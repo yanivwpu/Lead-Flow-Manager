@@ -13,15 +13,10 @@ export const PROSPECT_AI_BRAIN_RELATIONSHIP =
   `${PROSPECT_AI_BRAIN_RELATIONSHIP_LINES[0]}\n${PROSPECT_AI_BRAIN_RELATIONSHIP_LINES[1]}`;
 
 export const PROSPECT_AI_BRAIN_ONBOARDING = {
-  heading: "Want Prospect AI to understand your business even better?",
+  heading: "Make Prospect AI even smarter with AI Brain",
   body: [
-    "Prospect AI works on its own to discover, qualify, and help you reach new opportunities.",
-    "AI Brain is an optional intelligence layer that learns your business, services, offers, and company knowledge. This gives Prospect AI and AI Copilot deeper context for personalization, recommendations, and conversations.",
+    "With AI Brain, Prospect AI can go deeper — analyzing each prospect, identifying stronger opportunities, creating more personalized outreach, and recommending the best next steps.",
   ],
-  priceLabel: `AI Brain — $${AI_BRAIN_ADDON_PRICE_USD}/month · Optional`,
-  ctaLabel: "Learn about AI Brain",
-  ctaHref: "/app/ai-brain",
-  activeConfirmation: "AI Brain is active — Prospect AI can use your business context.",
 } as const;
 
 export const PROSPECT_AI_BRAIN_OPTIONAL_SUMMARY =

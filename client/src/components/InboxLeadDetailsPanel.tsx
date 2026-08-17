@@ -29,6 +29,8 @@ import {
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useSubscription } from "@/lib/subscription-context";
+import { Link } from "wouter";
 import {
   formatScoreActivityEvent,
   sanitizeUserFacingText,
@@ -857,6 +859,8 @@ export function InboxLeadDetailsPanel({
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+  const { data: subscription } = useSubscription();
+  const templateCampaignsEnabled = Boolean(subscription?.limits?.workflowsEnabled);
 
   // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.
   const { data: workspaceIntelligenceQuery } = useQuery<WorkspaceIntelligenceSnapshot>({
@@ -1099,7 +1103,7 @@ export function InboxLeadDetailsPanel({
       if (!r.ok) throw new Error("Failed to load campaigns");
       return r.json();
     },
-    enabled: !!contact.id,
+    enabled: !!contact.id && templateCampaignsEnabled,
   });
 
   const contactOutreachChannel = useMemo(
@@ -3390,15 +3394,26 @@ export function InboxLeadDetailsPanel({
           <div className="mt-6 pt-4 border-t border-[#eee]">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs uppercase tracking-wide text-gray-500">Campaigns</p>
-              <button
-                type="button"
-                onClick={() => openCampaignPicker()}
-                className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
-                data-testid="button-add-to-campaign"
-              >
-                <Plus className="w-3 h-3" />
-                Add Campaign
-              </button>
+              {templateCampaignsEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => openCampaignPicker()}
+                  className="flex items-center gap-0.5 text-[11px] font-medium text-gray-400 hover:text-gray-700 transition-colors"
+                  data-testid="button-add-to-campaign"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Campaign
+                </button>
+              ) : (
+                <Link href="/pricing">
+                  <a
+                    className="text-[11px] font-medium text-brand-green hover:underline"
+                    data-testid="button-upgrade-campaign-enroll"
+                  >
+                    Upgrade to enroll
+                  </a>
+                </Link>
+              )}
             </div>
             {campaignEnrollmentBuckets.primary.length === 0 &&
             campaignEnrollmentBuckets.history.length === 0 ? (

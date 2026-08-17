@@ -801,14 +801,23 @@ export function Templates() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+  const { user } = useAuth();
+  const { data: subscription, isLoading: subLoading } = useSubscription();
+  const templatesEnabled = Boolean((subscription?.limits as { templatesEnabled?: boolean } | undefined)?.templatesEnabled);
+  const workflowsEnabled = Boolean(subscription?.limits?.workflowsEnabled);
   const templatesMainTabValue = useMemo(() => {
     const p = new URLSearchParams(searchString).get("tab");
     const allowed = hideGrowthEngine
       ? (["presets", "templates", "re-engagement"] as const)
       : (["presets", "templates", "re-engagement", "growth-engines"] as const);
-    if (p === "growth-engines" && hideGrowthEngine) return "presets" as const;
-    return (allowed as readonly string[]).includes(p || "") ? (p as (typeof allowed)[number]) : "presets";
-  }, [searchString, hideGrowthEngine]);
+    if (p === "growth-engines" && hideGrowthEngine) {
+      return workflowsEnabled ? ("presets" as const) : ("templates" as const);
+    }
+    if ((allowed as readonly string[]).includes(p || "")) {
+      return p as (typeof allowed)[number];
+    }
+    return workflowsEnabled ? ("presets" as const) : ("templates" as const);
+  }, [searchString, hideGrowthEngine, workflowsEnabled]);
 
   useEffect(() => {
     if (!hideGrowthEngine) return;
@@ -820,14 +829,12 @@ export function Templates() {
 
   const handleTemplatesMainTabChange = (next: string) => {
     const sp = new URLSearchParams(searchString);
-    if (next === "presets") sp.delete("tab");
+    if (next === "presets" && workflowsEnabled) sp.delete("tab");
     else sp.set("tab", next);
     const q = sp.toString();
     setLocation(q ? `/app/templates?${q}` : "/app/templates");
   };
 
-  const { user } = useAuth();
-  const { data: subscription, isLoading: subLoading } = useSubscription();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<MessageTemplate | null>(null);
@@ -864,7 +871,6 @@ export function Templates() {
   const [savedCampaignOpenInEditMode, setSavedCampaignOpenInEditMode] = useState(false);
   const [pendingDeleteCampaignId, setPendingDeleteCampaignId] = useState<string | null>(null);
 
-  const templatesEnabled = (subscription?.limits as any)?.templatesEnabled;
 
   /** Re-render relative “Sent Xm ago” labels in Re-engagement. */
   const [, setReEngagementClock] = useState(0);
@@ -940,7 +946,7 @@ export function Templates() {
     PresetCampaignListItem[]
   >({
     queryKey: ["/api/preset-campaigns"],
-    enabled: !!templatesEnabled,
+    enabled: !!templatesEnabled && workflowsEnabled,
     staleTime: 0,
   });
 
@@ -953,7 +959,7 @@ export function Templates() {
       if (!res.ok) throw new Error("Failed to load campaign");
       return res.json();
     },
-    enabled: !!templatesEnabled && !!savedCampaignModalId && savedCampaignModalOpen,
+    enabled: !!templatesEnabled && workflowsEnabled && !!savedCampaignModalId && savedCampaignModalOpen,
     staleTime: 0,
   });
 
@@ -1503,27 +1509,6 @@ export function Templates() {
     );
   }
 
-  if (!templatesEnabled) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <Lock className="h-8 w-8 text-gray-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Template Messaging is a Pro Feature</h2>
-        <p className="text-gray-500 max-w-md mb-6">
-          Send pre-approved WhatsApp templates to re-engage customers after the 24-hour window. 
-          Perfect for follow-ups, promotions, and smart retargeting campaigns.
-        </p>
-        <Link href="/pricing">
-          <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade-templates">
-            <Zap className="h-4 w-4 mr-2" />
-            Upgrade to Pro
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 h-full bg-white flex flex-col overflow-hidden">
       <div className="px-4 md:px-6 py-2 md:py-4 border-b border-gray-100 flex-shrink-0">
@@ -1531,7 +1516,7 @@ export function Templates() {
           <div className="min-w-0 space-y-0.5">
             <h1 className="text-lg md:text-2xl font-bold text-gray-900 leading-tight">Message Templates</h1>
             <p className="text-gray-500 text-xs md:text-sm leading-snug">
-              Manage WhatsApp-approved templates, campaigns, and automation sequences.
+              Manage WhatsApp-approved templates and send them to a contact when Meta requires a template.
             </p>
           </div>
           <Button 
@@ -1579,6 +1564,30 @@ export function Templates() {
           </TabsList>
 
           <TabsContent value="presets" className="space-y-3 md:space-y-4 mt-0">
+            {!workflowsEnabled ? (
+              <Card className="overflow-hidden" data-testid="presets-paid-gate">
+                <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                    <Lock className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                    Campaign automation is on Starter and Pro
+                  </h2>
+                  <p className="text-gray-500 max-w-md mb-6">
+                    Basic WhatsApp templates stay available on Free for 1:1 sends outside the 24-hour
+                    window. Preset campaigns, bulk enrollment, and automation sequences require Starter
+                    or Pro.
+                  </p>
+                  <Link href="/pricing">
+                    <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade-template-campaigns">
+                      <Zap className="h-4 w-4 mr-2" />
+                      Upgrade for campaigns
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ) : (
+            <>
             <Card className="overflow-hidden">
               <CardHeader className="pb-2 pt-4 md:pt-6 px-4 md:px-6">
                 <CardTitle className="flex items-center gap-2 text-base md:text-lg">
@@ -1797,6 +1806,8 @@ export function Templates() {
               deletePresetCampaignMutation={deletePresetCampaignMutation}
               enrollmentMutation={enrollmentActionMutation}
             />
+            </>
+            )}
           </TabsContent>
 
           <TabsContent value="templates" className="space-y-3 md:space-y-4 mt-0">

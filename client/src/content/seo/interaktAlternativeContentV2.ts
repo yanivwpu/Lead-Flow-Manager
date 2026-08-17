@@ -27,12 +27,12 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "Interakt is a popular WhatsApp engagement platform — especially for India-based ecommerce and support teams running campaigns, chatbots, and catalog workflows. WhachatCRM adds Email beside WhatsApp, multi-channel Unified Inbox, and SMB seat economics with unlimited users on Pro.",
   quickSummary:
-    "Stay on Interakt when your India WhatsApp commerce playbooks, catalog flows, and campaign cadence are already optimized on their stack. Consider WhachatCRM when you need Gmail in the same inbox, Messenger and Instagram beside WhatsApp, Starter+ chatbot and preset templates, Shopify and GoHighLevel on Starter+, and unlimited Pro users at $49/mo. Confirm current Interakt plan packaging on their site before comparing totals.",
+    "Stay on Interakt when your India WhatsApp commerce playbooks, catalog flows, and campaign cadence are already optimized on their stack. Consider WhachatCRM when you need Gmail in the same inbox, Messenger and Instagram beside WhatsApp, Starter+ chatbot and preset templates, Shopify and GoHighLevel integrations, and unlimited Pro users at $49/mo. Confirm current Interakt plan packaging on their site before comparing totals.",
   whoFor: [
     "India and APAC teams expanding beyond WhatsApp-only commerce engagement",
     "Brands that need Email and social DMs in one CRM timeline — not separate campaign tools",
     "SMBs comparing Interakt tier scaling against Free / $19 / $49 WhachatCRM plans",
-    "Ecommerce operators who want Shopify context in inbox on Starter+ without commerce-only lock-in",
+    "Ecommerce operators who want Shopify context in inbox on Free without commerce-only lock-in"
     "Buyers seeking balanced analysis between regional WhatsApp leaders and omnichannel CRM",
   ],
   competitorGoodWhen: [
@@ -79,7 +79,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     "You want Email (Gmail OAuth) beside WhatsApp in one Unified Inbox",
     "Messenger and Instagram Messaging should share CRM context with WhatsApp — not live in silos",
     "You need chatbot, Flow Builder, and preset templates on Starter+ (not available on Free)",
-    "Shopify orders/customers in inbox and GoHighLevel LeadConnector sync on Starter+ fit your stack",
+    "Shopify orders/customers in inbox and GoHighLevel LeadConnector sync on Free fit your stack"
     "Unlimited users on Pro ($49/mo) matter as sales, support, and marketing scale together",
     "You want 0% WhachatCRM markup on Meta fees with Meta Embedded Signup (Twilio not required)",
   ],
@@ -90,7 +90,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
         "WhachatCRM connects WhatsApp, Messenger, Instagram, Email, and web chat without channel paywalls — useful when Interakt-centric workflows leave other channels in separate tools.",
     },
     {
-      title: "Calendly booking on Starter+",
+      title: "Calendly booking from Integrations",
       description:
         "Booking integration via Calendly is available on Starter and Pro — helpful for service businesses that schedule over WhatsApp and Email, not only cart recovery.",
     },
@@ -143,17 +143,17 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Is WhachatCRM better for India WhatsApp ecommerce than Interakt?",
       answer:
-        "Interakt has strong India market presence for WhatsApp campaigns and catalog workflows. WhachatCRM fits better when you need Email beside WhatsApp, broader channel inbox, unlimited Pro users, and Shopify/GHL on Starter+ — validate cart and template workflows during trial.",
+        "Interakt has strong India market presence for WhatsApp campaigns and catalog workflows. WhachatCRM fits better when you need Email beside WhatsApp, broader channel inbox, unlimited Pro users, and Shopify/GHL on Free — validate cart and template workflows during trial.",
     },
     {
       question: "Can I migrate Interakt chatbots to WhachatCRM?",
       answer:
-        "Export contacts and document flow logic from Interakt, then rebuild on Starter+ using WhachatCRM's Flow Builder and preset templates. Chatbot and templates are not on Free — upgrade before rebuilding critical bots.",
+        "Export contacts and document flow logic from Interakt, then rebuild on Starter+ using WhachatCRM's Flow Builder and preset templates. Chatbot and preset campaign automation are not on Free — upgrade before rebuilding critical bots.",
     },
     {
       question: "Does WhachatCRM support WhatsApp catalog and campaigns like Interakt?",
       answer:
-        "WhachatCRM supports template messaging, workflows, and Shopify order/customer context on Starter+. Confirm specific catalog and campaign features you rely on in Interakt during a parallel-run before switching.",
+        "WhachatCRM supports basic template messaging and Shopify order/customer context on Free; workflows and campaign automation stay on Starter+. Confirm specific catalog and campaign features you rely on in Interakt during a parallel-run before switching."
     },
     {
       question: "How do seat costs compare as my team grows?",
@@ -162,6 +162,6 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Interakt if India WhatsApp commerce campaigns and existing Interakt playbooks are your growth engine. Switch to WhachatCRM when you need Email and social channels in one Unified Inbox, Starter+ chatbot/templates, Shopify and GoHighLevel on Starter+, unlimited Pro users, and transparent Meta fee pass-through — with SMB pricing you can forecast.",
+    "Keep Interakt if India WhatsApp commerce campaigns and existing Interakt playbooks are your growth engine. Switch to WhachatCRM when you need Email and social channels in one Unified Inbox, Starter+ chatbot/templates, Shopify and GoHighLevel integrations, unlimited Pro users, and transparent Meta fee pass-through — with SMB pricing you can forecast.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

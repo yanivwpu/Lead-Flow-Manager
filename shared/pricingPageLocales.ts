@@ -64,7 +64,7 @@ const ES: DeepPartial<PricingPageContent> = {
       "Mejora tu plan solo cuando tu negocio crece",
     ],
   },
-  freeUpsell: "Mejora tu plan cuando necesites chatbot, automatizaciones y más capacidad.",
+  freeUpsell: "Mejora tu plan cuando necesites chatbot, automatización de campañas y más capacidad.",
   starterCallout: {
     title: "Chatbot con IA y widget web",
     body: "Captura, califica y responde a visitantes del sitio web de forma automática.",
@@ -156,6 +156,14 @@ const ES: DeepPartial<PricingPageContent> = {
     title: "Preguntas frecuentes",
     items: [
       {
+        q: "¿Las integraciones están incluidas en Free?",
+        a: "Sí. Los usuarios Free pueden abrir Integraciones y conectar herramientas compatibles como Gmail, Shopify, Calendly y GoHighLevel. Siguen aplicando los límites de conversaciones, usuarios y canales. La automatización de campañas y AI Brain siguen siendo capacidades de pago aparte.",
+      },
+      {
+        q: "¿Las plantillas de WhatsApp están incluidas en Free?",
+        a: "Sí. Free incluye mensajería básica de plantillas de WhatsApp: ver, sincronizar y enviar una plantilla aprobada a un contacto cuando Meta lo exige fuera de la ventana de 24 horas. Las campañas masivas, la inscripción masiva y el retargeting avanzado siguen en Starter y Pro.",
+      },
+      {
         q: "¿Puedo probar Pro y AI Brain antes de mejorar mi plan?",
         a: "Cada cuenta nueva recibe una prueba completa de 14 días de Pro + AI Brain. Sin restricciones de funciones durante la prueba.",
       },
@@ -208,10 +216,14 @@ const ES: DeepPartial<PricingPageContent> = {
     aiBrainAddon: "Complemento AI Brain",
     assignment: "Asignación / colaboración",
     integrations: "Integraciones",
+    templateMessaging: "Mensajería con plantillas de WhatsApp",
     growthEngines: "Growth Engines",
   },
   compareHints: {
     growthEngines: "Plan de plataforma requerido para activar Growth Engines compatibles.",
+    templateMessaging:
+      "Free incluye envíos básicos 1:1 de plantillas aprobadas. Las campañas masivas y las secuencias de automatización siguen en Starter y Pro.",
+    integrations: "Conecta herramientas de negocio compatibles. Siguen aplicando los límites de conversación y uso.",
   },
   compareGroups: {
     MESSAGING: "Mensajería",
@@ -229,6 +241,7 @@ const ES: DeepPartial<PricingPageContent> = {
     addOn: "Complemento",
     growthEngineReady: "Listo para Growth Engines",
     unlimited: "Ilimitado",
+    basic: "Básico",
     upTo: "Hasta {{n}}",
     perMonth: "/mes",
     user: "usuario",
@@ -243,6 +256,8 @@ const ES: DeepPartial<PricingPageContent> = {
     whatsappOne: "1 cuenta de WhatsApp Business",
     whatsappMany: "Hasta {{n}} cuentas de WhatsApp Business",
     multiChannelInbox: "Bandeja multicanal",
+    connectIntegrations: "Conecta integraciones",
+    basicWhatsappTemplates: "Plantillas básicas de WhatsApp",
     chatbotWidget: "Chatbot con IA y widget web",
     workflowAutomation: "Automatización de flujos",
     growthEnginesRequired: "Plan requerido para Growth Engines de industria",
@@ -253,6 +268,7 @@ const ES: DeepPartial<PricingPageContent> = {
     bullets: [
       "Planes Free, Starter y Pro con límites claros de conversaciones y usuarios",
       "Prospect AI incluido en todos los planes",
+      "Integraciones y plantillas básicas de WhatsApp en Free",
       "Complemento opcional AI Brain para Starter y Pro",
       "0% de margen de WhachatCRM sobre las tarifas de conversación de Meta",
       "Prueba de 14 días de Pro + AI Brain en cuentas nuevas",
@@ -311,7 +327,7 @@ const HE: DeepPartial<PricingPageContent> = {
       "שדרגו רק כשהעסק שלכם גדל",
     ],
   },
-  freeUpsell: "שדרגו כשאתם צריכים צ׳אטבוט, אוטומציות ויותר קיבולת.",
+  freeUpsell: "שדרגו כשאתם צריכים צ׳אטבוט, אוטומציית קמפיינים ויותר קיבולת.",
   starterCallout: {
     title: "צ׳אטבוט AI ווידג׳ט לאתר",
     body: "ללכוד, לסווג ולהשיב למבקרים באתר באופן אוטומטי.",
@@ -403,6 +419,14 @@ const HE: DeepPartial<PricingPageContent> = {
     title: "שאלות נפוצות",
     items: [
       {
+        q: "האם אינטגרציות כלולות ב-Free?",
+        a: "כן. משתמשי Free יכולים לפתוח את אינטגרציות ולחבר כלים נתמכים כמו Gmail, Shopify, Calendly ו-GoHighLevel. מגבלות שיחה, משתמשים וערוצים עדיין חלות. אוטומציית קמפיינים ו-AI Brain נשארים יכולות בתשלום נפרדות.",
+      },
+      {
+        q: "האם תבניות WhatsApp כלולות ב-Free?",
+        a: "כן. Free כולל משלוח תבניות WhatsApp בסיסי: צפייה, סנכרון ושליחת תבנית מאושרת לאיש קשר כש-Meta דורשת זאת מחוץ לחלון 24 השעות. קמפיינים המוניים, הרשמה המונית וריטרגטינג מתקדם נשארים ב-Starter וב-Pro.",
+      },
+      {
         q: "אפשר לנסות את Pro ו-AI Brain לפני שדרוג?",
         a: "כל חשבון חדש מקבל ניסיון מלא של 14 יום ל-Pro + AI Brain. בלי הגבלות יכולות במהלך הניסיון.",
       },
@@ -455,10 +479,14 @@ const HE: DeepPartial<PricingPageContent> = {
     aiBrainAddon: "תוסף AI Brain",
     assignment: "הקצאה / שיתוף פעולה",
     integrations: "אינטגרציות",
+    templateMessaging: "משלוח תבניות WhatsApp",
     growthEngines: "Growth Engines",
   },
   compareHints: {
     growthEngines: "תוכנית הפלטפורמה הנדרשת להפעלת Growth Engines תואמים.",
+    templateMessaging:
+      "Free כולל שליחות בסיסיות 1:1 של תבניות מאושרות. קמפיינים המוניים ורצפי אוטומציה נשארים ב-Starter וב-Pro.",
+    integrations: "חברו כלי עסק נתמכים. מגבלות שיחה ושימוש עדיין חלות.",
   },
   compareGroups: {
     MESSAGING: "מסרים",
@@ -476,6 +504,7 @@ const HE: DeepPartial<PricingPageContent> = {
     addOn: "תוסף",
     growthEngineReady: "מוכן ל-Growth Engines",
     unlimited: "ללא הגבלה",
+    basic: "בסיסי",
     upTo: "עד {{n}}",
     perMonth: "/חודש",
     user: "משתמש",
@@ -490,6 +519,8 @@ const HE: DeepPartial<PricingPageContent> = {
     whatsappOne: "חשבון WhatsApp Business אחד",
     whatsappMany: "עד {{n}} חשבונות WhatsApp Business",
     multiChannelInbox: "תיבה רב-ערוצית",
+    connectIntegrations: "חיבור אינטגרציות",
+    basicWhatsappTemplates: "תבניות WhatsApp בסיסיות",
     chatbotWidget: "צ׳אטבוט AI ווידג׳ט לאתר",
     workflowAutomation: "אוטומציית תהליכים",
     growthEnginesRequired: "תוכנית נדרשת ל-Growth Engines תעשייתיים",
@@ -500,6 +531,7 @@ const HE: DeepPartial<PricingPageContent> = {
     bullets: [
       "תוכניות Free, Starter ו-Pro עם מגבלות שיחה ומשתמשים ברורות",
       "Prospect AI כלול בכל תוכנית",
+      "אינטגרציות ותבניות WhatsApp בסיסיות ב-Free",
       "תוסף AI Brain אופציונלי ל-Starter ו-Pro",
       "0% תוספת של WhachatCRM על עמלות השיחה של Meta",
       "ניסיון 14 יום ל-Pro + AI Brain בחשבונות חדשים",

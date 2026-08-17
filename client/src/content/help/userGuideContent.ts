@@ -42,8 +42,8 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       {
         title: "Free vs Pro plans",
         bullets: [
-          "Free: test WhachatCRM with one user, basic inbox, limited active conversations, and supported channel testing.",
-          "Starter ($19/mo): up to 3 users, AI Assist Basic, templates, follow-ups, core integrations, and basic automations.",
+          "Free: test WhachatCRM with one user, Unified Inbox, Integrations, basic WhatsApp templates, Prospect AI, and limited active conversations.",
+          "Starter ($19/mo): up to 3 users, AI Assist Basic, campaign automation, follow-ups, and chatbot.",
           "Pro ($49/mo): unlimited users, larger conversation capacity, advanced Growth Engine workflows, multi-channel scaling, and team assignment.",
           "AI Brain add-on: deeper AI on Starter or Pro — check Pricing for current availability.",
           "Meta/WhatsApp conversation fees bill separately through Meta; WhachatCRM adds no message markup.",
@@ -422,7 +422,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
 
 export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   { question: "How do I create a WhachatCRM account?", answer: "Click Start Free on the website, sign up with email or Google, and complete the onboarding wizard." },
-  { question: "Is there a free plan?", answer: "Yes. Free includes core inbox features with one user and limited active conversations." },
+  { question: "Is there a free plan?", answer: "Yes. Free includes Unified Inbox, Integrations, basic WhatsApp templates, Prospect AI, one user, and limited active conversations. Chatbot, campaign automation, and AI Brain are not included." },
   { question: "What is the difference between Starter and Pro?", answer: "Starter supports up to 3 users and basic automations. Pro adds unlimited users, advanced Growth Engine workflows, and team assignment." },
   { question: "What is the AI Trial?", answer: "A limited trial of AI Copilot features for eligible new workspaces before upgrading or purchasing AI Brain." },
   { question: "How do I connect WhatsApp?", answer: "Go to Integrations → Meta (WhatsApp Cloud) and complete embedded signup with your Meta business portfolio." },

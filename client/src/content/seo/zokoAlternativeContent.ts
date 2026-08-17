@@ -18,21 +18,21 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
   meta: {
     title: "Zoko Alternative 2026: Shopify WhatsApp vs Omnichannel CRM | WhachatCRM",
     description:
-      "Zoko vs WhachatCRM: Shopify-first WhatsApp commerce vs broader channels, Email inbox, Starter+ Shopify integration, CRM depth, and unlimited Pro users.",
+      "Zoko vs WhachatCRM: Shopify-first WhatsApp commerce vs broader channels, Email inbox, Shopify integration on Free, CRM depth, and unlimited Pro users.",
     keywords:
       "Zoko alternative, Zoko vs WhachatCRM, Zoko competitor, Shopify WhatsApp CRM alternative, WhatsApp ecommerce CRM comparison",
     h1: "Zoko Alternative: Shopify-First WhatsApp vs Multi-Channel CRM Inbox",
   },
   heroEyebrow: "Zoko Alternative · Updated for 2026",
   heroLead:
-    "Zoko is built for Shopify merchants who want WhatsApp woven into ecommerce workflows — orders, support, and campaign messaging from one commerce-aware hub. WhachatCRM serves SMBs that need Shopify on Starter+ plus Email, Messenger, Instagram, and CRM depth without being locked into a single commerce channel story.",
+    "Zoko is built for Shopify merchants who want WhatsApp woven into ecommerce workflows — orders, support, and campaign messaging from one commerce-aware hub. WhachatCRM serves SMBs that need Shopify on Free plus Email, Messenger, Instagram, and CRM depth without being locked into a single commerce channel story.",
   quickSummary:
-    "Choose Zoko when Shopify + WhatsApp is your entire go-to-market and your team already runs proven Zoko commerce flows. Choose WhachatCRM when you want Shopify orders and customers in inbox context on Starter+ while also connecting Gmail, social channels, and web chat in one Unified Inbox — with unlimited Pro users and 0% WhachatCRM Meta markup. Confirm current Zoko packaging on their site before modeling cost.",
+    "Choose Zoko when Shopify + WhatsApp is your entire go-to-market and your team already runs proven Zoko commerce flows. Choose WhachatCRM when you want Shopify orders and customers in inbox context on Free while also connecting Gmail, social channels, and web chat in one Unified Inbox — with unlimited Pro users and 0% WhachatCRM Meta markup. Confirm current Zoko packaging on their site before modeling cost.",
   whoFor: [
     "Shopify merchants comparing WhatsApp commerce tools vs broader CRM inbox platforms",
     "Brands that need Email and Instagram beside WhatsApp — not only order notifications",
     "Teams outgrowing commerce-only inbox limits and exploring omnichannel support",
-    "Operators who want Starter+ Shopify integration without abandoning multi-channel CRM",
+    "Operators who want Shopify integration on Free without abandoning multi-channel CRM",
     "Buyers comparing seat scaling against unlimited Pro users at $49/mo",
   ],
   competitorGoodWhen: [
@@ -76,18 +76,18 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   whachatBetterWhen: [
-    "You want Shopify on Starter+ plus Email, Messenger, Instagram, and web chat in one inbox",
+    "You want Shopify on Free plus Email, Messenger, Instagram, and web chat in one inbox",
     "Meta Embedded Signup should onboard WhatsApp without Twilio for new setups",
     "Chatbot, Flow Builder, and preset automation templates on Starter+ should support non-commerce flows too",
-    "GoHighLevel LeadConnector sync on Starter+ matters alongside Shopify",
-    "Calendly booking integration on Starter+ fits service-and-commerce hybrid businesses",
+    "GoHighLevel LeadConnector sync on Free matters alongside Shopify",
+    "Calendly booking integration on Free fits service-and-commerce hybrid businesses",
     "You need unlimited users on Pro ($49/mo) with 0% WhachatCRM markup on Meta fees",
   ],
   advantages: [
     {
       title: "Shopify plus omnichannel — not Shopify only",
       description:
-        "Starter+ brings Shopify orders and customers into inbox context while WhatsApp, Email, and Meta social channels share one CRM timeline.",
+        "Free includes Shopify orders and customers in inbox context while WhatsApp, Email, and Meta social channels share one CRM timeline.",
     },
     {
       title: "Service businesses beyond D2C",
@@ -143,12 +143,12 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Does WhachatCRM replace Zoko for Shopify WhatsApp?",
       answer:
-        "For many merchants, yes on Starter+ — Shopify orders and customers sync into inbox context. Zoko may still fit if your entire operation is optimized on their Shopify-first UX. Parallel-run both during trial and compare agent workflows.",
+        "For many merchants, yes — Shopify orders and customers sync into inbox context from Integrations. Zoko may still fit if your entire operation is optimized on their Shopify-first UX. Parallel-run both during trial and compare agent workflows.",
     },
     {
       question: "Can WhachatCRM handle abandoned cart recovery like Zoko?",
       answer:
-        "WhachatCRM offers ecommerce automation templates on Starter+ and Shopify order/customer context. Confirm live webhook and recovery flow options in-product for your specific Shopify setup — we do not claim unverified abandoned-cart webhooks.",
+        "WhachatCRM offers Shopify order/customer context on Free and ecommerce automation templates on Starter+. Confirm live webhook and recovery flow options in-product for your specific Shopify setup — we do not claim unverified abandoned-cart webhooks.",
     },
     {
       question: "Is WhachatCRM better if I sell on Shopify and support over Email?",
@@ -162,6 +162,6 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Starter+ alongside Email, social channels, and CRM in one Unified Inbox, Starter+ chatbot/templates, GoHighLevel on Starter+, unlimited Pro users, and transparent Meta fee pass-through.",
+    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Free alongside Email, social channels, and CRM in one Unified Inbox, Starter+ chatbot and campaign templates, GoHighLevel on Free, unlimited Pro users, and transparent Meta fee pass-through.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

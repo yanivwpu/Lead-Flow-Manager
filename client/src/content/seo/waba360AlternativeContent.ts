@@ -80,7 +80,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat in one timeline",
     "You want chatbot, Flow Builder, and preset automation templates on Starter+ — not on Free",
     "You need CRM, tags, pipeline, and team collaboration without building middleware",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Starter+ matter",
+    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free matter"
     "You want unlimited users on Pro ($49/mo) instead of engineering headcount for every new agent workflow",
   ],
   advantages: [
@@ -158,10 +158,10 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     {
       question: "What if my team is half developers and half support agents?",
       answer:
-        "Developers may prefer 360dialog for custom products. Mixed teams that need agents in a shared inbox without sprint cycles usually fit WhachatCRM — chatbot and templates on Starter+, unlimited agents on Pro.",
+        "Developers may prefer 360dialog for custom products. Mixed teams that need agents in a shared inbox without sprint cycles usually fit WhachatCRM — chatbot and preset campaign templates on Starter+, unlimited agents on Pro.",
     },
   ],
   recommendation:
-    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Starter+ chatbot/templates, Shopify/GHL on Starter+, and unlimited Pro users — without building the operations layer yourself.",
+    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Starter+ chatbot/templates, Shopify/GHL on Free, and unlimited Pro users — without building the operations layer yourself.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

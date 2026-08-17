@@ -16,6 +16,9 @@ import {
   INBOX_AI_REPLY_GENERATIONS_MONTHLY,
   buildPricingCompareRows,
   getPlanPricingHighlights,
+  planAllowsBasicTemplateMessaging,
+  planAllowsIntegrations,
+  planAllowsTemplateCampaigns,
 } from "../shared/pricingEntitlements";
 
 test("Prospect AI quotas Free 50 / Starter 100 / Pro 500", () => {
@@ -28,6 +31,26 @@ test("Chatbot availability by plan", () => {
   assert.equal(PLAN_LIMITS.free.chatbotEnabled, false);
   assert.equal(PLAN_LIMITS.starter.chatbotEnabled, true);
   assert.equal(PLAN_LIMITS.pro.chatbotEnabled, true);
+});
+
+test("Free can connect integrations and send basic templates; campaigns stay paid", () => {
+  assert.equal(PLAN_LIMITS.free.integrationsEnabled, true);
+  assert.equal(PLAN_LIMITS.starter.integrationsEnabled, true);
+  assert.equal(PLAN_LIMITS.pro.integrationsEnabled, true);
+  assert.equal(PLAN_LIMITS.free.templatesEnabled, true);
+  assert.equal(PLAN_LIMITS.starter.templatesEnabled, true);
+  assert.equal(PLAN_LIMITS.pro.templatesEnabled, true);
+  assert.equal(PLAN_LIMITS.free.workflowsEnabled, false);
+  assert.equal(PLAN_LIMITS.starter.workflowsEnabled, true);
+  assert.equal(PLAN_LIMITS.pro.workflowsEnabled, true);
+  assert.equal(planAllowsIntegrations("free"), true);
+  assert.equal(planAllowsBasicTemplateMessaging("free"), true);
+  assert.equal(planAllowsTemplateCampaigns("free"), false);
+  assert.equal(planAllowsTemplateCampaigns("starter"), true);
+  assert.equal(planAllowsTemplateCampaigns("pro"), true);
+  assert.equal(PLAN_LIMITS.free.conversationsPerMonth, 50);
+  assert.equal(PLAN_LIMITS.free.maxUsers, 1);
+  assert.equal(PLAN_LIMITS.free.maxWhatsappNumbers, 1);
 });
 
 test("inbox AI reply generations exist internally but are not public pricing copy", () => {
@@ -76,8 +99,17 @@ test("compare rows include Prospect AI + chatbot", () => {
   assert.equal(chatbot!.starter, true);
   assert.equal(chatbot!.pro, true);
   const brain = rows.find((r) => r.featureKey === "aiBrainAddon");
+  assert.equal(brain!.free, "Not included");
   assert.equal(brain!.starter, "Add-on");
   assert.equal(brain!.pro, "Add-on");
+  const integrations = rows.find((r) => r.featureKey === "integrations");
+  assert.equal(integrations!.free, true);
+  assert.equal(integrations!.starter, true);
+  assert.equal(integrations!.pro, true);
+  const templates = rows.find((r) => r.featureKey === "templateMessaging");
+  assert.equal(templates!.free, "Basic");
+  assert.equal(templates!.starter, true);
+  assert.equal(templates!.pro, true);
   assert.equal(
     rows.find((r) => r.featureKey === "aiAssist"),
     undefined,
@@ -94,6 +126,8 @@ test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)",
   const free = getPlanPricingHighlights("free").join(" | ");
   assert.match(free, /50 Prospect AI/);
   assert.match(free, /Multi-channel Inbox/);
+  assert.match(free, /Connect integrations/);
+  assert.match(free, /Basic WhatsApp templates/);
   assert.ok(!/Chatbot/i.test(free));
   assert.ok(!/credits/i.test(free));
   const starter = getPlanPricingHighlights("starter").join(" | ");
@@ -136,6 +170,8 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(content.includes("Works with your customer channels"));
   assert.ok(content.includes("Transparent Pricing"));
   assert.ok(content.includes("Prospect AI Included — Free with Every Plan"));
+  assert.ok(content.includes("Are integrations included on Free?"));
+  assert.ok(content.includes("Are WhatsApp templates included on Free?"));
   assert.ok(content.includes("Monthly Prospect AI Discoveries"));
   assert.ok(content.includes("Multi-channel Inbox"));
   assert.ok(content.includes("Can I try Pro and AI Brain before upgrading?"));

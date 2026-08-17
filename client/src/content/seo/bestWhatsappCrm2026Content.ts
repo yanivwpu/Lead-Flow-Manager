@@ -226,7 +226,7 @@ export const WHACHAT_DIFFERENTIATORS = [
   "Omnichannel inbox for WhatsApp, Messenger, Instagram, Email (Gmail), SMS, Telegram, and website chat",
   "AI Assist on Starter/Pro, with optional AI Brain add-on for deeper intelligence",
   "Chatbot / Flow Builder and preset automation templates included on Starter and Pro",
-  "Shopify integration and GoHighLevel sync on Starter+ (Integrations page)",
+  "Shopify integration and GoHighLevel sync from Integrations (available on Free)",
   "Realtor Growth Engine for eligible Pro + AI Brain workspaces",
   "Unlimited users on Pro ($49/mo) with Free and Starter ($19/mo) entry points",
   "0% WhachatCRM markup on Meta messaging fees—Meta may change its rates independently",
@@ -329,7 +329,7 @@ export const FAQ_ITEMS = [
   {
     question: "How is WhachatCRM different from Respond.io or WATI?",
     answer:
-      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot and templates on Starter+, Shopify and GoHighLevel integrations on paid plans, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
+      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot on Starter+, basic WhatsApp templates and integrations on Free, Shopify and GoHighLevel connections, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
   },
   {
     question: "What should I compare before choosing a WhatsApp CRM?",

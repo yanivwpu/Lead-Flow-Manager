@@ -112,6 +112,12 @@ export function getLocalizedPlanPricingHighlights(
         }),
     content.highlights.multiChannelInbox,
   ];
+  if (limits.integrationsEnabled) {
+    lines.push(content.highlights.connectIntegrations);
+  }
+  if (limits.templatesEnabled) {
+    lines.push(content.highlights.basicWhatsappTemplates);
+  }
   if (limits.chatbotEnabled) lines.push(content.highlights.chatbotWidget);
   if (limits.workflowsEnabled) lines.push(content.highlights.workflowAutomation);
   if (plan === "pro") lines.push(content.highlights.growthEnginesRequired);
@@ -168,6 +174,13 @@ export function buildLocalizedPricingCompareRows(
       free: cells.connectedChannels,
       starter: cells.connectedChannels,
       pro: cells.connectedChannels,
+    },
+    {
+      group: "MESSAGING",
+      featureKey: "templateMessaging",
+      free: cells.basic,
+      starter: true,
+      pro: true,
     },
     {
       group: "PROSPECT AI",
@@ -242,7 +255,7 @@ export function buildLocalizedPricingCompareRows(
     {
       group: "SUPPORT",
       featureKey: "integrations",
-      free: false,
+      free: true,
       starter: true,
       pro: true,
     },

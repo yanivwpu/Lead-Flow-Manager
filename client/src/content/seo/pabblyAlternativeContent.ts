@@ -80,7 +80,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     "Meta Embedded Signup and WhatsApp Cloud API onboarding should be self-serve (Twilio not required)",
     "Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat matters daily",
     "Chatbot, Flow Builder, and preset templates on Starter+ should not consume separate credit pools",
-    "Shopify, GoHighLevel, and Calendly Integrations on Starter+ are part of your workflow",
+    "Shopify, GoHighLevel, and Calendly Integrations on Free are part of your workflow"
     "You want 0% WhachatCRM markup on Meta fees — competitor markup claims unverified here",
   ],
   advantages: [
@@ -92,7 +92,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     {
       title: "Free tier for inbox proof",
       description:
-        "Validate Unified Inbox and CRM on Free (1 user, 50 conversations) before upgrading to Starter for chatbot, templates, and Integrations.",
+        "Validate Unified Inbox, Integrations, and basic WhatsApp templates on Free (1 user, 50 conversations) before upgrading to Starter for chatbot and campaign automation."
     },
   ],
   matrix: withCompetitorMatrix({
@@ -148,7 +148,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Can I migrate from Pabbly Chatflow to WhachatCRM?",
       answer:
-        "Export contacts where possible, reconnect WhatsApp via Meta Embedded Signup, and rebuild critical automations on Starter+ using preset templates. Chatbot and templates are not on Free.",
+        "Export contacts where possible, reconnect WhatsApp via Meta Embedded Signup, and rebuild critical automations on Starter+ using preset templates. Chatbot and preset campaign automation are not on Free.",
     },
     {
       question: "Does WhachatCRM offer lifetime deals like Pabbly?",
@@ -162,6 +162,6 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Pabbly if upfront credit economics and existing Pabbly automations fit your procurement style. Switch to WhachatCRM when you want predictable Free / $19 / $49 SaaS, Meta Embedded Signup, Unified Inbox with Email, Starter+ chatbot/templates, Shopify/GHL on Starter+, unlimited Pro users, and transparent Meta fee pass-through.",
+    "Keep Pabbly if upfront credit economics and existing Pabbly automations fit your procurement style. Switch to WhachatCRM when you want predictable Free / $19 / $49 SaaS, Meta Embedded Signup, Unified Inbox with Email, Starter+ chatbot/templates, Shopify/GHL on Free, unlimited Pro users, and transparent Meta fee pass-through.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

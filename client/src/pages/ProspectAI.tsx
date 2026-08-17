@@ -10,7 +10,6 @@ import {
   MapPin,
   Radar,
   Search,
-  Sparkles,
   Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -222,111 +221,39 @@ function QuotaMeter({
 }
 
 function AiBrainPanel({ status }: { status: ProspectAiStatus }) {
-  const brain = status.aiBrain;
-
-  if (brain.configured) {
-    return (
-      <div className="relative overflow-hidden rounded-xl border border-violet-200/55 bg-gradient-to-br from-white via-violet-50/35 to-purple-50/25 px-3.5 py-3 shadow-sm shadow-violet-500/[0.06] ring-1 ring-violet-100/70 sm:px-4 sm:py-3.5">
-        <div
-          className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-violet-400/15 blur-2xl"
-          aria-hidden
-        />
-        <div className="relative flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-5">
-          <div className="flex min-w-0 flex-1 items-start gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/10">
-              <Brain className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
-                <h3 className="text-sm font-semibold tracking-tight text-violet-950 text-pretty">
-                  AI Brain Connected
-                </h3>
-                <Badge className="border border-violet-200/80 bg-white/90 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-violet-700 shadow-none">
-                  Connected
-                </Badge>
-              </div>
-              <p className="mt-0.5 text-xs leading-snug text-violet-900/75 text-pretty sm:text-[13px]">
-                Prospect AI uses AI Brain to analyze every business before outreach.
-              </p>
-            </div>
-          </div>
-          <ul className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2 lg:max-w-md lg:shrink-0">
-            {[
-              "Website Analysis",
-              "Company Intelligence",
-              "AI Fit Scoring",
-              "Personalized Outreach Angles",
-              "Business Context",
-            ].map((item) => (
-              <li
-                key={item}
-                className="flex items-center gap-1.5 text-xs leading-snug text-violet-950/85 text-pretty"
-              >
-                <Check className="h-3.5 w-3.5 shrink-0 text-violet-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    );
-  }
+  const brainConfigured = Boolean(status.aiBrain?.configured);
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-violet-200/65 bg-gradient-to-br from-white via-violet-50/45 to-purple-50/30 px-3.5 py-3 shadow-sm shadow-violet-500/[0.08] ring-1 ring-violet-100/80 sm:px-4 sm:py-3.5">
+    <div
+      className="relative overflow-hidden rounded-xl border border-violet-200/55 bg-gradient-to-br from-white via-violet-50/35 to-purple-50/25 px-3.5 py-3 shadow-sm shadow-violet-500/[0.06] ring-1 ring-violet-100/70 sm:px-4 sm:py-3.5"
+      data-testid="prospect-ai-brain-education"
+    >
       <div
-        className="pointer-events-none absolute -right-8 -top-6 h-28 w-28 rounded-full bg-violet-400/15 blur-2xl"
+        className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-violet-400/15 blur-2xl"
         aria-hidden
       />
-      <div className="relative flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-5">
-        <div className="flex min-w-0 flex-1 items-start gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center gap-0.5 rounded-lg border border-violet-200/80 bg-white text-violet-600 shadow-sm">
-            <Sparkles className="h-3.5 w-3.5" />
-            <Brain className="h-3.5 w-3.5 text-purple-600" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold tracking-tight text-violet-950 text-pretty">
-              Unlock AI Brain
-            </h3>
-            <p className="mt-0.5 text-xs leading-snug text-violet-900/80 text-pretty sm:text-[13px]">
-              Prospect AI works without AI Brain. Add AI Brain to automatically understand every
-              business before you reach out.
-            </p>
-          </div>
+      <div className="relative flex min-w-0 items-start gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-200/80 bg-white text-violet-600 shadow-sm shadow-violet-500/10">
+          <Brain className="h-4 w-4" />
         </div>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center lg:max-w-md lg:shrink-0">
-          <ul className="grid flex-1 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
-            {[
-              "Analyze every business website",
-              "Score prospect fit automatically",
-              "Generate personalized outreach angles",
-              "Recommend the best offer",
-              "Improve reply rates with richer context",
-            ].map((item) => (
-              <li
-                key={item}
-                className="flex items-start gap-1.5 text-xs leading-snug text-violet-950/85 text-pretty"
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
+            <h3 className="text-sm font-semibold tracking-tight text-violet-950 text-pretty">
+              Make Prospect AI even smarter with AI Brain
+            </h3>
+            {brainConfigured ? (
+              <Badge
+                className="border border-violet-200/80 bg-white/90 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-violet-700 shadow-none"
+                data-testid="prospect-ai-brain-connected-badge"
               >
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex shrink-0 flex-col gap-1 sm:items-end">
-            <Link href="/app/ai-brain">
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-3 text-xs text-white shadow-sm shadow-violet-500/20 hover:from-violet-500 hover:to-purple-500"
-              >
-                Upgrade to AI Brain
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-              </Button>
-            </Link>
-            <p className="text-[11px] leading-snug text-violet-800/65 text-pretty sm:text-right">
-              Prospect AI works on its own. AI Brain makes every discovery smarter.
-            </p>
+                Connected
+              </Badge>
+            ) : null}
           </div>
+          <p className="mt-0.5 text-xs leading-snug text-violet-900/75 text-pretty sm:text-[13px]">
+            With AI Brain, Prospect AI can go deeper — analyzing each prospect, identifying stronger
+            opportunities, creating more personalized outreach, and recommending the best next steps.
+          </p>
         </div>
       </div>
     </div>
@@ -760,7 +687,6 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         reason="prospect_ai_discoveries"
         currentPlan={status.plan}
       />
-      <AiBrainPanel status={status} />
 
       <div className="rounded-2xl border border-emerald-200/70 bg-white p-6 shadow-md shadow-emerald-900/[0.04] ring-1 ring-emerald-100/80 sm:p-7">
         <div className="mb-6 flex items-start gap-3">
@@ -908,6 +834,8 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
           </p>
         ) : null}
       </div>
+
+      <AiBrainPanel status={status} />
 
       {results.length > 0 || (diagnostics && (diagnostics.rawResults ?? 0) > 0) ? (
         <div className="space-y-3" data-testid="prospect-discover-results">
@@ -1831,7 +1759,6 @@ function Shell({ children }: { children: ReactNode }) {
 
 export function ProspectAI() {
   const statusQuery = useProspectAiStatus();
-  const { data: subscription } = useSubscription();
   const { user } = useAuth();
   const [localStatus, setLocalStatus] = useState<ProspectAiStatus | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -1900,17 +1827,10 @@ export function ProspectAI() {
   };
 
   if (showFirstTimeGuide || guideOpen) {
-    const aiBrainActive = Boolean(
-      status?.aiBrain?.configured ||
-        subscription?.limits?.effectiveHasAIBrain ||
-        subscription?.subscription?.effectiveHasAIBrain ||
-        subscription?.subscription?.trialIncludesAIBrain,
-    );
     return (
       <Shell>
         <ProspectAiOnboarding
           mode={showFirstTimeGuide ? "first_time" : "reference"}
-          aiBrainActive={aiBrainActive}
           onSkip={() => completeOnboarding({ skipped: true })}
           onFinishDiscover={() => {
             if (showFirstTimeGuide) {

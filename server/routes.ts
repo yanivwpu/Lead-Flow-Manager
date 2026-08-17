@@ -59,7 +59,9 @@ import {
   AI_BRAIN_PRO_CREDIT_BONUS,
   INBOX_AI_REPLY_FAIR_USE_MONTHLY_THRESHOLD,
   INBOX_AI_REPLY_GENERATIONS_MONTHLY,
+  INTEGRATIONS_UNAVAILABLE_MESSAGE,
   countInboxAiReplyGenerations,
+  limitsAllowIntegrations,
   shouldRecordInboxAiReplyGeneration,
 } from "@shared/pricingEntitlements";
 import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
@@ -4776,8 +4778,8 @@ export async function registerRoutes(
       }
       
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits?.integrationsEnabled) {
-        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      if (!limitsAllowIntegrations(limits)) {
+        return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
       
       const webhooks = await storage.getWebhooks(req.user.id);
@@ -4796,8 +4798,8 @@ export async function registerRoutes(
       }
       
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits?.integrationsEnabled) {
-        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      if (!limitsAllowIntegrations(limits)) {
+        return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
       
       const webhookCount = await storage.getWebhookCount(req.user.id);
@@ -5181,8 +5183,8 @@ export async function registerRoutes(
       }
       
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits?.integrationsEnabled) {
-        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      if (!limitsAllowIntegrations(limits)) {
+        return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
       
       const userIntegrations = await storage.getIntegrations(req.user.id);
@@ -6829,8 +6831,8 @@ export async function registerRoutes(
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits?.integrationsEnabled) {
-        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      if (!limitsAllowIntegrations(limits)) {
+        return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
 
       const { storeUrl, consumerKey, consumerSecret } = req.body as {
@@ -7130,8 +7132,8 @@ export async function registerRoutes(
       }
       
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits?.integrationsEnabled) {
-        return res.status(403).json({ error: "Integrations are not available on your plan" });
+      if (!limitsAllowIntegrations(limits)) {
+        return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
       
       const { type, name, config } = req.body;

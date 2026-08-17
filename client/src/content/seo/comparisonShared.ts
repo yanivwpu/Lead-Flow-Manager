@@ -139,9 +139,9 @@ export const WHACHAT_PLATFORM_ADVANTAGES: TitleDesc[] = [
       "One timeline per contact across WhatsApp, Messenger, Instagram, Email, and web chat — with notes, tags, and pipeline — instead of separate channel inboxes and a disconnected mailbox.",
   },
   {
-    title: "Shopify and GoHighLevel on paid plans",
+    title: "Shopify, GoHighLevel, and Calendly on Free",
     description:
-      "Starter+ unlocks the Integrations page: Shopify can sync new orders and customers into inbox context; GoHighLevel (LeadConnector) supports contact, message, and pipeline sync. Calendly booking integration is also available on Starter+.",
+      "Free users can open Integrations and connect Shopify (orders/customers into inbox context), GoHighLevel (LeadConnector), and Calendly. Conversation, user, and channel limits still apply. Campaign automation remains on Starter+.",
   },
   {
     title: "AI Assist with optional AI Brain",
@@ -181,9 +181,10 @@ export const WHACHAT_MATRIX_BASE: Array<{
   { category: "AI", feature: "AI Assist / Copilot", whachat: "Starter+" },
   { category: "AI", feature: "AI Brain (optional add-on)", whachat: "$29/mo on Starter/Pro" },
   // Integrations
-  { category: "Integrations", feature: "Shopify integration (orders/customers → inbox)", whachat: "Starter+" },
-  { category: "Integrations", feature: "GoHighLevel integration", whachat: "Starter+" },
-  { category: "Integrations", feature: "Calendly booking integration", whachat: "Starter+" },
+  { category: "Integrations", feature: "Shopify integration (orders/customers → inbox)", whachat: "yes" },
+  { category: "Integrations", feature: "GoHighLevel integration", whachat: "yes" },
+  { category: "Integrations", feature: "Calendly booking integration", whachat: "yes" },
+  { category: "Messaging", feature: "Basic WhatsApp template messaging", whachat: "yes" },
   // Vertical
   { category: "Growth products", feature: "Realtor Growth Engine", whachat: "Pro + AI Brain" },
   { category: "Growth products", feature: "Conversation / template analytics", whachat: "partial" },
@@ -238,20 +239,20 @@ export const DEFAULT_MIGRATION_STEPS = [
   "Connect WhatsApp with Meta Embedded Signup (Cloud API). Twilio is not required for new setups.",
   "Connect Messenger, Instagram (via Meta/Facebook Page), Gmail, and web chat if those channels matter.",
   "On Starter or Pro, rebuild critical chatbots and install preset automation templates.",
-  "On Starter+, connect Shopify, GoHighLevel, or Calendly from Integrations if you use those systems.",
+  "Connect Shopify, GoHighLevel, or Calendly from Integrations if you use those systems (available on Free).",
   "Parallel-run for a few days: route a share of conversations to WhachatCRM and compare response time and context.",
   "Cut over templates and team login once the Unified Inbox matches your daily workflow.",
 ];
 
 export const DEFAULT_FREE_VS_PAID = {
   freeHighlights: [
-    "Free forever: Unified Inbox, basic CRM, pipeline/tasks, and channel connect (WhatsApp, Messenger, Instagram, Email, web chat)",
+    "Free forever: Unified Inbox, basic CRM, pipeline/tasks, channel connect, Integrations, and basic WhatsApp templates",
     "50 active conversations · 1 user · 1 WhatsApp number",
-    "Validate workflows before paying — no credit card required to start",
-    "Chatbot, automation templates, Integrations (Shopify/GHL/Calendly), and AI are not included on Free",
+    "Validate the full communication loop before paying — no credit card required to start",
+    "Chatbot, preset campaign automation, and AI Brain are not included on Free",
   ],
   paidHighlights: [
-    "Starter ($19/mo): up to 3 users, chatbot + Flow Builder, basic automations & templates, Integrations page, AI Assist Basic",
+    "Starter ($19/mo): up to 3 users, chatbot + Flow Builder, campaign automation, AI Assist Basic",
     "Pro ($49/mo): unlimited users, higher conversation capacity, AI Assist Enhanced, advanced automations",
     "Optional AI Brain add-on ($29/mo) on Starter or Pro for deeper intelligence and Growth Engine eligibility",
     "Realtor Growth Engine requires Pro + AI Brain (specialized vertical — not a Free/Starter default)",
@@ -264,7 +265,7 @@ export function sharedComparisonFaqs(competitorName: string): FaqItem[] {
   return [
     {
       question: `Is WhachatCRM a complete ${competitorName} alternative?`,
-      answer: `For many SMBs, yes — if you need a Unified Inbox, CRM context, Meta Embedded Signup, Starter+ chatbot/templates, and transparent Meta fee pass-through. ${competitorName} may still fit better for niche workflows it specializes in; use the matrix on this page to decide.`,
+      answer: `For many SMBs, yes — if you need a Unified Inbox, CRM context, Meta Embedded Signup, Free integrations and basic WhatsApp templates, Starter+ chatbot/campaign automation, and transparent Meta fee pass-through. ${competitorName} may still fit better for niche workflows it specializes in; use the matrix on this page to decide.`,
     },
     {
       question: "Does WhachatCRM use WhatsApp Cloud API without requiring Twilio?",
@@ -294,12 +295,12 @@ export function sharedComparisonFaqs(competitorName: string): FaqItem[] {
     {
       question: "Does WhachatCRM integrate with Shopify?",
       answer:
-        "Yes on Starter and Pro. Shopify integration can bring new orders and customers into inbox context. Ecommerce automation templates are available on paid plans — confirm live webhook options in-product for your workflow.",
+        "Yes. Connect Shopify from Integrations on Free, Starter, and Pro. Shopify can bring new orders and customers into inbox context. Ecommerce campaign automation templates remain on Starter and Pro — confirm live webhook options in-product for your workflow.",
     },
     {
       question: "Does WhachatCRM work with GoHighLevel?",
       answer:
-        "Yes on Starter and Pro via the Integrations page (LeadConnector OAuth) for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
+        "Yes. Connect GoHighLevel from the Integrations page (LeadConnector OAuth) on Free, Starter, and Pro for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
     },
     {
       question: "What about AI Brain and Realtor Growth Engine?",

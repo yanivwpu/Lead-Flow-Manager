@@ -11,9 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link } from "wouter";
 import { 
-  Plug, Plus, Trash2, Copy, Check, ExternalLink, Zap, Lock,
+  Plug, Plus, Trash2, Copy, Check, ExternalLink,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
   Webhook, Eye, EyeOff, RefreshCw,
   Calendar, Mail, Link2
@@ -1151,27 +1150,6 @@ export function Integrations() {
     return (
       <div className="flex-1 flex items-center justify-center">
         <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
-      </div>
-    );
-  }
-
-  if (!integrationsEnabled) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <Lock className="h-8 w-8 text-gray-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Integrations are a Paid Feature</h2>
-        <p className="text-gray-500 max-w-md mb-6">
-          Connect WhachatCRM with your favorite tools like Shopify, CRM platforms, HubSpot, Salesforce, and more. 
-          Upgrade to Starter or Pro to unlock integrations.
-        </p>
-        <Link href="/pricing">
-          <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade-integrations">
-            <Zap className="h-4 w-4 mr-2" />
-            Upgrade Now
-          </Button>
-        </Link>
       </div>
     );
   }

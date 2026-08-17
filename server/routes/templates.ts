@@ -28,6 +28,12 @@ import { WA_TEMPLATE_MEDIA_NEEDS_CONVERSION_MESSAGE } from "../waTemplateMediaUs
 import { isPersistableWhatsAppTemplateDefaultUrl } from "../templateMediaPersistPolicy";
 import { getUserTwilioClient } from "../userTwilio";
 import { subscriptionService } from "../subscriptionService";
+import {
+  BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE,
+  TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
+  limitsAllowBasicTemplateMessaging,
+  limitsAllowTemplateCampaigns,
+} from "@shared/pricingEntitlements";
 import { withAutomationSendGuard, automationSendGuardBlockUserMessage } from "../automationSendGuard";
 import { getWhatsAppAvailability } from "../whatsappService";
 import { whatsappProviderNotReadyError, resolveWhatsAppActiveProvider } from "@shared/whatsappSetupMessages";
@@ -353,6 +359,14 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limitsAllowTemplateCampaigns(limits)) {
+        return res.status(403).json({
+          error: TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
+          upgradeRequired: true,
+        });
+      }
+
       const {
         sourcePresetId,
         name,
@@ -488,6 +502,14 @@ export function registerTemplateRoutes(app: Express): void {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limitsAllowTemplateCampaigns(limits)) {
+        return res.status(403).json({
+          error: TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
+          upgradeRequired: true,
+        });
       }
 
       const existing = await storage.getPresetCampaignForUser(req.params.id, req.user.id);
@@ -715,6 +737,14 @@ export function registerTemplateRoutes(app: Express): void {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limitsAllowTemplateCampaigns(limits)) {
+        return res.status(403).json({
+          error: TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
+          upgradeRequired: true,
+        });
+      }
+
       const copy = await storage.duplicatePresetCampaign(req.params.id, req.user.id);
       if (!copy) {
         return res.status(404).json({ error: "Campaign not found" });
@@ -928,7 +958,7 @@ export function registerTemplateRoutes(app: Express): void {
     }
   });
 
-  // ============= Message Templates (Pro Feature) =============
+  // ============= Message Templates =============
 
   // Get user's message templates
   app.get("/api/templates", async (req, res) => {
@@ -938,8 +968,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const templates = await storage.getMessageTemplates(req.user.id);
@@ -1008,8 +1038,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const templateId = typeof req.body?.templateId === "string" ? req.body.templateId.trim() : "";
@@ -1053,8 +1083,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       // IMPORTANT: use full session user row (auth-core `getUser` omits WhatsApp provider + Meta fields)
@@ -1428,8 +1458,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const rows = await storage.getRetargetableChats(req.user.id);
@@ -1482,8 +1512,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
@@ -1569,8 +1599,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
@@ -1652,8 +1682,8 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
-        return res.status(403).json({ error: "Template messaging is a Pro feature" });
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
+        return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
       const chatId = typeof req.query.chatId === "string" ? req.query.chatId.trim() : "";
@@ -1800,11 +1830,11 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!(limits as any)?.templatesEnabled) {
+      if (!limitsAllowBasicTemplateMessaging(limits)) {
         console.warn(
           `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=templates_disabled userId=${req.user.id}`
         );
-        return reply(403, { error: "Template messaging is a Pro feature" }, "templates_pro_required");
+        return reply(403, { error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE }, "templates_required");
       }
 
       const {

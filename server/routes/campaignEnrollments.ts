@@ -6,8 +6,8 @@ import {
   contactHasChannelIdentifier,
   evaluatePresetCampaignEnrollability,
 } from "@shared/campaignEnrollment";
-import { storage } from "../storage";
-import { getWhatsAppAvailability } from "../whatsappService";
+import { subscriptionService } from "../subscriptionService";
+import { TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE, limitsAllowTemplateCampaigns } from "@shared/pricingEntitlements";
 import { contactBlocksCampaignSends, processCampaignEnrollmentStep } from "../campaignExecution";
 
 async function assessChannelInfrastructure(userId: string, channel: Channel): Promise<{ ok: boolean; reason?: string }> {
@@ -39,6 +39,14 @@ export function registerCampaignEnrollmentRoutes(app: Express): void {
   app.post("/api/campaign-enrollments", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      if (!limitsAllowTemplateCampaigns(limits)) {
+        return res.status(403).json({
+          error: TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
+          upgradeRequired: true,
+        });
+      }
 
       const campaignId = typeof req.body?.campaignId === "string" ? req.body.campaignId : "";
       const contactId = typeof req.body?.contactId === "string" ? req.body.contactId : "";

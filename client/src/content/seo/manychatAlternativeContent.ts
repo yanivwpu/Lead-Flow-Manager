@@ -27,7 +27,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "ManyChat excels at Instagram and Facebook Messenger automation — flows, growth tools, and comment triggers many creators rely on. WhachatCRM is built for SMBs that treat WhatsApp as the revenue channel and want CRM depth, Email beside chat, team inbox, and Starter+ chatbot templates in one workspace.",
   quickSummary:
-    "Keep ManyChat when Instagram and Facebook automation is your core growth engine and your team already runs proven flows there. Consider WhachatCRM when WhatsApp CRM, a Unified Inbox with Gmail, shared team collaboration, Shopify and GoHighLevel on Starter+, and unlimited Pro users matter more than comment-to-DM growth hacks. ManyChat often prices around contacts and channels — confirm current packaging on their site.",
+    "Keep ManyChat when Instagram and Facebook automation is your core growth engine and your team already runs proven flows there. Consider WhachatCRM when WhatsApp CRM, a Unified Inbox with Gmail, shared team collaboration, Shopify and GoHighLevel integrations, and unlimited Pro users matter more than comment-to-DM growth hacks. ManyChat often prices around contacts and channels — confirm current packaging on their site.",
   whoFor: [
     "Brands shifting budget from IG/FB bots toward WhatsApp sales and support workflows",
     "Teams that need a real shared inbox and CRM — not just automation funnels",
@@ -80,7 +80,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat",
     "You want chatbot, Flow Builder, and preset templates on Starter+ for nurture and routing",
     "Shared team inbox, notes, tags, and pipeline matter for handoffs — not just broadcast funnels",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Starter+ are part of your stack",
+    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are part of your stack"
     "You want unlimited users on Pro ($49/mo) as marketing, sales, and support share one workspace",
   ],
   advantages: [
@@ -162,6 +162,6 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep ManyChat if Instagram and Facebook automation is your growth engine and flows are already optimized. Switch to WhachatCRM when WhatsApp CRM, Email in the same inbox, team collaboration, Starter+ chatbot/templates, Shopify/GHL on Starter+, and unlimited Pro users matter more than social-only funnel automation.",
+    "Keep ManyChat if Instagram and Facebook automation is your growth engine and flows are already optimized. Switch to WhachatCRM when WhatsApp CRM, Email in the same inbox, team collaboration, Starter+ chatbot/templates, Shopify/GHL on Free, and unlimited Pro users matter more than social-only funnel automation.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

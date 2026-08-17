@@ -65,6 +65,7 @@ export type PricingPageContent = {
     notIncluded: string;
     addOn: string;
     growthEngineReady: string;
+    basic: string;
     unlimited: string;
     upTo: string;
     perMonth: string;
@@ -80,6 +81,8 @@ export type PricingPageContent = {
     whatsappOne: string;
     whatsappMany: string;
     multiChannelInbox: string;
+    connectIntegrations: string;
+    basicWhatsappTemplates: string;
     chatbotWidget: string;
     workflowAutomation: string;
     growthEnginesRequired: string;
@@ -149,7 +152,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       "Upgrade only as your business grows",
     ],
   },
-  freeUpsell: "Upgrade when you need chatbot, automations, and more capacity.",
+  freeUpsell: "Upgrade when you need chatbot, campaign automation, and more capacity.",
   starterCallout: {
     title: "AI Chatbot & Website Widget",
     body: "Capture, qualify and respond to website visitors automatically.",
@@ -241,6 +244,14 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     title: "Common questions",
     items: [
       {
+        q: "Are integrations included on Free?",
+        a: "Yes. Free users can open Integrations and connect supported tools such as Gmail, Shopify, Calendly, and GoHighLevel. Conversation, user, and channel limits still apply. Campaign automation and AI Brain remain separate paid capabilities.",
+      },
+      {
+        q: "Are WhatsApp templates included on Free?",
+        a: "Yes. Free includes basic WhatsApp template messaging: view, sync, and send an approved template to a contact when Meta requires it outside the 24-hour window. Bulk campaigns, mass enrollment, and advanced retargeting stay on Starter and Pro.",
+      },
+      {
         q: "Can I try Pro and AI Brain before upgrading?",
         a: "Every new account receives a full-featured 14-day Pro + AI Brain trial. No feature restrictions during the trial.",
       },
@@ -293,10 +304,14 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     aiBrainAddon: "AI Brain add-on",
     assignment: "Assignment / collaboration",
     integrations: "Integrations",
+    templateMessaging: "WhatsApp template messaging",
     growthEngines: "Growth Engines",
   },
   compareHints: {
     growthEngines: "Required platform plan to activate compatible Growth Engines.",
+    templateMessaging:
+      "Free includes basic 1:1 approved-template sends. Bulk campaigns and automation sequences stay on Starter and Pro.",
+    integrations: "Connect supported business tools. Conversation and usage limits still apply.",
   },
   compareGroups: {
     MESSAGING: "Messaging",
@@ -314,6 +329,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     addOn: "Add-on",
     growthEngineReady: "Growth Engine Ready",
     unlimited: "Unlimited",
+    basic: "Basic",
     upTo: "Up to {{n}}",
     perMonth: "/month",
     user: "user",
@@ -328,6 +344,8 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     whatsappOne: "1 WhatsApp Business account",
     whatsappMany: "Up to {{n}} WhatsApp Business accounts",
     multiChannelInbox: "Multi-channel Inbox",
+    connectIntegrations: "Connect integrations",
+    basicWhatsappTemplates: "Basic WhatsApp templates",
     chatbotWidget: "AI Chatbot & Website Widget",
     workflowAutomation: "Workflow Automation",
     growthEnginesRequired: "Required plan for Industry Growth Engines",
@@ -338,6 +356,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     bullets: [
       "Free, Starter, and Pro plans with clear conversation and user limits",
       "Prospect AI included on every plan",
+      "Integrations and basic WhatsApp templates on Free",
       "Optional AI Brain add-on for Starter and Pro",
       "0% WhachatCRM markup on Meta conversation fees",
       "14-day Pro + AI Brain trial on new accounts",

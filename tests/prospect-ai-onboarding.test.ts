@@ -71,21 +71,28 @@ test("onboarding includes optional AI Brain education before You're Ready", asyn
   assert.ok(brainIdx >= 0 && readyIdx > brainIdx, "AI Brain section must precede You're Ready");
   assert.ok(ui.includes("PROSPECT_AI_BRAIN_ONBOARDING"));
   assert.ok(ui.includes("PROSPECT_AI_BRAIN_RELATIONSHIP_LINES"));
-  assert.ok(ui.includes("prospect-ai-guide-learn-ai-brain"));
-  assert.ok(ui.includes("aiBrainActive"));
   assert.ok(edu.includes(PROSPECT_AI_BRAIN_ONBOARDING.heading));
-  assert.ok(edu.includes(PROSPECT_AI_BRAIN_ONBOARDING.ctaLabel));
-  assert.ok(edu.includes("Optional"));
-  assert.ok(edu.includes(PROSPECT_AI_BRAIN_ONBOARDING.activeConfirmation));
+  assert.equal(PROSPECT_AI_BRAIN_ONBOARDING.heading, "Make Prospect AI even smarter with AI Brain");
+  assert.match(
+    PROSPECT_AI_BRAIN_ONBOARDING.body[0] ?? "",
+    /analyzing each prospect/i,
+  );
   assert.ok(edu.includes(PROSPECT_AI_BRAIN_RELATIONSHIP_LINES[0]));
   assert.ok(edu.includes(PROSPECT_AI_BRAIN_RELATIONSHIP_LINES[1]));
-  assert.ok(edu.includes("optional intelligence layer"));
+  assert.ok(!edu.includes("AI Brain Activated"));
+  assert.ok(!edu.includes("AI Brain is active"));
   assert.ok(!edu.includes("Upgrade Now"));
   assert.ok(!edu.includes("Unlock Prospect AI"));
   assert.ok(!edu.includes("Get Better Discovery"));
   assert.ok(!/\bRequired\b/.test(PROSPECT_AI_BRAIN_ONBOARDING.heading));
-  assert.ok(page.includes("aiBrainActive={aiBrainActive}"));
-  assert.ok(page.includes("effectiveHasAIBrain"));
+  assert.ok(!ui.includes("aiBrainActive"));
+  assert.ok(!ui.includes("prospect-ai-guide-learn-ai-brain"));
+  assert.ok(!page.includes("aiBrainActive={aiBrainActive}"));
+  assert.ok(!page.includes("Upgrade to AI Brain"));
+  assert.ok(!page.includes("AI Brain Connected"));
+  assert.ok(!page.includes("Unlock AI Brain"));
+  assert.ok(page.includes("Make Prospect AI even smarter with AI Brain"));
+  assert.ok(page.includes("prospect-ai-brain-education"));
 });
 
 test("User Guide includes Prospect AI chapter and FAQ", async () => {

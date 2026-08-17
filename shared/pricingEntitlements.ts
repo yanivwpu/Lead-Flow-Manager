@@ -12,6 +12,50 @@
 import { PLAN_LIMITS, type SubscriptionPlan } from "./schema";
 import { PROSPECT_AI_MONTHLY_QUOTAS } from "./prospectAI";
 
+/** Connect business tools/channels. Available on Free. */
+export function planAllowsIntegrations(plan: SubscriptionPlan): boolean {
+  return PLAN_LIMITS[plan].integrationsEnabled;
+}
+
+export function limitsAllowIntegrations(
+  limits: { integrationsEnabled?: boolean } | null | undefined,
+): boolean {
+  return !!limits?.integrationsEnabled;
+}
+
+/** View, sync, and send approved WhatsApp templates 1:1. Available on Free. */
+export function planAllowsBasicTemplateMessaging(plan: SubscriptionPlan): boolean {
+  return PLAN_LIMITS[plan].templatesEnabled;
+}
+
+export function limitsAllowBasicTemplateMessaging(
+  limits: { templatesEnabled?: boolean } | null | undefined,
+): boolean {
+  return !!limits?.templatesEnabled;
+}
+
+/**
+ * Preset campaigns, mass enrollment, and automation sequences.
+ * Reuses workflowsEnabled (Starter/Pro) — not a new pricing tier.
+ */
+export function planAllowsTemplateCampaigns(plan: SubscriptionPlan): boolean {
+  return PLAN_LIMITS[plan].workflowsEnabled;
+}
+
+export function limitsAllowTemplateCampaigns(
+  limits: { workflowsEnabled?: boolean } | null | undefined,
+): boolean {
+  return !!limits?.workflowsEnabled;
+}
+
+export const TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE =
+  "Campaign and bulk template automation requires Starter or Pro";
+
+export const INTEGRATIONS_UNAVAILABLE_MESSAGE = "Integrations are not available on your plan";
+
+export const BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE =
+  "Template messaging is not available on your plan";
+
 export {
   AI_ASSIST_FAIR_USE_MONTHLY_THRESHOLD,
   AI_ASSIST_MONTHLY_CREDITS,
@@ -63,6 +107,12 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
       : `Up to ${limits.maxWhatsappNumbers} WhatsApp Business accounts`,
     "Multi-channel Inbox",
   ];
+  if (limits.integrationsEnabled) {
+    lines.push("Connect integrations");
+  }
+  if (limits.templatesEnabled) {
+    lines.push("Basic WhatsApp templates");
+  }
   if (limits.chatbotEnabled) {
     lines.push("AI Chatbot & Website Widget");
   }
@@ -130,6 +180,13 @@ export function buildPricingCompareRows(opts?: {
       free: "Connected channels",
       starter: "Connected channels",
       pro: "Connected channels",
+    },
+    {
+      group: "MESSAGING",
+      featureKey: "templateMessaging",
+      free: "Basic",
+      starter: true,
+      pro: true,
     },
     {
       group: "PROSPECT AI",
@@ -204,7 +261,7 @@ export function buildPricingCompareRows(opts?: {
     {
       group: "SUPPORT",
       featureKey: "integrations",
-      free: false,
+      free: true,
       starter: true,
       pro: true,
     },

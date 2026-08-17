@@ -28,9 +28,9 @@ export const PLAN_LIMITS = {
     teamInbox: true, // read-only shared inbox
     assignmentEnabled: false,
     workflowsEnabled: false,
-    integrationsEnabled: false,
+    integrationsEnabled: true,
     maxWebhooks: 0,
-    templatesEnabled: false,
+    templatesEnabled: true,
     chatbotEnabled: false,
   },
   starter: {
@@ -68,7 +68,7 @@ export const PLAN_LIMITS = {
     workflowsEnabled: true, // Advanced Automations (full builder; UI may still gate extras)
     integrationsEnabled: true,
     maxWebhooks: 10,
-    templatesEnabled: true, // Pro feature: template messaging & retargeting
+    templatesEnabled: true, // Basic WhatsApp templates on all plans; campaign/bulk stays on workflowsEnabled
     chatbotEnabled: true, // Visual chatbot builder
   },
 } as const;
