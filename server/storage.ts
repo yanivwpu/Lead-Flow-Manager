@@ -67,6 +67,7 @@ import {
   shouldRepairReEngagementJsonFromLatestFailedTemplate,
   type ConversationReEngagement,
 } from "@shared/reEngagement";
+import { EMAIL_INBOX_IDENTITY_SOURCE, type GetContactsOptions } from "@shared/contactCrmVisibility";
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
 import { resolveLastEmailMessageIdForInboxRow } from "@shared/inboxEmailTrash";
@@ -343,7 +344,7 @@ export interface IStorage {
   // ============= MULTI-CHANNEL CRM METHODS =============
   
   // Contact methods
-  getContacts(userId: string, limit?: number): Promise<Contact[]>;
+  getContacts(userId: string, limit?: number, options?: GetContactsOptions): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
   getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
@@ -362,7 +363,7 @@ export interface IStorage {
   ): Promise<Contact | undefined>;
   deleteContact(id: string): Promise<void>;
   mergeContacts(targetId: string, sourceId: string): Promise<Contact>;
-  searchContacts(userId: string, query: string, limit?: number): Promise<Contact[]>;
+  searchContacts(userId: string, query: string, limit?: number, options?: GetContactsOptions): Promise<Contact[]>;
   getContactNotes(workspaceId: string, contactId: string): Promise<ContactNote[]>;
   addContactNote(data: InsertContactNote): Promise<ContactNote>;
   getContactNoteById(noteId: string): Promise<ContactNote | undefined>;
@@ -1098,7 +1099,8 @@ export class DbStorage implements IStorage {
       .where(
         and(
           isNotNull(contacts.followUpDate),
-          lte(contacts.followUpDate, now)
+          lte(contacts.followUpDate, now),
+          ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE),
         )
       );
   }
@@ -2281,9 +2283,13 @@ export class DbStorage implements IStorage {
   // ============= MULTI-CHANNEL CRM IMPLEMENTATION =============
 
   // Contact methods
-  async getContacts(userId: string, limit: number = 1000): Promise<Contact[]> {
+  async getContacts(userId: string, limit: number = 1000, options?: GetContactsOptions): Promise<Contact[]> {
+    const conditions = [eq(contacts.userId, userId)];
+    if (!options?.includeInboxIdentities) {
+      conditions.push(ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE));
+    }
     return await db.select().from(contacts)
-      .where(eq(contacts.userId, userId))
+      .where(and(...conditions))
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
   }
@@ -2655,18 +2661,22 @@ export class DbStorage implements IStorage {
     return updated!;
   }
 
-  async searchContacts(userId: string, query: string, limit: number = 50): Promise<Contact[]> {
+  async searchContacts(userId: string, query: string, limit: number = 50, options?: GetContactsOptions): Promise<Contact[]> {
     const searchPattern = `%${query}%`;
+    const conditions = [
+      eq(contacts.userId, userId),
+      or(
+        ilike(contacts.name, searchPattern),
+        ilike(contacts.email, searchPattern),
+        ilike(contacts.phone, searchPattern),
+        ilike(contacts.notes, searchPattern)
+      ),
+    ];
+    if (!options?.includeInboxIdentities) {
+      conditions.push(ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE));
+    }
     return await db.select().from(contacts)
-      .where(and(
-        eq(contacts.userId, userId),
-        or(
-          ilike(contacts.name, searchPattern),
-          ilike(contacts.email, searchPattern),
-          ilike(contacts.phone, searchPattern),
-          ilike(contacts.notes, searchPattern)
-        )
-      ))
+      .where(and(...conditions))
       .orderBy(desc(contacts.updatedAt))
       .limit(limit);
   }

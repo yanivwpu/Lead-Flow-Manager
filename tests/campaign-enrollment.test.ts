@@ -38,6 +38,17 @@ test("instagram campaign eligible for instagram contact", () => {
   assert.equal(r.eligible, true);
 });
 
+test("email_inbox identity cannot be enrolled in campaigns", () => {
+  const r = evaluatePresetCampaignEnrollability({
+    contact: { source: "email_inbox", email: "alerts@n.example", whatsappId: "15551234567" },
+    campaign: { channel: "whatsapp", status: "active", messages: [{ content: "hi" }] },
+    conversationChannel: "whatsapp",
+    channelConnected: true,
+  });
+  assert.equal(r.eligible, false);
+  assert.equal(r.code, "inbox_identity");
+});
+
 test("draft campaign blocked at enroll", () => {
   const r = evaluatePresetCampaignEnrollability({
     contact: { instagramId: "ig-123" },

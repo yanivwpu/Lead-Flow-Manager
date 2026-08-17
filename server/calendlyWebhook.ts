@@ -11,6 +11,8 @@ import {
   type WhatsAppMessage,
 } from "./userTwilio";
 import { storage } from "./storage";
+import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import { promoteInboxIdentityToCrm } from "./emailChannel/contactMatch";
 import { clearStaleAppointmentScheduledTag, contactHasActiveUpcomingAppointment, syncContactFollowUpAfterAppointmentChange } from "./contactAppointmentSync";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { subscriptionService } from "./subscriptionService";
@@ -551,10 +553,13 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
 }): Promise<void> {
   const { userId, contactId, conversationId, appointmentId, title, startIso, eventTypeName, scheduledEventUri, meetingLink, inviteeName, inviteeEmail, skipIfAlreadyConfirmed } =
     params;
-  const contact = await storage.getContact(contactId);
+  let contact = await storage.getContact(contactId);
   if (!contact) {
     logCalendlyWebhook("booking_effects_contact_missing", { userId, contactId, appointmentId });
     return;
+  }
+  if (isEmailInboxIdentitySource(contact.source)) {
+    contact = await promoteInboxIdentityToCrm(contact, "email");
   }
 
   const prevCf = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;

@@ -17,6 +17,7 @@ import {
 } from "@shared/prospectImport";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
+import { INCLUDE_INBOX_IDENTITIES } from "@shared/contactCrmVisibility";
 import { getIntegrationById, searchGhlContacts } from "./ghlApiClient";
 import {
   buildProspectImportFilterFingerprint,
@@ -188,7 +189,7 @@ async function runPreviewScanJob(jobId: string): Promise<void> {
       },
     });
 
-    const destinationContacts = await storage.getContacts(job.destinationUserId, 50000);
+    const destinationContacts = await storage.getContacts(job.destinationUserId, 50000, INCLUDE_INBOX_IDENTITIES);
     const scannedAt = new Date().toISOString();
     const previewResult = buildPreviewResultFromScan({
       scan,
@@ -323,7 +324,7 @@ export async function createGhlProspectPreviewJob(params: {
       },
     });
 
-    const destinationContacts = await storage.getContacts(params.destinationUserId, 50000);
+    const destinationContacts = await storage.getContacts(params.destinationUserId, 50000, INCLUDE_INBOX_IDENTITIES);
     const scannedAt = new Date().toISOString();
     const previewResult = buildPreviewResultFromScan({
       scan,

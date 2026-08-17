@@ -6,6 +6,7 @@ import type {
   Channel,
 } from "@shared/schema";
 import { CHANNEL_INFO } from "@shared/schema";
+import { isCrmListedContact } from "@shared/contactCrmVisibility";
 import { parsePresetDelayToMs } from "@shared/campaignDelays";
 import {
   coerceReplyWindowErrorToUserMessage,
@@ -57,6 +58,9 @@ function whatsAppFreeFormAllowed(conversation: Conversation | undefined): boolea
 }
 
 export function contactBlocksCampaignSends(contact: Contact): { blocked: boolean; reason?: string } {
+  if (!isCrmListedContact(contact)) {
+    return { blocked: true, reason: "Inbox identities cannot be enrolled in campaigns" };
+  }
   const tag = (contact.tag || "").toLowerCase();
   if (/\b(stop|unsubscribe|opt\s*out|do not contact|dnc)\b/i.test(contact.tag || "")) {
     return { blocked: true, reason: "Contact tag indicates opt-out" };
@@ -335,6 +339,10 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
   const contact = await storage.getContact(enrollment.contactId);
   if (!contact || contact.userId !== enrollment.userId) {
     await storage.updateCampaignEnrollment(enrollment.id, { status: "failed", nextRunAt: null });
+    return;
+  }
+  if (!isCrmListedContact(contact)) {
+    await storage.updateCampaignEnrollment(enrollment.id, { status: "cancelled", nextRunAt: null });
     return;
   }
 

@@ -16,6 +16,8 @@ import { PROSPECT_IMPORT_DASHBOARD_STAGES } from "@shared/prospectImport";
 import { getProspectImportDestinationEmail } from "@shared/prospectImportAccess";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
+import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import { promoteInboxIdentityToCrm } from "../emailChannel/contactMatch";
 import { normalizeGhlContactName } from "./ghlApiClient";
 import {
   buildProspectDedupIndex,
@@ -347,7 +349,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
     const total = rawContacts.length;
     await updateJob(jobId, { progressTotal: total });
 
-    const destinationContacts = await storage.getContacts(destinationUserId, 50000);
+    const destinationContacts = await storage.getContacts(destinationUserId, 50000, INCLUDE_INBOX_IDENTITIES);
     const dedupIndex = buildProspectDedupIndex(destinationContacts);
 
     let imported = 0;
@@ -390,6 +392,30 @@ async function runProspectImportJob(jobId: string): Promise<void> {
         };
 
         if (dup) {
+          if (isEmailInboxIdentitySource(dup.contact.source)) {
+            const promoted = await promoteInboxIdentityToCrm(dup.contact, "import");
+            const metaPatch = mergeProspectImportMetadata(promoted, {
+              ...prospectMeta,
+              createdByImportJob: true,
+            });
+            const updatedContact = await storage.updateContact(promoted.id, {
+              name,
+              ...(email ? { email } : {}),
+              ...(phone ? { phone } : {}),
+              ghlId: raw.id,
+              tag: internalTag,
+              pipelineStage,
+              sourceDetails: metaPatch.sourceDetails,
+              customFields: metaPatch.customFields,
+            });
+            if (updatedContact) {
+              imported += 1;
+              createdContactIds.push(updatedContact.id);
+              if (updatedContact.ghlId) dedupIndex.byGhlId.set(updatedContact.ghlId, updatedContact);
+              const normEmail = email?.toLowerCase();
+              if (normEmail) dedupIndex.byEmail.set(normEmail, updatedContact);
+            }
+          } else {
           duplicates += 1;
           if (updateMissingOnly && !skipDuplicates) {
             const patch = mergeMissingFields(dup.contact, {
@@ -414,6 +440,7 @@ async function runProspectImportJob(jobId: string): Promise<void> {
             }
           } else {
             skipped += 1;
+          }
           }
         } else {
           const prospectMetaCreate: ProspectImportGhlMetadata = {

@@ -1,4 +1,8 @@
-import type { Express } from "express";
+import { filterCrmListedContacts, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import {
+  findContactsByEmail,
+  promoteInboxIdentityToCrm,
+} from "../emailChannel/contactMatch";
 import { sql, eq } from "drizzle-orm";
 import { CHANNELS, contactNotes } from "@shared/schema";
 import { resolveEmailRichFromSendBody } from "@shared/emailChannel";
@@ -42,7 +46,7 @@ export function registerContactRoutes(app: Express): void {
       }
       const limit = parseInt(req.query.limit as string) || 1000;
       const contacts = await storage.getContacts(req.user.id, limit);
-      res.json(contacts);
+      res.json(filterCrmListedContacts(contacts));
     } catch (error) {
       console.error("Error fetching contacts:", error);
       res.status(500).json({ error: "Failed to fetch contacts" });
@@ -60,7 +64,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(400).json({ error: "Search query required" });
       }
       const contacts = await storage.searchContacts(req.user.id, query);
-      res.json(contacts);
+      res.json(filterCrmListedContacts(contacts));
     } catch (error) {
       console.error("Error searching contacts:", error);
       res.status(500).json({ error: "Failed to search contacts" });
@@ -381,11 +385,27 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
-  // Create new contact
+  // Create new contact (reuse + promote an Inbox identity with the same email)
   app.post("/api/contacts", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
+      }
+      const email = typeof req.body?.email === "string" ? req.body.email : "";
+      if (email.trim()) {
+        const existing = await findContactsByEmail(req.user.id, email);
+        const inboxIdentity = existing.find((c) => isEmailInboxIdentitySource(c.source));
+        if (inboxIdentity) {
+          let contact = await promoteInboxIdentityToCrm(inboxIdentity, "email");
+          const patch: Record<string, unknown> = {};
+          if (typeof req.body.name === "string" && req.body.name.trim()) patch.name = req.body.name.trim();
+          if (typeof req.body.phone === "string") patch.phone = req.body.phone;
+          if (Object.keys(patch).length > 0) {
+            contact = (await storage.updateContact(contact.id, patch as any)) || contact;
+          }
+          scheduleHubSpotAutoSync(req.user.id, contact.id);
+          return res.status(201).json(contact);
+        }
       }
       const contact = await storage.createContact({
         ...req.body,

@@ -1,3 +1,4 @@
+import { isCrmListedContact } from "@shared/contactCrmVisibility";
 import type { Chat, Contact } from "@shared/schema";
 import { storage } from "./storage";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "./integrationConfigCrypto";
@@ -142,6 +143,9 @@ export function scheduleHubSpotAutoSync(userId: string, contactId: string): void
 export async function syncContactToHubSpotIfEnabled(userId: string, contactOrChat: Contact | Chat): Promise<void> {
   if (!isCrmContact(contactOrChat)) {
     await syncChatToHubSpotIfEnabled(userId, contactOrChat as Chat);
+    return;
+  }
+  if (!isCrmListedContact(contactOrChat)) {
     return;
   }
 

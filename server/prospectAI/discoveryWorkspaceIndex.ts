@@ -4,6 +4,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
+import { INCLUDE_INBOX_IDENTITIES } from "@shared/contactCrmVisibility";
 import { prospectAiDiscoveryResults } from "@shared/schema";
 import {
   buildIdentityKeys,
@@ -49,7 +50,7 @@ export async function loadDiscoveryWorkspaceIndex(
   >();
   const entries: DiscoveryWorkspaceIndex["entries"] = [];
 
-  const existingContacts = await storage.getContacts(workspaceUserId, 5000);
+  const existingContacts = await storage.getContacts(workspaceUserId, 5000, INCLUDE_INBOX_IDENTITIES);
   const { loadProspectLifecycleByContactIds } = await import(
     "../prospectImport/prospectLifecycleService"
   );

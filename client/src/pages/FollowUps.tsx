@@ -49,6 +49,7 @@ interface InboxItem {
     notes?: string;
     followUp?: string | null;
     followUpDate?: string | null;
+    source?: string | null;
   };
   conversation?: {
     lastMessageDirection?: string;
@@ -694,7 +695,9 @@ export function FollowUps() {
   // Map /api/inbox items to the Chat shape used by this page
   const chats = useMemo<Chat[]>(() => {
     if (isDemoUser) return rawChats;
-    return inboxData.map(item => ({
+    return inboxData
+      .filter((item) => item.contact.source !== "email_inbox")
+      .map(item => ({
       id: item.contact.id,
       name: item.contact.name,
       avatar: item.contact.avatar || '',

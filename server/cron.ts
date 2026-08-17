@@ -2,6 +2,7 @@ import { db } from '../drizzle/db';
 import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
 import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzle-orm';
 import { sendDailyHotListEmail, type HotLeadEntry } from './email';
+import { EMAIL_INBOX_IDENTITY_SOURCE } from '@shared/contactCrmVisibility';
 import { runActivationEmails } from './activationEmailService';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
@@ -177,6 +178,7 @@ export async function runDailyHotListEmails(): Promise<{ sent: number; errors: n
             and(
               eq(contacts.userId, ent.userId),
               eq(contacts.tag, 'Hot'),
+              ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE),
               ne(contacts.pipelineStage, 'Closed'),
               ne(contacts.pipelineStage, 'Unqualified')
             )

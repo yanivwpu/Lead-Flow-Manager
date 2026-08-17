@@ -42,8 +42,20 @@ import {
   canAccessGhlOAuthRecoveryTools,
   isGhlOAuthRecoveryAllowlisted,
 } from '@shared/ghlOAuthRecoveryAccess';
+import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from '@shared/contactCrmVisibility';
+import { promoteInboxIdentityToCrm } from './emailChannel/contactMatch';
+import type { Contact } from '@shared/schema';
 
 const router = Router();
+
+async function loadContactsForIdentityMatch(userId: string): Promise<Contact[]> {
+  return storage.getContacts(userId, 5000, INCLUDE_INBOX_IDENTITIES);
+}
+
+async function promoteInboxIdentityOnGhlMatch(contact: Contact): Promise<Contact> {
+  if (!isEmailInboxIdentitySource(contact.source)) return contact;
+  return promoteInboxIdentityToCrm(contact, "gohighlevel");
+}
 
 const marketplaceOAuthBoot = getGhlMarketplaceOAuthConfig();
 if (!marketplaceOAuthBoot.configured) {
@@ -627,7 +639,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
             ? `${contact.firstName} ${contact.lastName}`
             : contact.firstName || incomingEmail || 'Unknown';
 
-          const allContacts = await storage.getContacts(userId);
+          const allContacts = await loadContactsForIdentityMatch(userId);
 
           const existingContact =
             (ghlId ? allContacts.find((c: any) => c.ghlId === ghlId) : undefined) ??
@@ -635,6 +647,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
             (incomingEmail ? allContacts.find((c: any) => c.email && c.email === incomingEmail) : undefined);
 
           if (existingContact) {
+            if (isEmailInboxIdentitySource(existingContact.source)) {
+              console.log(`[LeadConnector Webhook] ${timestamp} | ${type} skipped — matched Inbox identity, not a CRM Contact`);
+            } else {
             const sourceDetailsBase = existingContact.sourceDetails
               ? (typeof existingContact.sourceDetails === 'string'
                   ? JSON.parse(existingContact.sourceDetails)
@@ -654,6 +669,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
             });
             scheduleHubSpotAutoSync(userId, existingContact.id);
             console.log(`[LeadConnector Webhook] ${timestamp} | Updated existing contact: ${ghlId || incomingPhone || incomingEmail}`);
+            }
           } else {
             // Contact does not exist locally — skip creation.
             // Contacts only enter the CRM via InboundMessage events (real conversations).
@@ -671,7 +687,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const tags = body.tags || body.contact?.tags;
           
           if (ghlId && tags) {
-            const contacts = await storage.getContacts(userId);
+            const contacts = await loadContactsForIdentityMatch(userId);
             const existingContact = contacts.find((c: any) => c.ghlId === ghlId);
             if (existingContact) {
               await storage.updateContact(existingContact.id, {
@@ -705,7 +721,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           }
 
           // Phase 1 safe match: ghlId → phone → email → create (no duplicates)
-          const allContacts = await storage.getContacts(userId);
+          const allContacts = await loadContactsForIdentityMatch(userId);
           let contact =
             allContacts.find((c: any) => c.ghlId === ghlContactId) ??
             (msgPhone ? allContacts.find((c: any) => c.phone && c.phone === msgPhone) : undefined) ??
@@ -721,9 +737,11 @@ router.post('/webhook', async (req: Request, res: Response) => {
               ghlId: ghlContactId,
               source: 'gohighlevel',
             });
-          } else if (!contact.ghlId) {
-            // Stamp ghlId on a contact matched by phone/email
-            await storage.updateContact(contact.id, { ghlId: ghlContactId });
+          } else {
+            contact = await promoteInboxIdentityOnGhlMatch(contact);
+            if (!contact.ghlId) {
+              await storage.updateContact(contact.id, { ghlId: ghlContactId });
+            }
           }
 
           // Phase 7: Dedup by externalMessageId — GHL can echo outbound messages
@@ -780,7 +798,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const ghlContactId = apt.contactId || apt.contact?.id;
           
           if (ghlContactId) {
-            const contacts = await storage.getContacts(userId);
+            const contacts = await loadContactsForIdentityMatch(userId);
             const contact = contacts.find((c: any) => c.ghlId === ghlContactId);
             if (contact) {
               await storage.createActivityEvent({
@@ -808,7 +826,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
         try {
           const ghlId = body.contactId || body.contact?.id || body.id;
           if (ghlId) {
-            const allContacts = await storage.getContacts(userId);
+            const allContacts = await loadContactsForIdentityMatch(userId);
             const target = allContacts.find((c: any) => c.ghlId === ghlId);
             if (target) {
               await storage.updateContact(target.id, { tag: 'deleted_in_ghl' });
@@ -830,7 +848,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           const ghlContactId = apt.contactId || apt.contact?.id;
           const appointmentId = apt.id || apt.appointmentId;
           if (ghlContactId && appointmentId) {
-            const allContacts = await storage.getContacts(userId);
+            const allContacts = await loadContactsForIdentityMatch(userId);
             const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
             if (contact) {
               await storage.createActivityEvent({
@@ -895,7 +913,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
           }
 
           // Find the WhachatCRM contact by ghlId
-          const allContacts = await storage.getContacts(userId);
+          const allContacts = await loadContactsForIdentityMatch(userId);
           const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
           if (!contact) {
             console.log(
@@ -945,7 +963,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
             opp.contact?.id || opp.contactId || undefined;
           const ghlOpportunityId: string | undefined = opp.id;
           if (ghlContactId) {
-            const allContacts = await storage.getContacts(userId);
+            const allContacts = await loadContactsForIdentityMatch(userId);
             const contact = allContacts.find((c: any) => c.ghlId === ghlContactId);
             if (contact) {
               // Log as activity — do NOT change pipelineStage

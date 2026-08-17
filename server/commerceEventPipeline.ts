@@ -4,7 +4,9 @@
  */
 import type { Channel, Contact, Conversation, InsertMessage } from "@shared/schema";
 import { isCommerceSourcedContact } from "@shared/contactChannelDisplay";
+import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
 import { storage } from "./storage";
+import { promoteInboxIdentityToCrm } from "./emailChannel/contactMatch";
 import { dispatchCommerceEventAutomation } from "./automationEventDispatcher";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { notifyUser } from "./presence";
@@ -146,7 +148,7 @@ async function upsertCommerceContact(
   metadata: Record<string, unknown>,
   source: CommerceSource,
 ): Promise<{ contact: Contact; created: boolean }> {
-  const existing = await findContactForCommerceHints(userId, hints, source);
+  let existing = await findContactForCommerceHints(userId, hints, source);
   const phoneDigits = normalizePhone(hints.phone);
   const email = normalizeEmail(hints.email);
   const fallbackName = defaultCustomerName(source);
@@ -180,6 +182,9 @@ async function upsertCommerceContact(
   };
 
   if (existing) {
+    if (isEmailInboxIdentitySource(existing.source)) {
+      existing = await promoteInboxIdentityToCrm(existing, "email");
+    }
     const prevCf = (existing.customFields || {}) as Record<string, unknown>;
     const patch: Partial<Contact> = {
       customFields: { ...prevCf, ...commerceCustom },

@@ -27,6 +27,8 @@ import {
 } from "@shared/prospectAiDiscoveryBatch";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
+import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import { promoteInboxIdentityToCrm } from "../emailChannel/contactMatch";
 import { subscriptionService } from "../subscriptionService";
 import { getBusinessProfileForUser } from "../businessProfileService";
 import { getProspectDiscoveryProvider } from "./providers";
@@ -863,7 +865,7 @@ export async function sendDiscoverResultsToReview(
     throw new ProspectAiError("No matching discovery results in this search", "not_found", 404);
   }
 
-  const existingContacts = await storage.getContacts(workspaceUserId, 5000);
+  const existingContacts = await storage.getContacts(workspaceUserId, 5000, INCLUDE_INBOX_IDENTITIES);
   const dedupIndex = buildProspectDedupIndex(existingContacts);
 
   const placeIdIndex = new Map<string, (typeof existingContacts)[0]>();
@@ -937,6 +939,9 @@ export async function sendDiscoverResultsToReview(
     };
 
     if (contact && contact.userId === workspaceUserId) {
+      if (isEmailInboxIdentitySource(contact.source)) {
+        contact = await promoteInboxIdentityToCrm(contact, "import");
+      }
       const sd = { ...(contact.sourceDetails as Record<string, unknown> | null) };
       const cf = { ...(contact.customFields as Record<string, unknown> | null) };
       const mergedSd = {

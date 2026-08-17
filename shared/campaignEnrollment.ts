@@ -4,6 +4,7 @@
  */
 
 import { CHANNEL_INFO, type Channel } from "./schema";
+import { isCrmListedContact } from "./contactCrmVisibility";
 
 export type CampaignContactLike = {
   phone?: string | null;
@@ -14,6 +15,7 @@ export type CampaignContactLike = {
   primaryChannel?: string | null;
   lastIncomingChannel?: string | null;
   source?: string | null;
+  sourceDetails?: unknown;
   tag?: string | null;
   customFields?: unknown;
 };
@@ -35,7 +37,8 @@ export type CampaignEnrollBlockCode =
   | "channel_not_connected"
   | "no_campaign_steps"
   | "already_enrolled"
-  | "contact_opt_out";
+  | "contact_opt_out"
+  | "inbox_identity";
 
 export type CampaignEnrollEligibility = {
   eligible: boolean;
@@ -158,6 +161,14 @@ export function evaluatePresetCampaignEnrollability(params: {
   optOutReason?: string;
 }): CampaignEnrollEligibility {
   const { contact, campaign } = params;
+
+  if (!isCrmListedContact(contact)) {
+    return {
+      eligible: false,
+      code: "inbox_identity",
+      userMessage: "Cannot enroll: this is an Inbox identity, not a Contact",
+    };
+  }
 
   if (params.contactOptOut) {
     return {
