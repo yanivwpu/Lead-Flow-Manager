@@ -80,7 +80,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     "You need one Unified Inbox across WhatsApp, Messenger, Instagram, Email (Gmail), and web chat",
     "You want chatbot, Flow Builder, and preset automation templates on Starter+ — Free includes inbox, integrations, and basic WhatsApp templates",
     "You need unlimited users on Pro so sales, support, and marketing share one workspace without seat packs",
-    "Shopify orders/customers in inbox context or GoHighLevel LeadConnector sync matter on Free"
+    "Shopify orders/customers in inbox context or GoHighLevel LeadConnector sync matter on Free",
     "You want 0% WhachatCRM markup on Meta conversation fees with clear Free / $19 / $49 plans",
   ],
   advantages: [

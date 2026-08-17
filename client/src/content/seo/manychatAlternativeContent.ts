@@ -80,7 +80,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat",
     "You want chatbot, Flow Builder, and preset templates on Starter+ for nurture and routing",
     "Shared team inbox, notes, tags, and pipeline matter for handoffs — not just broadcast funnels",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are part of your stack"
+    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are part of your stack",
     "You want unlimited users on Pro ($49/mo) as marketing, sales, and support share one workspace",
   ],
   advantages: [

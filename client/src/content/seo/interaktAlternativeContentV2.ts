@@ -32,7 +32,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     "India and APAC teams expanding beyond WhatsApp-only commerce engagement",
     "Brands that need Email and social DMs in one CRM timeline — not separate campaign tools",
     "SMBs comparing Interakt tier scaling against Free / $19 / $49 WhachatCRM plans",
-    "Ecommerce operators who want Shopify context in inbox on Free without commerce-only lock-in"
+    "Ecommerce operators who want Shopify context in inbox on Free without commerce-only lock-in",
     "Buyers seeking balanced analysis between regional WhatsApp leaders and omnichannel CRM",
   ],
   competitorGoodWhen: [
@@ -79,7 +79,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     "You want Email (Gmail OAuth) beside WhatsApp in one Unified Inbox",
     "Messenger and Instagram Messaging should share CRM context with WhatsApp — not live in silos",
     "You need chatbot, Flow Builder, and preset templates on Starter+ (not available on Free)",
-    "Shopify orders/customers in inbox and GoHighLevel LeadConnector sync on Free fit your stack"
+    "Shopify orders/customers in inbox and GoHighLevel LeadConnector sync on Free fit your stack",
     "Unlimited users on Pro ($49/mo) matter as sales, support, and marketing scale together",
     "You want 0% WhachatCRM markup on Meta fees with Meta Embedded Signup (Twilio not required)",
   ],

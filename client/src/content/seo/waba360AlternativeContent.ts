@@ -80,7 +80,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat in one timeline",
     "You want chatbot, Flow Builder, and preset automation templates on Starter+ — not on Free",
     "You need CRM, tags, pipeline, and team collaboration without building middleware",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free matter"
+    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free matter",
     "You want unlimited users on Pro ($49/mo) instead of engineering headcount for every new agent workflow",
   ],
   advantages: [

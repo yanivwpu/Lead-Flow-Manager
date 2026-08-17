@@ -80,7 +80,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     "Meta Embedded Signup and WhatsApp Cloud API onboarding should be self-serve (Twilio not required)",
     "Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat matters daily",
     "Chatbot, Flow Builder, and preset templates on Starter+ should not consume separate credit pools",
-    "Shopify, GoHighLevel, and Calendly Integrations on Free are part of your workflow"
+    "Shopify, GoHighLevel, and Calendly Integrations on Free are part of your workflow",
     "You want 0% WhachatCRM markup on Meta fees — competitor markup claims unverified here",
   ],
   advantages: [

@@ -80,7 +80,7 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
     "You need unlimited users on Pro ($49/mo) as sales, support, and marketing share one workspace",
     "Meta Embedded Signup and WhatsApp Cloud API onboarding should be self-serve (Twilio not required)",
     "Starter+ chatbot, Flow Builder, and preset templates should launch without enterprise procurement",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are in your stack"
+    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are in your stack",
     "You want 0% WhachatCRM markup on Meta conversation fees with partial conversation analytics — not a full BI suite",
   ],
   advantages: [
