@@ -12,6 +12,7 @@ import { shouldBlockListingRecommendationMissingText } from "@shared/inboxCompos
 import { Link, useRoute, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { invalidateQueriesAfterContactDeletion } from "@/lib/contactDeletionCache";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   resolveInboxSelectionState,
@@ -2382,8 +2383,7 @@ export function UnifiedInbox() {
       if (!res.ok) throw new Error("Failed to delete contact");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      invalidateQueriesAfterContactDeletion(queryClient);
       setShowDeleteConfirm(false);
       setLocation("/app/inbox");
     },

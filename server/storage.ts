@@ -2602,7 +2602,8 @@ export class DbStorage implements IStorage {
   }
 
   async deleteContact(id: string): Promise<void> {
-    await db.delete(contacts).where(eq(contacts.id, id));
+    const { deleteContactRecords } = await import("./contactDeleteService");
+    await deleteContactRecords([id]);
   }
 
   /**

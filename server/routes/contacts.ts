@@ -1,10 +1,16 @@
+import type { Express } from "express";
 import { filterCrmListedContacts, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
 import {
   findContactsByEmail,
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
-import { sql, eq } from "drizzle-orm";
-import { CHANNELS, contactNotes } from "@shared/schema";
+import { sql, eq, and, inArray } from "drizzle-orm";
+import { CHANNELS, contactNotes, campaignEnrollments } from "@shared/schema";
+import {
+  CONTACTS_BULK_DELETE_MAX,
+  deleteContactSafely,
+  deleteContactsSafely,
+} from "../contactDeleteService";
 import { resolveEmailRichFromSendBody } from "@shared/emailChannel";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
@@ -46,7 +52,32 @@ export function registerContactRoutes(app: Express): void {
       }
       const limit = parseInt(req.query.limit as string) || 1000;
       const contacts = await storage.getContacts(req.user.id, limit);
-      res.json(filterCrmListedContacts(contacts));
+      const listed = filterCrmListedContacts(contacts);
+      const listedIds = listed.map((c) => c.id);
+      let activeEnrollmentIds = new Set<string>();
+      if (listedIds.length > 0) {
+        try {
+          const enrollmentRows = await db
+            .selectDistinct({ contactId: campaignEnrollments.contactId })
+            .from(campaignEnrollments)
+            .where(
+              and(
+                eq(campaignEnrollments.userId, req.user.id),
+                eq(campaignEnrollments.status, "active"),
+                inArray(campaignEnrollments.contactId, listedIds),
+              ),
+            );
+          activeEnrollmentIds = new Set(enrollmentRows.map((r) => r.contactId).filter(Boolean));
+        } catch (enrollErr) {
+          console.warn("[contacts] active enrollment lookup failed:", enrollErr);
+        }
+      }
+      res.json(
+        listed.map((c) => ({
+          ...c,
+          hasActiveCampaignEnrollment: activeEnrollmentIds.has(c.id),
+        })),
+      );
     } catch (error) {
       console.error("Error fetching contacts:", error);
       res.status(500).json({ error: "Failed to fetch contacts" });
@@ -90,6 +121,35 @@ export function registerContactRoutes(app: Express): void {
       console.error("Error fetching notes summary:", error);
       // Empty map keeps Contacts usable if DB/schema drifts; client treats non-OK as {} anyway.
       res.status(200).json({});
+    }
+  });
+
+  // Bulk hard-delete — MUST be before /:id so "bulk-delete" is not treated as an id
+  app.post("/api/contacts/bulk-delete", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = await deleteContactsSafely(req.user.id, req.body?.contactIds);
+      if (!result.ok) {
+        if (result.code === "over_limit") {
+          return res.status(400).json({
+            error: `Cannot delete more than ${CONTACTS_BULK_DELETE_MAX} contacts at once`,
+            max: CONTACTS_BULK_DELETE_MAX,
+            count: result.count,
+          });
+        }
+        if (result.code === "not_owned_or_missing") {
+          return res.status(403).json({
+            error: "One or more contacts were not found or not owned",
+          });
+        }
+        return res.status(400).json({ error: "contactIds must be a non-empty array of contact ids" });
+      }
+      res.json({ deleted: result.deleted });
+    } catch (error) {
+      console.error("Error bulk-deleting contacts:", error);
+      res.status(500).json({ error: "Failed to delete contacts" });
     }
   });
 
@@ -665,20 +725,19 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
-  // Delete contact
+  // Delete contact (permanent hard delete — same service as bulk-delete)
   app.delete("/api/contacts/:id", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const contact = await storage.getContact(req.params.id);
-      if (!contact) {
+      const result = await deleteContactSafely(req.user.id, req.params.id);
+      if (!result.ok) {
+        if (result.code === "forbidden") {
+          return res.status(403).json({ error: "Forbidden" });
+        }
         return res.status(404).json({ error: "Contact not found" });
       }
-      if (contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      await storage.deleteContact(req.params.id);
       res.status(204).send();
     } catch (error) {
       console.error("Error deleting contact:", error);

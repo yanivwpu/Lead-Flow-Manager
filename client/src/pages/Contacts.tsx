@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -6,6 +6,7 @@ import {
   Search, UserPlus, MessageCircle, Instagram, Facebook, Smartphone, Globe, Send,
   ChevronUp, ChevronDown, ChevronsUpDown, X, Users, Phone, Mail, ShoppingCart,
   ArrowUpRight, RefreshCw, Download, StickyNote, Sparkles, Loader2, CalendarCheck,
+  MoreVertical, Trash2,
 } from "lucide-react";
 import {
   getContactDisplayChannel,
@@ -14,15 +15,27 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { invalidateQueriesAfterContactDeletion } from "@/lib/contactDeletionCache";
+import { useToast } from "@/hooks/use-toast";
 import { TAG_COLORS } from "@/lib/data";
 import { isCrmDisplayTag, nextActiveAppointmentByContact } from "@shared/activeAppointment";
+import {
+  CONTACTS_BULK_DELETE_MAX,
+  contactHasActiveFollowUp,
+  describeContactDeletionExtraWarning,
+} from "@shared/contactDeletion";
 
 type Channel = "whatsapp" | "instagram" | "facebook" | "sms" | "webchat" | "telegram" | "shopify" | "woocommerce";
 
@@ -42,7 +55,9 @@ interface Contact {
   lastIncomingChannel?: string;
   source?: string;
   assignedTo?: string;
+  followUp?: string;
   followUpDate?: string;
+  hasActiveCampaignEnrollment?: boolean;
   notes?: string;
   createdAt: string;
   whatsappId?: string;
@@ -68,6 +83,9 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
 function contactDisplayChannelKey(contact: Contact): string {
   return getContactDisplayChannel(contact) ?? DISPLAY_CHANNEL_NONE;
 }
+
+const CONTACTS_TABLE_COLS =
+  "grid-cols-[2rem_minmax(0,2fr)_1fr_1.2fr_1fr_1fr_1fr_2rem]";
 
 function channelUiConfig(channelKey: string) {
   return CHANNEL_CONFIG[channelKey] ?? CHANNEL_CONFIG[DISPLAY_CHANNEL_NONE];
@@ -160,11 +178,49 @@ function StatCard({ label, value, icon: Icon, color, iconColor = "text-gray-500"
   );
 }
 
+function ContactRowMenu({
+  contact,
+  onDelete,
+}: {
+  contact: Contact;
+  onDelete: (contact: Contact) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="p-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+          data-testid={`menu-contact-${contact.id}`}
+          aria-label="Contact actions"
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuItem
+          className="text-red-600 focus:text-red-600"
+          data-testid={`menu-delete-contact-${contact.id}`}
+          onSelect={() => onDelete(contact)}
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Delete Contact
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function Contacts() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const contactsQueryKey = withUserQueryScope(["/api/contacts"], user?.id);
+  const notesSummaryQueryKey = withUserQueryScope(["/api/contacts/notes-summary"], user?.id);
+  const appointmentsQueryKey = withUserQueryScope(["/api/appointments"], user?.id);
 
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState<string>("");
@@ -175,6 +231,10 @@ export function Contacts() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
   const [addError, setAddError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [deleteTarget, setDeleteTarget] = useState<
+    { mode: "single"; contact: Contact } | { mode: "bulk"; ids: string[] } | null
+  >(null);
 
   const [snapshotContact, setSnapshotContact] = useState<Contact | null>(null);
   const [snapshotText, setSnapshotText] = useState<string>("");
@@ -186,7 +246,7 @@ export function Contacts() {
   const [notesLoading, setNotesLoading] = useState(false);
 
   const { data: notesSummary = {} } = useQuery<Record<string, number>>({
-    queryKey: ["/api/contacts/notes-summary"],
+    queryKey: notesSummaryQueryKey,
     queryFn: async () => {
       const res = await fetch("/api/contacts/notes-summary", { credentials: "include" });
       if (!res.ok) return {};
@@ -210,8 +270,8 @@ export function Contacts() {
     }
   }
 
-  const { data: contacts = [], isLoading, refetch } = useQuery<Contact[]>({
-    queryKey: ["/api/contacts"],
+  const { data: contacts = [], isLoading } = useQuery<Contact[]>({
+    queryKey: contactsQueryKey,
     queryFn: async () => {
       const res = await fetch("/api/contacts?limit=5000", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
@@ -226,7 +286,7 @@ export function Contacts() {
     title?: string;
     appointmentType?: string;
   }>>({
-    queryKey: ["/api/appointments"],
+    queryKey: appointmentsQueryKey,
     staleTime: 30_000,
   });
 
@@ -257,6 +317,71 @@ export function Contacts() {
       navigate(`/app/inbox/${contact.id}`);
     },
     onError: (err: Error) => setAddError(err.message),
+  });
+
+  const removeContactsFromCache = (deletedIds: string[]) => {
+    const deleted = new Set(deletedIds);
+    queryClient.setQueryData<Contact[]>(contactsQueryKey, (old) =>
+      old ? old.filter((c) => !deleted.has(c.id)) : old,
+    );
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (!deleted.has(id)) next.add(id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  };
+
+  const deleteSingleMutation = useMutation({
+    mutationFn: async (contact: Contact) => {
+      const res = await fetch(`/api/contacts/${contact.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete contact");
+      }
+      return contact;
+    },
+    onSuccess: (contact) => {
+      removeContactsFromCache([contact.id]);
+      invalidateQueriesAfterContactDeletion(queryClient);
+      setDeleteTarget(null);
+      toast({ title: `${contact.name} deleted.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not delete contact", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteBulkMutation = useMutation({
+    mutationFn: async (contactIds: string[]) => {
+      const res = await fetch("/api/contacts/bulk-delete", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error || "Failed to delete contacts");
+      }
+      return { deleted: Number(body.deleted) || contactIds.length, contactIds };
+    },
+    onSuccess: ({ deleted, contactIds }) => {
+      removeContactsFromCache(contactIds);
+      invalidateQueriesAfterContactDeletion(queryClient);
+      setDeleteTarget(null);
+      toast({
+        title: deleted === 1 ? "1 contact deleted." : `${deleted} contacts deleted.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not delete contacts", description: err.message, variant: "destructive" });
+    },
   });
 
   const allTags = useMemo(() => {
@@ -304,6 +429,80 @@ export function Contacts() {
 
     return list;
   }, [contacts, search, filterTag, filterStage, filterChannel, sortField, sortDir]);
+
+  useEffect(() => {
+    const visible = new Set(filtered.map((c) => c.id));
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filtered]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
+  const someFilteredSelected = filtered.some((c) => selectedIds.has(c.id));
+  const headerCheckboxState: boolean | "indeterminate" = allFilteredSelected
+    ? true
+    : someFilteredSelected
+      ? "indeterminate"
+      : false;
+
+  function toggleContactSelected(contactId: string, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(contactId);
+      else next.delete(contactId);
+      return next;
+    });
+  }
+
+  function toggleSelectAllFiltered() {
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) {
+        const next = new Set(prev);
+        for (const c of filtered) next.delete(c.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const c of filtered) next.add(c.id);
+      return next;
+    });
+  }
+
+  const appointmentContactIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const appt of contactAppointments) {
+      if (appt.contactId) ids.add(appt.contactId);
+    }
+    return ids;
+  }, [contactAppointments]);
+
+  const contactsById = useMemo(() => {
+    const map = new Map<string, Contact>();
+    for (const c of contacts) map.set(c.id, c);
+    return map;
+  }, [contacts]);
+
+  const deleteExtraWarning = useMemo(() => {
+    if (!deleteTarget) return null;
+    const ids = deleteTarget.mode === "single" ? [deleteTarget.contact.id] : deleteTarget.ids;
+    const flags = {
+      hasAppointments: ids.some((id) => appointmentContactIds.has(id)),
+      hasActiveCampaignEnrollment: ids.some((id) => contactsById.get(id)?.hasActiveCampaignEnrollment),
+      hasActiveFollowUp: ids.some((id) => {
+        const c = contactsById.get(id);
+        return c ? contactHasActiveFollowUp(c) : false;
+      }),
+    };
+    return describeContactDeletionExtraWarning(flags, deleteTarget.mode);
+  }, [deleteTarget, appointmentContactIds, contactsById]);
+
+  const deletePending = deleteSingleMutation.isPending || deleteBulkMutation.isPending;
 
   const channelCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -529,6 +728,47 @@ export function Contacts() {
             </span>
           </div>
 
+          {selectedIds.size >= 1 && (
+            <div
+              className="flex flex-col gap-2 rounded-lg border bg-gray-50/70 px-2.5 py-1.5 sm:flex-row sm:flex-wrap sm:items-center"
+              data-testid="contacts-bulk-bar"
+            >
+              <p className="text-xs font-medium text-gray-800" data-testid="contacts-selected-count">
+                {selectedIds.size} selected
+              </p>
+              <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs text-gray-500"
+                  onClick={() => setSelectedIds(new Set())}
+                  data-testid="button-clear-contact-selection"
+                >
+                  Clear
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  className="h-8 text-xs"
+                  disabled={selectedIds.size > CONTACTS_BULK_DELETE_MAX}
+                  title={selectedIds.size > CONTACTS_BULK_DELETE_MAX ? `Select at most ${CONTACTS_BULK_DELETE_MAX} contacts` : undefined}
+                  onClick={() => setDeleteTarget({ mode: "bulk", ids: [...selectedIds] })}
+                  data-testid="button-delete-selected-contacts"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  Delete selected
+                </Button>
+              </div>
+              {selectedIds.size > CONTACTS_BULK_DELETE_MAX ? (
+                <p className="w-full text-[11px] text-amber-800" data-testid="contacts-bulk-max-hint">
+                  Select at most {CONTACTS_BULK_DELETE_MAX} contacts to delete at once.
+                </p>
+              ) : null}
+            </div>
+          )}
+
           {/* ── MOBILE card list (< md) ── */}
           <div className="md:hidden bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {isLoading ? (
@@ -557,6 +797,17 @@ export function Contacts() {
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
+                <div className="flex items-center gap-3 px-4 py-2 bg-gray-50">
+                  <Checkbox
+                    checked={headerCheckboxState}
+                    onCheckedChange={() => toggleSelectAllFiltered()}
+                    aria-label="Select all filtered contacts"
+                    data-testid="checkbox-select-all-contacts-mobile"
+                  />
+                  <span className="text-xs font-medium text-gray-500">
+                    {t("contacts.selectAllFiltered", "Select all")}
+                  </span>
+                </div>
                 {filtered.map((contact) => {
                   const ch = contactDisplayChannelKey(contact);
                   const cfg = channelUiConfig(ch);
@@ -569,6 +820,17 @@ export function Contacts() {
                       className="flex items-center gap-3 px-4 py-3 active:bg-gray-50 cursor-pointer transition-colors"
                       data-testid={`row-contact-${contact.id}`}
                     >
+                      <div
+                        className="flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedIds.has(contact.id)}
+                          onCheckedChange={(checked) => toggleContactSelected(contact.id, checked === true)}
+                          aria-label={`Select ${contact.name}`}
+                          data-testid={`checkbox-contact-${contact.id}`}
+                        />
+                      </div>
                       {/* Avatar */}
                       <div className="flex-shrink-0">
                         <Avatar contact={contact} />
@@ -633,23 +895,28 @@ export function Contacts() {
                         ) : null}
                       </div>
 
-                      {/* Right: appointment + timestamp + arrow */}
-                      <div className="flex-shrink-0 flex flex-col items-end gap-1">
-                        {bookedAppt ? (
-                          <span
-                            className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700"
-                            data-testid={`text-appointment-${contact.id}`}
-                          >
-                            <CalendarCheck className="w-3 h-3 shrink-0" aria-hidden />
-                            {formatBookedAt(bookedAppt.appointmentDate)}
+                      {/* Right: appointment + timestamp + menu */}
+                      <div className="flex-shrink-0 flex items-start gap-1">
+                        <div className="flex flex-col items-end gap-1">
+                          {bookedAppt ? (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700"
+                              data-testid={`text-appointment-${contact.id}`}
+                            >
+                              <CalendarCheck className="w-3 h-3 shrink-0" aria-hidden />
+                              {formatBookedAt(bookedAppt.appointmentDate)}
+                            </span>
+                          ) : null}
+                          <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
+                            {contact.createdAt
+                              ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
+                              : "—"}
                           </span>
-                        ) : null}
-                        <span className="text-[10px] text-gray-400" data-testid={`text-created-${contact.id}`}>
-                          {contact.createdAt
-                            ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
-                            : "—"}
-                        </span>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-gray-300" />
+                        </div>
+                        <ContactRowMenu
+                          contact={contact}
+                          onDelete={(c) => setDeleteTarget({ mode: "single", contact: c })}
+                        />
                       </div>
                     </div>
                   );
@@ -661,7 +928,15 @@ export function Contacts() {
           {/* ── DESKTOP table (md+) ── */}
           <div className="hidden md:block bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Table header */}
-            <div className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr_1fr] gap-4 px-4 py-2.5 border-b border-gray-100 bg-gray-50">
+            <div className={cn("grid gap-4 px-4 py-2.5 border-b border-gray-100 bg-gray-50", CONTACTS_TABLE_COLS)}>
+              <div className="flex items-center">
+                <Checkbox
+                  checked={headerCheckboxState}
+                  onCheckedChange={() => toggleSelectAllFiltered()}
+                  aria-label="Select all filtered contacts"
+                  data-testid="checkbox-select-all-contacts"
+                />
+              </div>
               <SortHeader label={t("contacts.colName", "Contact")} field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
               <SortHeader label={t("contacts.colTag", "Tag")} field="tag" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
               <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
@@ -672,6 +947,7 @@ export function Contacts() {
                 {t("contacts.colChannel", "Channel")}
               </span>
               <SortHeader label={t("contacts.colAdded", "Added")} field="createdAt" sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+              <span className="sr-only">Actions</span>
             </div>
 
             {isLoading ? (
@@ -709,9 +985,20 @@ export function Contacts() {
                     <div
                       key={contact.id}
                       onClick={() => navigate(`/app/inbox/${contact.id}`)}
-                      className="grid grid-cols-[2fr_1fr_1.2fr_1fr_1fr_1fr] gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group"
+                      className={cn("grid gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group", CONTACTS_TABLE_COLS)}
                       data-testid={`row-contact-${contact.id}`}
                     >
+                      <div
+                        className="flex items-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedIds.has(contact.id)}
+                          onCheckedChange={(checked) => toggleContactSelected(contact.id, checked === true)}
+                          aria-label={`Select ${contact.name}`}
+                          data-testid={`checkbox-contact-${contact.id}`}
+                        />
+                      </div>
                       {/* Name + phone */}
                       <div className="flex items-center gap-3 min-w-0">
                         <Avatar contact={contact} />
@@ -804,6 +1091,12 @@ export function Contacts() {
                             ? formatDistanceToNow(new Date(contact.createdAt), { addSuffix: true })
                             : "—"}
                         </span>
+                      </div>
+                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <ContactRowMenu
+                          contact={contact}
+                          onDelete={(c) => setDeleteTarget({ mode: "single", contact: c })}
+                        />
                       </div>
                     </div>
                   );
@@ -932,6 +1225,54 @@ export function Contacts() {
               AI-generated from recent conversation and team notes
             </p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o && !deletePending) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-delete-contacts">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">
+              {deleteTarget?.mode === "single"
+                ? `Delete ${deleteTarget.contact.name}?`
+                : `Delete ${deleteTarget?.ids.length ?? 0} contacts?`}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {deleteTarget?.mode === "single"
+              ? "This permanently deletes the contact and all conversations and messages. This cannot be undone."
+              : "This permanently deletes these contacts and all related conversations and messages. This cannot be undone."}
+          </p>
+          {deleteExtraWarning ? (
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2" data-testid="contacts-delete-extra-warning">
+              {deleteExtraWarning}
+            </p>
+          ) : null}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deletePending}
+              data-testid="button-cancel-delete-contacts"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deletePending}
+              data-testid="button-confirm-delete-contacts"
+              onClick={() => {
+                if (!deleteTarget) return;
+                if (deleteTarget.mode === "single") {
+                  deleteSingleMutation.mutate(deleteTarget.contact);
+                } else {
+                  deleteBulkMutation.mutate(deleteTarget.ids);
+                }
+              }}
+            >
+              {deletePending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {deleteTarget?.mode === "single" ? "Delete Contact" : "Delete selected"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
