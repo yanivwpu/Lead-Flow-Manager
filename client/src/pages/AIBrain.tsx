@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import debounce from "lodash/debounce";
 import {
@@ -184,6 +185,7 @@ function LockedFeatureTeaser({
 }
 
 function AIBrainContent() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const shopHint = useShopifyShopHint();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
@@ -482,10 +484,16 @@ function AIBrainContent() {
 
   // No paid (or trial) tier — AI Assist is not available on Free; AI Brain requires Starter/Pro first.
   if (!hasAIAssist && !effectiveHasAIBrain) {
+    const ltrBrand = (className?: string) => (
+      <bdi dir="ltr" className={className} />
+    );
     return (
-      <div className="h-full overflow-y-auto bg-gradient-to-b from-violet-50/50 via-slate-50/90 to-white p-6 sm:p-10">
+      <div
+        className="h-full overflow-y-auto bg-gradient-to-b from-violet-50/50 via-slate-50/90 to-white p-6 sm:p-10"
+        data-testid="ai-workspace-locked"
+      >
         <div className="mx-auto max-w-lg space-y-10 py-10">
-          <div className="text-center space-y-5">
+          <div className="space-y-5 text-center">
             <div className="relative mx-auto w-fit">
               <div className="absolute -inset-2 rounded-3xl bg-gradient-to-br from-violet-400/20 to-emerald-400/15 blur-lg" aria-hidden />
               <div className="relative flex h-16 w-16 items-center justify-center gap-0.5 rounded-2xl border border-violet-100/90 bg-white shadow-md shadow-violet-500/10">
@@ -494,25 +502,59 @@ function AIBrainContent() {
               </div>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">WhachatCRM</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">AI workspace</h1>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-600">
+                <bdi dir="ltr">WhachatCRM</bdi>
+              </p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                {t("aiBrain.workspace.title")}
+              </h1>
             </div>
-            <div className="mx-auto max-w-sm space-y-2 text-left text-sm leading-relaxed text-slate-600">
+            <div className="mx-auto max-w-md space-y-3 text-start text-sm leading-relaxed text-slate-600">
+              <p className="font-medium text-slate-900">{t("aiBrain.workspace.valueLead")}</p>
               <p>
-                <span className="font-medium text-slate-900">Starter</span> is{" "}
-                <span className="text-violet-900/90">AI Assist Basic</span>.{" "}
-                <span className="font-medium text-slate-900">Pro</span> adds unlimited users and enhanced AI-assisted workflows where enabled.
+                <Trans
+                  i18nKey="aiBrain.workspace.assistLine"
+                  components={{ assist: ltrBrand("font-medium text-slate-900") }}
+                />
               </p>
               <p>
-                <span className="font-medium text-violet-900">AI Brain</span> — the serious upgrade for business memory,
-                scoring, and automation intelligence.
+                <Trans
+                  i18nKey="aiBrain.workspace.brainGoesFurther"
+                  components={{ brain: ltrBrand("font-medium text-violet-900") }}
+                />
+              </p>
+              <p>
+                <Trans
+                  i18nKey="aiBrain.workspace.brainSalesTeam"
+                  components={{
+                    brain: ltrBrand("font-medium text-violet-900"),
+                    team: ltrBrand(),
+                  }}
+                />
+              </p>
+              <p>
+                <Trans
+                  i18nKey="aiBrain.workspace.brainContext"
+                  components={{ brand: ltrBrand() }}
+                />
               </p>
             </div>
           </div>
 
           <div className="space-y-4 rounded-2xl border border-violet-100/80 bg-white/95 p-7 shadow-lg shadow-violet-500/[0.06] ring-1 ring-slate-200/40">
-            <p className="text-sm leading-relaxed text-slate-600">
-              Choose a plan to turn on AI Assist. Add AI Brain on Starter or Pro for the full intelligence layer.
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">
+              {t("aiBrain.workspace.readyHeadline")}
+            </h2>
+            <p className="text-start text-sm leading-relaxed text-slate-600">
+              <Trans
+                i18nKey="aiBrain.workspace.readyBody"
+                components={{
+                  starter: ltrBrand("font-medium text-slate-900"),
+                  pro: ltrBrand("font-medium text-slate-900"),
+                  assist: ltrBrand("font-medium text-slate-900"),
+                  brain: ltrBrand("font-medium text-violet-900"),
+                }}
+              />
             </p>
             {isFree && !isShopify ? (
               <>
@@ -521,8 +563,9 @@ function AIBrainContent() {
                   className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
                   onClick={() => setBundleModalOpen(true)}
                   disabled={isCheckingOut}
+                  data-testid="button-ai-workspace-choose-plan"
                 >
-                  Choose plan &amp; bundles
+                  {t("aiBrain.workspace.cta")}
                 </Button>
                 <Dialog open={bundleModalOpen} onOpenChange={setBundleModalOpen}>
                   <DialogContent className="sm:max-w-md">
@@ -566,8 +609,9 @@ function AIBrainContent() {
                 <Button
                   type="button"
                   className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
+                  data-testid="button-ai-workspace-choose-plan"
                 >
-                  View plans
+                  {t("aiBrain.workspace.cta")}
                 </Button>
               </Link>
             )}
@@ -662,7 +706,10 @@ function AIBrainContent() {
   const autoModeLocked = starterOnly;
 
   return (
-    <div className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/95 to-white">
+    <div
+      className="h-full overflow-y-auto overflow-x-hidden bg-gradient-to-b from-violet-50/50 via-slate-50/95 to-white"
+      data-testid="ai-workspace-active"
+    >
       <div className="p-6 sm:p-10 max-w-[800px] mx-auto w-full space-y-9 pb-28">
         <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex gap-4">

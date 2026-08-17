@@ -242,7 +242,19 @@
     "saveSettings": "שמור הגדרות",
     "testAi": "בדוק AI",
     "upgradeRequired": "נדרש שדרוג",
-    "upgradeDesc": "שדרג ל-Pro לפתיחת תכונות AI Brain"
+    "upgradeDesc": "שדרג ל-Pro לפתיחת תכונות AI Brain",
+    "workspace": {
+      "title": "AI Workspace",
+      "valueLead": "הפוך את השיחות שלך להחלטות מכירה חכמות יותר.",
+      "assistLine": "<assist>AI Assist</assist> עוזר לך לכתוב מהר יותר.",
+      "brainGoesFurther": "<brain>AI Brain</brain> הולך רחוק יותר — הוא זוכר את העסק שלך, מבין שיחות, מדרג הזדמנויות ומפעיל המלצות ואוטומציה חכמות יותר.",
+      "brainSalesTeam": "<brain>AI Brain</brain> — האינטליגנציה מאחורי ה-<team>AI Sales Team</team> שלך.",
+      "brainContext": "הוא לומד את ההקשר העסקי שלך כדי ש-<brand>WhachatCRM</brand> יוכל להמליץ על הצעדים הבאים הטובים יותר בשיחות, בלידים ובזרימות עבודה.",
+      "readyHeadline": "מוכנים ל-AI חכם יותר?",
+      "readyBody": "בחרו <starter>Starter</starter> או <pro>Pro</pro> כדי לפתוח את <assist>AI Assist</assist>, ואז הוסיפו <brain>AI Brain</brain> כשאתם רוצים את שכבת האינטליגנציה המלאה.",
+      "cta": "בחירת תוכנית ואפשרויות AI",
+      "viewPlans": "צפייה בתוכניות"
+    }
   },
   "pricing": {
     "backToSettings": "חזרה להגדרות",

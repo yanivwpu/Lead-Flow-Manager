@@ -242,7 +242,19 @@
     "saveSettings": "Guardar Configuración",
     "testAi": "Probar IA",
     "upgradeRequired": "Mejora Requerida",
-    "upgradeDesc": "Actualiza a Pro para desbloquear las funciones de AI Brain"
+    "upgradeDesc": "Actualiza a Pro para desbloquear las funciones de AI Brain",
+    "workspace": {
+      "title": "AI Workspace",
+      "valueLead": "Convierte tus conversaciones en decisiones de venta más inteligentes.",
+      "assistLine": "<assist>AI Assist</assist> te ayuda a escribir más rápido.",
+      "brainGoesFurther": "<brain>AI Brain</brain> va más allá: recuerda tu negocio, entiende las conversaciones, puntúa las oportunidades y potencia recomendaciones y automatización más inteligentes.",
+      "brainSalesTeam": "<brain>AI Brain</brain> — la inteligencia detrás de tu <team>AI Sales Team</team>.",
+      "brainContext": "Aprende el contexto de tu negocio para que <brand>WhachatCRM</brand> pueda recomendar mejores siguientes pasos en conversaciones, prospectos y flujos de trabajo.",
+      "readyHeadline": "¿Listo para una IA más inteligente?",
+      "readyBody": "Elige <starter>Starter</starter> o <pro>Pro</pro> para desbloquear <assist>AI Assist</assist> y añade <brain>AI Brain</brain> cuando quieras la capa de inteligencia completa.",
+      "cta": "Elegir plan y opciones de IA",
+      "viewPlans": "Ver planes"
+    }
   },
   "pricing": {
     "backToSettings": "Volver a Configuración",
