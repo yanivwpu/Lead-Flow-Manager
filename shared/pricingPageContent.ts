@@ -16,6 +16,7 @@ export type PricingPageContent = {
     twitterDescription: string;
   };
   trialBanner: string;
+  hero: { h1: string; subtitle: string; trustLine: string };
   transparent: { title: string; points: string[] };
   freeUpsell: string;
   starterCallout: { title: string; body: string };
@@ -105,6 +106,12 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       "Prospect AI, multi-channel inbox, AI Chatbot, and sales automation—clear plans from Free to Pro.",
   },
   trialBanner: "Every new account includes a full 14-day Pro + AI Brain trial.",
+  hero: {
+    h1: "Powerful tools to grow your business. Pricing that grows with you.",
+    subtitle:
+      "Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging. Upgrade when you need more conversations, automation, users, or AI.",
+    trustLine: "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
+  },
   transparent: {
     title: "Transparent Pricing",
     points: [
@@ -314,15 +321,15 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     growthEnginesRequired: "Required plan for Industry Growth Engines",
   },
   ssr: {
-    h1: "WhachatCRM Pricing",
-    lead: "Transparent plans for Prospect AI, Unified Inbox, AI Chatbot, Workflow Automation, and AI Copilot. Start free with 50 Prospect AI discoveries every month.",
+    h1: "Powerful tools to grow your business. Pricing that grows with you.",
+    lead: "Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging. Upgrade when you need more conversations, automation, users, or AI.",
     bullets: [
+      "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
       "Free, Starter, and Pro plans with clear conversation and user limits",
       "Prospect AI included on every plan",
       "Integrations and basic WhatsApp templates on Free",
       "Optional AI Brain add-on for Starter and Pro",
       "0% WhachatCRM markup on Meta conversation fees",
-      "14-day Pro + AI Brain trial on new accounts",
     ],
   },
 };

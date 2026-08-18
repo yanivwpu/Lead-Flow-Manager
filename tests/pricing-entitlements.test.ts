@@ -174,6 +174,30 @@ test("EN/ES/HE template card labels differ by plan", () => {
   }
 });
 
+test("Pricing hero copy is localized and pills stay removed", () => {
+  const en = getLocalizedPricingPage("en");
+  const es = getLocalizedPricingPage("es");
+  const he = getLocalizedPricingPage("he");
+  assert.equal(
+    en.hero.h1,
+    "Powerful tools to grow your business. Pricing that grows with you.",
+  );
+  assert.match(en.hero.subtitle, /Start free with Prospect AI, Unified Inbox/);
+  assert.equal(
+    en.hero.trustLine,
+    "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
+  );
+  assert.equal(
+    es.hero.h1,
+    "Herramientas potentes para hacer crecer tu negocio. Precios que crecen contigo.",
+  );
+  assert.match(es.hero.subtitle, /Empieza gratis con Prospect AI/);
+  assert.match(es.hero.trustLine, /Prueba de 14 días de Pro \+ AI Brain/);
+  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.");
+  assert.match(he.hero.subtitle, /התחילו בחינם עם Prospect AI/);
+  assert.match(he.hero.trustLine, /ניסיון 14 יום ל-Pro \+ AI Brain/);
+});
+
 test("Pricing page uses shared entitlements and avoids competitor names", () => {
   const pricing = readFileSync(
     join(process.cwd(), "client/src/pages/Pricing.tsx"),
@@ -183,8 +207,12 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("getLocalizedPlanPricingHighlights"));
   assert.ok(pricing.includes("ProspectAiCallout"));
   assert.ok(pricing.includes("getLocalizedPricingPage"));
-  assert.ok(!pricing.includes("SupportedChannelsSection"));
   assert.ok(!pricing.includes("PricingHeroChips"));
+  assert.ok(!pricing.includes("SupportedChannelsSection"));
+  assert.ok(pricing.includes("section-pricing-hero"));
+  assert.ok(pricing.includes("text-pricing-hero-title"));
+  assert.ok(pricing.includes("text-pricing-hero-subtitle"));
+  assert.ok(pricing.includes("text-pricing-hero-trust"));
   assert.ok(pricing.includes("TransparentPricingStrip"));
   assert.ok(pricing.includes("section-pricing-cards"));
   assert.ok(pricing.includes("PricingBottomCta"));
@@ -201,6 +229,9 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
     "utf8",
   );
   assert.ok(content.includes("0% WhachatCRM markup"));
+  assert.ok(content.includes("Powerful tools to grow your business. Pricing that grows with you."));
+  assert.ok(content.includes("Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging."));
+  assert.ok(content.includes("14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees"));
   assert.ok(!content.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(!content.includes("Works with your customer channels"));
   assert.ok(content.includes("Transparent Pricing"));

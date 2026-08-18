@@ -777,9 +777,9 @@ function resolveMarketingSsrPage(
   if (englishPath === "/pricing") {
     const pricing = getLocalizedPricingPage(locale);
     return {
-      h1: pricing.ssr.h1,
-      lead: pricing.ssr.lead,
-      bullets: pricing.ssr.bullets,
+      h1: pricing.hero.h1,
+      lead: pricing.hero.subtitle,
+      bullets: [pricing.hero.trustLine, ...pricing.ssr.bullets.filter((b) => b !== pricing.hero.trustLine)],
       linksHtml: [
         `<a href="${localizedInternalHref("/auth", locale)}">Start Free Trial</a>`,
         `<a href="${localizedInternalHref("/prospect-ai", locale)}">Prospect AI</a>`,

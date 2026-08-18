@@ -168,8 +168,8 @@ test("localized SSR bodies are not English fallbacks", () => {
   assert.ok(!es!.includes("Teach WhachatCRM your business profile"), "ES SSR should not use English hero fallback verbatim");
   const esPricing = generateMarketingPageSsrHtml("/es/pricing");
   const hePricing = generateMarketingPageSsrHtml("/he/pricing");
-  assert.ok(esPricing?.includes("Precios de WhachatCRM"));
-  assert.ok(hePricing?.includes("מחירי WhachatCRM"));
+  assert.ok(esPricing?.includes("Herramientas potentes para hacer crecer tu negocio"));
+  assert.ok(hePricing?.includes("כלים חזקים לצמיחת העסק"));
 });
 
 test("injectPageMeta sets lang/dir and self canonical for localized routes", () => {
@@ -188,6 +188,9 @@ test("Pricing content model fully localized for es and he", () => {
   const en = getLocalizedPricingPage("en");
   for (const locale of ["es", "he"] as const) {
     const content = getLocalizedPricingPage(locale);
+    assert.notEqual(content.hero.h1, en.hero.h1);
+    assert.notEqual(content.hero.subtitle, en.hero.subtitle);
+    assert.notEqual(content.hero.trustLine, en.hero.trustLine);
     assert.notEqual(content.transparent.title, en.transparent.title);
     assert.notEqual(content.prospectAi.title, en.prospectAi.title);
     assert.notEqual(content.whyChoose.title, en.whyChoose.title);

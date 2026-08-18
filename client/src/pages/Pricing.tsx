@@ -40,6 +40,7 @@ import {
   TransparentPricingStrip,
   WhyChooseSection,
 } from "@/components/pricing/PricingMarketingSections";
+import { renderRtlAwareHeadingText } from "@/components/marketing/RtlAwareHeadingText";
 import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { getDirection } from "@/lib/i18n";
 
@@ -457,7 +458,32 @@ export function Pricing() {
         </div>
         )}
 
-        <h1 className="sr-only">{pricingContent.ssr.h1}</h1>
+        <div className="mb-6 text-center" data-testid="section-pricing-hero">
+          <h1
+            className="mx-auto mb-3 max-w-3xl font-display text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl"
+            data-testid="text-pricing-hero-title"
+          >
+            {marketingLocale === "he"
+              ? renderRtlAwareHeadingText(pricingContent.hero.h1)
+              : pricingContent.hero.h1}
+          </h1>
+          <p
+            className="mx-auto mb-3 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg"
+            data-testid="text-pricing-hero-subtitle"
+          >
+            {marketingLocale === "he"
+              ? renderRtlAwareHeadingText(pricingContent.hero.subtitle)
+              : pricingContent.hero.subtitle}
+          </p>
+          <p
+            className="mx-auto max-w-2xl text-sm text-gray-500"
+            data-testid="text-pricing-hero-trust"
+          >
+            {marketingLocale === "he"
+              ? renderRtlAwareHeadingText(pricingContent.hero.trustLine)
+              : pricingContent.hero.trustLine}
+          </p>
+        </div>
         <TransparentPricingStrip />
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}

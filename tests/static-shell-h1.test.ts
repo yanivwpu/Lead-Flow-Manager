@@ -96,7 +96,7 @@ function expectedRouteH1(pathname: string): string {
     locale === "en" ? pathname : pathname.replace(/^\/(es|he)/, "") || "/";
 
   if (englishPath === "/pricing") {
-    return getLocalizedPricingPage(locale).ssr.h1;
+    return getLocalizedPricingPage(locale).hero.h1;
   }
   const product = getProductByPath(englishPath);
   if (product) return getLocalizedProductPage(product, locale).h1;

@@ -26,6 +26,12 @@ const ES: DeepPartial<PricingPageContent> = {
       "Prospect AI, bandeja multicanal, chatbot con IA y automatización de ventas: planes claros de Free a Pro.",
   },
   trialBanner: "Cada cuenta nueva incluye una prueba completa de 14 días de Pro + AI Brain.",
+  hero: {
+    h1: "Herramientas potentes para hacer crecer tu negocio. Precios que crecen contigo.",
+    subtitle:
+      "Empieza gratis con Prospect AI, Unified Inbox, integraciones y mensajería de WhatsApp. Mejora tu plan cuando necesites más conversaciones, automatización, usuarios o IA.",
+    trustLine: "Prueba de 14 días de Pro + AI Brain · 0% de margen de WhachatCRM sobre las tarifas de Meta · Sin costos de configuración",
+  },
   transparent: {
     title: "Precios transparentes",
     points: [
@@ -235,15 +241,15 @@ const ES: DeepPartial<PricingPageContent> = {
     growthEnginesRequired: "Plan requerido para Growth Engines de industria",
   },
   ssr: {
-    h1: "Precios de WhachatCRM",
-    lead: "Planes transparentes para Prospect AI, Unified Inbox, chatbot con IA, automatización de flujos y AI Copilot. Empieza gratis con 50 descubrimientos de Prospect AI cada mes.",
+    h1: "Herramientas potentes para hacer crecer tu negocio. Precios que crecen contigo.",
+    lead: "Empieza gratis con Prospect AI, Unified Inbox, integraciones y mensajería de WhatsApp. Mejora tu plan cuando necesites más conversaciones, automatización, usuarios o IA.",
     bullets: [
+      "Prueba de 14 días de Pro + AI Brain · 0% de margen de WhachatCRM sobre las tarifas de Meta · Sin costos de configuración",
       "Planes Free, Starter y Pro con límites claros de conversaciones y usuarios",
       "Prospect AI incluido en todos los planes",
       "Integraciones y plantillas básicas de WhatsApp en Free",
       "Complemento opcional AI Brain para Starter y Pro",
       "0% de margen de WhachatCRM sobre las tarifas de conversación de Meta",
-      "Prueba de 14 días de Pro + AI Brain en cuentas nuevas",
     ],
   },
 };
@@ -261,6 +267,12 @@ const HE: DeepPartial<PricingPageContent> = {
       "Prospect AI, תיבה רב-ערוצית, צ׳אטבוט AI ואוטומציית מכירות—תוכניות ברורות מ-Free עד Pro.",
   },
   trialBanner: "כל חשבון חדש כולל ניסיון מלא של 14 יום ל-Pro + AI Brain.",
+  hero: {
+    h1: "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.",
+    subtitle:
+      "התחילו בחינם עם Prospect AI, Unified Inbox, אינטגרציות ומסרים ב-WhatsApp. שדרגו כשאתם צריכים יותר שיחות, אוטומציה, משתמשים או AI.",
+    trustLine: "ניסיון 14 יום ל-Pro + AI Brain · 0% תוספת של WhachatCRM על עמלות Meta · בלי דמי הקמה",
+  },
   transparent: {
     title: "תמחור שקוף",
     points: [
@@ -470,15 +482,15 @@ const HE: DeepPartial<PricingPageContent> = {
     growthEnginesRequired: "תוכנית נדרשת ל-Growth Engines תעשייתיים",
   },
   ssr: {
-    h1: "מחירי WhachatCRM",
-    lead: "תוכניות שקופות ל-Prospect AI, Unified Inbox, צ׳אטבוט AI, אוטומציית תהליכים ו-AI Copilot. התחילו בחינם עם 50 גילויי Prospect AI בכל חודש.",
+    h1: "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.",
+    lead: "התחילו בחינם עם Prospect AI, Unified Inbox, אינטגרציות ומסרים ב-WhatsApp. שדרגו כשאתם צריכים יותר שיחות, אוטומציה, משתמשים או AI.",
     bullets: [
+      "ניסיון 14 יום ל-Pro + AI Brain · 0% תוספת של WhachatCRM על עמלות Meta · בלי דמי הקמה",
       "תוכניות Free, Starter ו-Pro עם מגבלות שיחה ומשתמשים ברורות",
       "Prospect AI כלול בכל תוכנית",
       "אינטגרציות ותבניות WhatsApp בסיסיות ב-Free",
       "תוסף AI Brain אופציונלי ל-Starter ו-Pro",
       "0% תוספת של WhachatCRM על עמלות השיחה של Meta",
-      "ניסיון 14 יום ל-Pro + AI Brain בחשבונות חדשים",
     ],
   },
 };

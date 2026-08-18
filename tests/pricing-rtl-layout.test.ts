@@ -42,11 +42,17 @@ test("Pricing page has no feature/channel pill section; Hebrew template labels s
   assert.ok(!pricing.includes("SupportedChannelsSection"));
   assert.ok(!sections.includes("section-hero-chips"));
   assert.ok(!sections.includes("section-supported-channels"));
+  assert.ok(pricing.includes("section-pricing-hero"));
   assert.ok(pricing.includes("TransparentPricingStrip"));
   assert.ok(pricing.includes("section-pricing-cards"));
+  assert.ok(pricing.includes("renderRtlAwareHeadingText"));
   assert.ok(pricing.includes('dir="auto"'));
 
   const he = getLocalizedPricingPage("he");
+  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.");
+  assert.match(he.hero.subtitle, /[\u0590-\u05FF]/);
+  assert.match(he.hero.trustLine, /[\u0590-\u05FF]/);
+  assert.notEqual(he.hero.h1, getLocalizedPricingPage("en").hero.h1);
   assert.match(he.highlights.basicWhatsappTemplates, /[\u0590-\u05FF]/);
   assert.match(he.highlights.whatsappTemplatesAutomation, /[\u0590-\u05FF]/);
   assert.match(he.compareCells.templateOneToOne, /[\u0590-\u05FF]/);

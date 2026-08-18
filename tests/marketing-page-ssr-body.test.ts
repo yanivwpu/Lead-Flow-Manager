@@ -90,13 +90,18 @@ for (const route of requiredRoutes) {
 
 const pricingBody = generateMarketingPageSsrHtml("/pricing");
 assert.ok(pricingBody, "pricing now has crawlable SSR body");
-assert.match(pricingBody!, /WhachatCRM Pricing/);
+assert.match(pricingBody!, /Powerful tools to grow your business\. Pricing that grows with you\./);
+assert.match(pricingBody!, /Start free with Prospect AI, Unified Inbox/);
+assert.match(pricingBody!, /14-day Pro \+ AI Brain trial/);
+assert.match(pricingBody!, /0% WhachatCRM markup/);
 assert.equal(generateMarketingPageSsrHtml("/contact"), null, "contact still meta-only");
 
 const esPricing = generateMarketingPageSsrHtml("/es/pricing");
-assert.ok(esPricing?.includes("Precios de WhachatCRM"));
+assert.ok(esPricing?.includes("Herramientas potentes para hacer crecer tu negocio"));
+assert.ok(esPricing?.includes("Empieza gratis con Prospect AI"));
 const hePricing = generateMarketingPageSsrHtml("/he/pricing");
-assert.ok(hePricing?.includes("מחירי WhachatCRM"));
+assert.ok(hePricing?.includes("כלים חזקים לצמיחת העסק"));
+assert.ok(hePricing?.includes("התחילו בחינם עם Prospect AI"));
 
 const marketing = Object.keys(PAGE_META);
 assert.equal(shouldServeSpaFallback("/this-page-should-not-exist", marketing), false);
