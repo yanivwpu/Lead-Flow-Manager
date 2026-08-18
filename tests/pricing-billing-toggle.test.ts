@@ -59,7 +59,8 @@ test("Free stays $0 and AI Brain stays monthly-only $29", () => {
 
 test("Pricing page defaults to Monthly, wires yearly checkout, and keeps pills removed", () => {
   const pricing = readFileSync(join(root, "client/src/pages/Pricing.tsx"), "utf8");
-  assert.ok(pricing.includes('useState<BillingInterval>("monthly")'));
+  assert.ok(pricing.includes("billingIntervalFromSearch"));
+  assert.ok(pricing.includes('?? "monthly"'));
   assert.ok(pricing.includes("billing-interval-toggle"));
   assert.ok(pricing.includes("billing-toggle-monthly"));
   assert.ok(pricing.includes("billing-toggle-yearly"));

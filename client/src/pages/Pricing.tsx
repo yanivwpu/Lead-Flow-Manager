@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
@@ -11,6 +11,14 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import {
+  billingIntervalFromSearch,
+  buildPricingAuthRedirect,
+  parsePricingCheckoutIntent,
+  parsePricingCheckoutPlan,
+  shouldResumePricingCheckout,
+  stripPricingCheckoutParam,
+} from "@/lib/pricingCheckoutIntent";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
   getSubscriptionApiUrl,
@@ -153,12 +161,15 @@ function TableCellValue({ val }: { val: boolean | string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function Pricing() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const shopHint = useShopifyShopHint();
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>("monthly");
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>(
+    () => billingIntervalFromSearch(typeof window === "undefined" ? "" : window.location.search) ?? "monthly",
+  );
+  const checkoutIntentHandledRef = useRef(false);
   const { t, i18n } = useTranslation();
   const p = "pricingPage";
   const marketingLocale = useMarketingUrlLocale();
@@ -356,7 +367,8 @@ export function Pricing() {
         body: JSON.stringify({
           planId,
           billingInterval: interval,
-          ...getCheckoutReturnPaths(),
+          redirectTo: stripPricingCheckoutParam(getCheckoutReturnPaths().redirectTo),
+          cancelTo: stripPricingCheckoutParam(getCheckoutReturnPaths().cancelTo),
         }),
         credentials: "include",
       });
@@ -393,8 +405,20 @@ export function Pricing() {
     if (!user) {
       const hint = getShopifyShopHint();
       const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
-      const pricingPath = hint ? `${pricingBase}?shop=${encodeURIComponent(hint)}` : pricingBase;
-      setLocation(`/auth?redirect=${encodeURIComponent(pricingPath)}`);
+      if (hint || isShopify) {
+        const pricingPath = hint ? `${pricingBase}?shop=${encodeURIComponent(hint)}` : pricingBase;
+        setLocation(`/auth?redirect=${encodeURIComponent(pricingPath)}`);
+        return;
+      }
+      const paidPlan = parsePricingCheckoutPlan(planId);
+      if (!paidPlan) return;
+      setLocation(
+        buildPricingAuthRedirect({
+          pricingPath: pricingBase,
+          plan: paidPlan,
+          billingInterval,
+        }),
+      );
       return;
     }
     if (planId === "free") return;
@@ -405,6 +429,47 @@ export function Pricing() {
       checkoutMutation.mutate({ planId, interval: billingInterval });
     }
   };
+
+  useEffect(() => {
+    if (checkoutIntentHandledRef.current) return;
+    if (authLoading) return;
+
+    const intent = parsePricingCheckoutIntent(window.location.search);
+    if (!intent) return;
+    if (!user || !subscriptionResolved) return;
+
+    checkoutIntentHandledRef.current = true;
+    setBillingInterval(intent.billingInterval);
+    const next = stripPricingCheckoutParam(`${window.location.pathname}${window.location.search}`);
+    if (next !== `${window.location.pathname}${window.location.search}`) {
+      window.history.replaceState(null, "", next);
+    }
+
+    if (
+      !shouldResumePricingCheckout({
+        hasUser: true,
+        authLoading: false,
+        subscriptionResolved: true,
+        isShopify,
+        billingPlan,
+        isActiveProAiTrial,
+        intent,
+      })
+    ) {
+      return;
+    }
+
+    setLoadingPlan(intent.plan);
+    checkoutMutation.mutate({ planId: intent.plan, interval: intent.billingInterval });
+  }, [
+    authLoading,
+    user,
+    subscriptionResolved,
+    isShopify,
+    billingPlan,
+    isActiveProAiTrial,
+    checkoutMutation,
+  ]);
 
   const [aiBrainAddonLoading, setAiBrainAddonLoading] = useState(false);
 

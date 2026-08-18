@@ -253,7 +253,8 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(!pricing.includes("xl:grid-cols-4"));
   assert.ok(!pricing.includes("AiBrainSpotlight"));
   assert.ok(pricing.includes("billing-interval-toggle"));
-  assert.ok(pricing.includes('useState<BillingInterval>("monthly")'));
+  assert.ok(pricing.includes("billingIntervalFromSearch"));
+  assert.ok(pricing.includes('?? "monthly"'));
   assert.ok(pricing.includes("billingInterval: interval"));
   assert.ok(pricing.includes("max-w-[72rem]"));
   assert.ok(pricing.includes("text-balance"));
