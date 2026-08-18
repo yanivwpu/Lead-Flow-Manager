@@ -32,6 +32,29 @@ test("Pricing FAQ chevron uses logical margin and hides default marker", () => {
   assert.ok(src.includes("text-start"));
 });
 
+test("Pricing page has no feature/channel pill section; Hebrew template labels stay RTL-safe", () => {
+  const pricing = fs.readFileSync(path.join(process.cwd(), "client/src/pages/Pricing.tsx"), "utf8");
+  const sections = fs.readFileSync(
+    path.join(process.cwd(), "client/src/components/pricing/PricingMarketingSections.tsx"),
+    "utf8",
+  );
+  assert.ok(!pricing.includes("PricingHeroChips"));
+  assert.ok(!pricing.includes("SupportedChannelsSection"));
+  assert.ok(!sections.includes("section-hero-chips"));
+  assert.ok(!sections.includes("section-supported-channels"));
+  assert.ok(pricing.includes("TransparentPricingStrip"));
+  assert.ok(pricing.includes("section-pricing-cards"));
+  assert.ok(pricing.includes('dir="auto"'));
+
+  const he = getLocalizedPricingPage("he");
+  assert.match(he.highlights.basicWhatsappTemplates, /[\u0590-\u05FF]/);
+  assert.match(he.highlights.whatsappTemplatesAutomation, /[\u0590-\u05FF]/);
+  assert.match(he.compareCells.templateOneToOne, /[\u0590-\u05FF]/);
+  assert.match(he.compareCells.templateAutomation, /[\u0590-\u05FF]/);
+  assert.equal(he.highlights.basicWhatsappTemplates, "תבניות WhatsApp בסיסיות");
+  assert.equal(he.highlights.whatsappTemplatesAutomation, "תבניות WhatsApp + אוטומציה");
+});
+
 test("Hebrew Prospect AI Pricing headline keeps stored order and isolates brand", () => {
   const title = getLocalizedPricingPage("he").prospectAi.title;
   assert.equal(title, "Prospect AI כלול — בחינם בכל תוכנית");

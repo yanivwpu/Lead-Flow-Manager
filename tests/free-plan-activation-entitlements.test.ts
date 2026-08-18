@@ -114,7 +114,8 @@ test("Pricing Free includes Integrations and basic templates; AI Brain stays sep
 
   const rows = buildPricingCompareRows();
   assert.equal(rows.find((r) => r.featureKey === "integrations")?.free, true);
-  assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.free, "Basic");
+  assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.free, "Approved 1:1 template sends");
+  assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.starter, "Templates with workflow automation");
   assert.equal(rows.find((r) => r.featureKey === "aiBrainAddon")?.free, "Not included");
   assert.equal(rows.find((r) => r.featureKey === "workflowAutomation")?.free, false);
 
@@ -132,6 +133,10 @@ test("Pricing Free includes Integrations and basic templates; AI Brain stays sep
     assert.notEqual(page.compareLabels.templateMessaging, en.compareLabels.templateMessaging);
     assert.notEqual(page.highlights.connectIntegrations, en.highlights.connectIntegrations);
     assert.notEqual(page.highlights.basicWhatsappTemplates, en.highlights.basicWhatsappTemplates);
+    assert.notEqual(page.highlights.whatsappTemplatesAutomation, en.highlights.whatsappTemplatesAutomation);
+    const starterLoc = getLocalizedPlanPricingHighlights("starter", locale);
+    assert.ok(!starterLoc.some((l) => l === page.highlights.basicWhatsappTemplates), locale);
+    assert.ok(starterLoc.some((l) => l === page.highlights.whatsappTemplatesAutomation), locale);
   }
 });
 
@@ -148,5 +153,8 @@ test("Paid regression: Starter/Pro keep scale, automations, and AI Brain add-on"
   const pro = getPlanPricingHighlights("pro").join(" | ");
   assert.match(starter, /AI Chatbot/);
   assert.match(starter, /Workflow Automation/);
+  assert.match(starter, /WhatsApp templates \+ automation/);
+  assert.ok(!/Basic WhatsApp templates/i.test(starter));
   assert.match(pro, /Industry Growth Engines/);
+  assert.match(pro, /WhatsApp templates \+ automation/);
 });

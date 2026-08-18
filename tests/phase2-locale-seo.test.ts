@@ -188,8 +188,6 @@ test("Pricing content model fully localized for es and he", () => {
   const en = getLocalizedPricingPage("en");
   for (const locale of ["es", "he"] as const) {
     const content = getLocalizedPricingPage(locale);
-    assert.notEqual(content.hero.h1, en.hero.h1);
-    assert.notEqual(content.channels.title, en.channels.title);
     assert.notEqual(content.transparent.title, en.transparent.title);
     assert.notEqual(content.prospectAi.title, en.prospectAi.title);
     assert.notEqual(content.whyChoose.title, en.whyChoose.title);

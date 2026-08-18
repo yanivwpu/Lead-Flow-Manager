@@ -5,8 +5,6 @@
 
 export type PricingFaqItem = { q: string; a: string };
 export type PricingCard = { id?: string; title: string; body: string };
-export type PricingChip = { id: string; label: string };
-export type PricingChannel = { id: string; label: string };
 
 export type PricingPageContent = {
   seo: {
@@ -18,15 +16,6 @@ export type PricingPageContent = {
     twitterDescription: string;
   };
   trialBanner: string;
-  hero: { h1: string; subtitle: string };
-  heroChips: PricingChip[];
-  channels: {
-    title: string;
-    messagingLabel: string;
-    leadSourcesLabel: string;
-    messaging: PricingChannel[];
-    leadSources: PricingChannel[];
-  };
   transparent: { title: string; points: string[] };
   freeUpsell: string;
   starterCallout: { title: string; body: string };
@@ -65,12 +54,13 @@ export type PricingPageContent = {
     notIncluded: string;
     addOn: string;
     growthEngineReady: string;
-    basic: string;
     unlimited: string;
     upTo: string;
     perMonth: string;
     user: string;
     users: string;
+    templateOneToOne: string;
+    templateAutomation: string;
   };
   highlights: {
     prospectDiscoveries: string;
@@ -83,6 +73,7 @@ export type PricingPageContent = {
     multiChannelInbox: string;
     connectIntegrations: string;
     basicWhatsappTemplates: string;
+    whatsappTemplatesAutomation: string;
     chatbotWidget: string;
     workflowAutomation: string;
     growthEnginesRequired: string;
@@ -114,36 +105,6 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       "Prospect AI, multi-channel inbox, AI Chatbot, and sales automation—clear plans from Free to Pro.",
   },
   trialBanner: "Every new account includes a full 14-day Pro + AI Brain trial.",
-  hero: {
-    h1: "Everything you need to find, engage, and convert more customers",
-    subtitle:
-      "Prospect AI, Unified Inbox, Chatbot, Workflow Automation and AI Copilot—all in one platform.",
-  },
-  heroChips: [
-    { id: "prospect-ai", label: "Prospect AI" },
-    { id: "inbox", label: "Unified Inbox" },
-    { id: "chatbot", label: "AI Chatbot" },
-    { id: "workflows", label: "Workflow Automation" },
-    { id: "copilot", label: "AI Copilot" },
-  ],
-  channels: {
-    title: "Works with your customer channels",
-    messagingLabel: "Messaging",
-    leadSourcesLabel: "Lead Sources",
-    messaging: [
-      { id: "whatsapp", label: "WhatsApp Business" },
-      { id: "facebook", label: "Facebook Messenger" },
-      { id: "instagram", label: "Instagram" },
-      { id: "gmail", label: "Gmail" },
-      { id: "telegram", label: "Telegram" },
-      { id: "webchat", label: "Website Chat" },
-      { id: "sms", label: "SMS" },
-    ],
-    leadSources: [
-      { id: "tiktok", label: "TikTok Lead Forms" },
-      { id: "website-forms", label: "Website Forms" },
-    ],
-  },
   transparent: {
     title: "Transparent Pricing",
     points: [
@@ -249,7 +210,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         q: "Are WhatsApp templates included on Free?",
-        a: "Yes. Free includes basic WhatsApp template messaging: view, sync, and send an approved template to a contact when Meta requires it outside the 24-hour window. Bulk campaigns, mass enrollment, and advanced retargeting stay on Starter and Pro.",
+        a: "Yes. Free includes basic WhatsApp template messaging: view, sync, and send an approved template to a contact when Meta requires it outside the 24-hour window. Starter and Pro add WhatsApp templates in workflow automation.",
       },
       {
         q: "Can I try Pro and AI Brain before upgrading?",
@@ -310,7 +271,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   compareHints: {
     growthEngines: "Required platform plan to activate compatible Growth Engines.",
     templateMessaging:
-      "Free includes basic 1:1 approved-template sends. Bulk campaigns and automation sequences stay on Starter and Pro.",
+      "Free includes approved 1:1 template sends. Starter and Pro add templates in workflow automation.",
     integrations: "Connect supported business tools. Conversation and usage limits still apply.",
   },
   compareGroups: {
@@ -329,11 +290,12 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     addOn: "Add-on",
     growthEngineReady: "Growth Engine Ready",
     unlimited: "Unlimited",
-    basic: "Basic",
     upTo: "Up to {{n}}",
     perMonth: "/month",
     user: "user",
     users: "users",
+    templateOneToOne: "Approved 1:1 template sends",
+    templateAutomation: "Templates with workflow automation",
   },
   highlights: {
     prospectDiscoveries: "{{n}} Prospect AI discoveries/month",
@@ -346,6 +308,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     multiChannelInbox: "Multi-channel Inbox",
     connectIntegrations: "Connect integrations",
     basicWhatsappTemplates: "Basic WhatsApp templates",
+    whatsappTemplatesAutomation: "WhatsApp templates + automation",
     chatbotWidget: "AI Chatbot & Website Widget",
     workflowAutomation: "Workflow Automation",
     growthEnginesRequired: "Required plan for Industry Growth Engines",

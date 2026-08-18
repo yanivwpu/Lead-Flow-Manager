@@ -111,7 +111,9 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
     lines.push("Connect integrations");
   }
   if (limits.templatesEnabled) {
-    lines.push("Basic WhatsApp templates");
+    lines.push(
+      limits.workflowsEnabled ? "WhatsApp templates + automation" : "Basic WhatsApp templates",
+    );
   }
   if (limits.chatbotEnabled) {
     lines.push("AI Chatbot & Website Widget");
@@ -184,9 +186,9 @@ export function buildPricingCompareRows(opts?: {
     {
       group: "MESSAGING",
       featureKey: "templateMessaging",
-      free: "Basic",
-      starter: true,
-      pro: true,
+      free: "Approved 1:1 template sends",
+      starter: "Templates with workflow automation",
+      pro: "Templates with workflow automation",
     },
     {
       group: "PROSPECT AI",

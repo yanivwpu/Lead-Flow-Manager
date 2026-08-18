@@ -20,6 +20,10 @@ import {
   planAllowsIntegrations,
   planAllowsTemplateCampaigns,
 } from "../shared/pricingEntitlements";
+import {
+  getLocalizedPlanPricingHighlights,
+  getLocalizedPricingPage,
+} from "../shared/localizeMarketingContent";
 
 test("Prospect AI quotas Free 50 / Starter 100 / Pro 500", () => {
   assert.equal(PROSPECT_AI_MONTHLY_QUOTAS.free, 50);
@@ -107,9 +111,9 @@ test("compare rows include Prospect AI + chatbot", () => {
   assert.equal(integrations!.starter, true);
   assert.equal(integrations!.pro, true);
   const templates = rows.find((r) => r.featureKey === "templateMessaging");
-  assert.equal(templates!.free, "Basic");
-  assert.equal(templates!.starter, true);
-  assert.equal(templates!.pro, true);
+  assert.equal(templates!.free, "Approved 1:1 template sends");
+  assert.equal(templates!.starter, "Templates with workflow automation");
+  assert.equal(templates!.pro, "Templates with workflow automation");
   assert.equal(
     rows.find((r) => r.featureKey === "aiAssist"),
     undefined,
@@ -132,14 +136,42 @@ test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)",
   assert.ok(!/credits/i.test(free));
   const starter = getPlanPricingHighlights("starter").join(" | ");
   assert.match(starter, /100 Prospect AI/);
+  assert.match(starter, /WhatsApp templates \+ automation/);
+  assert.ok(!/Basic WhatsApp templates/i.test(starter));
   assert.match(starter, /AI Chatbot & Website Widget/);
   assert.match(starter, /Workflow Automation/);
   assert.ok(!/credits/i.test(starter));
   const pro = getPlanPricingHighlights("pro").join(" | ");
   assert.match(pro, /500 Prospect AI/);
+  assert.match(pro, /WhatsApp templates \+ automation/);
+  assert.ok(!/Basic WhatsApp templates/i.test(pro));
   assert.match(pro, /AI Chatbot & Website Widget/);
   assert.match(pro, /Industry Growth Engines/);
   assert.ok(!/credits/i.test(pro));
+});
+
+test("EN/ES/HE template card labels differ by plan", () => {
+  const en = getLocalizedPricingPage("en");
+  const es = getLocalizedPricingPage("es");
+  const he = getLocalizedPricingPage("he");
+  assert.equal(en.highlights.basicWhatsappTemplates, "Basic WhatsApp templates");
+  assert.equal(en.highlights.whatsappTemplatesAutomation, "WhatsApp templates + automation");
+  assert.equal(es.highlights.basicWhatsappTemplates, "Plantillas básicas de WhatsApp");
+  assert.equal(es.highlights.whatsappTemplatesAutomation, "Plantillas de WhatsApp + automatización");
+  assert.equal(he.highlights.basicWhatsappTemplates, "תבניות WhatsApp בסיסיות");
+  assert.equal(he.highlights.whatsappTemplatesAutomation, "תבניות WhatsApp + אוטומציה");
+
+  for (const locale of ["en", "es", "he"] as const) {
+    const page = getLocalizedPricingPage(locale);
+    const free = getLocalizedPlanPricingHighlights("free", locale);
+    const starter = getLocalizedPlanPricingHighlights("starter", locale);
+    const pro = getLocalizedPlanPricingHighlights("pro", locale);
+    assert.ok(free.includes(page.highlights.basicWhatsappTemplates), locale);
+    assert.ok(!starter.includes(page.highlights.basicWhatsappTemplates), locale);
+    assert.ok(!pro.includes(page.highlights.basicWhatsappTemplates), locale);
+    assert.ok(starter.includes(page.highlights.whatsappTemplatesAutomation), locale);
+    assert.ok(pro.includes(page.highlights.whatsappTemplatesAutomation), locale);
+  }
 });
 
 test("Pricing page uses shared entitlements and avoids competitor names", () => {
@@ -151,7 +183,10 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("getLocalizedPlanPricingHighlights"));
   assert.ok(pricing.includes("ProspectAiCallout"));
   assert.ok(pricing.includes("getLocalizedPricingPage"));
-  assert.ok(pricing.includes("SupportedChannelsSection"));
+  assert.ok(!pricing.includes("SupportedChannelsSection"));
+  assert.ok(!pricing.includes("PricingHeroChips"));
+  assert.ok(pricing.includes("TransparentPricingStrip"));
+  assert.ok(pricing.includes("section-pricing-cards"));
   assert.ok(pricing.includes("PricingBottomCta"));
   assert.ok(pricing.includes("section-optional-addon"));
   assert.ok(pricing.includes('md:grid-cols-3'));
@@ -165,11 +200,15 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
     join(process.cwd(), "shared/pricingPageContent.ts"),
     "utf8",
   );
-  assert.ok(content.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(content.includes("0% WhachatCRM markup"));
-  assert.ok(content.includes("Works with your customer channels"));
+  assert.ok(!content.includes("Everything you need to find, engage, and convert more customers"));
+  assert.ok(!content.includes("Works with your customer channels"));
   assert.ok(content.includes("Transparent Pricing"));
-  assert.ok(content.includes("Prospect AI Included — Free with Every Plan"));
+  assert.ok(content.includes("Basic WhatsApp templates"));
+  assert.ok(content.includes("WhatsApp templates + automation"));
+  assert.ok(content.includes("Approved 1:1 template sends"));
+  assert.ok(content.includes("Templates with workflow automation"));
+  assert.match(content, /Prospect AI Included/);
   assert.ok(content.includes("Are integrations included on Free?"));
   assert.ok(content.includes("Are WhatsApp templates included on Free?"));
   assert.ok(content.includes("Monthly Prospect AI Discoveries"));
@@ -188,8 +227,8 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(marketing));
   assert.ok(marketing.includes("FULL_PRO_AI_TRIAL_COPY"));
   assert.ok(marketing.includes("getLocalizedPricingPage"));
-  assert.ok(marketing.includes("brightness-0"));
-  assert.ok(marketing.includes("data-mono-logo"));
+  assert.ok(!marketing.includes("brightness-0"));
+  assert.ok(!marketing.includes("data-mono-logo"));
   assert.ok(!marketing.includes("bg-emerald-500"));
   assert.ok(!marketing.includes("bg-pink-600"));
   assert.ok(!marketing.includes("No user fees"));

@@ -36,9 +36,7 @@ import {
   CoreCapabilitiesSection,
   PricingBottomCta,
   PricingFaqSection,
-  PricingHeroChips,
   ProspectAiCallout,
-  SupportedChannelsSection,
   TransparentPricingStrip,
   WhyChooseSection,
 } from "@/components/pricing/PricingMarketingSections";
@@ -459,21 +457,7 @@ export function Pricing() {
         </div>
         )}
 
-        {/* ─────────────── SECTION 1: HERO ─────────────── */}
-        <div className="mb-4 text-center">
-          <h1
-            className="mb-2 font-display text-3xl font-bold text-gray-900 sm:text-4xl"
-            data-testid="text-pricing-hero-title"
-          >
-            {pricingContent.hero.h1}
-          </h1>
-          <p className="mx-auto max-w-2xl text-base text-gray-600 sm:text-lg">
-            {pricingContent.hero.subtitle}
-          </p>
-          <PricingHeroChips />
-        </div>
-
-        <SupportedChannelsSection />
+        <h1 className="sr-only">{pricingContent.ssr.h1}</h1>
         <TransparentPricingStrip />
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}

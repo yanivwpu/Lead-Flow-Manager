@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   Brain,
   Check,
-  FileText,
-  Globe2,
   Inbox,
   MessageSquare,
   Radar,
@@ -40,115 +38,6 @@ function usePricingContent(): PricingPageContent {
 
 function useMarketingLocale() {
   return useMarketingUrlLocale();
-}
-
-export function PricingHeroChips() {
-  const content = usePricingContent();
-  return (
-    <div className="mt-3 flex flex-wrap justify-center gap-2" data-testid="section-hero-chips">
-      {content.heroChips.map((chip) => (
-        <span
-          key={chip.id}
-          data-testid={`chip-capability-${chip.id}`}
-          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-xs font-medium text-emerald-900"
-        >
-          <Check className="h-3 w-3 text-brand-green" aria-hidden />
-          {chip.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-type ChannelItem =
-  | { id: string; label: string; logoSrc: string }
-  | { id: string; label: string; icon: "webchat" | "sms" | "forms" };
-
-const CHANNEL_META: Record<string, { logoSrc?: string; icon?: "webchat" | "sms" | "forms" }> = {
-  whatsapp: { logoSrc: "/logos/whatsapp.svg" },
-  facebook: { logoSrc: "/logos/facebook.svg" },
-  instagram: { logoSrc: "/logos/instagram.svg" },
-  gmail: { logoSrc: "/logos/gmail.svg" },
-  telegram: { logoSrc: "/logos/telegram.svg" },
-  webchat: { icon: "webchat" },
-  sms: { icon: "sms" },
-  tiktok: { logoSrc: "/logos/tiktok.svg" },
-  "website-forms": { icon: "forms" },
-};
-
-function toChannelItem(id: string, label: string): ChannelItem {
-  const meta = CHANNEL_META[id];
-  if (meta?.icon) return { id, label, icon: meta.icon };
-  return { id, label, logoSrc: meta?.logoSrc || "/logos/whatsapp.svg" };
-}
-
-/** Official logo shapes forced to one monochrome weight (no brand colors). */
-function MonoOfficialLogo({ src }: { src: string }) {
-  return (
-    <img
-      src={src}
-      alt=""
-      aria-hidden
-      className="h-3.5 w-3.5 object-contain brightness-0 opacity-70"
-      data-mono-logo="true"
-    />
-  );
-}
-
-function ChannelGlyph({ item }: { item: ChannelItem }) {
-  if ("icon" in item) {
-    const Icon =
-      item.icon === "webchat" ? Globe2 : item.icon === "sms" ? MessageSquare : FileText;
-    return <Icon className="h-3.5 w-3.5 text-gray-700" strokeWidth={1.75} aria-hidden />;
-  }
-  return <MonoOfficialLogo src={item.logoSrc} />;
-}
-
-function ChannelPill({ item }: { item: ChannelItem }) {
-  return (
-    <li
-      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-[0_1px_0_rgba(0,0,0,0.02)]"
-      data-testid={`channel-${item.id}`}
-    >
-      <ChannelGlyph item={item} />
-      {item.label}
-    </li>
-  );
-}
-
-export function SupportedChannelsSection() {
-  const content = usePricingContent();
-  const messaging = content.channels.messaging.map((c) => toChannelItem(c.id, c.label));
-  const leadSources = content.channels.leadSources.map((c) => toChannelItem(c.id, c.label));
-  return (
-    <section className="mb-4 sm:mb-5" data-testid="section-supported-channels">
-      <h2 className="mb-2 text-center text-lg font-display font-bold text-gray-900 sm:text-xl">
-        {content.channels.title}
-      </h2>
-      <div className="grid gap-3 sm:grid-cols-2 sm:gap-6">
-        <div>
-          <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
-            {content.channels.messagingLabel}
-          </p>
-          <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
-            {messaging.map((item) => (
-              <ChannelPill key={item.id} item={item} />
-            ))}
-          </ul>
-        </div>
-        <div>
-          <p className="mb-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:text-start">
-            {content.channels.leadSourcesLabel}
-          </p>
-          <ul className="flex flex-wrap justify-center gap-2 sm:justify-start">
-            {leadSources.map((item) => (
-              <ChannelPill key={item.id} item={item} />
-            ))}
-          </ul>
-        </div>
-      </div>
-    </section>
-  );
 }
 
 export function TransparentPricingStrip() {

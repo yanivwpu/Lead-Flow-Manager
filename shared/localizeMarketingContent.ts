@@ -116,7 +116,11 @@ export function getLocalizedPlanPricingHighlights(
     lines.push(content.highlights.connectIntegrations);
   }
   if (limits.templatesEnabled) {
-    lines.push(content.highlights.basicWhatsappTemplates);
+    lines.push(
+      limits.workflowsEnabled
+        ? content.highlights.whatsappTemplatesAutomation
+        : content.highlights.basicWhatsappTemplates,
+    );
   }
   if (limits.chatbotEnabled) lines.push(content.highlights.chatbotWidget);
   if (limits.workflowsEnabled) lines.push(content.highlights.workflowAutomation);
@@ -178,9 +182,9 @@ export function buildLocalizedPricingCompareRows(
     {
       group: "MESSAGING",
       featureKey: "templateMessaging",
-      free: cells.basic,
-      starter: true,
-      pro: true,
+      free: cells.templateOneToOne,
+      starter: cells.templateAutomation,
+      pro: cells.templateAutomation,
     },
     {
       group: "PROSPECT AI",

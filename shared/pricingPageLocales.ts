@@ -26,36 +26,6 @@ const ES: DeepPartial<PricingPageContent> = {
       "Prospect AI, bandeja multicanal, chatbot con IA y automatización de ventas: planes claros de Free a Pro.",
   },
   trialBanner: "Cada cuenta nueva incluye una prueba completa de 14 días de Pro + AI Brain.",
-  hero: {
-    h1: "Todo lo que necesitas para encontrar, atender y convertir más clientes",
-    subtitle:
-      "Prospect AI, Unified Inbox, Chatbot, automatización de flujos y AI Copilot—todo en una sola plataforma.",
-  },
-  heroChips: [
-    { id: "prospect-ai", label: "Prospect AI" },
-    { id: "inbox", label: "Unified Inbox" },
-    { id: "chatbot", label: "Chatbot con IA" },
-    { id: "workflows", label: "Automatización de flujos" },
-    { id: "copilot", label: "AI Copilot" },
-  ],
-  channels: {
-    title: "Funciona con tus canales de cliente",
-    messagingLabel: "Mensajería",
-    leadSourcesLabel: "Fuentes de leads",
-    messaging: [
-      { id: "whatsapp", label: "WhatsApp Business" },
-      { id: "facebook", label: "Facebook Messenger" },
-      { id: "instagram", label: "Instagram" },
-      { id: "gmail", label: "Gmail" },
-      { id: "telegram", label: "Telegram" },
-      { id: "webchat", label: "Chat del sitio web" },
-      { id: "sms", label: "SMS" },
-    ],
-    leadSources: [
-      { id: "tiktok", label: "Formularios de leads de TikTok" },
-      { id: "website-forms", label: "Formularios del sitio web" },
-    ],
-  },
   transparent: {
     title: "Precios transparentes",
     points: [
@@ -161,7 +131,7 @@ const ES: DeepPartial<PricingPageContent> = {
       },
       {
         q: "¿Las plantillas de WhatsApp están incluidas en Free?",
-        a: "Sí. Free incluye mensajería básica de plantillas de WhatsApp: ver, sincronizar y enviar una plantilla aprobada a un contacto cuando Meta lo exige fuera de la ventana de 24 horas. Las campañas masivas, la inscripción masiva y el retargeting avanzado siguen en Starter y Pro.",
+        a: "Sí. Free incluye mensajería básica de plantillas de WhatsApp: ver, sincronizar y enviar una plantilla aprobada a un contacto cuando Meta lo exige fuera de la ventana de 24 horas. Starter y Pro añaden plantillas de WhatsApp en la automatización de flujos.",
       },
       {
         q: "¿Puedo probar Pro y AI Brain antes de mejorar mi plan?",
@@ -222,7 +192,7 @@ const ES: DeepPartial<PricingPageContent> = {
   compareHints: {
     growthEngines: "Plan de plataforma requerido para activar Growth Engines compatibles.",
     templateMessaging:
-      "Free incluye envíos básicos 1:1 de plantillas aprobadas. Las campañas masivas y las secuencias de automatización siguen en Starter y Pro.",
+      "Free incluye envíos 1:1 de plantillas aprobadas. Starter y Pro añaden plantillas en la automatización de flujos.",
     integrations: "Conecta herramientas de negocio compatibles. Siguen aplicando los límites de conversación y uso.",
   },
   compareGroups: {
@@ -241,11 +211,12 @@ const ES: DeepPartial<PricingPageContent> = {
     addOn: "Complemento",
     growthEngineReady: "Listo para Growth Engines",
     unlimited: "Ilimitado",
-    basic: "Básico",
     upTo: "Hasta {{n}}",
     perMonth: "/mes",
     user: "usuario",
     users: "usuarios",
+    templateOneToOne: "Envíos 1:1 de plantillas aprobadas",
+    templateAutomation: "Plantillas con automatización de flujos",
   },
   highlights: {
     prospectDiscoveries: "{{n}} descubrimientos de Prospect AI/mes",
@@ -258,6 +229,7 @@ const ES: DeepPartial<PricingPageContent> = {
     multiChannelInbox: "Bandeja multicanal",
     connectIntegrations: "Conecta integraciones",
     basicWhatsappTemplates: "Plantillas básicas de WhatsApp",
+    whatsappTemplatesAutomation: "Plantillas de WhatsApp + automatización",
     chatbotWidget: "Chatbot con IA y widget web",
     workflowAutomation: "Automatización de flujos",
     growthEnginesRequired: "Plan requerido para Growth Engines de industria",
@@ -289,36 +261,6 @@ const HE: DeepPartial<PricingPageContent> = {
       "Prospect AI, תיבה רב-ערוצית, צ׳אטבוט AI ואוטומציית מכירות—תוכניות ברורות מ-Free עד Pro.",
   },
   trialBanner: "כל חשבון חדש כולל ניסיון מלא של 14 יום ל-Pro + AI Brain.",
-  hero: {
-    h1: "הכל שצריך כדי למצוא, לטפל ולהמיר יותר לקוחות",
-    subtitle:
-      "Prospect AI, Unified Inbox, צ׳אטבוט, אוטומציית תהליכים ו-AI Copilot—הכל בפלטפורמה אחת.",
-  },
-  heroChips: [
-    { id: "prospect-ai", label: "Prospect AI" },
-    { id: "inbox", label: "Unified Inbox" },
-    { id: "chatbot", label: "צ׳אטבוט AI" },
-    { id: "workflows", label: "אוטומציית תהליכים" },
-    { id: "copilot", label: "AI Copilot" },
-  ],
-  channels: {
-    title: "עובד עם ערוצי הלקוחות שלכם",
-    messagingLabel: "מסרים",
-    leadSourcesLabel: "מקורות לידים",
-    messaging: [
-      { id: "whatsapp", label: "WhatsApp Business" },
-      { id: "facebook", label: "Facebook Messenger" },
-      { id: "instagram", label: "Instagram" },
-      { id: "gmail", label: "Gmail" },
-      { id: "telegram", label: "Telegram" },
-      { id: "webchat", label: "צ׳אט באתר" },
-      { id: "sms", label: "SMS" },
-    ],
-    leadSources: [
-      { id: "tiktok", label: "טפסי לידים של TikTok" },
-      { id: "website-forms", label: "טפסים באתר" },
-    ],
-  },
   transparent: {
     title: "תמחור שקוף",
     points: [
@@ -424,7 +366,7 @@ const HE: DeepPartial<PricingPageContent> = {
       },
       {
         q: "האם תבניות WhatsApp כלולות ב-Free?",
-        a: "כן. Free כולל משלוח תבניות WhatsApp בסיסי: צפייה, סנכרון ושליחת תבנית מאושרת לאיש קשר כש-Meta דורשת זאת מחוץ לחלון 24 השעות. קמפיינים המוניים, הרשמה המונית וריטרגטינג מתקדם נשארים ב-Starter וב-Pro.",
+        a: "כן. Free כולל משלוח תבניות WhatsApp בסיסי: צפייה, סנכרון ושליחת תבנית מאושרת לאיש קשר כש-Meta דורשת זאת מחוץ לחלון 24 השעות. Starter ו-Pro מוסיפים תבניות WhatsApp באוטומציית תהליכים.",
       },
       {
         q: "אפשר לנסות את Pro ו-AI Brain לפני שדרוג?",
@@ -485,7 +427,7 @@ const HE: DeepPartial<PricingPageContent> = {
   compareHints: {
     growthEngines: "תוכנית הפלטפורמה הנדרשת להפעלת Growth Engines תואמים.",
     templateMessaging:
-      "Free כולל שליחות בסיסיות 1:1 של תבניות מאושרות. קמפיינים המוניים ורצפי אוטומציה נשארים ב-Starter וב-Pro.",
+      "Free כולל שליחות תבניות מאושרות 1:1. Starter ו-Pro מוסיפים תבניות באוטומציית תהליכים.",
     integrations: "חברו כלי עסק נתמכים. מגבלות שיחה ושימוש עדיין חלות.",
   },
   compareGroups: {
@@ -504,11 +446,12 @@ const HE: DeepPartial<PricingPageContent> = {
     addOn: "תוסף",
     growthEngineReady: "מוכן ל-Growth Engines",
     unlimited: "ללא הגבלה",
-    basic: "בסיסי",
     upTo: "עד {{n}}",
     perMonth: "/חודש",
     user: "משתמש",
     users: "משתמשים",
+    templateOneToOne: "שליחות תבניות מאושרות 1:1",
+    templateAutomation: "תבניות עם אוטומציית תהליכים",
   },
   highlights: {
     prospectDiscoveries: "{{n}} גילויי Prospect AI בחודש",
@@ -521,6 +464,7 @@ const HE: DeepPartial<PricingPageContent> = {
     multiChannelInbox: "תיבה רב-ערוצית",
     connectIntegrations: "חיבור אינטגרציות",
     basicWhatsappTemplates: "תבניות WhatsApp בסיסיות",
+    whatsappTemplatesAutomation: "תבניות WhatsApp + אוטומציה",
     chatbotWidget: "צ׳אטבוט AI ווידג׳ט לאתר",
     workflowAutomation: "אוטומציית תהליכים",
     growthEnginesRequired: "תוכנית נדרשת ל-Growth Engines תעשייתיים",
