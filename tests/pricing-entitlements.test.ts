@@ -243,7 +243,8 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("section-pricing-hero"));
   assert.ok(pricing.includes("text-pricing-hero-title"));
   assert.ok(pricing.includes("text-pricing-hero-subtitle"));
-  assert.ok(pricing.includes("text-pricing-hero-trust"));
+  assert.ok(!pricing.includes("text-pricing-hero-trust"));
+  assert.ok(!pricing.includes("pricingContent.hero.trustLine"));
   assert.ok(pricing.includes("TransparentPricingStrip"));
   assert.ok(pricing.includes("section-pricing-cards"));
   assert.ok(pricing.includes("PricingBottomCta"));

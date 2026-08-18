@@ -554,20 +554,12 @@ export function Pricing() {
               : pricingContent.hero.h1}
           </h1>
           <p
-            className="mx-auto mb-2 w-full max-w-5xl text-pretty text-base leading-relaxed text-gray-600 sm:text-lg"
+            className="mx-auto w-full max-w-5xl text-pretty text-base leading-relaxed text-gray-600 sm:text-lg"
             data-testid="text-pricing-hero-subtitle"
           >
             {marketingLocale === "he"
               ? renderRtlAwareHeadingText(pricingContent.hero.subtitle)
               : pricingContent.hero.subtitle}
-          </p>
-          <p
-            className="mx-auto w-full max-w-[72rem] text-sm text-gray-500"
-            data-testid="text-pricing-hero-trust"
-          >
-            {marketingLocale === "he"
-              ? renderRtlAwareHeadingText(pricingContent.hero.trustLine)
-              : pricingContent.hero.trustLine}
           </p>
         </div>
         <TransparentPricingStrip />
