@@ -90,7 +90,7 @@ for (const route of requiredRoutes) {
 
 const pricingBody = generateMarketingPageSsrHtml("/pricing");
 assert.ok(pricingBody, "pricing now has crawlable SSR body");
-assert.match(pricingBody!, /Powerful tools to grow your business\. Pricing that grows with you\./);
+assert.match(pricingBody!, /Powerful tools to grow your business — pricing that grows with you\./);
 assert.match(pricingBody!, /Start free with Prospect AI, Unified Inbox/);
 assert.match(pricingBody!, /14-day Pro \+ AI Brain trial/);
 assert.match(pricingBody!, /0% WhachatCRM markup/);

@@ -44,7 +44,7 @@ export function TransparentPricingStrip() {
   const content = usePricingContent();
   return (
     <section
-      className="mx-auto mb-6 max-w-3xl rounded-2xl border border-gray-200 bg-white px-4 py-3.5 shadow-sm sm:mb-7 sm:px-6 sm:py-4"
+      className="mx-auto mb-4 max-w-3xl rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-6 sm:py-3.5"
       data-testid="section-transparent-pricing"
     >
       <h2 className="text-center text-base font-display font-bold text-gray-900 sm:text-lg">

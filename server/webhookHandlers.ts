@@ -3,6 +3,7 @@ import { RGE_TEMPLATE_ID } from '@shared/rgePaths';
 import { getUncachableStripeClient } from './stripeClient';
 import { fulfillRgePurchaseAfterPayment, logRgeStripeWebhook } from './rgePurchase';
 import { storage } from './storage';
+import { entitlementPlanFromStripePriceIds } from './stripePlanPriceIds';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
@@ -58,18 +59,10 @@ export class WebhookHandlers {
       const items = subscription?.items?.data || [];
       const priceIds: string[] = items.map((it: any) => it?.price?.id).filter(Boolean);
 
-      const starterMonthly = process.env.STRIPE_STARTER_MONTHLY_PRICE_ID;
-      const starterYearly = process.env.STRIPE_STARTER_YEARLY_PRICE_ID;
-      const proMonthly = process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
-      const proYearly = process.env.STRIPE_PRO_YEARLY_PRICE_ID;
       const aiBrainMonthly = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
 
-      // Determine billing plan from known price IDs (prefer Pro if both exist).
-      let billingPlan: 'free' | 'starter' | 'pro' | undefined;
-      if (proMonthly && priceIds.includes(proMonthly)) billingPlan = 'pro';
-      else if (proYearly && priceIds.includes(proYearly)) billingPlan = 'pro';
-      else if (starterMonthly && priceIds.includes(starterMonthly)) billingPlan = 'starter';
-      else if (starterYearly && priceIds.includes(starterYearly)) billingPlan = 'starter';
+      // Yearly and monthly Price IDs map to the same entitlement plan.
+      const billingPlan = entitlementPlanFromStripePriceIds(priceIds);
 
       const hasAIBrainAddon = !!(aiBrainMonthly && priceIds.includes(aiBrainMonthly));
 

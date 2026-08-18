@@ -49,7 +49,7 @@ test("Pricing page has no feature/channel pill section; Hebrew template labels s
   assert.ok(pricing.includes('dir="auto"'));
 
   const he = getLocalizedPricingPage("he");
-  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.");
+  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.");
   assert.match(he.hero.subtitle, /[\u0590-\u05FF]/);
   assert.match(he.hero.trustLine, /[\u0590-\u05FF]/);
   assert.notEqual(he.hero.h1, getLocalizedPricingPage("en").hero.h1);
@@ -59,6 +59,11 @@ test("Pricing page has no feature/channel pill section; Hebrew template labels s
   assert.match(he.compareCells.templateAutomation, /[\u0590-\u05FF]/);
   assert.equal(he.highlights.basicWhatsappTemplates, "תבניות WhatsApp בסיסיות");
   assert.equal(he.highlights.whatsappTemplatesAutomation, "תבניות WhatsApp + אוטומציה");
+  assert.equal(he.billing.monthly, "חודשי");
+  assert.equal(he.billing.yearly, "שנתי");
+  assert.match(he.billing.saveTwoMonths, /[\u0590-\u05FF]/);
+  assert.ok(pricing.includes("billing-interval-toggle"));
+  assert.ok(pricing.includes("<span dir=\"ltr\">{price}</span>"));
 });
 
 test("Hebrew Prospect AI Pricing headline keeps stored order and isolates brand", () => {

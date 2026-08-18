@@ -191,6 +191,10 @@ test("Pricing content model fully localized for es and he", () => {
     assert.notEqual(content.hero.h1, en.hero.h1);
     assert.notEqual(content.hero.subtitle, en.hero.subtitle);
     assert.notEqual(content.hero.trustLine, en.hero.trustLine);
+    assert.notEqual(content.billing.monthly, en.billing.monthly);
+    assert.notEqual(content.billing.yearly, en.billing.yearly);
+    assert.notEqual(content.billing.saveTwoMonths, en.billing.saveTwoMonths);
+    assert.notEqual(content.billing.billedYearly, en.billing.billedYearly);
     assert.notEqual(content.transparent.title, en.transparent.title);
     assert.notEqual(content.prospectAi.title, en.prospectAi.title);
     assert.notEqual(content.whyChoose.title, en.whyChoose.title);

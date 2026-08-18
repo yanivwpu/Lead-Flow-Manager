@@ -14,8 +14,14 @@ import {
   AI_BRAIN_ADDON_PRICE_USD,
   AI_BRAIN_PRO_CREDIT_BONUS,
   INBOX_AI_REPLY_GENERATIONS_MONTHLY,
+  PAID_PLAN_YEARLY_PRICE_USD,
   buildPricingCompareRows,
+  formatUsdDisplay,
+  getPaidPlanDisplayAmountUsd,
+  getPaidPlanMonthlyPriceUsd,
+  getPaidPlanYearlyPriceUsd,
   getPlanPricingHighlights,
+  getYearlyEquivalentMonthlyUsd,
   planAllowsBasicTemplateMessaging,
   planAllowsIntegrations,
   planAllowsTemplateCampaigns,
@@ -89,6 +95,28 @@ test("inbox AI reply generations exist internally but are not public pricing cop
 
 test("AI Brain is $29 add-on", () => {
   assert.equal(AI_BRAIN_ADDON_PRICE_USD, 29);
+});
+
+test("Paid plan monthly/yearly amounts stay 19/190 and 49/490", () => {
+  assert.equal(PLAN_LIMITS.starter.price, 19);
+  assert.equal(PLAN_LIMITS.pro.price, 49);
+  assert.equal(getPaidPlanMonthlyPriceUsd("starter"), 19);
+  assert.equal(getPaidPlanMonthlyPriceUsd("pro"), 49);
+  assert.equal(getPaidPlanYearlyPriceUsd("starter"), 190);
+  assert.equal(getPaidPlanYearlyPriceUsd("pro"), 490);
+  assert.equal(PAID_PLAN_YEARLY_PRICE_USD.starter, 190);
+  assert.equal(PAID_PLAN_YEARLY_PRICE_USD.pro, 490);
+  assert.equal(getYearlyEquivalentMonthlyUsd("starter"), 15.83);
+  assert.equal(getYearlyEquivalentMonthlyUsd("pro"), 40.83);
+  assert.equal(getPaidPlanDisplayAmountUsd("starter", "monthly"), 19);
+  assert.equal(getPaidPlanDisplayAmountUsd("pro", "monthly"), 49);
+  assert.equal(getPaidPlanDisplayAmountUsd("starter", "yearly"), 15.83);
+  assert.equal(getPaidPlanDisplayAmountUsd("pro", "yearly"), 40.83);
+  assert.equal(formatUsdDisplay(19), "$19");
+  assert.equal(formatUsdDisplay(15.83), "$15.83");
+  assert.equal(formatUsdDisplay(40.83), "$40.83");
+  assert.equal(formatUsdDisplay(190), "$190");
+  assert.equal(formatUsdDisplay(490), "$490");
 });
 
 test("compare rows include Prospect AI + chatbot", () => {
@@ -180,21 +208,24 @@ test("Pricing hero copy is localized and pills stay removed", () => {
   const he = getLocalizedPricingPage("he");
   assert.equal(
     en.hero.h1,
-    "Powerful tools to grow your business. Pricing that grows with you.",
+    "Powerful tools to grow your business — pricing that grows with you.",
   );
-  assert.match(en.hero.subtitle, /Start free with Prospect AI, Unified Inbox/);
+  assert.match(en.hero.subtitle, /Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging/);
+  assert.match(en.hero.subtitle, /Upgrade only when you need/);
   assert.equal(
     en.hero.trustLine,
     "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
   );
   assert.equal(
     es.hero.h1,
-    "Herramientas potentes para hacer crecer tu negocio. Precios que crecen contigo.",
+    "Herramientas potentes para hacer crecer tu negocio — precios que crecen contigo.",
   );
   assert.match(es.hero.subtitle, /Empieza gratis con Prospect AI/);
+  assert.match(es.hero.subtitle, /solo cuando necesites/);
   assert.match(es.hero.trustLine, /Prueba de 14 días de Pro \+ AI Brain/);
-  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק. תמחור שגדל יחד איתכם.");
+  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.");
   assert.match(he.hero.subtitle, /התחילו בחינם עם Prospect AI/);
+  assert.match(he.hero.subtitle, /שדרגו רק כשאתם צריכים/);
   assert.match(he.hero.trustLine, /ניסיון 14 יום ל-Pro \+ AI Brain/);
 });
 
@@ -220,17 +251,22 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes('md:grid-cols-3'));
   assert.ok(!pricing.includes("xl:grid-cols-4"));
   assert.ok(!pricing.includes("AiBrainSpotlight"));
+  assert.ok(pricing.includes("billing-interval-toggle"));
+  assert.ok(pricing.includes('useState<BillingInterval>("monthly")'));
+  assert.ok(pricing.includes("billingInterval: interval"));
+  assert.ok(pricing.includes("max-w-[72rem]"));
+  assert.ok(pricing.includes("text-balance"));
+  assert.ok(!pricing.includes("max-w-3xl font-display text-3xl"));
   assert.ok(!/ManyChat|Wati|Gorgias/i.test(pricing));
-  // No monthly/yearly billing toggle in product — do not invent one on pricing.
-  assert.ok(!/monthly\/yearly|billingPeriod|annual/i.test(pricing));
 
   const content = readFileSync(
     join(process.cwd(), "shared/pricingPageContent.ts"),
     "utf8",
   );
   assert.ok(content.includes("0% WhachatCRM markup"));
-  assert.ok(content.includes("Powerful tools to grow your business. Pricing that grows with you."));
-  assert.ok(content.includes("Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging."));
+  assert.ok(content.includes("Powerful tools to grow your business — pricing that grows with you."));
+  assert.ok(content.includes("Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging."));
+  assert.ok(content.includes("Upgrade only when you need more conversations"));
   assert.ok(content.includes("14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees"));
   assert.ok(!content.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(!content.includes("Works with your customer channels"));

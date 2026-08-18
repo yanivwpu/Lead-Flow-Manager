@@ -16,6 +16,11 @@ import {
   sanitizeStripeReturnPath,
 } from "./checkoutReturnPath";
 import { assertStripeNotAllowedForShopifyUser } from "./shopifyBillingGuard";
+import {
+  resolveStripePlanPriceId,
+  stripePriceEnvForPlan,
+  type StripeBillingInterval,
+} from "./stripePlanPriceIds";
 
 export type StripeCheckoutRedirectOpts = {
   successReturnPath?: string;
@@ -347,7 +352,7 @@ class SubscriptionService {
     userId: string,
     plan: SubscriptionPlan,
     baseUrl: string,
-    billingInterval: "monthly" | "yearly" = "monthly",
+    billingInterval: StripeBillingInterval = "monthly",
     redirect?: StripeCheckoutRedirectOpts,
   ): Promise<{ url: string }> {
     const user = await storage.getUserForSession(userId);
@@ -371,24 +376,10 @@ class SubscriptionService {
       throw new Error("Cannot checkout for free plan");
     }
 
-    const priceId =
-      plan === "starter"
-        ? billingInterval === "yearly"
-          ? process.env.STRIPE_STARTER_YEARLY_PRICE_ID
-          : process.env.STRIPE_STARTER_MONTHLY_PRICE_ID
-        : billingInterval === "yearly"
-          ? process.env.STRIPE_PRO_YEARLY_PRICE_ID
-          : process.env.STRIPE_PRO_MONTHLY_PRICE_ID;
+    const priceId = resolveStripePlanPriceId(plan, billingInterval);
+    const envName = stripePriceEnvForPlan(plan, billingInterval);
 
     if (!priceId) {
-      const envName =
-        plan === "starter"
-          ? billingInterval === "yearly"
-            ? "STRIPE_STARTER_YEARLY_PRICE_ID"
-            : "STRIPE_STARTER_MONTHLY_PRICE_ID"
-          : billingInterval === "yearly"
-            ? "STRIPE_PRO_YEARLY_PRICE_ID"
-            : "STRIPE_PRO_MONTHLY_PRICE_ID";
       throw new Error(`Missing ${envName}`);
     }
 

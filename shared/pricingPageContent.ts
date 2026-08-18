@@ -17,6 +17,13 @@ export type PricingPageContent = {
   };
   trialBanner: string;
   hero: { h1: string; subtitle: string; trustLine: string };
+  billing: {
+    monthly: string;
+    yearly: string;
+    saveTwoMonths: string;
+    billedYearly: string;
+    twoMonthsFree: string;
+  };
   transparent: { title: string; points: string[] };
   freeUpsell: string;
   starterCallout: { title: string; body: string };
@@ -107,10 +114,17 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   },
   trialBanner: "Every new account includes a full 14-day Pro + AI Brain trial.",
   hero: {
-    h1: "Powerful tools to grow your business. Pricing that grows with you.",
+    h1: "Powerful tools to grow your business — pricing that grows with you.",
     subtitle:
-      "Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging. Upgrade when you need more conversations, automation, users, or AI.",
+      "Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging. Upgrade only when you need more conversations, automation, users, or AI.",
     trustLine: "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
+  },
+  billing: {
+    monthly: "Monthly",
+    yearly: "Yearly",
+    saveTwoMonths: "Save 2 months",
+    billedYearly: "Billed {{price}}/year",
+    twoMonthsFree: "2 months free",
   },
   transparent: {
     title: "Transparent Pricing",
@@ -321,8 +335,8 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     growthEnginesRequired: "Required plan for Industry Growth Engines",
   },
   ssr: {
-    h1: "Powerful tools to grow your business. Pricing that grows with you.",
-    lead: "Start free with Prospect AI, Unified Inbox, integrations and WhatsApp messaging. Upgrade when you need more conversations, automation, users, or AI.",
+    h1: "Powerful tools to grow your business — pricing that grows with you.",
+    lead: "Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging. Upgrade only when you need more conversations, automation, users, or AI.",
     bullets: [
       "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
       "Free, Starter, and Pro plans with clear conversation and user limits",

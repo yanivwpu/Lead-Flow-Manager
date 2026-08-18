@@ -33,6 +33,13 @@ import {
 } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks, localizePath } from "@shared/localeRoutes";
 import {
+  formatUsdDisplay,
+  getPaidPlanDisplayAmountUsd,
+  getPaidPlanYearlyPriceUsd,
+  type BillingInterval,
+  type PaidPlanId,
+} from "@shared/pricingEntitlements";
+import {
   CoreCapabilitiesSection,
   PricingBottomCta,
   PricingFaqSection,
@@ -65,6 +72,74 @@ function FeatureItem({
   );
 }
 
+function BilledYearlyLine({
+  template,
+  price,
+  isRTL,
+  testId,
+}: {
+  template: string;
+  price: string;
+  isRTL: boolean;
+  testId: string;
+}) {
+  const parts = template.split("{{price}}");
+  return (
+    <p className="mb-1 text-xs text-gray-500" dir={isRTL ? "rtl" : "ltr"} data-testid={testId}>
+      {parts[0]}
+      <span dir="ltr">{price}</span>
+      {parts[1] ?? ""}
+    </p>
+  );
+}
+
+function PaidPlanPriceBlock({
+  plan,
+  billingInterval,
+  periodLabel,
+  billedYearlyTemplate,
+  twoMonthsFreeLabel,
+  isRTL,
+}: {
+  plan: PaidPlanId;
+  billingInterval: BillingInterval;
+  periodLabel: string;
+  billedYearlyTemplate: string;
+  twoMonthsFreeLabel: string;
+  isRTL: boolean;
+}) {
+  const amount = formatUsdDisplay(getPaidPlanDisplayAmountUsd(plan, billingInterval));
+  const yearly = formatUsdDisplay(getPaidPlanYearlyPriceUsd(plan));
+  return (
+    <>
+      <div
+        className={`flex items-baseline gap-1 mt-1 mb-1 ${isRTL ? "justify-start" : ""}`}
+        dir="ltr"
+      >
+        <span className="text-3xl font-bold text-gray-900" data-testid={`text-${plan}-price`}>
+          {amount}
+        </span>
+        <span className="text-sm text-gray-500">{periodLabel}</span>
+      </div>
+      {billingInterval === "yearly" ? (
+        <>
+          <BilledYearlyLine
+            template={billedYearlyTemplate}
+            price={yearly}
+            isRTL={isRTL}
+            testId={`text-${plan}-billed-yearly`}
+          />
+          <p className="mb-1 text-xs font-medium text-emerald-700" data-testid={`text-${plan}-two-months-free`}>
+            {twoMonthsFreeLabel}
+          </p>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+// ─── Comparison table cell helpers ──────────────────────────────────────────
+
 // ─── Comparison table cell helpers ──────────────────────────────────────────
 // TableCellValue renders a single value cell (boolean or string).
 // String values use dir="auto" so LTR plan labels stay LTR and
@@ -83,6 +158,7 @@ export function Pricing() {
   const shopHint = useShopifyShopHint();
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("monthly");
   const { t, i18n } = useTranslation();
   const p = "pricingPage";
   const marketingLocale = useMarketingUrlLocale();
@@ -267,11 +343,21 @@ export function Pricing() {
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: async (planId: string) => {
+    mutationFn: async ({
+      planId,
+      interval,
+    }: {
+      planId: string;
+      interval: BillingInterval;
+    }) => {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId, ...getCheckoutReturnPaths() }),
+        body: JSON.stringify({
+          planId,
+          billingInterval: interval,
+          ...getCheckoutReturnPaths(),
+        }),
         credentials: "include",
       });
       if (res.status === 401) {
@@ -316,7 +402,7 @@ export function Pricing() {
     if (isShopify) {
       shopifyCheckoutMutation.mutate(planId);
     } else {
-      checkoutMutation.mutate(planId);
+      checkoutMutation.mutate({ planId, interval: billingInterval });
     }
   };
 
@@ -430,7 +516,7 @@ export function Pricing() {
         {/* ─────────────── ACTIVE PRO+AI TRIAL BANNER ─────────────── */}
         {isActiveProAiTrial ? (
           <div
-            className="mb-10 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 px-6 py-5 shadow-sm"
+            className="mb-6 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 px-6 py-5 shadow-sm"
             role="status"
             data-testid="banner-pro-ai-trial-active"
           >
@@ -458,9 +544,9 @@ export function Pricing() {
         </div>
         )}
 
-        <div className="mb-6 text-center" data-testid="section-pricing-hero">
+        <div className="mb-4 text-center" data-testid="section-pricing-hero">
           <h1
-            className="mx-auto mb-3 max-w-3xl font-display text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl"
+            className="mx-auto mb-2 w-full max-w-[72rem] text-balance font-display text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl"
             data-testid="text-pricing-hero-title"
           >
             {marketingLocale === "he"
@@ -468,7 +554,7 @@ export function Pricing() {
               : pricingContent.hero.h1}
           </h1>
           <p
-            className="mx-auto mb-3 max-w-2xl text-base leading-relaxed text-gray-600 sm:text-lg"
+            className="mx-auto mb-2 w-full max-w-5xl text-pretty text-base leading-relaxed text-gray-600 sm:text-lg"
             data-testid="text-pricing-hero-subtitle"
           >
             {marketingLocale === "he"
@@ -476,7 +562,7 @@ export function Pricing() {
               : pricingContent.hero.subtitle}
           </p>
           <p
-            className="mx-auto max-w-2xl text-sm text-gray-500"
+            className="mx-auto w-full max-w-[72rem] text-sm text-gray-500"
             data-testid="text-pricing-hero-trust"
           >
             {marketingLocale === "he"
@@ -485,6 +571,52 @@ export function Pricing() {
           </p>
         </div>
         <TransparentPricingStrip />
+
+        {!isShopify ? (
+          <div
+            className="mb-4 flex flex-col items-center gap-2"
+            data-testid="billing-interval-toggle"
+          >
+            <div
+              className="inline-flex rounded-full border border-gray-200 bg-gray-100 p-1"
+              role="group"
+              aria-label={`${pricingContent.billing.monthly} / ${pricingContent.billing.yearly}`}
+            >
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  billingInterval === "monthly"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+                aria-pressed={billingInterval === "monthly"}
+                onClick={() => setBillingInterval("monthly")}
+                data-testid="billing-toggle-monthly"
+              >
+                {pricingContent.billing.monthly}
+              </button>
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                  billingInterval === "yearly"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+                aria-pressed={billingInterval === "yearly"}
+                onClick={() => setBillingInterval("yearly")}
+                data-testid="billing-toggle-yearly"
+              >
+                {pricingContent.billing.yearly}
+                <span
+                  className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
+                  data-testid="billing-save-badge"
+                >
+                  {pricingContent.billing.saveTwoMonths}
+                </span>
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}
         <div
@@ -516,7 +648,7 @@ export function Pricing() {
                     }`}
                     dir="ltr"
                   >
-                    <span className="text-3xl font-bold text-gray-900">
+                    <span className="text-3xl font-bold text-gray-900" data-testid="text-free-price">
                       {t(`${p}.plans.free.price`)}
                     </span>
                     <span className="text-sm text-gray-500">
@@ -579,19 +711,14 @@ export function Pricing() {
                   <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
                     {t(`${p}.plans.starter.name`)}
                   </span>
-                  <div
-                    className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                      isRTL ? "justify-start" : ""
-                    }`}
-                    dir="ltr"
-                  >
-                    <span className="text-3xl font-bold text-gray-900">
-                      {t(`${p}.plans.starter.price`)}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      {t(`${p}.plans.starter.period`)}
-                    </span>
-                  </div>
+                  <PaidPlanPriceBlock
+                    plan="starter"
+                    billingInterval={isShopify ? "monthly" : billingInterval}
+                    periodLabel={t(`${p}.plans.starter.period`)}
+                    billedYearlyTemplate={pricingContent.billing.billedYearly}
+                    twoMonthsFreeLabel={pricingContent.billing.twoMonthsFree}
+                    isRTL={isRTL}
+                  />
                   <p className="text-sm text-gray-500">
                     {t(`${p}.plans.starter.desc`)}
                   </p>
@@ -667,19 +794,14 @@ export function Pricing() {
                   <span className="text-xs font-semibold text-brand-green uppercase tracking-wider">
                     {t(`${p}.plans.pro.name`)}
                   </span>
-                  <div
-                    className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                      isRTL ? "justify-start" : ""
-                    }`}
-                    dir="ltr"
-                  >
-                    <span className="text-3xl font-bold text-gray-900">
-                      {t(`${p}.plans.pro.price`)}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      {t(`${p}.plans.pro.period`)}
-                    </span>
-                  </div>
+                  <PaidPlanPriceBlock
+                    plan="pro"
+                    billingInterval={isShopify ? "monthly" : billingInterval}
+                    periodLabel={t(`${p}.plans.pro.period`)}
+                    billedYearlyTemplate={pricingContent.billing.billedYearly}
+                    twoMonthsFreeLabel={pricingContent.billing.twoMonthsFree}
+                    isRTL={isRTL}
+                  />
                   <p className="text-sm text-gray-500">
                     {t(`${p}.plans.pro.desc`)}
                   </p>

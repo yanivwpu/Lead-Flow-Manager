@@ -74,6 +74,46 @@ export const AI_BRAIN_PRO_CREDIT_BONUS = 0;
 
 export const AI_BRAIN_ADDON_PRICE_USD = 29;
 
+/** Annual Stripe amounts for paid base plans. AI Brain has no yearly price. */
+export const PAID_PLAN_YEARLY_PRICE_USD = {
+  starter: 190,
+  pro: 490,
+} as const;
+
+export type PaidPlanId = keyof typeof PAID_PLAN_YEARLY_PRICE_USD;
+export type BillingInterval = "monthly" | "yearly";
+
+export function getPaidPlanMonthlyPriceUsd(plan: PaidPlanId): number {
+  return PLAN_LIMITS[plan].price;
+}
+
+export function getPaidPlanYearlyPriceUsd(plan: PaidPlanId): number {
+  return PAID_PLAN_YEARLY_PRICE_USD[plan];
+}
+
+/** Equivalent monthly from yearly ÷ 12, rounded to cents (e.g. 190 → 15.83). */
+export function getYearlyEquivalentMonthlyUsd(plan: PaidPlanId): number {
+  return Math.round((getPaidPlanYearlyPriceUsd(plan) / 12) * 100) / 100;
+}
+
+export function getPaidPlanDisplayAmountUsd(
+  plan: PaidPlanId,
+  interval: BillingInterval,
+): number {
+  return interval === "yearly"
+    ? getYearlyEquivalentMonthlyUsd(plan)
+    : getPaidPlanMonthlyPriceUsd(plan);
+}
+
+export function formatUsdDisplay(amount: number): string {
+  const cents = Math.round(amount * 100);
+  const hasCents = cents % 100 !== 0;
+  return `$${(cents / 100).toLocaleString("en-US", {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 export type PricingCompareCell = boolean | string;
 
 export type PricingCompareRow = {
