@@ -10,18 +10,7 @@ import {
 } from "@shared/rgePaths";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { trackPurchase } from "@/lib/ga4Events";
-
-function sanitizeClientRedirect(raw: string | null, fallback: string): string {
-  if (!raw || typeof raw !== "string") return fallback;
-  try {
-    const decoded = decodeURIComponent(raw);
-    if (!decoded.startsWith("/") || decoded.startsWith("//")) return fallback;
-    const u = new URL(decoded, "https://placeholder.local");
-    return u.pathname + u.search + u.hash;
-  } catch {
-    return fallback;
-  }
-}
+import { sanitizeClientRedirectPath } from "@/lib/postAuthRedirect";
 
 function serializeSubscriptionSnapshot(data: any): string {
   const limits = data?.limits;
@@ -70,7 +59,7 @@ export function PostCheckout() {
     const stripeSession =
       params.get("session_id") ?? params.get("stripe_session") ?? params.get("checkout_session_id");
 
-    let target = sanitizeClientRedirect(redirectRaw, "/app/inbox");
+    let target = sanitizeClientRedirectPath(redirectRaw, "/app/inbox");
 
     if (stripeSession && !target.includes("session_id=")) {
       const join = target.includes("?") ? "&" : "?";
@@ -211,11 +200,13 @@ export function PostCheckout() {
 
         const redirectTarget = effectivePollTemplate ? RGE_TEMPLATE_ONBOARDING_PATH : targetPath;
 
-        if (!ac.signal.aborted) setLocation(redirectTarget);
+        if (!ac.signal.aborted) window.location.assign(redirectTarget);
       } catch {
         setErrorMsg("Something went wrong confirming your checkout. Redirecting…");
         setTimeout(() => {
-          if (!ac.signal.aborted) setLocation(pollTemplate && hideGrowthEngine ? SHOPIFY_RGE_BLOCK_REDIRECT : targetPath);
+          if (!ac.signal.aborted) {
+            window.location.assign(pollTemplate && hideGrowthEngine ? SHOPIFY_RGE_BLOCK_REDIRECT : targetPath);
+          }
         }, 1600);
       }
     }
@@ -238,7 +229,7 @@ export function PostCheckout() {
           type="button"
           variant="outline"
           className="mt-6"
-          onClick={() => setLocation(manualContinuePath)}
+          onClick={() => window.location.assign(manualContinuePath)}
           data-testid="button-post-checkout-continue"
         >
           {effectivePollTemplate ? "Continue to Realtor Growth Engine onboarding" : "Continue to your account"}

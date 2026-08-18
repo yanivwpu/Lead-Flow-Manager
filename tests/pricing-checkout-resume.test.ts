@@ -114,7 +114,7 @@ test("I: Shopify path does not resume Stripe checkout", () => {
     false,
   );
   const pricing = readFileSync(join(root, "client/src/pages/Pricing.tsx"), "utf8");
-  assert.ok(pricing.includes("hint || isShopify"));
+  assert.ok(pricing.includes("liveShopifyShop"));
   assert.ok(pricing.includes("openShopifyManagedPricing"));
 });
 
@@ -141,7 +141,7 @@ test("J: existing same-plan subscriber does not auto-open a duplicate subscripti
 test("Auth still uses existing redirect query param; Price IDs never go in the URL", () => {
   const auth = readFileSync(join(root, "client/src/pages/Auth.tsx"), "utf8");
   assert.ok(auth.includes("params.get('redirect')"));
-  assert.ok(auth.includes("setLocation(postAuthRedirect)"));
+  assert.ok(auth.includes("navigateAfterAuth(postAuthRedirect)"));
 
   const href = buildPricingAuthRedirect({
     pricingPath: "/es/pricing",

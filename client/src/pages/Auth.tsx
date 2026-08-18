@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
-import { useLocation, Link } from "wouter";
+import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
+import { navigateAfterAuth } from "@/lib/postAuthRedirect";
 import { getDirection } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,6 @@ export function AuthPage() {
   const [resendBusy, setResendBusy] = useState(false);
   const [resendNote, setResendNote] = useState("");
   const { login, signup, resendVerification } = useAuth();
-  const [, setLocation] = useLocation();
   const turnstileConfigured = !!(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined);
 
   const onTurnstileToken = useCallback((token: string | null) => {
@@ -97,7 +97,7 @@ export function AuthPage() {
       if (isLogin) {
         const success = await login(email, password, rememberMe);
         if (success) {
-          setLocation(postAuthRedirect);
+          navigateAfterAuth(postAuthRedirect);
         } else {
           setError("Invalid email or password");
         }
@@ -111,7 +111,7 @@ export function AuthPage() {
         if (result.success && result.pendingVerification) {
           setPendingVerification(true);
         } else if (result.success) {
-          setLocation(postAuthRedirect);
+          navigateAfterAuth(postAuthRedirect);
         } else {
           setError(result.error || "Signup failed");
           setTurnstileToken(null);

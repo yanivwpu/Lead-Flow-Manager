@@ -10,23 +10,30 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getCheckoutReturnPaths, getPlanCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import {
   billingIntervalFromSearch,
   buildPricingAuthRedirect,
-  parsePricingCheckoutIntent,
+  consumePricingCheckoutIntentFromLocation,
+  persistPricingCheckoutIntent,
   parsePricingCheckoutPlan,
+  resolvePricingCheckoutIntent,
   shouldResumePricingCheckout,
-  stripPricingCheckoutParam,
+  markPricingCheckoutResumeStarted,
+  hasPricingCheckoutResumeStarted,
+  clearPersistedPricingCheckoutIntent,
 } from "@/lib/pricingCheckoutIntent";
 import { SiteFooter } from "@/components/SiteFooter";
 import {
-  getSubscriptionApiUrl,
   getShopifyShopHint,
   resolveShopifyShopForCheckout,
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
-import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import {
+  getLiveShopifyShopFromSearch,
+  getPricingSubscriptionApiUrl,
+  isShopifyPlanCheckoutBlocked,
+} from "@/lib/shopifyLiveShop";
 import { isActiveProAiTrial as checkActiveProAiTrial, proAiTrialDaysRemaining } from "@/lib/proAiTrialState";
 import {
   openShopifyManagedPricing,
@@ -191,7 +198,7 @@ export function Pricing() {
     return p.get("shopify_installed") === "1";
   }, []);
 
-  const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<{
+  const { data: subscriptionData, isFetched: subscriptionFetched, isError: subscriptionError } = useQuery<{
     limits: {
       plan: string;
       hasAIBrainAddon?: boolean;
@@ -211,9 +218,9 @@ export function Pricing() {
       trialDaysRemaining?: number;
     } | null;
   }>({
-    queryKey: ["/api/subscription", shopHint ?? ""],
+    queryKey: ["/api/subscription", getLiveShopifyShopFromSearch() ?? "web"],
     queryFn: async () => {
-      const res = await fetch(getSubscriptionApiUrl(), { credentials: "include" });
+      const res = await fetch(getPricingSubscriptionApiUrl(), { credentials: "include" });
       if (res.status === 401) throw new Error("401");
       if (!res.ok) throw new Error(await res.text());
       return res.json();
@@ -223,7 +230,7 @@ export function Pricing() {
 
   const limits = subscriptionData?.limits;
   const subscriptionMeta = subscriptionData?.subscription;
-  const subscriptionResolved = !user || !subscriptionLoading;
+  const subscriptionResolved = !user || subscriptionFetched || subscriptionError;
   /** Effective access tier (includes Pro during pro_ai trial). */
   const effectivePlan: "free" | "starter" | "pro" | null = !subscriptionResolved
     ? null
@@ -250,8 +257,12 @@ export function Pricing() {
 
   const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
   const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
-  const isShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
-  const planButtonsDisabled = !!user && subscriptionLoading;
+  const liveShopifyShop = getLiveShopifyShopFromSearch();
+  const isShopify = isShopifyPlanCheckoutBlocked(
+    subscriptionData?.subscription,
+    typeof window !== "undefined" ? window.location.search : "",
+  );
+  const planButtonsDisabled = !!user && !subscriptionResolved;
 
   const compareRows = useMemo(
     () =>
@@ -367,8 +378,7 @@ export function Pricing() {
         body: JSON.stringify({
           planId,
           billingInterval: interval,
-          redirectTo: stripPricingCheckoutParam(getCheckoutReturnPaths().redirectTo),
-          cancelTo: stripPricingCheckoutParam(getCheckoutReturnPaths().cancelTo),
+          ...getPlanCheckoutReturnPaths(),
         }),
         credentials: "include",
       });
@@ -384,6 +394,12 @@ export function Pricing() {
     },
     onSuccess: (data) => {
       if (data.url) {
+        const next = consumePricingCheckoutIntentFromLocation(
+          `${window.location.pathname}${window.location.search}`,
+        );
+        if (next !== `${window.location.pathname}${window.location.search}`) {
+          window.history.replaceState(null, "", next);
+        }
         window.location.href = data.url;
         setLoadingPlan(null);
       }
@@ -403,15 +419,15 @@ export function Pricing() {
   const handleUpgrade = (planId: string) => {
     trackPricingEvent("pricing_plan_cta_click", { plan: planId });
     if (!user) {
-      const hint = getShopifyShopHint();
       const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
-      if (hint || isShopify) {
-        const pricingPath = hint ? `${pricingBase}?shop=${encodeURIComponent(hint)}` : pricingBase;
+      if (liveShopifyShop) {
+        const pricingPath = `${pricingBase}?shop=${encodeURIComponent(liveShopifyShop)}`;
         setLocation(`/auth?redirect=${encodeURIComponent(pricingPath)}`);
         return;
       }
       const paidPlan = parsePricingCheckoutPlan(planId);
       if (!paidPlan) return;
+      persistPricingCheckoutIntent({ plan: paidPlan, billingInterval });
       setLocation(
         buildPricingAuthRedirect({
           pricingPath: pricingBase,
@@ -434,16 +450,14 @@ export function Pricing() {
     if (checkoutIntentHandledRef.current) return;
     if (authLoading) return;
 
-    const intent = parsePricingCheckoutIntent(window.location.search);
+    if (hasPricingCheckoutResumeStarted()) {
+      checkoutIntentHandledRef.current = true;
+      return;
+    }
+
+    const intent = resolvePricingCheckoutIntent(window.location.search);
     if (!intent) return;
     if (!user || !subscriptionResolved) return;
-
-    checkoutIntentHandledRef.current = true;
-    setBillingInterval(intent.billingInterval);
-    const next = stripPricingCheckoutParam(`${window.location.pathname}${window.location.search}`);
-    if (next !== `${window.location.pathname}${window.location.search}`) {
-      window.history.replaceState(null, "", next);
-    }
 
     if (
       !shouldResumePricingCheckout({
@@ -456,9 +470,20 @@ export function Pricing() {
         intent,
       })
     ) {
+      checkoutIntentHandledRef.current = true;
+      const skipped = consumePricingCheckoutIntentFromLocation(
+        `${window.location.pathname}${window.location.search}`,
+      );
+      if (skipped !== `${window.location.pathname}${window.location.search}`) {
+        window.history.replaceState(null, "", skipped);
+      }
       return;
     }
 
+    checkoutIntentHandledRef.current = true;
+    markPricingCheckoutResumeStarted();
+    clearPersistedPricingCheckoutIntent();
+    setBillingInterval(intent.billingInterval);
     setLoadingPlan(intent.plan);
     checkoutMutation.mutate({ planId: intent.plan, interval: intent.billingInterval });
   }, [

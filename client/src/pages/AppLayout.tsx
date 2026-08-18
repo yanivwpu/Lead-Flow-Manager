@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useMemo } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo, useRef } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -17,11 +17,14 @@ import {
   readActivationSetupModalLastShownDay,
   writeActivationSetupModalLastShownDay,
   todayLocalYYYYMMDD,
+  shouldShowActivationSetupModal,
 } from "@/lib/activationStatus";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
+import { consumeUpgradedQueryParam } from "@/lib/upgradeSuccess";
+import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -55,7 +58,9 @@ function AppContent() {
   const [trialModalOpen, setTrialModalOpen] = useState(false);
   /** Same-tab: after dismiss or CTA, avoid re-open until localStorage day key updates on next render. */
   const [activationIntroDismissedSession, setActivationIntroDismissedSession] = useState(false);
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const { toast } = useToast();
+  const upgradedToastHandledRef = useRef(false);
   useInboxNewActivityRealtime();
 
   const activationDayKey = activationSetupModalStorageKey(user?.id);
@@ -81,12 +86,27 @@ function AppContent() {
     }
   }, [activation?.hasAnyMessagingChannel]);
 
-  const showActivationIntroModal =
-    !activationPending &&
-    !!activation &&
-    !activation.hasAnyMessagingChannel &&
-    !activationIntroDismissedSession &&
-    !shownActivationModalToday;
+  useEffect(() => {
+    if (typeof window === "undefined" || upgradedToastHandledRef.current) return;
+    const result = consumeUpgradedQueryParam(
+      window.location.pathname,
+      window.location.search,
+      window.location.hash,
+    );
+    if (!result.consumed) return;
+    upgradedToastHandledRef.current = true;
+    window.history.replaceState(null, "", result.nextUrl);
+    toast({
+      title: t("common.upgradedToast"),
+    });
+  }, [toast, t]);
+
+  const showActivationIntroModal = shouldShowActivationSetupModal({
+    activationPending,
+    activation,
+    dismissedThisSession: activationIntroDismissedSession,
+    shownToday: shownActivationModalToday,
+  });
 
   const showUsageBanner =
     !isLoading &&

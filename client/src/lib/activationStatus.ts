@@ -39,3 +39,19 @@ export function writeActivationSetupModalLastShownDay(key: string, day: string):
     /* ignore quota / private mode */
   }
 }
+
+/** Existing Get Started modal — no new route. Incomplete = no messaging channel connected. */
+export function shouldShowActivationSetupModal(opts: {
+  activationPending: boolean;
+  activation: ActivationStatusPayload | null | undefined;
+  dismissedThisSession: boolean;
+  shownToday: boolean;
+}): boolean {
+  return (
+    !opts.activationPending &&
+    !!opts.activation &&
+    !opts.activation.hasAnyMessagingChannel &&
+    !opts.dismissedThisSession &&
+    !opts.shownToday
+  );
+}

@@ -9,6 +9,7 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
+    "upgradedToast": "You're upgraded! Your new features are ready.",
     "confirm": "Confirm",
     "back": "Back",
     "next": "Next",

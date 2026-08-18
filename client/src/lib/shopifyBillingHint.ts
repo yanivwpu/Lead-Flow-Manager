@@ -4,6 +4,12 @@ import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import type { BillingSubscriptionFlags } from "@/lib/shopifyBillingContext";
 import { readHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 
+export {
+  getLiveShopifyShopFromSearch,
+  getPricingSubscriptionApiUrl,
+  isShopifyPlanCheckoutBlocked,
+} from "@/lib/shopifyLiveShop";
+
 /** Persist Shopify shop domain from URL for SPA navigations (matches Settings localStorage key). */
 export function getShopifyShopHint(): string | undefined {
   if (typeof window === "undefined") return undefined;
