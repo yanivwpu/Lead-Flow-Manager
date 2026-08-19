@@ -10,6 +10,8 @@ import {
   getUserTwilioNumber 
 } from "./userTwilio";
 import { CHANNEL_INFO } from "@shared/schema";
+import { extraWhatsAppOutboundAllowed, isPrimaryWhatsAppNumber } from "@shared/paidAutomationEntitlements";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
 import { userFacingReplyWindowBlockedMessage } from "@shared/metaReplyWindowError";
 import { buildMetaOutboundSteps, type MetaOutboundStep } from "@shared/metaOutboundMessagePlan";
 
@@ -197,6 +199,29 @@ class WhatsAppAdapter implements ChannelAdapter {
       const fromNumber = conversation.channelAccountId || undefined;
       if (fromNumber) {
         console.log(`[WhatsAppAdapter] Using channelAccountId=${fromNumber} as from-number (multi-number conversation)`);
+        const entitlement = await resolveExecutionEntitlement(conversation.userId);
+        const owner = await storage.getUserForSession(conversation.userId);
+        const isPrimary = isPrimaryWhatsAppNumber(owner?.twilioWhatsappNumber, fromNumber);
+        if (
+          !extraWhatsAppOutboundAllowed({
+            maxWhatsappNumbers: entitlement.maxWhatsappNumbers,
+            isPrimaryNumber: isPrimary,
+          })
+        ) {
+          logEntitlementSkip({
+            feature: "whatsapp_extra",
+            userId: conversation.userId,
+            extra: {
+              conversationId: conversation.id,
+              action: "extra_whatsapp_outbound_blocked",
+              preserved: true,
+            },
+          });
+          return {
+            success: false,
+            error: "Extra WhatsApp numbers are inactive on your current plan. Primary number remains connected.",
+          };
+        }
       }
 
       if (isMedia) {

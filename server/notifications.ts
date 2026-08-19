@@ -4,6 +4,8 @@ import { storage } from './storage';
 import { clearStaleAppointmentScheduledTag } from './contactAppointmentSync';
 import { sendWhatsAppMessage } from './whatsappService';
 import type { Chat, User, Contact } from '@shared/schema';
+import { logEntitlementSkip, resolveExecutionEntitlement } from './paidAutomationGate';
+import { nextEntitlementDeferAt } from '@shared/paidAutomationEntitlements';
 
 // Generate VAPID keys if not set
 // Run: npx web-push generate-vapid-keys
@@ -62,25 +64,45 @@ async function notify(user: User, contactName: string, followUpText: string, lin
 
 async function checkFollowUps() {
   try {
-    // ── Source 1: legacy chats table ──────────────────────────────────────────
     const dueChats = await storage.getDueFollowUps();
     if (dueChats.length > 0) {
       console.log(`[FollowUp] ${dueChats.length} due from chats`);
       for (const chat of dueChats) {
         const user = await storage.getUser(chat.userId);
         if (!user) continue;
+        const entitlement = await resolveExecutionEntitlement(chat.userId);
+        if (!entitlement.followUpsAllowed) {
+          logEntitlementSkip({
+            feature: "follow_up",
+            userId: chat.userId,
+            jobId: chat.id,
+            extra: { source: "chats", action: "defer_keep_active" },
+          });
+          await storage.updateChat(chat.id, { followUpDate: nextEntitlementDeferAt() });
+          continue;
+        }
         await notify(user, chat.name, chat.followUp || '', `/chats/${chat.id}`, chat.notes || '');
         await storage.updateChat(chat.id, { followUp: null, followUpDate: null });
       }
     }
 
-    // ── Source 2: contacts table ───────────────────────────────────────────────
     const dueContacts = await storage.getDueContactFollowUps();
     if (dueContacts.length > 0) {
       console.log(`[FollowUp] ${dueContacts.length} due from contacts`);
       for (const contact of dueContacts) {
         const user = await storage.getUser(contact.userId);
         if (!user) continue;
+        const entitlement = await resolveExecutionEntitlement(contact.userId);
+        if (!entitlement.followUpsAllowed) {
+          logEntitlementSkip({
+            feature: "follow_up",
+            userId: contact.userId,
+            jobId: contact.id,
+            extra: { source: "contacts", action: "defer_keep_active" },
+          });
+          await storage.updateContact(contact.id, { followUpDate: nextEntitlementDeferAt() });
+          continue;
+        }
         await notify(user, contact.name, contact.followUp || '', `/contacts/${contact.id}`, contact.notes || '');
         await storage.updateContact(contact.id, { followUp: null, followUpDate: null });
         await clearStaleAppointmentScheduledTag(contact.id);
@@ -92,7 +114,7 @@ async function checkFollowUps() {
 }
 
 // Process drip campaign enrollments
-async function processDripEnrollments() {
+export async function processDripEnrollments() {
   try {
     const dueEnrollments = await storage.getDueEnrollments();
     
@@ -107,6 +129,20 @@ async function processDripEnrollments() {
         const campaign = await storage.getDripCampaign(enrollment.campaignId);
         if (!campaign || !campaign.isActive) {
           await storage.updateDripEnrollment(enrollment.id, { status: "cancelled" });
+          continue;
+        }
+
+        const entitlement = await resolveExecutionEntitlement(campaign.userId);
+        if (!entitlement.paidAutomationAllowed) {
+          logEntitlementSkip({
+            feature: "drip",
+            userId: campaign.userId,
+            jobId: enrollment.id,
+            extra: { campaignId: campaign.id, action: "defer_keep_active" },
+          });
+          await storage.updateDripEnrollment(enrollment.id, {
+            nextSendAt: nextEntitlementDeferAt(),
+          });
           continue;
         }
 

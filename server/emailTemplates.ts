@@ -137,12 +137,12 @@ export function emailFigure(
 
 export function emailActivationFooter(appUrl: string): string {
   return `<p style="margin: 0 0 8px; color: #94a3b8; font-size: 12px;">Questions? <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a></p>
-    <p style="margin: 0; color: #94a3b8; font-size: 11px;">You're receiving this because you signed up for WhaChatCRM.</p>
+    <p style="margin: 0; color: #94a3b8; font-size: 11px;">You're receiving this because you signed up for WhachatCRM.</p>
     <p style="margin: 8px 0 0; color: #94a3b8; font-size: 11px;">
       <a href="${appUrl}/unsubscribe" style="color: #94a3b8; text-decoration: underline;">Unsubscribe</a> ·
       <a href="${appUrl}/privacy-policy" style="color: #94a3b8; text-decoration: underline;">Privacy Policy</a>
     </p>
-    <p style="margin: 12px 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhaChatCRM. All rights reserved.</p>`;
+    <p style="margin: 12px 0 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhachatCRM. All rights reserved.</p>`;
 }
 
 export function emailSignatureBlock(): string {

@@ -36,6 +36,8 @@ interface SubscriptionLimits {
   integrationsEnabled: boolean;
   maxWebhooks: number;
   templatesEnabled: boolean;
+  conversationUsagePeriodEnd?: string | Date | null;
+  conversationUsagePeriodStart?: string | Date | null;
 }
 
 interface SubscriptionData {

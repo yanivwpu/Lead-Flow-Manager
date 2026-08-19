@@ -642,6 +642,25 @@ export async function executeWorkflowActions(
   let sendOutcome: WorkflowSendOutcome = "none";
   
   try {
+    const limits = await subscriptionService.getUserLimits(workflow.userId);
+    if (!limits?.workflowsEnabled) {
+      console.log(
+        JSON.stringify({
+          tag: "[EntitlementSkip]",
+          feature: "workflow",
+          userId: workflow.userId,
+          workflowId: workflow.id,
+          reason: "plan_does_not_allow",
+          preserved: true,
+        }),
+      );
+      return {
+        success: false,
+        actionsExecuted: [],
+        blockedReason: "entitlement_blocked",
+        sendOutcome: "none",
+      };
+    }
     const blockedReason = await blockGrowthEngineWorkflowIfNotEntitled(workflow, chat, conversationId, triggerData);
     if (blockedReason) {
       return { success: false, actionsExecuted: [], blockedReason, sendOutcome: "none" };

@@ -1,13 +1,17 @@
 /**
- * Render Day 3 / Day 10 activation emails and capture desktop + mobile previews.
+ * Render Day 0 / Day 5 / Day 10 activation emails and capture desktop + mobile previews.
  * Usage: npx tsx scripts/activation-email-preview.ts
  */
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import {
-  renderActivationEmailDay3Html,
+  ACTIVATION_DAY5_EMAIL_SUBJECT,
+  ACTIVATION_DAY10_EMAIL_SUBJECT,
+  WELCOME_EMAIL_SUBJECT,
+  renderActivationEmailDay5Html,
   renderActivationEmailDay10Html,
+  renderWelcomeEmailHtml,
 } from "../server/email";
 
 const OUT_DIR = path.join(process.cwd(), "artifacts", "activation-email-previews");
@@ -140,8 +144,9 @@ function buildPreviewShell(specs: PreviewSpec[]): string {
 <body>
   <h1>Activation email previews</h1>
   <p class="intro">
-    Exact HTML rendered by <code>renderActivationEmailDay3Html</code> and
-    <code>renderActivationEmailDay10Html</code> with local product screenshots.
+    Exact HTML rendered by <code>renderWelcomeEmailHtml</code>,
+    <code>renderActivationEmailDay5Html</code>, and
+    <code>renderActivationEmailDay10Html</code>.
     Review spacing, image sizing, CTA buttons, and footer before deployment.
   </p>
   ${frames}
@@ -168,20 +173,27 @@ async function main() {
   const assetBase = localAssetBase();
   const renderOpts = { appUrl: APP_URL, assetBase };
 
-  const day3Html = inlineActivationImages(renderActivationEmailDay3Html(SAMPLE_NAME, renderOpts));
+  const welcomeHtml = inlineActivationImages(renderWelcomeEmailHtml(SAMPLE_NAME, renderOpts));
+  const day5Html = inlineActivationImages(renderActivationEmailDay5Html(SAMPLE_NAME, renderOpts));
   const day10Html = inlineActivationImages(renderActivationEmailDay10Html(SAMPLE_NAME, renderOpts));
 
   const specs: PreviewSpec[] = [
     {
-      id: "day3",
-      label: "Day 3 — Getting Connected",
-      subject: "Connect WhatsApp in minutes — your free AI assistant is ready",
-      html: day3Html,
+      id: "day0",
+      label: "Day 0 — Welcome (after email verification)",
+      subject: WELCOME_EMAIL_SUBJECT,
+      html: welcomeHtml,
+    },
+    {
+      id: "day5",
+      label: "Day 5 — Connect your channels",
+      subject: ACTIVATION_DAY5_EMAIL_SUBJECT,
+      html: day5Html,
     },
     {
       id: "day10",
-      label: "Day 10 — Why Connect?",
-      subject: "Your AI assistant is waiting — connect your channels to activate it",
+      label: "Day 10 — Setup help",
+      subject: ACTIVATION_DAY10_EMAIL_SUBJECT,
       html: day10Html,
     },
   ];

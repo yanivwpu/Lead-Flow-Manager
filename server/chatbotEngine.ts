@@ -6,6 +6,8 @@ import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { getUserTwilioClient } from "./userTwilio";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { withAutomationSendGuard } from "./automationSendGuard";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
+import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
 
 // ─── Button types ──────────────────────────────────────────────────────────
 
@@ -186,6 +188,15 @@ export async function evaluateChatbotInboundArbitration(
 ): Promise<InboundChatbotArbitration> {
   if (detectHighConfidenceBookingIntent(ctx.message)) {
     return { flowMatched: false, reason: "booking_fast_path_priority" };
+  }
+  const entitlement = await resolveExecutionEntitlement(ctx.userId);
+  if (!entitlement.chatbotAllowed) {
+    logEntitlementSkip({
+      feature: "chatbot",
+      userId: ctx.userId,
+      extra: { conversationId: ctx.conversationId, action: "skip_terminal" },
+    });
+    return { flowMatched: false, reason: ENTITLEMENT_BLOCKED_REASON };
   }
   try {
     const dry = dryRunPendingButton(ctx);
@@ -1008,6 +1019,16 @@ async function checkAndResolvePendingButton(ctx: TriggerContext): Promise<boolea
 
 export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
   try {
+    const entitlement = await resolveExecutionEntitlement(ctx.userId);
+    if (!entitlement.chatbotAllowed) {
+      logEntitlementSkip({
+        feature: "chatbot",
+        userId: ctx.userId,
+        extra: { conversationId: ctx.conversationId, action: "skip_terminal" },
+      });
+      return;
+    }
+
     console.log(
       `[Chatbot] Evaluating flows — userId: ${ctx.userId}, channel: ${ctx.channel}, isNewConversation: ${ctx.isNewConversation}, message: "${ctx.message.substring(0, 80)}"`
     );
@@ -1110,5 +1131,14 @@ export async function executeFlowFromJob(
   ctx: TriggerContext,
   nodeId: string
 ): Promise<void> {
+  const entitlement = await resolveExecutionEntitlement(ctx.userId || flow.userId);
+  if (!entitlement.chatbotAllowed) {
+    logEntitlementSkip({
+      feature: "flow_job",
+      userId: ctx.userId || flow.userId,
+      extra: { flowId: flow.id, action: "skip_terminal" },
+    });
+    return;
+  }
   await executeFlow(flow, ctx, nodeId);
 }

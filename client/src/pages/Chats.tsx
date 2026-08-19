@@ -606,7 +606,7 @@ export function Chats() {
           limit: subscription.limits.conversationsLimit, 
           used: subscription.limits.conversationsUsed, 
           planName: subscription.limits.planName,
-          resetDate: subscription.subscription?.currentPeriodEnd || null,
+          resetDate: subscription.limits.conversationUsagePeriodEnd || subscription.subscription?.currentPeriodEnd || null,
         });
       }
       setUpgradeModalOpen(true);
@@ -636,7 +636,7 @@ export function Chats() {
               limit: data.limit, 
               used: data.used, 
               planName: data.planName,
-              resetDate: subscription?.subscription?.currentPeriodEnd || null,
+              resetDate: subscription?.limits?.conversationUsagePeriodEnd || subscription?.subscription?.currentPeriodEnd || null,
             });
           }
           setUpgradeModalOpen(true);
@@ -716,7 +716,7 @@ export function Chats() {
           limit: subscription.limits.conversationsLimit,
           used: subscription.limits.conversationsUsed,
           planName: subscription.limits.planName,
-          resetDate: subscription.subscription?.currentPeriodEnd || null,
+          resetDate: subscription.limits.conversationUsagePeriodEnd || subscription.subscription?.currentPeriodEnd || null,
         });
       }
       setUpgradeModalOpen(true);
@@ -746,7 +746,7 @@ export function Chats() {
               limit: data.limit,
               used: data.used,
               planName: data.planName,
-              resetDate: subscription?.subscription?.currentPeriodEnd || null,
+              resetDate: subscription?.limits?.conversationUsagePeriodEnd || subscription?.subscription?.currentPeriodEnd || null,
             });
           }
           setUpgradeModalOpen(true);

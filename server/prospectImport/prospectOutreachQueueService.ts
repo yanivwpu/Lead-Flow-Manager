@@ -76,6 +76,8 @@ import {
   recipientIdentityForSelectedChannel,
 } from "./prospectOutreachEligibilityService";
 import { getProspectOutreachSender } from "./prospectOutreachSenders";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "../paidAutomationGate";
+import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
 
 function failureClassFromEligibilityDetail(
   detail: string | null | undefined,
@@ -1459,6 +1461,17 @@ export async function claimNextDueQueueItem(
   // Fail-closed: queueing alone must never send; Start arms queueRunning.
   if (!isProspectOutreachQueueArmed(settings)) return null;
 
+  const entitlement = await resolveExecutionEntitlement(workspaceUserId);
+  if (!entitlement.paidAutomationAllowed) {
+    logEntitlementSkip({
+      feature: "prospect_outreach",
+      userId: workspaceUserId,
+      extra: { action: "pause_queue_keep_items" },
+    });
+    await pauseQueue(workspaceUserId);
+    return null;
+  }
+
   const now = new Date();
   const due = await db
     .select()
@@ -1536,6 +1549,31 @@ export async function claimNextDueQueueItem(
 export async function processClaimedQueueItem(
   item: ProspectOutreachQueueItemRow,
 ): Promise<{ ok: boolean; reason: string }> {
+  const entitlement = await resolveExecutionEntitlement(item.workspaceUserId);
+  if (!entitlement.paidAutomationAllowed) {
+    const restored = nextQueueItemAfterInfraPause({
+      currentAttempts: item.attempts,
+      reason: ENTITLEMENT_BLOCKED_REASON,
+    });
+    await db
+      .update(prospectOutreachQueueItems)
+      .set({
+        queueStatus: restored.queueStatus,
+        attempts: restored.attempts,
+        lastError: restored.lastError,
+        updatedAt: new Date(),
+      })
+      .where(eq(prospectOutreachQueueItems.id, item.id));
+    logEntitlementSkip({
+      feature: "prospect_outreach",
+      userId: item.workspaceUserId,
+      jobId: item.id,
+      extra: { action: "pause_queue_keep_items" },
+    });
+    await pauseQueue(item.workspaceUserId);
+    return { ok: false, reason: ENTITLEMENT_BLOCKED_REASON };
+  }
+
   const started = Date.now();
   console.info(
     JSON.stringify(

@@ -61,3 +61,39 @@ export function isExcludedFromActivationEmails(email: string | null | undefined)
   if (lower.endsWith("@test.com")) return true;
   return false;
 }
+
+/** Channel-connection reminder (DB flag remains activationEmailDay3Sent). */
+export const ACTIVATION_EMAIL_DAY5_THRESHOLD = 5;
+export const ACTIVATION_EMAIL_DAY10_THRESHOLD = 10;
+
+export type ActivationSequenceAction =
+  | { action: "welcome" }
+  | { action: "day5" }
+  | { action: "day10"; alsoCompleteDay5: boolean }
+  | { action: "mark_complete" }
+  | { action: "none" };
+
+/**
+ * One onboarding email per cron run.
+ * Welcome retry wins so Day 0 is never skipped for an unverified-send failure.
+ * Stale accounts (>=10 days, neither reminder sent) get Day 10 rescue, not Day 5+10.
+ */
+export function chooseActivationSequenceAction(opts: {
+  welcomeSent: boolean;
+  day5Sent: boolean;
+  day10Sent: boolean;
+  daysSinceStart: number;
+  hasQualifyingChannel: boolean;
+}): ActivationSequenceAction {
+  if (!opts.welcomeSent) return { action: "welcome" };
+  if (opts.hasQualifyingChannel) {
+    return opts.day5Sent && opts.day10Sent ? { action: "none" } : { action: "mark_complete" };
+  }
+  if (opts.daysSinceStart >= ACTIVATION_EMAIL_DAY10_THRESHOLD && !opts.day10Sent) {
+    return { action: "day10", alsoCompleteDay5: !opts.day5Sent };
+  }
+  if (opts.daysSinceStart >= ACTIVATION_EMAIL_DAY5_THRESHOLD && !opts.day5Sent) {
+    return { action: "day5" };
+  }
+  return { action: "none" };
+}

@@ -2,6 +2,8 @@ import { storage } from "./storage";
 import { executeFlowFromJob } from "./chatbotEngine";
 import { processNoReplyJob } from "./automationNoReply";
 import { processAutomationTimerJob } from "./automationTimerHandlers";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
+import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
 
 const POLL_INTERVAL_MS = 7_000; // poll every 7 seconds
 const BATCH_SIZE = 20;
@@ -83,6 +85,22 @@ async function processDueJobs(): Promise<void> {
             await storage.markFlowJobFailed(job.id, `Flow ${job.flowId} not found`);
             flowFailed++;
             return;
+          }
+
+          const flowOwnerId = flow.userId || (job.payload as { userId?: string })?.userId;
+          if (flowOwnerId) {
+            const entitlement = await resolveExecutionEntitlement(flowOwnerId);
+            if (!entitlement.chatbotAllowed) {
+              logEntitlementSkip({
+                feature: "flow_job",
+                userId: flowOwnerId,
+                jobId: job.id,
+                extra: { flowId: job.flowId, action: "skip_terminal" },
+              });
+              await storage.markFlowJobSkipped(job.id, ENTITLEMENT_BLOCKED_REASON);
+              flowSkipped++;
+              return;
+            }
           }
 
           if (!flow.isActive) {

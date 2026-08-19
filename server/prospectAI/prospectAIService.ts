@@ -35,6 +35,10 @@ import { getProspectDiscoveryProvider } from "./providers";
 import type { ProspectDiscoveryProvider } from "./providers/types";
 import { validateDiscoverInput } from "./normalize";
 import {
+  startOfUtcMonth,
+  resolveUsagePeriodFromDates,
+} from "@shared/usagePeriod";
+import {
   buildProspectDedupIndex,
   findProspectDuplicate,
 } from "../prospectImport/prospectImportDedup";
@@ -96,9 +100,7 @@ export class ProspectAiError extends Error {
   }
 }
 
-export function startOfUtcMonth(now = new Date()): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-}
+export { startOfUtcMonth };
 
 /**
  * Pure period resolver for discovery quota (billing cycle when active, else UTC month).
@@ -109,18 +111,8 @@ export function resolveDiscoveryQuotaPeriodStartFromDates(
   currentPeriodEnd: Date | null | undefined,
   now = new Date(),
 ): { periodStart: Date; source: "billing_period" | "utc_month" } {
-  const start =
-    currentPeriodStart instanceof Date && !Number.isNaN(currentPeriodStart.getTime())
-      ? currentPeriodStart
-      : null;
-  const end =
-    currentPeriodEnd instanceof Date && !Number.isNaN(currentPeriodEnd.getTime())
-      ? currentPeriodEnd
-      : null;
-  if (start && end && now <= end) {
-    return { periodStart: start, source: "billing_period" };
-  }
-  return { periodStart: startOfUtcMonth(now), source: "utc_month" };
+  const resolved = resolveUsagePeriodFromDates(currentPeriodStart, currentPeriodEnd, now);
+  return { periodStart: resolved.periodStart, source: resolved.source };
 }
 
 function toIso(value: Date | string | null | undefined): string | null {

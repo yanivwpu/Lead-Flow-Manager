@@ -21,6 +21,8 @@ import {
   stripePriceEnvForPlan,
   type StripeBillingInterval,
 } from "./stripePlanPriceIds";
+import { resolveUsagePeriodFromDates } from "@shared/usagePeriod";
+import { nextConversationUsageAfterPeriodCheck } from "@shared/conversationUsagePeriod";
 
 export type StripeCheckoutRedirectOpts = {
   successReturnPath?: string;
@@ -55,6 +57,11 @@ export interface UserLimits {
   chatbotEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean;
+  /** Start of the current conversation usage window (Stripe or UTC month). */
+  conversationUsagePeriodStart: Date;
+  /** Exclusive end of the current conversation usage window. */
+  conversationUsagePeriodEnd: Date;
+  conversationUsagePeriodSource: "billing_period" | "utc_month";
   suggestedUpgrade: SubscriptionPlan | null;
   isInTrial: boolean;
   trialEndsAt: Date | null;
@@ -111,15 +118,25 @@ class SubscriptionService {
     const effectivePlan = getEffectivePlanForUser(user, now);
     const planLimits = PLAN_LIMITS[effectivePlan];
 
-    // MONTHLY RESET LOGIC: Reset conversations if billing period has ended
-    let conversationsUsed = user.monthlyConversations || 0;
-    const currentPeriodEnd = user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : null;
-    
-    if (currentPeriodEnd && now > currentPeriodEnd) {
-      // Billing period has expired - reset the monthly counter
-      conversationsUsed = 0;
-      // Persist the reset to database
-      await storage.updateUser(userId, { monthlyConversations: 0 });
+    const usagePeriod = resolveUsagePeriodFromDates(
+      user.currentPeriodStart ? new Date(user.currentPeriodStart) : null,
+      user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : null,
+      now,
+    );
+    const usageDecision = nextConversationUsageAfterPeriodCheck({
+      storedPeriodStart: user.conversationUsagePeriodStart
+        ? new Date(user.conversationUsagePeriodStart)
+        : null,
+      canonicalPeriodStart: usagePeriod.periodStart,
+      conversationsUsed: user.monthlyConversations || 0,
+      conversationsLimit: planLimits.conversationsPerMonth,
+    });
+    let conversationsUsed = usageDecision.conversationsUsed;
+    if (usageDecision.persistPeriodStart || usageDecision.resetCounter) {
+      await storage.updateUser(userId, {
+        conversationUsagePeriodStart: usagePeriod.periodStart,
+        ...(usageDecision.resetCounter ? { monthlyConversations: 0 } : {}),
+      });
     }
     
     const conversationsLimit = planLimits.conversationsPerMonth;
@@ -171,6 +188,9 @@ class SubscriptionService {
       chatbotEnabled: (planLimits as any).chatbotEnabled || false,
       isAtLimit,
       isAtWarning,
+      conversationUsagePeriodStart: usagePeriod.periodStart,
+      conversationUsagePeriodEnd: usagePeriod.periodEnd,
+      conversationUsagePeriodSource: usagePeriod.source,
       suggestedUpgrade,
       isInTrial,
       trialEndsAt: user.trialEndsAt,
@@ -673,6 +693,8 @@ class SubscriptionService {
   }
 
   async incrementConversationUsage(userId: string): Promise<void> {
+    // Apply period reset first so trial-only Free accounts cannot stay locked.
+    await this.getUserLimits(userId);
     const user = await storage.getUserForSession(userId);
     if (!user) return;
 

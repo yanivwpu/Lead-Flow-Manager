@@ -676,8 +676,16 @@ app.use((req, res, next) => {
         (async () => {
           try {
             console.log("[Backfill] Starting startup backfills...");
-            await (app as any).locals.runBackfills?.();
+            const backfillResult = await (app as any).locals.runBackfills?.();
             console.log("[Backfill] Startup backfills completed");
+            if (backfillResult?.trialExpirationEmailPatchOk) {
+              const { startTrialExpirationEmailsAfterSchemaReady } = await import("./cron");
+              await startTrialExpirationEmailsAfterSchemaReady();
+            } else {
+              console.error(
+                "[Cron] Not enabling trial-expiration emails — schema patch 0080 did not succeed",
+              );
+            }
           } catch (err) {
             console.error("[Backfill] Startup backfills failed:", err);
           }

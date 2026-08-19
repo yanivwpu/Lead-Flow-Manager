@@ -848,6 +848,21 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_inbox_checked_at timestamp`,
     ].join(";\n"),
   },
+  {
+    tag: "0080_trial_expiration_email",
+    sql: [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_expiration_email_sent_at timestamp`,
+      `UPDATE users
+        SET trial_expiration_email_sent_at = COALESCE(trial_ends_at, NOW())
+        WHERE trial_expiration_email_sent_at IS NULL
+          AND trial_ends_at IS NOT NULL
+          AND trial_ends_at <= NOW()`,
+    ].join(";\n"),
+  },
+  {
+    tag: "0081_conversation_usage_period",
+    sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS conversation_usage_period_start timestamp`,
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -872,7 +887,10 @@ async function probePublicListingSchemaColumns(): Promise<boolean> {
   }
 }
 
-export async function applyStartupSchemaPatches(): Promise<{ publicListingSchemaReady: boolean }> {
+export async function applyStartupSchemaPatches(): Promise<{
+  publicListingSchemaReady: boolean;
+  trialExpirationEmailPatchOk: boolean;
+}> {
   const patchResults = new Map<string, boolean>();
 
   for (const patch of STARTUP_COLUMN_PATCHES) {
@@ -914,5 +932,8 @@ export async function applyStartupSchemaPatches(): Promise<{ publicListingSchema
   }
 
   setPublicListingSchemaReady(ready);
-  return { publicListingSchemaReady: ready };
+  return {
+    publicListingSchemaReady: ready,
+    trialExpirationEmailPatchOk: patchResults.get("0080_trial_expiration_email") === true,
+  };
 }

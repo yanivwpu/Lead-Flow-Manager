@@ -12,6 +12,8 @@ import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { executeWorkflowActions, type WorkflowSendOutcome } from "./workflowEngine";
 import { resolveLegacyChatForContact } from "./automationEventDispatcher";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
+import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
 
 function combinedNoReplyConditionRows(
   tc: Record<string, unknown> | undefined,
@@ -343,6 +345,18 @@ export async function scheduleNoReplyJobsAfterTeamOutbound(params: {
 }
 
 export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
+  const entitlement = await resolveExecutionEntitlement(job.userId);
+  if (!entitlement.paidAutomationAllowed) {
+    logEntitlementSkip({
+      feature: "no_reply_job",
+      userId: job.userId,
+      jobId: job.id,
+      extra: { workflowId: job.workflowId, action: "skip_terminal" },
+    });
+    await storage.markNoReplyJobSkipped(job.id, ENTITLEMENT_BLOCKED_REASON);
+    return;
+  }
+
   const wf = await storage.getWorkflow(job.workflowId);
   if (!wf || !wf.isActive) {
     await storage.markNoReplyJobSkipped(job.id, "workflow_missing_or_inactive");

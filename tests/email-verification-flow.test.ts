@@ -34,10 +34,12 @@ section("source: trial starts at verification not signup");
   assert.ok(authSrc.includes("issueEmailVerification"));
 
   const verifySrc = readFileSync(join(process.cwd(), "server/emailVerification.ts"), "utf8");
+  assert.ok(verifySrc.includes("trySendWelcomeEmailForUser"));
   assert.ok(verifySrc.includes("sendWelcomeEmail"));
   assert.ok(verifySrc.includes('trialPlan') && verifySrc.includes("pro_ai"));
   assert.ok(verifySrc.includes("welcomeEmailSentAt"));
   assert.ok(verifySrc.includes("shouldStartTrial"));
+  assert.ok(verifySrc.includes("will retry on the activation cron"));
 }
 
 section("source: honeypot + turnstile + disposable");

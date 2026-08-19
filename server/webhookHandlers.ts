@@ -177,7 +177,12 @@ export class WebhookHandlers {
         if (user) {
           // Reset monthly conversations counter on subscription renewal
           // Keep lifetimeConversations for analytics, only reset the monthly counter
-          await storage.updateUser(user.id, { monthlyConversations: 0 });
+          await storage.updateUser(user.id, {
+            monthlyConversations: 0,
+            conversationUsagePeriodStart: user.currentPeriodStart
+              ? new Date(user.currentPeriodStart)
+              : new Date(),
+          });
           console.log(`Reset monthlyConversations for user ${user.id} on subscription renewal`);
         }
       }

@@ -9,6 +9,7 @@ import { db } from "../drizzle/db";
 import { storage } from "./storage";
 import { sendEmailVerificationEmail, sendWelcomeEmail } from "./email";
 import { isEmailVerified } from "./authSecurity";
+import { isExcludedFromActivationEmails } from "@shared/activationEmailEligibility";
 
 export const EMAIL_VERIFICATION_TTL_MS = 45 * 60 * 1000; // 45 minutes
 export const TRIAL_DAYS = 14;
@@ -75,6 +76,26 @@ export type VerifyEmailResult =
   | { ok: false; reason: "invalid" | "expired" | "used" | "user_missing" };
 
 /**
+ * Send Day 0 welcome if it has never succeeded.
+ * Does not throw; returns false on provider failure so login/verify is never blocked.
+ * welcomeEmailSentAt is written only after a successful send (duplicate protection).
+ */
+export async function trySendWelcomeEmailForUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  welcomeEmailSentAt?: Date | string | null;
+}): Promise<boolean> {
+  if (user.welcomeEmailSentAt) return true;
+  if (!user.email || isExcludedFromActivationEmails(user.email)) return true;
+  const sent = await sendWelcomeEmail(user.name, user.email);
+  if (sent) {
+    await storage.updateUser(user.id, { welcomeEmailSentAt: new Date() } as any);
+  }
+  return sent;
+}
+
+/**
  * Consume a verification token once. Starts trial + welcome only on first successful verify.
  */
 export async function consumeEmailVerificationToken(rawToken: string): Promise<VerifyEmailResult> {
@@ -134,12 +155,12 @@ export async function consumeEmailVerificationToken(rawToken: string): Promise<V
     return { ok: false, reason: "user_missing" };
   }
 
-  // Welcome once after verification
-  if (!user.welcomeEmailSentAt) {
-    const sent = await sendWelcomeEmail(user.name, user.email);
-    if (sent) {
-      await storage.updateUser(user.id, { welcomeEmailSentAt: now } as any);
-    }
+  // Welcome once after verification — retry later via cron if Resend fails
+  const sent = await trySendWelcomeEmailForUser(user);
+  if (!sent) {
+    console.warn(
+      `[EMAIL_VERIFY] Welcome email not sent for ${user.email}; will retry on the activation cron`,
+    );
   }
 
   return {

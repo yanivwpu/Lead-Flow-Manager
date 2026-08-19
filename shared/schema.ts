@@ -135,6 +135,8 @@ export const users = pgTable("users", {
   trialPlan: text("trial_plan"),
   lifetimeConversations: integer("lifetime_conversations").default(0), // for free tier tracking
   monthlyConversations: integer("monthly_conversations").default(0), // current month conversation count
+  /** Start of the conversation usage window (Stripe period or UTC month). Not message/history data. */
+  conversationUsagePeriodStart: timestamp("conversation_usage_period_start"),
   monthlyTwilioUsage: numeric("monthly_twilio_usage", { precision: 10, scale: 2 }).default("0"), // current month Twilio spend
   // Business hours & auto-reply settings
   businessHoursEnabled: boolean("business_hours_enabled").default(false),
@@ -163,7 +165,7 @@ export const users = pgTable("users", {
   shopifyInstalledAt: timestamp("shopify_installed_at"),
   shopifyAIBrainEnabled: boolean("shopify_ai_brain_enabled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-  // Onboarding activation email sequence (day 3 + day 10; skip when messaging channels connected)
+  // Onboarding activation email sequence (day 5 uses activationEmailDay3Sent flag + day 10; skip/complete when messaging channels connected)
   activationEmailDay3Sent: boolean("activation_email_day3_sent").default(false),
   activationEmailDay10Sent: boolean("activation_email_day10_sent").default(false),
   /** @deprecated Legacy trial check-in flag — superseded by activationEmailDay10Sent. Not read by cron. */
@@ -177,6 +179,8 @@ export const users = pgTable("users", {
   emailVerifiedAt: timestamp("email_verified_at"),
   /** When the post-verification welcome email was sent (prevents duplicate welcome sequences). */
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
+  /** When the Pro + AI Brain trial-expiration email was successfully sent (send-once). */
+  trialExpirationEmailSentAt: timestamp("trial_expiration_email_sent_at"),
   /**
    * Sidebar Inbox badge: inbound messages since the user last visibly checked Inbox.
    * Independent of per-conversation unread_count / Needs Reply.

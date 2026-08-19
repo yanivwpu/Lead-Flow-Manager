@@ -1610,6 +1610,25 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Phone number is required" });
       }
 
+      const limits = await subscriptionService.getUserLimits(req.user.id);
+      const maxNumbers = limits?.maxWhatsappNumbers ?? 1;
+      if (maxNumbers !== -1) {
+        const { countDistinctWhatsAppNumbers } = await import("@shared/paidAutomationEntitlements");
+        const existingPhones = await storage.getRegisteredPhones(req.user.id);
+        const sessionUser = await storage.getUserForSession(req.user.id);
+        const currentCount = countDistinctWhatsAppNumbers(
+          sessionUser?.twilioWhatsappNumber || sessionUser?.metaDisplayPhoneNumber || null,
+          existingPhones.map((p) => p.phoneNumber),
+        );
+        if (currentCount >= maxNumbers) {
+          return res.status(403).json({
+            error: "Your plan allows 1 WhatsApp Business account. Extra numbers stay saved but new connections require an upgrade.",
+            upgradeRequired: true,
+            plan: limits?.plan,
+          });
+        }
+      }
+
       // Normalize phone number format (should be whatsapp:+1234567890)
       let normalizedPhone = phoneNumber.trim();
       if (!normalizedPhone.startsWith("whatsapp:")) {
@@ -5023,9 +5042,9 @@ export async function registerRoutes(
     }
   }
 
-  async function runBackfills() {
+  async function runBackfills(): Promise<{ trialExpirationEmailPatchOk: boolean }> {
     const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
-    const { publicListingSchemaReady } = await applyStartupSchemaPatches();
+    const { publicListingSchemaReady, trialExpirationEmailPatchOk } = await applyStartupSchemaPatches();
     if (!publicListingSchemaReady) {
       console.error(
         "[Startup] Public listing and agent page routes will return 503 until schema patches 0045–0047 succeed",
@@ -5033,6 +5052,7 @@ export async function registerRoutes(
     }
     await backfillFacebookInstagramChannelSettings();
     await backfillInstagramPageId();
+    return { trialExpirationEmailPatchOk };
   }
 
   // IMPORTANT: Do not run backfills during route registration (startup import/init).
@@ -10417,8 +10437,8 @@ export async function registerRoutes(
       const result = await runActivationEmails();
       res.json({
         success: true,
-        message: `Activation emails processed: day3=${result.day3Sent}, day10=${result.day10Sent}, errors=${result.errors}`,
-        sent: result.day3Sent + result.day10Sent,
+        message: `Activation emails processed: welcome=${result.welcomeSent}, day5=${result.day5Sent}, day10=${result.day10Sent}, markedComplete=${result.markedComplete}, errors=${result.errors}`,
+        sent: result.welcomeSent + result.day5Sent + result.day10Sent,
         ...result,
       });
     } catch (error) {

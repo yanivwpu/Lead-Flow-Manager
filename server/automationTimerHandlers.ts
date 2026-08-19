@@ -3,6 +3,8 @@ import { storage } from "./storage";
 import { sendUserWhatsAppMessage } from "./userTwilio";
 import { sendMetaWhatsAppMessage } from "./userMeta";
 import { withAutomationSendGuard } from "./automationSendGuard";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
+import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
 
 type W2QualPayload = {
   userId: string;
@@ -108,6 +110,18 @@ async function sendW2Outbound(payload: W2QualPayload | W2RoutePayload, dedupKind
 }
 
 export async function processAutomationTimerJob(job: AutomationTimerJob): Promise<void> {
+  const entitlement = await resolveExecutionEntitlement(job.userId);
+  if (!entitlement.paidAutomationAllowed) {
+    logEntitlementSkip({
+      feature: "timer_job",
+      userId: job.userId,
+      jobId: job.id,
+      extra: { kind: job.kind, action: "skip_terminal" },
+    });
+    await storage.markAutomationTimerJobSkipped(job.id, ENTITLEMENT_BLOCKED_REASON);
+    return;
+  }
+
   const contact = await storage.getContact((job.payload as any).contactId as string);
   if (!contact) {
     await storage.markAutomationTimerJobSkipped(job.id, "contact_missing");

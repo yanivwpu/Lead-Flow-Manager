@@ -30,6 +30,8 @@ import { getWhatsAppAvailability } from "./whatsappService";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
 import { withAutomationSendGuard } from "./automationSendGuard";
+import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
+import { nextEntitlementDeferAt } from "@shared/paidAutomationEntitlements";
 
 const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
 
@@ -322,6 +324,20 @@ async function sendCampaignChannelMessage(params: {
 export async function processCampaignEnrollmentStep(enrollmentId: string): Promise<void> {
   const enrollment = await storage.getCampaignEnrollmentById(enrollmentId);
   if (!enrollment || enrollment.status !== "active") return;
+
+  const entitlement = await resolveExecutionEntitlement(enrollment.userId);
+  if (!entitlement.paidAutomationAllowed) {
+    logEntitlementSkip({
+      feature: "campaign",
+      userId: enrollment.userId,
+      jobId: enrollment.id,
+      extra: { campaignId: enrollment.campaignId, action: "defer_keep_active" },
+    });
+    await storage.updateCampaignEnrollment(enrollment.id, {
+      nextRunAt: nextEntitlementDeferAt(),
+    });
+    return;
+  }
 
   const campaign = await storage.getPresetCampaignForUser(enrollment.campaignId, enrollment.userId);
   if (!campaign) {

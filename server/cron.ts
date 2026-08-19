@@ -4,6 +4,7 @@ import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzl
 import { sendDailyHotListEmail, type HotLeadEntry } from './email';
 import { EMAIL_INBOX_IDENTITY_SOURCE } from '@shared/contactCrmVisibility';
 import { runActivationEmails } from './activationEmailService';
+import { runTrialExpirationEmails } from './trialExpirationEmailService';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
 
@@ -97,7 +98,9 @@ export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; re
   }
 }
 
-/** Mark trial_status expired for accounts past trial_ends_at (runs periodically). */
+let trialExpirationEmailsAllowed = false;
+
+/** Mark trial_status expired, then send Day 14 expiration email if still on Free. */
 export async function runTrialExpirySync(): Promise<number> {
   try {
     const result = await db.execute(sql`
@@ -115,9 +118,26 @@ export async function runTrialExpirySync(): Promise<number> {
   }
 }
 
+async function runTrialExpiryThenExpirationEmails(): Promise<void> {
+  await runTrialExpirySync();
+  if (!trialExpirationEmailsAllowed) {
+    console.log(
+      "[Cron] Trial-expiration emails deferred until schema patch 0080 (column + historical backfill) completes",
+    );
+    return;
+  }
+  await runTrialExpirationEmails();
+}
+
+/** Enable Day 14 mail only after patch 0080 has added the column and backfilled expired trials. */
+export async function startTrialExpirationEmailsAfterSchemaReady(): Promise<void> {
+  trialExpirationEmailsAllowed = true;
+  await runTrialExpiryThenExpirationEmails();
+}
+
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
   const result = await runActivationEmails();
-  return { sent: result.day3Sent + result.day10Sent, errors: result.errors };
+  return { sent: result.welcomeSent + result.day5Sent + result.day10Sent, errors: result.errors };
 }
 
 export { runActivationEmails } from './activationEmailService';
@@ -234,6 +254,8 @@ export function startCronJobs() {
 
   // Activation emails run only on the daily schedule (14:00 UTC) — not on deploy/startup,
   // to avoid blasting legacy users when new sequence flags are introduced.
+  // Trial-expiration mail waits for schema patch 0080 (column + historical backfill)
+  // before the first scan; startup here only syncs trial_status.
   runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
 
   // Run webhook health check once at startup (after 30 s to let DB settle)
@@ -251,7 +273,7 @@ export function startCronJobs() {
     }
 
     if (utcMin === 0) {
-      runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
+      runTrialExpiryThenExpirationEmails().catch(err => console.error('[Cron] Trial expiry sync error:', err));
     }
 
     if (utcHour === 13 && utcMin === 0 && !hotListRanToday) {
