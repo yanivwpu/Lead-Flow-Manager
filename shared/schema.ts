@@ -164,6 +164,14 @@ export const users = pgTable("users", {
   shopifySubscriptionStatus: text("shopify_subscription_status"), // active, cancelled, pending
   shopifyInstalledAt: timestamp("shopify_installed_at"),
   shopifyAIBrainEnabled: boolean("shopify_ai_brain_enabled").default(false),
+  /**
+   * Shopify Admin GraphQL `shop.email` (store owner). Onboarding mail only.
+   * Never copied onto users.email — synthetic `{slug}@shopify.whachatcrm.com` stays identity.
+   */
+  shopifyOwnerEmail: text("shopify_owner_email"),
+  shopifyWelcomeEmailSentAt: timestamp("shopify_welcome_email_sent_at"),
+  shopifyActivationEmailDay5SentAt: timestamp("shopify_activation_email_day5_sent_at"),
+  shopifyActivationEmailDay10SentAt: timestamp("shopify_activation_email_day10_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
   // Onboarding activation email sequence (day 5 uses activationEmailDay3Sent flag + day 10; skip/complete when messaging channels connected)
   activationEmailDay3Sent: boolean("activation_email_day3_sent").default(false),

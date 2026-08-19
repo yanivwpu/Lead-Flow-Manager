@@ -4,6 +4,7 @@ import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzl
 import { sendDailyHotListEmail, type HotLeadEntry } from './email';
 import { EMAIL_INBOX_IDENTITY_SOURCE } from '@shared/contactCrmVisibility';
 import { runActivationEmails } from './activationEmailService';
+import { runShopifyOnboardingEmails } from './shopifyOnboardingEmailService';
 import { runTrialExpirationEmails } from './trialExpirationEmailService';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
@@ -137,7 +138,17 @@ export async function startTrialExpirationEmailsAfterSchemaReady(): Promise<void
 
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
   const result = await runActivationEmails();
-  return { sent: result.welcomeSent + result.day5Sent + result.day10Sent, errors: result.errors };
+  const shopify = await runShopifyOnboardingEmails();
+  return {
+    sent:
+      result.welcomeSent +
+      result.day5Sent +
+      result.day10Sent +
+      shopify.welcomeSent +
+      shopify.day5Sent +
+      shopify.day10Sent,
+    errors: result.errors + shopify.errors,
+  };
 }
 
 export { runActivationEmails } from './activationEmailService';

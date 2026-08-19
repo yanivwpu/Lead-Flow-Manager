@@ -10,6 +10,7 @@ import {
   chooseActivationSequenceAction,
   ACTIVATION_EMAIL_DAY5_THRESHOLD,
   ACTIVATION_EMAIL_DAY10_THRESHOLD,
+  isEligibleForActivationEmails,
 } from "../shared/activationEmailEligibility";
 import { hasQualifyingMessagingChannelForActivationEmails } from "../shared/activationEmailChannels";
 import {
@@ -232,6 +233,20 @@ test("W–X: failed welcome remains retryable; success never duplicates", () => 
   const service = readFileSync(join(root, "server/activationEmailService.ts"), "utf8");
   assert.ok(service.includes("isNull(users.welcomeEmailSentAt)"));
   assert.ok(service.includes("trySendWelcomeEmailForUser"));
+});
+
+test("Shopify-linked accounts are excluded from the generic web sequence", () => {
+  const service = readFileSync(join(root, "server/activationEmailService.ts"), "utf8");
+  assert.ok(service.includes("isShopifyLinkedAccount(user)"));
+  assert.equal(
+    isEligibleForActivationEmails({
+      email: "owner@store.com",
+      emailVerifiedAt: new Date(),
+      trialStartedAt: new Date(),
+      shopifyShop: "store.myshopify.com",
+    }),
+    false,
+  );
 });
 
 test("Day 5/10 use WhachatCRM branding; activation-status API is unchanged", () => {

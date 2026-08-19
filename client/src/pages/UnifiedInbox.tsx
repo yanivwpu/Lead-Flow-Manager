@@ -3323,7 +3323,11 @@ export function UnifiedInbox() {
               <div className="p-6 text-center" data-testid="inbox-empty-no-channels">
                 <Smartphone className="w-10 h-10 mx-auto mb-3 text-gray-300" aria-hidden />
                 <p className="text-sm font-medium text-gray-900 mb-1">{t("unifiedInbox.emptyNoChannelsTitle")}</p>
-                <p className="text-xs text-muted-foreground mb-4">{t("unifiedInbox.emptyNoChannelsHint")}</p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  {subscription?.subscription?.isShopify
+                    ? t("unifiedInbox.emptyNoChannelsHintShopify")
+                    : t("unifiedInbox.emptyNoChannelsHint")}
+                </p>
                 <Link href={settingsChannelsHref({ provider: "whatsapp" })}>
                   <a>
                     <Button

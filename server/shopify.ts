@@ -3,7 +3,7 @@ import { shopifyApi, BillingInterval, Session, ApiVersion } from '@shopify/shopi
 import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
-import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
+import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from '@shared/shopifyBilling';
 import { getAppOrigin } from './urlOrigins';
 import { storage } from './storage';
 
@@ -65,6 +65,47 @@ export function getShopifyApi() {
 
 export function isShopifyConfigured(): boolean {
   return !!(SHOPIFY_API_KEY && SHOPIFY_API_SECRET);
+}
+
+/**
+ * Shopify Admin GraphQL — shop owner email only.
+ * Shop.email does not require read_users. Do not query contactEmail or customers.
+ */
+export const SHOPIFY_SHOP_OWNER_EMAIL_QUERY = `
+  query shopOwnerEmail {
+    shop {
+      email
+    }
+  }
+`;
+
+export async function fetchShopifyShopOwnerEmail(
+  shop: string,
+  accessToken: string,
+): Promise<string | null> {
+  try {
+    const shopify = getShopifyApi();
+    if (!shopify) return null;
+
+    const client = new shopify.clients.Graphql({
+      session: { shop, accessToken } as Session,
+    });
+
+    const response = await client.request(SHOPIFY_SHOP_OWNER_EMAIL_QUERY);
+    const data = (response as { data?: { shop?: { email?: string | null } } }).data;
+    const sanitized = sanitizeShopifyOwnerEmail(data?.shop?.email);
+    if (!sanitized) {
+      console.warn("[Shopify] shop.email missing or unusable", { shop });
+      return null;
+    }
+    return sanitized;
+  } catch (error) {
+    console.warn("[Shopify] shop.email fetch failed", {
+      shop,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function verifyShopifySessionToken(token: string): Promise<{

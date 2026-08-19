@@ -130,6 +130,7 @@ function sanitizeUserUpdatesForLog(updates: Partial<User>): Record<string, unkno
     "twilioAuthToken",
     "twilioAccountSid",
     "shopifyAccessToken",
+    "shopifyOwnerEmail",
     "pushSubscription",
   ]);
   const o: Record<string, unknown> = {};

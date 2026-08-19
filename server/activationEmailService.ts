@@ -19,6 +19,7 @@ import {
   daysSinceActivationStart,
   isEligibleForActivationEmails,
   isExcludedFromActivationEmails,
+  isShopifyLinkedAccount,
   chooseActivationSequenceAction,
 } from "@shared/activationEmailEligibility";
 
@@ -89,6 +90,7 @@ const activationUserSelect = {
   createdAt: users.createdAt,
   trialStartedAt: users.trialStartedAt,
   shopifyInstalledAt: users.shopifyInstalledAt,
+  shopifyShop: users.shopifyShop,
   emailVerifiedAt: users.emailVerifiedAt,
   welcomeEmailSentAt: users.welcomeEmailSentAt,
   activationEmailDay3Sent: users.activationEmailDay3Sent,
@@ -156,6 +158,7 @@ export async function runActivationEmails(): Promise<{
 
     for (const user of uniqueCandidates) {
       if (user.deletionRequestedAt) continue;
+      if (isShopifyLinkedAccount(user)) continue;
       if (!user.email || isExcludedFromActivationEmails(user.email)) {
         continue;
       }

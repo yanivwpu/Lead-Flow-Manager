@@ -158,6 +158,7 @@ function AppContent() {
           </div>
         <ActivationSetupModal
           open={showActivationIntroModal}
+          shopifyConnected={!!subscription?.subscription?.isShopify}
           onOpenChange={(open) => {
             if (!open) {
               setActivationIntroDismissedSession(true);

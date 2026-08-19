@@ -1,6 +1,8 @@
 import {
   shopifySyntheticMerchantEmail,
   normalizeShopifyShopDomain,
+  isShopifySyntheticMerchantEmail,
+  sanitizeShopifyOwnerEmail,
 } from "../shared/shopifyBilling";
 import { isUsersEmailUniqueViolation } from "../server/shopifyInstallUser";
 
@@ -18,6 +20,29 @@ assert(
   shopifySyntheticMerchantEmail("WhachatCRM.myshopify.com") ===
     "whachatcrm@shopify.whachatcrm.com",
   "normalizes shop before email",
+);
+
+assert(
+  isShopifySyntheticMerchantEmail("whachatcrm@shopify.whachatcrm.com"),
+  "detects synthetic identity",
+);
+assert(!isShopifySyntheticMerchantEmail("owner@store.com"), "real inbox is not synthetic");
+
+assert(
+  sanitizeShopifyOwnerEmail("  Owner@Store.COM ") === "owner@store.com",
+  "sanitizes shop.email",
+);
+assert(
+  sanitizeShopifyOwnerEmail("whachatcrm@shopify.whachatcrm.com") === null,
+  "rejects synthetic as owner email",
+);
+assert(
+  sanitizeShopifyOwnerEmail("") === null,
+  "rejects empty",
+);
+assert(
+  sanitizeShopifyOwnerEmail("not-an-email") === null,
+  "rejects malformed",
 );
 
 assert(

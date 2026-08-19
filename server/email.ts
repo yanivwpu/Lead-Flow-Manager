@@ -31,6 +31,7 @@ import {
   APP_TEMPLATES_PATH,
 } from "@shared/appProductPaths";
 import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
+import { isShopifySyntheticMerchantEmail } from "@shared/shopifyBilling";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const APP_URL = process.env.APP_URL || "https://app.whachatcrm.com";
@@ -50,6 +51,12 @@ export const ACTIVATION_DAY5_EMAIL_SUBJECT = "Connect your channels — it's eas
 export const ACTIVATION_DAY10_EMAIL_SUBJECT = "Need help getting WhachatCRM set up?";
 export const TRIAL_EXPIRATION_EMAIL_SUBJECT =
   "Your Pro + AI Brain trial has ended — your Free account is still active";
+export const SHOPIFY_WELCOME_EMAIL_SUBJECT =
+  "Welcome to WhachatCRM — connect your store conversations";
+export const SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT =
+  "Connect WhatsApp to your Shopify store conversations";
+export const SHOPIFY_ACTIVATION_DAY10_EMAIL_SUBJECT =
+  "Need help connecting WhachatCRM to your store?";
 
 interface EmailOptions {
   to: string;
@@ -59,6 +66,12 @@ interface EmailOptions {
 }
 
 export async function sendEmail({ to, subject, html, replyTo }: EmailOptions): Promise<boolean> {
+  if (isShopifySyntheticMerchantEmail(to)) {
+    console.warn(
+      `[Email] Refusing to send to synthetic Shopify identity address. Subject: "${subject}"`,
+    );
+    return false;
+  }
   if (!RESEND_API_KEY) {
     console.warn(
       `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${to}, subject: "${subject}"`
@@ -113,6 +126,18 @@ function emailFeatureBlock(title: string, body: string, location: string): strin
   return `${emailSubheading(title)}
     ${emailParagraph(body)}
     <p style="color: #64748b; font-size: 13px; margin: -8px 0 16px;"><strong>Location:</strong> ${escapeHtml(location)}</p>`;
+}
+
+function emailShopifyWelcomeNavLinks(appUrl: string): string {
+  const base = appUrl.replace(/\/+$/, "");
+  const link = (href: string, label: string) =>
+    `<a href="${href}" style="color: #059669; text-decoration: none; font-weight: 600;">${escapeHtml(label)}</a>`;
+  return `<p style="color: #64748b; font-size: 14px; margin: 16px 0 0; text-align: center; line-height: 1.7;">
+    ${link(`${base}${APP_INBOX_PATH}`, "Inbox")} ·
+    ${link(`${base}${APP_PROSPECT_AI_PATH}`, "Prospect AI")} ·
+    ${link(`${base}${APP_TEMPLATES_PATH}`, "Templates")} ·
+    ${link(`${base}${APP_INTEGRATIONS_PATH}`, "Integrations")}
+  </p>`;
 }
 
 function emailNavLinks(appUrl: string, channelsUrl: string): string {
@@ -190,6 +215,150 @@ export async function sendWelcomeEmail(name: string, email: string): Promise<boo
     to: email,
     subject: WELCOME_EMAIL_SUBJECT,
     html: renderWelcomeEmailHtml(name),
+  });
+}
+
+export function renderShopifyWelcomeEmailHtml(
+  name: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl } = activationEmailContext(options);
+  const first = escapeHtml(firstNameFrom(name));
+  const connectWhatsAppUrl = settingsChannelsAbsoluteHref(appUrl, { provider: "whatsapp" });
+
+  const body = [
+    emailParagraph(`Hi ${first},`),
+    emailParagraph("Your Shopify store is now connected to WhachatCRM."),
+    emailParagraph("The next step is to connect the channels where your customers talk to you."),
+    emailFeatureBlock(
+      "1. Connect WhatsApp",
+      "Bring WhatsApp conversations into your Unified Inbox so you can manage customer conversations alongside your Shopify activity.",
+      "Settings → Channels → WhatsApp",
+    ),
+    emailSectionHeading("Already using the WhatsApp Business App?"),
+    emailHighlightBox(
+      "With WhatsApp Coexistence, you can keep using the WhatsApp Business App with your existing number while also connecting that number to WhachatCRM.",
+    ),
+    emailFeatureBlock(
+      "2. Unified Inbox",
+      "Manage conversations from WhatsApp, Instagram, Facebook Messenger, Email and other supported channels in one place.",
+      "Inbox",
+    ),
+    emailFeatureBlock(
+      "3. Prospect AI",
+      "Find and qualify potential customers directly from WhachatCRM.",
+      "Prospect AI",
+    ),
+    emailFeatureBlock(
+      "4. WhatsApp Templates",
+      "Manage approved WhatsApp templates and use supported 1:1 template messaging.",
+      "Templates",
+    ),
+    emailFeatureBlock(
+      "5. Integrations",
+      "Shopify is already connected, and you can connect additional tools your business uses.",
+      "Integrations",
+    ),
+    emailParagraph(
+      "Your account also includes a 14-day Pro + AI Brain trial so you can experience advanced automation and AI features.",
+    ),
+    emailButton(connectWhatsAppUrl, "Connect WhatsApp"),
+    emailShopifyWelcomeNavLinks(appUrl),
+  ].join("");
+
+  return renderBrandedEmail({
+    title: "Connect your store conversations",
+    bodyHtml: body,
+    footerHtml: `<p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhachatCRM. All rights reserved.</p>`,
+  });
+}
+
+export async function sendShopifyWelcomeEmail(name: string, email: string): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: SHOPIFY_WELCOME_EMAIL_SUBJECT,
+    html: renderShopifyWelcomeEmailHtml(name),
+  });
+}
+
+export function renderShopifyActivationEmailDay5Html(
+  firstName: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl } = activationEmailContext(options);
+  const channelsUrl = settingsChannelsAbsoluteHref(appUrl);
+
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(firstName)},`),
+    emailParagraph("Shopify is already connected."),
+    emailParagraph(
+      "Now connect WhatsApp so customer conversations can flow into WhachatCRM.",
+    ),
+    emailSectionHeading("Already using WhatsApp Business App?"),
+    emailHighlightBox(
+      "Keep using the same app and number while connecting it to WhachatCRM with WhatsApp Coexistence.",
+    ),
+    emailParagraph(
+      "You can also connect Instagram, Facebook Messenger, Gmail/Email, and other supported channels from Settings → Channels.",
+    ),
+    emailButton(channelsUrl, "Connect a Channel"),
+  ].join("");
+
+  return renderBrandedEmail({
+    title: "Connect WhatsApp to your store",
+    bodyHtml: body,
+    footerHtml: emailActivationFooter(appUrl),
+  });
+}
+
+export async function sendShopifyActivationEmailDay5(
+  firstName: string,
+  email: string,
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT,
+    html: renderShopifyActivationEmailDay5Html(firstName),
+  });
+}
+
+export function renderShopifyActivationEmailDay10Html(
+  firstName: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl } = activationEmailContext(options);
+  const helpMailto = `mailto:${WHACHATCRM_SUPPORT_EMAIL}?subject=${encodeURIComponent("Help connecting WhachatCRM to your store")}`;
+
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(firstName)},`),
+    emailParagraph("We'd be happy to help you get up and running."),
+    emailParagraph("We can help:"),
+    emailList([
+      "connect WhatsApp or another messaging channel",
+      "get the Unified Inbox working",
+      "configure an automation/workflow for the business",
+      "at no charge",
+    ]),
+    emailParagraph("Just reply to this email and tell us what you're trying to accomplish."),
+    emailButton(helpMailto, "Get Setup Help"),
+  ].join("");
+
+  return renderBrandedEmail({
+    title: "Need help connecting your store?",
+    bodyHtml: body,
+    footerHtml: emailActivationFooter(appUrl),
+  });
+}
+
+export async function sendShopifyActivationEmailDay10(
+  firstName: string,
+  email: string,
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: SHOPIFY_ACTIVATION_DAY10_EMAIL_SUBJECT,
+    html: renderShopifyActivationEmailDay10Html(firstName),
+    replyTo: WHACHATCRM_SUPPORT_EMAIL,
   });
 }
 

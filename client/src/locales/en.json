@@ -1054,7 +1054,7 @@
     "backHome": "Back to Home",
     "backSettings": "Back to Settings",
     "trialBanner": "All paid plans include a 14-day free trial.",
-    "shopifyInstallBanner": "Choose and manage your subscription securely through Shopify.",
+    "shopifyInstallBanner": "Shopify is connected. Next, connect WhatsApp or another messaging channel to bring customer conversations into your Unified Inbox. Already use WhatsApp Business App? You can keep using it with WhatsApp Coexistence.",
     "shopifyChooseStarter": "Choose Starter",
     "shopifyChoosePro": "Choose Pro",
     "shopifyChooseAiBrain": "Choose AI Brain",
@@ -1256,6 +1256,7 @@
   "unifiedInbox": {
     "emptyNoChannelsTitle": "No channels connected yet",
     "emptyNoChannelsHint": "Connect WhatsApp or Meta to receive conversations here.",
+    "emptyNoChannelsHintShopify": "Shopify is connected. Next, connect WhatsApp or another messaging channel to bring customer conversations into your Unified Inbox. Already use WhatsApp Business App? You can keep using it with WhatsApp Coexistence.",
     "connectWhatsAppCta": "Connect WhatsApp"
   },
   "trial": {
@@ -1283,6 +1284,8 @@
   "activation": {
     "title": "Let's get you set up",
     "description": "Connect your first channel to start conversations",
+    "shopifyDescription": "Shopify is connected. Next, connect WhatsApp or another messaging channel to bring customer conversations into your Unified Inbox.",
+    "shopifyCoexistence": "Already use WhatsApp Business App? You can keep using it with WhatsApp Coexistence.",
     "connectWhatsApp": "Connect WhatsApp",
     "connectInstagram": "Connect Instagram",
     "connectFacebook": "Connect Facebook"

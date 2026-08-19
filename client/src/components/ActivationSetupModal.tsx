@@ -18,10 +18,11 @@ interface ActivationSetupModalProps {
   onOpenChange: (open: boolean) => void;
   /** Persist intro dismissed + navigate to channels */
   onChannelCta: () => void;
+  shopifyConnected?: boolean;
 }
 
 /** First-login modal when no WhatsApp / Meta messaging channels are connected yet. */
-export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: ActivationSetupModalProps) {
+export function ActivationSetupModal({ open, onOpenChange, onChannelCta, shopifyConnected }: ActivationSetupModalProps) {
   const { t } = useTranslation();
   const dir = getDirection();
 
@@ -37,8 +38,13 @@ export function ActivationSetupModal({ open, onOpenChange, onChannelCta }: Activ
             {t("activation.title")}
           </DialogTitle>
           <DialogDescription className="text-base text-gray-600">
-            {t("activation.description")}
+            {shopifyConnected ? t("activation.shopifyDescription") : t("activation.description")}
           </DialogDescription>
+          {shopifyConnected ? (
+            <p className="text-sm text-gray-600" data-testid="activation-shopify-coexistence">
+              {t("activation.shopifyCoexistence")}
+            </p>
+          ) : null}
         </DialogHeader>
         <DialogFooter className="flex-col gap-2 sm:flex-col">
           <Link href={settingsChannelsHref({ provider: "whatsapp" })}>

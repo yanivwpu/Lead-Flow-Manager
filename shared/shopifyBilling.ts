@@ -30,3 +30,23 @@ export function shopifySyntheticMerchantEmail(shop: string | null | undefined): 
   if (!slug) return null;
   return `${slug}@${SHOPIFY_MERCHANT_EMAIL_DOMAIN}`.toLowerCase();
 }
+
+export function isShopifySyntheticMerchantEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase().endsWith(`@${SHOPIFY_MERCHANT_EMAIL_DOMAIN}`);
+}
+
+/**
+ * Normalize Shopify Admin `shop.email` for onboarding.
+ * Rejects missing, malformed, and synthetic identity addresses.
+ * Does not accept customer emails or contactEmail — callers must pass shop.email only.
+ */
+export function sanitizeShopifyOwnerEmail(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const email = raw.trim().toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  if (isShopifySyntheticMerchantEmail(email)) return null;
+  if (/\s/.test(email)) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}

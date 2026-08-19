@@ -863,6 +863,39 @@ const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
     tag: "0081_conversation_usage_period",
     sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS conversation_usage_period_start timestamp`,
   },
+  {
+    tag: "0082_shopify_onboarding_emails",
+    sql: `
+DO $patch$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'shopify_welcome_email_sent_at'
+  ) THEN
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_owner_email text;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_welcome_email_sent_at timestamp;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_activation_email_day5_sent_at timestamp;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_activation_email_day10_sent_at timestamp;
+
+    UPDATE users
+    SET
+      shopify_welcome_email_sent_at = COALESCE(shopify_welcome_email_sent_at, shopify_installed_at, NOW()),
+      shopify_activation_email_day5_sent_at = COALESCE(shopify_activation_email_day5_sent_at, shopify_installed_at, NOW()),
+      shopify_activation_email_day10_sent_at = COALESCE(shopify_activation_email_day10_sent_at, shopify_installed_at, NOW())
+    WHERE shopify_installed_at IS NOT NULL;
+  ELSE
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_owner_email text;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_welcome_email_sent_at timestamp;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_activation_email_day5_sent_at timestamp;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS shopify_activation_email_day10_sent_at timestamp;
+  END IF;
+END
+$patch$;
+`.trim(),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

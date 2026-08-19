@@ -11,6 +11,7 @@ import {
   shopifySessionMiddleware,
   registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
+  fetchShopifyShopOwnerEmail,
 } from './shopify';
 import { getAppOrigin } from './urlOrigins';
 import { resolveShopifyMerchantForBilling } from './shopifyMerchantResolver';
@@ -32,6 +33,7 @@ import {
   resolveShopifyInstallUser,
 } from './shopifyInstallUser';
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
+import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -264,6 +266,19 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifyAccessToken: accessToken,
       shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
     };
+
+    let shopOwnerEmail: string | null = null;
+    try {
+      shopOwnerEmail = await fetchShopifyShopOwnerEmail(normalizedShop, accessToken);
+    } catch (ownerErr) {
+      console.warn("[Shopify Callback] shop.email fetch failed", {
+        shop: normalizedShop,
+        error: ownerErr instanceof Error ? ownerErr.message : String(ownerErr),
+      });
+    }
+    if (shopOwnerEmail) {
+      installPatch.shopifyOwnerEmail = shopOwnerEmail;
+    }
     if (!shopAlreadyActive && (firstTokenInstall || !usableAppAccess)) {
       Object.assign(installPatch, {
         shopifySubscriptionStatus: 'pending',
@@ -301,6 +316,25 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
     await storage.updateUser(user.id, installPatch);
+
+    try {
+      const forWelcome = (await storage.getUserForSession(user.id)) ?? user;
+      await trySendShopifyWelcomeEmailForUser({
+        id: forWelcome.id,
+        name: forWelcome.name,
+        email: forWelcome.email,
+        shopifyShop: forWelcome.shopifyShop ?? normalizedShop,
+        shopifySubscriptionStatus: forWelcome.shopifySubscriptionStatus,
+        shopifyOwnerEmail: forWelcome.shopifyOwnerEmail || shopOwnerEmail,
+        shopifyWelcomeEmailSentAt: forWelcome.shopifyWelcomeEmailSentAt,
+        deletionRequestedAt: forWelcome.deletionRequestedAt,
+      });
+    } catch (welcomeErr) {
+      console.warn("[Shopify Callback] Shopify Day 0 welcome skipped or failed", {
+        userId: user.id,
+        error: welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
+      });
+    }
 
     const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
     if (!existingIntegration) {

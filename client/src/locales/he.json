@@ -1063,7 +1063,7 @@
     "backHome": "חזרה לדף הבית",
     "backSettings": "חזרה להגדרות",
     "trialBanner": "כל התוכניות בתשלום כוללות 14 ימי ניסיון חינם.",
-    "shopifyInstallBanner": "בחר ונהל את המנוי שלך בצורה מאובטחת דרך Shopify.",
+    "shopifyInstallBanner": "Shopify כבר מחובר. השלב הבא: חברו WhatsApp או ערוץ הודעות אחר כדי להביא שיחות לקוחות ל-Unified Inbox. כבר משתמשים ב-WhatsApp Business App? אפשר להמשיך איתה עם WhatsApp Coexistence.",
     "shopifyChooseStarter": "בחר Starter",
     "shopifyChoosePro": "בחר Pro",
     "shopifyChooseAiBrain": "בחר AI Brain",
@@ -1268,6 +1268,7 @@
   "unifiedInbox": {
     "emptyNoChannelsTitle": "עדיין לא חיברת ערוצים",
     "emptyNoChannelsHint": "חבר את WhatsApp או Meta כדי לקבל כאן שיחות.",
+    "emptyNoChannelsHintShopify": "Shopify כבר מחובר. השלב הבא: חברו WhatsApp או ערוץ הודעות אחר כדי להביא שיחות לקוחות ל-Unified Inbox. כבר משתמשים ב-WhatsApp Business App? אפשר להמשיך איתה עם WhatsApp Coexistence.",
     "connectWhatsAppCta": "חיבור WhatsApp"
   },
   "trial": {
@@ -1295,6 +1296,8 @@
   "activation": {
     "title": "בוא נכין אותך לעבודה",
     "description": "חבר את הערוץ הראשון שלך כדי להתחיל שיחות",
+    "shopifyDescription": "Shopify כבר מחובר. השלב הבא: חברו WhatsApp או ערוץ הודעות אחר כדי להביא שיחות לקוחות ל-Unified Inbox.",
+    "shopifyCoexistence": "כבר משתמשים ב-WhatsApp Business App? אפשר להמשיך איתה עם WhatsApp Coexistence.",
     "connectWhatsApp": "חיבור WhatsApp",
     "connectInstagram": "חיבור Instagram",
     "connectFacebook": "חיבור Facebook"

@@ -4,6 +4,7 @@ import {
   daysSinceActivationStart,
   fullCalendarDaysSince,
   isExcludedFromActivationEmails,
+  isEligibleForActivationEmails,
   chooseActivationSequenceAction,
   ACTIVATION_EMAIL_DAY5_THRESHOLD,
 } from "../shared/activationEmailEligibility";
@@ -41,6 +42,27 @@ function testExcludedEmails() {
   assert.equal(isExcludedFromActivationEmails("customer@example.com"), false);
 }
 
+function testShopifyLinkedExcludedFromWebSequence() {
+  assert.equal(
+    isEligibleForActivationEmails({
+      email: "merchant@example.com",
+      emailVerifiedAt: "2026-08-01T00:00:00.000Z",
+      trialStartedAt: "2026-08-01T00:00:00.000Z",
+      shopifyShop: "store.myshopify.com",
+    }),
+    false,
+  );
+  assert.equal(
+    isEligibleForActivationEmails({
+      email: "merchant@example.com",
+      emailVerifiedAt: "2026-08-01T00:00:00.000Z",
+      trialStartedAt: "2026-08-01T00:00:00.000Z",
+      shopifyInstalledAt: "2026-08-01T00:00:00.000Z",
+    }),
+    false,
+  );
+}
+
 function testDay5ThresholdNotDay3() {
   assert.equal(ACTIVATION_EMAIL_DAY5_THRESHOLD, 5);
   const action = chooseActivationSequenceAction({
@@ -57,6 +79,7 @@ testActivationStartPrefersShopifyInstall();
 testFullCalendarDays();
 testDaysSinceActivationStart();
 testExcludedEmails();
+testShopifyLinkedExcludedFromWebSequence();
 testDay5ThresholdNotDay3();
 
 console.log("activation-email-eligibility.test.ts: ok");

@@ -9,7 +9,7 @@ import { db } from "../drizzle/db";
 import { storage } from "./storage";
 import { sendEmailVerificationEmail, sendWelcomeEmail } from "./email";
 import { isEmailVerified } from "./authSecurity";
-import { isExcludedFromActivationEmails } from "@shared/activationEmailEligibility";
+import { isExcludedFromActivationEmails, isShopifyLinkedAccount } from "@shared/activationEmailEligibility";
 
 export const EMAIL_VERIFICATION_TTL_MS = 45 * 60 * 1000; // 45 minutes
 export const TRIAL_DAYS = 14;
@@ -85,8 +85,11 @@ export async function trySendWelcomeEmailForUser(user: {
   name: string;
   email: string;
   welcomeEmailSentAt?: Date | string | null;
+  shopifyShop?: string | null;
+  shopifyInstalledAt?: Date | string | null;
 }): Promise<boolean> {
   if (user.welcomeEmailSentAt) return true;
+  if (isShopifyLinkedAccount(user)) return true;
   if (!user.email || isExcludedFromActivationEmails(user.email)) return true;
   const sent = await sendWelcomeEmail(user.name, user.email);
   if (sent) {

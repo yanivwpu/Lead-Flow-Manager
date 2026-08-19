@@ -23,15 +23,24 @@ export function activationStartAt(user: ActivationEmailUserDates): Date | null {
   return null;
 }
 
+/** Shopify-linked accounts use the Shopify onboarding sequence, never this web sequence. */
+export function isShopifyLinkedAccount(user: {
+  shopifyShop?: string | null;
+  shopifyInstalledAt?: Date | string | null;
+}): boolean {
+  return !!(user.shopifyShop || user.shopifyInstalledAt);
+}
+
 /** Pending public-signup accounts must not receive activation / onboarding sequences. */
 export function isEligibleForActivationEmails(user: {
   email?: string | null;
   emailVerifiedAt?: Date | string | null;
   shopifyInstalledAt?: Date | string | null;
+  shopifyShop?: string | null;
   trialStartedAt?: Date | string | null;
 }): boolean {
+  if (isShopifyLinkedAccount(user)) return false;
   if (isExcludedFromActivationEmails(user.email)) return false;
-  if (user.shopifyInstalledAt) return true;
   if (!user.emailVerifiedAt) return false;
   if (!user.trialStartedAt && !user.emailVerifiedAt) return false;
   return true;
