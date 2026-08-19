@@ -55,3 +55,22 @@ export function shouldShowActivationSetupModal(opts: {
     !opts.shownToday
   );
 }
+
+/**
+ * Auto-open only on Inbox / conversation routes, where a messaging channel is required.
+ * Prospect AI, Integrations, Templates, Settings, Growth Engine, etc. stay unblocked.
+ */
+export function isInboxActivationModalPath(pathname: string): boolean {
+  const path = String(pathname || "").split("?")[0].split("#")[0];
+  return path === "/app/inbox" || path.startsWith("/app/inbox/");
+}
+
+export function shouldAutoOpenActivationSetupModal(opts: {
+  activationPending: boolean;
+  activation: ActivationStatusPayload | null | undefined;
+  dismissedThisSession: boolean;
+  shownToday: boolean;
+  pathname: string;
+}): boolean {
+  return isInboxActivationModalPath(opts.pathname) && shouldShowActivationSetupModal(opts);
+}

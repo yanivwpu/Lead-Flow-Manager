@@ -160,7 +160,7 @@ test("G: incomplete activation still uses existing ActivationSetupModal", () => 
   );
   const layout = readFileSync(join(root, "client/src/pages/AppLayout.tsx"), "utf8");
   assert.ok(layout.includes("ActivationSetupModal"));
-  assert.ok(layout.includes("shouldShowActivationSetupModal"));
+  assert.ok(layout.includes("shouldAutoOpenActivationSetupModal"));
   assert.ok(!layout.includes("/get-started"));
 });
 

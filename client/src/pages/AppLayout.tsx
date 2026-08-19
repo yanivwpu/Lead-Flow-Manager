@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense, useMemo, useRef } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "@/components/Sidebar";
@@ -17,7 +17,7 @@ import {
   readActivationSetupModalLastShownDay,
   writeActivationSetupModalLastShownDay,
   todayLocalYYYYMMDD,
-  shouldShowActivationSetupModal,
+  shouldAutoOpenActivationSetupModal,
 } from "@/lib/activationStatus";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -53,6 +53,7 @@ const PageLoader = () => (
 );
 
 function AppContent() {
+  const [location] = useLocation();
   const { user, sessionAligned } = useAuth();
   const { data: subscription, isLoading } = useSubscription();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
@@ -101,11 +102,12 @@ function AppContent() {
     });
   }, [toast, t]);
 
-  const showActivationIntroModal = shouldShowActivationSetupModal({
+  const showActivationIntroModal = shouldAutoOpenActivationSetupModal({
     activationPending,
     activation,
     dismissedThisSession: activationIntroDismissedSession,
     shownToday: shownActivationModalToday,
+    pathname: location,
   });
 
   const showUsageBanner =
