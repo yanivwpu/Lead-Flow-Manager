@@ -77,6 +77,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
   shopify: { icon: ShoppingCart, color: "#96BF48", label: "Shopify" },
   woocommerce: { icon: ShoppingCart, color: "#96588A", label: "WooCommerce" },
+  email: { icon: Mail, color: "#EA4335", label: "Email" },
   [DISPLAY_CHANNEL_NONE]: { icon: Smartphone, color: "#9CA3AF", label: "No channel" },
 };
 

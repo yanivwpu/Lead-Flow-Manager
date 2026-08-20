@@ -2,6 +2,8 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { contacts, type Contact } from "@shared/schema";
 import { normalizeEmailAddress } from "@shared/emailChannel";
 import {
+  isServiceRoleEmailLocalPart,
+  looksLikeHumanAsk,
   looksLikeSystemOrNotificationEmail,
 } from "@shared/aiDomainEligibility";
 import {
@@ -47,6 +49,10 @@ export function shouldSuppressEmailContactCreation(email: string): string | null
  * Decide whether a *new* Email sender should become a CRM Contact.
  * Existing Contact match always happens first in `resolveEmailContact`.
  *
+ * Visible CRM requires positive evidence: outbound, website form / lead capture,
+ * or a genuine human ask from a non-service mailbox. Uncertain inbound stays
+ * an internal `email_inbox` identity.
+ *
  * Chat channels never call this.
  */
 export function decideNewEmailContactKind(input: {
@@ -74,7 +80,12 @@ export function decideNewEmailContactKind(input: {
   const localSuppress = shouldSuppressEmailContactCreation(fromEmail);
   if (localSuppress) return "inbox_identity";
 
-  return "crm";
+  if (isServiceRoleEmailLocalPart(fromEmail)) return "inbox_identity";
+
+  if (looksLikeHumanAsk(input.inboundText)) return "crm";
+
+  // Uncertain inbound Email stays an internal identity, not a visible CRM Contact.
+  return "inbox_identity";
 }
 
 export async function findContactsByEmail(

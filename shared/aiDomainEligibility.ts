@@ -132,12 +132,29 @@ function parseEmailParts(email: string): { local: string; domain: string } {
   return { local: local || "", domain: domain || "" };
 }
 
-/** notification / alert / newsletter host labels — not a brand list. */
+/** notification / alert / newsletter / status-page host labels — not a brand list. */
 function looksLikeNotificationHost(domain: string): boolean {
   if (!domain) return false;
-  return domain.split(".").some((label) =>
-    /^(notifications?|alerts?|newsletters?|updates?|noreply|no-reply)$/i.test(label),
+  return domain.split(".").some(
+    (label) =>
+      /^(notifications?|alerts?|newsletters?|updates?|noreply|no-reply|status)$/i.test(label) ||
+      /status/i.test(label),
   );
+}
+
+/**
+ * Shared helpdesk / status / billing mailboxes. Display names can look human
+ * ("Support Team"); the local-part is still not a person or a lead.
+ * Deliberately excludes hello/info — those can be real inquiries.
+ */
+const SERVICE_ROLE_LOCAL_RE =
+  /^(?:support|helpdesk|help-desk|help|status|billing|accounts?|tickets?|team|customerservice|customer-service|servicedesk|service-desk)(?:$|[-_.+])/i;
+
+export function isServiceRoleEmailLocalPart(email?: string | null): boolean {
+  const sender = String(email || "").trim().toLowerCase();
+  const { local } = parseEmailParts(sender);
+  if (!local) return false;
+  return SERVICE_ROLE_LOCAL_RE.test(local);
 }
 
 /**

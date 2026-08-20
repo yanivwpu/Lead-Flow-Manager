@@ -10,7 +10,11 @@ import {
   shouldPromoteInboxIdentityToCrm,
   shouldSuppressEmailContactCreation,
 } from "../server/emailChannel/contactMatch";
-import { looksLikeSystemOrNotificationEmail } from "../shared/aiDomainEligibility";
+import {
+  isServiceRoleEmailLocalPart,
+  looksLikeSystemOrNotificationEmail,
+} from "../shared/aiDomainEligibility";
+import { getContactDisplayChannel, getContactDisplayChannelLabel } from "../shared/contactChannelDisplay";
 import {
   EMAIL_INBOX_IDENTITY_SOURCE,
   filterCrmListedContacts,
@@ -158,13 +162,15 @@ run("G. Human company-domain inquiry → CRM Contact", () => {
     }),
     "crm",
   );
+  // Conversational follow-up without a genuine ask is uncertain inbound —
+  // hidden unless an existing visible Contact already matches.
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "yaniv.client@outlook.com",
       inboundText: HUMAN_FOLLOWUP,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
 });
 
@@ -421,6 +427,270 @@ run("6. later user outbound promotes the same row, no duplicate", () => {
   const index = readFileSync(join(import.meta.dirname, "..", "server/index.ts"), "utf8");
   assert.equal(index.includes("estimate-email-junk-contacts"), false);
   assert.equal(index.includes("EMAIL_INBOX_IDENTITY_SOURCE"), false);
+});
+
+const SUPPORT_DESK =
+  "Ticket #4821: How can we help you today? Reply to this email to continue the conversation with our support team.";
+const STATUS_INCIDENT =
+  "Incident update: we are investigating degraded performance on the status page.";
+const NEWSLETTER_HELLO = "This month's digest. View this email in a browser. Unsubscribe anytime.";
+const RECEIPT_ALERT = "Receipt for your order. Your payment was received. Tracking number 1Z999.";
+const UNCERTAIN_INBOUND = "Following up on your account.";
+const PROSPECT_REPLY = "Hi, I'm interested in your services. Can someone call me about pricing?";
+
+run("A. automated support/service email → hidden email_inbox identity", () => {
+  assert.equal(isServiceRoleEmailLocalPart("support@vendor.example"), true);
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "support@vendor.example",
+      inboundText: SUPPORT_DESK,
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "team@broker.example",
+      inboundText: "The Team here. Need help accessing your account?",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+});
+
+run("B. newsletter → hidden", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "hello@updates.news.example",
+      inboundText: NEWSLETTER_HELLO,
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+});
+
+run("C. receipt/alert/status email → hidden", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "receipts@store.example",
+      inboundText: RECEIPT_ALERT,
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "support@getstatus.example",
+      inboundText: STATUS_INCIDENT,
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+  assert.equal(
+    looksLikeSystemOrNotificationEmail({
+      fromEmail: "alerts@status.vendor.example",
+      inboundText: STATUS_INCIDENT,
+      channel: "email",
+    }),
+    true,
+  );
+});
+
+run("D. noreply sender → hidden", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "noreply@vendor.example",
+      inboundText: "Your password reset is ready.",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "no-reply@mail.example",
+      inboundText: "See others in your feed.",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+});
+
+run("E. support@ sender with system signals → hidden", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "support@vendor.example",
+      inboundText: "This is an automated message. Do not reply to this email.",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+});
+
+run("F. uncertain passive inbound email → hidden", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "jane@company.example",
+      inboundText: UNCERTAIN_INBOUND,
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "ops@company.example",
+      inboundText: "",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
+});
+
+run("G. real human inquiry → visible Contact", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "alex.buyer@gmail.com",
+      inboundText: HUMAN_GMAIL,
+      direction: "inbound",
+    }),
+    "crm",
+  );
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "ops@acme.com",
+      inboundText: HUMAN_COMPANY,
+      direction: "inbound",
+    }),
+    "crm",
+  );
+});
+
+run("H. reply from a genuine prospect → visible/promoted", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "sam.prospect@outlook.com",
+      inboundText: PROSPECT_REPLY,
+      direction: "inbound",
+    }),
+    "crm",
+  );
+  assert.equal(
+    shouldPromoteInboxIdentityToCrm({
+      existingSource: EMAIL_INBOX_IDENTITY_SOURCE,
+      kind: "crm",
+      direction: "inbound",
+    }),
+    true,
+  );
+});
+
+run("I. intentional outbound email → promotes hidden identity", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "prospect@client.com",
+      inboundText: "Hello",
+      direction: "outbound",
+    }),
+    "crm",
+  );
+  assert.equal(
+    shouldPromoteInboxIdentityToCrm({
+      existingSource: EMAIL_INBOX_IDENTITY_SOURCE,
+      kind: "crm",
+      direction: "outbound",
+    }),
+    true,
+  );
+});
+
+run("J. existing visible Contact match still precedes create", () => {
+  const src = readFileSync(
+    join(import.meta.dirname, "..", "server/emailChannel/contactMatch.ts"),
+    "utf8",
+  );
+  const matchIdx = src.indexOf("const existing = await findContactsByEmail");
+  const kindIdx = src.indexOf("const kind = decideNewEmailContactKind");
+  const createIdx = src.indexOf("const created = await storage.createContact");
+  assert.ok(matchIdx > 0 && kindIdx > matchIdx && createIdx > kindIdx);
+});
+
+run("K. /api/contacts never returns email_inbox rows", () => {
+  const routes = readFileSync(
+    join(import.meta.dirname, "..", "server/routes/contacts.ts"),
+    "utf8",
+  );
+  const getHandler = routes.slice(routes.indexOf('app.get("/api/contacts"'));
+  const searchStart = getHandler.indexOf('app.get("/api/contacts/search"');
+  const listHandler = searchStart > 0 ? getHandler.slice(0, searchStart) : getHandler;
+  assert.ok(listHandler.includes("filterCrmListedContacts"));
+  assert.equal(isCrmListedContact({ source: EMAIL_INBOX_IDENTITY_SOURCE }), false);
+});
+
+run("L. Contacts search never returns email_inbox rows", () => {
+  const routes = readFileSync(
+    join(import.meta.dirname, "..", "server/routes/contacts.ts"),
+    "utf8",
+  );
+  const searchHandler = routes.slice(routes.indexOf('app.get("/api/contacts/search"'));
+  assert.ok(searchHandler.includes("filterCrmListedContacts"));
+  const storageSrc = readFileSync(join(import.meta.dirname, "..", "server/storage.ts"), "utf8");
+  const searchFn = storageSrc.slice(storageSrc.indexOf("async searchContacts("));
+  assert.ok(searchFn.includes("EMAIL_INBOX_IDENTITY_SOURCE"));
+});
+
+run("M. Gmail polling and Pub/Sub push use the same persist + contact policy", () => {
+  const trigger = readFileSync(
+    join(import.meta.dirname, "..", "server/emailChannel/gmailSyncTrigger.ts"),
+    "utf8",
+  );
+  const sync = readFileSync(
+    join(import.meta.dirname, "..", "server/emailChannel/syncService.ts"),
+    "utf8",
+  );
+  const persist = readFileSync(
+    join(import.meta.dirname, "..", "server/emailChannel/persistInbound.ts"),
+    "utf8",
+  );
+  assert.ok(trigger.includes("GmailSyncTriggerSource"));
+  assert.ok(trigger.includes('"push"'));
+  assert.ok(trigger.includes('"poll"'));
+  assert.ok(trigger.includes("runIncrementalEmailSync"));
+  assert.ok(sync.includes("runEmailPollingCron"));
+  assert.ok(sync.includes('source: "poll"'));
+  assert.ok(sync.includes("persistNormalizedEmailMessage"));
+  assert.ok(persist.includes("resolveEmailContact"));
+  const persistCalls = sync.split("persistNormalizedEmailMessage").length - 1;
+  assert.ok(persistCalls >= 4, "bootstrap + poll/push incremental share persistNormalizedEmailMessage");
+});
+
+run("visible Email contacts display Email, not No channel", () => {
+  assert.equal(
+    getContactDisplayChannel({
+      primaryChannel: "email",
+      source: "email",
+      email: "alex.buyer@gmail.com",
+    }),
+    "email",
+  );
+  assert.equal(getContactDisplayChannelLabel("email"), "Email");
+  assert.equal(
+    getContactDisplayChannel({
+      primaryChannel: "whatsapp",
+      whatsappId: "15551234567",
+      source: "email",
+    }),
+    "whatsapp",
+  );
+});
+
+run("human-looking display name / support local-part is not enough", () => {
+  assert.equal(
+    decideNewEmailContactKind({
+      fromEmail: "support@vendor.example",
+      inboundText: "How can we help? Interested in getting started?",
+      direction: "inbound",
+    }),
+    "inbox_identity",
+  );
 });
 
 console.log("email-contact-creation-policy.test.ts: all assertions passed");

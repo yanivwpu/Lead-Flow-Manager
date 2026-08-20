@@ -80,7 +80,8 @@ export function getReachableMessagingChannels(
 }
 
 /**
- * Label channel for Contacts list / exports — messaging channel if any, else Shopify for commerce-only, else null.
+ * Label channel for Contacts list / exports — messaging channel if any, else
+ * Shopify for commerce-only, else Email when the contact is email-sourced.
  */
 export function getContactDisplayChannel(
   contact: ContactChannelFields,
@@ -108,6 +109,16 @@ export function getContactDisplayChannel(
   }
   if (conversations?.some((c) => c.channel === "woocommerce")) return "woocommerce";
   if (conversations?.some((c) => c.channel === "shopify")) return "shopify";
+
+  // Email is not a reachable messaging channel for send, but genuine Email
+  // Contacts should still show Email instead of "No channel".
+  if (
+    contact.primaryChannel === "email" ||
+    contact.lastIncomingChannel === "email" ||
+    contact.source === "email"
+  ) {
+    return "email";
+  }
   return null;
 }
 
@@ -122,6 +133,7 @@ export const CONTACT_DISPLAY_CHANNEL_LABELS: Record<string, string> = {
   calendly: "Calendly",
   shopify: "Shopify",
   woocommerce: "WooCommerce",
+  email: "Email",
 };
 
 export function getContactDisplayChannelLabel(channel: string | null): string {
