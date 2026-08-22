@@ -232,6 +232,7 @@ export interface IStorage {
   recordMessageUsage(usage: InsertMessageUsage): Promise<MessageUsage>;
   getUsageByUser(userId: string, startDate?: Date, endDate?: Date): Promise<MessageUsage[]>;
   getUsageSummary(userId: string, startDate?: Date, endDate?: Date): Promise<{totalMessages: number; totalCost: string}>;
+  incrementMonthlyConversations(userId: string): Promise<void>;
   
   // Conversation window methods (24-hour tracking)
   getActiveConversationWindow(userId: string, whatsappPhone: string): Promise<ConversationWindow | undefined>;
@@ -1223,7 +1224,10 @@ export class DbStorage implements IStorage {
   async incrementMonthlyConversations(userId: string): Promise<void> {
     await db
       .update(users)
-      .set({ monthlyConversations: sql`coalesce(${users.monthlyConversations}, 0) + 1` })
+      .set({
+        monthlyConversations: sql`coalesce(${users.monthlyConversations}, 0) + 1`,
+        lifetimeConversations: sql`coalesce(${users.lifetimeConversations}, 0) + 1`,
+      })
       .where(eq(users.id, userId));
   }
 

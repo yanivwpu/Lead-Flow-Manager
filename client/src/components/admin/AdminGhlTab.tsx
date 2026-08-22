@@ -19,6 +19,7 @@ type GhlInstallRow = {
   companyId: string;
   installDate: string | null;
   installationStatus: string;
+  linkState?: "Linked" | "Unmatched" | "Uninstalled";
   uninstallDate: string | null;
   pricePlan: string;
   billingStatus: string;
@@ -27,6 +28,7 @@ type GhlInstallRow = {
   whachatUserName: string;
   whachatUserEmail: string;
   isActive: boolean;
+  oauthRecoverable?: boolean;
 };
 
 function getAdminToken() {
@@ -105,9 +107,9 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="font-semibold text-gray-900">{CRM_MARKETPLACE_LABEL}</h2>
+          <h2 className="font-semibold text-gray-900">GHL Diagnostics</h2>
           <p className="text-sm text-gray-500">
-            OAuth integrations, marketplace webhooks, and CSV imports — merged by Location ID + Company ID.
+            Marketplace registry and CSV reconciliation — not the primary activation monitor. Linked = usable WhachatCRM integration. Unmatched = install exists without a usable account link.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -227,11 +229,23 @@ export function AdminGhlTab({ enabled }: { enabled: boolean }) {
                     </TableCell>
                     <TableCell className="text-sm">{formatDate(row.installDate)}</TableCell>
                     <TableCell>
-                      {row.isActive ? (
-                        <Badge className="bg-green-100 text-green-700">{row.installationStatus}</Badge>
-                      ) : (
-                        <Badge variant="secondary">{row.installationStatus}</Badge>
-                      )}
+                      {(() => {
+                        const state = row.linkState || (row.isActive ? "Linked" : "Unmatched");
+                        const cls =
+                          state === "Linked"
+                            ? "bg-green-100 text-green-700"
+                            : state === "Uninstalled"
+                              ? "bg-gray-100 text-gray-600"
+                              : "bg-amber-100 text-amber-800";
+                        return (
+                          <div className="space-y-0.5">
+                            <Badge className={cls}>{state}</Badge>
+                            {row.oauthRecoverable && state === "Unmatched" ? (
+                              <div className="text-[10px] text-amber-800">OAuth recoverable</div>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-sm">{formatDate(row.uninstallDate)}</TableCell>
                     <TableCell className="text-sm capitalize">{row.pricePlan}</TableCell>

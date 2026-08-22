@@ -57,6 +57,11 @@ import type {
   AdminUserChannelConnections,
 } from "@shared/adminChannelConnectionStatus";
 import {
+  adminUserStatusLabel,
+  deriveAdminUserStatus,
+  type AdminUserStatusFilter,
+} from "@shared/adminUserStatus";
+import {
   PARTNER_COMMISSION_POLICY_TEXT,
   PARTNER_COMMISSION_TERM_DISPLAY,
   PARTNER_COMMISSION_TERM_LABEL,
@@ -214,9 +219,11 @@ const EMPTY_CHANNEL_CONNECTIONS: AdminUserChannelConnections = {
   whatsapp: { state: "disconnected", tooltip: "WhatsApp not connected" },
   facebook: { state: "disconnected", tooltip: "Facebook not connected" },
   instagram: { state: "disconnected", tooltip: "Instagram not connected" },
+  email: { state: "disconnected", tooltip: "Email not connected" },
   hasAnyChannel: false,
   noChannelsConnected: true,
   whatsappConnected: false,
+  emailConnected: false,
   needsAttention: false,
 };
 
@@ -229,6 +236,7 @@ function AdminChannelIndicators({
     { key: "WA", ...connections.whatsapp },
     { key: "FB", ...connections.facebook },
     { key: "IG", ...connections.instagram },
+    { key: "EM", ...connections.email },
   ] as const;
 
   return (
@@ -262,7 +270,7 @@ function AdminChannelIndicators({
   );
 }
 
-type UserStatusFilter = "all" | "trial" | "active" | "expired";
+type UserStatusFilter = AdminUserStatusFilter;
 type PlanFilter = "all" | "free" | "starter" | "pro";
 
 interface GhlIntegration {
@@ -609,14 +617,7 @@ export function Admin() {
     const q = userSearch.trim().toLowerCase();
 
     function deriveStatus(u: AdminUser): UserStatusFilter {
-      if (u.isInTrial) return "trial";
-      const st = (u.subscriptionStatus || "").toLowerCase();
-      // Heuristic: treat active/trialing as active; canceled/unpaid/past_due as expired
-      if (st === "active" || st === "trialing") return "active";
-      if (st === "canceled" || st === "cancelled" || st === "past_due" || st === "unpaid") return "expired";
-      // If billing plan is paid and no explicit status, treat as active
-      if ((u.billingPlan || "").toLowerCase() !== "free") return "active";
-      return "expired";
+      return deriveAdminUserStatus(u);
     }
 
     function hasAiBrain(u: AdminUser): boolean {
@@ -688,6 +689,10 @@ export function Admin() {
       pageRows: rows.slice(start, end),
     };
   }, [aiFilter, channelFilter, filteredUsers, overrideFilter, page, pageSize, planFilter, statusFilter, userSearch, userSort]);
+
+  const selectedUserStatus = selectedAdminUser
+    ? deriveAdminUserStatus(selectedAdminUser)
+    : null;
 
   useEffect(() => {
     // Reset to page 1 when filters change
@@ -1087,10 +1092,10 @@ export function Admin() {
                 <span className="hidden sm:inline">Partners</span>
                 <span className="sm:hidden">Part</span>
               </TabsTrigger>
-              <TabsTrigger value="ghl" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-ghl">
+              <TabsTrigger value="ghl" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-ghl" title="GHL Diagnostics — marketplace registry, not activation">
                 <MessageCircle className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">CRM</span>
-                <span className="sm:hidden">CRM</span>
+                <span className="hidden sm:inline">GHL</span>
+                <span className="sm:hidden">GHL</span>
                 {ghlIntegrations.length > 0 && (
                   <Badge className="ml-1 px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700">
                     {ghlIntegrations.length}
@@ -1463,6 +1468,7 @@ export function Admin() {
                       aria-label="Status filter"
                     >
                       <option value="all">All status</option>
+                      <option value="awaiting_verification">Awaiting verification</option>
                       <option value="trial">Trial</option>
                       <option value="active">Active</option>
                       <option value="expired">Expired</option>
@@ -1544,8 +1550,15 @@ export function Admin() {
                     <TableRow>
                       <TableHead className="min-w-[260px]">User</TableHead>
                       <TableHead>Plan</TableHead>
-                      <TableHead className="min-w-[88px]">Channels</TableHead>
-                      <TableHead>Conversations</TableHead>
+                      <TableHead
+                        className="min-w-[88px]"
+                        title="WA = WhatsApp · FB = Facebook Messenger · IG = Instagram · EM = Email / Gmail"
+                      >
+                        Channels
+                      </TableHead>
+                      <TableHead title="Plan conversation usage for the current billing period (not thread count)">
+                        Conversation usage
+                      </TableHead>
                       <TableHead>Usage %</TableHead>
                       <TableHead>AI Brain</TableHead>
                       <TableHead>Status</TableHead>
@@ -1648,16 +1661,19 @@ export function Admin() {
                             <TableCell>
                               <Badge
                                 variant={
-                                  status === "trial" ? "outline" :
-                                  status === "active" ? "default" :
-                                  "secondary"
+                                  status === "awaiting_verification" || status === "trial"
+                                    ? "outline"
+                                    : status === "active"
+                                      ? "default"
+                                      : "secondary"
                                 }
                                 className={cn(
-                                  status === "trial" && "border-amber-300 text-amber-700",
+                                  (status === "awaiting_verification" || status === "trial") &&
+                                    "border-amber-300 text-amber-700",
                                   status === "active" && "bg-emerald-600",
                                 )}
                               >
-                                {status === "trial" ? "Trial" : status === "active" ? "Active" : "Expired"}
+                                {adminUserStatusLabel(status)}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-sm text-gray-600">
@@ -1789,8 +1805,22 @@ export function Admin() {
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-semibold text-gray-900">Trial / status</div>
-                        <Badge variant="outline" className="text-xs">
-                          {selectedAdminUser.subscriptionStatus || "—"}
+                        <Badge
+                          variant={
+                            selectedUserStatus === "awaiting_verification" || selectedUserStatus === "trial"
+                              ? "outline"
+                              : selectedUserStatus === "active"
+                                ? "default"
+                                : "secondary"
+                          }
+                          className={cn(
+                            "text-xs",
+                            (selectedUserStatus === "awaiting_verification" || selectedUserStatus === "trial") &&
+                              "border-amber-300 text-amber-700",
+                            selectedUserStatus === "active" && "bg-emerald-600 text-white",
+                          )}
+                        >
+                          {selectedUserStatus ? adminUserStatusLabel(selectedUserStatus) : "—"}
                         </Badge>
                       </div>
                       <div className="text-sm text-gray-700">
@@ -1822,6 +1852,15 @@ export function Admin() {
                             : "Verified"}
                         </Badge>
                       </div>
+                      {selectedAdminUser.subscriptionStatus && (
+                        <div className="text-xs text-gray-500">
+                          Subscription (billing):{" "}
+                          <span className="font-medium">{selectedAdminUser.subscriptionStatus}</span>
+                          {selectedUserStatus === "awaiting_verification"
+                            ? " — not account activation"
+                            : ""}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-lg border p-3 space-y-2">
@@ -1861,6 +1900,7 @@ export function Admin() {
                         <p>{selectedAdminUser.channelConnections?.whatsapp.tooltip ?? "WhatsApp not connected"}</p>
                         <p>{selectedAdminUser.channelConnections?.facebook.tooltip ?? "Facebook not connected"}</p>
                         <p>{selectedAdminUser.channelConnections?.instagram.tooltip ?? "Instagram not connected"}</p>
+                        <p>{selectedAdminUser.channelConnections?.email.tooltip ?? "Email not connected"}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {selectedAdminUser.twilioConnected ? (
@@ -1875,7 +1915,7 @@ export function Admin() {
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="text-sm font-semibold text-gray-900">Usage</div>
                       <div className="text-sm text-gray-700">
-                        Conversations:{" "}
+                        Conversation usage:{" "}
                         <span className="font-medium">
                           {(selectedAdminUser.conversationsUsed ?? 0)} / {(selectedAdminUser.conversationsLimit ?? 0)}
                         </span>

@@ -261,13 +261,13 @@ async function ensureWhatsAppConversationForContact(
   if (existing) {
     return { conversationId: existing.id, created: false };
   }
-  await subscriptionService.incrementConversationUsage(userId);
   const created = await storage.createConversation({
     userId,
     contactId,
     channel: "whatsapp",
     status: "open",
   });
+  await subscriptionService.incrementConversationUsage(userId);
   return { conversationId: created.id, created: true };
 }
 

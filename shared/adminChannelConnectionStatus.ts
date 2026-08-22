@@ -1,4 +1,6 @@
-/** Admin users table — compact WA / FB / IG connection indicators from canonical fields. */
+import { isEmailMailboxUiConnected } from "./emailMailboxAvailability";
+
+/** Admin users table — compact WA / FB / IG / Email connection indicators from canonical fields. */
 
 export type AdminChannelIndicatorState = "connected" | "attention" | "disconnected" | "error";
 
@@ -11,9 +13,11 @@ export type AdminUserChannelConnections = {
   whatsapp: AdminChannelIndicator;
   facebook: AdminChannelIndicator;
   instagram: AdminChannelIndicator;
+  email: AdminChannelIndicator;
   hasAnyChannel: boolean;
   noChannelsConnected: boolean;
   whatsappConnected: boolean;
+  emailConnected: boolean;
   needsAttention: boolean;
 };
 
@@ -188,9 +192,55 @@ function deriveAdminMetaMessagingIndicator(
   };
 }
 
+export type AdminEmailMailboxFields = {
+  syncStatus?: string | null;
+  provider?: string | null;
+};
+
+export function deriveAdminEmailIndicator(
+  mailbox: AdminEmailMailboxFields | null | undefined,
+): AdminChannelIndicator {
+  if (!mailbox) {
+    return { state: "disconnected", tooltip: "Email not connected" };
+  }
+  const status = String(mailbox.syncStatus || "").toLowerCase();
+  const provider = String(mailbox.provider || "gmail").toLowerCase();
+  const gmail = provider === "gmail";
+
+  if (isEmailMailboxUiConnected(status)) {
+    return {
+      state: "connected",
+      tooltip: gmail ? "Gmail / Email" : "Email connected",
+    };
+  }
+  if (status === "error" || status === "needs_reconnect") {
+    return {
+      state: status === "error" ? "error" : "attention",
+      tooltip: gmail ? "Gmail / Email needs reconnect" : "Email needs reconnect",
+    };
+  }
+  return { state: "disconnected", tooltip: "Email not connected" };
+}
+
+/** Prefer a UI-connected mailbox, then primary, then newest. Never uses users.email. */
+export function pickAdminEmailMailbox<
+  T extends AdminEmailMailboxFields & { isPrimary?: boolean | null; createdAt?: Date | string | null },
+>(rows: T[]): T | undefined {
+  if (!rows.length) return undefined;
+  const connected = rows.filter((r) => isEmailMailboxUiConnected(r.syncStatus));
+  const pool = [...(connected.length ? connected : rows)].sort((a, b) => {
+    if (!!a.isPrimary !== !!b.isPrimary) return a.isPrimary ? -1 : 1;
+    const at = a.createdAt ? new Date(a.createdAt as Date | string).getTime() : 0;
+    const bt = b.createdAt ? new Date(b.createdAt as Date | string).getTime() : 0;
+    return bt - at;
+  });
+  return pool[0];
+}
+
 export function deriveAdminUserChannelConnections(input: {
   user: AdminWhatsAppUserFields;
   channelSettings: AdminChannelSettingRow[];
+  emailMailbox?: AdminEmailMailboxFields | null;
 }): AdminUserChannelConnections {
   const facebookRow = input.channelSettings.find((s) => s.channel === "facebook");
   const instagramRow = input.channelSettings.find((s) => s.channel === "instagram");
@@ -198,16 +248,19 @@ export function deriveAdminUserChannelConnections(input: {
   const whatsapp = deriveAdminWhatsAppIndicator(input.user);
   const facebook = deriveAdminFacebookIndicator(facebookRow);
   const instagram = deriveAdminInstagramIndicator(instagramRow);
+  const email = deriveAdminEmailIndicator(input.emailMailbox);
 
   const hasAnyChannel =
     whatsapp.state === "connected" ||
     facebook.state === "connected" ||
-    instagram.state === "connected";
+    instagram.state === "connected" ||
+    email.state === "connected";
 
   const noChannelsConnected =
     whatsapp.state === "disconnected" &&
     facebook.state === "disconnected" &&
-    instagram.state === "disconnected";
+    instagram.state === "disconnected" &&
+    email.state === "disconnected";
 
   const needsAttention =
     whatsapp.state === "attention" ||
@@ -215,15 +268,19 @@ export function deriveAdminUserChannelConnections(input: {
     facebook.state === "attention" ||
     facebook.state === "error" ||
     instagram.state === "attention" ||
-    instagram.state === "error";
+    instagram.state === "error" ||
+    email.state === "attention" ||
+    email.state === "error";
 
   return {
     whatsapp,
     facebook,
     instagram,
+    email,
     hasAnyChannel,
     noChannelsConnected,
     whatsappConnected: whatsapp.state === "connected",
+    emailConnected: email.state === "connected",
     needsAttention,
   };
 }

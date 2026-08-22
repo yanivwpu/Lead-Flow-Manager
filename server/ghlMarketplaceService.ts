@@ -8,6 +8,15 @@ import {
   type Integration,
 } from "@shared/schema";
 import { storage } from "./storage";
+import {
+  classifyGhlAdminLinkState,
+  formatGhlInstallSource,
+  isGhlMarketplaceUninstalled,
+  isUnmatchedGhlMarketplaceInstall,
+  isUsableGhlConnectionForUser,
+  normalizeGhlMarketplaceInstallStatus,
+  type GhlAdminLinkState,
+} from "@shared/ghlConnectionState";
 
 type StoredOAuthTokenPayload = {
   access_token: string;
@@ -46,7 +55,7 @@ function normalizeRecoveryEmail(email: string): string {
 }
 
 function isActiveMarketplaceInstall(row: GhlMarketplaceInstall): boolean {
-  return (row.installationStatus || "").toLowerCase() !== "uninstalled";
+  return !isGhlMarketplaceUninstalled(row.installationStatus);
 }
 
 function estimateTokenExpiry(
@@ -224,6 +233,7 @@ export type GhlInstallRow = {
   companyId: string;
   installDate: string | null;
   installationStatus: string;
+  linkState: GhlAdminLinkState;
   uninstallDate: string | null;
   pricePlan: string;
   billingStatus: string;
@@ -234,8 +244,32 @@ export type GhlInstallRow = {
   whachatUserName: string;
   whachatUserEmail: string;
   isActive: boolean;
+  oauthRecoverable: boolean;
   whiteLabeled: boolean | null;
   userType: string;
+};
+
+export type UnmatchedGhlInstallRow = {
+  id: string;
+  installDate: string | null;
+  source: string;
+  agency: string | null;
+  subAccountName: string | null;
+  locationId: string | null;
+  companyId: string | null;
+  status: "Unmatched";
+  installationStatus: string;
+  oauthRecoverable: boolean;
+};
+
+export type ActivationGhlDetails = {
+  agency: string | null;
+  subAccountName: string | null;
+  locationId: string | null;
+  companyId: string | null;
+  installDate: string | null;
+  status: string;
+  linkState: "Linked";
 };
 
 export type GhlMarketplaceInstallInput = {
@@ -278,6 +312,12 @@ function mapIntegrationToRow(
   const config = (integration.config || {}) as Record<string, unknown>;
   const locationId = unknown((config.locationId as string) || marketplace?.locationId);
   const companyId = unknown((config.companyId as string) || marketplace?.companyId);
+  const marketplaceStatus = marketplace?.installationStatus || (integration.isActive ? "Active" : "Uninstalled");
+  const linkState = classifyGhlAdminLinkState({
+    marketplaceStatus,
+    hasMarketplaceRow: !!marketplace,
+    integration,
+  });
 
   return {
     id: integration.id,
@@ -293,9 +333,8 @@ function mapIntegrationToRow(
       marketplace?.installDate?.toISOString() ||
       integration.createdAt?.toISOString() ||
       null,
-    installationStatus: integration.isActive
-      ? unknown(marketplace?.installationStatus || "Active")
-      : unknown(marketplace?.installationStatus || "Uninstalled"),
+    installationStatus: unknown(normalizeGhlMarketplaceInstallStatus(marketplaceStatus) || marketplaceStatus),
+    linkState,
     uninstallDate: marketplace?.uninstallDate?.toISOString() || null,
     pricePlan: unknown(marketplace?.pricePlan || user?.subscriptionPlan || user?.billingPlan),
     billingStatus: unknown(marketplace?.billingStatus || user?.subscriptionStatus),
@@ -305,7 +344,8 @@ function mapIntegrationToRow(
     whachatUserId: integration.userId,
     whachatUserName: unknown(user?.name),
     whachatUserEmail: unknown(user?.email),
-    isActive: !!integration.isActive,
+    isActive: linkState === "Linked",
+    oauthRecoverable: hasRecoverableOAuthTokens(marketplace?.rawPayload),
     whiteLabeled: marketplace?.whiteLabeled ?? null,
     userType: unknown((config.userType as string) || null),
   };
@@ -314,7 +354,13 @@ function mapIntegrationToRow(
 function mapMarketplaceOnlyToRow(
   row: GhlMarketplaceInstall,
   user?: { name?: string | null; email?: string | null } | null,
+  integration?: Integration | null,
 ): GhlInstallRow {
+  const linkState = classifyGhlAdminLinkState({
+    marketplaceStatus: row.installationStatus,
+    hasMarketplaceRow: true,
+    integration,
+  });
   return {
     id: row.id,
     source: "marketplace",
@@ -325,7 +371,8 @@ function mapMarketplaceOnlyToRow(
     locationId: unknown(row.locationId),
     companyId: unknown(row.companyId),
     installDate: row.installDate?.toISOString() || null,
-    installationStatus: unknown(row.installationStatus),
+    installationStatus: unknown(normalizeGhlMarketplaceInstallStatus(row.installationStatus) || row.installationStatus),
+    linkState,
     uninstallDate: row.uninstallDate?.toISOString() || null,
     pricePlan: unknown(row.pricePlan),
     billingStatus: unknown(row.billingStatus),
@@ -335,7 +382,8 @@ function mapMarketplaceOnlyToRow(
     whachatUserId: row.whachatUserId,
     whachatUserName: unknown(user?.name),
     whachatUserEmail: unknown(user?.email),
-    isActive: (row.installationStatus || "").toLowerCase() !== "uninstalled",
+    isActive: linkState === "Linked",
+    oauthRecoverable: hasRecoverableOAuthTokens(row.rawPayload),
     whiteLabeled: row.whiteLabeled ?? null,
     userType: "Unknown",
   };
@@ -372,6 +420,7 @@ export async function upsertGhlMarketplaceInstall(
         )
         .limit(1);
 
+  const normalizedStatus = normalizeGhlMarketplaceInstallStatus(input.installationStatus) ?? input.installationStatus;
   const patch = {
     agency: input.agency ?? undefined,
     companyId,
@@ -381,7 +430,7 @@ export async function upsertGhlMarketplaceInstall(
     agencyOwner: input.agencyOwner ?? undefined,
     agencyEmail: input.agencyEmail ?? undefined,
     installDate: parseDate(input.installDate) ?? undefined,
-    installationStatus: input.installationStatus ?? undefined,
+    installationStatus: normalizedStatus ?? undefined,
     uninstallDate: parseDate(input.uninstallDate) ?? undefined,
     pricePlan: input.pricePlan ?? undefined,
     billingStatus: input.billingStatus ?? undefined,
@@ -411,7 +460,7 @@ export async function upsertGhlMarketplaceInstall(
       agencyOwner: input.agencyOwner ?? null,
       agencyEmail: input.agencyEmail ?? null,
       installDate: parseDate(input.installDate),
-      installationStatus: input.installationStatus ?? "Active",
+      installationStatus: normalizeGhlMarketplaceInstallStatus(input.installationStatus) ?? input.installationStatus ?? "Active",
       uninstallDate: parseDate(input.uninstallDate),
       pricePlan: input.pricePlan ?? null,
       billingStatus: input.billingStatus ?? null,
@@ -430,62 +479,78 @@ export async function linkMarketplaceInstallToIntegration(
 ): Promise<void> {
   if (!companyId && !locationId) return;
 
-  const conditions = [];
-  if (locationId) conditions.push(eq(ghlMarketplaceInstalls.locationId, locationId));
-  if (companyId) conditions.push(eq(ghlMarketplaceInstalls.companyId, companyId));
+  const loc = locationId?.trim() || null;
+  const company = companyId?.trim() || null;
 
-  const rows = await db
-    .select()
-    .from(ghlMarketplaceInstalls)
-    .where(conditions.length === 2 ? and(...conditions) : conditions[0])
-    .limit(1);
+  let existing: GhlMarketplaceInstall | undefined;
+  if (loc && company) {
+    existing = (
+      await db
+        .select()
+        .from(ghlMarketplaceInstalls)
+        .where(and(eq(ghlMarketplaceInstalls.locationId, loc), eq(ghlMarketplaceInstalls.companyId, company)))
+        .limit(1)
+    )[0];
+  } else if (loc) {
+    existing = (
+      await db
+        .select()
+        .from(ghlMarketplaceInstalls)
+        .where(eq(ghlMarketplaceInstalls.locationId, loc))
+        .limit(1)
+    )[0];
+  } else if (company) {
+    existing = (
+      await db
+        .select()
+        .from(ghlMarketplaceInstalls)
+        .where(and(eq(ghlMarketplaceInstalls.companyId, company), sql`${ghlMarketplaceInstalls.locationId} IS NULL`))
+        .limit(1)
+    )[0];
+  }
 
-  if (rows[0]) {
+  const linkFields = {
+    integrationId: integration.id,
+    whachatUserId: integration.userId,
+    lastSyncedAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  if (existing) {
     await db
       .update(ghlMarketplaceInstalls)
-      .set({
-        integrationId: integration.id,
-        whachatUserId: integration.userId,
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(ghlMarketplaceInstalls.id, rows[0].id));
+      .set(linkFields)
+      .where(eq(ghlMarketplaceInstalls.id, existing.id));
     return;
   }
 
   const config = (integration.config || {}) as Record<string, unknown>;
   await upsertGhlMarketplaceInstall({
-    companyId: companyId || (config.companyId as string) || "unknown",
-    locationId: locationId || (config.locationId as string) || null,
+    companyId: company || (config.companyId as string) || "unknown",
+    locationId: loc || (config.locationId as string) || null,
     subAccountName: integration.name,
     installDate: (config.installedAt as string) || integration.createdAt || new Date(),
     installationStatus: integration.isActive ? "Active" : "Uninstalled",
     source: "oauth",
   });
 
-  const linked = await db
-    .select()
-    .from(ghlMarketplaceInstalls)
-    .where(
-      and(
-        eq(ghlMarketplaceInstalls.companyId, companyId || (config.companyId as string) || "unknown"),
-        locationId
-          ? eq(ghlMarketplaceInstalls.locationId, locationId)
-          : sql`${ghlMarketplaceInstalls.locationId} IS NULL`,
-      ),
-    )
-    .limit(1);
-
-  if (linked[0]) {
+  const created = (
     await db
-      .update(ghlMarketplaceInstalls)
-      .set({
-        integrationId: integration.id,
-        whachatUserId: integration.userId,
-        lastSyncedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(ghlMarketplaceInstalls.id, linked[0].id));
+      .select()
+      .from(ghlMarketplaceInstalls)
+      .where(
+        and(
+          eq(ghlMarketplaceInstalls.companyId, company || (config.companyId as string) || "unknown"),
+          loc
+            ? eq(ghlMarketplaceInstalls.locationId, loc)
+            : sql`${ghlMarketplaceInstalls.locationId} IS NULL`,
+        ),
+      )
+      .limit(1)
+  )[0];
+
+  if (created) {
+    await db.update(ghlMarketplaceInstalls).set(linkFields).where(eq(ghlMarketplaceInstalls.id, created.id));
   }
 }
 
@@ -682,6 +747,7 @@ export async function listGhlInstallationsForAdmin(): Promise<GhlInstallRow[]> {
   const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
   const allUsers = await storage.getAllUsers();
   const userMap = new Map(allUsers.map((u) => [u.id, u]));
+  const integrationById = new Map(allIntegrations.map((i) => [i.id, i]));
   const marketplaceByKey = new Map(
     marketplaceRows.map((r) => [normalizeInstallKey(r.locationId, r.companyId), r]),
   );
@@ -702,7 +768,8 @@ export async function listGhlInstallationsForAdmin(): Promise<GhlInstallRow[]> {
     const key = normalizeInstallKey(row.locationId, row.companyId);
     if (seenKeys.has(key)) continue;
     const user = row.whachatUserId ? userMap.get(row.whachatUserId) : undefined;
-    merged.push(mapMarketplaceOnlyToRow(row, user));
+    const integration = row.integrationId ? integrationById.get(row.integrationId) : undefined;
+    merged.push(mapMarketplaceOnlyToRow(row, user, integration));
   }
 
   merged.sort((a, b) => {
@@ -718,7 +785,7 @@ export async function countActiveGhlMarketplaceInstalls(): Promise<number> {
   const rows = await db
     .select({ installationStatus: ghlMarketplaceInstalls.installationStatus })
     .from(ghlMarketplaceInstalls);
-  return rows.filter((r) => (r.installationStatus || "").toLowerCase() !== "uninstalled").length;
+  return rows.filter((r) => !isGhlMarketplaceUninstalled(r.installationStatus)).length;
 }
 
 function isGhlMarketplacePaidPlan(pricePlan: string | null | undefined): boolean {
@@ -742,29 +809,86 @@ export async function getGhlMarketplacePaidUserIds(): Promise<Set<string>> {
   const ids = new Set<string>();
   for (const row of rows) {
     if (!row.whachatUserId) continue;
-    if ((row.installationStatus || "").toLowerCase() === "uninstalled") continue;
+    if (isGhlMarketplaceUninstalled(row.installationStatus)) continue;
     if (!isGhlMarketplacePaidPlan(row.pricePlan)) continue;
     ids.add(row.whachatUserId);
   }
   return ids;
 }
 
-export async function getGhlUserIds(): Promise<Set<string>> {
-  const ghlIntegrations = await db
-    .select({ userId: integrations.userId })
-    .from(integrations)
-    .where(eq(integrations.type, "gohighlevel"));
-  const marketplaceUsers = await db
-    .select({ userId: ghlMarketplaceInstalls.whachatUserId })
-    .from(ghlMarketplaceInstalls)
-    .where(sql`${ghlMarketplaceInstalls.whachatUserId} IS NOT NULL`);
+export async function loadGhlActivationConnectionState(): Promise<{
+  connectedUserIds: Set<string>;
+  detailsByUserId: Map<string, ActivationGhlDetails>;
+  unmatched: UnmatchedGhlInstallRow[];
+}> {
+  const [ghlIntegrations, marketplaceRows] = await Promise.all([
+    db.select().from(integrations).where(eq(integrations.type, "gohighlevel")),
+    db.select().from(ghlMarketplaceInstalls),
+  ]);
 
-  const ids = new Set<string>();
-  for (const row of ghlIntegrations) ids.add(row.userId);
-  for (const row of marketplaceUsers) {
-    if (row.userId) ids.add(row.userId);
+  const integrationById = new Map(ghlIntegrations.map((i) => [i.id, i]));
+  const marketplaceByIntegrationId = new Map<string, GhlMarketplaceInstall>();
+  for (const row of marketplaceRows) {
+    if (row.integrationId && !marketplaceByIntegrationId.has(row.integrationId)) {
+      marketplaceByIntegrationId.set(row.integrationId, row);
+    }
   }
-  return ids;
+
+  const connectedUserIds = new Set<string>();
+  const detailsByUserId = new Map<string, ActivationGhlDetails>();
+
+  for (const integration of ghlIntegrations) {
+    const marketplace = marketplaceByIntegrationId.get(integration.id) ?? null;
+    if (!isUsableGhlConnectionForUser({ integration, marketplace })) continue;
+    connectedUserIds.add(integration.userId);
+    if (detailsByUserId.has(integration.userId)) continue;
+    const config = (integration.config || {}) as Record<string, unknown>;
+    detailsByUserId.set(integration.userId, {
+      agency: marketplace?.agency?.trim() || null,
+      subAccountName: marketplace?.subAccountName?.trim() || integration.name || null,
+      locationId: (config.locationId as string) || marketplace?.locationId || null,
+      companyId: (config.companyId as string) || marketplace?.companyId || null,
+      installDate:
+        (config.installedAt as string) ||
+        marketplace?.installDate?.toISOString() ||
+        integration.createdAt?.toISOString() ||
+        null,
+      status: "Linked",
+      linkState: "Linked",
+    });
+  }
+
+  const unmatched: UnmatchedGhlInstallRow[] = [];
+  for (const row of marketplaceRows) {
+    const integration = row.integrationId ? integrationById.get(row.integrationId) : undefined;
+    if (!isUnmatchedGhlMarketplaceInstall({ marketplace: row, integration })) continue;
+    unmatched.push({
+      id: row.id,
+      installDate: row.installDate?.toISOString() || row.createdAt?.toISOString() || null,
+      source: formatGhlInstallSource(row.source),
+      agency: row.agency?.trim() || null,
+      subAccountName: row.subAccountName?.trim() || null,
+      locationId: row.locationId || null,
+      companyId: row.companyId || null,
+      status: "Unmatched",
+      installationStatus: normalizeGhlMarketplaceInstallStatus(row.installationStatus) || row.installationStatus || "Active",
+      oauthRecoverable: hasRecoverableOAuthTokens(row.rawPayload),
+    });
+  }
+
+  unmatched.sort((a, b) => {
+    const at = a.installDate ? new Date(a.installDate).getTime() : 0;
+    const bt = b.installDate ? new Date(b.installDate).getTime() : 0;
+    return bt - at;
+  });
+
+  return { connectedUserIds, detailsByUserId, unmatched };
+}
+
+/** Users with a usable, non-uninstalled GHL integration (Activation CRM green). */
+export async function getGhlUserIds(): Promise<Set<string>> {
+  const state = await loadGhlActivationConnectionState();
+  return state.connectedUserIds;
 }
 
 export type BackfillGhlMarketplaceResult = {

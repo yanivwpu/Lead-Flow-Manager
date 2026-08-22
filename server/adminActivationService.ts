@@ -7,6 +7,7 @@ import {
   channelSettings,
   contacts,
   conversations,
+  emailMailboxes,
   growthEngineSetupTasks,
   inventorySources,
   messages,
@@ -15,7 +16,7 @@ import {
   userSessions,
   workflows,
 } from "@shared/schema";
-import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
+import { deriveAdminUserChannelConnections, pickAdminEmailMailbox } from "@shared/adminChannelConnectionStatus";
 import {
   REAL_ACTIVATION_CHANNELS,
   type ActivationBillingBadge,
@@ -29,9 +30,10 @@ import {
 import { getEffectivePlanForUser } from "./subscriptionService";
 import { computeTrialStatus, isProAiTrialActive } from "./trialEntitlements";
 import {
-  countActiveGhlMarketplaceInstalls,
   getGhlMarketplacePaidUserIds,
-  getGhlUserIds,
+  loadGhlActivationConnectionState,
+  type ActivationGhlDetails,
+  type UnmatchedGhlInstallRow,
 } from "./ghlMarketplaceService";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
 
@@ -49,6 +51,8 @@ export type ActivationSummary = {
     totalUsers: number;
     activeUsers: number;
     ghlInstalls: number;
+    ghlConnected: number;
+    ghlUnmatched: number;
     shopifyInstalls: number;
     websiteSignups: number;
     /** Confirmed paid billing only — excludes Pro/Pro AI trials */
@@ -68,6 +72,7 @@ export type ActivationSummary = {
     instagramConnected: number;
     shopifyConnected: number;
     ghlConnected: number;
+    emailConnected: number;
     anyChannelConnected: number;
     multipleChannelsConnected: number;
     embeddedSignupCompleted: number;
@@ -90,6 +95,7 @@ export type ActivationSummary = {
     shopifyAbandonedCartEnabled: number;
     accountsWithOrphanMessages: number;
   };
+  unmatchedGhlInstalls: UnmatchedGhlInstallRow[];
   funnel: ActivationFunnelStep[];
 };
 
@@ -112,6 +118,8 @@ export type ActivationAccountRow = {
   instagramConnected: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
+  emailConnected: boolean;
+  ghlDetails: ActivationGhlDetails | null;
   conversationsCount: number;
   /** Real customer-channel messages only (excludes webchat/sms/test) */
   messagesSent: number;
@@ -295,10 +303,38 @@ function mapChannelSettingsRows(channelRows: (typeof channelSettings.$inferSelec
   return channelByUser;
 }
 
+type AdminMailboxRow = {
+  workspaceUserId: string;
+  syncStatus: string | null;
+  provider: string | null;
+  isPrimary: boolean | null;
+  createdAt: Date | null;
+};
+
+async function loadEmailMailboxesByUser(): Promise<Map<string, AdminMailboxRow[]>> {
+  const rows = await db
+    .select({
+      workspaceUserId: emailMailboxes.workspaceUserId,
+      syncStatus: emailMailboxes.syncStatus,
+      provider: emailMailboxes.provider,
+      isPrimary: emailMailboxes.isPrimary,
+      createdAt: emailMailboxes.createdAt,
+    })
+    .from(emailMailboxes);
+  const map = new Map<string, AdminMailboxRow[]>();
+  for (const row of rows) {
+    const list = map.get(row.workspaceUserId) ?? [];
+    list.push(row);
+    map.set(row.workspaceUserId, list);
+  }
+  return map;
+}
+
 function deriveUserConnections(
   user: typeof users.$inferSelect,
   channelByUser: Map<string, (typeof channelSettings.$inferSelect)[]>,
   ghlUserIds: Set<string>,
+  mailboxByUser: Map<string, Array<{ syncStatus: string | null; provider: string | null; isPrimary: boolean | null; createdAt: Date | null }>>,
 ) {
   const meta = deriveAdminUserChannelConnections({
     user,
@@ -308,6 +344,7 @@ function deriveUserConnections(
       isEnabled: row.isEnabled,
       config: row.config,
     })),
+    emailMailbox: pickAdminEmailMailbox(mailboxByUser.get(user.id) ?? []),
   });
 
   return {
@@ -318,6 +355,7 @@ function deriveUserConnections(
       facebookConnected: meta.facebook.state === "connected",
       instagramConnected: meta.instagram.state === "connected",
       ghlUserIds,
+      emailConnected: meta.emailConnected,
     }),
   };
 }
@@ -330,9 +368,8 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
   const now = new Date();
   const [
     allUsers,
-    ghlUserIds,
+    ghlConnectionState,
     ghlMarketplacePaidUserIds,
-    ghlInstallCount,
     channelRows,
     messageStatsByUser,
     conversationCounts,
@@ -348,9 +385,8 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     shopifyAbandonedCartEnabled,
   ] = await Promise.all([
     db.select().from(users),
-    getGhlUserIds(),
+    loadGhlActivationConnectionState(),
     getGhlMarketplacePaidUserIds(),
-    countActiveGhlMarketplaceInstalls(),
     db.select().from(channelSettings),
     fetchMessageStatsByUserChannel(),
     db
@@ -415,6 +451,7 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       .then((rows) => rows.length),
   ]);
 
+  const ghlUserIds = ghlConnectionState.connectedUserIds;
   const userEmailById = new Map(allUsers.map((u) => [u.id, u.email]));
   const metricUsers = allUsers.filter((u) => !isExcludedActivationAccount(u.email));
   const shopifyInstalls = metricUsers.filter((u) => u.shopifyInstalledAt || u.shopifyShop).length;
@@ -430,12 +467,14 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
   let marketplacePaidUsers = 0;
 
   const channelByUser = mapChannelSettingsRows(channelRows);
+  const mailboxByUser = await loadEmailMailboxesByUser();
 
   let whatsappConnected = 0;
   let facebookMessengerConnected = 0;
   let instagramConnected = 0;
   let shopifyConnectedCount = 0;
   let ghlConnectedCount = 0;
+  let emailConnectedCount = 0;
   let anyChannelConnected = 0;
   let multipleChannelsConnected = 0;
   let embeddedSignupCompleted = 0;
@@ -466,13 +505,14 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     }
     if (effectivePlan === "free" && !billing.isPaidSubscriber && !billing.isProTrial) freeUsers++;
 
-    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds);
+    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser);
 
     if (activation.whatsappConnected) whatsappConnected++;
     if (activation.facebookConnected) facebookMessengerConnected++;
     if (activation.instagramConnected) instagramConnected++;
     if (activation.shopifyConnected) shopifyConnectedCount++;
     if (activation.ghlConnected) ghlConnectedCount++;
+    if (activation.emailConnected) emailConnectedCount++;
 
     if (activation.hasAnyActivationChannel) {
       anyChannelConnected++;
@@ -485,6 +525,7 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       activation.instagramConnected,
       activation.shopifyConnected,
       activation.ghlConnected,
+      activation.emailConnected,
     ].filter(Boolean).length;
     if (connectedCount >= 2) multipleChannelsConnected++;
 
@@ -574,7 +615,9 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
     topMetrics: {
       totalUsers,
       activeUsers,
-      ghlInstalls: Math.max(ghlInstallCount, ghlUserIds.size),
+      ghlInstalls: ghlConnectionState.connectedUserIds.size,
+      ghlConnected: ghlConnectionState.connectedUserIds.size,
+      ghlUnmatched: ghlConnectionState.unmatched.length,
       shopifyInstalls,
       websiteSignups,
       payingCustomers: paidSubscribers,
@@ -592,6 +635,7 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       instagramConnected,
       shopifyConnected: shopifyConnectedCount,
       ghlConnected: ghlConnectedCount,
+      emailConnected: emailConnectedCount,
       anyChannelConnected,
       multipleChannelsConnected,
       embeddedSignupCompleted,
@@ -614,6 +658,7 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
       shopifyAbandonedCartEnabled,
       accountsWithOrphanMessages,
     },
+    unmatchedGhlInstalls: ghlConnectionState.unmatched,
     funnel,
   };
 }
@@ -644,7 +689,7 @@ async function loadActivationAccounts(
   const now = new Date();
 
   const [
-    ghlUserIds,
+    ghlConnectionState,
     ghlMarketplacePaidUserIds,
     allUsers,
     channelRows,
@@ -657,7 +702,7 @@ async function loadActivationAccounts(
     agentPageRows,
     inventoryRows,
   ] = await Promise.all([
-    getGhlUserIds(),
+    loadGhlActivationConnectionState(),
     getGhlMarketplacePaidUserIds(),
     db.select().from(users),
     db.select().from(channelSettings),
@@ -692,7 +737,10 @@ async function loadActivationAccounts(
     db.select({ userId: inventorySources.userId }).from(inventorySources),
   ]);
 
+  const ghlUserIds = ghlConnectionState.connectedUserIds;
+  const ghlDetailsByUser = ghlConnectionState.detailsByUserId;
   const channelByUser = mapChannelSettingsRows(channelRows);
+  const mailboxByUser = await loadEmailMailboxesByUser();
   const conversationCountMap = new Map(conversationCounts.map((r) => [r.userId, r.count || 0]));
 
   const aiUserIds = new Set(aiRows.map((r) => r.userId));
@@ -707,7 +755,7 @@ async function loadActivationAccounts(
   let accountsWithOrphanMessages = 0;
 
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
-    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds);
+    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser);
     const plan = getEffectivePlanForUser(user, now);
     const conversationsCount = conversationCountMap.get(user.id) || 0;
     const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
@@ -738,6 +786,8 @@ async function loadActivationAccounts(
       instagramConnected: activation.instagramConnected,
       shopifyConnected: activation.shopifyConnected,
       ghlConnected: activation.ghlConnected,
+      emailConnected: activation.emailConnected,
+      ghlDetails: activation.ghlConnected ? ghlDetailsByUser.get(user.id) ?? null : null,
       conversationsCount,
       messagesSent: msgStats.messagesSent,
       messagesReceived: msgStats.messagesReceived,
@@ -782,7 +832,8 @@ async function loadActivationAccounts(
         r.facebookConnected ||
         r.instagramConnected ||
         r.shopifyConnected ||
-        r.ghlConnected,
+        r.ghlConnected ||
+        r.emailConnected,
     );
   } else if (filters.channelConnected === "no") {
     rows = rows.filter(
@@ -791,7 +842,8 @@ async function loadActivationAccounts(
         !r.facebookConnected &&
         !r.instagramConnected &&
         !r.shopifyConnected &&
-        !r.ghlConnected,
+        !r.ghlConnected &&
+        !r.emailConnected,
     );
   }
   if (filters.hasConversations === "yes") {

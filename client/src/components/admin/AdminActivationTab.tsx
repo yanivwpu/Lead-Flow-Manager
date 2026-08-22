@@ -1,19 +1,18 @@
 import { useMemo, useState } from "react";
 import {
   CRM_CHANNEL_LABEL,
-  CRM_MARKETPLACE_LABEL,
   CRM_SOURCE_LABEL,
 } from "@shared/leadConnectorWhiteLabel";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 type ActivationSummary = {
   topMetrics: {
     totalUsers: number;
     activeUsers: number;
-    ghlInstalls: number;
     shopifyInstalls: number;
     websiteSignups: number;
     payingCustomers: number;
@@ -22,12 +21,39 @@ type ActivationSummary = {
     websitePaidUsers: number;
     shopifyPaidUsers: number;
     marketplacePaidUsers: number;
+    ghlInstalls: number;
+    ghlConnected?: number;
+    ghlUnmatched?: number;
     freeUsers: number;
     trialUsers: number;
   };
   channelMetrics: Record<string, number>;
   usageMetrics: Record<string, number>;
+  unmatchedGhlInstalls?: UnmatchedGhlInstall[];
   funnel: { key: string; label: string; count: number; percent: number }[];
+};
+
+type UnmatchedGhlInstall = {
+  id: string;
+  installDate: string | null;
+  source: string;
+  agency: string | null;
+  subAccountName: string | null;
+  locationId: string | null;
+  companyId: string | null;
+  status: "Unmatched";
+  installationStatus: string;
+  oauthRecoverable: boolean;
+};
+
+type ActivationGhlDetails = {
+  agency: string | null;
+  subAccountName: string | null;
+  locationId: string | null;
+  companyId: string | null;
+  installDate: string | null;
+  status: string;
+  linkState: "Linked";
 };
 
 type ActivationBillingBadge = "free" | "trial" | "paid" | "canceled" | "expired";
@@ -48,8 +74,10 @@ type ActivationAccount = {
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
+  emailConnected: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
+  ghlDetails?: ActivationGhlDetails | null;
   conversationsCount: number;
   messagesSent: number;
   messagesReceived: number;
@@ -163,10 +191,11 @@ function TrialBadge({ row }: { row: ActivationAccount }) {
 function ChannelBadges({ row }: { row: ActivationAccount }) {
   const channels = [
     { key: "WA", on: row.whatsappConnected, label: "WhatsApp" },
-    { key: "FB", on: row.facebookConnected, label: "Facebook" },
+    { key: "FB", on: row.facebookConnected, label: "Facebook Messenger" },
     { key: "IG", on: row.instagramConnected, label: "Instagram" },
+    { key: "EM", on: row.emailConnected, label: "Email / Gmail" },
     { key: "Shop", on: row.shopifyConnected, label: "Shopify" },
-    { key: CRM_CHANNEL_LABEL, on: row.ghlConnected, label: CRM_CHANNEL_LABEL },
+    { key: CRM_CHANNEL_LABEL, on: row.ghlConnected, label: row.ghlConnected ? "CRM linked (usable GHL integration)" : "CRM not connected" },
   ];
   return (
     <div className="flex flex-nowrap items-center gap-0.5">
@@ -234,6 +263,7 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
   const [trial, setTrial] = useState("all");
   const [paying, setPaying] = useState("all");
   const [search, setSearch] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState<ActivationAccount | null>(null);
 
   const { data: summary, isLoading: summaryLoading } = useQuery<ActivationSummary>({
     queryKey: ["/api/admin/activation/summary"],
@@ -314,7 +344,11 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
         <MetricCard label="Website paid (Stripe)" value={topMetrics.websitePaidUsers} />
         <MetricCard label="Shopify paid" value={topMetrics.shopifyPaidUsers} />
         <MetricCard label="Marketplace paid (CRM)" value={topMetrics.marketplacePaidUsers} />
-        <MetricCard label="CRM installs" value={topMetrics.ghlInstalls} />
+        <MetricCard
+          label="GHL Connected"
+          value={topMetrics.ghlConnected ?? topMetrics.ghlInstalls}
+        />
+        <MetricCard label="GHL Unmatched" value={topMetrics.ghlUnmatched ?? 0} />
         <MetricCard label="Shopify installs" value={topMetrics.shopifyInstalls} />
         <MetricCard label="Website signups" value={topMetrics.websiteSignups} />
         <MetricCard label="Free users" value={topMetrics.freeUsers} />
@@ -373,6 +407,59 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
           ))}
         </div>
       </div>
+
+      {(summary.unmatchedGhlInstalls?.length ?? 0) > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Unmatched GHL installs</h3>
+            <p className="text-xs text-gray-600">
+              Marketplace installations not linked to a usable WhachatCRM account. Not counted as GHL Connected.
+            </p>
+          </div>
+          <div className="-mx-1 overflow-x-auto">
+            <Table className="min-w-[920px] text-xs">
+              <TableHeader>
+                <TableRow className="whitespace-nowrap">
+                  <TableHead>Install date</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Agency</TableHead>
+                  <TableHead>Location / sub-account</TableHead>
+                  <TableHead>Location ID</TableHead>
+                  <TableHead>Company ID</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>OAuth</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {summary.unmatchedGhlInstalls!.map((row) => (
+                  <TableRow key={row.id} data-testid={`unmatched-ghl-${row.id}`}>
+                    <TableCell className="py-1.5">
+                      {row.installDate ? new Date(row.installDate).toLocaleDateString() : "—"}
+                    </TableCell>
+                    <TableCell className="py-1.5">{row.source}</TableCell>
+                    <TableCell className="py-1.5">{row.agency || "—"}</TableCell>
+                    <TableCell className="py-1.5">{row.subAccountName || "—"}</TableCell>
+                    <TableCell className="py-1.5">
+                      <code className="rounded bg-gray-100 px-1 text-[10px]">{row.locationId || "—"}</code>
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <code className="rounded bg-gray-100 px-1 text-[10px]">{row.companyId || "—"}</code>
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <span className={`${COMPACT_PILL} bg-amber-100 text-amber-800`} title="Needs linking">
+                        Unmatched
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-1.5 text-gray-600">
+                      {row.oauthRecoverable ? "Recoverable" : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -447,8 +534,17 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                 <TableHead>Plan</TableHead>
                 <TableHead>Billing</TableHead>
                 <TableHead>Trial</TableHead>
-                <TableHead className="min-w-[148px]">Channels</TableHead>
-                <TableHead>Conv</TableHead>
+                <TableHead
+                  className="min-w-[168px]"
+                  title="WA = WhatsApp · FB = Facebook Messenger · IG = Instagram · EM = Email / Gmail"
+                >
+                  Channels
+                </TableHead>
+                <TableHead
+                  title="Conversation threads on WhatsApp, Messenger, Instagram, Shopify, and CRM (not plan usage)"
+                >
+                  Conversations
+                </TableHead>
                 <TableHead>Sent</TableHead>
                 <TableHead>Recv</TableHead>
                 <TableHead>Msg src</TableHead>
@@ -480,7 +576,12 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
                 </TableRow>
               ) : (
                 accountRows.map((row) => (
-                  <TableRow key={row.id} className="whitespace-nowrap">
+                  <TableRow
+                    key={row.id}
+                    className="whitespace-nowrap cursor-pointer hover:bg-gray-50"
+                    onClick={() => setSelectedAccount(row)}
+                    data-testid={`activation-account-${row.id}`}
+                  >
                     <TableCell className="max-w-[180px] py-1.5">
                       <div className="truncate font-medium text-gray-900">{row.name}</div>
                       <div className="truncate text-[10px] text-gray-500">{row.email}</div>
@@ -526,6 +627,55 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
           </Table>
         </div>
       </div>
+
+      <Sheet open={!!selectedAccount} onOpenChange={(open) => { if (!open) setSelectedAccount(null); }}>
+        <SheetContent className="overflow-y-auto sm:max-w-md">
+          {selectedAccount ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedAccount.name}</SheetTitle>
+                <SheetDescription>{selectedAccount.email}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-4 text-sm">
+                <div className="rounded-lg border p-3 space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Account</div>
+                  <p>Source: {selectedAccount.source}</p>
+                  <p>Plan: {selectedAccount.plan}</p>
+                  <p>Billing: {selectedAccount.billingBadge}</p>
+                </div>
+                <div className="rounded-lg border p-3 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Channels</div>
+                  <ChannelBadges row={selectedAccount} />
+                </div>
+                {selectedAccount.ghlConnected && selectedAccount.ghlDetails ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-1">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-800">CRM linked</div>
+                    <p>Agency: {selectedAccount.ghlDetails.agency || "—"}</p>
+                    <p>Location / sub-account: {selectedAccount.ghlDetails.subAccountName || "—"}</p>
+                    <p>
+                      Location ID:{" "}
+                      <code className="rounded bg-white px-1 text-xs">{selectedAccount.ghlDetails.locationId || "—"}</code>
+                    </p>
+                    <p>
+                      Company ID:{" "}
+                      <code className="rounded bg-white px-1 text-xs">{selectedAccount.ghlDetails.companyId || "—"}</code>
+                    </p>
+                    <p>
+                      Install date:{" "}
+                      {selectedAccount.ghlDetails.installDate
+                        ? new Date(selectedAccount.ghlDetails.installDate).toLocaleDateString()
+                        : "—"}
+                    </p>
+                    <p>Status: {selectedAccount.ghlDetails.status}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">No usable GHL / CRM integration linked to this account.</p>
+                )}
+              </div>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

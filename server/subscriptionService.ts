@@ -352,18 +352,11 @@ class SubscriptionService {
       };
     }
 
-    const user = await storage.getUserForSession(userId);
-    if (!user) return { allowed: false, remaining: 0, limit: 0, used: 0, planName: "free" };
-    
-    await storage.updateUser(userId, { 
-      monthlyConversations: (user.monthlyConversations || 0) + 1,
-      lifetimeConversations: (user.lifetimeConversations || 0) + 1
-    });
     return { 
       allowed: true, 
-      remaining: limits.conversationsRemaining - 1,
+      remaining: limits.conversationsRemaining,
       limit: limits.conversationsLimit,
-      used: limits.conversationsUsed + 1,
+      used: limits.conversationsUsed,
       planName: limits.planName
     };
   }
@@ -695,13 +688,8 @@ class SubscriptionService {
   async incrementConversationUsage(userId: string): Promise<void> {
     // Apply period reset first so trial-only Free accounts cannot stay locked.
     await this.getUserLimits(userId);
-    const user = await storage.getUserForSession(userId);
-    if (!user) return;
-
-    await storage.updateUser(userId, {
-      monthlyConversations: (user.monthlyConversations || 0) + 1,
-      lifetimeConversations: (user.lifetimeConversations || 0) + 1
-    });
+    // Atomic increment — never read-modify-write (avoids lost updates and double-set races).
+    await storage.incrementMonthlyConversations(userId);
   }
 }
 

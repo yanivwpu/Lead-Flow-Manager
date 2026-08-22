@@ -21,6 +21,7 @@ export type ActivationChannelConnections = {
   instagramConnected: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
+  emailConnected: boolean;
   hasAnyActivationChannel: boolean;
 };
 
@@ -78,12 +79,14 @@ export function deriveActivationChannelConnections(input: {
   facebookConnected: boolean;
   instagramConnected: boolean;
   ghlUserIds: Set<string>;
+  emailConnected?: boolean;
 }): ActivationChannelConnections {
   const shopifyConnected = !!(
     input.user.shopifyShop &&
     (input.user.shopifyInstalledAt || input.user.shopifyAccessToken)
   );
   const ghlConnected = input.ghlUserIds.has(input.user.id);
+  const emailConnected = !!input.emailConnected;
 
   return {
     whatsappConnected: input.whatsappConnected,
@@ -91,12 +94,14 @@ export function deriveActivationChannelConnections(input: {
     instagramConnected: input.instagramConnected,
     shopifyConnected,
     ghlConnected,
+    emailConnected,
     hasAnyActivationChannel:
       input.whatsappConnected ||
       input.facebookConnected ||
       input.instagramConnected ||
       shopifyConnected ||
-      ghlConnected,
+      ghlConnected ||
+      emailConnected,
   };
 }
 
@@ -115,6 +120,8 @@ export function isActivationChannelConnected(
       return connections.shopifyConnected;
     case "gohighlevel":
       return connections.ghlConnected;
+    case "email":
+      return connections.emailConnected;
     default:
       return false;
   }

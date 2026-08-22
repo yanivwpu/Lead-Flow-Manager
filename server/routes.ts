@@ -8,6 +8,7 @@ import {
   users,
   channelSettings,
   conversations,
+  emailMailboxes,
 } from "@shared/schema";
 import { eq, and, or, isNotNull, ilike, desc, sql } from "drizzle-orm";
 import { registerContactRoutes } from "./routes/contacts";
@@ -64,7 +65,7 @@ import {
   limitsAllowIntegrations,
   shouldRecordInboxAiReplyGeneration,
 } from "@shared/pricingEntitlements";
-import { deriveAdminUserChannelConnections } from "@shared/adminChannelConnectionStatus";
+import { deriveAdminUserChannelConnections, pickAdminEmailMailbox } from "@shared/adminChannelConnectionStatus";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
 import {
   parseConversationReEngagement,
@@ -785,21 +786,23 @@ export async function registerRoutes(
       });
 
       // Enforce monthly conversation limit before creating
-      const limitCheck = await subscriptionService.checkAndDecrementConversation(req.user.id);
+      const limitCheck = await subscriptionService.checkConversationLimit(req.user.id);
       if (!limitCheck.allowed) {
+        const limits = await subscriptionService.getUserLimits(req.user.id);
         return res.status(429).json({ 
           code: "CONVERSATION_LIMIT",
           error: "You've reached your monthly conversation limit",
-          message: `Your ${limitCheck.planName} plan includes ${limitCheck.limit} conversations per month. Upgrade your plan or wait until your next billing cycle.`,
-          limit: limitCheck.limit,
-          used: limitCheck.used,
-          planName: limitCheck.planName,
+          message: `Your ${limits?.planName || "current"} plan includes ${limits?.conversationsLimit ?? 0} conversations per month. Upgrade your plan or wait until your next billing cycle.`,
+          limit: limits?.conversationsLimit ?? 0,
+          used: limits?.conversationsUsed ?? 0,
+          planName: limits?.planName || "current",
           remaining: 0,
           upgradeRequired: true 
         });
       }
 
       const chat = await storage.createChat(validated);
+      await subscriptionService.incrementConversationUsage(req.user.id);
       res.status(201).json(chat);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -9124,6 +9127,22 @@ export async function registerRoutes(
       }
       console.log('[Admin Users] Channel settings rows:', allChannelSettingsRows.length);
 
+      const mailboxRows = await db
+        .select({
+          workspaceUserId: emailMailboxes.workspaceUserId,
+          syncStatus: emailMailboxes.syncStatus,
+          provider: emailMailboxes.provider,
+          isPrimary: emailMailboxes.isPrimary,
+          createdAt: emailMailboxes.createdAt,
+        })
+        .from(emailMailboxes);
+      const mailboxesByUserId = new Map<string, typeof mailboxRows>();
+      for (const row of mailboxRows) {
+        const list = mailboxesByUserId.get(row.workspaceUserId) ?? [];
+        list.push(row);
+        mailboxesByUserId.set(row.workspaceUserId, list);
+      }
+
       const geTasks = await storage.listGrowthEngineSetupTasksForTemplate(RGE_TEMPLATE_ID);
       const geByUserId = new Map(geTasks.map((t) => [t.userId, t]));
       const salespersonCalendarById = new Map(allSalespeople.map((s) => [s.id, s.calendarLink]));
@@ -9235,6 +9254,7 @@ export async function registerRoutes(
             isEnabled: row.isEnabled,
             config: row.config,
           })),
+          emailMailbox: pickAdminEmailMailbox(mailboxesByUserId.get(user.id) ?? []),
         });
 
         return {

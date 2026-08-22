@@ -425,6 +425,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         note: "Marketplace install recorded only — integrations row NOT created without WhachatCRM login session. Use /api/ext/oauth-authorize while logged in.",
       });
       console.error('[LeadConnector OAuth] No authenticated user — recording marketplace install without integration link');
+      // Do NOT auto-create a WhachatCRM user. Unmatched installs stay on Activation until a real owner OAuths.
       await upsertGhlMarketplaceInstall({
         companyId: tokenData.companyId || "unknown",
         locationId: tokenData.locationId || null,
