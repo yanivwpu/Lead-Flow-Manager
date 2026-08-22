@@ -1,13 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   CRM_CHANNEL_LABEL,
   CRM_SOURCE_LABEL,
 } from "@shared/leadConnectorWhiteLabel";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  ACTIVATION_SECTION_DEFAULT_OPEN,
+  formatActivationSectionCount,
+} from "./adminActivationSectionState";
 
 type ActivationSummary = {
   topMetrics: {
@@ -128,6 +133,46 @@ function SubMetric({ label, value }: { label: string; value: number }) {
       <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-lg font-semibold text-gray-900">{value.toLocaleString()}</p>
     </div>
+  );
+}
+
+function ActivationSection({
+  title,
+  countLabel,
+  open,
+  onOpenChange,
+  testId,
+  className = "rounded-xl border border-gray-200 bg-white",
+  children,
+}: {
+  title: string;
+  countLabel?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  testId: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className={className}>
+      <CollapsibleTrigger
+        type="button"
+        data-testid={testId}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-black/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-green/40"
+      >
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ${open ? "rotate-0" : "-rotate-90"}`}
+          aria-hidden
+        />
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
+          {title}
+          {countLabel ? <span className="font-medium text-gray-500"> {countLabel}</span> : null}
+        </h3>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-4 pb-4">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 function MetricCard({ label, value }: { label: string; value: number }) {
@@ -264,6 +309,11 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
   const [paying, setPaying] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<ActivationAccount | null>(null);
+  const [channelsOpen, setChannelsOpen] = useState(ACTIVATION_SECTION_DEFAULT_OPEN.channels);
+  const [usageOpen, setUsageOpen] = useState(ACTIVATION_SECTION_DEFAULT_OPEN.usage);
+  const [funnelOpen, setFunnelOpen] = useState(ACTIVATION_SECTION_DEFAULT_OPEN.funnel);
+  const [unmatchedOpen, setUnmatchedOpen] = useState(ACTIVATION_SECTION_DEFAULT_OPEN.unmatchedGhl);
+  const [accountsOpen, setAccountsOpen] = useState(ACTIVATION_SECTION_DEFAULT_OPEN.accounts);
 
   const { data: summary, isLoading: summaryLoading } = useQuery<ActivationSummary>({
     queryKey: ["/api/admin/activation/summary"],
@@ -355,8 +405,12 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Channel connections</h3>
+        <ActivationSection
+          title="Channel connections"
+          open={channelsOpen}
+          onOpenChange={setChannelsOpen}
+          testId="activation-section-channels"
+        >
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(channelMetrics).map(([key, value]) => (
               <SubMetric
@@ -366,9 +420,13 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
               />
             ))}
           </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Usage</h3>
+        </ActivationSection>
+        <ActivationSection
+          title="Usage"
+          open={usageOpen}
+          onOpenChange={setUsageOpen}
+          testId="activation-section-usage"
+        >
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(usageMetrics).map(([key, value]) => (
               <SubMetric
@@ -378,11 +436,15 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
               />
             ))}
           </div>
-        </div>
+        </ActivationSection>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h3 className="mb-4 text-sm font-semibold text-gray-900">Activation funnel</h3>
+      <ActivationSection
+        title="Activation funnel"
+        open={funnelOpen}
+        onOpenChange={setFunnelOpen}
+        testId="activation-section-funnel"
+      >
         <div className="space-y-3">
           {funnel.map((step, idx) => (
             <div key={step.key} className="flex items-center gap-3">
@@ -406,16 +468,20 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
             </div>
           ))}
         </div>
-      </div>
+      </ActivationSection>
 
       {(summary.unmatchedGhlInstalls?.length ?? 0) > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
-          <div className="mb-3">
-            <h3 className="text-sm font-semibold text-gray-900">Unmatched GHL installs</h3>
-            <p className="text-xs text-gray-600">
-              Marketplace installations not linked to a usable WhachatCRM account. Not counted as GHL Connected.
-            </p>
-          </div>
+        <ActivationSection
+          title="Unmatched GHL installs"
+          countLabel={formatActivationSectionCount(summary.unmatchedGhlInstalls!.length)}
+          open={unmatchedOpen}
+          onOpenChange={setUnmatchedOpen}
+          testId="activation-section-unmatched-ghl"
+          className="rounded-xl border border-amber-200 bg-amber-50/40"
+        >
+          <p className="mb-3 text-xs text-gray-600">
+            Marketplace installations not linked to a usable WhachatCRM account. Not counted as GHL Connected.
+          </p>
           <div className="-mx-1 overflow-x-auto">
             <Table className="min-w-[920px] text-xs">
               <TableHeader>
@@ -458,21 +524,27 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
               </TableBody>
             </Table>
           </div>
-        </div>
+        </ActivationSection>
       ) : null}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">Account activation</h3>
-            <p className="text-sm text-gray-500">
-              {accountsLoading || accountsFetching
-                ? "Loading accounts..."
-                : accountsError
-                  ? "Could not load accounts"
-                  : `${accountsData?.total ?? accountRows.length} account(s)`}
-            </p>
-          </div>
+      <ActivationSection
+        title="Account activation"
+        countLabel={formatActivationSectionCount(
+          accountsData?.total ?? accountRows.length,
+          (accountsData?.total ?? accountRows.length) === 1 ? "account" : "accounts",
+        )}
+        open={accountsOpen}
+        onOpenChange={setAccountsOpen}
+        testId="activation-section-accounts"
+      >
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <p className="text-sm text-gray-500">
+            {accountsLoading || accountsFetching
+              ? "Loading accounts..."
+              : accountsError
+                ? "Could not load accounts"
+                : `${accountsData?.total ?? accountRows.length} account(s)`}
+          </p>
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -626,7 +698,7 @@ export function AdminActivationTab({ enabled }: { enabled: boolean }) {
             </TableBody>
           </Table>
         </div>
-      </div>
+      </ActivationSection>
 
       <Sheet open={!!selectedAccount} onOpenChange={(open) => { if (!open) setSelectedAccount(null); }}>
         <SheetContent className="overflow-y-auto sm:max-w-md">
