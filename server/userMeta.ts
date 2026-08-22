@@ -904,6 +904,7 @@ export interface MetaWebhookEntry {
         interactive?: { type: string; button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string; description?: string } };
         button?: { text: string; payload: string };
       }>;
+      message_echoes?: Array<Record<string, unknown>>;
       statuses?: Array<{
         id: string;
         status: "sent" | "delivered" | "read" | "failed";
@@ -932,7 +933,10 @@ export function parseMetaIncomingWebhook(body: any): {
     const entry = body.entry?.[0] as MetaWebhookEntry;
     const change = entry?.changes?.[0];
     const value = change?.value;
-    
+    if (String(change?.field || "") === "smb_message_echoes") {
+      return null;
+    }
+
     if (!value?.messages?.[0]) {
       return null;
     }

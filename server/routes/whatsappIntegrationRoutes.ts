@@ -62,6 +62,7 @@ import {
   COEXISTENCE_COMING_SOON_MESSAGE,
   buildSanitizedCoexistenceGateSummary,
 } from "@shared/whatsappCoexistenceGate";
+import { COEXISTENCE_WHATSAPP_WEBHOOK_FIELDS } from "@shared/whatsappSmbMessageEchoes";
 
 export function registerWhatsappIntegrationRoutes(app: Express): void {
   logWhatsappEmbeddedSignupStartupWarnings();
@@ -274,6 +275,11 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
                   ? "meta_access_token_plaintext_or_unknown"
                   : "meta_access_token_missing",
           ],
+          whatsappWebhookFields: {
+            configuredIn: "Meta App Dashboard → WhatsApp → Configuration",
+            wabaSubscribedAppsSetsFields: false,
+            requiredForCoexistence: [...COEXISTENCE_WHATSAPP_WEBHOOK_FIELDS],
+          },
         });
         logCoexistenceDiagnostics({
           userId: req.user.id,
@@ -429,7 +435,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         blockerReason = "D) Connection not saved as coexistence — provisioning route may differ.";
       } else if (!reasons.length && webhookProbe.webhookEndpointHealthy && subscribedApps.hasConfiguredAppId) {
         blockerReason =
-          "No definitive Graph blocker. If Railway still sees zero POST /api/webhook/meta for WhatsApp, check Meta App Dashboard WhatsApp product webhook fields (messages), phone registration, or coexistence onboarding delay.";
+          "No definitive Graph blocker. If Railway still sees zero POST /api/webhook/meta for WhatsApp, check Meta App Dashboard WhatsApp product webhook fields (messages, and smb_message_echoes for Coexistence), phone registration, or coexistence onboarding delay.";
       } else {
         blockerReason = reasons[0] || "Review reasons[] and Meta Business Manager.";
       }
@@ -505,6 +511,13 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           error: wabaPhones.httpOk ? null : (wabaPhones.body?.error ?? null),
         },
         inboundWebhookExpectedByGraph,
+        whatsappWebhookFields: {
+          configuredIn: "Meta App Dashboard → WhatsApp → Configuration",
+          wabaSubscribedAppsSetsFields: false,
+          requiredForCoexistence: [...COEXISTENCE_WHATSAPP_WEBHOOK_FIELDS],
+          note:
+            "Business App outbound messages are delivered as smb_message_echoes. WABA subscribed_apps does not subscribe that field.",
+        },
         reasons,
       };
 

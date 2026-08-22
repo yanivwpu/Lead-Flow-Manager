@@ -36,6 +36,11 @@ import {
   webchatErrorCodeForMessage,
 } from "@shared/webchatSendErrors";
 import {
+  smbEchoTimestampToDate,
+  type ParsedSmbMessageEcho,
+  type WhatsAppSmbEchoPersistOutcome,
+} from "@shared/whatsappSmbMessageEchoes";
+import {
   inboundProcessingLog,
   type InboundProcessingResult,
   type InboundProcessingSubState,
@@ -1797,6 +1802,220 @@ class ChannelService {
       case 'email': return 'email';
       default: return 'phone';
     }
+  }
+
+  /**
+   * Persist a Coexistence WhatsApp Business App outbound echo as an Inbox outbound message.
+   * Dedupes on (userId, externalMessageId). Does not treat the customer `to` as inbound.
+   */
+  async persistWhatsAppBusinessAppOutboundEcho(params: {
+    userId: string;
+    phoneNumberId: string;
+    echo: ParsedSmbMessageEcho;
+  }): Promise<{
+    outcome: WhatsAppSmbEchoPersistOutcome;
+    reason?: string;
+    messageId?: string;
+    conversationId?: string;
+    contactId?: string;
+  }> {
+    const { userId, phoneNumberId, echo } = params;
+
+    if (echo.action === "skip") {
+      return { outcome: "skipped", reason: echo.skipReason || "unsupported_echo_type" };
+    }
+
+    const customerPhone = String(echo.to || "").replace(/\D/g, "");
+    if (!customerPhone) {
+      return { outcome: "skipped", reason: "missing_customer_phone" };
+    }
+
+    const occurredAt = smbEchoTimestampToDate(echo.timestamp);
+
+    if (echo.action === "edit" || echo.action === "revoke") {
+      const originalId = echo.originalMessageId || echo.id;
+      const existing = originalId
+        ? await storage.getMessageByUserExternalId(userId, originalId)
+        : undefined;
+      if (!existing) {
+        return { outcome: "skipped", reason: `${echo.action}_original_not_found` };
+      }
+      if (existing.userId !== userId) {
+        return { outcome: "skipped", reason: "tenant_mismatch" };
+      }
+      const updates =
+        echo.action === "revoke"
+          ? {
+              content: "[Message deleted]",
+              errorCode: "revoked",
+            }
+          : {
+              content: echo.content,
+              contentType: echo.contentType,
+              ...(echo.mediaId ? { platformMediaId: echo.mediaId } : {}),
+              ...(echo.mediaFilename ? { mediaFilename: echo.mediaFilename } : {}),
+            };
+      await storage.updateMessage(existing.id, updates);
+      await storage.updateConversation(existing.conversationId, {
+        lastMessageAt: occurredAt,
+        lastMessagePreview: (echo.content || mediaPreviewLabel(echo.contentType)).substring(0, 100),
+        lastMessageDirection: "outbound",
+      });
+      return {
+        outcome: echo.action === "revoke" ? "revoked" : "edited",
+        messageId: existing.id,
+        conversationId: existing.conversationId,
+        contactId: existing.contactId,
+      };
+    }
+
+    if (echo.id) {
+      const existing = await storage.getMessageByUserExternalId(userId, echo.id);
+      if (existing) {
+        return {
+          outcome: "deduped",
+          reason: "external_message_id",
+          messageId: existing.id,
+          conversationId: existing.conversationId,
+          contactId: existing.contactId,
+        };
+      }
+    }
+
+    let contact = await storage.getContactByChannelId(userId, "whatsapp", customerPhone);
+    if (!contact) {
+      contact = await storage.createContact({
+        userId,
+        name: customerPhone,
+        phone: customerPhone,
+        whatsappId: customerPhone,
+        primaryChannel: "whatsapp",
+        source: "whatsapp",
+      });
+    } else if (!contact.whatsappId) {
+      await storage.updateContact(contact.id, { whatsappId: customerPhone });
+      contact = (await storage.getContact(contact.id)) || contact;
+    }
+
+    let conversation = await storage.getConversationByContactAndChannel(
+      contact.id,
+      "whatsapp",
+      phoneNumberId,
+    );
+    if (!conversation) {
+      conversation = await storage.createConversation({
+        userId,
+        contactId: contact.id,
+        channel: "whatsapp",
+        channelAccountId: phoneNumberId,
+        status: "open",
+      });
+      await subscriptionService.incrementConversationUsage(userId);
+    }
+
+    let persistedMedia: {
+      mediaUrl?: string;
+      mediaFilename?: string;
+      providerMediaId?: string | null;
+      mediaMimeType?: string | null;
+      mediaSize?: number | null;
+      mediaStorageKey?: string | null;
+      mediaStoredAt?: Date | null;
+      mediaType?: string | null;
+    } = {};
+    if (echo.mediaId) {
+      try {
+        persistedMedia = await this.persistInboundMediaIfNeeded({
+          userId,
+          channel: "whatsapp",
+          contentType: echo.contentType,
+          platformMediaId: echo.mediaId,
+          mediaFilename: echo.mediaFilename,
+        });
+      } catch (err: unknown) {
+        console.warn(
+          "[SmbMessageEcho] media persist failed",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    const preview = (echo.content || mediaPreviewLabel(echo.contentType)).substring(0, 100);
+    let message;
+    try {
+      message = await storage.createMessage({
+        conversationId: conversation.id,
+        contactId: contact.id,
+        userId,
+        direction: "outbound",
+        content: echo.content,
+        contentType: echo.contentType,
+        mediaUrl: persistedMedia.mediaUrl,
+        mediaFilename: persistedMedia.mediaFilename ?? echo.mediaFilename,
+        platformMediaId: echo.mediaId,
+        mediaType: persistedMedia.mediaType ?? (echo.mediaId ? echo.contentType : undefined),
+        providerMediaId: persistedMedia.providerMediaId ?? echo.mediaId,
+        mediaMimeType: persistedMedia.mediaMimeType ?? undefined,
+        mediaSize: persistedMedia.mediaSize ?? undefined,
+        mediaStorageKey: persistedMedia.mediaStorageKey ?? undefined,
+        mediaStoredAt: persistedMedia.mediaStoredAt ?? undefined,
+        status: "sent",
+        externalMessageId: echo.id || undefined,
+        sentAt: occurredAt,
+        createdAt: occurredAt,
+      });
+    } catch (err: unknown) {
+      if (echo.id && isUniqueExternalMessageViolation(err)) {
+        const raced = await storage.getMessageByUserExternalId(userId, echo.id);
+        if (raced) {
+          return {
+            outcome: "deduped",
+            reason: "external_message_id_unique_race",
+            messageId: raced.id,
+            conversationId: raced.conversationId,
+            contactId: raced.contactId,
+          };
+        }
+      }
+      throw err;
+    }
+
+    await storage.updateConversation(conversation.id, {
+      lastMessageAt: occurredAt,
+      lastMessagePreview: preview,
+      lastMessageDirection: "outbound",
+    });
+
+    await this.logActivity(userId, contact.id, conversation.id, "message", {
+      direction: "outbound",
+      channel: "whatsapp",
+      source: "smb_message_echoes",
+      preview: preview.substring(0, 100),
+    });
+
+    await this.resolveHandoffIfActive(userId, contact.id, conversation.id, "business_app_outbound_echo");
+
+    notifyUser(userId, {
+      type: "new_message",
+      conversationId: conversation.id,
+      contactId: contact.id,
+    });
+
+    void import("./automationNoReply").then(({ scheduleNoReplyJobsAfterTeamOutbound }) =>
+      scheduleNoReplyJobsAfterTeamOutbound({
+        userId,
+        contactId: contact.id,
+        conversationId: conversation.id,
+        channel: "whatsapp",
+      }).catch(() => {}),
+    );
+
+    return {
+      outcome: "persisted",
+      messageId: message.id,
+      conversationId: conversation.id,
+      contactId: contact.id,
+    };
   }
 
   async logActivity(

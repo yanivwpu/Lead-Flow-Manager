@@ -89,6 +89,8 @@ describe("coexistence-diagnostics route safety", () => {
     assert.match(block, /oauthDiagnostics/);
     assert.match(block, /error:\s*["']Diagnostics failed["']/);
     assert.match(block, /\[CoexistenceDiagnostics\] error:/);
+    assert.match(block, /requiredForCoexistence/);
+    assert.match(block, /smb_message_echoes/);
     assert.doesNotMatch(block, /json\(\{\s*error:\s*e\?\.message/);
   });
 

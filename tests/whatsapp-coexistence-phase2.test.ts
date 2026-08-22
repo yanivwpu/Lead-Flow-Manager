@@ -638,10 +638,11 @@ describe("Readiness + account_update recovery", () => {
     );
   });
 
-  it("webhook wires account_update handler", () => {
+  it("webhook wires account_update and smb_message_echoes handlers", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "server/routes.ts"), "utf8");
     assert.match(src, /parseMetaWhatsappAccountUpdate/);
     assert.match(src, /applyCoexistenceAccountUpdateAttention/);
+    assert.match(src, /handleSmbMessageEchoesWebhook/);
   });
 
   it("disconnect clears CRM only (no Meta deregister call)", () => {

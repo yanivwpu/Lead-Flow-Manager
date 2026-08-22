@@ -11,9 +11,12 @@
  * (new Login for Business configuration) with purposely empty extras per Meta Versions docs.
  * Redirect OAuth remains a v2-safe fallback (same token exchange).
  *
- * Webhook **fields** (messages, message statuses, etc.) are subscribed at the WhatsApp Business Account
- * via `POST /{waba-id}/subscribed_apps`; ensure your Meta App Dashboard WhatsApp product webhooks
- * include message + status fields (and `account_update` if your integration relies on it).
+ * Webhook **fields** (messages, statuses, Coexistence `smb_message_echoes`, etc.) are
+ * configured in Meta App Dashboard → WhatsApp → Configuration. WABA
+ * `POST /{waba-id}/subscribed_apps` only attaches this app to the WABA — it does not
+ * subscribe individual WhatsApp fields. Coexistence numbers also need
+ * `smb_message_echoes` (Business App outbound mirrors), plus `smb_app_state_sync` and
+ * `history` when using those products.
  */
 import crypto from "crypto";
 import { eq, lt, sql } from "drizzle-orm";
@@ -1480,8 +1483,9 @@ export function sanitizeEmbeddedSignupClientError(
 
 /**
  * Confirm our app id appears on `GET /{waba-id}/subscribed_apps` after POST.
- * Note: WhatsApp **message** and **status** delivery still requires webhook fields
- * configured on the app (WhatsApp product → Configuration).
+ * Note: WhatsApp **message**, **status**, and Coexistence **smb_message_echoes** delivery
+ * still requires webhook fields configured on the app (WhatsApp product → Configuration).
+ * `POST /{waba-id}/subscribed_apps` does not set those field checkboxes.
  */
 type MetaGraphErrorShape = { code?: number; message?: string; type?: string };
 

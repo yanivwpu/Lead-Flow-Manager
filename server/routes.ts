@@ -292,6 +292,7 @@ function summarizeMetaWebhookInbound(body: unknown): {
   phoneNumberIdFromPayload: string | null;
   messagingEventKinds: string[];
   messagingRecipientIds: string[];
+  smbMessageEchoCount: number;
 } {
   const b = body as Record<string, unknown> | null | undefined;
   const object =
@@ -311,6 +312,7 @@ function summarizeMetaWebhookInbound(body: unknown): {
   let phoneNumberIdFromPayload: string | null = null;
   const messagingEventKinds: string[] = [];
   const messagingRecipientIds: string[] = [];
+  let smbMessageEchoCount = 0;
   for (const e of entries) {
     const ent = e as Record<string, unknown>;
     const changes = Array.isArray(ent?.changes) ? (ent.changes as unknown[]) : [];
@@ -318,6 +320,9 @@ function summarizeMetaWebhookInbound(body: unknown): {
       const c = ch as Record<string, unknown>;
       if (c?.field) changesFields.push(String(c.field));
       const value = c?.value as Record<string, unknown> | undefined;
+      if (Array.isArray(value?.message_echoes)) {
+        smbMessageEchoCount += (value!.message_echoes as unknown[]).length;
+      }
       const meta = value?.metadata as Record<string, unknown> | undefined;
       const fromMeta = meta?.phone_number_id;
       const fromMsgs =
@@ -357,6 +362,7 @@ function summarizeMetaWebhookInbound(body: unknown): {
     phoneNumberIdFromPayload,
     messagingEventKinds: [...new Set(messagingEventKinds)],
     messagingRecipientIds: [...new Set(messagingRecipientIds)],
+    smbMessageEchoCount,
   };
 }
 
@@ -2750,6 +2756,7 @@ export async function registerRoutes(
           phoneNumberIdFromPayload: inboundPreview.phoneNumberIdFromPayload,
           messagingEventKinds: inboundPreview.messagingEventKinds,
           messagingRecipientIds: inboundPreview.messagingRecipientIds,
+          smbMessageEchoCount: inboundPreview.smbMessageEchoCount,
           resolvedUserId,
           resolvedChannel:
             inboundPreview.object === "instagram"
@@ -3024,6 +3031,7 @@ export async function registerRoutes(
 
       const incomingMessage = parseMetaIncomingWebhook(req.body);
       const statusUpdate = parseMetaStatusWebhook(req.body);
+      let smbEchoHandled = false;
 
       try {
         const { parseMetaWhatsappAccountUpdate } = await import(
@@ -3043,14 +3051,25 @@ export async function registerRoutes(
         );
       }
 
+      try {
+        const { handleSmbMessageEchoesWebhook } = await import("./whatsappSmbMessageEchoHandler");
+        const echoResult = await handleSmbMessageEchoesWebhook(req.body);
+        smbEchoHandled = echoResult.handled;
+      } catch (echoErr) {
+        console.warn(
+          "[Meta Webhook] smb_message_echoes handling failed (non-fatal)",
+          echoErr instanceof Error ? echoErr.message : echoErr,
+        );
+      }
+
       // [Stage 2] Classify the payload by object type so downstream sections are easy to trace
       const webhookEntry0 = req.body.entry?.[0];
       const webhookHasMessaging = !!(webhookEntry0?.messaging?.length);
-      devLog(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"}`);
+      devLog(`[Meta Webhook] [Stage 2] Object type: "${webhookObjectType}" | has messaging array: ${webhookHasMessaging} | WhatsApp parse: ${incomingMessage ? "YES" : "no"} | status-update parse: ${statusUpdate ? "YES" : "no"} | smb_echoes: ${smbEchoHandled ? "YES" : "no"}`);
 
       if (incomingMessage) {
         devLog(`[Meta Webhook] [Stage 2a] WhatsApp inbound — from: ${incomingMessage.from}, type: ${incomingMessage.type}, messageId: ${incomingMessage.messageId}, phoneNumberId: ${incomingMessage.phoneNumberId}, profileName: "${incomingMessage.profileName}"`);
-      } else if (!statusUpdate && !webhookHasMessaging) {
+      } else if (!statusUpdate && !webhookHasMessaging && !smbEchoHandled) {
         devLog("[Meta Webhook] Payload is neither a message nor a status update — likely a notification event, ignoring");
       } else if (!incomingMessage && webhookHasMessaging) {
         devLog(`[Meta Webhook] [Stage 2b] Non-WhatsApp messaging payload detected — routing to ${webhookObjectType === 'instagram' ? 'Instagram' : webhookObjectType === 'page' ? 'Facebook' : webhookObjectType ?? 'unknown'} handler`);
