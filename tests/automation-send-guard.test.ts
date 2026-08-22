@@ -42,6 +42,10 @@ function run() {
     automationSendGuardBlockUserMessage("do_not_contact").includes("do-not-contact"),
     "dnc user message"
   );
+  assert(
+    automationSendGuardBlockUserMessage("automations_paused").toLowerCase().includes("paused"),
+    "pause user message"
+  );
 
   console.log("automation-send-guard.test.ts: all passed");
 }

@@ -17,6 +17,7 @@ import { storage } from "../storage";
 import { channelService } from "../channelService";
 import { scheduleHubSpotAutoSync, contactPatchAffectsHubSpot } from "../hubspotAutoSync";
 import { withAutomationSendGuard, type AutomationSendGuardSource } from "../automationSendGuard";
+import { buildContactAutomationPausePatch } from "@shared/contactAutomationsPause";
 import {
   MIN_HOT_TAG_SCORE,
   shouldApplySystemScoreTag,
@@ -494,6 +495,14 @@ export function registerContactRoutes(app: Express): void {
       }
       // Coerce date strings → Date objects for timestamp columns
       const body = { ...req.body };
+      delete body.automationsPausedAt;
+      delete body.automationsPausedByUserId;
+      if (Object.prototype.hasOwnProperty.call(req.body, "automationsPaused")) {
+        Object.assign(
+          body,
+          buildContactAutomationPausePatch(req.body.automationsPaused === true, req.user.id),
+        );
+      }
       if (body.followUpDate !== undefined) {
         body.followUpDate = body.followUpDate ? new Date(body.followUpDate) : null;
       }
@@ -524,6 +533,28 @@ export function registerContactRoutes(app: Express): void {
       }
 
       const updated = await storage.updateContact(req.params.id, body);
+
+      if (
+        updated &&
+        Object.prototype.hasOwnProperty.call(req.body, "automationsPaused") &&
+        Boolean(contact.automationsPaused) !== Boolean(updated.automationsPaused)
+      ) {
+        try {
+          const { syncCampaignEnrollmentsForContactAutomationPause } = await import(
+            "../campaignExecution"
+          );
+          await syncCampaignEnrollmentsForContactAutomationPause({
+            userId: req.user.id,
+            contactId: contact.id,
+            paused: updated.automationsPaused === true,
+          });
+        } catch (e) {
+          console.warn(
+            "[contacts.patch] campaign pause sync failed:",
+            (e as Error)?.message || e,
+          );
+        }
+      }
 
       // Phase 1 + Phase 5: Diff-checked outbound sync to GHL.
       // Phase 3: pipelineStage changes also sync to GHL opportunity.

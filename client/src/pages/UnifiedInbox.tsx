@@ -76,6 +76,8 @@ import {
   Edit,
   X,
   Zap,
+  PauseCircle,
+  PlayCircle,
   PanelRight,
   LayoutTemplate,
   ImageOff,
@@ -232,6 +234,10 @@ interface Contact {
   createdAt: string;
   /** CRM / RGE persisted score (0–100); Copilot uses as primary when present. */
   leadScore?: number | null;
+  /** Durable Pause Automations (not Copilot snooze / composer Manual). */
+  automationsPaused?: boolean;
+  automationsPausedAt?: string | null;
+  automationsPausedByUserId?: string | null;
   whatsappId?: string;
   instagramId?: string;
   facebookId?: string;
@@ -3589,6 +3595,15 @@ export function UnifiedInbox() {
                       No conversation
                     </span>
                   )}
+                  {contact.automationsPaused ? (
+                    <span
+                      className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                      data-testid="chip-automation-paused"
+                      title="Workflows, timers, campaigns, and AI auto will not send until you Resume Automations"
+                    >
+                      Automation Paused
+                    </span>
+                  ) : null}
                 </div>
                 {isEmailChannel && (primaryConversation?.subject || emailSubject) ? (
                   <p className="text-xs text-gray-600 truncate" data-testid="inbox-email-subject">
@@ -3704,6 +3719,17 @@ export function UnifiedInbox() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">
                       <Edit className="w-4 h-4 mr-2" /> Edit Contact
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => updateContact({ automationsPaused: !contact.automationsPaused })}
+                      data-testid="menu-toggle-automations-pause"
+                    >
+                      {contact.automationsPaused ? (
+                        <PlayCircle className="w-4 h-4 mr-2" />
+                      ) : (
+                        <PauseCircle className="w-4 h-4 mr-2" />
+                      )}
+                      {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">
                       <History className="w-4 h-4 mr-2" /> Activity Timeline

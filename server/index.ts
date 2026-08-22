@@ -450,6 +450,16 @@ app.use((req, res, next) => {
   
   await registerRoutes(httpServer, app);
 
+  // Railway does not auto-apply migrations/*.sql. Additive IF NOT EXISTS patches must
+  // land before workers or HTTP traffic SELECT contacts columns from shared/schema.
+  const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
+  const schemaPatches = await applyStartupSchemaPatches();
+  if (!schemaPatches.contactsAutomationsPausedPatchOk) {
+    throw new Error(
+      "[StartupSchema] FATAL: contacts automations_paused columns are not ready (patch 0083)",
+    );
+  }
+
   // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
   // Production always starts them. Local Inbox debugging skips unless opted in —
   // REDIS_URL= does not gate these workers.

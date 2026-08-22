@@ -87,7 +87,10 @@ export async function scheduleW2FollowUpTimers(params: {
   }
 }
 
-async function sendW2Outbound(payload: W2QualPayload | W2RoutePayload, dedupKind: string): Promise<void> {
+async function sendW2Outbound(
+  payload: W2QualPayload | W2RoutePayload,
+  dedupKind: string,
+): Promise<{ sent: boolean; skipReason?: string }> {
   const dedupKey = `${dedupKind}:${payload.userId}:${payload.contactId}:${payload.text.slice(0, 120)}`;
   const res = await withAutomationSendGuard({
     userId: payload.userId,
@@ -106,7 +109,9 @@ async function sendW2Outbound(payload: W2QualPayload | W2RoutePayload, dedupKind
   });
   if (!res.ok) {
     console.log(JSON.stringify({ tag: "[W2Timer]", skipped: true, dedupKey, reason: res.reason }));
+    return { sent: false, skipReason: res.reason };
   }
+  return { sent: true };
 }
 
 export async function processAutomationTimerJob(job: AutomationTimerJob): Promise<void> {
@@ -137,12 +142,20 @@ export async function processAutomationTimerJob(job: AutomationTimerJob): Promis
   }
 
   if (job.kind === "w2_qualification") {
-    await sendW2Outbound(job.payload as W2QualPayload, "w2_qual");
+    const send = await sendW2Outbound(job.payload as W2QualPayload, "w2_qual");
+    if (!send.sent) {
+      await storage.markAutomationTimerJobSkipped(job.id, send.skipReason || "automation_send_guard");
+      return;
+    }
     await storage.markAutomationTimerJobCompleted(job.id);
     return;
   }
   if (job.kind === "w2_routing") {
-    await sendW2Outbound(job.payload as W2RoutePayload, "w2_route");
+    const send = await sendW2Outbound(job.payload as W2RoutePayload, "w2_route");
+    if (!send.sent) {
+      await storage.markAutomationTimerJobSkipped(job.id, send.skipReason || "automation_send_guard");
+      return;
+    }
     await storage.markAutomationTimerJobCompleted(job.id);
     return;
   }

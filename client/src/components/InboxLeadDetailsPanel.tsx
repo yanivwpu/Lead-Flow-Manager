@@ -157,6 +157,10 @@ interface Contact {
   assignedTo?: string | null;
   /** CRM cumulative / RGE score (0–100); when set, Copilot aligns primary score to this value. */
   leadScore?: number | null;
+  /** Durable Pause Automations — not Copilot snooze or composer Manual. */
+  automationsPaused?: boolean;
+  automationsPausedAt?: string | null;
+  automationsPausedByUserId?: string | null;
   source?: string;
   createdAt: string;
   customFields?: Record<string, unknown>;
@@ -3149,6 +3153,36 @@ export function InboxLeadDetailsPanel({
               </div>
             </div>
           )}
+
+          {/* ── AUTOMATION (durable contact pause — not Copilot snooze / Manual) ─ */}
+          <div data-testid="section-contact-automation-pause">
+            <RowLabel>Automation</RowLabel>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span
+                className={cn(
+                  "text-[11px] font-medium",
+                  contact.automationsPaused ? "text-amber-800" : "text-emerald-700",
+                )}
+                data-testid="text-automation-pause-state"
+              >
+                {contact.automationsPaused ? "Automation Paused" : "Automation Active"}
+              </span>
+              <button
+                type="button"
+                onClick={() => onUpdateContact({ automationsPaused: !contact.automationsPaused })}
+                className={cn(
+                  "shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
+                  contact.automationsPaused
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                )}
+                data-testid="button-toggle-automations-pause"
+                title="Stops workflows, timers, campaigns, chatbot, and AI auto. Manual Inbox sends still work. Not Do Not Contact."
+              >
+                {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
+              </button>
+            </div>
+          </div>
 
           {showMarkWon ? (
             <div className="mt-2 space-y-1.5" data-testid="prospect-ai-won-actions">

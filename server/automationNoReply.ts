@@ -58,7 +58,10 @@ function silenceAnchorFromJob(job: NoReplyJob, mode: NoReplyAnchorMode): Date {
   return job.anchorOutboundAt;
 }
 
-function mapSendOutcomeToSkipReason(outcome: WorkflowSendOutcome | undefined): string | null {
+function mapSendOutcomeToSkipReason(
+  outcome: WorkflowSendOutcome | undefined,
+  blockedReason?: string | null,
+): string | null {
   switch (outcome) {
     case "skipped_meta_window":
     case "template_required":
@@ -70,10 +73,21 @@ function mapSendOutcomeToSkipReason(outcome: WorkflowSendOutcome | undefined): s
     case "skipped_stage":
       return "stage_filter_no_match";
     case "guard_skipped":
-      return "automation_send_guard";
+      if (blockedReason === "automations_paused") return "automations_paused";
+      return blockedReason && blockedReason !== "guard_skipped"
+        ? blockedReason
+        : "automation_send_guard";
     default:
       return null;
   }
+}
+
+/** Exported for pause / guard skip tests. */
+export function noReplyJobSkipReasonFromSend(
+  outcome: WorkflowSendOutcome | undefined,
+  blockedReason?: string | null,
+): string | null {
+  return mapSendOutcomeToSkipReason(outcome, blockedReason);
 }
 
 async function upsertLastInboundNoReplyJob(params: {
@@ -425,7 +439,7 @@ export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
   );
 
   const sendOutcome = exec.sendOutcome;
-  const skipReason = mapSendOutcomeToSkipReason(sendOutcome);
+  const skipReason = mapSendOutcomeToSkipReason(sendOutcome, exec.blockedReason);
 
   console.log(
     JSON.stringify({

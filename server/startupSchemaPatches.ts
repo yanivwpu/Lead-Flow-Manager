@@ -896,6 +896,30 @@ END
 $patch$;
 `.trim(),
   },
+  {
+    tag: "0083_contacts_automations_paused",
+    sql: `
+ALTER TABLE contacts
+  ADD COLUMN IF NOT EXISTS automations_paused boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS automations_paused_at timestamp,
+  ADD COLUMN IF NOT EXISTS automations_paused_by_user_id varchar;
+DO $patch$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'contacts_automations_paused_by_user_id_users_id_fk'
+  ) THEN
+    ALTER TABLE contacts
+      ADD CONSTRAINT contacts_automations_paused_by_user_id_users_id_fk
+      FOREIGN KEY (automations_paused_by_user_id)
+      REFERENCES users(id)
+      ON DELETE SET NULL;
+  END IF;
+END
+$patch$;
+`.trim(),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -923,6 +947,7 @@ async function probePublicListingSchemaColumns(): Promise<boolean> {
 export async function applyStartupSchemaPatches(): Promise<{
   publicListingSchemaReady: boolean;
   trialExpirationEmailPatchOk: boolean;
+  contactsAutomationsPausedPatchOk: boolean;
 }> {
   const patchResults = new Map<string, boolean>();
 
@@ -968,5 +993,6 @@ export async function applyStartupSchemaPatches(): Promise<{
   return {
     publicListingSchemaReady: ready,
     trialExpirationEmailPatchOk: patchResults.get("0080_trial_expiration_email") === true,
+    contactsAutomationsPausedPatchOk: patchResults.get("0083_contacts_automations_paused") === true,
   };
 }

@@ -158,7 +158,8 @@ type FakeJob = {
 };
 
 const jobs = new Map<string, FakeJob>();
-let lastIncomingAt = new Date("2026-07-27T09:00:00.000Z");
+/** Keep inbound in the recent past so last_inbound + delay is still in the future (not clamped to now). */
+let lastIncomingAt = new Date(Date.now() - 30 * 60_000);
 
 const w4: Workflow = {
   id: "wf-w4",
@@ -289,7 +290,8 @@ try {
   const pendingAfterInbound = [...jobs.values()].filter((j) => j.status === "pending");
   assert.equal(pendingAfterInbound.length, 2, "W4+W5 scheduled on inbound");
   const w4Job = pendingAfterInbound.find((j) => j.workflowId === "wf-w4")!;
-  assert.equal(w4Job.runAt.toISOString(), "2026-07-28T05:00:00.000Z");
+  const expectedW4RunAt = new Date(lastIncomingAt.getTime() + 20 * 3_600_000);
+  assert.equal(w4Job.runAt.toISOString(), expectedW4RunAt.toISOString());
   assert.equal(
     w4Job.idempotencyKey,
     lastInboundIdempotencyKey({
@@ -311,7 +313,7 @@ try {
   assert.equal(w4AfterOut.runAt.toISOString(), runAtBeforeOutbound);
 
   // Second inbound resets timer
-  lastIncomingAt = new Date("2026-07-27T10:30:00.000Z");
+  lastIncomingAt = new Date(lastIncomingAt.getTime() + 90 * 60_000);
   await onInboundMessageForNoReplyTimers({
     userId: "user-1",
     contactId: "contact-1",
@@ -320,11 +322,14 @@ try {
     reschedule: true,
   });
   const w4Reset = [...jobs.values()].find((j) => j.workflowId === "wf-w4" && j.status === "pending")!;
-  assert.equal(w4Reset.runAt.toISOString(), "2026-07-28T06:30:00.000Z");
+  assert.equal(
+    w4Reset.runAt.toISOString(),
+    new Date(lastIncomingAt.getTime() + 20 * 3_600_000).toISOString(),
+  );
 
   // Email channel still schedules (policy free_form at send time — scheduling unrestricted)
   jobs.clear();
-  lastIncomingAt = new Date("2026-07-27T09:00:00.000Z");
+  lastIncomingAt = new Date(Date.now() - 30 * 60_000);
   await onInboundMessageForNoReplyTimers({
     userId: "user-1",
     contactId: "contact-1",

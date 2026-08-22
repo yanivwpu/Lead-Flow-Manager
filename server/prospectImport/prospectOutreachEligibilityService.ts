@@ -557,6 +557,7 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     suppressed: suppression.suppressed,
     optedOut: suppression.optedOut,
     suppressionDetail: suppression.detail || suppression.reason || null,
+    automationsPaused: params.contact.automationsPaused === true,
     alreadyQueued,
     preferredChannel: params.preferredChannel || "auto",
     suggestedFirstMessage: pi?.suggestedFirstMessage,

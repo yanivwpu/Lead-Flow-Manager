@@ -146,6 +146,7 @@ export type ProspectOutreachEligibilityReason =
   | "missing_consent"
   | "suppressed"
   | "opted_out"
+  | "automations_paused"
   | "already_outreach_sent"
   | "already_replied"
   | "needs_review"
@@ -214,6 +215,8 @@ export function prospectOutreachEligibilityReasonLabel(
       return prospectSuppressionDetailLabel(detail, detail);
     case "opted_out":
       return prospectSuppressionDetailLabel(detail || "unsubscribe", detail);
+    case "automations_paused":
+      return "Automations paused";
     case "missing_consent":
       return "Missing consent for this channel";
     case "template_required":
@@ -270,6 +273,7 @@ export function formatProspectQueueItemError(lastError?: string | null): string 
     "missing_message_snapshot",
     "suppressed",
     "opted_out",
+    "automations_paused",
     "missing_consent",
     "template_required",
     "unsupported_for_cold_outreach",

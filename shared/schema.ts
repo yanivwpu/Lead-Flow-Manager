@@ -1140,6 +1140,16 @@ export const contacts = pgTable("contacts", {
   // Follow-up
   followUp: text("follow_up"),
   followUpDate: timestamp("follow_up_date"),
+
+  /**
+   * Durable contact-level Pause Automations (operational).
+   * Not Do Not Contact, Unqualified, composer Manual, or Copilot Pause AI.
+   */
+  automationsPaused: boolean("automations_paused").notNull().default(false),
+  automationsPausedAt: timestamp("automations_paused_at"),
+  automationsPausedByUserId: varchar("automations_paused_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
   
   // Assignment (team feature)
   assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),

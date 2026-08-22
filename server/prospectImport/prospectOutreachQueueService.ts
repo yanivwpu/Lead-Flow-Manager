@@ -1436,6 +1436,9 @@ export async function retryFailedQueueItem(params: {
     if (suppression.suppressed || suppression.optedOut) {
       return { retried: false, reason: "contact_suppressed" };
     }
+    if (contact.automationsPaused === true) {
+      return { retried: false, reason: "automations_paused" };
+    }
   }
 
   await db
@@ -1597,6 +1600,28 @@ export async function processClaimedQueueItem(
     return { ok: false, reason: "contact_not_found" };
   }
 
+  if (contact.automationsPaused === true) {
+    await db
+      .update(prospectOutreachQueueItems)
+      .set({
+        queueStatus: "skipped",
+        lastError: "automations_paused",
+        updatedAt: new Date(),
+      })
+      .where(eq(prospectOutreachQueueItems.id, item.id));
+    console.info(
+      JSON.stringify(
+        prospectBulkOutreachLog("prospect_skipped", {
+          workspaceId: item.workspaceUserId,
+          queueItemId: item.id,
+          contactId: item.contactId,
+          reason: "automations_paused",
+        }),
+      ),
+    );
+    return { ok: false, reason: "automations_paused" };
+  }
+
   const { loadPriorProspectOutreachEvidence } = await import(
     "./prospectOutreachEligibilityService"
   );
@@ -1685,6 +1710,14 @@ export async function processClaimedQueueItem(
       await db
         .update(prospectOutreachQueueItems)
         .set({ queueStatus: "skipped", lastError: reason, updatedAt: new Date() })
+        .where(eq(prospectOutreachQueueItems.id, item.id));
+      return { ok: false, reason };
+    }
+
+    if (reason === "automations_paused") {
+      await db
+        .update(prospectOutreachQueueItems)
+        .set({ queueStatus: "skipped", lastError: "automations_paused", updatedAt: new Date() })
         .where(eq(prospectOutreachQueueItems.id, item.id));
       return { ok: false, reason };
     }

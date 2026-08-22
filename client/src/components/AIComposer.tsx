@@ -853,6 +853,12 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
               const label  = mode === "manual" ? "Manual" : mode === "suggest" ? "Suggest" : "Auto";
               const Icon   = mode === "manual" ? User : mode === "suggest" ? Sparkles : Zap;
               const active = aiMode === mode;
+              const modeHelp =
+                mode === "manual"
+                  ? "You type and send. This does not pause workflows or follow-ups — use Pause Automations on the contact."
+                  : mode === "suggest"
+                    ? "AI drafts a reply; you send."
+                    : "Eligible AI auto-reply. Pause Automations on the contact to stop all automated sends.";
 
               // Capability + business-settings gate (Full Auto only when business mode is auto)
               const modeEnabled =
@@ -876,7 +882,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
                   key={mode}
                   onClick={() => modeEnabled ? handleModeChange(mode) : undefined}
                   disabled={!modeEnabled}
-                  title={lockReason ?? undefined}
+                  title={lockReason ?? modeHelp}
                   data-testid={`composer-ai-mode-${mode}`}
                   className={cn(
                     "flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all",

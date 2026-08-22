@@ -4,6 +4,7 @@ import {
   RE_ENGAGEMENT_REOPENABLE_CONVERSATION_STATUSES,
   type AutomationSendGuardBlockReason as SharedAutomationSendGuardBlockReason,
 } from "@shared/automationSendGuardMessages";
+import { contactHasAutomationsPaused } from "@shared/contactAutomationsPause";
 import { storage } from "./storage";
 import type { Channel, Contact, Conversation } from "@shared/schema";
 
@@ -45,6 +46,11 @@ export type AutomationSendGuardParams = {
    * closed/resolved/archived/inactive; hard blocks (blocked/deleted/wrong_user) still apply.
    */
   allowReEngagementTemplateSend?: boolean;
+  /**
+   * Human-triggered template sends (Inbox picker / Templates library) still enforce DNC
+   * but must not be blocked by Pause Automations.
+   */
+  ignoreAutomationsPaused?: boolean;
 };
 
 function normalizedChannel(channel: unknown): Channel | undefined {
@@ -144,6 +150,10 @@ export async function evaluateAutomationSendGuard(
   const dnc = contactHasDoNotContact(contact);
   if (dnc.blocked) {
     return { ok: false, reason: dnc.reason || "do_not_contact", detail: dnc.detail };
+  }
+
+  if (!params.ignoreAutomationsPaused && contactHasAutomationsPaused(contact)) {
+    return { ok: false, reason: "automations_paused" };
   }
 
   let channel = normalizedChannel(params.channel);

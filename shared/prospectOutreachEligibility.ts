@@ -60,6 +60,8 @@ export type ProspectOutreachEligibilityInput = {
   optedOut?: boolean;
   /** Human/machine detail for suppressed/opted-out (bounce, unsubscribe, …). */
   suppressionDetail?: string | null;
+  /** Contact-level Pause Automations — blocks outreach, not discovery. */
+  automationsPaused?: boolean;
   /** Already has active/successful queue item for same channel+recipient. */
   alreadyQueued?: boolean;
   preferredChannel?: ProspectOutreachPreferredChannel;
@@ -393,6 +395,7 @@ function lifecycleGate(
   // Deliverability / compliance always wins over review/lifecycle state.
   if (input.suppressed) return "suppressed";
   if (input.optedOut) return "opted_out";
+  if (input.automationsPaused) return "automations_paused";
 
   const outreach = normalizeOutreachStatus(input.outreachStatus, {
     outreachSentAt: input.outreachSentAt,

@@ -2009,6 +2009,7 @@ export function registerTemplateRoutes(app: Express): void {
         source: "template",
         idempotencyKey: templateGuardKey,
         allowReEngagementTemplateSend: isReEngagementCampaignSend,
+        ignoreAutomationsPaused: !isReEngagementCampaignSend,
       }, async () => true);
       if (!templateGuard.ok) {
         console.warn(

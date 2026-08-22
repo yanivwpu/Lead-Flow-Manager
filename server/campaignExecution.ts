@@ -32,6 +32,11 @@ import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeli
 import { withAutomationSendGuard } from "./automationSendGuard";
 import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
 import { nextEntitlementDeferAt } from "@shared/paidAutomationEntitlements";
+import {
+  contactHasAutomationsPaused,
+  shouldFreezeDueCampaignEnrollmentOnPause,
+  shouldRearmCampaignEnrollmentAfterContactResume,
+} from "@shared/contactAutomationsPause";
 
 const WHATSAPP_CSW_BUFFER_MS = 60 * 60 * 1000;
 
@@ -362,6 +367,13 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     return;
   }
 
+  if (contactHasAutomationsPaused(contact)) {
+    await storage.updateCampaignEnrollment(enrollment.id, {
+      nextRunAt: null,
+    });
+    return;
+  }
+
   const messages = parsePresetCampaignMessagesArray(campaign.messages) as CampaignMessageStep[];
   if (messages.length === 0) {
     await storage.updateCampaignEnrollment(enrollment.id, { status: "completed", nextRunAt: null });
@@ -438,13 +450,14 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
   );
 
   if (!guardedSend.ok) {
+    const paused = guardedSend.reason === "automations_paused";
     await storage.updateCampaignStepEvent(pendingEvent.id, {
       status: "skipped",
       errorMessage: `Automation send blocked: ${guardedSend.reason}${guardedSend.detail ? ` (${guardedSend.detail})` : ""}`,
       sentAt: null,
     });
     await storage.updateCampaignEnrollment(enrollment.id, {
-      status: guardedSend.reason === "duplicate" ? "active" : "cancelled",
+      status: paused || guardedSend.reason === "duplicate" ? "active" : "cancelled",
       nextRunAt: null,
       lastRunAt: new Date(),
     });
@@ -498,6 +511,31 @@ export async function processCampaignEnrollmentStep(enrollmentId: string): Promi
     nextRunAt: nextRun,
     lastRunAt: new Date(),
   });
+}
+
+/**
+ * Pause: freeze due/active drips without cancelling or advancing.
+ * Resume: rearm frozen enrollments (nextRunAt null) so the current step can send once.
+ * Does not replay skipped no-reply/timer jobs.
+ */
+export async function syncCampaignEnrollmentsForContactAutomationPause(params: {
+  userId: string;
+  contactId: string;
+  paused: boolean;
+}): Promise<void> {
+  const rows = await storage.getCampaignEnrollmentsForContact(params.userId, params.contactId);
+  const now = new Date();
+  for (const row of rows) {
+    if (params.paused) {
+      if (shouldFreezeDueCampaignEnrollmentOnPause(row, now)) {
+        await storage.updateCampaignEnrollment(row.id, { nextRunAt: null });
+      }
+      continue;
+    }
+    if (shouldRearmCampaignEnrollmentAfterContactResume(row)) {
+      await storage.updateCampaignEnrollment(row.id, { nextRunAt: now });
+    }
+  }
 }
 
 export async function runCampaignSchedulerTick(limit = 30): Promise<{ ran: number }> {

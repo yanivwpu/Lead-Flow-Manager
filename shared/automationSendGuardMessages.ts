@@ -6,6 +6,7 @@ export type AutomationSendGuardBlockReason =
   | "contact_wrong_user"
   | "do_not_contact"
   | "unsubscribed"
+  | "automations_paused"
   | "channel_ineligible"
   | "conversation_inactive"
   | "duplicate";
@@ -36,6 +37,8 @@ export function automationSendGuardBlockUserMessage(
         return "This contact has opted out of marketing messages.";
       }
       return "This contact has opted out of messages.";
+    case "automations_paused":
+      return "Automations are paused for this contact. Resume Automations to continue automated sends. Manual messages are still allowed.";
     case "conversation_inactive":
       if (d === "wrong_user") {
         return "You don't have access to this conversation.";
