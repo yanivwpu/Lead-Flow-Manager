@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { mapDemoBookingRow } from "./demoBookingRows";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import {
   isMarketingDemoCalendlyTracking,
@@ -11,7 +12,8 @@ import { demoBookings, salespeople } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { extractCalendlyBookingPayload, verifyCalendlyWebhookSignature } from "./calendlyWebhook";
 import { readDemoBookings } from "./demoBookingStorage";
-import { sendDemoBookingNotification, sendDemoConfirmationEmail } from "./email";
+import { maskEmailForLogs, sendDemoConfirmationEmail } from "./email";
+import { notifyAssignedSalespersonOfScheduledDemo } from "./demoSalespersonNotifications";
 import { storage } from "./storage";
 
 function logMarketingDemoCalendly(event: string, data: Record<string, unknown>): void {
@@ -100,6 +102,59 @@ async function findAwaitingMarketingDemoBooking(params: {
   return { rejectReason: "no_awaiting_schedule_for_email" };
 }
 
+export function shouldSkipDuplicateMarketingDemoConfirm(params: {
+  status: string;
+  calendlyConfirmedAt?: Date | string | null;
+  calendlyScheduledEventUri?: string | null;
+  incomingScheduledEventUri?: string | null;
+}): { skip: true; reason: string } | { skip: false } {
+  const confirmed = params.calendlyConfirmedAt != null && params.calendlyConfirmedAt !== "";
+  if (
+    params.calendlyScheduledEventUri &&
+    params.incomingScheduledEventUri &&
+    params.calendlyScheduledEventUri === params.incomingScheduledEventUri &&
+    confirmed
+  ) {
+    return { skip: true, reason: "same_scheduled_event" };
+  }
+  if (confirmed) return { skip: true, reason: "already_calendly_confirmed" };
+  if (params.status !== DEMO_BOOKING_STATUS.awaitingSchedule) {
+    return { skip: true, reason: "not_awaiting_schedule" };
+  }
+  return { skip: false };
+}
+
+/** Atomic confirm: only one invitee.created can move awaiting_schedule → pending_acceptance. */
+async function confirmAwaitingScheduleDemoBooking(
+  bookingId: string,
+  updates: Partial<DemoBooking>,
+): Promise<{ booking?: DemoBooking; skippedReason?: string }> {
+  try {
+    const result = await db
+      .update(demoBookings)
+      .set(updates)
+      .where(
+        and(
+          eq(demoBookings.id, bookingId),
+          eq(demoBookings.status, DEMO_BOOKING_STATUS.awaitingSchedule),
+        ),
+      )
+      .returning();
+    if (!result[0]) {
+      return { skippedReason: "confirm_race_or_already_confirmed" };
+    }
+    return { booking: mapDemoBookingRow(result[0] as Record<string, unknown>) };
+  } catch (err) {
+    logMarketingDemoCalendly("confirm_conditional_update_fallback", {
+      bookingId,
+      error: err instanceof Error ? err.message.slice(0, 200) : "unknown",
+    });
+    const updated = await storage.updateDemoBooking(bookingId, updates);
+    if (!updated) return { skippedReason: "update_failed" };
+    return { booking: updated };
+  }
+}
+
 export async function handleMarketingDemoCalendlyWebhook(req: Request, res: Response): Promise<void> {
   const rawBody = (req as { rawBody?: Buffer }).rawBody;
   const sigHeader = req.get("calendly-webhook-signature") || undefined;
@@ -186,11 +241,18 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     return;
   }
 
-  if (booking.calendlyScheduledEventUri && parsed.scheduledEventUri) {
-    if (booking.calendlyScheduledEventUri === parsed.scheduledEventUri && booking.calendlyConfirmedAt) {
-      logMarketingDemoCalendly("duplicate_event_ignored", { bookingId: booking.id });
-      return;
-    }
+  const dup = shouldSkipDuplicateMarketingDemoConfirm({
+    status: booking.status,
+    calendlyConfirmedAt: booking.calendlyConfirmedAt,
+    calendlyScheduledEventUri: booking.calendlyScheduledEventUri,
+    incomingScheduledEventUri: parsed.scheduledEventUri,
+  });
+  if (dup.skip) {
+    logMarketingDemoCalendly("duplicate_event_ignored", {
+      bookingId: booking.id,
+      reason: dup.reason,
+    });
+    return;
   }
 
   const startTime = parsed.startTime ? new Date(parsed.startTime) : null;
@@ -214,7 +276,7 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     recordedAt: confirmedAt.toISOString(),
   };
 
-  const updated = await storage.updateDemoBooking(booking.id, {
+  const confirm = await confirmAwaitingScheduleDemoBooking(booking.id, {
     scheduledDate: startTime,
     calendlyScheduledEventUri: parsed.scheduledEventUri ?? null,
     calendlyInviteeUri: parsed.inviteeUri ?? null,
@@ -225,6 +287,15 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
     assignedAt: booking.assignedAt ?? confirmedAt,
   });
 
+  if (confirm.skippedReason === "confirm_race_or_already_confirmed") {
+    logMarketingDemoCalendly("duplicate_event_ignored", {
+      bookingId: booking.id,
+      reason: confirm.skippedReason,
+    });
+    return;
+  }
+
+  const updated = confirm.booking;
   if (!updated) {
     logMarketingDemoCalendly("update_failed", { bookingId: booking.id });
     return;
@@ -250,17 +321,18 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
 
   let salespersonNotificationSent = false;
   if (salesperson?.email) {
-    salespersonNotificationSent = await sendDemoBookingNotification(
-      salesperson.email,
-      salesperson.name,
-      {
-        name: booking.visitorName,
-        email: booking.visitorEmail,
-        phone: booking.visitorPhone,
-        scheduledDate: startTime,
-      },
-      parsed.meetingLink,
-    );
+    const notify = await notifyAssignedSalespersonOfScheduledDemo({
+      bookingId: booking.id,
+      salespersonId: booking.salespersonId,
+      salespersonEmail: salesperson.email,
+      salespersonName: salesperson.name,
+      visitorName: booking.visitorName,
+      visitorEmail: booking.visitorEmail,
+      visitorPhone: booking.visitorPhone,
+      scheduledDate: startTime,
+      meetingLink: parsed.meetingLink,
+    });
+    salespersonNotificationSent = notify.ok;
   } else {
     logMarketingDemoCalendly("salesperson_notification_skipped", {
       bookingId: booking.id,
@@ -278,9 +350,9 @@ export async function processMarketingDemoCalendlyPayload(body: Record<string, u
 
   logMarketingDemoCalendly("emails_dispatched", {
     bookingId: booking.id,
-    customerEmail: booking.visitorEmail,
+    customerEmailMasked: maskEmailForLogs(booking.visitorEmail),
     customerConfirmationSent,
-    salespersonEmail: salesperson?.email || null,
+    salespersonEmailMasked: maskEmailForLogs(salesperson?.email || null),
     salespersonNotificationSent,
   });
 

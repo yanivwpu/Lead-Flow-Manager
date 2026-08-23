@@ -40,6 +40,77 @@ export function isDemoCompleted(status: string): boolean {
   return s === DEMO_BOOKING_STATUS.completed || s === DEMO_BOOKING_STATUS.converted;
 }
 
+export function isDemoAwaitingSchedule(status: string): boolean {
+  return normalizeDemoBookingStatus(status) === DEMO_BOOKING_STATUS.awaitingSchedule;
+}
+
+/**
+ * Sales Admin "Pending demos" KPI: assigned requests that still need scheduling
+ * or salesperson acceptance. Does not include accepted/completed/converted.
+ */
+export function isOpenDemoRequestStatus(status: string): boolean {
+  const s = normalizeDemoBookingStatus(status);
+  return (
+    s === DEMO_BOOKING_STATUS.awaitingSchedule || s === DEMO_BOOKING_STATUS.pendingAcceptance
+  );
+}
+
+export function countOpenDemoRequests(bookings: Array<{ status: string }>): number {
+  return bookings.filter((b) => isOpenDemoRequestStatus(b.status)).length;
+}
+
+/**
+ * Active assigned lead workload for round-robin (not compensation).
+ * Unscheduled assigned requests count; completed/converted/cancelled do not.
+ */
+export const ACTIVE_DEMO_ASSIGNMENT_WORKLOAD_STATUSES: readonly string[] = [
+  DEMO_BOOKING_STATUS.awaitingSchedule,
+  DEMO_BOOKING_STATUS.pendingAcceptance,
+  DEMO_BOOKING_STATUS.accepted,
+];
+
+export function isActiveDemoAssignmentWorkloadStatus(status: string): boolean {
+  const s = normalizeDemoBookingStatus(status);
+  return ACTIVE_DEMO_ASSIGNMENT_WORKLOAD_STATUSES.includes(s);
+}
+
+/** Statuses that imply a Calendly (or other) datetime exists. */
+export function demoStatusRequiresScheduledDate(status: string): boolean {
+  const s = normalizeDemoBookingStatus(status);
+  return (
+    s === DEMO_BOOKING_STATUS.pendingAcceptance ||
+    s === DEMO_BOOKING_STATUS.accepted ||
+    s === DEMO_BOOKING_STATUS.completed ||
+    s === DEMO_BOOKING_STATUS.converted
+  );
+}
+
+export function evaluateAdminDemoStatusChange(params: {
+  nextStatus: string;
+  scheduledDate: Date | string | null | undefined;
+}): { ok: true } | { ok: false; reason: "scheduled_date_required" } {
+  if (!demoStatusRequiresScheduledDate(params.nextStatus)) return { ok: true };
+  if (params.scheduledDate == null || params.scheduledDate === "") {
+    return { ok: false, reason: "scheduled_date_required" };
+  }
+  const d =
+    params.scheduledDate instanceof Date ? params.scheduledDate : new Date(params.scheduledDate);
+  if (Number.isNaN(d.getTime())) return { ok: false, reason: "scheduled_date_required" };
+  return { ok: true };
+}
+
+export function pickLeastLoadedSalesperson<T extends { id: string }>(
+  people: T[],
+  activeAssignedCountById: Record<string, number>,
+): T | undefined {
+  if (people.length === 0) return undefined;
+  return people.reduce((min, p) => {
+    const c = activeAssignedCountById[p.id] ?? 0;
+    const m = activeAssignedCountById[min.id] ?? 0;
+    return c < m ? p : min;
+  });
+}
+
 export function demoStatusLabel(status: string): string {
   const s = normalizeDemoBookingStatus(status);
   switch (s) {

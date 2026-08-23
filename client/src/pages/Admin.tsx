@@ -71,8 +71,10 @@ import {
   DEMO_BOOKING_STATUS,
   normalizeDemoBookingStatus,
   demoStatusLabel,
+  countOpenDemoRequests,
+  evaluateAdminDemoStatusChange,
 } from "@shared/salesCompensation";
-import { formatDemoScheduledDate } from "@shared/demoBookingDisplay";
+import { formatDemoScheduleDisplay, formatDemoScheduledDate } from "@shared/demoBookingDisplay";
 import {
   SALES_PAYOUT_REVIEW_NOTE,
   computeAggregatePayoutTotals,
@@ -940,9 +942,7 @@ export function Admin() {
     return salespeople.find(p => p.id === id)?.name || 'Unknown';
   };
 
-  const pendingBookings = bookings.filter((b) =>
-    normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.pendingAcceptance,
-  ).length;
+  const pendingBookings = countOpenDemoRequests(bookings);
   const acceptedBookings = bookings.filter(
     (b) => normalizeDemoBookingStatus(b.status) === DEMO_BOOKING_STATUS.accepted,
   ).length;
@@ -1268,7 +1268,9 @@ export function Admin() {
                             <div className="text-gray-500">{booking.visitorPhone || "—"}</div>
                           </div>
                         </TableCell>
-                        <TableCell>{formatDemoScheduledDate(booking.scheduledDate)}</TableCell>
+                        <TableCell>
+                          {formatDemoScheduleDisplay(booking.scheduledDate, booking.status)}
+                        </TableCell>
                         <TableCell>
                           {booking.status === "needs_reassignment" || !booking.salespersonId ? (
                             <select
@@ -1331,13 +1333,27 @@ export function Admin() {
                         </TableCell>
                         <TableCell>
                           <select
-                            value={booking.status}
-                            onChange={(e) => updateBookingStatus.mutate({ 
-                              id: booking.id, 
-                              status: e.target.value 
-                            })}
+                            value={booking.status === "pending" ? "pending_acceptance" : booking.status}
+                            onChange={(e) => {
+                              const nextStatus = e.target.value;
+                              const allowed = evaluateAdminDemoStatusChange({
+                                nextStatus,
+                                scheduledDate: booking.scheduledDate ?? null,
+                              });
+                              if (!allowed.ok) {
+                                window.alert(
+                                  "This request has no scheduled date yet. Keep “Awaiting schedule”, or cancel it. Do not mark it pending/accepted until the visitor books a time.",
+                                );
+                                return;
+                              }
+                              updateBookingStatus.mutate({
+                                id: booking.id,
+                                status: nextStatus,
+                              });
+                            }}
                             className="text-sm border rounded px-2 py-1"
                           >
+                            <option value="awaiting_schedule">Awaiting schedule</option>
                             <option value="pending_acceptance">Pending acceptance</option>
                             <option value="needs_reassignment">Needs reassignment</option>
                             <option value="accepted">Accepted</option>

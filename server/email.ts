@@ -65,21 +65,55 @@ interface EmailOptions {
   replyTo?: string;
 }
 
+export type EmailDispatchResult = {
+  ok: boolean;
+  providerMessageId: string | null;
+  error: string | null;
+};
+
+export function maskEmailForLogs(email: string | null | undefined): string | null {
+  const trimmed = String(email || "").trim();
+  if (!trimmed) return null;
+  const at = trimmed.indexOf("@");
+  if (at <= 0 || at === trimmed.length - 1) return "(invalid)";
+  return `${trimmed.slice(0, 1)}***@${trimmed.slice(at + 1)}`;
+}
+
+export function sanitizeEmailProviderError(raw: string): string {
+  return String(raw || "")
+    .replace(/Bearer\s+\S+/gi, "[redacted]")
+    .replace(/re_[A-Za-z0-9_]+/g, "[redacted]")
+    .slice(0, 400);
+}
+
+export function demoRequestAssignedEmailSubject(visitorName: string): string {
+  return `New Demo Request: ${visitorName}`;
+}
+
+export function demoScheduledEmailSubject(visitorName: string): string {
+  return `Demo Scheduled: ${visitorName}`;
+}
+
 export async function sendEmail({ to, subject, html, replyTo }: EmailOptions): Promise<boolean> {
+  const result = await sendEmailDetailed({ to, subject, html, replyTo });
+  return result.ok;
+}
+
+export async function sendEmailDetailed({ to, subject, html, replyTo }: EmailOptions): Promise<EmailDispatchResult> {
   if (isShopifySyntheticMerchantEmail(to)) {
     console.warn(
       `[Email] Refusing to send to synthetic Shopify identity address. Subject: "${subject}"`,
     );
-    return false;
+    return { ok: false, providerMessageId: null, error: "synthetic_shopify_recipient" };
   }
   if (!RESEND_API_KEY) {
     console.warn(
-      `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${to}, subject: "${subject}"`
+      `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`
     );
     console.warn(
       "[Email] Set RESEND_API_KEY in your environment (e.g. Railway variables) to enable Resend."
     );
-    return false;
+    return { ok: false, providerMessageId: null, error: "resend_api_key_missing" };
   }
 
   try {
@@ -98,23 +132,33 @@ export async function sendEmail({ to, subject, html, replyTo }: EmailOptions): P
       }),
     });
 
+    const rawBody = await response.text();
     if (!response.ok) {
-      const body = await response.text();
+      const sanitized = sanitizeEmailProviderError(rawBody || `http_${response.status}`);
       console.error(
-        `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${to}, subject: "${subject}"`
+        `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`,
       );
-      console.error(`[Email] Resend response body: ${body || "(empty)"}`);
-      return false;
+      console.error(`[Email] Resend error (sanitized): ${sanitized || "(empty)"}`);
+      return { ok: false, providerMessageId: null, error: sanitized || `http_${response.status}` };
     }
 
-    console.log(`[Email] Sent successfully to ${to}: ${subject}`);
-    return true;
+    let providerMessageId: string | null = null;
+    try {
+      const parsed = rawBody ? (JSON.parse(rawBody) as { id?: unknown }) : null;
+      if (typeof parsed?.id === "string" && parsed.id.trim()) providerMessageId = parsed.id.trim();
+    } catch {
+      providerMessageId = null;
+    }
+
+    console.log(`[Email] Sent successfully to ${maskEmailForLogs(to)}: ${subject}`);
+    return { ok: true, providerMessageId, error: null };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error(
-      `[Email] Network or unexpected error while calling Resend — recipient: ${to}, subject: "${subject}"`,
-      error
+      `[Email] Network or unexpected error while calling Resend — recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`,
+      sanitizeEmailProviderError(message),
     );
-    return false;
+    return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message) };
   }
 }
 
@@ -570,6 +614,21 @@ export async function sendDemoBookingNotification(
   visitor: { name: string; email: string; phone: string; scheduledDate: Date },
   meetingLink?: string | null,
 ): Promise<boolean> {
+  const result = await sendDemoScheduledNotificationDetailed(
+    salespersonEmail,
+    salespersonName,
+    visitor,
+    meetingLink,
+  );
+  return result.ok;
+}
+
+export async function sendDemoScheduledNotificationDetailed(
+  salespersonEmail: string,
+  salespersonName: string,
+  visitor: { name: string; email: string; phone: string; scheduledDate: Date },
+  meetingLink?: string | null,
+): Promise<EmailDispatchResult> {
   const formattedDate = visitor.scheduledDate.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -587,7 +646,7 @@ export async function sendDemoBookingNotification(
   const body = [
     emailParagraph(`Hi ${escapeHtml(salespersonName)}!`),
     emailParagraph(
-      "A prospect booked a demo on your Calendly and chose the time below. No further scheduling is needed."
+      "A prospect booked a time on your Calendly. The demo is now scheduled — no further scheduling is needed."
     ),
     emailHighlightBox(
       `<strong>Visitor:</strong> ${escapeHtml(visitor.name)}<br/>
@@ -601,10 +660,55 @@ export async function sendDemoBookingNotification(
     emailButton(`${APP_URL}/sales-portal`, "Open Sales Portal"),
   ].join("");
 
-  return sendEmail({
+  return sendEmailDetailed({
     to: salespersonEmail,
-    subject: `New Demo Booking: ${visitor.name}`,
-    html: renderBrandedEmail({ title: "New demo booking", bodyHtml: body }),
+    subject: demoScheduledEmailSubject(visitor.name),
+    html: renderBrandedEmail({ title: "Demo scheduled", bodyHtml: body }),
+  });
+}
+
+export function renderUnscheduledDemoRequestEmailHtml(params: {
+  salespersonName: string;
+  visitorName: string;
+  visitorEmail: string;
+  visitorPhone: string;
+  appUrl?: string;
+}): string {
+  const appUrl = (params.appUrl || APP_URL).replace(/\/+$/, "");
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(params.salespersonName)}!`),
+    emailParagraph(
+      "A new demo request was assigned to you. The visitor submitted the public demo form but has not chosen a time on Calendly yet.",
+    ),
+    emailHighlightBox(
+      `<strong>Visitor:</strong> ${escapeHtml(params.visitorName)}<br/>
+       <strong>Email:</strong> ${escapeHtml(params.visitorEmail)}<br/>
+       <strong>Phone:</strong> ${escapeHtml(params.visitorPhone)}<br/>
+       <strong>Assigned to:</strong> ${escapeHtml(params.salespersonName)}<br/>
+       <strong>Status:</strong> Awaiting scheduling`,
+    ),
+    emailParagraph(
+      "Please contact this lead soon. You can follow up by email or phone and help them schedule if they have not completed Calendly.",
+    ),
+    emailButton(`${appUrl}/sales-portal`, "Open Sales Portal"),
+  ].join("");
+  return renderBrandedEmail({ title: "New demo request", bodyHtml: body });
+}
+
+export async function sendUnscheduledDemoRequestNotification(
+  salespersonEmail: string,
+  salespersonName: string,
+  visitor: { name: string; email: string; phone: string },
+): Promise<EmailDispatchResult> {
+  return sendEmailDetailed({
+    to: salespersonEmail,
+    subject: demoRequestAssignedEmailSubject(visitor.name),
+    html: renderUnscheduledDemoRequestEmailHtml({
+      salespersonName,
+      visitorName: visitor.name,
+      visitorEmail: visitor.email,
+      visitorPhone: visitor.phone,
+    }),
   });
 }
 

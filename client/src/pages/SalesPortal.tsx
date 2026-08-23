@@ -33,11 +33,12 @@ import {
   SALES_CONVERSION_PAYOUT_DOLLARS,
   demoStatusLabel as sharedDemoStatusLabel,
   isDemoAwaitingAcceptance,
+  isDemoAwaitingSchedule,
   isDemoUpcoming,
   isDemoCompleted,
   normalizeDemoBookingStatus,
 } from "@shared/salesCompensation";
-import { formatDemoScheduledDate } from "@shared/demoBookingDisplay";
+import { formatDemoScheduledDate, formatDemoScheduleDisplay } from "@shared/demoBookingDisplay";
 import {
   SALES_PAYOUT_REVIEW_NOTE,
   computeAggregatePayoutTotals,
@@ -164,7 +165,7 @@ function DemoContactBlock({ demo }: { demo: Demo }) {
       </div>
       <p className="text-sm text-brand-green font-medium">
         <Calendar className="h-3.5 w-3.5 inline mr-1" />
-        {formatDemoScheduledDate(demo.scheduledDate)}
+        {formatDemoScheduleDisplay(demo.scheduledDate, demo.status)}
       </p>
       {meetingLink ? (
         <Button
@@ -475,6 +476,7 @@ export function SalesPortal() {
   const setupPayoutRate =
     stats?.effectiveTaskPayoutDollars ?? stats?.defaultTaskPayoutDollars ?? SETUP_PAYOUT_DEFAULT_DOLLARS;
 
+  const awaitingScheduleDemos = demos.filter((d) => isDemoAwaitingSchedule(d.status));
   const pendingAcceptanceDemos = demos.filter((d) => isDemoAwaitingAcceptance(d.status));
   const upcomingDemos = demos.filter((d) => isDemoUpcoming(d.status));
   const completedDemos = demos.filter((d) => isDemoCompleted(d.status));
@@ -705,8 +707,12 @@ export function SalesPortal() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs defaultValue="pending-acceptance" className="space-y-4">
+        <Tabs defaultValue="awaiting-schedule" className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1">
+            <TabsTrigger value="awaiting-schedule" className="gap-2">
+              <Clock className="h-4 w-4" />
+              Awaiting schedule ({awaitingScheduleDemos.length})
+            </TabsTrigger>
             <TabsTrigger value="pending-acceptance" className="gap-2">
               <Clock className="h-4 w-4" />
               Pending Acceptance ({pendingAcceptanceDemos.length})
@@ -736,6 +742,35 @@ export function SalesPortal() {
               Earnings
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="awaiting-schedule">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-900">Awaiting schedule</h2>
+                <p className="text-sm text-gray-500">
+                  These leads submitted a demo request and were assigned to you, but have not chosen a
+                  Calendly time yet. Contact them — this is not an accepted or scheduled demo.
+                </p>
+              </div>
+              {awaitingScheduleDemos.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No unscheduled demo requests.</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {awaitingScheduleDemos.map((demo) => (
+                    <div key={demo.id} className="p-4 hover:bg-gray-50">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <DemoContactBlock demo={demo} />
+                        <div className="text-sm text-gray-500 max-w-xs">
+                          No scheduled date. Reach out using the contact details. Accept/decline appears
+                          after they book a time.
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           <TabsContent value="pending-acceptance">
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

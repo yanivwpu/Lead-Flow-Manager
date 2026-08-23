@@ -167,7 +167,7 @@ import { getAppOrigin } from "./urlOrigins";
 import { isShopifyShopDomain } from "@shared/shopifyBilling";
 import { rejectStripeIfShopifyUser } from "./shopifyBillingGuard";
 import { getMarketingOrigin } from "./urlOrigins";
-import { sendWelcomeEmail, sendContactFormEmail, sendDemoBookingNotification, sendDemoConfirmationEmail, sendSalespersonWelcomeEmail } from "./email";
+import { sendContactFormEmail, sendSalespersonWelcomeEmail, sanitizeEmailProviderError } from "./email";
 import bcrypt from "bcryptjs";
 import { dispatchInboundMessagingAutomation } from "./automationEventDispatcher";
 import { evaluateChatbotInboundArbitration } from "./chatbotEngine";
@@ -8402,6 +8402,33 @@ export async function registerRoutes(
         notes: formatMarketingDemoBookingNote(booking.id),
       });
 
+      try {
+        const { notifyAssignedSalespersonOfUnscheduledDemo } = await import(
+          "./demoSalespersonNotifications"
+        );
+        await notifyAssignedSalespersonOfUnscheduledDemo({
+          bookingId: booking.id,
+          salespersonId: salesperson.id,
+          salespersonEmail: salesperson.email,
+          salespersonName: salesperson.name,
+          visitorName: booking.visitorName,
+          visitorEmail: booking.visitorEmail,
+          visitorPhone: booking.visitorPhone,
+        });
+      } catch (notifyErr) {
+        console.warn(
+          JSON.stringify({
+            tag: "[DemoSalespersonEmail]",
+            event: "assignment_notify_threw",
+            bookingId: booking.id,
+            salespersonId: salesperson.id,
+            error: sanitizeEmailProviderError(
+              notifyErr instanceof Error ? notifyErr.message : "unknown",
+            ),
+          }),
+        );
+      }
+
       const calendlyUrl = appendMarketingDemoCalendlyParams(salesperson.calendarLink.trim(), {
         demoBookingId: booking.id,
         visitorEmail: booking.visitorEmail,
@@ -8884,10 +8911,23 @@ export async function registerRoutes(
         notes?: string;
         salespersonId?: string | null;
       };
-      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
+      const { DEMO_BOOKING_STATUS, evaluateAdminDemoStatusChange } = await import("@shared/salesCompensation");
 
       // Get the current booking to check if status is changing to converted
       const currentBooking = await storage.getDemoBooking(req.params.id);
+
+      if (status !== undefined) {
+        const allowed = evaluateAdminDemoStatusChange({
+          nextStatus: status,
+          scheduledDate: currentBooking?.scheduledDate ?? null,
+        });
+        if (!allowed.ok) {
+          return res.status(400).json({
+            error: "Cannot set this status without a scheduled date. Keep Awaiting schedule until the visitor books a time.",
+            code: allowed.reason,
+          });
+        }
+      }
 
       const bookingUpdates: Record<string, unknown> = {};
       if (status !== undefined) bookingUpdates.status = status;
@@ -8895,9 +8935,13 @@ export async function registerRoutes(
       if (salespersonId !== undefined) {
         bookingUpdates.salespersonId = salespersonId || null;
         if (salespersonId) {
-          bookingUpdates.status = DEMO_BOOKING_STATUS.pendingAcceptance;
           bookingUpdates.assignedAt = new Date();
           bookingUpdates.acceptedAt = null;
+          if (currentBooking?.scheduledDate) {
+            bookingUpdates.status = DEMO_BOOKING_STATUS.pendingAcceptance;
+          } else if (status === undefined) {
+            bookingUpdates.status = DEMO_BOOKING_STATUS.awaitingSchedule;
+          }
         }
       }
 
@@ -9891,11 +9935,8 @@ export async function registerRoutes(
   app.get("/api/sales-portal/demos", requireSalesperson, async (req: any, res) => {
     try {
       const { processExpiredDemoAcceptances } = await import("./demoAssignmentService");
-      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
       await processExpiredDemoAcceptances();
-      const demos = (await storage.getDemoBookingsBySalesperson(req.salesperson.id)).filter(
-        (d) => d.status !== DEMO_BOOKING_STATUS.awaitingSchedule,
-      );
+      const demos = await storage.getDemoBookingsBySalesperson(req.salesperson.id);
       res.json(demos);
     } catch (error) {
       console.error("Error fetching salesperson demos:", error);

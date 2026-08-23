@@ -1,9 +1,11 @@
 import {
   DEMO_ACCEPTANCE_TIMEOUT_HOURS,
   DEMO_BOOKING_STATUS,
+  ACTIVE_DEMO_ASSIGNMENT_WORKLOAD_STATUSES,
+  pickLeastLoadedSalesperson,
 } from "@shared/salesCompensation";
 import type { DemoBooking } from "@shared/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { demoBookings } from "@shared/schema";
 import { storage } from "./storage";
@@ -26,6 +28,32 @@ export function filterDemoEligibleSalespeople(
   });
 }
 
+export async function countActiveAssignedDemoLeadsBySalespersonId(): Promise<Record<string, number>> {
+  try {
+    const rows = await db
+      .select({
+        salespersonId: demoBookings.salespersonId,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(demoBookings)
+      .where(
+        and(
+          isNotNull(demoBookings.salespersonId),
+          inArray(demoBookings.status, [...ACTIVE_DEMO_ASSIGNMENT_WORKLOAD_STATUSES]),
+        ),
+      )
+      .groupBy(demoBookings.salespersonId);
+    const out: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.salespersonId) out[row.salespersonId] = Number(row.n) || 0;
+    }
+    return out;
+  } catch (err) {
+    if (isDemoBookingsSchemaMismatchError(err)) return {};
+    throw err;
+  }
+}
+
 export async function pickSalespersonForDemoAssignment(
   excludeSalespersonId?: string,
 ): Promise<(DemoEligibleSalesperson & { calendarLink: string }) | undefined> {
@@ -39,9 +67,14 @@ export async function pickSalespersonForDemoAssignment(
     })
     .filter((p): p is DemoEligibleSalesperson & { calendarLink: string } => p != null);
   if (withCalendar.length === 0) return undefined;
-  return withCalendar.reduce((min, p) =>
-    (p.totalBookings || 0) < (min.totalBookings || 0) ? p : min,
-  );
+  /**
+   * Assignment fairness uses live active assigned leads (awaiting_schedule +
+   * pending_acceptance + accepted), not `salespeople.totalBookings`.
+   * `totalBookings` remains a lifetime scheduled-demo counter (incremented on
+   * Calendly confirm / non-awaiting insert) and must not drive compensation.
+   */
+  const workload = await countActiveAssignedDemoLeadsBySalespersonId();
+  return pickLeastLoadedSalesperson(withCalendar, workload);
 }
 
 /** Pure decline/reassign update — used by reassignDemoBookingToPool and regression tests. */

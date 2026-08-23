@@ -2141,6 +2141,9 @@ export class DbStorage implements IStorage {
 
   async createDemoBooking(booking: InsertDemoBooking): Promise<DemoBooking> {
     const now = new Date();
+    // awaiting_schedule is an assigned lead for round-robin (live query), not a
+    // scheduled demo. Do not bump salespeople.totalBookings here; Calendly
+    // confirmation increments that lifetime scheduled counter once.
     const skipBookingCount = booking.status === "awaiting_schedule";
     try {
       const result = await db.insert(demoBookings).values({
