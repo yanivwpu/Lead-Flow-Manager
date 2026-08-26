@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
 import {
   emailsMatchForAdminDeletion,
@@ -42,9 +48,14 @@ type PreflightResponse = {
 type Props = {
   user: { id: string; name: string | null; email: string };
   onDeleted: () => void;
+  variant?: "icon" | "labeled";
 };
 
-export function AdminUserPermanentDeleteButton({ user, onDeleted }: Props) {
+export function AdminUserPermanentDeleteButton({
+  user,
+  onDeleted,
+  variant = "icon",
+}: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -137,22 +148,48 @@ export function AdminUserPermanentDeleteButton({ user, onDeleted }: Props) {
     }
   }
 
+  const openDialog = (e: MouseEvent) => {
+    e.stopPropagation();
+    setOpen(true);
+  };
+
   return (
     <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-gray-500 hover:text-red-600"
-        aria-label={`Delete ${user.email}`}
-        data-testid={`admin-user-delete-${user.id}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
-        }}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
+      {variant === "labeled" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+          aria-label={`Delete account ${user.email}`}
+          data-testid={`admin-user-delete-${user.id}`}
+          onClick={openDialog}
+        >
+          <Trash2 className="h-4 w-4 mr-1.5" />
+          Delete account
+        </Button>
+      ) : (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                aria-label={`Delete account ${user.email}`}
+                data-testid={`admin-user-delete-${user.id}`}
+                onClick={openDialog}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="text-xs">
+              Delete account
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
       <Dialog
         open={open}
         onOpenChange={(next) => {

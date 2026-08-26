@@ -245,7 +245,7 @@ function AdminChannelIndicators({
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="flex items-center gap-1.5"
+        className="flex items-center gap-1"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -253,7 +253,7 @@ function AdminChannelIndicators({
           <Tooltip key={key}>
             <TooltipTrigger asChild>
               <span
-                className="inline-flex flex-col items-center gap-0.5 min-w-[24px] cursor-default select-none"
+                className="inline-flex flex-col items-center gap-0 min-w-[18px] cursor-default select-none"
                 aria-label={tooltip}
                 data-testid={`admin-channel-${key.toLowerCase()}`}
               >
@@ -1560,28 +1560,39 @@ export function Admin() {
                 </div>
               </div>
 
-              {/* Compact table */}
-              <div className="overflow-x-auto">
-                <Table>
+              {/* Compact table: fits ~1280px; Actions stays visible when it must scroll */}
+              <div className="relative isolate">
+                <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[260px]">User</TableHead>
-                      <TableHead>Plan</TableHead>
+                      <TableHead className="w-[22%] px-2">User</TableHead>
+                      <TableHead className="w-[9%] px-1.5">Plan</TableHead>
                       <TableHead
-                        className="min-w-[88px]"
+                        className="w-[8%] px-1.5"
                         title="WA = WhatsApp · FB = Facebook Messenger · IG = Instagram · EM = Email / Gmail"
                       >
                         Channels
                       </TableHead>
-                      <TableHead title="Plan conversation usage for the current billing period (not thread count)">
-                        Conversation usage
+                      <TableHead
+                        className="w-[8%] px-1.5"
+                        title="Plan conversation usage for the current billing period (not thread count)"
+                      >
+                        Usage
                       </TableHead>
-                      <TableHead>Usage %</TableHead>
-                      <TableHead>AI Brain</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Signup</TableHead>
-                      <TableHead className="min-w-[180px]">Acquisition</TableHead>
-                      <TableHead className="w-[56px] text-right">Actions</TableHead>
+                      <TableHead className="w-[6%] px-1.5">%</TableHead>
+                      <TableHead className="w-[5%] px-1.5">AI</TableHead>
+                      <TableHead className="w-[11%] px-1.5">Status</TableHead>
+                      <TableHead className="w-[8%] px-1.5">Signup</TableHead>
+                      <TableHead className="w-[15%] min-w-0 px-1.5">Acquisition</TableHead>
+                      <TableHead
+                        title="Actions"
+                        className={cn(
+                          "sticky right-0 z-20 w-10 min-w-10 max-w-10 px-1 text-right bg-white",
+                          "border-l border-gray-200 shadow-[-8px_0_8px_-6px_rgba(15,23,42,0.16)]",
+                        )}
+                      >
+                        <span className="sr-only">Actions</span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1617,17 +1628,20 @@ export function Admin() {
                         return (
                           <TableRow
                             key={u.id}
-                            className={cn("cursor-pointer", u.openTicketCount > 0 && "bg-red-50")}
+                            className={cn(
+                              "cursor-pointer group",
+                              u.openTicketCount > 0 && "bg-red-50",
+                            )}
                             onClick={() => setSelectedAdminUser(u)}
                             data-testid={`admin-user-row-${u.id}`}
                           >
-                            <TableCell>
-                              <div className="flex items-center gap-2.5">
+                            <TableCell className="px-2 py-1.5 overflow-hidden">
+                              <div className="flex items-center gap-2 min-w-0">
                                 {u.avatarUrl ? (
-                                  <img src={u.avatarUrl} alt="" className="w-8 h-8 rounded-full" />
+                                  <img src={u.avatarUrl} alt="" className="w-7 h-7 rounded-full shrink-0" />
                                 ) : (
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                                    <UserCircle className="h-5 w-5 text-gray-500" />
+                                  <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
+                                    <UserCircle className="h-4 w-4 text-gray-500" />
                                   </div>
                                 )}
                                 <div className="min-w-0">
@@ -1636,47 +1650,47 @@ export function Admin() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1.5">
+                            <TableCell className="px-1.5 py-1.5">
+                              <div className="flex flex-wrap items-center gap-1">
                                 <Badge
                                   variant={plan === "pro" ? "default" : plan === "starter" ? "secondary" : "outline"}
-                                  className={cn(plan === "pro" && "bg-brand-green")}
+                                  className={cn("text-[10px] px-1.5 py-0", plan === "pro" && "bg-brand-green")}
                                 >
                                   {planLabel}
                                 </Badge>
                                 {(u.planOverrideEnabled ||
                                   u.aiBrainEntitlementOverrideEnabled ||
                                   u.growthEngineEntitlementOverrideEnabled) && (
-                                  <Badge variant="outline" className="text-[10px] border-indigo-300 text-indigo-700">
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-indigo-300 text-indigo-700">
                                     Override
                                   </Badge>
                                 )}
                                 {u.isInTrial && (
-                                  <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700">
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 border-amber-300 text-amber-700">
                                     Trial
                                   </Badge>
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-1.5 py-1.5">
                               <AdminChannelIndicators
                                 connections={u.channelConnections ?? EMPTY_CHANNEL_CONNECTIONS}
                               />
                             </TableCell>
-                            <TableCell className="text-sm text-gray-700">
+                            <TableCell className="px-1.5 py-1.5 text-sm text-gray-700 whitespace-nowrap">
                               {limit > 0 ? `${used} / ${limit}` : "—"}
                             </TableCell>
-                            <TableCell className="text-sm text-gray-600">
+                            <TableCell className="px-1.5 py-1.5 text-sm text-gray-600 whitespace-nowrap">
                               {limit > 0 ? `${usagePct}%` : "—"}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-1.5 py-1.5">
                               {hasAI ? (
-                                <Badge className="bg-purple-100 text-purple-700">AI</Badge>
+                                <Badge className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0">AI</Badge>
                               ) : (
                                 <span className="text-xs text-gray-400">—</span>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-1.5 py-1.5">
                               <Badge
                                 variant={
                                   status === "awaiting_verification" || status === "trial"
@@ -1686,6 +1700,7 @@ export function Admin() {
                                       : "secondary"
                                 }
                                 className={cn(
+                                  "max-w-full truncate text-[10px] px-1.5 py-0",
                                   (status === "awaiting_verification" || status === "trial") &&
                                     "border-amber-300 text-amber-700",
                                   status === "active" && "bg-emerald-600",
@@ -1694,14 +1709,20 @@ export function Admin() {
                                 {adminUserStatusLabel(status)}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-sm text-gray-600">
+                            <TableCell className="px-1.5 py-1.5 text-xs text-gray-600 whitespace-nowrap">
                               {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
                             </TableCell>
-                            <TableCell className="text-sm text-gray-700">
-                              {acq}
+                            <TableCell className="px-1.5 py-1.5 text-xs text-gray-700 overflow-hidden" title={acq}>
+                              <span className="block truncate">{acq}</span>
                             </TableCell>
                             <TableCell
-                              className="text-right"
+                              className={cn(
+                                "sticky right-0 z-10 w-10 min-w-10 max-w-10 px-1 py-1.5 text-right",
+                                "border-l border-gray-200 shadow-[-8px_0_8px_-6px_rgba(15,23,42,0.16)]",
+                                u.openTicketCount > 0
+                                  ? "bg-red-50 group-hover:bg-red-50"
+                                  : "bg-white group-hover:bg-muted/50",
+                              )}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <AdminUserPermanentDeleteButton
@@ -2092,6 +2113,25 @@ export function Admin() {
                             : "—"}
                         </span>
                       </div>
+                    </div>
+
+                    <div className="rounded-lg border border-red-200 bg-red-50/40 p-3 space-y-2">
+                      <div className="text-sm font-semibold text-red-800">Danger zone</div>
+                      <p className="text-xs text-gray-600">
+                        Permanent deletion is only allowed for empty unused accounts. Blocked accounts show why they cannot be deleted.
+                      </p>
+                      <AdminUserPermanentDeleteButton
+                        variant="labeled"
+                        user={{
+                          id: selectedAdminUser.id,
+                          name: selectedAdminUser.name,
+                          email: selectedAdminUser.email,
+                        }}
+                        onDeleted={() => {
+                          setSelectedAdminUser(null);
+                          void queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+                        }}
+                      />
                     </div>
                   </div>
                 )}
