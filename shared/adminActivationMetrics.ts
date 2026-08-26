@@ -1,3 +1,4 @@
+import { isRetiredCrmDemoEmail } from "./retiredCrmDemoAgent";
 import { isExcludedFromActivationEmails } from "./activationEmailEligibility";
 
 /** Customer messaging channels that count toward activation metrics. */
@@ -28,11 +29,10 @@ export type ActivationChannelConnections = {
 export const ACTIVATION_WARNING_MESSAGES_WITHOUT_CHANNEL =
   "Messages without connected channel" as const;
 
-/** Internal/demo/seed accounts excluded from activation metrics. */
+/** Retired Demo Agent leftover and owner/QA accounts excluded from activation metrics. */
 export function isExcludedActivationAccount(email: string | null | undefined): boolean {
   if (!email) return true;
-  const lower = email.trim().toLowerCase();
-  if (lower === "demo@whachat.com") return true;
+  if (isRetiredCrmDemoEmail(email)) return true;
   return isExcludedFromActivationEmails(email);
 }
 

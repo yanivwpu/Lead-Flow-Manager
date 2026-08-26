@@ -30,14 +30,15 @@ import {
 } from './authTurnstile';
 import { consumeEmailVerificationToken, issueEmailVerification, resendVerificationForEmail } from './emailVerification';
 import { consumePasswordResetToken, issuePasswordResetForEmail } from './passwordResetTokens';
+import { isRetiredCrmDemoEmail } from '@shared/retiredCrmDemoAgent';
 
 const PgStore = connectPgSimple(session);
 
 const DISPOSABLE_EMAIL_MESSAGE =
-  "Temporary email addresses aren’t allowed. Please use a permanent personal or business email address.";
+  "Temporary email addresses arenâ€™t allowed. Please use a permanent personal or business email address.";
 const PENDING_VERIFICATION_MESSAGE = "Check your email to verify your account.";
 const FORGOT_PASSWORD_MESSAGE =
-  "If an account exists for that email, we’ve sent password-reset instructions.";
+  "If an account exists for that email, weâ€™ve sent password-reset instructions.";
 const HONEYPOT_FIELD = "website";
 
 async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> {
@@ -88,7 +89,7 @@ function logLoginAttemptLine(req: Request, extras: Record<string, unknown>): voi
     ...extras,
     host: req.get('host') ?? null,
     origin: req.get('origin') ?? req.get('referer') ?? null,
-    cookieDomain: process.env.SESSION_COOKIE_DOMAIN?.trim() || '(unset — host-only cookie)',
+    cookieDomain: process.env.SESSION_COOKIE_DOMAIN?.trim() || '(unset â€” host-only cookie)',
     secureCookie: process.env.NODE_ENV === 'production',
   };
   console.log(`[LoginAttempt] ${JSON.stringify(payload)}`);
@@ -172,77 +173,22 @@ export function setupAuth(app: Express) {
           const trimmedEmail = rawEmail.trim();
           const normalizedEmail = normalizeEmailForAuth(trimmedEmail);
 
-          // Special handling for demo account - auto-create/fix in any environment
-          const DEMO_EMAIL = 'demo@whachat.com';
-          const DEMO_PASSWORD = 'password123';
-          
-          if (normalizedEmail === DEMO_EMAIL && password === DEMO_PASSWORD) {
-            let user = await storage.getUserByEmail(DEMO_EMAIL);
-            let needsSampleData = false;
-            
-            if (!user) {
-              // Create demo user if it doesn't exist
-              const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
-              user = await storage.createUser({
-                name: 'Demo Agent',
-                email: DEMO_EMAIL,
-                password: hashedPassword,
-                emailVerifiedAt: new Date(),
-              });
-              needsSampleData = true;
-              console.log('[AUTH] Demo user created on-demand');
-            } else {
-              // Verify password, if wrong fix it
-              const isValid = await bcrypt.compare(DEMO_PASSWORD, user.password);
-              if (!isValid) {
-                const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10);
-                user = await storage.updateUser(user.id, { password: hashedPassword }) || user;
-                console.log('[AUTH] Demo user password fixed on-demand');
-              }
-            }
-            
-            // Ensure Pro subscription
-            if ((user.billingPlan || user.subscriptionPlan) !== 'pro') {
-              user = await storage.updateUser(user.id, { 
-                subscriptionPlan: 'pro',
-                billingPlan: 'pro',
-                onboardingCompleted: true,
-                // twilioConnected intentionally NOT set here — demo user has no
-                // real Twilio credentials (accountSid/authToken/whatsappNumber).
-                // Setting twilioConnected=true without credentials causes a data
-                // inconsistency that breaks the "No user matched" webhook lookup.
-              }) || user;
-            }
-            
-            // Add sample data if needed (check if contacts exist for Unified Inbox)
-            const existingContacts = await storage.getContacts(user.id);
-            if (existingContacts.length === 0) {
-              await setupDemoSampleData(user.id);
-              console.log('[AUTH] Demo sample data created for Unified Inbox');
-            }
-
+          if (isRetiredCrmDemoEmail(normalizedEmail)) {
             emitLoginAttempt(req, {
               emailNormalized: maskEmailForLog(normalizedEmail),
               emailRawLen: trimmedEmail.length,
-              userFound: true,
-              userId: user.id,
-              passwordMatch: true,
-              passwordStoredPresent: true,
-              storedHashKind: 'bcrypt',
-              failureReason: null,
-              path: 'demo_bypass',
+              userFound: false,
+              userId: null,
+              passwordMatch: false,
+              passwordStoredPresent: false,
+              storedHashKind: 'empty',
+              failureReason: 'retired_crm_demo',
+              path: 'local_strategy',
             });
-
-            const demoSessionUser = await storage.getUserForSession(user.id);
-            if (demoSessionUser?.deletionRequestedAt) {
-              return done(null, false, {
-                message: 'This account has a pending deletion request.',
-              });
-            }
-            return done(null, demoSessionUser || user);
+            return done(null, false, { message: 'Invalid email or password' });
           }
-          
-          // Normal login flow for non-demo accounts (case-insensitive email match + NFKC via storage.getUserByEmail)
+
+          // Normal login (case-insensitive email match + NFKC via storage.getUserByEmail)
           let user = await resolveUserForLogin(normalizedEmail);
           const passwordFieldPresent = !!(user?.password && user.password.length > 0);
           const storedHashKind = classifyStoredPassword(user?.password);
@@ -357,7 +303,7 @@ export function requireAuth(req: any, res: any, next: any) {
 
 // Register auth routes
 export function registerAuthRoutes(app: Express) {
-  // Sign up — pending verification; trial + welcome start after email verify
+  // Sign up â€” pending verification; trial + welcome start after email verify
   app.post('/api/auth/signup', async (req, res) => {
     const ip = getAuthClientIp(req);
     const userAgent = getAuthUserAgent(req);
@@ -401,6 +347,19 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const normalizedEmail = normalizeEmailForAuth(email);
+
+      if (isRetiredCrmDemoEmail(normalizedEmail)) {
+        await logAuthSecurityEvent({
+          eventType: 'signup_rejected_retired_identity',
+          email: normalizedEmail,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rejected',
+          reasonCode: 'retired_crm_demo',
+          requestId,
+        });
+        return res.status(400).json({ error: 'This email cannot be used to create an account.' });
+      }
 
       const ipLimit = await checkSignupIpLimit(ip);
       if (!ipLimit.allowed) {
@@ -776,6 +735,20 @@ export function registerAuthRoutes(app: Express) {
         return res.json(generic);
       }
 
+      if (isRetiredCrmDemoEmail(email)) {
+        await logAuthSecurityEvent({
+          eventType: 'forgot_password_requested',
+          email,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'noop',
+          reasonCode: 'retired_crm_demo',
+          requestId,
+        });
+        await softAuthDelay();
+        return res.json(generic);
+      }
+
       const ipLimit = await checkForgotPasswordIpLimit(ip);
       if (!ipLimit.allowed) {
         await logAuthSecurityEvent({
@@ -924,6 +897,9 @@ export function registerAuthRoutes(app: Express) {
       if (!email || !newPassword || typeof newPassword !== 'string') {
         return res.status(400).json({ error: 'email and newPassword required' });
       }
+      if (isRetiredCrmDemoEmail(typeof email === 'string' ? email : '')) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
       if (newPassword.length < 8) {
         return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
       }
@@ -985,250 +961,6 @@ export function registerAuthRoutes(app: Express) {
       res.status(500).json({ error: 'Failed to reset password' });
     }
   });
-}
-
-// Setup demo sample data for Unified Inbox showcase
-async function setupDemoSampleData(userId: string) {
-  // Sample contacts with conversations across different channels
-  const sampleData = [
-    {
-      contact: {
-        userId,
-        name: 'Sarah Johnson',
-        phone: '+14155551234',
-        email: 'sarah.johnson@email.com',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
-        whatsappId: '+14155551234',
-        primaryChannel: 'whatsapp',
-        tag: 'Hot Lead',
-        pipelineStage: 'Qualified',
-        notes: 'Interested in 3BR property in downtown area. Budget $500-600k.',
-        source: 'whatsapp',
-      },
-      conversations: [
-        {
-          channel: 'whatsapp',
-          status: 'open',
-          unreadCount: 2,
-          messages: [
-            { direction: 'inbound', content: 'Hi! I saw your listing for the downtown condo. Is it still available?', minutesAgo: 15 },
-            { direction: 'outbound', content: 'Yes, it\'s still available! Would you like to schedule a viewing?', minutesAgo: 13 },
-            { direction: 'inbound', content: 'That would be great! What times work this week?', minutesAgo: 10 },
-            { direction: 'outbound', content: 'I have openings Thursday at 2pm or Saturday at 11am. Which works better?', minutesAgo: 7 },
-            { direction: 'inbound', content: 'Saturday at 11am would be perfect!', minutesAgo: 5 },
-            { direction: 'outbound', content: 'Great! I\'ll send you the property details and confirmation.', minutesAgo: 3 },
-            { direction: 'inbound', content: 'Thanks! I\'ll check it out.', minutesAgo: 0 },
-          ],
-        },
-      ],
-    },
-    {
-      contact: {
-        userId,
-        name: 'Michael Chen',
-        phone: '+14155552345',
-        email: 'michael.chen@email.com',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Michael',
-        primaryChannel: 'sms',
-        tag: 'Customer',
-        pipelineStage: 'Closed',
-        notes: 'Just closed on beach house property. Very happy client!',
-        source: 'manual',
-      },
-      conversations: [
-        {
-          channel: 'sms',
-          status: 'resolved',
-          unreadCount: 0,
-          messages: [
-            { direction: 'outbound', content: 'Hi! Just wanted to confirm our closing meeting tomorrow at 3pm?', minutesAgo: 120 },
-            { direction: 'inbound', content: 'Yes! We\'re so excited! Do we need to bring anything else?', minutesAgo: 115 },
-            { direction: 'outbound', content: 'Just photo IDs and your checkbook for any remaining fees. Everything else is ready!', minutesAgo: 112 },
-            { direction: 'inbound', content: 'Perfect, see you tomorrow!', minutesAgo: 110 },
-          ],
-        },
-      ],
-    },
-    {
-      contact: {
-        userId,
-        name: 'Emma Williams',
-        phone: '+14155553456',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Emma',
-        primaryChannel: 'webchat',
-        tag: 'New',
-        pipelineStage: 'Lead',
-        notes: '',
-        source: 'webchat',
-      },
-      conversations: [
-        {
-          channel: 'webchat',
-          status: 'open',
-          unreadCount: 1,
-          messages: [
-            { direction: 'inbound', content: 'Hello! I\'m looking for a pet-friendly rental apartment in the city.', minutesAgo: 180 },
-            { direction: 'outbound', content: 'Welcome! We have several pet-friendly options. What\'s your budget range?', minutesAgo: 178 },
-            { direction: 'inbound', content: 'Around $2000-2500/month. I have a medium-sized dog.', minutesAgo: 175 },
-            { direction: 'inbound', content: 'What\'s the pet policy for rentals?', minutesAgo: 174 },
-          ],
-        },
-      ],
-    },
-    {
-      contact: {
-        userId,
-        name: 'David Martinez',
-        phone: '+14155554567',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=David',
-        telegramId: '@david_m',
-        primaryChannel: 'telegram',
-        tag: 'Warm Lead',
-        pipelineStage: 'Proposal',
-        notes: 'Relocating from NYC. Looking for family home with good schools nearby.',
-        source: 'telegram',
-      },
-      conversations: [
-        {
-          channel: 'telegram',
-          status: 'pending',
-          unreadCount: 1,
-          messages: [
-            { direction: 'inbound', content: 'I\'m interested in the 4BR home on Oak Street you posted.', minutesAgo: 300 },
-            { direction: 'outbound', content: 'Great choice! It\'s a beautiful property. The asking price is $750,000.', minutesAgo: 285 },
-            { direction: 'inbound', content: 'Can I get more photos of the kitchen?', minutesAgo: 280 },
-          ],
-        },
-      ],
-    },
-    {
-      contact: {
-        userId,
-        name: 'Lisa Thompson',
-        phone: '+14155555678',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa',
-        instagramId: 'lisathompson_realestate',
-        primaryChannel: 'instagram',
-        tag: 'Hot Lead',
-        pipelineStage: 'Qualified',
-        notes: 'Instagram lead from property showcase reel',
-        source: 'instagram',
-      },
-      conversations: [
-        {
-          channel: 'instagram',
-          status: 'open',
-          unreadCount: 1,
-          messages: [
-            { direction: 'inbound', content: 'Hi! Saw your reel about the luxury penthouse. Is it available?', minutesAgo: 480 },
-            { direction: 'outbound', content: 'Yes it is! Would you like to schedule a private viewing?', minutesAgo: 450 },
-            { direction: 'inbound', content: 'Love this property! DM sent.', minutesAgo: 420 },
-          ],
-        },
-      ],
-    },
-    {
-      contact: {
-        userId,
-        name: 'James Wilson',
-        phone: '+14155556789',
-        email: 'james.wilson@investments.com',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=James',
-        facebookId: 'james.wilson.investor',
-        primaryChannel: 'facebook',
-        tag: 'Investor',
-        pipelineStage: 'Negotiation',
-        notes: 'Commercial investor. Looking for multi-family units.',
-        source: 'facebook',
-      },
-      conversations: [
-        {
-          channel: 'facebook',
-          status: 'open',
-          unreadCount: 0,
-          messages: [
-            { direction: 'inbound', content: 'Hello! I\'m an investor looking for multi-family properties.', minutesAgo: 720 },
-            { direction: 'outbound', content: 'Welcome James! We have several excellent multi-family options with strong rental income potential.', minutesAgo: 690 },
-            { direction: 'inbound', content: 'Great! What kind of cap rates are you seeing?', minutesAgo: 660 },
-            { direction: 'outbound', content: 'Currently seeing 5-7% cap rates in our market. I can send you a curated list.', minutesAgo: 645 },
-            { direction: 'inbound', content: 'Looking for investment properties with good ROI.', minutesAgo: 630 },
-          ],
-        },
-      ],
-    },
-    // Multi-channel contact example: Rachel with both WhatsApp and Instagram threads
-    {
-      contact: {
-        userId,
-        name: 'Rachel Green',
-        phone: '+14155557890',
-        email: 'rachel.green@design.com',
-        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Rachel',
-        whatsappId: '+14155557890',
-        instagramId: 'rachelgreen_homes',
-        primaryChannel: 'whatsapp',
-        tag: 'VIP',
-        pipelineStage: 'Proposal',
-        notes: 'Interior designer - Referred by James Wilson. Looking for investment property to flip.',
-        source: 'whatsapp',
-      },
-      conversations: [
-        {
-          channel: 'whatsapp',
-          status: 'open',
-          unreadCount: 1,
-          messages: [
-            { direction: 'inbound', content: 'James recommended you! I\'m looking for a fixer-upper to flip.', minutesAgo: 1440 },
-            { direction: 'outbound', content: 'Great to hear from you Rachel! James has great taste. What\'s your budget?', minutesAgo: 1420 },
-            { direction: 'inbound', content: 'Around $400-500k including renovation budget.', minutesAgo: 1400 },
-            { direction: 'outbound', content: 'Perfect. I have 3 properties that fit that profile. Can I send details?', minutesAgo: 60 },
-            { direction: 'inbound', content: 'Yes please!', minutesAgo: 45 },
-          ],
-        },
-        {
-          channel: 'instagram',
-          status: 'open',
-          unreadCount: 0,
-          messages: [
-            { direction: 'inbound', content: 'Just saw your post about the Victorian! Is that one of the fixer-uppers?', minutesAgo: 30 },
-            { direction: 'outbound', content: 'Yes! That\'s actually my top pick for you. Great bones, needs cosmetic work.', minutesAgo: 25 },
-          ],
-        },
-      ],
-    },
-  ];
-
-  // Create contacts, conversations, and messages
-  for (const data of sampleData) {
-    const contact = await storage.createContact(data.contact as any);
-    
-    for (const convData of data.conversations) {
-      const lastMsg = convData.messages[convData.messages.length - 1];
-      const conversation = await storage.createConversation({
-        userId,
-        contactId: contact.id,
-        channel: convData.channel,
-        status: convData.status,
-        unreadCount: convData.unreadCount,
-        lastMessageAt: new Date(Date.now() - lastMsg.minutesAgo * 60000),
-        lastMessagePreview: lastMsg.content,
-        lastMessageDirection: lastMsg.direction,
-      } as any);
-      
-      for (const msg of convData.messages) {
-        await storage.createMessage({
-          conversationId: conversation.id,
-          contactId: contact.id,
-          userId,
-          direction: msg.direction,
-          content: msg.content,
-          contentType: 'text',
-          status: msg.direction === 'outbound' ? 'delivered' : 'received',
-          createdAt: new Date(Date.now() - msg.minutesAgo * 60000),
-        } as any);
-      }
-    }
-  }
 }
 
 // Extend Express Request type to include user

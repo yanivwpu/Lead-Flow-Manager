@@ -18,7 +18,6 @@ import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
 import {
-  ensureGrowthEnginePurchasedTask,
   onGrowthEngineSubmissionRecorded,
   onGrowthEngineInstallSuccess,
   resolveConciergeBookingUrlForUser,
@@ -97,8 +96,8 @@ export function registerTemplateRoutes(app: Express) {
       const user = await storage.getUser(userId);
       const template = await storage.getTemplateById(TEMPLATE_ID);
 
-      // Bypass for demo user or anyone else we want to grant immediate access
-      if (user?.email === "demo@whachat.com" || user?.email?.includes("admin") || req.query.bypass === "true") {
+      // Bypass for internal admin emails or explicit query bypass
+      if (user?.email?.includes("admin") || req.query.bypass === "true") {
         return res.json({
           template: template || {
             id: TEMPLATE_ID,
@@ -187,55 +186,34 @@ export function registerTemplateRoutes(app: Express) {
         });
       }
 
-      if (user.email !== "demo@whachat.com") {
-        const ge = await evaluateGrowthEngineAccess(userId);
-        if (!ge.ok) {
-          logRgePurchaseEvent("ge_access_denied", {
-            userId,
-            reason: ge.reason,
-            hasPro: ge.hasProTier,
-            hasAI: ge.hasAIBrainAddon,
-            workflowsEnabled: ge.workflowsEnabled,
-          });
-          return res.status(403).json({
-            error: ge.message,
-            code: "rge_ge_access_denied",
-            reason: ge.reason,
-            hasPro: ge.hasProTier,
-            hasAI: ge.hasAIBrainAddon,
-            workflowsEnabled: ge.workflowsEnabled,
-          });
-        }
-
-        if (shouldAutoGrantGrowthEngineViaAdminOverride(ge.limits)) {
-          const entitlement = await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
-          return res.json({
-            success: true,
-            adminOverride: true,
-            alreadyPurchased: true,
-            entitlementStatus: entitlement?.status ?? "purchased",
-            onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
-          });
-        }
+      const ge = await evaluateGrowthEngineAccess(userId);
+      if (!ge.ok) {
+        logRgePurchaseEvent("ge_access_denied", {
+          userId,
+          reason: ge.reason,
+          hasPro: ge.hasProTier,
+          hasAI: ge.hasAIBrainAddon,
+          workflowsEnabled: ge.workflowsEnabled,
+        });
+        return res.status(403).json({
+          error: ge.message,
+          code: "rge_ge_access_denied",
+          reason: ge.reason,
+          hasPro: ge.hasProTier,
+          hasAI: ge.hasAIBrainAddon,
+          workflowsEnabled: ge.workflowsEnabled,
+        });
       }
 
-      if (user.email === "demo@whachat.com") {
-        const entitlement = await storage.upsertTemplateEntitlement(userId, TEMPLATE_ID, {
-          status: "purchased",
-          purchasedAt: new Date(),
+      if (shouldAutoGrantGrowthEngineViaAdminOverride(ge.limits)) {
+        const entitlement = await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
+        return res.json({
+          success: true,
+          adminOverride: true,
+          alreadyPurchased: true,
+          entitlementStatus: entitlement?.status ?? "purchased",
+          onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
         });
-        const existingInstall = await storage.getTemplateInstall(userId, TEMPLATE_ID);
-        if (!existingInstall) {
-          await storage.createTemplateInstall({ userId, templateId: TEMPLATE_ID, installStatus: "pending" });
-        }
-        await ensureGrowthEnginePurchasedTask(userId).catch((e) =>
-          console.error("[Template] GE setup task (demo purchase):", e)
-        );
-        const existingProgress = await getRgeOnboardingProgress(userId);
-        if (!existingProgress) {
-          await saveRgeOnboardingProgress(userId, { step: 1 }).catch(() => undefined);
-        }
-        return res.json({ success: true, demo: true });
       }
 
       const billingChannel = await resolveRgePurchaseBillingChannel(userId, req);
@@ -416,16 +394,14 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(404).json({ error: "User not found" });
       }
 
-      if (user.email !== "demo@whachat.com") {
-        if (!ge.ok) {
-          return res.status(403).json({
-            error: ge.message,
-            code: ge.reason,
-            hasPro: ge.hasProTier,
-            hasAI: ge.hasAIBrainAddon,
-            workflowsEnabled: ge.workflowsEnabled,
-          });
-        }
+      if (!ge.ok) {
+        return res.status(403).json({
+          error: ge.message,
+          code: ge.reason,
+          hasPro: ge.hasProTier,
+          hasAI: ge.hasAIBrainAddon,
+          workflowsEnabled: ge.workflowsEnabled,
+        });
       }
 
       if (entitlement.onboardingSubmittedAt) {
@@ -479,7 +455,7 @@ export function registerTemplateRoutes(app: Express) {
       const waLine =
         user?.metaDisplayPhoneNumber ||
         user?.twilioWhatsappNumber ||
-        (user?.email !== "demo@whachat.com" ? "Not on file" : "demo");
+        "Not on file";
 
       const whatsappConnected = await isUserWhatsAppConnectedForActivation(userId);
 
@@ -578,24 +554,26 @@ export function registerTemplateRoutes(app: Express) {
         return res.status(403).json({ error: "Template not purchased" });
       }
 
-      if (user && user.email !== "demo@whachat.com") {
-        if (!ge.ok) {
-          return res.status(403).json({
-            error: ge.message,
-            code: ge.reason,
-            hasPro: ge.hasProTier,
-            hasAI: ge.hasAIBrainAddon,
-            workflowsEnabled: ge.workflowsEnabled,
-          });
-        }
-        const whatsappOk = await isUserWhatsAppConnectedForActivation(userId);
-        if (!whatsappOk) {
-          return res.status(400).json({
-            error:
-              "WhatsApp must be connected before the Growth Engine can be installed. Open Settings → Channels and complete the guided WhatsApp setup.",
-            code: "whatsapp_required",
-          });
-        }
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (!ge.ok) {
+        return res.status(403).json({
+          error: ge.message,
+          code: ge.reason,
+          hasPro: ge.hasProTier,
+          hasAI: ge.hasAIBrainAddon,
+          workflowsEnabled: ge.workflowsEnabled,
+        });
+      }
+      const whatsappOk = await isUserWhatsAppConnectedForActivation(userId);
+      if (!whatsappOk) {
+        return res.status(400).json({
+          error:
+            "WhatsApp must be connected before the Growth Engine can be installed. Open Settings → Channels and complete the guided WhatsApp setup.",
+          code: "whatsapp_required",
+        });
       }
 
       await installTemplateForUser(userId);

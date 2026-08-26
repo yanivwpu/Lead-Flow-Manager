@@ -29,6 +29,7 @@ import {
 } from "@shared/adminActivationMetrics";
 import { getEffectivePlanForUser } from "./subscriptionService";
 import { computeTrialStatus, isProAiTrialActive } from "./trialEntitlements";
+import { RETIRED_CRM_DEMO_EMAIL } from "@shared/retiredCrmDemoAgent";
 import {
   getGhlMarketplacePaidUserIds,
   loadGhlActivationConnectionState,
@@ -253,7 +254,7 @@ export function serializeActivationDate(value: unknown): string | null {
 /** Exclude test/demo/seed accounts and contacts from message aggregates. */
 function realMessageSqlConditions() {
   return and(
-    sql`lower(${users.email}) != 'demo@whachat.com'`,
+    sql`lower(${users.email}) != ${RETIRED_CRM_DEMO_EMAIL}`,
     sql`lower(${users.email}) not like '%@test.com'`,
     sql`lower(${users.email}) not like '%@shopify.whachatcrm.com'`,
     sql`coalesce(${contacts.notes}, '') not ilike '%test lead%'`,

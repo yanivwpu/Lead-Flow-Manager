@@ -104,6 +104,13 @@ run("Stripe trialing / past_due / paused / unpaid block even without customer id
   assert.equal(hasStripeBillingDeletionBlocker({ stripeSubscriptionId: "sub_1" }), true);
 });
 
+run("owner / sales-portal / shopify / retired CRM demo emails stay protected from Admin empty-account delete", () => {
+  assert.equal(isProtectedAdminDeletionEmail("yanivharamaty@gmail.com"), true);
+  assert.equal(isProtectedAdminDeletionEmail("yahabegood@gmail.com"), true);
+  assert.equal(isProtectedAdminDeletionEmail("demo@sales.com"), true);
+  assert.equal(isProtectedAdminDeletionEmail("demo@whachat.com"), true);
+});
+
 run("Shopify synthetic email, install timestamp, token, charge, and status all block", () => {
   assert.equal(hasShopifyInstallationDeletionBlocker({ email: "store@shopify.whachatcrm.com" }), true);
   assert.equal(hasShopifyInstallationDeletionBlocker({ shopifyInstalledAt: new Date() }), true);

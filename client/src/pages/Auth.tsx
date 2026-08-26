@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
+import { BookDemoModal } from "@/components/BookDemoModal";
 
 export function AuthPage() {
   const { t } = useTranslation();
@@ -44,6 +45,7 @@ export function AuthPage() {
   const [honeypot, setHoneypot] = useState("");
   const [resendBusy, setResendBusy] = useState(false);
   const [resendNote, setResendNote] = useState("");
+  const [showDemoModal, setShowDemoModal] = useState(false);
   const { login, signup, resendVerification } = useAuth();
   const turnstileConfigured = !!(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined);
 
@@ -238,7 +240,16 @@ export function AuthPage() {
                 dir="ltr"
               />
               {isLogin && (
-                <p className="text-[10px] text-gray-400 mt-1">Demo: demo@whachat.com / password123</p>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Need a walkthrough?{" "}
+                  <button
+                    type="button"
+                    className="underline hover:text-gray-600"
+                    onClick={() => setShowDemoModal(true)}
+                  >
+                    Book a demo
+                  </button>
+                </p>
               )}
             </div>
 
@@ -488,6 +499,7 @@ export function AuthPage() {
           )}
         </DialogContent>
       </Dialog>
+      <BookDemoModal isOpen={showDemoModal} onClose={() => setShowDemoModal(false)} />
     </div>
     </>
   );

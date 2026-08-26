@@ -636,28 +636,18 @@ export function FollowUps() {
   const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
 
-  const isDemoUser = user?.email === 'demo@whachat.com';
-
-  // Demo users: keep using /api/chats. Real users: use /api/inbox.
-  const { data: rawChats = [], isLoading: chatsLoading } = useQuery<Chat[]>({
-    queryKey: ['/api/chats'],
-    enabled: !!user && isDemoUser,
-  });
-
-  const { data: inboxData = [], isLoading: inboxLoading } = useQuery<InboxItem[]>({
+  const { data: inboxData = [], isLoading } = useQuery<InboxItem[]>({
     queryKey: ['/api/inbox'],
-    enabled: !!user && !isDemoUser,
+    enabled: !!user,
   });
-
-  const isLoading = isDemoUser ? chatsLoading : inboxLoading;
 
   const { data: appointmentsData = [] } = useQuery<AppointmentRecord[]>({
     queryKey: ['/api/appointments'],
-    enabled: !!user && !isDemoUser,
+    enabled: !!user,
   });
 
   useEffect(() => {
-    if (!user || isDemoUser) return;
+    if (!user) return;
     let ws: WebSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -690,11 +680,10 @@ export function FollowUps() {
       if (heartbeat) clearInterval(heartbeat);
       ws?.close();
     };
-  }, [user, isDemoUser, queryClient, toast]);
+  }, [user, queryClient, toast]);
 
   // Map /api/inbox items to the Chat shape used by this page
   const chats = useMemo<Chat[]>(() => {
-    if (isDemoUser) return rawChats;
     return inboxData
       .filter((item) => item.contact.source !== "email_inbox")
       .map(item => ({
@@ -716,7 +705,7 @@ export function FollowUps() {
       messages: [],
       lastMessageDirection: item.conversation?.lastMessageDirection,
     }));
-  }, [isDemoUser, rawChats, inboxData]);
+  }, [inboxData]);
 
   const patchContact = async (contactId: string, fields: Record<string, unknown>) => {
     const res = await fetch(`/api/contacts/${contactId}`, {
@@ -729,17 +718,6 @@ export function FollowUps() {
     return res.json();
   };
 
-  const patchChat = async (chatId: string, fields: Record<string, unknown>) => {
-    const res = await fetch(`/api/chats/${chatId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(fields),
-    });
-    if (!res.ok) throw new Error('Failed to update chat');
-    return res.json();
-  };
-
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/inbox'] });
     queryClient.invalidateQueries({ queryKey: ['/api/chats'] });
@@ -749,7 +727,6 @@ export function FollowUps() {
 
   const clearFollowUpMutation = useMutation({
     mutationFn: async (contactId: string) => {
-      if (isDemoUser) return patchChat(contactId, { followUp: null, followUpDate: null });
       return patchContact(contactId, { followUp: null, followUpDate: null });
     },
     onSuccess: invalidateAll,
@@ -757,7 +734,6 @@ export function FollowUps() {
 
   const updateFollowUpDateMutation = useMutation({
     mutationFn: async ({ chatId, newDate }: { chatId: string; newDate: Date }) => {
-      if (isDemoUser) return patchChat(chatId, { followUpDate: newDate.toISOString() });
       return patchContact(chatId, { followUpDate: newDate.toISOString() });
     },
     onSuccess: invalidateAll,
@@ -765,7 +741,6 @@ export function FollowUps() {
 
   const updatePipelineStageMutation = useMutation({
     mutationFn: async ({ chatId, newStage }: { chatId: string; newStage: string }) => {
-      if (isDemoUser) return patchChat(chatId, { pipelineStage: newStage });
       return patchContact(chatId, { pipelineStage: newStage });
     },
     onSuccess: invalidateAll,

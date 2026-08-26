@@ -29,7 +29,7 @@ export type StripeCheckoutRedirectOpts = {
   cancelReturnPath?: string;
 };
 
-export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "demo" | "trial" | "admin";
+export type AIBrainSource = "none" | "stripe" | "shopify" | "manual" | "trial" | "admin";
 
 /** Shown when user tries AI Brain add-on checkout on Free (effective plan). */
 export const AI_BRAIN_REQUIRES_PAID_PLAN_MESSAGE =
@@ -296,9 +296,6 @@ class SubscriptionService {
     has: boolean;
     source: AIBrainSource;
   }> {
-    if (user.email === "demo@whachat.com") {
-      return { has: true, source: "demo" };
-    }
     if (this.isManualAIBrainEmail(user.email ?? undefined)) {
       return { has: true, source: "manual" };
     }
