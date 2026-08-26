@@ -185,6 +185,11 @@ import ghlRoutes from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
 import {
+  getAdminAccountDeletionPreflight,
+  permanentlyDeleteEmptyAdminAccount,
+} from "./adminAccountDeletionService";
+import { getRequestId } from "./authSecurity";
+import {
   normalizeWooCommerceStoreUrl,
   verifyWooCommerceRestCredentials,
   fetchWooCommerceSampleOrders,
@@ -9402,6 +9407,56 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error fetching admin users:", error?.message || error, error?.stack);
       res.status(500).json({ error: `Failed to fetch users: ${error?.message || 'Unknown error'}` });
+    }
+  });
+
+  // Sales Admin: permanent-delete preflight for empty unused accounts (exact user ID only).
+  app.get("/api/admin/users/:userId/deletion-preflight", requireAdmin, async (req, res) => {
+    try {
+      const preflight = await getAdminAccountDeletionPreflight(req.params.userId, {
+        actorCrmUserId: (req.user as { id?: string } | undefined)?.id ?? null,
+      });
+      return res.json({
+        allowed: preflight.allowed,
+        userId: preflight.userId,
+        name: preflight.name,
+        email: preflight.email,
+        blockers: preflight.blockers,
+      });
+    } catch (error: any) {
+      console.error("Error loading deletion preflight:", error?.message || error);
+      return res.status(500).json({ error: "Failed to load deletion preflight" });
+    }
+  });
+
+  // Sales Admin: permanently delete an empty unused account after email confirmation.
+  // Re-runs preflight inside the request; never trusts the UI result.
+  app.post("/api/admin/users/:userId/permanent-delete", requireAdmin, async (req, res) => {
+    try {
+      const emailConfirmation =
+        typeof (req.body as { emailConfirmation?: unknown } | undefined)?.emailConfirmation === "string"
+          ? (req.body as { emailConfirmation: string }).emailConfirmation
+          : "";
+      const actor: "admin_session" | "admin_token" = req.headers["x-admin-token"]
+        ? "admin_token"
+        : "admin_session";
+      const result = await permanentlyDeleteEmptyAdminAccount({
+        userId: req.params.userId,
+        emailConfirmation,
+        actorCrmUserId: (req.user as { id?: string } | undefined)?.id ?? null,
+        actor,
+        requestId: getRequestId(req),
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({
+          error: result.error,
+          ...(result.blockers ? { blockers: result.blockers } : {}),
+        });
+      }
+      return res.json({ success: true, userId: result.userId });
+    } catch (error: any) {
+      console.error("Error permanently deleting account:", error?.message || error);
+      return res.status(500).json({ error: "Failed to permanently delete account" });
     }
   });
 

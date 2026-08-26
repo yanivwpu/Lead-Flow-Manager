@@ -83,6 +83,7 @@ import {
 import { AdminGhlTab } from "@/components/admin/AdminGhlTab";
 import { AdminActivationTab } from "@/components/admin/AdminActivationTab";
 import { AdminEmailCryptoTab } from "@/components/admin/AdminEmailCryptoTab";
+import { AdminUserPermanentDeleteButton } from "@/components/admin/AdminUserPermanentDelete";
 
 /** Centered compact admin form dialogs (~520–600px; scroll inside body only). */
 const ADMIN_FORM_MODAL_CLASS =
@@ -1580,12 +1581,13 @@ export function Admin() {
                       <TableHead>Status</TableHead>
                       <TableHead>Signup</TableHead>
                       <TableHead className="min-w-[180px]">Acquisition</TableHead>
+                      <TableHead className="w-[56px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {usersError ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <p className="text-red-500 mb-2">Failed to load users: {usersErrorDetails?.message || 'Unknown error'}</p>
                           <Button variant="outline" size="sm" onClick={() => refetchUsers()}>
                             Retry
@@ -1594,7 +1596,7 @@ export function Admin() {
                       </TableRow>
                     ) : derivedUsers.total === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={10} className="text-center py-8 text-gray-500">
                           No users match the current filters.
                         </TableCell>
                       </TableRow>
@@ -1697,6 +1699,18 @@ export function Admin() {
                             </TableCell>
                             <TableCell className="text-sm text-gray-700">
                               {acq}
+                            </TableCell>
+                            <TableCell
+                              className="text-right"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <AdminUserPermanentDeleteButton
+                                user={{ id: u.id, name: u.name, email: u.email }}
+                                onDeleted={() => {
+                                  if (selectedAdminUser?.id === u.id) setSelectedAdminUser(null);
+                                  void queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+                                }}
+                              />
                             </TableCell>
                           </TableRow>
                         );
