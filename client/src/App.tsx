@@ -27,6 +27,9 @@ import { parseLocalizedPath } from "@shared/localeRoutes";
 import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
+const CheckEmailPage = lazy(() =>
+  import("@/pages/CheckEmail").then((m) => ({ default: m.CheckEmailPage })),
+);
 const VerifyEmailPage = lazy(() =>
   import("@/pages/VerifyEmail").then((m) => ({ default: m.VerifyEmailPage })),
 );
@@ -167,7 +170,7 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
   // Only block when the server explicitly reports an unverified account (null).
   // Missing field = legacy payload / pre-migration → allow.
   if (user.emailVerifiedAt === null) {
-    return <Redirect to={`/auth?mode=login`} />;
+    return <Redirect to={`/check-email`} />;
   }
 
   return <Component {...rest} />;
@@ -206,6 +209,7 @@ function MarketingRoutes() {
   return (
     <Switch>
       <Route path="/auth" component={AuthPage} />
+      <Route path="/check-email" component={CheckEmailPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy">

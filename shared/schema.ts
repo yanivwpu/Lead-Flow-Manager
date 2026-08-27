@@ -185,6 +185,14 @@ export const users = pgTable("users", {
    * Existing users are backfilled on migration; null = awaiting verification.
    */
   emailVerifiedAt: timestamp("email_verified_at"),
+  /** When a 24-hour unverified-signup reminder was successfully sent (send-once). */
+  verificationReminderSentAt: timestamp("verification_reminder_sent_at"),
+  /**
+   * When Resend last accepted a verification email (signup, resend, change-email,
+   * automatic reminder, or guarded recovery). Automatic reminders wait 24h from
+   * this timestamp; null falls back to created_at.
+   */
+  verificationEmailLastSentAt: timestamp("verification_email_last_sent_at"),
   /** When the post-verification welcome email was sent (prevents duplicate welcome sequences). */
   welcomeEmailSentAt: timestamp("welcome_email_sent_at"),
   /** When the Pro + AI Brain trial-expiration email was successfully sent (send-once). */
@@ -201,6 +209,15 @@ export const users = pgTable("users", {
   metaPhoneNumberIdUq: uniqueIndex("users_meta_phone_number_id_uidx")
     .on(t.metaPhoneNumberId)
     .where(sql`${t.metaPhoneNumberId} IS NOT NULL`),
+  /**
+   * At most one live install row per shop. Lifetime trial consumption is
+   * `shopify_shop_trials` (any row, including blocked). This unique index is
+   * created at startup when no duplicate shopify_shop values exist; otherwise
+   * a sanitized diagnostic is logged and the index is not created.
+   */
+  shopifyShopUq: uniqueIndex("users_shopify_shop_uidx")
+    .on(t.shopifyShop)
+    .where(sql`${t.shopifyShop} IS NOT NULL`),
 }));
 
 /** Hashed, single-use email verification tokens for public signup. */
@@ -220,6 +237,48 @@ export const emailVerificationTokens = pgTable(
 );
 
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+
+/**
+ * Durable feature rollout boundaries. `active_after` is written once with NOW()
+ * and must not be moved by later process startups (INSERT ON CONFLICT DO NOTHING).
+ */
+export const appFeatureRollouts = pgTable("app_feature_rollouts", {
+  featureKey: text("feature_key").primaryKey(),
+  activeAfter: timestamp("active_after").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AppFeatureRollout = typeof appFeatureRollouts.$inferSelect;
+
+/**
+ * One-trial ledger per canonical Shopify shop (`{slug}.myshopify.com`) while the
+ * shop is known to WhachatCRM. Kept through ordinary uninstall and through
+ * deletion of the original user (`original_user_id` ON DELETE SET NULL).
+ * Deleted on valid shop/redact together with store-identifying data — the
+ * canonical domain is not retained, hashed, or replaced after redaction.
+ * Any row (granted, backfilled, or blocked) prevents an automatic trial grant.
+ * Stores no access tokens and no owner PII.
+ */
+export const shopifyShopTrials = pgTable(
+  "shopify_shop_trials",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    canonicalShop: text("canonical_shop").notNull(),
+    /** granted | backfilled | blocked_conflict | blocked_unknown_history */
+    status: text("status").notNull().default("granted"),
+    blockReason: text("block_reason"),
+    trialStartedAt: timestamp("trial_started_at"),
+    trialEndsAt: timestamp("trial_ends_at"),
+    trialPlan: text("trial_plan").notNull().default("pro_ai"),
+    trialConsumedAt: timestamp("trial_consumed_at").notNull().defaultNow(),
+    originalUserId: varchar("original_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => [uniqueIndex("shopify_shop_trials_canonical_shop_uidx").on(t.canonicalShop)],
+);
+
+export type ShopifyShopTrial = typeof shopifyShopTrials.$inferSelect;
 
 /** Hashed, single-use password reset tokens for main app users (DB-backed for multi-instance). */
 export const passwordResetTokens = pgTable(

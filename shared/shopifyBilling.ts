@@ -1,10 +1,22 @@
 /** Shared Shopify shop domain validation (client + server). */
 export const SHOPIFY_SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
 
+/**
+ * Canonical Shopify shop hostname: lowercase `{slug}.myshopify.com`.
+ * Strips protocol, credentials, path, query, hash, and port. Rejects custom domains.
+ */
 export function normalizeShopifyShopDomain(shop: string | null | undefined): string | null {
-  const s = shop?.trim();
+  if (!shop || typeof shop !== "string") return null;
+  let s = shop.trim().toLowerCase();
+  if (!s) return null;
+  s = s.replace(/^https?:\/\//, "");
+  const at = s.lastIndexOf("@");
+  if (at >= 0) s = s.slice(at + 1);
+  s = s.split("/")[0]?.split("?")[0]?.split("#")[0] ?? "";
+  s = s.replace(/:\d+$/, "");
+  if (s.startsWith("www.")) s = s.slice(4);
   if (!s || !SHOPIFY_SHOP_DOMAIN_RE.test(s)) return null;
-  return s.toLowerCase();
+  return s;
 }
 
 export function isShopifyShopDomain(shop: string | null | undefined): boolean {
@@ -34,6 +46,14 @@ export function shopifySyntheticMerchantEmail(shop: string | null | undefined): 
 export function isShopifySyntheticMerchantEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return email.trim().toLowerCase().endsWith(`@${SHOPIFY_MERCHANT_EMAIL_DOMAIN}`);
+}
+
+/** Reverse of shopifySyntheticMerchantEmail — used only for ledger backfill of redacted shops. */
+export function shopDomainFromShopifySyntheticEmail(email: string | null | undefined): string | null {
+  if (!isShopifySyntheticMerchantEmail(email)) return null;
+  const local = String(email).trim().toLowerCase().split("@")[0] ?? "";
+  if (!local) return null;
+  return normalizeShopifyShopDomain(`${local}.myshopify.com`);
 }
 
 /**

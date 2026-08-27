@@ -5069,9 +5069,13 @@ export async function registerRoutes(
     }
   }
 
-  async function runBackfills(): Promise<{ trialExpirationEmailPatchOk: boolean }> {
+  async function runBackfills(): Promise<{
+    trialExpirationEmailPatchOk: boolean;
+    verificationReminderPatchOk: boolean;
+  }> {
     const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
-    const { publicListingSchemaReady, trialExpirationEmailPatchOk } = await applyStartupSchemaPatches();
+    const { publicListingSchemaReady, trialExpirationEmailPatchOk, verificationReminderPatchOk } =
+      await applyStartupSchemaPatches();
     if (!publicListingSchemaReady) {
       console.error(
         "[Startup] Public listing and agent page routes will return 503 until schema patches 0045–0047 succeed",
@@ -5079,7 +5083,7 @@ export async function registerRoutes(
     }
     await backfillFacebookInstagramChannelSettings();
     await backfillInstagramPageId();
-    return { trialExpirationEmailPatchOk };
+    return { trialExpirationEmailPatchOk, verificationReminderPatchOk };
   }
 
   // IMPORTANT: Do not run backfills during route registration (startup import/init).

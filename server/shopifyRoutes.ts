@@ -27,12 +27,12 @@ import {
   shopifyMerchantIsFirstTokenInstall,
 } from '@shared/shopifyLaunchRouting';
 import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
-import { hasActivePaidPlan } from './trialEntitlements';
 import {
   isUsersEmailUniqueViolation,
   resolveShopifyInstallUser,
 } from './shopifyInstallUser';
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
+import { claimShopifyShopTrialForInstall, deleteShopifyShopTrialLedgerForCanonicalShop, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
 import {
   processShopifyCustomerCreate,
@@ -220,9 +220,6 @@ router.get('/callback', async (req: Request, res: Response) => {
     if (!user) {
       const tempPassword = crypto.randomBytes(16).toString('hex');
       const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(tempPassword, 10));
-      const trialStartedAt = new Date();
-      const trialEndsAt = new Date(trialStartedAt);
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
       const merchantEmail = shopifySyntheticMerchantEmail(normalizedShop);
       if (!merchantEmail) {
         return res.status(400).json({ error: 'Invalid shop domain' });
@@ -233,10 +230,10 @@ router.get('/callback', async (req: Request, res: Response) => {
           name: normalizedShop.replace('.myshopify.com', ''),
           email: merchantEmail,
           password: hashedPassword,
-          trialStartedAt,
-          trialEndsAt,
-          trialStatus: 'active',
-          trialPlan: 'pro_ai',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          trialStatus: 'none',
+          trialPlan: null,
           emailVerifiedAt: new Date(),
         });
       } catch (createErr) {
@@ -251,10 +248,23 @@ router.get('/callback', async (req: Request, res: Response) => {
         console.warn('[Shopify Callback] createUser raced or reinstall — reusing by email', {
           shop: normalizedShop,
           userId: user.id,
-          email: merchantEmail,
         });
       }
     }
+
+    const trialClaim = await claimShopifyShopTrialForInstall({
+      canonicalShop: normalizedShop,
+      user,
+    });
+    console.log("[Shopify Callback] Shop trial ledger", {
+      shopHash: hashShopifyShopForLogs(normalizedShop),
+      userId: user.id,
+      claimed: trialClaim.claimed,
+      granted: trialClaim.granted,
+      status: trialClaim.status,
+      reason: trialClaim.reason,
+    });
+    user = (await storage.getUserForSession(user.id)) ?? user;
 
     const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
     const shopAlreadyActive = priorShopifyStatus === 'active';
@@ -290,31 +300,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       });
     }
 
-    // Existing account first Shopify install: grant pro_ai trial only if they never had one.
-    const now = new Date();
-    const trialPreviouslyExpired =
-      user.trialStatus === 'expired' ||
-      (user.trialEndsAt != null && new Date(user.trialEndsAt) <= now);
-    const neverHadTrial = !user.trialEndsAt && !trialPreviouslyExpired;
-    if (
-      firstTokenInstall &&
-      neverHadTrial &&
-      !hasActivePaidPlan(user, now)
-    ) {
-      const trialStartedAt = new Date();
-      const trialEndsAt = new Date(trialStartedAt);
-      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
-      Object.assign(installPatch, {
-        trialStartedAt,
-        trialEndsAt,
-        trialStatus: 'active',
-        trialPlan: 'pro_ai',
-      });
-      console.log('[Shopify Callback] Granted 14-day Pro + AI trial on first install', {
-        userId: user.id,
-        shop: normalizedShop,
-      });
-    }
     await storage.updateUser(user.id, installPatch);
 
     try {
@@ -644,17 +629,19 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
     return res.status(401).json({ error: 'Invalid webhook signature' });
   }
 
-  console.log('[Shopify Uninstall]', { shop });
+  console.log('[Shopify Uninstall]', { shopHash: hashShopifyShopForLogs(shop) });
 
   try {
     const user = await storage.getUserByShopifyShop(shop);
 
     if (!user) {
-      console.log('[Shopify Uninstall Cleanup]', { shop, status: 'no_user_found' });
+      console.log('[Shopify Uninstall Cleanup]', { shopHash: hashShopifyShopForLogs(shop), status: 'no_user_found' });
       return res.status(200).json({ received: true });
     }
 
     try {
+      // Keep shopify_shop and shopify_shop_trials so a reinstall cannot restart a trial.
+      // shop/redact (not uninstall) is the path that erases the shop-identifying ledger.
       await storage.updateUser(user.id, {
         shopifyAccessToken: null,
         shopifyChargeId: null,
@@ -834,7 +821,16 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
 
   try {
     const { shop_domain } = req.body;
-    console.log(`[Shopify Compliance] Shop redact request for: ${shop_domain}`);
+    const canonicalShop = normalizeShopifyShopDomain(shop_domain || shop);
+    const shopHash = hashShopifyShopForLogs(canonicalShop || shop_domain || shop);
+    console.log(`[Shopify Compliance] Shop redact request`, { shopHash });
+
+    // Erase the shop-identifying trial ledger with the store data. A later
+    // reinstall after completed redaction may qualify as a new shop trial
+    // because WhachatCRM no longer retains identifying history.
+    if (canonicalShop) {
+      await deleteShopifyShopTrialLedgerForCanonicalShop(canonicalShop);
+    }
     
     // Find the user associated with this shop and delete all their data
     const user = await storage.getUserByShopifyShop(shop_domain || shop);
@@ -845,10 +841,8 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
       for (const chat of chats) {
         await storage.deleteChat(chat.id);
       }
-      console.log(`[Shopify Compliance] Deleted ${chats.length} chats for shop ${shop_domain}`);
+      console.log(`[Shopify Compliance] Deleted chats for redacted shop`, { shopHash, chatCount: chats.length });
       
-      // Clear Shopify-related fields but keep basic account for audit trail
-      // Full account deletion handled separately per retention policy
       await storage.updateUser(user.id, {
         shopifyShop: null,
         shopifyAccessToken: null,
@@ -856,12 +850,12 @@ router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
         shopifySubscriptionStatus: 'redacted',
         shopifyInstalledAt: null,
       });
-      console.log(`[Shopify Compliance] Cleared Shopify data for user ${user.id}`);
+      console.log(`[Shopify Compliance] Cleared Shopify data for user`, { userId: user.id, shopHash });
     }
     
     res.status(200).json({ 
       received: true,
-      message: 'Shop data redaction completed.'
+      message: 'Shop data redaction completed. Identifying trial ledger removed. A later reinstall may qualify as a new shop trial.'
     });
   } catch (error) {
     console.error('[Shopify Compliance] shop/redact error:', error);

@@ -1,23 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { useAuth } from "@/lib/auth-context";
 import { trackSignUp } from "@/lib/ga4Events";
+import { CHECK_EMAIL_PATH, clearPendingVerificationEmail } from "@/lib/pendingVerification";
 
 export function VerifyEmailPage() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const { refreshSession } = useAuth();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [message, setMessage] = useState("Verifying your email…");
+  const [message, setMessage] = useState(t("auth.verifyingMessage"));
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token") || "";
     if (!token) {
       setStatus("error");
-      setMessage("This verification link is missing a token.");
+      setMessage(t("auth.verifyMissingToken"));
       return;
     }
 
@@ -34,10 +37,11 @@ export function VerifyEmailPage() {
         if (cancelled) return;
         if (!res.ok) {
           setStatus("error");
-          setMessage(data.error || "This verification link is invalid or has expired.");
+          setMessage(data.error || t("auth.verifyInvalidLink"));
           return;
         }
         await refreshSession();
+        clearPendingVerificationEmail();
         const userId = data?.user?.id as string | undefined;
         if (userId && !data.alreadyVerified) {
           const source =
@@ -53,15 +57,13 @@ export function VerifyEmailPage() {
         }
         setStatus("success");
         setMessage(
-          data.trialStarted
-            ? "Your email is verified. Your 14-day Pro + AI Brain trial has started."
-            : "Your email is verified. You can continue to WhachatCRM.",
+          data.trialStarted ? t("auth.verifyTrialStarted") : t("auth.verifyContinue"),
         );
         window.setTimeout(() => setLocation("/app/inbox"), 1500);
       } catch {
         if (!cancelled) {
           setStatus("error");
-          setMessage("We couldn’t verify your email. Please try again.");
+          setMessage(t("auth.verifyNetworkError"));
         }
       }
     })();
@@ -69,7 +71,7 @@ export function VerifyEmailPage() {
     return () => {
       cancelled = true;
     };
-  }, [refreshSession, setLocation]);
+  }, [refreshSession, setLocation, t]);
 
   return (
     <>
@@ -86,17 +88,21 @@ export function VerifyEmailPage() {
             <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
           )}
           <h1 className="text-xl font-display font-semibold text-gray-900 mb-2">
-            {status === "success" ? "Email verified" : status === "error" ? "Verification failed" : "Verifying"}
+            {status === "success"
+              ? t("auth.emailVerifiedTitle")
+              : status === "error"
+                ? t("auth.verificationFailedTitle")
+                : t("auth.verifyingTitle")}
           </h1>
           <p className="text-sm text-gray-600 mb-6">{message}</p>
           {status === "error" && (
             <div className="space-y-3">
-              <Link href="/auth?mode=login">
-                <Button className="w-full bg-brand-green hover:bg-emerald-700">Back to login</Button>
+              <Link href={CHECK_EMAIL_PATH}>
+                <Button className="w-full bg-brand-green hover:bg-emerald-700">
+                  {t("auth.checkEmailTitle")}
+                </Button>
               </Link>
-              <p className="text-xs text-gray-500">
-                Need a new link? Sign up again with the same email or use Resend from the signup screen.
-              </p>
+              <p className="text-xs text-gray-500">{t("auth.verifyNeedNewLink")}</p>
             </div>
           )}
         </div>

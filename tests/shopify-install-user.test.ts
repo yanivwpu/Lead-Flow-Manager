@@ -46,10 +46,9 @@ assert(
 );
 
 assert(
-  normalizeShopifyShopDomain("whachatcrm.myshopify.com") ===
-    shopifySyntheticMerchantEmail("whachatcrm.myshopify.com")?.split("@")[0] + ".myshopify.com" ||
-    true,
-  "slug alignment",
+  normalizeShopifyShopDomain("https://WhachatCRM.myshopify.com/admin") ===
+    "whachatcrm.myshopify.com",
+  "strips protocol and path",
 );
 
 assert(

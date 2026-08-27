@@ -301,8 +301,8 @@ test("S/T: reinstall does not duplicate Day 0 or re-grant trial", () => {
   );
   const routes = src("server/shopifyRoutes.ts");
   assert.ok(routes.includes("shopifyInstalledAt: user.shopifyInstalledAt ?? new Date()"));
-  assert.ok(routes.includes("const neverHadTrial = !user.trialEndsAt && !trialPreviouslyExpired"));
-  assert.ok(routes.includes("Granted 14-day Pro + AI trial on first install"));
+  assert.ok(routes.includes("claimShopifyShopTrialForInstall"));
+  assert.ok(!routes.includes("const neverHadTrial"));
   const start = shopifyOnboardingStartAt({
     shopifyInstalledAt: "2026-06-01T00:00:00.000Z",
   });

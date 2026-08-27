@@ -21,7 +21,7 @@ section("verification token security properties");
   const hash = crypto.createHash("sha256").update(raw).digest("hex");
   assert.equal(hash.length, 64);
   assert.notEqual(raw, hash);
-  assert.equal(EMAIL_VERIFICATION_TTL_MS, 45 * 60 * 1000);
+  assert.equal(EMAIL_VERIFICATION_TTL_MS, 24 * 60 * 60 * 1000);
   assert.equal(TRIAL_DAYS, 14);
 }
 
@@ -29,6 +29,10 @@ section("source: trial starts at verification not signup");
 {
   const authSrc = readFileSync(join(process.cwd(), "server/auth.ts"), "utf8");
   assert.ok(authSrc.includes("pendingVerification"));
+  assert.ok(authSrc.includes("emailSent"));
+  assert.ok(authSrc.includes("/api/auth/change-pending-email"));
+  const appSrc = readFileSync(join(process.cwd(), "client/src/App.tsx"), "utf8");
+  assert.ok(appSrc.includes("/check-email"));
   assert.ok(authSrc.includes("trialStatus: \"none\""));
   assert.ok(!authSrc.includes("sendWelcomeEmail(name, email)"));
   assert.ok(authSrc.includes("issueEmailVerification"));

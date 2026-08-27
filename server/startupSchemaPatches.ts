@@ -4,6 +4,11 @@ import {
   REQUIRED_PUBLIC_LISTING_PATCH_TAGS,
   setPublicListingSchemaReady,
 } from "./publicListingSchemaReady";
+import { setShopifyShopTrialLedgerReady } from "./shopifyShopTrialLedgerReady";
+import {
+  ensureUsersShopifyShopUniqueIndex,
+  logShopifyShopTrialLedgerCounts,
+} from "./shopifyShopTrialService";
 
 /**
  * Idempotent ADD COLUMN patches for production DBs that lag behind shared/schema.
@@ -920,6 +925,171 @@ END
 $patch$;
 `.trim(),
   },
+  {
+    tag: "0084_shopify_shop_trials",
+    sql: String.raw`
+CREATE TABLE IF NOT EXISTS shopify_shop_trials (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  canonical_shop text NOT NULL,
+  status text NOT NULL DEFAULT 'granted',
+  block_reason text,
+  trial_started_at timestamp,
+  trial_ends_at timestamp,
+  trial_plan text NOT NULL DEFAULT 'pro_ai',
+  trial_consumed_at timestamp NOT NULL DEFAULT NOW(),
+  original_user_id varchar REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamp DEFAULT NOW(),
+  updated_at timestamp DEFAULT NOW()
+);
+ALTER TABLE shopify_shop_trials ADD COLUMN IF NOT EXISTS status text;
+ALTER TABLE shopify_shop_trials ADD COLUMN IF NOT EXISTS block_reason text;
+ALTER TABLE shopify_shop_trials ALTER COLUMN trial_started_at DROP NOT NULL;
+ALTER TABLE shopify_shop_trials ALTER COLUMN trial_ends_at DROP NOT NULL;
+UPDATE shopify_shop_trials SET status = 'backfilled' WHERE status IS NULL;
+ALTER TABLE shopify_shop_trials ALTER COLUMN status SET DEFAULT 'granted';
+UPDATE shopify_shop_trials SET status = 'granted' WHERE status IS NULL;
+ALTER TABLE shopify_shop_trials ALTER COLUMN status SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS shopify_shop_trials_canonical_shop_uidx
+  ON shopify_shop_trials (canonical_shop);
+DO $status$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'shopify_shop_trials_status_check'
+  ) THEN
+    ALTER TABLE shopify_shop_trials
+      ADD CONSTRAINT shopify_shop_trials_status_check
+      CHECK (status IN ('granted', 'backfilled', 'blocked_conflict', 'blocked_unknown_history'));
+  END IF;
+END
+$status$;
+WITH source AS (
+  SELECT
+    u.id AS user_id,
+    CASE
+      WHEN u.shopify_shop IS NOT NULL AND trim(u.shopify_shop) <> '' THEN lower(trim(u.shopify_shop))
+      WHEN lower(u.email) LIKE '%@shopify.whachatcrm.com'
+        THEN lower(split_part(u.email, '@', 1)) || '.myshopify.com'
+      ELSE NULL
+    END AS canonical_shop,
+    u.trial_started_at,
+    u.trial_ends_at,
+    COALESCE(NULLIF(trim(u.trial_plan), ''), 'pro_ai') AS trial_plan
+  FROM users u
+), dated AS (
+  SELECT *
+  FROM source
+  WHERE canonical_shop ~ '^[a-z0-9][a-z0-9-]*\.myshopify\.com$'
+    AND trial_started_at IS NOT NULL
+    AND trial_ends_at IS NOT NULL
+), chosen AS (
+  SELECT DISTINCT ON (n.canonical_shop)
+    n.canonical_shop, n.user_id, n.trial_started_at, n.trial_ends_at, n.trial_plan
+  FROM dated n
+  INNER JOIN (
+    SELECT canonical_shop
+    FROM dated
+    GROUP BY canonical_shop
+    HAVING count(DISTINCT (trial_started_at, trial_ends_at, trial_plan)) = 1
+  ) ok ON ok.canonical_shop = n.canonical_shop
+  ORDER BY n.canonical_shop, n.trial_started_at ASC, n.user_id ASC
+)
+INSERT INTO shopify_shop_trials (
+  canonical_shop, status, block_reason, trial_started_at, trial_ends_at, trial_plan,
+  trial_consumed_at, original_user_id, created_at, updated_at
+)
+SELECT canonical_shop, 'backfilled', NULL, trial_started_at, trial_ends_at, trial_plan,
+       trial_started_at, user_id, NOW(), NOW()
+FROM chosen
+ON CONFLICT (canonical_shop) DO NOTHING;
+INSERT INTO shopify_shop_trials (
+  canonical_shop, status, block_reason, trial_started_at, trial_ends_at, trial_plan,
+  trial_consumed_at, original_user_id, created_at, updated_at
+)
+SELECT d.canonical_shop, 'blocked_conflict', 'conflicting_trial_dates', NULL, NULL, 'pro_ai',
+       NOW(), NULL, NOW(), NOW()
+FROM (
+  SELECT canonical_shop
+  FROM (
+    SELECT
+      CASE
+        WHEN shopify_shop IS NOT NULL AND trim(shopify_shop) <> '' THEN lower(trim(shopify_shop))
+        WHEN lower(email) LIKE '%@shopify.whachatcrm.com'
+          THEN lower(split_part(email, '@', 1)) || '.myshopify.com'
+        ELSE NULL
+      END AS canonical_shop,
+      trial_started_at,
+      trial_ends_at,
+      COALESCE(NULLIF(trim(trial_plan), ''), 'pro_ai') AS trial_plan
+    FROM users
+  ) raw
+  WHERE canonical_shop ~ '^[a-z0-9][a-z0-9-]*\.myshopify\.com$'
+    AND trial_started_at IS NOT NULL
+    AND trial_ends_at IS NOT NULL
+  GROUP BY canonical_shop
+  HAVING count(DISTINCT (trial_started_at, trial_ends_at, trial_plan)) > 1
+) d
+ON CONFLICT (canonical_shop) DO NOTHING;
+INSERT INTO shopify_shop_trials (
+  canonical_shop, status, block_reason, trial_started_at, trial_ends_at, trial_plan,
+  trial_consumed_at, original_user_id, created_at, updated_at
+)
+SELECT v.canonical_shop, 'blocked_unknown_history', 'no_original_trial_dates', NULL, NULL, 'pro_ai',
+       NOW(), NULL, NOW(), NOW()
+FROM (
+  SELECT DISTINCT canonical_shop
+  FROM (
+    SELECT
+      CASE
+        WHEN shopify_shop IS NOT NULL AND trim(shopify_shop) <> '' THEN lower(trim(shopify_shop))
+        WHEN lower(email) LIKE '%@shopify.whachatcrm.com'
+          THEN lower(split_part(email, '@', 1)) || '.myshopify.com'
+        ELSE NULL
+      END AS canonical_shop,
+      trial_started_at,
+      trial_ends_at
+    FROM users
+  ) raw
+  WHERE canonical_shop ~ '^[a-z0-9][a-z0-9-]*\.myshopify\.com$'
+) v
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM (
+    SELECT
+      CASE
+        WHEN shopify_shop IS NOT NULL AND trim(shopify_shop) <> '' THEN lower(trim(shopify_shop))
+        WHEN lower(email) LIKE '%@shopify.whachatcrm.com'
+          THEN lower(split_part(email, '@', 1)) || '.myshopify.com'
+        ELSE NULL
+      END AS canonical_shop,
+      trial_started_at,
+      trial_ends_at
+    FROM users
+  ) dated
+  WHERE dated.canonical_shop = v.canonical_shop
+    AND dated.trial_started_at IS NOT NULL
+    AND dated.trial_ends_at IS NOT NULL
+)
+ON CONFLICT (canonical_shop) DO NOTHING;
+`.trim(),
+  },
+  {
+    tag: "0085_verification_reminder",
+    sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_reminder_sent_at timestamp`,
+  },
+  {
+    tag: "0086_verification_reminder_last_sent_and_rollout",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_email_last_sent_at timestamp;
+CREATE TABLE IF NOT EXISTS app_feature_rollouts (
+  feature_key text PRIMARY KEY,
+  active_after timestamp NOT NULL,
+  created_at timestamp DEFAULT NOW()
+);
+INSERT INTO app_feature_rollouts (feature_key, active_after)
+VALUES ('verification_reminder', NOW())
+ON CONFLICT (feature_key) DO NOTHING;
+`.trim(),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -948,6 +1118,8 @@ export async function applyStartupSchemaPatches(): Promise<{
   publicListingSchemaReady: boolean;
   trialExpirationEmailPatchOk: boolean;
   contactsAutomationsPausedPatchOk: boolean;
+  verificationReminderPatchOk: boolean;
+  shopifyShopTrialLedgerPatchOk: boolean;
 }> {
   const patchResults = new Map<string, boolean>();
 
@@ -990,9 +1162,26 @@ export async function applyStartupSchemaPatches(): Promise<{
   }
 
   setPublicListingSchemaReady(ready);
+
+  const shopifyShopTrialLedgerPatchOk = patchResults.get("0084_shopify_shop_trials") === true;
+  if (shopifyShopTrialLedgerPatchOk) {
+    await logShopifyShopTrialLedgerCounts();
+    await ensureUsersShopifyShopUniqueIndex();
+    setShopifyShopTrialLedgerReady(true);
+  } else {
+    setShopifyShopTrialLedgerReady(false);
+    console.error(
+      "[StartupSchema] FATAL: Shopify shop trial ledger patch 0084 did not succeed — OAuth must not grant trials",
+    );
+  }
+
   return {
     publicListingSchemaReady: ready,
     trialExpirationEmailPatchOk: patchResults.get("0080_trial_expiration_email") === true,
     contactsAutomationsPausedPatchOk: patchResults.get("0083_contacts_automations_paused") === true,
+    verificationReminderPatchOk:
+      patchResults.get("0085_verification_reminder") === true &&
+      patchResults.get("0086_verification_reminder_last_sent_and_rollout") === true,
+    shopifyShopTrialLedgerPatchOk,
   };
 }

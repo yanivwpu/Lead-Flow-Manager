@@ -38,17 +38,6 @@ export async function resolveShopifyInstallUser(options: {
     };
   }
 
-  if (options.sessionUserId) {
-    const sessionUser = await storage.getUserForSession(options.sessionUserId);
-    if (sessionUser && !sessionUser.shopifyShop) {
-      return {
-        user: sessionUser,
-        normalizedShop,
-        resolution: "session_link",
-      };
-    }
-  }
-
   const syntheticEmail = shopifySyntheticMerchantEmail(normalizedShop);
   if (syntheticEmail) {
     const byEmail = await storage.getUserByEmail(syntheticEmail);
@@ -57,13 +46,23 @@ export async function resolveShopifyInstallUser(options: {
       console.log("[Shopify Install] Reusing merchant by synthetic email", {
         shop: normalizedShop,
         userId: byEmail.id,
-        email: syntheticEmail,
         priorShopifyShop: full?.shopifyShop ?? byEmail.shopifyShop ?? null,
       });
       return {
         user: full ?? byEmail,
         normalizedShop,
         resolution: "synthetic_email",
+      };
+    }
+  }
+
+  if (options.sessionUserId) {
+    const sessionUser = await storage.getUserForSession(options.sessionUserId);
+    if (sessionUser && !sessionUser.shopifyShop) {
+      return {
+        user: sessionUser,
+        normalizedShop,
+        resolution: "session_link",
       };
     }
   }

@@ -57,6 +57,8 @@ export const SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT =
   "Connect WhatsApp to your Shopify store conversations";
 export const SHOPIFY_ACTIVATION_DAY10_EMAIL_SUBJECT =
   "Need help connecting WhachatCRM to your store?";
+export const EMAIL_VERIFICATION_REMINDER_SUBJECT =
+  "Reminder: verify your email to start your 14-day Pro + AI Brain trial";
 
 interface EmailOptions {
   to: string;
@@ -416,11 +418,11 @@ export async function sendEmailVerificationEmail(
   const body = [
     emailParagraph(`Hi ${escapeHtml(name)}!`),
     emailParagraph(
-      "Please verify your email address to activate your WhaChatCRM account and start your free trial.",
+      "Please verify your email address to activate your WhachatCRM account and start your 14-day Pro + AI Brain trial.",
     ),
-    emailButton(verifyUrl, "Verify my email"),
+    emailButton(verifyUrl, "Verify email and start my 14-day trial"),
     emailHighlightBox(
-      "<strong>This link expires in 45 minutes</strong> and can only be used once. If you did not create an account, you can ignore this email.",
+      "<strong>This link expires in 24 hours</strong> and can only be used once. If you did not create an account, you can ignore this email.",
     ),
     emailParagraph("Having trouble with the button? Copy and paste this link into your browser:"),
     emailInfoBox(
@@ -430,8 +432,48 @@ export async function sendEmailVerificationEmail(
 
   return sendEmail({
     to: email,
-    subject: "Verify your WhaChatCRM email",
+    subject: "Verify your email to start your 14-day Pro + AI Brain trial",
     html: renderBrandedEmail({ title: "Verify your email", bodyHtml: body }),
+  });
+}
+
+export function renderEmailVerificationReminderHtml(
+  name: string,
+  rawToken: string,
+  options?: { appUrl?: string },
+): string {
+  const appUrl = (options?.appUrl || APP_URL).replace(/\/+$/, "");
+  const verifyUrl = `${appUrl}/verify-email?token=${encodeURIComponent(rawToken)}`;
+  const body = [
+    emailParagraph(`Hi ${escapeHtml(name)}!`),
+    emailParagraph(
+      "You signed up for WhachatCRM, but your email is still unverified. This is a one-time reminder.",
+    ),
+    emailParagraph(
+      "Please verify your email address to activate your account and start your 14-day Pro + AI Brain trial. Your trial does not begin until you verify.",
+    ),
+    emailButton(verifyUrl, "Verify email and start my 14-day trial"),
+    emailHighlightBox(
+      "<strong>This link expires in 24 hours</strong> and can only be used once. If you did not create an account, you can ignore this email.",
+    ),
+    emailParagraph("Having trouble with the button? Copy and paste this link into your browser:"),
+    emailInfoBox(
+      `<span style="font-family: monospace; font-size: 12px; color: #64748b; word-break: break-all;">${escapeHtml(verifyUrl)}</span>`,
+    ),
+  ].join("");
+
+  return renderBrandedEmail({ title: "Verify your email", bodyHtml: body });
+}
+
+export async function sendEmailVerificationReminderEmail(
+  name: string,
+  email: string,
+  rawToken: string,
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: EMAIL_VERIFICATION_REMINDER_SUBJECT,
+    html: renderEmailVerificationReminderHtml(name, rawToken),
   });
 }
 

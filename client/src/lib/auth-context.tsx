@@ -14,6 +14,10 @@ import {
   sessionIdentitiesMatch,
   type SessionUser,
 } from "@/lib/accountQueryScope";
+import {
+  rememberPendingVerificationEmail,
+  rememberPendingVerificationSend,
+} from "@/lib/pendingVerification";
 
 interface User {
   id: string;
@@ -39,6 +43,7 @@ export type SignupOptions = {
 export type SignupResult = {
   success: boolean;
   pendingVerification?: boolean;
+  emailSent?: boolean;
   error?: string;
 };
 
@@ -47,7 +52,7 @@ interface AuthContextType {
   isLoading: boolean;
   /** True after a no-store /api/auth/me confirms cookie identity matches `user`. */
   sessionAligned: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ ok: boolean; pendingVerification?: boolean }>;
   signup: (
     name: string,
     email: string,
@@ -141,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void applyDatabaseLanguagePreference(user.language);
   }, [user?.id, user?.language, location, isLoading]);
 
-  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
+  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<{ ok: boolean; pendingVerification?: boolean }> => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -151,18 +156,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: "no-store",
       });
 
-      if (!response.ok) return false;
+      if (!response.ok) return { ok: false };
 
       const session = await fetchAuthoritativeSessionUser();
       if (!session) {
         replaceSessionUser(null, false);
-        return false;
+        return { ok: false };
       }
       replaceSessionUser(asAppUser(session), true);
-      return true;
+      const pending = session.emailVerifiedAt === null;
+      if (pending && typeof session.email === "string") {
+        rememberPendingVerificationEmail(session.email);
+      }
+      return { ok: true, pendingVerification: pending };
     } catch (error) {
       console.error("Login error:", error);
-      return false;
+      return { ok: false };
     }
   };
 
@@ -194,8 +203,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.pendingVerification) {
-        // GA4 sign_up fires after email verification once we have a session user id
-        return { success: true, pendingVerification: true };
+        const pendingEmail = typeof data.email === "string" ? data.email : email;
+        rememberPendingVerificationEmail(pendingEmail);
+        rememberPendingVerificationSend(data.emailSent !== false);
+        if (data.sessionEstablished) {
+          await refreshSession();
+        }
+        return {
+          success: true,
+          pendingVerification: true,
+          emailSent: data.emailSent !== false,
+        };
       }
 
       if (response.ok && data.id) {
@@ -222,11 +240,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/auth/resend-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email }),
       });
+      const data = await response.json().catch(() => ({}));
       if (response.status === 429) {
-        const data = await response.json().catch(() => ({}));
         return { ok: false, error: data.error || "Too many requests. Please try again shortly." };
+      }
+      if (data.honest) {
+        if (data.emailSent === false || !response.ok) {
+          return { ok: false, error: data.error || "We couldn't send the verification email. Please try again." };
+        }
+        return { ok: true };
+      }
+      if (!response.ok) {
+        return { ok: false, error: data.error || "Please try again shortly." };
       }
       return { ok: true };
     } catch {

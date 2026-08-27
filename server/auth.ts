@@ -14,6 +14,7 @@ import {
   checkForgotPasswordIpLimit,
   checkSignupEmailLimit,
   checkSignupIpLimit,
+  checkVerificationResendCooldown,
   checkVerificationResendLimit,
   getAuthClientIp,
   getAuthUserAgent,
@@ -37,6 +38,9 @@ const PgStore = connectPgSimple(session);
 const DISPOSABLE_EMAIL_MESSAGE =
   "Temporary email addresses arenâ€™t allowed. Please use a permanent personal or business email address.";
 const PENDING_VERIFICATION_MESSAGE = "Check your email to verify your account.";
+const VERIFICATION_SEND_FAILED_MESSAGE =
+  "We couldn't send the verification email. Please try again.";
+const VERIFICATION_SEND_SUCCESS_MESSAGE = "Verification email sent.";
 const FORGOT_PASSWORD_MESSAGE =
   "If an account exists for that email, weâ€™ve sent password-reset instructions.";
 const HONEYPOT_FIELD = "website";
@@ -283,6 +287,7 @@ const UNVERIFIED_ALLOWED_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/resend-verification',
   '/api/auth/verify-email',
+  '/api/auth/change-pending-email',
 ]);
 
 // Auth middleware to protect routes
@@ -527,7 +532,7 @@ export function registerAuthRoutes(app: Express) {
         }
       }
 
-      await issueEmailVerification(user.id, user.email, user.name);
+      const emailSent = await issueEmailVerification(user.id, user.email, user.name);
       await logAuthSecurityEvent({
         eventType: 'signup_created_pending_verification',
         userId: user.id,
@@ -538,10 +543,18 @@ export function registerAuthRoutes(app: Express) {
         requestId,
       });
 
-      // Do not establish a product session until verified
+      await new Promise<void>((resolve, reject) => {
+        req.login(user, (err: unknown) => (err ? reject(err) : resolve()));
+      }).catch((loginErr) => {
+        console.warn("[Signup] pending session not established", loginErr);
+      });
+
       return res.status(201).json({
         pendingVerification: true,
-        message: PENDING_VERIFICATION_MESSAGE,
+        emailSent,
+        sessionEstablished: true,
+        email: normalizedEmail,
+        message: emailSent ? PENDING_VERIFICATION_MESSAGE : VERIFICATION_SEND_FAILED_MESSAGE,
       });
     } catch (error) {
       console.error('Signup error:', error);
@@ -549,17 +562,69 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Resend verification email (no account enumeration)
+  // Resend verification email. Authenticated pending users get an honest send result.
+  // Unauthenticated callers receive a generic response (no account enumeration).
   app.post('/api/auth/resend-verification', async (req, res) => {
     const ip = getAuthClientIp(req);
     const userAgent = getAuthUserAgent(req);
     const requestId = getRequestId(req);
     const generic = {
       success: true,
+      emailSent: true,
+      honest: false,
       message: PENDING_VERIFICATION_MESSAGE,
     };
 
     try {
+      const sessionUser = req.isAuthenticated?.() ? (req.user as User | undefined) : undefined;
+      if (sessionUser && !isEmailVerified(sessionUser)) {
+        const cooldown = await checkVerificationResendCooldown(sessionUser.id);
+        if (!cooldown.allowed) {
+          return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+        }
+        const limit = await checkVerificationResendLimit(sessionUser.email);
+        if (!limit.allowed) {
+          await logAuthSecurityEvent({
+            eventType: 'signup_rate_limited',
+            userId: sessionUser.id,
+            email: sessionUser.email,
+            ipAddress: ip,
+            userAgent,
+            outcome: 'rate_limited',
+            reasonCode: 'verification_resend',
+            requestId,
+          });
+          return res.status(429).json({ error: AUTH_RATE_LIMIT_MESSAGE, code: 'RATE_LIMITED' });
+        }
+        const emailSent = await issueEmailVerification(sessionUser.id, sessionUser.email, sessionUser.name);
+        await logAuthSecurityEvent({
+          eventType: 'verification_resent',
+          userId: sessionUser.id,
+          email: sessionUser.email,
+          ipAddress: ip,
+          userAgent,
+          outcome: emailSent ? 'success' : 'rejected',
+          reasonCode: emailSent ? 'session_resend' : 'send_failed',
+          requestId,
+        });
+        if (!emailSent) {
+          return res.status(502).json({
+            success: false,
+            emailSent: false,
+            honest: true,
+            error: VERIFICATION_SEND_FAILED_MESSAGE,
+            code: 'EMAIL_SEND_FAILED',
+          });
+        }
+        return res.json({
+          success: true,
+          emailSent: true,
+          honest: true,
+          email: sessionUser.email,
+          message: VERIFICATION_SEND_SUCCESS_MESSAGE,
+        });
+      }
+
       const email = typeof req.body?.email === 'string' ? normalizeEmailForAuth(req.body.email) : '';
       if (!email) {
         return res.json(generic);
@@ -594,7 +659,89 @@ export function registerAuthRoutes(app: Express) {
       return res.json(generic);
     } catch (error) {
       console.error('Resend verification error:', error);
+      if (req.isAuthenticated?.() && req.user && !isEmailVerified(req.user as User)) {
+        return res.status(502).json({
+          success: false,
+          emailSent: false,
+          honest: true,
+          error: VERIFICATION_SEND_FAILED_MESSAGE,
+          code: 'EMAIL_SEND_FAILED',
+        });
+      }
       return res.json(generic);
+    }
+  });
+
+  app.post('/api/auth/change-pending-email', requireAuth, async (req, res) => {
+    const ip = getAuthClientIp(req);
+    const userAgent = getAuthUserAgent(req);
+    const requestId = getRequestId(req);
+    const sessionUser = req.user as User;
+
+    try {
+      if (isEmailVerified(sessionUser)) {
+        return res.status(400).json({ error: 'Email is already verified.', code: 'ALREADY_VERIFIED' });
+      }
+
+      const nextEmail = typeof req.body?.email === 'string' ? normalizeEmailForAuth(req.body.email) : '';
+      if (!nextEmail) {
+        return res.status(400).json({ error: 'Enter a valid email address.' });
+      }
+      if (isDisposableEmail(nextEmail)) {
+        return res.status(400).json({ error: DISPOSABLE_EMAIL_MESSAGE, code: 'DISPOSABLE_EMAIL' });
+      }
+
+      const currentEmail = normalizeEmailForAuth(sessionUser.email);
+      if (nextEmail === currentEmail) {
+        return res.json({
+          success: true,
+          email: currentEmail,
+          emailSent: false,
+          unchanged: true,
+        });
+      }
+
+      const existing = await resolveUserForLogin(nextEmail);
+      if (existing && existing.id !== sessionUser.id) {
+        await logAuthSecurityEvent({
+          eventType: 'change_pending_email',
+          userId: sessionUser.id,
+          email: nextEmail,
+          ipAddress: ip,
+          userAgent,
+          outcome: 'rejected',
+          reasonCode: 'email_in_use',
+          requestId,
+        });
+        return res.status(409).json({ error: 'That email is already in use.', code: 'EMAIL_IN_USE' });
+      }
+
+      const updated = await storage.updateUser(sessionUser.id, { email: nextEmail } as any);
+      if (!updated) {
+        return res.status(400).json({ error: 'Unable to update email.' });
+      }
+
+      const emailSent = await issueEmailVerification(sessionUser.id, nextEmail, sessionUser.name);
+      await logAuthSecurityEvent({
+        eventType: 'change_pending_email',
+        userId: sessionUser.id,
+        email: nextEmail,
+        ipAddress: ip,
+        userAgent,
+        outcome: emailSent ? 'success' : 'rejected',
+        reasonCode: emailSent ? 'changed' : 'send_failed',
+        requestId,
+      });
+
+      return res.json({
+        success: true,
+        email: nextEmail,
+        emailSent,
+        message: emailSent ? VERIFICATION_SEND_SUCCESS_MESSAGE : VERIFICATION_SEND_FAILED_MESSAGE,
+      });
+    } catch (error) {
+      console.error('Change pending email error:', error);
+      return res.status(500).json({ error: 'Failed to update email' });
     }
   });
 

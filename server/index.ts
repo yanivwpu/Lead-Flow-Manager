@@ -459,6 +459,11 @@ app.use((req, res, next) => {
       "[StartupSchema] FATAL: contacts automations_paused columns are not ready (patch 0083)",
     );
   }
+  if (!schemaPatches.shopifyShopTrialLedgerPatchOk) {
+    throw new Error(
+      "[StartupSchema] FATAL: Shopify shop trial ledger is not ready (patch 0084) — refusing to listen so OAuth cannot grant trials",
+    );
+  }
 
   // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
   // Production always starts them. Local Inbox debugging skips unless opted in —
@@ -694,6 +699,14 @@ app.use((req, res, next) => {
             } else {
               console.error(
                 "[Cron] Not enabling trial-expiration emails — schema patch 0080 did not succeed",
+              );
+            }
+            if (backfillResult?.verificationReminderPatchOk) {
+              const { enableVerificationRemindersAfterSchemaReady } = await import("./cron");
+              await enableVerificationRemindersAfterSchemaReady();
+            } else {
+              console.error(
+                "[Cron] Not enabling verification reminders — schema patches 0085/0086 did not succeed",
               );
             }
           } catch (err) {

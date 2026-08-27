@@ -6,6 +6,8 @@ import { EMAIL_INBOX_IDENTITY_SOURCE } from '@shared/contactCrmVisibility';
 import { runActivationEmails } from './activationEmailService';
 import { runShopifyOnboardingEmails } from './shopifyOnboardingEmailService';
 import { runTrialExpirationEmails } from './trialExpirationEmailService';
+import { runVerificationReminders } from './verificationReminderService';
+import { loadVerificationReminderRolloutActiveAfter } from './verificationReminderRollout';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
 
@@ -100,6 +102,7 @@ export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; re
 }
 
 let trialExpirationEmailsAllowed = false;
+let verificationRemindersAllowed = false;
 
 /** Mark trial_status expired, then send Day 14 expiration email if still on Free. */
 export async function runTrialExpirySync(): Promise<number> {
@@ -130,10 +133,41 @@ async function runTrialExpiryThenExpirationEmails(): Promise<void> {
   await runTrialExpirationEmails();
 }
 
+async function runVerificationRemindersIfAllowed(): Promise<void> {
+  if (!verificationRemindersAllowed) {
+    console.log(
+      "[Cron] Verification reminders deferred until schema patches 0085/0086 and a valid rollout boundary are ready",
+    );
+    return;
+  }
+  await runVerificationReminders();
+}
+
+async function runHourlyAccountEmailJobs(): Promise<void> {
+  await runTrialExpiryThenExpirationEmails();
+  await runVerificationRemindersIfAllowed();
+}
+
 /** Enable Day 14 mail only after patch 0080 has added the column and backfilled expired trials. */
 export async function startTrialExpirationEmailsAfterSchemaReady(): Promise<void> {
   trialExpirationEmailsAllowed = true;
   await runTrialExpiryThenExpirationEmails();
+}
+
+/** Enable 24h verification reminders after patches 0085/0086. Hourly only — never on deploy/startup. */
+export async function enableVerificationRemindersAfterSchemaReady(): Promise<void> {
+  const boundary = await loadVerificationReminderRolloutActiveAfter();
+  if (!boundary) {
+    verificationRemindersAllowed = false;
+    console.error(
+      "[Cron] Not enabling verification reminders — rollout boundary missing or invalid (fail-closed)",
+    );
+    return;
+  }
+  verificationRemindersAllowed = true;
+  console.log(
+    `[Cron] Verification reminders enabled (hourly only; not run on deploy); rollout active_after=${boundary.toISOString()}`,
+  );
 }
 
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
@@ -267,6 +301,7 @@ export function startCronJobs() {
   // to avoid blasting legacy users when new sequence flags are introduced.
   // Trial-expiration mail waits for schema patch 0080 (column + historical backfill)
   // before the first scan; startup here only syncs trial_status.
+  // Verification reminders wait for schema patch 0085 and run hourly only — never on deploy.
   runTrialExpirySync().catch(err => console.error('[Cron] Trial expiry sync error:', err));
 
   // Run webhook health check once at startup (after 30 s to let DB settle)
@@ -284,7 +319,7 @@ export function startCronJobs() {
     }
 
     if (utcMin === 0) {
-      runTrialExpiryThenExpirationEmails().catch(err => console.error('[Cron] Trial expiry sync error:', err));
+      runHourlyAccountEmailJobs().catch(err => console.error('[Cron] Trial expiry sync error:', err));
     }
 
     if (utcHour === 13 && utcMin === 0 && !hotListRanToday) {

@@ -1,14 +1,15 @@
 import { useState, useCallback } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { navigateAfterAuth } from "@/lib/postAuthRedirect";
+import { CHECK_EMAIL_PATH } from "@/lib/pendingVerification";
 import { getDirection } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { Loader2, ArrowRight, AlertCircle, CheckCircle2, X, Eye, EyeOff } from "lucide-react";
+import { Loader2, ArrowRight, AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ export function AuthPage() {
   const params = new URLSearchParams(window.location.search);
   const defaultToLogin = params.get('mode') === 'login';
   const redirectTo = params.get('redirect') || null;
+  const [, setLocation] = useLocation();
   const [isLogin, setIsLogin] = useState(defaultToLogin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,14 +41,11 @@ export function AuthPage() {
   const [resetSubmitted, setResetSubmitted] = useState(false);
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [pendingVerification, setPendingVerification] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [honeypot, setHoneypot] = useState("");
-  const [resendBusy, setResendBusy] = useState(false);
-  const [resendNote, setResendNote] = useState("");
   const [showDemoModal, setShowDemoModal] = useState(false);
-  const { login, signup, resendVerification } = useAuth();
+  const { login, signup } = useAuth();
   const turnstileConfigured = !!(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined);
 
   const onTurnstileToken = useCallback((token: string | null) => {
@@ -80,7 +79,6 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setResendNote("");
 
     if (!isLogin && !agreedToTerms) {
       setError("Please agree to the Privacy Policy and Terms of Use");
@@ -97,8 +95,10 @@ export function AuthPage() {
     try {
       const postAuthRedirect = redirectTo || "/app/inbox";
       if (isLogin) {
-        const success = await login(email, password, rememberMe);
-        if (success) {
+        const result = await login(email, password, rememberMe);
+        if (result.ok && result.pendingVerification) {
+          setLocation(CHECK_EMAIL_PATH);
+        } else if (result.ok) {
           navigateAfterAuth(postAuthRedirect);
         } else {
           setError("Invalid email or password");
@@ -111,7 +111,7 @@ export function AuthPage() {
           website: honeypot,
         });
         if (result.success && result.pendingVerification) {
-          setPendingVerification(true);
+          setLocation(CHECK_EMAIL_PATH);
         } else if (result.success) {
           navigateAfterAuth(postAuthRedirect);
         } else {
@@ -127,18 +127,6 @@ export function AuthPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleResendVerification = async () => {
-    setResendBusy(true);
-    setResendNote("");
-    const result = await resendVerification(email);
-    setResendBusy(false);
-    setResendNote(
-      result.ok
-        ? "If an account needs verification, we’ve sent another email."
-        : result.error || "Please try again shortly.",
-    );
   };
 
   return (
@@ -350,31 +338,6 @@ export function AuthPage() {
               <TurnstileWidget onToken={onTurnstileToken} resetKey={turnstileResetKey} />
             )}
 
-            {pendingVerification && (
-              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg space-y-2 text-sm text-emerald-800">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium">Check your email to verify your account.</p>
-                    <p className="text-emerald-700/90 mt-1">
-                      We sent a verification link to <span className="font-medium">{email}</span>. Your trial starts after you verify.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  disabled={resendBusy}
-                  onClick={handleResendVerification}
-                >
-                  {resendBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Resend verification email"}
-                </Button>
-                {resendNote && <p className="text-xs text-emerald-700">{resendNote}</p>}
-              </div>
-            )}
-
             {error && (
               <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -382,8 +345,7 @@ export function AuthPage() {
               </div>
             )}
 
-            {!pendingVerification && (
-              <Button 
+            <Button 
                 type="submit" 
                 className="w-full bg-brand-green hover:bg-emerald-700 h-11 text-base shadow-sm"
                 disabled={isSubmitting}
@@ -397,7 +359,6 @@ export function AuthPage() {
                   </>
                 )}
               </Button>
-            )}
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">

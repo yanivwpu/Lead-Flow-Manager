@@ -3,15 +3,15 @@
  * Trial + welcome email start only after successful verification.
  */
 import crypto from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import { emailVerificationTokens } from "@shared/schema";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { emailVerificationTokens, users } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { storage } from "./storage";
 import { sendEmailVerificationEmail, sendWelcomeEmail } from "./email";
 import { isEmailVerified } from "./authSecurity";
 import { isExcludedFromActivationEmails, isShopifyLinkedAccount } from "@shared/activationEmailEligibility";
 
-export const EMAIL_VERIFICATION_TTL_MS = 45 * 60 * 1000; // 45 minutes
+export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const TRIAL_DAYS = 14;
 
 function hashToken(rawToken: string): string {
@@ -22,7 +22,7 @@ function generateRawToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-async function invalidateUnusedTokens(userId: string): Promise<void> {
+async function invalidateOtherUnusedTokens(userId: string, keepTokenId: string): Promise<void> {
   await db
     .update(emailVerificationTokens)
     .set({ usedAt: new Date() })
@@ -30,7 +30,7 @@ async function invalidateUnusedTokens(userId: string): Promise<void> {
       and(
         eq(emailVerificationTokens.userId, userId),
         isNull(emailVerificationTokens.usedAt),
-        gt(emailVerificationTokens.expiresAt, new Date()),
+        ne(emailVerificationTokens.id, keepTokenId),
       ),
     );
 }
@@ -50,25 +50,91 @@ async function purgeExpiredUnusedTokens(): Promise<void> {
   }
 }
 
+export type IssuedEmailVerificationToken = {
+  rawToken: string;
+  tokenId: string;
+};
+
 /**
- * Issue a new verification token and send the verification email.
- * Does not reveal whether the user already exists to the caller — caller controls messaging.
+ * Insert a fresh 24-hour verification token without invalidating existing unused tokens.
+ * Callers must finalize or abandon after the send attempt so a failed replacement
+ * cannot destroy the last usable verification path.
  */
-export async function issueEmailVerification(userId: string, email: string, name: string): Promise<boolean> {
+export async function insertEmailVerificationToken(userId: string): Promise<IssuedEmailVerificationToken> {
   await purgeExpiredUnusedTokens();
-  await invalidateUnusedTokens(userId);
 
   const rawToken = generateRawToken();
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
 
-  await db.insert(emailVerificationTokens).values({
-    userId,
-    tokenHash,
-    expiresAt,
-  });
+  const inserted = await db
+    .insert(emailVerificationTokens)
+    .values({
+      userId,
+      tokenHash,
+      expiresAt,
+    })
+    .returning({ id: emailVerificationTokens.id });
 
-  return sendEmailVerificationEmail(name, email, rawToken);
+  const tokenId = inserted[0]?.id;
+  if (!tokenId) {
+    throw new Error("Failed to insert email verification token");
+  }
+
+  return { rawToken, tokenId };
+}
+
+/**
+ * After Resend accepts a verification email: invalidate other unused tokens and
+ * stamp verification_email_last_sent_at. Does not start the trial.
+ */
+export async function markVerificationEmailAccepted(userId: string, tokenId: string): Promise<void> {
+  await invalidateOtherUnusedTokens(userId, tokenId);
+  await db
+    .update(users)
+    .set({ verificationEmailLastSentAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+/**
+ * Mark a newly inserted token used after a failed send so it cannot be consumed.
+ * Does not invalidate previously unused tokens and does not change last-sent.
+ */
+export async function abandonIssuedVerificationToken(tokenId: string): Promise<void> {
+  await db
+    .update(emailVerificationTokens)
+    .set({ usedAt: new Date() })
+    .where(
+      and(
+        eq(emailVerificationTokens.id, tokenId),
+        isNull(emailVerificationTokens.usedAt),
+      ),
+    );
+}
+
+/**
+ * Insert a fresh 24-hour verification token without invalidating existing unused tokens.
+ * Prefer issueEmailVerification / reminder send paths which finalize after Resend accepts.
+ */
+export async function createEmailVerificationToken(userId: string): Promise<string> {
+  const issued = await insertEmailVerificationToken(userId);
+  return issued.rawToken;
+}
+
+/**
+ * Issue a new verification token and send the verification email.
+ * Unused prior tokens are invalidated only after Resend accepts the replacement.
+ * Does not reveal whether the user already exists to the caller — caller controls messaging.
+ */
+export async function issueEmailVerification(userId: string, email: string, name: string): Promise<boolean> {
+  const issued = await insertEmailVerificationToken(userId);
+  const sent = await sendEmailVerificationEmail(name, email, issued.rawToken);
+  if (sent) {
+    await markVerificationEmailAccepted(userId, issued.tokenId);
+    return true;
+  }
+  await abandonIssuedVerificationToken(issued.tokenId);
+  return false;
 }
 
 export type VerifyEmailResult =

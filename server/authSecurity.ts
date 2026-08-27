@@ -23,9 +23,11 @@ export type AuthSecurityEventType =
   | "signup_rejected_disposable"
   | "signup_rejected_turnstile"
   | "signup_rejected_honeypot"
+  | "signup_rejected_retired_identity"
   | "signup_rate_limited"
   | "email_verified"
   | "verification_resent"
+  | "change_pending_email"
   | "forgot_password_requested"
   | "forgot_password_rate_limited";
 
@@ -112,6 +114,13 @@ export async function checkSignupEmailLimit(email: string): Promise<RateLimitChe
 
 export async function checkVerificationResendLimit(email: string): Promise<RateLimitCheck> {
   return checkBucket(`verify-resend:email:${normalizeEmailAddress(email)}`, 3);
+}
+
+/** One resend per minute per pending account (in addition to the hourly cap). */
+export const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+
+export async function checkVerificationResendCooldown(userId: string): Promise<RateLimitCheck> {
+  return checkBucket(`verify-resend-cd:user:${userId}`, 1, VERIFICATION_RESEND_COOLDOWN_MS);
 }
 
 export async function checkForgotPasswordIpLimit(ip: string): Promise<RateLimitCheck> {
