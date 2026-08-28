@@ -23,6 +23,7 @@ import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import { getAppOrigin } from "./urlOrigins";
+import { isEmailImageRequestPath } from "@shared/emailImagePolicy";
 import { corsMiddleware } from "./corsMiddleware";
 import { rateLimitMiddleware } from "./rateLimitMiddleware";
 import { logGhlOAuthRecoveryAllowlistAtStartup } from "./ghlOAuthRecoveryStartup";
@@ -146,6 +147,12 @@ app.use((req, res, next) => {
   const pathname = req.path || "/";
   const target = `${getAppOrigin().replace(/\/+$/, "")}${req.originalUrl || req.url}`;
 
+  // Serve email image proxy/inline on the viewing host so host-only session
+  // cookies are sent. Apex/www 307 to APP_URL would change the request origin
+  // and trip iframe img-src 'self' (and drop host-only cookies).
+  if (isEmailImageRequestPath(pathname)) {
+    return next();
+  }
   if (host === "whachatcrm.com") {
     if (isSaaSPathname(pathname)) {
       return res.redirect(hostRedirectStatusForPathname(pathname), target);

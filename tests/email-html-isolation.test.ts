@@ -100,6 +100,7 @@ test("EmailMessageBody no longer uses dangerouslySetInnerHTML for HTML bodies", 
   assert.doesNotMatch(sandboxJoin![1], /["']allow-scripts["']/);
   assert.match(frameSrc, /srcDoc|srcdoc/i);
   assert.match(frameSrc, /buildIsolatedEmailSrcDoc/);
+  assert.match(frameSrc, /imageOrigins/);
 });
 
 test("regression payload: global a{} style is only present inside isolated srcdoc", () => {

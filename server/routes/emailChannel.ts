@@ -335,7 +335,8 @@ export function registerEmailChannelRoutes(app: Express): void {
         mailboxEmail,
       });
 
-      // Defense-in-depth: rewrite any leftover cid:/http(s) imgs to same-origin endpoints.
+      // Defense-in-depth: rewrite leftover cid:/http(s) imgs and refresh expired
+      // signed proxy URLs. Response-only — do not persist rewritten HTML.
       let htmlBody = detail.htmlBody;
       if (htmlBody) {
         const { sanitizeEmailHtml } = await import("../emailChannel/htmlSanitize");

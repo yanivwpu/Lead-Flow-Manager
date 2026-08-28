@@ -1,8 +1,9 @@
 /**
  * Conservative HTML sanitizer for email bodies.
  *
- * Inbound: strips executable content; rewrites remote images + CSS url() to same-origin
- * proxy paths; rewrites cid: to same-origin inline paths (when messageId known).
+ * Inbound: strips executable content; rewrites remote images, srcset, HTML background=,
+ * and CSS url() to signed same-origin proxy paths; refreshes existing signed proxy URLs;
+ * rewrites cid: to same-origin inline paths (when messageId known).
  * Outbound: strips executable content only — leaves remote image URLs intact for recipients.
  */
 import {
@@ -10,8 +11,11 @@ import {
   EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER,
   EMAIL_TRACKING_PIXEL_PLACEHOLDER,
   buildEmailInlineImagePath,
+  decodeEmailProxyUrlPayload,
   decodeHtmlEntitiesInRemoteUrl,
   encodeEmailProxyUrlPayload,
+  isEmailImageProxySrc,
+  isEmailInlineImageSrc,
   isLikelyTrackingPixelAttrs,
   normalizeEmailContentId,
 } from "@shared/emailImagePolicy";
@@ -65,22 +69,158 @@ function stripDangerous(html: string): string {
     .replace(CSS_BEHAVIOR, "");
 }
 
+type SanitizeStats = {
+  remoteImagesBlocked: number;
+  remoteImagesProxied: number;
+  cidImagesRewritten: number;
+  trackingPixelsNeutralized: number;
+};
+
+function shouldRewriteCssImageUrl(url: string): boolean {
+  const src = decodeHtmlEntitiesInRemoteUrl(String(url || "").trim());
+  if (!src) return false;
+  if (/^https?:\/\//i.test(src)) return true;
+  if (isEmailImageProxySrc(src)) return true;
+  if (/^cid:/i.test(src)) return true;
+  return false;
+}
+
 function rewriteCssRemoteUrls(
   cssText: string,
-  stats: { remoteImagesProxied: number; remoteImagesBlocked: number },
+  stats: SanitizeStats,
+  messageId: string | null,
 ): string {
   return cssText.replace(
-    /url\s*\(\s*(['"]?)(https?:\/\/[^)'"\s]+)\1\s*\)/gi,
-    (_m, _q, url: string) => {
-      const proxy = tryBuildEmailRemoteProxySrc(url);
-      if (!proxy) {
-        stats.remoteImagesBlocked += 1;
-        return "url('')";
-      }
-      stats.remoteImagesProxied += 1;
-      return `url('${proxy}')`;
+    /url\s*\(\s*(['"]?)([^)'"\s]+)\1\s*\)/gi,
+    (full, q: string, url: string) => {
+      if (!shouldRewriteCssImageUrl(url)) return full;
+      const next = rewriteInboundImageRef(url, stats, messageId, { allowEmpty: true });
+      if (!next) return "url('')";
+      return `url('${next}')`;
     },
   );
+}
+
+function parseProxyQuery(src: string): URLSearchParams | null {
+  const decoded = String(src || "").replace(/&amp;/g, "&");
+  const q = decoded.indexOf("?");
+  if (q < 0) return null;
+  try {
+    return new URLSearchParams(decoded.slice(q + 1));
+  } catch {
+    return null;
+  }
+}
+
+/** Rebuild a signed proxy URL from a stored `u=` payload (refreshes expiry). */
+export function refreshEmailImageProxySrc(src: string): string | null {
+  const qs = parseProxyQuery(src);
+  if (!qs) return null;
+  const remote = decodeEmailProxyUrlPayload(qs.get("u") || "");
+  if (!remote) return null;
+  return tryBuildEmailRemoteProxySrc(remote);
+}
+
+/**
+ * Rewrite one image URL for inbound rendering: remote HTTPS → signed proxy,
+ * existing proxy → freshly signed, cid → inline, tracking pixels → data GIF.
+ */
+export function rewriteInboundImageRef(
+  rawUrl: string,
+  stats: SanitizeStats,
+  messageId: string | null,
+  options?: { allowEmpty?: boolean; treatAsTracking?: boolean },
+): string {
+  const src = decodeHtmlEntitiesInRemoteUrl(String(rawUrl || "").trim());
+  if (!src) return options?.allowEmpty ? "" : src;
+
+  if (options?.treatAsTracking && /^https?:\/\//i.test(src)) {
+    stats.trackingPixelsNeutralized += 1;
+    return EMAIL_TRACKING_PIXEL_PLACEHOLDER;
+  }
+
+  if (isEmailImageProxySrc(src)) {
+    const fresh = refreshEmailImageProxySrc(src);
+    if (fresh) {
+      stats.remoteImagesProxied += 1;
+      return fresh;
+    }
+    stats.remoteImagesBlocked += 1;
+    return options?.allowEmpty ? "" : EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER;
+  }
+
+  if (isEmailInlineImageSrc(src)) {
+    return src;
+  }
+
+  if (/^https?:\/\//i.test(src)) {
+    const proxy = tryBuildEmailRemoteProxySrc(src);
+    if (!proxy) {
+      stats.remoteImagesBlocked += 1;
+      return options?.allowEmpty ? "" : EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER;
+    }
+    stats.remoteImagesProxied += 1;
+    return proxy;
+  }
+
+  if (/^cid:/i.test(src)) {
+    const cid = normalizeEmailContentId(src);
+    if (cid && messageId) {
+      stats.cidImagesRewritten += 1;
+      return buildEmailInlineImagePath(messageId, cid);
+    }
+    return src;
+  }
+
+  if (/^(data:image\/(png|jpe?g|gif|webp)|blob:)/i.test(src)) {
+    return src;
+  }
+
+  stats.remoteImagesBlocked += 1;
+  return options?.allowEmpty ? "" : EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER;
+}
+
+function rewriteSrcsetValue(
+  raw: string,
+  stats: SanitizeStats,
+  messageId: string | null,
+): string {
+  const parts = String(raw || "").split(",");
+  const out: string[] = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^(\S+)(\s+.*)?$/);
+    if (!match) continue;
+    const next = rewriteInboundImageRef(match[1], stats, messageId, { allowEmpty: true });
+    if (!next || next === EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER) continue;
+    out.push(`${next}${match[2] || ""}`);
+  }
+  return out.join(", ");
+}
+
+function replaceAttrValue(
+  attrs: string,
+  attrName: string,
+  nextValue: string,
+): string {
+  const quoted = new RegExp(`\\b${attrName}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i");
+  if (quoted.test(attrs)) {
+    return attrs.replace(quoted, (_m, q: string) => `${attrName}=${q}${nextValue}${q}`);
+  }
+  const unquoted = new RegExp(`\\b${attrName}\\s*=\\s*([^\\s>]+)`, "i");
+  if (unquoted.test(attrs)) {
+    return attrs.replace(unquoted, () => `${attrName}="${nextValue}"`);
+  }
+  return `${attrs} ${attrName}="${nextValue}"`;
+}
+
+function readAttrValue(attrs: string, attrName: string): { value: string; quoted: boolean } | null {
+  const quoted = attrs.match(new RegExp(`\\b${attrName}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i"));
+  if (quoted) return { value: quoted[2], quoted: true };
+  const unquoted = attrs.match(new RegExp(`\\b${attrName}\\s*=\\s*([^\\s>]+)`, "i"));
+  if (unquoted) return { value: unquoted[1], quoted: false };
+  return null;
 }
 
 /**
@@ -122,71 +262,59 @@ export function sanitizeEmailHtml(
 
   // <style> blocks: rewrite remote url(...) to proxy (or leave relative alone).
   html = html.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, (block) =>
-    rewriteCssRemoteUrls(block, stats),
+    rewriteCssRemoteUrls(block, stats, messageId),
   );
 
   // Inline style="...url(https://...)"
   html = html.replace(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/gi, (_m, q, styleBody: string) => {
-    const next = rewriteCssRemoteUrls(styleBody, stats);
+    const next = rewriteCssRemoteUrls(styleBody, stats, messageId);
     return `style=${q}${next}${q}`;
   });
 
-  // <img src="...">
+  // HTML background="https://..." (newsletter table headers). Quoted and unquoted.
+  html = html.replace(/\sbackground\s*=\s*(["'])([\s\S]*?)\1/gi, (_m, q, url: string) => {
+    const next = rewriteInboundImageRef(url, stats, messageId, { allowEmpty: true });
+    if (!next) return ` background=${q}${q}`;
+    return ` background=${q}${next}${q}`;
+  });
+  html = html.replace(/\sbackground\s*=\s*([^\s>"']+)/gi, (_m, url: string) => {
+    const next = rewriteInboundImageRef(url, stats, messageId, { allowEmpty: true });
+    if (!next) return ` background=""`;
+    return ` background="${next}"`;
+  });
+
+  // <img src / srcset>
   html = html.replace(/<img\b([^>]*)>/gi, (_full, attrsRaw: string) => {
     let attrs = String(attrsRaw || "");
-    const srcMatch = attrs.match(/\bsrc\s*=\s*(["'])([\s\S]*?)\1/i);
-    if (!srcMatch) return `<img${attrs}>`;
+    const srcInfo = readAttrValue(attrs, "src");
 
-    const quote = srcMatch[1];
-    const src = String(srcMatch[2] || "").trim();
-
-    if (isLikelyTrackingPixelAttrs(attrs) && /^https?:\/\//i.test(src)) {
-      stats.trackingPixelsNeutralized += 1;
-      attrs = attrs.replace(srcMatch[0], `src=${quote}${EMAIL_TRACKING_PIXEL_PLACEHOLDER}${quote}`);
-      return `<img${attrs}>`;
-    }
-
-    if (/^https?:\/\//i.test(src)) {
-      const proxy = tryBuildEmailRemoteProxySrc(src);
-      if (!proxy) {
-        stats.remoteImagesBlocked += 1;
-        return EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER;
+    if (srcInfo) {
+      const src = String(srcInfo.value || "").trim();
+      if (isLikelyTrackingPixelAttrs(attrs) && /^https?:\/\//i.test(src)) {
+        const next = rewriteInboundImageRef(src, stats, messageId, { treatAsTracking: true });
+        attrs = replaceAttrValue(attrs, "src", next);
+      } else {
+        const next = rewriteInboundImageRef(src, stats, messageId);
+        if (next.startsWith("<span")) {
+          return next;
+        }
+        attrs = replaceAttrValue(attrs, "src", next);
       }
-      stats.remoteImagesProxied += 1;
-      attrs = attrs.replace(srcMatch[0], `src=${quote}${proxy}${quote}`);
-      // Drop onerror that might probe remote hosts.
-      attrs = attrs.replace(/\sonerror\s*=\s*(["'])[\s\S]*?\1/gi, "");
-      return `<img${attrs}>`;
     }
 
-    if (/^cid:/i.test(src)) {
-      const cid = normalizeEmailContentId(src);
-      if (cid && messageId) {
-        stats.cidImagesRewritten += 1;
-        const inlineSrc = buildEmailInlineImagePath(messageId, cid);
-        attrs = attrs.replace(srcMatch[0], `src=${quote}${inlineSrc}${quote}`);
-        return `<img${attrs}>`;
+    const srcsetInfo = readAttrValue(attrs, "srcset");
+    if (srcsetInfo) {
+      const nextSrcset = rewriteSrcsetValue(srcsetInfo.value, stats, messageId);
+      if (!nextSrcset) {
+        attrs = attrs.replace(/\s*srcset\s*=\s*(["'])[\s\S]*?\1/i, "");
+        attrs = attrs.replace(/\s*srcset\s*=\s*[^\s>]+/i, "");
+      } else {
+        attrs = replaceAttrValue(attrs, "srcset", nextSrcset);
       }
-      // Keep cid until messageId is known (second pass).
-      return `<img${attrs}>`;
     }
 
-    if (/^(data:image\/(png|jpe?g|gif|webp)|blob:)/i.test(src)) {
-      return `<img${attrs}>`;
-    }
-
-    // Already rewritten to same-origin proxy / CID endpoints — keep.
-    if (
-      src.startsWith(EMAIL_IMAGE_PROXY_PATH) ||
-      /\/api\/messages\/[^/]+\/email-inline\?/i.test(src) ||
-      src.startsWith("/api/email/image-proxy")
-    ) {
-      return `<img${attrs}>`;
-    }
-
-    // Unknown / unsafe schemes — neutralize without noisy [Remote image blocked] labels.
-    stats.remoteImagesBlocked += 1;
-    return EMAIL_IMAGE_UNAVAILABLE_PLACEHOLDER;
+    attrs = attrs.replace(/\sonerror\s*=\s*(["'])[\s\S]*?\1/gi, "");
+    return `<img${attrs}>`;
   });
 
   html = stripDangerous(html);

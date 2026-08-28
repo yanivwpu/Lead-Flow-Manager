@@ -8,16 +8,20 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   EMAIL_IMAGE_PROXY_PATH,
+  buildEmailFrameImgSrcDirective,
   buildEmailInlineImagePath,
   decodeEmailProxyUrlPayload,
   decodeHtmlEntitiesInRemoteUrl,
   encodeEmailProxyUrlPayload,
+  isAllowedEmailImageCspOrigin,
+  isEmailImageRequestPath,
   isEmailSafeImageMime,
   isLikelyTrackingPixelAttrs,
   normalizeEmailContentId,
 } from "../shared/emailImagePolicy";
 import {
   buildEmailRemoteProxySrc,
+  refreshEmailImageProxySrc,
   sanitizeEmailHtml,
 } from "../server/emailChannel/htmlSanitize";
 import {
@@ -190,6 +194,65 @@ describe("inbound sanitizer preserves images via proxy/CID rewrite", () => {
       "https://scontent.cdninstagram.com/v/t51.2885-19/n.jpg?stp=dst-jpg&_nc_cat=1&oh=abc&oe=def",
     );
   });
+
+  it("rewrites HTML background= remote URLs to signed proxy", () => {
+    const { html, remoteImagesProxied } = sanitizeEmailHtml(
+      `<table background="https://cdn.braze-images.com/header.png"><tr><td>News</td></tr></table>
+       <td background=https://cdn.braze-images.com/unquoted.png>x</td>`,
+      { purpose: "inbound", messageId: "m1" },
+    );
+    assert.ok(remoteImagesProxied >= 2);
+    assert.doesNotMatch(html, /https:\/\/cdn\.braze-images\.com/);
+    assert.match(html, /background="\/api\/email\/image-proxy\?/);
+    assert.equal(signedProxyTargetFromHtml(html), "https://cdn.braze-images.com/header.png");
+  });
+
+  it("rewrites srcset HTTPS candidates to signed proxy", () => {
+    const { html, remoteImagesProxied } = sanitizeEmailHtml(
+      `<img src="https://cdn.example.com/a.png" srcset="https://cdn.example.com/a.png 1x, https://cdn.example.com/a@2x.png 2x" />`,
+      { purpose: "inbound", messageId: "m1" },
+    );
+    assert.ok(remoteImagesProxied >= 3);
+    assert.doesNotMatch(html, /srcset="https:/i);
+    assert.match(html, /srcset="\/api\/email\/image-proxy\?/);
+    assert.match(html, / 1x, \/api\/email\/image-proxy\?/);
+    assert.match(html, / 2x/);
+  });
+
+  it("re-sanitize refreshes expired signed proxy URLs from stored u=", () => {
+    const once = sanitizeEmailHtml(`<img src="https://cdn.example.com/a.png" width="10" height="10" />`, {
+      purpose: "inbound",
+      messageId: "m1",
+    }).html;
+    const qsOnce = new URLSearchParams(
+      once.match(/\/api\/email\/image-proxy\?([^"'>\s]+)/i)![1].replace(/&amp;/g, "&"),
+    );
+    const staleExpiry = Math.floor(Date.now() / 1000) - 86_400;
+    const stale = once.replace(/([?&])e=\d+/, `$1e=${staleExpiry}`);
+    const twice = sanitizeEmailHtml(stale, { purpose: "inbound", messageId: "m1" }).html;
+    const qsTwice = new URLSearchParams(
+      twice.match(/\/api\/email\/image-proxy\?([^"'>\s]+)/i)![1].replace(/&amp;/g, "&"),
+    );
+    const e2 = Number(qsTwice.get("e"));
+    assert.ok(e2 > Math.floor(Date.now() / 1000), "refreshed expiry must be in the future");
+    assert.notEqual(e2, staleExpiry);
+    assert.equal(
+      verifyEmailImageProxyRequest({
+        remoteUrl: "https://cdn.example.com/a.png",
+        expiresUnixSec: e2,
+        signature: qsTwice.get("s") || "",
+      }),
+      true,
+    );
+    assert.equal(decodeEmailProxyUrlPayload(qsTwice.get("u") || ""), "https://cdn.example.com/a.png");
+    const refreshed = refreshEmailImageProxySrc(
+      `/api/email/image-proxy?u=${qsOnce.get("u")}&e=${staleExpiry}&s=deadbeef`,
+    );
+    assert.ok(refreshed);
+    assert.match(refreshed!, /[?&]e=\d+/);
+    const eFresh = Number(new URLSearchParams(refreshed!.split("?")[1]).get("e"));
+    assert.ok(eFresh > Math.floor(Date.now() / 1000));
+  });
 });
 
 describe("proxy signing + payload", () => {
@@ -271,13 +334,23 @@ describe("SSRF protections", () => {
 });
 
 describe("CSP + wiring", () => {
-  it("iframe CSP allows only self/data/blob for images (no direct http/https)", () => {
+  it("iframe CSP allows self/data/blob plus trusted app hosts (no https: / * wildcards)", () => {
     const doc = buildIsolatedEmailSrcDoc(`<img src="/api/email/image-proxy?u=x&s=y" />`);
     const imgSrc = doc.match(/img-src[^;]+/)?.[0] || "";
     assert.match(imgSrc, /img-src 'self' data: blob:/);
-    assert.doesNotMatch(imgSrc, /https:/);
-    assert.doesNotMatch(imgSrc, /http:/);
+    assert.match(imgSrc, /https:\/\/app\.whachatcrm\.com/);
+    assert.match(imgSrc, /https:\/\/www\.whachatcrm\.com/);
+    assert.match(imgSrc, /https:\/\/whachatcrm\.com/);
+    assert.doesNotMatch(imgSrc, /(^|[\s;])https:([\s;]|$)/);
+    assert.doesNotMatch(imgSrc, /(^|[\s;])http:([\s;]|$)/);
+    assert.doesNotMatch(imgSrc, /(^|[\s;])\*([\s;]|$)/);
     assert.doesNotMatch(imgSrc, /cid:/);
+    const withLoopback = buildIsolatedEmailSrcDoc(`<img src="/x" />`, {
+      imageOrigins: ["http://127.0.0.1:7788", "https://evil.example"],
+    });
+    const loopSrc = withLoopback.match(/img-src[^;]+/)?.[0] || "";
+    assert.match(loopSrc, /http:\/\/127\.0\.0\.1:7788/);
+    assert.doesNotMatch(loopSrc, /evil\.example/);
   });
 
   it("routes and providers wire proxy + inline + getAttachment", () => {
@@ -308,8 +381,32 @@ describe("CSP + wiring", () => {
       "utf8",
     );
     assert.match(sanitizer, /decodeHtmlEntitiesInRemoteUrl\(remoteUrl\)/);
+    assert.match(sanitizer, /refreshEmailImageProxySrc/);
+    assert.match(sanitizer, /srcset/);
+    assert.match(sanitizer, /background/);
     assert.doesNotMatch(sanitizer, /127\.0\.0\.1:7693/);
     assert.doesNotMatch(sanitizer, /#region agent log/);
+    const indexSrc = fs.readFileSync(path.join(process.cwd(), "server/index.ts"), "utf8");
+    assert.match(indexSrc, /isEmailImageRequestPath/);
+    const details = fs.readFileSync(
+      path.join(process.cwd(), "server/routes/emailChannel.ts"),
+      "utf8",
+    );
+    assert.match(details, /email-details/);
+    assert.match(details, /sanitizeEmailHtml/);
+    assert.doesNotMatch(details, /app\.(get|post)\(["']\/api\/email\/sign/);
+  });
+
+  it("isEmailImageRequestPath matches proxy and inline only", () => {
+    assert.equal(isEmailImageRequestPath("/api/email/image-proxy"), true);
+    assert.equal(isEmailImageRequestPath("/api/email/image-proxy?u=x"), true);
+    assert.equal(isEmailImageRequestPath("/api/messages/abc/email-inline"), true);
+    assert.equal(isEmailImageRequestPath("/api/messages/abc/email-details"), false);
+    assert.equal(isEmailImageRequestPath("/api/auth/login"), false);
+    assert.equal(isAllowedEmailImageCspOrigin("https://app.whachatcrm.com"), true);
+    assert.equal(isAllowedEmailImageCspOrigin("https://evil.example"), false);
+    assert.equal(isAllowedEmailImageCspOrigin("http://127.0.0.1:5000"), true);
+    assert.doesNotMatch(buildEmailFrameImgSrcDirective(["https://cdn.evil.example"]), /cdn\.evil/);
   });
 
   it("Phase 1 live-first sync files still present (unchanged architecture)", () => {

@@ -7,6 +7,17 @@
 export const EMAIL_IMAGE_PROXY_PATH = "/api/email/image-proxy";
 export const EMAIL_INLINE_IMAGE_PATH_PREFIX = "/api/messages/";
 
+/**
+ * Explicit HTTPS origins allowed in the isolated email iframe `img-src`.
+ * Must stay a finite allowlist — never `https:` or `*`.
+ * Covers apex → www → app 307s of `/api/email/image-proxy` and `/email-inline`.
+ */
+export const EMAIL_IMAGE_TRUSTED_ORIGINS = [
+  "https://app.whachatcrm.com",
+  "https://www.whachatcrm.com",
+  "https://whachatcrm.com",
+] as const;
+
 export const EMAIL_SAFE_IMAGE_MIME_TYPES = [
   "image/jpeg",
   "image/jpg",
@@ -95,4 +106,93 @@ export function decodeEmailProxyUrlPayload(encoded: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function pathnameWithoutQuery(raw: string): string {
+  return String(raw || "").split("?")[0] || "";
+}
+
+/** True for the inbound image proxy and CID inline endpoints (same Express app on every host). */
+export function isEmailImageRequestPath(pathname: string): boolean {
+  const path = pathnameWithoutQuery(pathname);
+  if (path === EMAIL_IMAGE_PROXY_PATH) return true;
+  return /^\/api\/messages\/[^/]+\/email-inline$/i.test(path);
+}
+
+export function isEmailImageProxySrc(src: string): boolean {
+  const path = pathnameWithoutQuery(String(src || "").trim().replace(/&amp;/g, "&"));
+  if (path === EMAIL_IMAGE_PROXY_PATH) return true;
+  if (path.endsWith(EMAIL_IMAGE_PROXY_PATH)) return true;
+  try {
+    const u = new URL(path, "https://app.whachatcrm.com");
+    return u.pathname === EMAIL_IMAGE_PROXY_PATH;
+  } catch {
+    return false;
+  }
+}
+
+export function isEmailInlineImageSrc(src: string): boolean {
+  const path = pathnameWithoutQuery(String(src || "").trim().replace(/&amp;/g, "&"));
+  return /\/api\/messages\/[^/]+\/email-inline$/i.test(path);
+}
+
+function tryParseOrigin(raw: string): string | null {
+  try {
+    const u = new URL(String(raw || "").trim());
+    if (u.username || u.password || u.search || u.hash) return null;
+    if (u.pathname && u.pathname !== "/") return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackEmailImageCspHostname(hostname: string): boolean {
+  const host = String(hostname || "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+/**
+ * Origins allowed in email-frame `img-src`. Finite production allowlist plus
+ * loopback (local verification). Never `https:` / `*` wildcards, never arbitrary HTTPS.
+ */
+export function isAllowedEmailImageCspOrigin(origin: string): boolean {
+  const parsed = tryParseOrigin(origin);
+  if (!parsed) return false;
+  if ((EMAIL_IMAGE_TRUSTED_ORIGINS as readonly string[]).includes(parsed)) return true;
+  try {
+    const u = new URL(parsed);
+    if (!isLoopbackEmailImageCspHostname(u.hostname)) return false;
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function collectEmailFrameImageOrigins(
+  extra: Array<string | null | undefined> = [],
+): string[] {
+  const set = new Set<string>();
+  for (const origin of EMAIL_IMAGE_TRUSTED_ORIGINS) {
+    if (isAllowedEmailImageCspOrigin(origin)) set.add(origin);
+  }
+  for (const raw of extra) {
+    if (!raw) continue;
+    const origin = tryParseOrigin(raw.includes("://") ? raw : `https://${raw}`) || tryParseOrigin(raw);
+    if (origin && isAllowedEmailImageCspOrigin(origin)) set.add(origin);
+  }
+  return [...set];
+}
+
+export function buildEmailFrameImgSrcDirective(extraOrigins: Array<string | null | undefined> = []): string {
+  const origins = collectEmailFrameImageOrigins(extraOrigins);
+  return ["'self'", "data:", "blob:", ...origins].join(" ");
+}
+
+/** Full CSP for isolated email srcdoc. No `https:` / `*` image wildcards. */
+export function buildEmailFrameContentSecurityPolicy(
+  extraOrigins: Array<string | null | undefined> = [],
+): string {
+  const imgSrc = buildEmailFrameImgSrcDirective(extraOrigins);
+  return `default-src 'none'; img-src ${imgSrc}; style-src 'unsafe-inline'; font-src https: http: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none';`;
 }

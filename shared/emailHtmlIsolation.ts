@@ -3,6 +3,8 @@
  * Used to build iframe srcdoc documents (sandbox without allow-scripts).
  */
 
+import { buildEmailFrameContentSecurityPolicy } from "./emailImagePolicy";
+
 const DANGEROUS_TAGS =
   /<\/?(?:script|iframe|object|embed|form|link|meta|base|svg|math|frame|frameset|template)(?:\s[^>]*)?>/gi;
 const EVENT_HANDLER_ATTR = /\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
@@ -82,15 +84,21 @@ export function hardenEmailHtmlForFrame(raw: string | null | undefined): string 
 /**
  * Full HTML document for iframe srcdoc.
  * Email `<style>` blocks stay inside this document only — they cannot style the host UI.
+ * `img-src` allows 'self', data, blob, and explicit trusted app hosts (apex/www/app)
+ * so 307s between those hosts do not trip CSP. Never `https:` / `*`.
  */
-export function buildIsolatedEmailSrcDoc(rawHtml: string | null | undefined): string {
+export function buildIsolatedEmailSrcDoc(
+  rawHtml: string | null | undefined,
+  options?: { imageOrigins?: Array<string | null | undefined> },
+): string {
   const body = hardenEmailHtmlForFrame(rawHtml);
+  const csp = buildEmailFrameContentSecurityPolicy(options?.imageOrigins);
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="${csp}" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'; font-src https: http: data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none';" />
 <base target="_blank" />
 <style>
   html, body {

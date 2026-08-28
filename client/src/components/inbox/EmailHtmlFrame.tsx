@@ -15,6 +15,14 @@ const IFRAME_SANDBOX = [
   "allow-popups-to-escape-sandbox",
 ].join(" ");
 
+function currentPageOrigin(): string | undefined {
+  try {
+    return window.location.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export function EmailHtmlFrame({
   html,
   className,
@@ -24,7 +32,10 @@ export function EmailHtmlFrame({
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
-  const srcDoc = useMemo(() => buildIsolatedEmailSrcDoc(html), [html]);
+  const srcDoc = useMemo(
+    () => buildIsolatedEmailSrcDoc(html, { imageOrigins: [currentPageOrigin()] }),
+    [html],
+  );
 
   useEffect(() => {
     const frame = iframeRef.current;

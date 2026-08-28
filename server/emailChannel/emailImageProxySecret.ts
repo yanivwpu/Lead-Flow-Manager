@@ -10,7 +10,7 @@ import crypto from "crypto";
 const WEAK_PLACEHOLDER = "email-image-proxy-dev-only";
 const MIN_PROD_SECRET_LEN = 32;
 
-/** Signed proxy URL lifetime (default 7 days). Re-signed on email-details render. */
+/** Signed proxy URL lifetime (default 7 days). Re-signed on authorized email-details render. */
 export const EMAIL_IMAGE_PROXY_URL_TTL_SEC = Number(
   process.env.EMAIL_IMAGE_PROXY_URL_TTL_SEC || 7 * 24 * 60 * 60,
 );
