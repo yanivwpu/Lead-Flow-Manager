@@ -121,7 +121,7 @@ export function isGrowthEngineWorkflow(
 
 /**
  * Product rule: Growth Engine install, activation, and runtime all require
- * Pro (or Scale) + AI Brain + plan automations enabled.
+ * an active Pro plan (AI Brain is included with Pro) plus plan automations enabled.
  *
  * Admin overrides (plan / AI Brain / Growth Engine) are honored here.
  * This is the single source of truth for server-side Growth Engine gating.
@@ -172,7 +172,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       ok: false,
       reason: "automations_not_in_plan",
       message:
-        "Automations are not enabled on your current plan. Upgrade to Pro with AI Brain to use Growth Engine.",
+        "Automations are not enabled on your current plan. Upgrade to Pro to use Growth Engine.",
       limits,
       hasProTier,
       hasAIBrainAddon,
@@ -186,21 +186,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
     const result: GrowthEngineAccessResult = {
       ok: false,
       reason: "pro_plan_required",
-      message: "Growth Engine requires an active Pro (or Scale) subscription.",
-      limits,
-      hasProTier,
-      hasAIBrainAddon,
-      workflowsEnabled,
-    };
-    logGrowthEngineAccessDecision(userId, user, result);
-    return result;
-  }
-
-  if (!hasAIBrainAddon) {
-    const result: GrowthEngineAccessResult = {
-      ok: false,
-      reason: "ai_brain_required",
-      message: "Growth Engine requires the AI Brain add-on on your account.",
+      message: "Growth Engine requires an active Pro subscription.",
       limits,
       hasProTier,
       hasAIBrainAddon,

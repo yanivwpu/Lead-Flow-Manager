@@ -98,7 +98,7 @@ test("Templates page opens for Free; campaigns remain a paid action gate", () =>
   assert.ok(inbox.includes("templateCampaignsEnabled"));
   assert.equal(
     TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE,
-    "Campaign and bulk template automation requires Starter or Pro",
+    "Campaign and bulk template automation requires Pro",
   );
   assert.equal(
     BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE,
@@ -115,8 +115,9 @@ test("Pricing Free includes Integrations and basic templates; AI Brain stays sep
   const rows = buildPricingCompareRows();
   assert.equal(rows.find((r) => r.featureKey === "integrations")?.free, true);
   assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.free, "Approved 1:1 template sends");
-  assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.starter, "Templates with workflow automation");
-  assert.equal(rows.find((r) => r.featureKey === "aiBrainAddon")?.free, "Not included");
+  assert.equal(rows.find((r) => r.featureKey === "templateMessaging")?.pro, "Templates with workflow automation");
+  assert.equal(rows.find((r) => r.featureKey === "aiBrain")?.free, "Not included after trial");
+  assert.equal(rows.find((r) => r.featureKey === "aiBrain")?.pro, "Included");
   assert.equal(rows.find((r) => r.featureKey === "workflowAutomation")?.free, false);
 
   const en = getLocalizedPricingPage("en");
@@ -140,7 +141,7 @@ test("Pricing Free includes Integrations and basic templates; AI Brain stays sep
   }
 });
 
-test("Paid regression: Starter/Pro keep scale, automations, and AI Brain add-on", () => {
+test("Paid regression: Pro includes Brain; grandfathered Starter keeps automations", () => {
   assert.equal(PLAN_LIMITS.starter.conversationsPerMonth, 500);
   assert.equal(PLAN_LIMITS.pro.conversationsPerMonth, 2000);
   assert.equal(PLAN_LIMITS.starter.maxUsers, 3);
@@ -157,4 +158,5 @@ test("Paid regression: Starter/Pro keep scale, automations, and AI Brain add-on"
   assert.ok(!/Basic WhatsApp templates/i.test(starter));
   assert.match(pro, /Industry Growth Engines/);
   assert.match(pro, /WhatsApp templates \+ automation/);
+  assert.match(pro, /AI Brain included/);
 });

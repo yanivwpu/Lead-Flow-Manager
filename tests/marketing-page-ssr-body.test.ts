@@ -90,18 +90,19 @@ for (const route of requiredRoutes) {
 
 const pricingBody = generateMarketingPageSsrHtml("/pricing");
 assert.ok(pricingBody, "pricing now has crawlable SSR body");
-assert.match(pricingBody!, /Powerful tools to grow your business — pricing that grows with you\./);
-assert.match(pricingBody!, /Start free with Prospect AI, Unified Inbox/);
-assert.match(pricingBody!, /14-day Pro \+ AI Brain trial/);
+assert.match(pricingBody!, /Simple pricing\. Everything you need to grow\./);
+assert.match(pricingBody!, /Start free\. Upgrade when you’re ready to scale\./);
+assert.match(pricingBody!, /AI Brain included with Pro/);
 assert.match(pricingBody!, /0% WhachatCRM markup/);
+assert.doesNotMatch(pricingBody!, /\$19/);
 assert.equal(generateMarketingPageSsrHtml("/contact"), null, "contact still meta-only");
 
 const esPricing = generateMarketingPageSsrHtml("/es/pricing");
-assert.ok(esPricing?.includes("Herramientas potentes para hacer crecer tu negocio"));
-assert.ok(esPricing?.includes("Empieza gratis con Prospect AI"));
+assert.ok(esPricing?.includes("Precios simples. Todo lo que necesitas para crecer."));
+assert.ok(esPricing?.includes("AI Brain incluido con Pro"));
 const hePricing = generateMarketingPageSsrHtml("/he/pricing");
-assert.ok(hePricing?.includes("כלים חזקים לצמיחת העסק"));
-assert.ok(hePricing?.includes("התחילו בחינם עם Prospect AI"));
+assert.ok(hePricing?.includes("תמחור פשוט. כל מה שצריך כדי לצמוח."));
+assert.ok(hePricing?.includes("AI Brain כלול ב-Pro"));
 
 const marketing = Object.keys(PAGE_META);
 assert.equal(shouldServeSpaFallback("/this-page-should-not-exist", marketing), false);

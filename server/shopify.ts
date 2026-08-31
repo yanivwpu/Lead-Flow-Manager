@@ -20,7 +20,7 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 export const SHOPIFY_SCOPES = ['read_customers', 'read_orders'] as const;
 export const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
-/** Amounts must match public pricing / App Store listing (Starter $19/mo, Pro $49/mo, AI Brain add-on +$29/mo). */
+/** Amounts must match public pricing / App Store listing (Pro $49/mo). Starter and AI Brain add-on remain for historical Shopify subscriptions. */
 export const SHOPIFY_BILLING_PLANS = {
   'Starter': {
     amount: 19.0,
@@ -599,7 +599,11 @@ export async function syncShopifyBillingToUser(
       subscriptionPlan: billingPlan,
       billingPlan,
       subscriptionStatus: 'active',
-      ...(aiBrain ? { shopifyAIBrainEnabled: true } : {}),
+      ...(billingPlan === "starter"
+        ? { shopifyAIBrainEnabled: aiBrain }
+        : billingPlan === "free"
+          ? { shopifyAIBrainEnabled: false }
+          : {}),
     });
     console.log('[ShopifyBilling] Synced active subscription', {
       userId,

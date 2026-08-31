@@ -78,7 +78,7 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
   whachatBetterWhen: [
     "You want Shopify on Free plus Email, Messenger, Instagram, and web chat in one inbox",
     "Meta Embedded Signup should onboard WhatsApp without Twilio for new setups",
-    "Chatbot, Flow Builder, and preset automation templates on Starter+ should support non-commerce flows too",
+    "Chatbot, Flow Builder, and preset automation templates on Pro should support non-commerce flows too",
     "GoHighLevel LeadConnector sync on Free matters alongside Shopify",
     "Calendly booking integration on Free fits service-and-commerce hybrid businesses",
     "You need unlimited users on Pro ($49/mo) with 0% WhachatCRM markup on Meta fees",
@@ -135,7 +135,7 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     competitorSummary:
       "Zoko typically sells plans oriented toward Shopify merchants using WhatsApp for sales and support. Philosophy: ecommerce-native WhatsApp hub with order-aware agent workflows. Confirm current plan tiers, agent limits, and Meta fee handling on Zoko's official pricing page; we do not quote live monthly totals here.",
     whachatSummary:
-      "WhachatCRM: Free (1 user, inbox + CRM), Starter $19/mo (3 users, Shopify + chatbot + templates + Integrations), Pro $49/mo unlimited users. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
+      "WhachatCRM: Free forever (1 user, inbox + CRM, basic WhatsApp templates). Pro $49/mo with unlimited users, chatbot, automation, AI Copilot, and AI Brain included. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
   },
   freeVsPaid: DEFAULT_FREE_VS_PAID,
   faqs: [
@@ -148,7 +148,7 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Can WhachatCRM handle abandoned cart recovery like Zoko?",
       answer:
-        "WhachatCRM offers Shopify order/customer context on Free and ecommerce automation templates on Starter+. Confirm live webhook and recovery flow options in-product for your specific Shopify setup — we do not claim unverified abandoned-cart webhooks.",
+        "WhachatCRM offers Shopify order/customer context on Free and ecommerce automation templates on Pro. Confirm live webhook and recovery flow options in-product for your specific Shopify setup — we do not claim unverified abandoned-cart webhooks.",
     },
     {
       question: "Is WhachatCRM better if I sell on Shopify and support over Email?",
@@ -158,10 +158,10 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "How many team members can use WhachatCRM vs Zoko?",
       answer:
-        "WhachatCRM Pro includes unlimited users at $49/mo; Starter allows 3; Free is 1. Zoko agent limits vary by plan — verify current packaging on their site.",
+        "WhachatCRM Pro includes unlimited users at $49/mo; Free is 1. Zoko agent limits vary by plan — verify current packaging on their site.",
     },
   ],
   recommendation:
-    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Free alongside Email, social channels, and CRM in one Unified Inbox, Starter+ chatbot and campaign templates, GoHighLevel on Free, unlimited Pro users, and transparent Meta fee pass-through.",
+    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Free alongside Email, social channels, and CRM in one Unified Inbox, Pro chatbot and campaign templates, GoHighLevel on Free, unlimited Pro users, and transparent Meta fee pass-through.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

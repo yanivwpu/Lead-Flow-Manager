@@ -2,35 +2,49 @@ import type { SubscriptionPlan, User } from "./schema";
 
 export type TrialStatus = "none" | "active" | "expired";
 
-/** True when the user has an active paid subscription (Stripe or Shopify) that defines billing plan. */
-export function hasActivePaidPlan(
-  user: Pick<
-    User,
-    | "planOverrideEnabled"
-    | "planOverride"
-    | "billingPlan"
-    | "subscriptionStatus"
-    | "shopifyShop"
-    | "shopifySubscriptionStatus"
-  >,
-  now: Date = new Date(),
-): boolean {
-  if (user.planOverrideEnabled && user.planOverride && user.planOverride !== "free") {
-    return true;
-  }
+/** Extra independently-active paid sources that are not stored on users.billingPlan. */
+export type PaidSourceOptions = {
+  ghlMarketplaceProActive?: boolean;
+};
+
+type PaidPlanUser = Pick<
+  User,
+  | "planOverrideEnabled"
+  | "planOverride"
+  | "billingPlan"
+  | "subscriptionStatus"
+  | "shopifyShop"
+  | "shopifySubscriptionStatus"
+>;
+
+function stripeOrShopifyPaidPlan(user: PaidPlanUser): SubscriptionPlan | null {
   const bp = (user.billingPlan || "free") as SubscriptionPlan;
   const st = (user.subscriptionStatus || "").toLowerCase();
   if (bp !== "free" && (st === "active" || st === "trialing")) {
-    return true;
+    return bp;
   }
   if (
     user.shopifyShop &&
     (user.shopifySubscriptionStatus || "").toLowerCase() === "active" &&
     bp !== "free"
   ) {
+    return bp;
+  }
+  return null;
+}
+
+/** True when the user has an independently active paid source (admin override, Stripe, Shopify, or GHL Pro). */
+export function hasActivePaidPlan(
+  user: PaidPlanUser,
+  now: Date = new Date(),
+  opts?: PaidSourceOptions,
+): boolean {
+  void now;
+  if (user.planOverrideEnabled && user.planOverride && user.planOverride !== "free") {
     return true;
   }
-  return false;
+  if (opts?.ghlMarketplaceProActive) return true;
+  return stripeOrShopifyPaidPlan(user) !== null;
 }
 
 export function computeTrialStatus(
@@ -59,8 +73,9 @@ export function isProAiTrialActive(
     | "shopifySubscriptionStatus"
   >,
   now: Date = new Date(),
+  opts?: PaidSourceOptions,
 ): boolean {
-  if (hasActivePaidPlan(user, now)) return false;
+  if (hasActivePaidPlan(user, now, opts)) return false;
   if (!user.trialEndsAt || new Date(user.trialEndsAt) <= now) return false;
   if (user.trialStatus === "expired") return false;
   const plan = user.trialPlan || "pro_ai";
@@ -69,7 +84,9 @@ export function isProAiTrialActive(
 
 /**
  * Effective subscription tier for limits/features.
- * Order: admin override → paid billing → Pro + AI trial → free.
+ * Order: admin override → any independently active paid source (Stripe / Shopify / GHL Pro)
+ * → Pro + AI trial → free.
+ * GHL Pro never writes users.billingPlan; pass ghlMarketplaceProActive instead.
  */
 export function getEffectivePlanForUser(
   user: Pick<
@@ -85,16 +102,18 @@ export function getEffectivePlanForUser(
     | "shopifySubscriptionStatus"
   >,
   now: Date = new Date(),
+  opts?: PaidSourceOptions,
 ): SubscriptionPlan {
   const overrideEnabled = !!user.planOverrideEnabled;
   const overridePlan = (user.planOverride || "free") as SubscriptionPlan;
   if (overrideEnabled) return overridePlan;
 
-  if (hasActivePaidPlan(user, now)) {
-    return (user.billingPlan || "free") as SubscriptionPlan;
-  }
+  const cardPlan = stripeOrShopifyPaidPlan(user);
+  if (opts?.ghlMarketplaceProActive) return "pro";
+  if (cardPlan === "pro") return "pro";
+  if (cardPlan && cardPlan !== "free") return cardPlan;
 
-  if (isProAiTrialActive(user, now)) {
+  if (isProAiTrialActive(user, now, opts)) {
     return "pro";
   }
 

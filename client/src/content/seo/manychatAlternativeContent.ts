@@ -18,14 +18,14 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
   meta: {
     title: "ManyChat Alternative 2026: IG/FB Automation vs WhatsApp CRM | WhachatCRM",
     description:
-      "ManyChat vs WhachatCRM: strong Instagram and Facebook automation vs WhatsApp CRM, Email inbox, team collaboration, Starter+ templates, and unlimited Pro users.",
+      "ManyChat vs WhachatCRM: strong Instagram and Facebook automation vs WhatsApp CRM, Email inbox, team collaboration, Pro templates, and unlimited Pro users.",
     keywords:
       "ManyChat alternative, ManyChat vs WhachatCRM, ManyChat competitor, Instagram automation alternative, WhatsApp CRM vs ManyChat",
     h1: "ManyChat Alternative: Social Automation Power vs WhatsApp-First CRM Inbox",
   },
   heroEyebrow: "ManyChat Alternative · Updated for 2026",
   heroLead:
-    "ManyChat excels at Instagram and Facebook Messenger automation — flows, growth tools, and comment triggers many creators rely on. WhachatCRM is built for SMBs that treat WhatsApp as the revenue channel and want CRM depth, Email beside chat, team inbox, and Starter+ chatbot templates in one workspace.",
+    "ManyChat excels at Instagram and Facebook Messenger automation — flows, growth tools, and comment triggers many creators rely on. WhachatCRM is built for SMBs that treat WhatsApp as the revenue channel and want CRM depth, Email beside chat, team inbox, and Pro chatbot templates in one workspace.",
   quickSummary:
     "Keep ManyChat when Instagram and Facebook automation is your core growth engine and your team already runs proven flows there. Consider WhachatCRM when WhatsApp CRM, a Unified Inbox with Gmail, shared team collaboration, Shopify and GoHighLevel integrations, and unlimited Pro users matter more than comment-to-DM growth hacks. ManyChat often prices around contacts and channels — confirm current packaging on their site.",
   whoFor: [
@@ -78,7 +78,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
   whachatBetterWhen: [
     "WhatsApp is your primary sales and support channel with Meta Embedded Signup onboarding",
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat",
-    "You want chatbot, Flow Builder, and preset templates on Starter+ for nurture and routing",
+    "You want chatbot, Flow Builder, and preset templates on Pro for nurture and routing",
     "Shared team inbox, notes, tags, and pipeline matter for handoffs — not just broadcast funnels",
     "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are part of your stack",
     "You want unlimited users on Pro ($49/mo) as marketing, sales, and support share one workspace",
@@ -135,7 +135,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     competitorSummary:
       "ManyChat is known for contact- and channel-based tiers with a free entry point for light social automation. Philosophy: pay as your subscriber list and channel needs grow. Confirm current plan limits, WhatsApp add-ons, and Meta fee handling on ManyChat's official pricing page — we do not quote live monthly totals here.",
     whachatSummary:
-      "WhachatCRM: Free (1 user, inbox + CRM, no chatbot/templates), Starter $19/mo (3 users, chatbot + templates + Integrations), Pro $49/mo unlimited users. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
+      "WhachatCRM: Free (1 user, inbox + CRM, basic WhatsApp templates). Pro $49/mo with unlimited users, chatbot, automation, AI Copilot, and AI Brain included. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
   },
   freeVsPaid: DEFAULT_FREE_VS_PAID,
   faqs: [
@@ -143,7 +143,7 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Can WhachatCRM replace ManyChat Instagram comment automation?",
       answer:
-        "WhachatCRM includes Instagram Messaging in the Unified Inbox and Starter+ automations, but ManyChat's comment-to-DM growth mechanics are a specialty. If IG comment triggers are core revenue, test WhachatCRM flows during trial before switching entirely.",
+        "WhachatCRM includes Instagram Messaging in the Unified Inbox and Pro automations, but ManyChat's comment-to-DM growth mechanics are a specialty. If IG comment triggers are core revenue, test WhachatCRM flows during trial before switching entirely.",
     },
     {
       question: "Is ManyChat or WhachatCRM better for WhatsApp sales?",
@@ -153,15 +153,15 @@ export const manychatAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Does WhachatCRM have a free plan like ManyChat?",
       answer:
-        "Yes — Free forever for inbox and CRM validation (1 user). Chatbot, automation templates, and Integrations require Starter ($19/mo) or Pro ($49/mo), unlike ManyChat's free social automation tier.",
+        "Yes — Free forever for inbox and CRM validation (1 user). Chatbot, automation templates, and AI Brain require Pro ($49/mo), unlike ManyChat's free social automation tier.",
     },
     {
       question: "How do I migrate flows from ManyChat?",
       answer:
-        "Export what ManyChat allows, document trigger logic, then rebuild critical paths on Starter+ using WhachatCRM's Flow Builder and preset templates. Parallel-run social and WhatsApp channels for a few days before cutover.",
+        "Export what ManyChat allows, document trigger logic, then rebuild critical paths on Pro using WhachatCRM's Flow Builder and preset templates. Parallel-run social and WhatsApp channels for a few days before cutover.",
     },
   ],
   recommendation:
-    "Keep ManyChat if Instagram and Facebook automation is your growth engine and flows are already optimized. Switch to WhachatCRM when WhatsApp CRM, Email in the same inbox, team collaboration, Starter+ chatbot/templates, Shopify/GHL on Free, and unlimited Pro users matter more than social-only funnel automation.",
+    "Keep ManyChat if Instagram and Facebook automation is your growth engine and flows are already optimized. Switch to WhachatCRM when WhatsApp CRM, Email in the same inbox, team collaboration, Pro chatbot/templates, Shopify/GHL on Free, and unlimited Pro users matter more than social-only funnel automation.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

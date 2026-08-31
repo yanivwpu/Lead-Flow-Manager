@@ -46,7 +46,7 @@ test("Displayed yearly prices are derived monthly equivalents with annual disclo
   assert.equal(en.billing.yearly, "Yearly");
 });
 
-test("Free stays $0 and AI Brain stays monthly-only $29", () => {
+test("Free stays $0; historical Brain add-on amount kept for webhooks", () => {
   assert.equal(PLAN_LIMITS.free.price, 0);
   assert.equal(AI_BRAIN_ADDON_PRICE_USD, 29);
   const envExample = readFileSync(join(root, ".env.example"), "utf8");
@@ -86,9 +86,8 @@ test("Pricing page defaults to Monthly, wires yearly checkout, and keeps pills r
 
 test("Checkout route and Stripe mapping keep yearly on the same entitlement plan", () => {
   const routes = readFileSync(join(root, "server/routes.ts"), "utf8");
-  assert.ok(routes.includes('billingInterval?: "monthly" | "yearly"'));
-  assert.ok(routes.includes("billingInterval || \"monthly\""));
   assert.ok(routes.includes("createCheckoutSession"));
+  assert.ok(routes.includes("billingInterval || \"monthly\""));
 
   const service = readFileSync(join(root, "server/subscriptionService.ts"), "utf8");
   assert.ok(service.includes("resolveStripePlanPriceId(plan, billingInterval)"));
@@ -96,7 +95,7 @@ test("Checkout route and Stripe mapping keep yearly on the same entitlement plan
   assert.ok(service.includes("billingInterval,"));
 
   const webhook = readFileSync(join(root, "server/webhookHandlers.ts"), "utf8");
-  assert.ok(webhook.includes("entitlementPlanFromStripePriceIds"));
+  assert.ok(webhook.includes("buildUserUpdatesFromStripeSubscription"));
 
   assert.equal(stripePriceEnvForPlan("starter", "monthly"), STRIPE_PLAN_PRICE_ENV.starter.monthly);
   assert.equal(stripePriceEnvForPlan("starter", "yearly"), STRIPE_PLAN_PRICE_ENV.starter.yearly);

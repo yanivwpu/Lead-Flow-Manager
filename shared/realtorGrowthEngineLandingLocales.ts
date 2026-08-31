@@ -646,7 +646,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "Capa de inteligencia",
           name: "AI Brain",
-          price: "$29/mo",
+          price: "Incluido con Pro",
           desc: "La capa de inteligencia para calificación más profunda y contexto inmobiliario con IA.",
         },
         {
@@ -658,7 +658,7 @@ export const RGE_LANDING_LOCALES: Record<
         },
       ],
       explain:
-        "Pro te da la plataforma. AI Brain aporta la inteligencia. Realtor Growth Engine añade el sistema inmobiliario especializado construido encima.",
+        "Pro incluye AI Brain. Realtor Growth Engine añade el sistema inmobiliario especializado construido encima.",
       metaNote: "Las tarifas de mensajería de WhatsApp las factura Meta directamente sin recargo.",
       cta: "Instalar Realtor Growth Engine",
       viewPlans: "Ver todos los planes",
@@ -683,7 +683,7 @@ export const RGE_LANDING_LOCALES: Record<
       },
       {
         q: "¿Qué necesito para ejecutar Realtor Growth Engine?",
-        a: "WhachatCRM Pro, AI Brain y la licencia de pago único de $199 de Realtor Growth Engine. La conexión WhatsApp Business forma parte de la activación para flujos de mensajería.",
+        a: "WhachatCRM Pro (AI Brain incluido) y la licencia de pago único de $199 de Realtor Growth Engine. La conexión WhatsApp Business forma parte de la activación para flujos de mensajería.",
       },
       {
         q: "¿Cómo funciona el seguimiento en WhatsApp?",
@@ -708,7 +708,7 @@ export const RGE_LANDING_LOCALES: Record<
         "Del primer mensaje a coincidencia de propiedad a visita, Realtor Growth Engine ayuda a manejar el trabajo repetitivo entre cada paso.",
       cta: "Instalar Realtor Growth Engine",
       viewPlans: "Ver todos los planes",
-      note: "Pro + AI Brain requeridos. Licencia RGE de $199 pago único. Sin garantías de conversión no soportadas.",
+      note: "Se requiere un plan Pro activo. Licencia RGE de $199 pago único. Sin garantías de conversión no soportadas.",
     },
     screenshots: RGE_SCREENSHOTS_ES,
   },
@@ -1097,7 +1097,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "שכבת מודיעין",
           name: "AI Brain",
-          price: "$29/mo",
+          price: "כלול ב-Pro",
           desc: "שכבת המודיעין לסינון עמוק יותר והקשר נדל\"ן AI.",
         },
         {
@@ -1134,7 +1134,7 @@ export const RGE_LANDING_LOCALES: Record<
       },
       {
         q: "מה צריך כדי להריץ Realtor Growth Engine?",
-        a: "WhachatCRM Pro, AI Brain ורישיון Realtor Growth Engine חד-פעמי ב-$199. חיבור WhatsApp Business הוא חלק מההפעלה לזרימות הודעות.",
+        a: "WhachatCRM Pro (AI Brain כלול) ורישיון Realtor Growth Engine חד-פעמי ב-$199. חיבור WhatsApp Business הוא חלק מההפעלה לזרימות הודעות.",
       },
       {
         q: "איך מעקב עובד ב-WhatsApp?",
@@ -1159,7 +1159,7 @@ export const RGE_LANDING_LOCALES: Record<
         "מההודעה הראשונה להתאמת נכס ועד סיור, Realtor Growth Engine עוזר לטפל בעבודה החוזרת בין כל שלב.",
       cta: "התקינו Realtor Growth Engine",
       viewPlans: "צפו בכל התוכניות",
-      note: "Pro + AI Brain נדרשים. רישיון RGE חד-פעמי $199. ללא ערבויות המרה לא נתמכות.",
+      note: "נדרש תוכנית Pro פעילה. רישיון RGE חד-פעמי $199. ללא ערבויות המרה לא נתמכות.",
     },
     screenshots: RGE_SCREENSHOTS_HE,
   },

@@ -112,7 +112,7 @@ export function CrmForWhatsappBusiness() {
               </a>
             </Link>
           </div>
-          <p className="text-sm text-gray-500">Free plan available · Paid plans from $19/month</p>
+          <p className="text-sm text-gray-500">Free plan available · Pro at $49/month</p>
         </motion.div>
       </section>
 

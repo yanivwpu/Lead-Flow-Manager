@@ -1528,7 +1528,7 @@ export function RealtorGrowthEngine() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-amber-900">Growth Engine Paused</p>
                 <p className="mt-0.5 text-xs text-amber-800">
-                  Your <RealtorMark /> Growth Engine requires an active Pro + AI plan to run automations and handle conversations.
+                  Your <RealtorMark /> Growth Engine requires an active Pro plan to run automations and handle conversations.
                   Reactivate your plan to resume your system instantly.
                 </p>
                 <p className="mt-1 text-[11px] text-amber-700">Your purchase and configuration are saved — nothing is lost.</p>
@@ -1545,20 +1545,6 @@ export function RealtorGrowthEngine() {
                       data-testid="button-reactivate-pro"
                     >
                       Reactivate Pro
-                    </Button>
-                  )}
-                  {!templateData?.subscription?.hasAI && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs border-amber-400 text-amber-900 hover:bg-amber-100"
-                      onClick={() => {
-                        sessionStorage.setItem("rge_reactivating", "1");
-                        setLocation("/app/ai-brain");
-                      }}
-                      data-testid="button-reactivate-ai"
-                    >
-                      Enable AI
                     </Button>
                   )}
                 </div>
@@ -2200,7 +2186,7 @@ export function RealtorGrowthEngine() {
                 </>
               )}
             </Button>
-            <p className="mt-4 text-xs text-gray-500">One-time template license · Pro + AI Brain required</p>
+            <p className="mt-4 text-xs text-gray-500">One-time template license · Requires an active Pro plan.</p>
           </section>
         ) : hasPurchased && !onboardingComplete ? (
           <section
@@ -2233,9 +2219,9 @@ export function RealtorGrowthEngine() {
     <Dialog open={subscriptionGate.show} onOpenChange={(open) => { if (!open) setSubscriptionGate({ ...subscriptionGate, show: false }); }}>
       <DialogContent className="max-w-sm" data-testid="dialog-subscription-gate">
         <DialogHeader>
-          <DialogTitle>Pro + AI Plan Required</DialogTitle>
+          <DialogTitle>Pro plan required</DialogTitle>
           <DialogDescription>
-            The <RealtorMark /> Growth Engine requires both our Pro plan and AI Brain add-on to run.
+            The <RealtorMark /> Growth Engine requires an active Pro plan.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-4">
@@ -2243,7 +2229,7 @@ export function RealtorGrowthEngine() {
             <p className="text-sm font-semibold text-gray-900">What you'll get:</p>
             <ul className="text-xs text-gray-600 mt-2 space-y-1">
               <li>✓ WhachatCRM Pro platform ($49/mo)</li>
-              <li>✓ AI Brain automation layer ($29/mo)</li>
+              <li>✓ AI Brain included with Pro</li>
               <li>✓ All workflows + templates included</li>
             </ul>
           </div>
@@ -2276,10 +2262,7 @@ export function RealtorGrowthEngine() {
                   return;
                 }
 
-                const endpoint = !subscriptionGate.hasPro
-                  ? "/api/subscription/checkout/pro-ai"
-                  : "/api/subscription/addon/ai-brain";
-                const res = await fetch(endpoint, {
+                const res = await fetch("/api/subscription/checkout/pro-ai", {
                   method: "POST",
                   credentials: "include",
                   headers: { "Content-Type": "application/json" },
@@ -2313,9 +2296,7 @@ export function RealtorGrowthEngine() {
                 ? !subscriptionGate.hasPro
                   ? "Choose plan in Shopify"
                   : "Manage plan in Shopify"
-                : !subscriptionGate.hasPro
-                  ? "Upgrade to Pro + AI"
-                  : "Enable AI Add-on"}
+                : "Upgrade to Pro"}
           </Button>
         </DialogFooter>
       </DialogContent>

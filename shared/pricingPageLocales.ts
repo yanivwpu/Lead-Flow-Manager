@@ -25,12 +25,11 @@ const ES: DeepPartial<PricingPageContent> = {
     twitterDescription:
       "Prospect AI, bandeja multicanal, chatbot con IA y automatización de ventas: planes claros de Free a Pro.",
   },
-  trialBanner: "Cada cuenta nueva incluye una prueba completa de 14 días de Pro + AI Brain.",
+  trialBanner: "Cada cuenta nueva incluye una prueba de 14 días de Pro con AI Brain.",
   hero: {
-    h1: "Herramientas potentes para hacer crecer tu negocio — precios que crecen contigo.",
-    subtitle:
-      "Empieza gratis con Prospect AI, Unified Inbox, integraciones y mensajería de WhatsApp. Mejora tu plan solo cuando necesites más conversaciones, automatización, usuarios o IA.",
-    trustLine: "Prueba de 14 días de Pro + AI Brain · 0% de margen de WhachatCRM sobre las tarifas de Meta · Sin costos de configuración",
+    h1: "Precios simples. Todo lo que necesitas para crecer.",
+    subtitle: "Empieza gratis. Mejora tu plan cuando estés listo para escalar.",
+    trustLine: "Prueba de Pro de 14 días · AI Brain incluido · 0% de margen sobre las tarifas de Meta · Sin costos de configuración",
   },
   billing: {
     monthly: "Mensual",
@@ -56,14 +55,23 @@ const ES: DeepPartial<PricingPageContent> = {
     title: "Listo para Growth Engines",
     body: "Activa Growth Engines de industria compatibles, como Realtor Growth Engine. Los Growth Engines pueden requerir una compra aparte.",
   },
+  agency: {
+    title: "¿Necesitas varias cuentas de clientes o más volumen de mensajería?",
+    body: "Háblanos sobre opciones Agency y Enterprise.",
+    cta: "Contactar a ventas",
+  },
+  starterRetired: {
+    title: "Starter ya no está disponible",
+    body: "Starter ya no está disponible para compras nuevas. Elige Free o Pro.",
+  },
   proBadge: "Más popular",
   compareTitle: "Compara planes",
   featureColumnHeader: "Función",
   aiBrain: {
-    badge: "Complemento opcional",
+    badge: "Incluido con Pro",
     title: "AI Brain",
-    intro: "Mejora WhachatCRM con el conocimiento de tu negocio—no es un plan de suscripción aparte.",
-    cardDesc: "Añade AI Brain a Starter o Pro: mejora la plataforma, no es un plan independiente.",
+    intro: "AI Brain está incluido con Pro. Mejora WhachatCRM con el conocimiento de tu negocio.",
+    cardDesc: "AI Brain está incluido con Pro: aprende tu negocio y potencia Copilot, Prospect AI y recomendaciones.",
     highlights: [
       "Aprende tu negocio",
       "Usa el conocimiento de la empresa",
@@ -78,6 +86,8 @@ const ES: DeepPartial<PricingPageContent> = {
     title: "Prospect AI incluido — gratis en todos los planes",
     body: "Encuentra negocios locales, califica oportunidades con IA y lanza campañas de outreach personalizadas—todo dentro de WhachatCRM.",
     quotaNote: "Descubrimientos mensuales de Prospect AI por plan",
+    quotaFree: "Gratis: {{count}}/mes",
+    quotaPro: "Pro: {{count}}/mes",
     cta: "Explorar Prospect AI",
   },
   capabilities: {
@@ -131,7 +141,7 @@ const ES: DeepPartial<PricingPageContent> = {
       },
       {
         title: "Chatbot con IA y automatización de flujos",
-        body: "Captura, califica y da seguimiento automáticamente en Starter y Pro.",
+        body: "Captura, califica y da seguimiento automáticamente en Pro.",
       },
     ],
   },
@@ -140,15 +150,15 @@ const ES: DeepPartial<PricingPageContent> = {
     items: [
       {
         q: "¿Las integraciones están incluidas en Free?",
-        a: "Sí. Los usuarios Free pueden abrir Integraciones y conectar herramientas compatibles como Gmail, Shopify, Calendly y GoHighLevel. Siguen aplicando los límites de conversaciones, usuarios y canales. La automatización de campañas y AI Brain siguen siendo capacidades de pago aparte.",
+        a: "Sí. Los usuarios Free pueden abrir Integraciones y conectar herramientas compatibles como Gmail, Shopify, Calendly y GoHighLevel. Siguen aplicando los límites de conversaciones, usuarios y canales. La automatización de campañas y AI Brain están incluidos con Pro.",
       },
       {
         q: "¿Las plantillas de WhatsApp están incluidas en Free?",
-        a: "Sí. Free incluye mensajería básica de plantillas de WhatsApp: ver, sincronizar y enviar una plantilla aprobada a un contacto cuando Meta lo exige fuera de la ventana de 24 horas. Starter y Pro añaden plantillas de WhatsApp en la automatización de flujos.",
+        a: "Sí. Free incluye mensajería básica de plantillas de WhatsApp: ver, sincronizar y enviar una plantilla aprobada a un contacto cuando Meta lo exige fuera de la ventana de 24 horas. Pro añade plantillas de WhatsApp en la automatización de flujos.",
       },
       {
-        q: "¿Puedo probar Pro y AI Brain antes de mejorar mi plan?",
-        a: "Cada cuenta nueva recibe una prueba completa de 14 días de Pro + AI Brain. Sin restricciones de funciones durante la prueba.",
+        q: "¿Puedo probar Pro antes de mejorar mi plan?",
+        a: "Cada cuenta nueva recibe una prueba de 14 días de Pro con AI Brain. Sin restricciones de funciones durante la prueba. Después de la prueba, Free no incluye AI Brain.",
       },
       {
         q: "¿Qué es Prospect AI?",
@@ -156,11 +166,11 @@ const ES: DeepPartial<PricingPageContent> = {
       },
       {
         q: "¿El chatbot está incluido?",
-        a: "El chatbot con IA y el widget web están incluidos en Starter y Pro. Free no incluye el constructor visual de chatbots. El chatbot captura, califica y responde a visitantes del sitio; AI Brain es un complemento opcional que hace las conversaciones más inteligentes.",
+        a: "El chatbot con IA y el widget web están incluidos en Pro. Free no incluye el constructor visual de chatbots. El chatbot captura, califica y responde a visitantes del sitio; AI Brain está incluido con Pro y hace las conversaciones más inteligentes.",
       },
       {
         q: "¿Qué es AI Brain?",
-        a: "AI Brain es un complemento opcional de $29/mes para Starter o Pro—no es un plan base. Aprende tu negocio, usa el conocimiento de la empresa y las ofertas y enlaces de pago, mejora la personalización de Prospect AI y potencia un AI Copilot más inteligente.",
+        a: "AI Brain está incluido con Pro. Aprende tu negocio, usa el conocimiento de la empresa y las ofertas y enlaces de pago, mejora la personalización de Prospect AI y potencia un AI Copilot más inteligente. No está incluido en Free después de la prueba.",
       },
       {
         q: "¿Qué cuenta como conversación activa?",
@@ -196,7 +206,7 @@ const ES: DeepPartial<PricingPageContent> = {
     chatbotWidget: "Chatbot con IA y widget web",
     workflowAutomation: "Automatización de flujos",
     followUps: "Seguimientos",
-    aiBrainAddon: "Complemento AI Brain",
+    aiBrain: "AI Brain",
     assignment: "Asignación / colaboración",
     integrations: "Integraciones",
     templateMessaging: "Mensajería con plantillas de WhatsApp",
@@ -205,7 +215,7 @@ const ES: DeepPartial<PricingPageContent> = {
   compareHints: {
     growthEngines: "Plan de plataforma requerido para activar Growth Engines compatibles.",
     templateMessaging:
-      "Free incluye envíos 1:1 de plantillas aprobadas. Starter y Pro añaden plantillas en la automatización de flujos.",
+      "Free incluye envíos 1:1 de plantillas aprobadas. Pro añade plantillas en la automatización de flujos.",
     integrations: "Conecta herramientas de negocio compatibles. Siguen aplicando los límites de conversación y uso.",
   },
   compareGroups: {
@@ -221,6 +231,8 @@ const ES: DeepPartial<PricingPageContent> = {
   compareCells: {
     connectedChannels: "Canales conectados",
     notIncluded: "No incluido",
+    notIncludedAfterTrial: "No incluido después de la prueba",
+    included: "Incluido",
     addOn: "Complemento",
     growthEngineReady: "Listo para Growth Engines",
     unlimited: "Ilimitado",
@@ -245,17 +257,18 @@ const ES: DeepPartial<PricingPageContent> = {
     whatsappTemplatesAutomation: "Plantillas de WhatsApp + automatización",
     chatbotWidget: "Chatbot con IA y widget web",
     workflowAutomation: "Automatización de flujos",
+    aiBrainIncluded: "AI Brain incluido",
     growthEnginesRequired: "Plan requerido para Growth Engines de industria",
   },
   ssr: {
-    h1: "Herramientas potentes para hacer crecer tu negocio — precios que crecen contigo.",
-    lead: "Empieza gratis con Prospect AI, Unified Inbox, integraciones y mensajería de WhatsApp. Mejora tu plan solo cuando necesites más conversaciones, automatización, usuarios o IA.",
+    h1: "Precios simples. Todo lo que necesitas para crecer.",
+    lead: "Empieza gratis. Mejora tu plan cuando estés listo para escalar.",
     bullets: [
-      "Prueba de 14 días de Pro + AI Brain · 0% de margen de WhachatCRM sobre las tarifas de Meta · Sin costos de configuración",
-      "Planes Free, Starter y Pro con límites claros de conversaciones y usuarios",
+      "Prueba de Pro de 14 días · AI Brain incluido · 0% de margen sobre las tarifas de Meta · Sin costos de configuración",
+      "Planes Free y Pro con límites claros de conversaciones y usuarios",
       "Prospect AI incluido en todos los planes",
       "Integraciones y plantillas básicas de WhatsApp en Free",
-      "Complemento opcional AI Brain para Starter y Pro",
+      "AI Brain incluido con Pro",
       "0% de margen de WhachatCRM sobre las tarifas de conversación de Meta",
     ],
   },
@@ -273,12 +286,11 @@ const HE: DeepPartial<PricingPageContent> = {
     twitterDescription:
       "Prospect AI, תיבה רב-ערוצית, צ׳אטבוט AI ואוטומציית מכירות—תוכניות ברורות מ-Free עד Pro.",
   },
-  trialBanner: "כל חשבון חדש כולל ניסיון מלא של 14 יום ל-Pro + AI Brain.",
+  trialBanner: "כל חשבון חדש כולל ניסיון 14 יום ל-Pro עם AI Brain.",
   hero: {
-    h1: "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.",
-    subtitle:
-      "התחילו בחינם עם Prospect AI, Unified Inbox, אינטגרציות ומסרים ב-WhatsApp. שדרגו רק כשאתם צריכים יותר שיחות, אוטומציה, משתמשים או AI.",
-    trustLine: "ניסיון 14 יום ל-Pro + AI Brain · 0% תוספת של WhachatCRM על עמלות Meta · בלי דמי הקמה",
+    h1: "תמחור פשוט. כל מה שצריך כדי לצמוח.",
+    subtitle: "התחילו בחינם. שדרגו כשאתם מוכנים להתרחב.",
+    trustLine: "ניסיון Pro של 14 יום · AI Brain כלול · 0% תוספת על עמלות Meta · בלי דמי הקמה",
   },
   billing: {
     monthly: "חודשי",
@@ -304,14 +316,23 @@ const HE: DeepPartial<PricingPageContent> = {
     title: "מוכן ל-Growth Engines",
     body: "הפעילו Growth Engines תעשייתיים תואמים כמו Realtor Growth Engine. ייתכן ש-Growth Engines ידרשו רכישה נפרדת.",
   },
+  agency: {
+    title: "צריכים כמה חשבונות לקוח או נפח הודעות גבוה יותר?",
+    body: "דברו איתנו על אפשרויות Agency ו-Enterprise.",
+    cta: "צרו קשר עם המכירות",
+  },
+  starterRetired: {
+    title: "Starter כבר אינו זמין",
+    body: "Starter כבר אינו זמין לרכישות חדשות. בחרו Free או Pro.",
+  },
   proBadge: "הפופולרי ביותר",
   compareTitle: "השוואת תוכניות",
   featureColumnHeader: "יכולת",
   aiBrain: {
-    badge: "תוסף אופציונלי",
+    badge: "כלול ב-Pro",
     title: "AI Brain",
-    intro: "משדרג את WhachatCRM עם הידע העסקי שלכם—לא תוכנית מנוי נפרדת.",
-    cardDesc: "הוסיפו AI Brain ל-Starter או Pro — משדרג את הפלטפורמה, לא תוכנית עצמאית.",
+    intro: "AI Brain כלול ב-Pro. הוא משדרג את WhachatCRM עם הידע העסקי שלכם.",
+    cardDesc: "AI Brain כלול ב-Pro — לומד את העסק ומעצים את Copilot, Prospect AI וההמלצות.",
     highlights: [
       "לומד את העסק שלכם",
       "משתמש בידע החברה",
@@ -326,6 +347,8 @@ const HE: DeepPartial<PricingPageContent> = {
     title: "Prospect AI כלול — בחינם בכל תוכנית",
     body: "מצאו עסקים מקומיים, סננו הזדמנויות עם AI והשיקו קמפיינים מותאמים אישית—הכל בתוך WhachatCRM.",
     quotaNote: "גילויי Prospect AI חודשיים לפי תוכנית",
+    quotaFree: "חינם: {{count}}/חודש",
+    quotaPro: "Pro: {{count}}/חודש",
     cta: "גלו את Prospect AI",
   },
   capabilities: {
@@ -379,7 +402,7 @@ const HE: DeepPartial<PricingPageContent> = {
       },
       {
         title: "צ׳אטבוט AI ואוטומציית תהליכים",
-        body: "ללכוד, לסווג ולעקוב אוטומטית ב-Starter וב-Pro.",
+        body: "ללכוד, לסווג ולעקוב אוטומטית ב-Pro.",
       },
     ],
   },
@@ -388,15 +411,15 @@ const HE: DeepPartial<PricingPageContent> = {
     items: [
       {
         q: "האם אינטגרציות כלולות ב-Free?",
-        a: "כן. משתמשי Free יכולים לפתוח את אינטגרציות ולחבר כלים נתמכים כמו Gmail, Shopify, Calendly ו-GoHighLevel. מגבלות שיחה, משתמשים וערוצים עדיין חלות. אוטומציית קמפיינים ו-AI Brain נשארים יכולות בתשלום נפרדות.",
+        a: "כן. משתמשי Free יכולים לפתוח את אינטגרציות ולחבר כלים נתמכים כמו Gmail, Shopify, Calendly ו-GoHighLevel. מגבלות שיחה, משתמשים וערוצים עדיין חלות. אוטומציית קמפיינים ו-AI Brain כלולים ב-Pro.",
       },
       {
         q: "האם תבניות WhatsApp כלולות ב-Free?",
-        a: "כן. Free כולל משלוח תבניות WhatsApp בסיסי: צפייה, סנכרון ושליחת תבנית מאושרת לאיש קשר כש-Meta דורשת זאת מחוץ לחלון 24 השעות. Starter ו-Pro מוסיפים תבניות WhatsApp באוטומציית תהליכים.",
+        a: "כן. Free כולל משלוח תבניות WhatsApp בסיסי: צפייה, סנכרון ושליחת תבנית מאושרת לאיש קשר כש-Meta דורשת זאת מחוץ לחלון 24 השעות. Pro מוסיף תבניות WhatsApp באוטומציית תהליכים.",
       },
       {
-        q: "אפשר לנסות את Pro ו-AI Brain לפני שדרוג?",
-        a: "כל חשבון חדש מקבל ניסיון מלא של 14 יום ל-Pro + AI Brain. בלי הגבלות יכולות במהלך הניסיון.",
+        q: "אפשר לנסות את Pro לפני שדרוג?",
+        a: "כל חשבון חדש מקבל ניסיון 14 יום ל-Pro עם AI Brain. בלי הגבלות יכולות במהלך הניסיון. אחרי הניסיון, Free לא כולל AI Brain.",
       },
       {
         q: "מה זה Prospect AI?",
@@ -404,11 +427,11 @@ const HE: DeepPartial<PricingPageContent> = {
       },
       {
         q: "האם הצ׳אטבוט כלול?",
-        a: "צ׳אטבוט AI ווידג׳ט לאתר כלולים ב-Starter וב-Pro. ב-Free אין בונה צ׳אטבוטים ויזואלי. הצ׳אטבוט לוכד, מסווג ומשיב למבקרים באתר; AI Brain הוא תוסף אופציונלי שהופך שיחות לחכמות יותר.",
+        a: "צ׳אטבוט AI ווידג׳ט לאתר כלולים ב-Pro. ב-Free אין בונה צ׳אטבוטים ויזואלי. הצ׳אטבוט לוכד, מסווג ומשיב למבקרים באתר; AI Brain כלול ב-Pro והופך שיחות לחכמות יותר.",
       },
       {
         q: "מה זה AI Brain?",
-        a: "AI Brain הוא תוסף אופציונלי ב-$29 לחודש ל-Starter או Pro—לא תוכנית בסיס. הוא לומד את העסק, משתמש בידע החברה ובהצעות וקישורי תשלום, משפר התאמה אישית ב-Prospect AI ומפעיל AI Copilot חכם יותר.",
+        a: "AI Brain כלול ב-Pro. הוא לומד את העסק, משתמש בידע החברה ובהצעות וקישורי תשלום, משפר התאמה אישית ב-Prospect AI ומפעיל AI Copilot חכם יותר. הוא לא כלול ב-Free אחרי הניסיון.",
       },
       {
         q: "מה נחשב לשיחה פעילה?",
@@ -444,7 +467,7 @@ const HE: DeepPartial<PricingPageContent> = {
     chatbotWidget: "צ׳אטבוט AI ווידג׳ט לאתר",
     workflowAutomation: "אוטומציית תהליכים",
     followUps: "מעקבים",
-    aiBrainAddon: "תוסף AI Brain",
+    aiBrain: "AI Brain",
     assignment: "הקצאה / שיתוף פעולה",
     integrations: "אינטגרציות",
     templateMessaging: "משלוח תבניות WhatsApp",
@@ -453,7 +476,7 @@ const HE: DeepPartial<PricingPageContent> = {
   compareHints: {
     growthEngines: "תוכנית הפלטפורמה הנדרשת להפעלת Growth Engines תואמים.",
     templateMessaging:
-      "Free כולל שליחות תבניות מאושרות 1:1. Starter ו-Pro מוסיפים תבניות באוטומציית תהליכים.",
+      "Free כולל שליחות תבניות מאושרות 1:1. Pro מוסיף תבניות באוטומציית תהליכים.",
     integrations: "חברו כלי עסק נתמכים. מגבלות שיחה ושימוש עדיין חלות.",
   },
   compareGroups: {
@@ -469,6 +492,8 @@ const HE: DeepPartial<PricingPageContent> = {
   compareCells: {
     connectedChannels: "ערוצים מחוברים",
     notIncluded: "לא כלול",
+    notIncludedAfterTrial: "לא כלול אחרי הניסיון",
+    included: "כלול",
     addOn: "תוסף",
     growthEngineReady: "מוכן ל-Growth Engines",
     unlimited: "ללא הגבלה",
@@ -493,17 +518,18 @@ const HE: DeepPartial<PricingPageContent> = {
     whatsappTemplatesAutomation: "תבניות WhatsApp + אוטומציה",
     chatbotWidget: "צ׳אטבוט AI ווידג׳ט לאתר",
     workflowAutomation: "אוטומציית תהליכים",
+    aiBrainIncluded: "AI Brain כלול",
     growthEnginesRequired: "תוכנית נדרשת ל-Growth Engines תעשייתיים",
   },
   ssr: {
-    h1: "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.",
-    lead: "התחילו בחינם עם Prospect AI, Unified Inbox, אינטגרציות ומסרים ב-WhatsApp. שדרגו רק כשאתם צריכים יותר שיחות, אוטומציה, משתמשים או AI.",
+    h1: "תמחור פשוט. כל מה שצריך כדי לצמוח.",
+    lead: "התחילו בחינם. שדרגו כשאתם מוכנים להתרחב.",
     bullets: [
-      "ניסיון 14 יום ל-Pro + AI Brain · 0% תוספת של WhachatCRM על עמלות Meta · בלי דמי הקמה",
-      "תוכניות Free, Starter ו-Pro עם מגבלות שיחה ומשתמשים ברורות",
+      "ניסיון Pro של 14 יום · AI Brain כלול · 0% תוספת על עמלות Meta · בלי דמי הקמה",
+      "תוכניות Free ו-Pro עם מגבלות שיחה ומשתמשים ברורות",
       "Prospect AI כלול בכל תוכנית",
       "אינטגרציות ותבניות WhatsApp בסיסיות ב-Free",
-      "תוסף AI Brain אופציונלי ל-Starter ו-Pro",
+      "AI Brain כלול ב-Pro",
       "0% תוספת של WhachatCRM על עמלות השיחה של Meta",
     ],
   },

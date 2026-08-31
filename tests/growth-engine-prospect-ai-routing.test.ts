@@ -42,14 +42,15 @@ test("public Prospect AI marketing CTA → public /prospect-ai landing", () => {
   assert.equal(PROSPECT_AI_LANDING_PATH, "/prospect-ai");
 
   const app = readFileSync(join(root, "client/src/App.tsx"), "utf8");
-  assert.match(app, /path="\/prospect-ai"/);
+  assert.match(app, /localeRoutes\("\/prospect-ai"/);
   assert.ok(app.includes("ProspectAiLanding"));
 
   const pricing = readFileSync(
     join(root, "client/src/components/pricing/PricingMarketingSections.tsx"),
     "utf8",
   );
-  assert.ok(pricing.includes('loggedIn ? PROSPECT_AI_PATH : "/prospect-ai"'));
+  assert.ok(pricing.includes("PROSPECT_AI_PATH"));
+  assert.ok(pricing.includes('localizedInternalHref("/prospect-ai"'));
 
   const landing = readFileSync(
     join(root, "client/src/content/prospectAiLandingContent.ts"),

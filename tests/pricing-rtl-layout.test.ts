@@ -49,7 +49,7 @@ test("Pricing page has no feature/channel pill section; Hebrew template labels s
   assert.ok(pricing.includes('dir="auto"'));
 
   const he = getLocalizedPricingPage("he");
-  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.");
+  assert.equal(he.hero.h1, "תמחור פשוט. כל מה שצריך כדי לצמוח.");
   assert.match(he.hero.subtitle, /[\u0590-\u05FF]/);
   assert.match(he.hero.trustLine, /[\u0590-\u05FF]/);
   assert.notEqual(he.hero.h1, getLocalizedPricingPage("en").hero.h1);

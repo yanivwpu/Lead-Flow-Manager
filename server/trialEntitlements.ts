@@ -2,6 +2,7 @@ import type { User } from "@shared/schema";
 import { storage } from "./storage";
 import { hasActivePaidPlan, isProAiTrialActive } from "@shared/trialEntitlements";
 import { trialExpiryConversationUsageReset } from "@shared/conversationUsagePeriod";
+import { userHasActiveGhlMarketplacePro } from "./ghlMarketplaceGrant";
 
 export type { TrialStatus } from "@shared/trialEntitlements";
 export {
@@ -11,6 +12,7 @@ export {
   getEffectivePlanForUser,
   hadProAiBrainTrial,
 } from "@shared/trialEntitlements";
+export type { PaidSourceOptions } from "@shared/trialEntitlements";
 
 /** Persist trial_status = expired once trial window passes (idempotent). */
 export async function syncTrialExpiryIfNeeded(user: User): Promise<User> {
@@ -19,7 +21,8 @@ export async function syncTrialExpiryIfNeeded(user: User): Promise<User> {
   if (new Date(user.trialEndsAt) > now) return user;
   if (user.trialStatus === "expired") return user;
 
-  const usageReset = hasActivePaidPlan(user, now)
+  const ghlMarketplaceProActive = await userHasActiveGhlMarketplacePro(user.id);
+  const usageReset = hasActivePaidPlan(user, now, { ghlMarketplaceProActive })
     ? null
     : trialExpiryConversationUsageReset(now);
   const updated = await storage.updateUser(user.id, {

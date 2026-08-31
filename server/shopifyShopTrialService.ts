@@ -14,6 +14,7 @@ import {
 } from "@shared/shopifyShopTrialPolicy";
 import { db } from "../drizzle/db";
 import { isShopifyShopTrialLedgerReady } from "./shopifyShopTrialLedgerReady";
+import { userHasActiveGhlMarketplacePro } from "./ghlMarketplaceGrant";
 
 export type ShopifyShopTrialClaimResult = {
   claimed: boolean;
@@ -120,7 +121,9 @@ export async function claimShopifyShopTrialForInstall(input: {
       };
     }
 
-    if (shopifyInstallShouldGrantUserTrial(input.user, now)) {
+    if (shopifyInstallShouldGrantUserTrial(input.user, now, {
+      ghlMarketplaceProActive: await userHasActiveGhlMarketplacePro(input.user.id),
+    })) {
       await tx
         .update(users)
         .set({

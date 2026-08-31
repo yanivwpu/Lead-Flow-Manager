@@ -295,12 +295,12 @@ test("fresh 24-hour token: invalidate unused tokens only after Resend accepts; r
 
   assert.equal(
     EMAIL_VERIFICATION_REMINDER_SUBJECT,
-    "Reminder: verify your email to start your 14-day Pro + AI Brain trial",
+    "Reminder: verify your email to start your 14-day Pro trial with AI Brain",
   );
   const html = renderEmailVerificationReminderHtml("Alex", "token-abc", {
     appUrl: "https://app.whachatcrm.com",
   });
-  assert.match(html, /14-day Pro \+ AI Brain trial/);
+  assert.match(html, /14-day Pro trial with AI Brain/);
   assert.match(html, /trial does not begin until you verify/);
   assert.match(html, /expires in 24 hours/);
   assert.match(html, /Verify email and start my 14-day trial/);

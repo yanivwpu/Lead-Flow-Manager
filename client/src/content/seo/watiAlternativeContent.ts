@@ -18,7 +18,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
   meta: {
     title: "WATI Alternative 2026: WhatsApp CRM vs Omnichannel Inbox | WhachatCRM",
     description:
-      "Honest WATI vs WhachatCRM comparison: team inbox maturity vs broader channels, Email, Starter+ chatbot/templates, unlimited Pro users, and 0% WhachatCRM Meta markup.",
+      "Honest WATI vs WhachatCRM comparison: team inbox maturity vs broader channels, Email, Pro chatbot/templates, unlimited Pro users, and 0% WhachatCRM Meta markup.",
     keywords:
       "WATI alternative, WATI vs WhachatCRM, WATI competitor, WhatsApp CRM comparison, WATI pricing alternative, omnichannel WhatsApp inbox",
     h1: "WATI Alternative: WhatsApp Ops Maturity vs Omnichannel CRM Simplicity",
@@ -27,11 +27,11 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "WATI is a proven WhatsApp operations platform with strong shared-inbox and broadcast workflows. WhachatCRM targets SMBs that want Meta Embedded Signup, WhatsApp beside Email and Meta social channels, and predictable seat economics on Pro — without rebuilding around a WhatsApp-only console.",
   quickSummary:
-    "Stay on WATI when your team already runs mature WhatsApp campaigns, template ops, and agent playbooks on their stack. Consider WhachatCRM when you need a Unified Inbox across WhatsApp, Messenger, Instagram, and Gmail; Starter+ chatbot and preset templates (not on Free); unlimited users on Pro; Shopify and GoHighLevel integrations; and Meta conversation fees passed through without WhachatCRM markup. Confirm current WATI packaging on their site before modeling total cost.",
+    "Stay on WATI when your team already runs mature WhatsApp campaigns, template ops, and agent playbooks on their stack. Consider WhachatCRM when you need a Unified Inbox across WhatsApp, Messenger, Instagram, and Gmail; Pro chatbot and preset templates (not on Free); unlimited users on Pro; Shopify and GoHighLevel integrations; and Meta conversation fees passed through without WhachatCRM markup. Confirm current WATI packaging on their site before modeling total cost.",
   whoFor: [
     "SMBs outgrowing WATI seat packs or channel limits and exploring omnichannel inbox options",
     "Support leads who want Email beside WhatsApp without a separate mailbox",
-    "Teams that need Free → Starter ($19) → Pro ($49) pricing they can forecast as headcount grows",
+    "Teams that need Free → Pro ($49) pricing they can forecast as headcount grows",
     "Operators comparing WhatsApp BSP maturity against a self-serve CRM workspace",
     "Buyers who want balanced trade-offs — not a one-sided feature checklist",
   ],
@@ -78,10 +78,10 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
   whachatBetterWhen: [
     "You want Meta Embedded Signup and WhatsApp Cloud API onboarding without a long BSP implementation project",
     "You need one Unified Inbox across WhatsApp, Messenger, Instagram, Email (Gmail), and web chat",
-    "You want chatbot, Flow Builder, and preset automation templates on Starter+ — Free includes inbox, integrations, and basic WhatsApp templates",
+    "You want chatbot, Flow Builder, and preset automation templates on Pro — Free includes inbox, integrations, and basic WhatsApp templates",
     "You need unlimited users on Pro so sales, support, and marketing share one workspace without seat packs",
     "Shopify orders/customers in inbox context or GoHighLevel LeadConnector sync matter on Free",
-    "You want 0% WhachatCRM markup on Meta conversation fees with clear Free / $19 / $49 plans",
+    "You want 0% WhachatCRM markup on Meta conversation fees with clear Free / Pro $49 plans",
   ],
   advantages: [
     {
@@ -92,7 +92,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     {
       title: "Pro unlimited seats for growing teams",
       description:
-        "Pro ($49/mo) includes unlimited team members. Starter covers up to 3 users; Free is single-user — a simpler seat model than stacking agent licenses as headcount grows.",
+        "Pro ($49/mo) includes unlimited team members. Free is single-user — a simpler seat model than stacking agent licenses as headcount grows.",
     },
   ],
   matrix: withCompetitorMatrix({
@@ -135,7 +135,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     competitorSummary:
       "WATI is typically sold on tiered paid plans with packaging that scales by agents, features, and message volume. Philosophy: WhatsApp operations platform with broadcast and team inbox depth. Confirm current plan names, seat limits, and Meta fee handling on WATI's official pricing page before purchasing — we do not quote live monthly totals here.",
     whachatSummary:
-      "WhachatCRM: Free forever to start (1 user, no chatbot/templates), Starter $19/mo (up to 3 users, chatbot + templates + Integrations), Pro $49/mo with unlimited users. No WhachatCRM per-message markup on Meta WhatsApp conversation fees.",
+      "WhachatCRM: Free forever (1 user, inbox + CRM, basic WhatsApp templates). Pro $49/mo with unlimited users, chatbot, automation, AI Copilot, and AI Brain included. No WhachatCRM per-message markup on Meta WhatsApp conversation fees.",
   },
   freeVsPaid: DEFAULT_FREE_VS_PAID,
   faqs: [
@@ -153,15 +153,15 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Does WhachatCRM replace WATI broadcast workflows?",
       answer:
-        "WhachatCRM covers basic template messaging on Free, and workflow automations plus chatbot flows on Starter+. If you rely on very large WATI-specific broadcast operations, validate volume and template workflows during a Free or Starter trial before switching.",
+        "WhachatCRM covers basic template messaging on Free, and workflow automations plus chatbot flows on Pro. If you rely on very large WATI-specific broadcast operations, validate volume and template workflows during a Free or Pro trial before switching.",
     },
     {
       question: "Who wins for a 5-person support team?",
       answer:
-        "Teams already deep in WATI with trained agents may stay until a migration window makes sense. A 5-person team that needs Email, social DMs, and unlimited Pro seats without buying extra agents often fits WhachatCRM better — chatbot and preset campaign automation require Starter or Pro, not Free.",
+        "Teams already deep in WATI with trained agents may stay until a migration window makes sense. A 5-person team that needs Email, social DMs, and unlimited Pro seats without buying extra agents often fits WhachatCRM better — chatbot and preset campaign automation require Pro, not Free.",
     },
   ],
   recommendation:
-    "Keep WATI if WhatsApp broadcast maturity and existing WATI playbooks are your competitive advantage. Switch to WhachatCRM when you need Meta Embedded Signup, a Unified Inbox with Email and social channels, Starter+ chatbot/templates, unlimited Pro users, Shopify/GHL on Free, and transparent Meta fee pass-through — with a self-serve SMB workspace instead of a WhatsApp-only ops console.",
+    "Keep WATI if WhatsApp broadcast maturity and existing WATI playbooks are your competitive advantage. Switch to WhachatCRM when you need Meta Embedded Signup, a Unified Inbox with Email and social channels, Pro chatbot/templates, unlimited Pro users, Shopify/GHL on Free, and transparent Meta fee pass-through — with a self-serve SMB workspace instead of a WhatsApp-only ops console.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

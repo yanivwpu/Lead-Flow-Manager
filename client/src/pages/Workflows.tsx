@@ -1437,9 +1437,9 @@ export function Workflows() {
             <div className="h-14 w-14 rounded-2xl bg-brand-green/10 flex items-center justify-center mx-auto">
               <Zap className="h-7 w-7 text-brand-green" />
             </div>
-            <p className="text-gray-900 font-medium">Automations are available on Starter and Pro plans</p>
+            <p className="text-gray-900 font-medium">Automations are available on the Pro plan</p>
             <Button className="bg-brand-green hover:bg-brand-green/90" onClick={openPaidAutomationsUpgrade} data-testid="button-automations-upgrade">
-              Upgrade to Starter or Pro
+              Upgrade to Pro
             </Button>
           </div>
         </div>

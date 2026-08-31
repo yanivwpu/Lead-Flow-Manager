@@ -129,6 +129,9 @@ export type ProductPageContent = {
   finalCtaHeadline: string;
   finalCtaSubtitle: string;
   ssrBullets: string[];
+  /** Optional hero CTA — defaults to Start Free Trial → /auth or inbox. */
+  primaryCtaHref?: string;
+  primaryCtaLabel?: string;
 };
 
 export const aiBrainProduct: ProductPageContent = {
@@ -141,8 +144,10 @@ export const aiBrainProduct: ProductPageContent = {
   ogTitle: "AI Brain — Business Knowledge Intelligence | WhachatCRM",
   h1: "AI That Understands How Your Business Works",
   heroIntro:
-    "Generic AI can write a reply. AI Brain understands your business, your goals, what to ask, and what should happen next — then supplies that approved intelligence across WhachatCRM.",
+    "Generic AI can write a reply. AI Brain understands your business, your goals, what to ask, and what should happen next — then supplies that approved intelligence across WhachatCRM. AI Brain is included with Pro.",
   secondaryCta: { label: "See AI Copilot", href: "/ai-copilot" },
+  primaryCtaHref: "/pricing",
+  primaryCtaLabel: "Start Your 14-Day Free Trial",
   themeId: "violet",
   heroVariant: "screenshot",
   workflowVariant: "both",
@@ -261,7 +266,7 @@ export const aiBrainProduct: ProductPageContent = {
     },
     {
       label: "Platform intelligence",
-      description: "Optional layer that deepens Copilot and Prospect AI with business context.",
+      description: "Included with Pro. Deepens Copilot and Prospect AI with business context.",
     },
   ],
   workflowTitle: "From teaching to approved intelligence",
@@ -366,7 +371,7 @@ export const aiBrainProduct: ProductPageContent = {
   ],
   finalCtaHeadline: "Give your AI a business brain you control",
   finalCtaSubtitle:
-    "Start free, teach WhachatCRM how you work, and publish approved intelligence for Copilot, Prospect AI, and campaigns.",
+    "AI Brain is included with Pro. Start a 14-day Pro trial, teach WhachatCRM how you work, and publish approved intelligence for Copilot, Prospect AI, and campaigns.",
   ssrBullets: [
     "Business profile, industry, services, and instructions",
     "Knowledge analysis with change, duplicate, and conflict review",
@@ -1773,7 +1778,7 @@ export const teamCollaborationProduct: ProductPageContent = {
     },
     {
       label: "Multi-user plans",
-      description: "Seat availability expands from Free to Starter and Pro as documented on pricing.",
+      description: "Seat availability expands from Free to Pro as documented on pricing.",
       href: "/pricing",
     },
     {

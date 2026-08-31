@@ -67,12 +67,16 @@ export function isProspectAiPlanEligible(plan: SubscriptionPlan): boolean {
   return getProspectAiMonthlyQuota(plan) > 0;
 }
 
-/** Next plan with a higher discovery quota, if any (upgrade path). */
+/**
+ * Next publicly offered plan with a higher discovery quota.
+ * Starter remains in quota maps for grandfathered workspaces but is not a suggested upgrade.
+ */
 export function nextProspectAiQuotaUpgradePlan(
   plan: SubscriptionPlan,
 ): SubscriptionPlan | null {
   const current = getProspectAiMonthlyQuota(plan);
   for (const candidate of PROSPECT_AI_PLAN_ORDER) {
+    if (candidate === "starter") continue;
     if (getProspectAiMonthlyQuota(candidate) > current) return candidate;
   }
   return null;

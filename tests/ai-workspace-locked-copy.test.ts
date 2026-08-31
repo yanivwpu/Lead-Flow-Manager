@@ -54,9 +54,9 @@ test("locked AI Workspace uses value-first EN copy via i18n keys", () => {
   assert.equal(en.readyHeadline, "Ready for smarter AI?");
   assert.match(
     en.readyBody,
-    /Choose <starter>Starter<\/starter> or <pro>Pro<\/pro> to unlock <assist>AI Assist<\/assist>, then add <brain>AI Brain<\/brain> when you want the full intelligence layer/,
+    /Upgrade to <pro>Pro<\/pro> to unlock <assist>AI Assist<\/assist> and <brain>AI Brain<\/brain>. AI Brain is included with Pro/,
   );
-  assert.equal(en.cta, "Choose plan & AI options");
+  assert.equal(en.cta, "Start Your 14-Day Free Trial");
 
   assert.ok(page.includes('t("aiBrain.workspace.title")'));
   assert.ok(page.includes('t("aiBrain.workspace.valueLead")'));
@@ -69,8 +69,9 @@ test("locked AI Workspace uses value-first EN copy via i18n keys", () => {
   assert.ok(page.includes('t("aiBrain.workspace.cta")'));
   assert.ok(page.includes('data-testid="ai-workspace-locked"'));
   assert.ok(page.includes('data-testid="button-ai-workspace-choose-plan"'));
-  assert.ok(page.includes("setBundleModalOpen(true)"));
-  assert.ok(page.includes("handlePlanAIBundleCheckout"));
+  assert.ok(page.includes("handleProCheckout"));
+  assert.ok(!page.includes("setBundleModalOpen(true)"));
+  assert.ok(!page.includes("handlePlanAIBundleCheckout"));
 });
 
 test("obsolete plan-jargon copy is gone from the locked screen", () => {
@@ -94,12 +95,12 @@ test("obsolete plan-jargon copy is gone from the locked screen", () => {
   }
 });
 
-test("AI Brain is not implied as included on the locked screen", () => {
+test("locked screen does not present Brain as an add-on purchase", () => {
   const en = flattenWorkspace(loadJson(EN)).toLowerCase();
-  assert.ok(!en.includes("included"));
-  assert.ok(!en.includes("activated"));
-  assert.ok(en.includes("then add"));
-  assert.ok(en.includes("full intelligence layer"));
+  assert.ok(en.includes("included with pro"));
+  assert.ok(!en.includes("then add"));
+  assert.ok(!en.includes("$29"));
+  assert.ok(!en.includes("starter"));
 });
 
 test("entitlement gates are unchanged: Free locked vs active vs Starter upgrade", () => {
@@ -142,10 +143,10 @@ test("EN/ES/HE workspace strings exist and locales stay aligned", () => {
   const heAll = flattenWorkspace(loadJson(HE));
   assert.match(esAll, /Convierte tus conversaciones/);
   assert.match(esAll, /¿Listo para una IA más inteligente\?/);
-  assert.match(esAll, /Elegir plan y opciones de IA/);
+  assert.match(esAll, /prueba gratis de 14 días/);
   assert.match(heAll, /הפוך את השיחות שלך/);
   assert.match(heAll, /מוכנים ל-AI חכם יותר/);
-  assert.match(heAll, /בחירת תוכנית ואפשרויות AI/);
+  assert.match(heAll, /ניסיון 14 הימים בחינם/);
   assert.ok(!esAll.toLowerCase().includes("serious upgrade"));
   assert.ok(!heAll.toLowerCase().includes("serious upgrade"));
 });

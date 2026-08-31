@@ -226,7 +226,7 @@ function SalesPortalEarningsDialog({
             <ul className="list-disc pl-4 space-y-1.5 text-sm text-slate-600 leading-relaxed">
               <li>
                 <span className="font-medium text-slate-800">${SALES_CONVERSION_PAYOUT_DOLLARS.toFixed(0)}</span> when
-                your demo lead becomes a paying Starter or Pro subscriber.
+                your demo lead becomes a paying Pro subscriber.
               </li>
               <li>Free plan signups do not qualify.</li>
               <li>Demo completion alone does not create a payout.</li>
@@ -901,7 +901,7 @@ export function SalesPortal() {
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Conversions</h2>
                 <p className="text-sm text-gray-500">
-                  ${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying Starter or Pro subscriber. Free plan signups
+                  ${SALES_CONVERSION_PAYOUT_DOLLARS} when your demo lead becomes a paying Pro subscriber. Free plan signups
                   do not qualify.
                 </p>
               </div>
@@ -1100,7 +1100,7 @@ export function SalesPortal() {
                     </div>
                   </dl>
                   <p className="mt-2 text-[11px] leading-snug text-gray-500">
-                    ${SALES_CONVERSION_PAYOUT_DOLLARS} per Starter or Pro subscriber from your demos.
+                    ${SALES_CONVERSION_PAYOUT_DOLLARS} per Pro subscriber from your demos.
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4">

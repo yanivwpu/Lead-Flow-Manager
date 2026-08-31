@@ -43,7 +43,7 @@ interface UpgradeModalProps {
   limitInfo?: ConversationLimitInfo;
 }
 
-type TargetPlan = "starter" | "pro";
+type TargetPlan = "pro";
 
 interface UpgradeContent {
   icon: React.ReactNode;
@@ -63,7 +63,7 @@ const UPGRADE_CONTENT: Record<
     title: "Conversation limit reached",
     description:
       "You've reached your monthly conversation limit for this plan.\nUpgrade your plan to continue creating new conversations, or wait until your next billing cycle for access to reset.",
-    targetPlan: "starter",
+    targetPlan: "pro",
     ctaText: "Upgrade Plan",
     benefits: ["Better conversation capacity", "Send messages to customers", "Follow-ups enabled"],
   },
@@ -71,8 +71,8 @@ const UPGRADE_CONTENT: Record<
     icon: <Zap className="h-8 w-8 text-brand-green" />,
     title: "Upgrade to send messages",
     description: "Free plan users can receive messages, but sending requires a paid plan.",
-    targetPlan: "starter",
-    ctaText: "Upgrade to Starter",
+    targetPlan: "pro",
+    ctaText: "Upgrade to Pro",
     benefits: ["Reply to all your customers", "Better conversation capacity", "Notes, tags & pipeline"],
   },
   add_user: {
@@ -95,12 +95,12 @@ const UPGRADE_CONTENT: Record<
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Team member limit reached",
     description: "Upgrade to invite more team members to collaborate.",
-    targetPlan: "starter",
+    targetPlan: "pro",
     ctaText: "Upgrade Now",
     benefits: [
-      "Up to 3 users (Starter)",
-      "Unlimited users (Pro)",
+      "Unlimited users",
       "Shared team inbox",
+      "Larger conversation capacity",
     ],
   },
   conversation_assignment: {
@@ -127,11 +127,11 @@ const UPGRADE_CONTENT: Record<
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Invite more team members",
     description:
-      "Free includes 1 user. Upgrade to Starter to invite up to 3 users.",
-    targetPlan: "starter",
-    ctaText: "Upgrade to Starter",
+      "Free includes 1 user. Upgrade to Pro to invite unlimited users.",
+    targetPlan: "pro",
+    ctaText: "Upgrade to Pro",
     benefits: [
-      "Up to 3 users",
+      "Unlimited users",
       "Better conversation capacity",
       "Shared team inbox",
     ],
@@ -140,7 +140,7 @@ const UPGRADE_CONTENT: Record<
     icon: <Users className="h-8 w-8 text-blue-500" />,
     title: "Invite more team members",
     description:
-      "Starter includes up to 3 users. Upgrade to Pro for unlimited users.",
+      "Your current plan includes a limited number of users. Upgrade to Pro for unlimited users.",
     targetPlan: "pro",
     ctaText: "Upgrade to Pro",
     benefits: [
@@ -154,33 +154,27 @@ const UPGRADE_CONTENT: Record<
     title: "Prospect Discovery limit reached",
     description:
       "You've reached your monthly Prospect AI discovery limit. Upgrade for more discoveries each month.",
-    targetPlan: "starter",
+    targetPlan: "pro",
     ctaText: "Upgrade Plan",
     benefits: [
-      `Starter: ${PROSPECT_AI_MONTHLY_QUOTAS.starter} discoveries/month · Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro}/month`,
-      "Chatbot & Website Widget on paid plans",
-      `Up to ${PLAN_LIMITS.starter.maxUsers} users on Starter · unlimited on Pro`,
-      `${PLAN_LIMITS.starter.conversationsPerMonth.toLocaleString("en-US")} / ${PLAN_LIMITS.pro.conversationsPerMonth.toLocaleString("en-US")} active conversations on Starter / Pro`,
+      `Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries/month`,
+      "AI Chatbot & Website Widget",
+      "Unlimited users",
+      `${PLAN_LIMITS.pro.conversationsPerMonth.toLocaleString("en-US")} active conversations`,
     ],
   },
 };
 
 const PLAN_PRICES: Record<TargetPlan, string> = {
-  starter: "$19",
   pro: "$49",
 };
 
 const AUTOMATIONS_PAID_PLAN_COPY = {
   icon: <Sparkles className="h-8 w-8 text-purple-500" />,
-  title: "Automations require a paid plan",
-  description: "Automations are available on Starter and Pro plans.",
-  starterBenefits: [
-    "Basic Automations — workflows & sequences",
-    "Better conversation capacity",
-    "Templates & integrations",
-  ],
+  title: "Automations require Pro",
+  description: "Automations are available on the Pro plan.",
   proBenefits: [
-    "Advanced workflows and AI-assisted triggers where enabled",
+    "Workflows, sequences, and AI-assisted triggers where enabled",
     "Larger conversation capacity",
     "Unlimited users",
   ],
@@ -260,20 +254,11 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
       };
     }
     if (reason === "prospect_ai_discoveries") {
-      const plan = String(currentPlan || "").toLowerCase();
-      if (plan.includes("starter")) {
-        return {
-          ...base,
-          description: `You've reached your monthly Prospect AI discovery limit. Upgrade to Pro for ${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries per month.`,
-          targetPlan: "pro" as TargetPlan,
-          ctaText: "Upgrade to Pro",
-        };
-      }
       return {
         ...base,
-        description: `You've reached your monthly Prospect AI discovery limit. Upgrade to Starter for ${PROSPECT_AI_MONTHLY_QUOTAS.starter} discoveries per month.`,
-        targetPlan: "starter" as TargetPlan,
-        ctaText: "Upgrade to Starter",
+        description: `You've reached your monthly Prospect AI discovery limit. Upgrade to Pro for ${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries per month.`,
+        targetPlan: "pro" as TargetPlan,
+        ctaText: "Upgrade to Pro",
       };
     }
     return base;
@@ -359,66 +344,34 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
 
         {isAutomationsPaidPlan ? (
           <div className="space-y-4 my-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Starter</p>
-                <div className="flex items-baseline gap-1 mb-3">
-                  <span className="text-2xl font-bold text-gray-900">{PLAN_PRICES.starter}</span>
-                  <span className="text-gray-500 text-sm">/month</span>
-                </div>
-                <ul className="space-y-2 mb-4">
-                  {AUTOMATIONS_PAID_PLAN_COPY.starterBenefits.map((benefit, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                      <Check className="h-4 w-4 text-brand-green flex-shrink-0" />
-                      {benefit}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  className="w-full bg-brand-green hover:bg-emerald-700 h-10"
-                  onClick={() => runCheckout("starter")}
-                  disabled={loadingPlan !== null}
-                  data-testid="button-upgrade-modal-starter"
-                >
-                  {loadingPlan === "starter" ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : isShopify ? (
-                    t(`${p}.shopifyChoosePlan`)
-                  ) : (
-                    "Upgrade to Starter"
-                  )}
-                </Button>
+            <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Pro</p>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="text-2xl font-bold text-gray-900">{PLAN_PRICES.pro}</span>
+                <span className="text-gray-500 text-sm">/month</span>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Pro</p>
-                <div className="flex items-baseline gap-1 mb-3">
-                  <span className="text-2xl font-bold text-gray-900">{PLAN_PRICES.pro}</span>
-                  <span className="text-gray-500 text-sm">/month</span>
-                </div>
-                <ul className="space-y-2 mb-4">
-                  {AUTOMATIONS_PAID_PLAN_COPY.proBenefits.map((benefit, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                      <Check className="h-4 w-4 text-brand-green flex-shrink-0" />
-                      {benefit}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant="outline"
-                  className="w-full border-gray-300 h-10"
-                  onClick={() => runCheckout("pro")}
-                  disabled={loadingPlan !== null}
-                  data-testid="button-upgrade-modal-pro"
-                >
-                  {loadingPlan === "pro" ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : isShopify ? (
-                    t(`${p}.shopifyChoosePro`)
-                  ) : (
-                    "Upgrade to Pro"
-                  )}
-                </Button>
-              </div>
+              <ul className="space-y-2 mb-4">
+                {AUTOMATIONS_PAID_PLAN_COPY.proBenefits.map((benefit, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                    <Check className="h-4 w-4 text-brand-green flex-shrink-0" />
+                    {benefit}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                className="w-full bg-brand-green hover:bg-emerald-700 h-10"
+                onClick={() => runCheckout("pro")}
+                disabled={loadingPlan !== null}
+                data-testid="button-upgrade-modal-pro"
+              >
+                {loadingPlan === "pro" ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : isShopify ? (
+                  t(`${p}.shopifyChoosePro`)
+                ) : (
+                  "Upgrade to Pro"
+                )}
+              </Button>
             </div>
           </div>
         ) : (

@@ -185,9 +185,9 @@ test("H: expired user falling back to Free gets continuation copy", () => {
   assert.equal(getEffectivePlanForUser(expiredFreeUser(), now), "free");
   assert.equal(
     TRIAL_EXPIRATION_EMAIL_SUBJECT,
-    "Your Pro + AI Brain trial has ended — your Free account is still active",
+    "Your Pro trial has ended — your Free account is still active",
   );
-  assert.match(html, /Your 14-day Pro \+ AI Brain trial has ended/);
+  assert.match(html, /Your 14-day Pro trial with AI Brain has ended/);
   assert.match(html, /account is still active/);
   assert.match(html, /features included with Free/);
   assert.doesNotMatch(html, /account is disabled/i);
@@ -220,15 +220,16 @@ test("J: Day 5/10 activation flags do not control Day 14", () => {
 });
 
 test("K: Day 14 copy covers trial ended, Free continuation, and feature list", () => {
-  assert.match(html, /trial has ended/);
+  assert.match(html, /has ended/);
   assert.match(html, /Free account is still active/);
   assert.match(html, /Prospect AI/);
   assert.match(html, /Unified Inbox/);
   assert.match(html, /Integrations/);
   assert.match(html, /WhatsApp Templates/);
-  assert.match(html, /View Plans &amp; AI Options|View Plans & AI Options/);
+  assert.match(html, /View Plans/);
   assert.match(html, /Continue on Free/);
-  assert.match(html, /optional add-on for paid plans/);
+  assert.match(html, /AI Brain is included with Pro/);
+  assert.doesNotMatch(html, /optional add-on for paid plans/);
   assert.match(html, new RegExp(`${PROSPECT_AI_MONTHLY_QUOTAS.free} discoveries`));
   assert.doesNotMatch(html, /WhaChatCRM/);
   assert.match(html, /WhachatCRM/);

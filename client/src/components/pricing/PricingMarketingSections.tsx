@@ -54,7 +54,7 @@ export function TransparentPricingStrip() {
         {content.transparent.points.map((point) => (
           <li key={point} className="flex items-start gap-2 text-sm text-gray-700">
             <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
-            <span className="leading-snug whitespace-nowrap sm:whitespace-normal sm:max-w-[12rem]">
+            <span className="leading-snug sm:max-w-[12rem]">
               {point}
             </span>
           </li>
@@ -91,13 +91,10 @@ export function ProspectAiCallout({ loggedIn }: { loggedIn: boolean }) {
         </p>
         <ul className="mt-4 flex flex-wrap items-center justify-center gap-2.5 text-sm font-medium text-gray-800">
           <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
-            Free: {PROSPECT_AI_MONTHLY_QUOTAS.free}
+            {content.prospectAi.quotaFree.replace("{{count}}", String(PROSPECT_AI_MONTHLY_QUOTAS.free))}
           </li>
           <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
-            Starter: {PROSPECT_AI_MONTHLY_QUOTAS.starter}
-          </li>
-          <li className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 shadow-sm">
-            Pro: {PROSPECT_AI_MONTHLY_QUOTAS.pro}
+            {content.prospectAi.quotaPro.replace("{{count}}", String(PROSPECT_AI_MONTHLY_QUOTAS.pro))}
           </li>
         </ul>
         <p className="mt-2 text-xs text-gray-500">{content.prospectAi.quotaNote}</p>

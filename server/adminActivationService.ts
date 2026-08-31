@@ -204,11 +204,7 @@ export function classifyActivationBilling(
   ghlMarketplacePaidUserIds: Set<string>,
   now: Date = new Date(),
 ): ActivationBillingClassification {
-  if (isActivationProTrial(user, now)) {
-    return { isPaidSubscriber: false, isProTrial: true, paidBillingSource: null };
-  }
-
-  if (hasConfirmedShopifyBilling(user)) {
+    if (hasConfirmedShopifyBilling(user)) {
     return { isPaidSubscriber: true, isProTrial: false, paidBillingSource: "shopify" };
   }
 
@@ -218,6 +214,10 @@ export function classifyActivationBilling(
 
   if (ghlMarketplacePaidUserIds.has(user.id)) {
     return { isPaidSubscriber: true, isProTrial: false, paidBillingSource: "ghl_marketplace" };
+  }
+
+  if (isActivationProTrial(user, now)) {
+    return { isPaidSubscriber: false, isProTrial: true, paidBillingSource: null };
   }
 
   return { isPaidSubscriber: false, isProTrial: false, paidBillingSource: null };
@@ -495,7 +495,9 @@ export async function getActivationSummary(): Promise<ActivationSummary> {
 
   for (const user of metricUsers) {
     const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
-    const effectivePlan = getEffectivePlanForUser(user, now);
+    const effectivePlan = getEffectivePlanForUser(user, now, {
+      ghlMarketplaceProActive: ghlMarketplacePaidUserIds.has(user.id),
+    });
 
     if (billing.isProTrial) proTrialUsers++;
     if (billing.isPaidSubscriber) {
@@ -757,7 +759,9 @@ async function loadActivationAccounts(
 
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
     const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser);
-    const plan = getEffectivePlanForUser(user, now);
+    const plan = getEffectivePlanForUser(user, now, {
+      ghlMarketplaceProActive: ghlMarketplacePaidUserIds.has(user.id),
+    });
     const conversationsCount = conversationCountMap.get(user.id) || 0;
     const billing = classifyActivationBilling(user, ghlMarketplacePaidUserIds, now);
     const billingBadge = deriveActivationBillingBadge(user, billing);

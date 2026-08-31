@@ -41,9 +41,9 @@ export interface GrowthEngineCardModel {
   oneTimePrice?: string | null;
   /** Shown on the RGE detail “Pricing & access” block (not on the gallery pricing strip). */
   subscriptionRequirementShort?: string | null;
-  /** Detail page: headline monthly bundle, e.g. “$78/mo Pro + AI Brain” */
+  /** Detail page: headline monthly requirement, e.g. “Requires an active Pro plan.” */
   monthlyRequirementLabel?: string | null;
-  /** Detail page: breakdown line, e.g. “Pro $49/mo + AI Brain $29/mo” */
+  /** Detail page: breakdown line (optional) */
   monthlyRequirementBreakdown?: string | null;
   /** Detail page: checklist (pricing / access requirements) */
   requirements?: string[];
@@ -101,12 +101,11 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     detailHref: "/app/templates/realtor-growth-engine",
     ctaLabel: "View & Activate",
     oneTimePrice: "$199",
-    subscriptionRequirementShort: "Requires Pro + AI Brain",
-    monthlyRequirementLabel: "$78/mo Pro + AI Brain",
-    monthlyRequirementBreakdown: "Pro $49/mo + AI Brain $29/mo",
+    subscriptionRequirementShort: "Requires an active Pro plan.",
+    monthlyRequirementLabel: "Requires an active Pro plan.",
+    monthlyRequirementBreakdown: null,
     requirements: [
       "Pro plan required",
-      "AI Brain required",
       "WhatsApp Business connected before activation",
     ],
     metaFeesNote: "WhatsApp / Meta messaging fees are billed separately by Meta.",

@@ -50,7 +50,7 @@ export const WELCOME_EMAIL_SUBJECT = "Welcome to WhachatCRM — here's what you 
 export const ACTIVATION_DAY5_EMAIL_SUBJECT = "Connect your channels — it's easier than you think";
 export const ACTIVATION_DAY10_EMAIL_SUBJECT = "Need help getting WhachatCRM set up?";
 export const TRIAL_EXPIRATION_EMAIL_SUBJECT =
-  "Your Pro + AI Brain trial has ended — your Free account is still active";
+  "Your Pro trial has ended — your Free account is still active";
 export const SHOPIFY_WELCOME_EMAIL_SUBJECT =
   "Welcome to WhachatCRM — connect your store conversations";
 export const SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT =
@@ -58,7 +58,7 @@ export const SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT =
 export const SHOPIFY_ACTIVATION_DAY10_EMAIL_SUBJECT =
   "Need help connecting WhachatCRM to your store?";
 export const EMAIL_VERIFICATION_REMINDER_SUBJECT =
-  "Reminder: verify your email to start your 14-day Pro + AI Brain trial";
+  "Reminder: verify your email to start your 14-day Pro trial with AI Brain";
 
 interface EmailOptions {
   to: string;
@@ -243,7 +243,7 @@ export function renderWelcomeEmailHtml(
       "<strong>Already using the WhatsApp Business App?</strong><br/>With WhatsApp Coexistence, you can keep using the WhatsApp Business App with your existing number while also connecting it to WhachatCRM. The WhatsApp Business App stays your mobile app — it does not become the WhachatCRM inbox. WhachatCRM gives your team a shared inbox for that same number.",
     ),
     emailParagraph(
-      "Your new account also includes a 14-day Pro + AI Brain trial, so you can experience the advanced AI and automation features before deciding whether you need them. When the trial ends, you keep the Free features above unless you choose a paid plan. AI Brain is not included on Free after the trial.",
+      "Your new account also includes a 14-day Pro trial with AI Brain, so you can experience the advanced AI and automation features before deciding whether you need them. When the trial ends, you keep the Free features above unless you choose a paid plan. AI Brain is included with Pro and is not included on Free after the trial.",
     ),
     emailButton(prospectAiUrl, "Try Prospect AI"),
     emailNavLinks(appUrl, channelsUrl),
@@ -306,7 +306,7 @@ export function renderShopifyWelcomeEmailHtml(
       "Integrations",
     ),
     emailParagraph(
-      "Your account also includes a 14-day Pro + AI Brain trial so you can experience advanced automation and AI features.",
+      "Your account also includes a 14-day Pro trial with AI Brain so you can experience advanced automation and AI features.",
     ),
     emailButton(connectWhatsAppUrl, "Connect WhatsApp"),
     emailShopifyWelcomeNavLinks(appUrl),
@@ -418,7 +418,7 @@ export async function sendEmailVerificationEmail(
   const body = [
     emailParagraph(`Hi ${escapeHtml(name)}!`),
     emailParagraph(
-      "Please verify your email address to activate your WhachatCRM account and start your 14-day Pro + AI Brain trial.",
+      "Please verify your email address to activate your WhachatCRM account and start your 14-day Pro trial with AI Brain.",
     ),
     emailButton(verifyUrl, "Verify email and start my 14-day trial"),
     emailHighlightBox(
@@ -432,7 +432,7 @@ export async function sendEmailVerificationEmail(
 
   return sendEmail({
     to: email,
-    subject: "Verify your email to start your 14-day Pro + AI Brain trial",
+    subject: "Verify your email to start your 14-day Pro trial with AI Brain",
     html: renderBrandedEmail({ title: "Verify your email", bodyHtml: body }),
   });
 }
@@ -450,7 +450,7 @@ export function renderEmailVerificationReminderHtml(
       "You signed up for WhachatCRM, but your email is still unverified. This is a one-time reminder.",
     ),
     emailParagraph(
-      "Please verify your email address to activate your account and start your 14-day Pro + AI Brain trial. Your trial does not begin until you verify.",
+      "Please verify your email address to activate your account and start your 14-day Pro trial with AI Brain. Your trial does not begin until you verify.",
     ),
     emailButton(verifyUrl, "Verify email and start my 14-day trial"),
     emailHighlightBox(
@@ -831,7 +831,7 @@ export async function sendSalespersonWelcomeEmail(
     ]),
     emailSectionHeading("How conversions are tracked"),
     emailParagraph(
-      `When a prospect you've demoed signs up for a paid Starter or Pro plan, our system automatically matches their information to your demo booking. ${SALESPERSON_PAYOUT_POLICY_DESCRIPTION}`
+      `When a prospect you've demoed signs up for a paid Pro plan, our system automatically matches their information to your demo booking. ${SALESPERSON_PAYOUT_POLICY_DESCRIPTION}`
     ),
     emailParagraph(SALESPERSON_GE_SETUP_PAYOUT_NOTE),
     emailHighlightBox(
@@ -1020,7 +1020,7 @@ export function renderTrialExpirationEmailHtml(
 
   const body = [
     emailParagraph(`Hi ${escapeHtml(firstName)},`),
-    emailParagraph("Your 14-day Pro + AI Brain trial has ended."),
+    emailParagraph("Your 14-day Pro trial with AI Brain has ended."),
     emailParagraph(
       "Your WhachatCRM account is still active, and you can continue using the features included with Free.",
     ),
@@ -1033,14 +1033,14 @@ export function renderTrialExpirationEmailHtml(
       "Manage and send supported 1:1 WhatsApp Templates",
     ]),
     emailSectionHeading("What changed"),
-    emailParagraph("Your temporary Pro + AI Brain trial features have ended."),
+    emailParagraph("Your temporary Pro trial features have ended. AI Brain is not included on Free after the trial."),
     emailParagraph(
-      "AI Brain is the intelligence layer behind the AI Sales Team. It can power deeper prospect analysis, stronger personalization, opportunity intelligence, recommendations, and smarter automation. AI Brain is an optional add-on for paid plans — it is not included with Free, and it is not automatically included with every paid plan.",
+      "AI Brain is the intelligence layer behind the AI Sales Team. It can power deeper prospect analysis, stronger personalization, opportunity intelligence, recommendations, and smarter automation. AI Brain is included with Pro.",
     ),
     emailParagraph(
-      "If you want to continue using the advanced automation, higher usage limits, team features, and AI Brain intelligence you experienced during your trial, you can choose the plan and AI options that fit your business.",
+      "If you want to continue using the advanced automation, higher usage limits, team features, and AI Brain intelligence you experienced during your trial, you can upgrade to Pro.",
     ),
-    emailButton(pricingUrl, "View Plans & AI Options"),
+    emailButton(pricingUrl, "View Plans"),
     `<div style="text-align: center; margin: 12px 0 4px;">
       <a href="${inboxUrl}" style="color: #059669; text-decoration: none; font-weight: 600; font-size: 14px;">Continue on Free</a>
     </div>`,
@@ -1128,7 +1128,7 @@ export async function sendRealtorPaymentConfirmationEmail(
     emailButton(onboardingUrl, "Complete onboarding"),
     emailSubheading("Before you start (2 minutes)"),
     emailOrderedList([
-      "<strong>Pro + AI Brain</strong> — active on your account (required for the Growth Engine)",
+      "<strong>Pro</strong> — active on your account (required for the Growth Engine; AI Brain is included)",
       "<strong>WhatsApp</strong> — connect in Settings with guided embedded signup",
       "<strong>Business basics</strong> — name, country, and optional website for your launch profile",
       "<strong>Calendar (optional)</strong> — connect Calendly so leads can self-book showings",
@@ -1286,7 +1286,7 @@ export async function sendRealtorOnboardingEmail(
     row("Additional notes", field("notes") === "N/A" ? "—" : field("notes")),
     emailSectionHeading("Plan validation"),
     emailParagraph(
-      "Pro + AI Brain were verified at activation. Automations install with the template; concierge validates AI Brain tuning and channel coverage in the launch session.",
+      "An active Pro plan was verified at activation (AI Brain is included with Pro). Automations install with the template; concierge validates AI Brain tuning and channel coverage in the launch session.",
     ),
     emailHighlightBox(
       `<strong>Submission ID:</strong> ${escapeHtml(submissionId)}<br/>

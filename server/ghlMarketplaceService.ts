@@ -17,6 +17,8 @@ import {
   normalizeGhlMarketplaceInstallStatus,
   type GhlAdminLinkState,
 } from "@shared/ghlConnectionState";
+import { isActiveGhlMarketplaceProGrant } from "@shared/ghlMarketplaceBilling";
+import { ghlMarketplacePlanConfigFromEnv } from "@shared/ghlMarketplacePlanIds";
 
 type StoredOAuthTokenPayload = {
   access_token: string;
@@ -285,6 +287,10 @@ export type GhlMarketplaceInstallInput = {
   uninstallDate?: Date | string | null;
   pricePlan?: string | null;
   billingStatus?: string | null;
+  appId?: string | null;
+  marketplacePlanId?: string | null;
+  paymentStatus?: string | null;
+  ghlUserId?: string | null;
   source?: string;
   rawPayload?: Record<string, unknown>;
 };
@@ -434,6 +440,10 @@ export async function upsertGhlMarketplaceInstall(
     uninstallDate: parseDate(input.uninstallDate) ?? undefined,
     pricePlan: input.pricePlan ?? undefined,
     billingStatus: input.billingStatus ?? undefined,
+    appId: input.appId ?? undefined,
+    marketplacePlanId: input.marketplacePlanId ?? undefined,
+    paymentStatus: input.paymentStatus ?? undefined,
+    ghlUserId: input.ghlUserId ?? undefined,
     source: input.source ?? "webhook",
     rawPayload: input.rawPayload ?? {},
     lastSyncedAt: now,
@@ -464,6 +474,10 @@ export async function upsertGhlMarketplaceInstall(
       uninstallDate: parseDate(input.uninstallDate),
       pricePlan: input.pricePlan ?? null,
       billingStatus: input.billingStatus ?? null,
+      appId: input.appId ?? null,
+      marketplacePlanId: input.marketplacePlanId ?? null,
+      paymentStatus: input.paymentStatus ?? null,
+      ghlUserId: input.ghlUserId ?? null,
       source: input.source ?? "webhook",
       rawPayload: input.rawPayload ?? {},
       lastSyncedAt: now,
@@ -617,7 +631,10 @@ export function extractInstallFromWebhook(body: Record<string, unknown>): GhlMar
       (body.timestamp as string) ||
       new Date().toISOString(),
     installationStatus: "Active",
-    pricePlan: (install.pricePlan as string) || (install.plan as string) || null,
+    pricePlan: (install.planId as string) || (install.pricePlan as string) || (install.plan as string) || (body.planId as string) || null,
+    marketplacePlanId: (body.planId as string) || (install.planId as string) || null,
+    appId: (body.appId as string) || null,
+    ghlUserId: (body.userId as string) || null,
     billingStatus: (install.billingStatus as string) || null,
     source: "webhook",
     rawPayload: body,
@@ -788,30 +805,37 @@ export async function countActiveGhlMarketplaceInstalls(): Promise<number> {
   return rows.filter((r) => !isGhlMarketplaceUninstalled(r.installationStatus)).length;
 }
 
-function isGhlMarketplacePaidPlan(pricePlan: string | null | undefined): boolean {
-  if (!pricePlan || !String(pricePlan).trim()) return false;
-  const normalized = String(pricePlan).toLowerCase();
-  if (normalized.includes("free")) return false;
-  if (normalized.includes("trial")) return false;
-  return true;
-}
-
-/** Users with an active GHL marketplace install on a non-free, non-trial price plan. */
+/** Users with an active GHL Marketplace Pro grant (exact configured plan ID). */
 export async function getGhlMarketplacePaidUserIds(): Promise<Set<string>> {
+  const config = ghlMarketplacePlanConfigFromEnv();
   const rows = await db
     .select({
       whachatUserId: ghlMarketplaceInstalls.whachatUserId,
+      marketplacePlanId: ghlMarketplaceInstalls.marketplacePlanId,
       pricePlan: ghlMarketplaceInstalls.pricePlan,
+      paymentStatus: ghlMarketplaceInstalls.paymentStatus,
       installationStatus: ghlMarketplaceInstalls.installationStatus,
+      uninstallDate: ghlMarketplaceInstalls.uninstallDate,
     })
     .from(ghlMarketplaceInstalls);
 
   const ids = new Set<string>();
   for (const row of rows) {
     if (!row.whachatUserId) continue;
-    if (isGhlMarketplaceUninstalled(row.installationStatus)) continue;
-    if (!isGhlMarketplacePaidPlan(row.pricePlan)) continue;
-    ids.add(row.whachatUserId);
+    if (
+      isActiveGhlMarketplaceProGrant(
+        {
+          marketplacePlanId: row.marketplacePlanId,
+          paymentStatus: row.paymentStatus,
+          installationStatus: row.installationStatus,
+          uninstallDate: row.uninstallDate,
+          whachatUserId: row.whachatUserId,
+        },
+        config,
+      )
+    ) {
+      ids.add(row.whachatUserId);
+    }
   }
   return ids;
 }

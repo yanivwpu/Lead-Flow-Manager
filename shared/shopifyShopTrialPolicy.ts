@@ -17,7 +17,7 @@
  * those require explicit Admin/manual resolution.
  */
 import { normalizeShopifyShopDomain } from "./shopifyBilling";
-import { hasActivePaidPlan } from "./trialEntitlements";
+import { hasActivePaidPlan, type PaidSourceOptions } from "./trialEntitlements";
 import type { User } from "./schema";
 
 export const SHOPIFY_SHOP_TRIAL_DAYS = 14;
@@ -116,8 +116,9 @@ export function shopifyInstallShouldGrantUserTrial(
     | "shopifySubscriptionStatus"
   >,
   now: Date = new Date(),
+  opts?: PaidSourceOptions,
 ): boolean {
-  if (hasActivePaidPlan(user, now)) return false;
+  if (hasActivePaidPlan(user, now, opts)) return false;
   if (user.trialStatus === "expired") return false;
   if (user.trialEndsAt != null) return false;
   if (user.trialStartedAt != null) return false;

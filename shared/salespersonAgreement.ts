@@ -26,7 +26,7 @@ Eligibility and attribution are determined using WhachatCRM internal tracking sy
 
 A) Demo Conversion Payout (one-time)
 Eligible internal sales representatives may earn:
-- $100 one-time payout when a demo lead becomes a paying Starter or Pro subscriber
+- $100 one-time payout when a demo lead becomes a paying Pro subscriber
 - Attribution must fall within the company-defined conversion window from the demo date
 - Free plan signups do not qualify
 - Demo completion alone does not create a payout

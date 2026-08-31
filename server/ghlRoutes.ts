@@ -9,10 +9,7 @@ import { eq, and, inArray, notInArray } from 'drizzle-orm';
 import { getAppOrigin } from './urlOrigins';
 import { scheduleHubSpotAutoSync } from './hubspotAutoSync';
 import {
-  extractInstallFromWebhook,
   evaluateUnlinkedOAuthRecoveryEligibility,
-  linkMarketplaceInstallToIntegration,
-  markMarketplaceUninstalled,
   upsertGhlMarketplaceInstall,
 } from './ghlMarketplaceService';
 import { getGhlMarketplaceOAuthConfig } from './ghlOAuthConfig';
@@ -44,6 +41,10 @@ import {
 } from '@shared/ghlOAuthRecoveryAccess';
 import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from '@shared/contactCrmVisibility';
 import { promoteInboxIdentityToCrm } from './emailChannel/contactMatch';
+import { persistGhlMarketplaceLifecycleEvent } from './ghlMarketplaceLifecycleService';
+import { verifyGhlWebhookSignature, ghlWebhookSignatureReadiness } from './ghlWebhookSignature';
+import { normalizeGhlLifecycleEventType } from '@shared/ghlMarketplaceLifecycle';
+import { ghlMarketplacePlanConfigReadiness } from '@shared/ghlMarketplacePlanIds';
 import type { Contact } from '@shared/schema';
 
 const router = Router();
@@ -537,74 +538,52 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/webhook', async (req: Request, res: Response) => {
-  res.status(200).json({ received: true });
+router.post('/webhook', handleGhlWebhook);
+
+export async function handleGhlWebhook(req: Request, res: Response) {
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  const verified = verifyGhlWebhookSignature({
+    rawBody,
+    headers: req.headers as Record<string, unknown>,
+  });
+  if (!verified.ok) {
+    return res.status(401).json({ error: "Invalid webhook signature" });
+  }
 
   const timestamp = new Date().toISOString();
+  const body = (req.body && typeof req.body === "object" ? req.body : {}) as any;
+  const type = String(body.type || "UNKNOWN");
+  const locationId = (body.locationId as string) || null;
+  const eventId = (body.eventId as string) || (body.id as string) || null;
+  const lifecycleType = normalizeGhlLifecycleEventType(type);
+
+  console.log(
+    `[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || "N/A"}`,
+  );
+
+  if (lifecycleType) {
+    try {
+      const result = await persistGhlMarketplaceLifecycleEvent(body);
+      if (result.warning) {
+        logGhlOAuthDiagnostic("webhook_lifecycle_warning", {
+          eventType: lifecycleType,
+          locationId,
+          warning: result.warning,
+          kind: result.kind,
+        });
+      }
+      return res.status(200).json({ received: true });
+    } catch (error) {
+      console.error("[LeadConnector Webhook] Lifecycle processing error:", error instanceof Error ? error.message : "error");
+      return res.status(500).json({ error: "Webhook processing error" });
+    }
+  }
+
+  res.status(200).json({ received: true });
+
   try {
-    const body = req.body || {};
-    const type = body.type || 'UNKNOWN';
-    const locationId = body.locationId || null;
-    const eventId = body.eventId || body.id || null;
-
-    console.log(`[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || 'N/A'}`);
-
-    if (type === 'AppInstall' || type === 'INSTALL') {
-      logGhlOAuthDiagnostic("webhook_install_received", {
-        locationId,
-        companyId: body.companyId ?? null,
-        installType: body.installType ?? null,
-      });
-      const installData = extractInstallFromWebhook(body);
-      if (installData) {
-        const row = await upsertGhlMarketplaceInstall(installData);
-        logGhlOAuthDiagnostic("webhook_install_marketplace_upserted", {
-          marketplaceInstallId: row.id,
-          locationId: row.locationId,
-          companyId: row.companyId,
-          integrationId: row.integrationId,
-          whachatUserId: row.whachatUserId,
-          note: "Webhook does not create OAuth tokens — integrations row still required for API access",
-        });
-        console.log(`[LeadConnector Webhook] ${timestamp} | Recorded marketplace install for location: ${locationId}`);
-      }
-      const allGhl = await storage.getAllIntegrationsByType('gohighlevel');
-      const matched = allGhl.find(
-        (i: any) => i.config && (i.config as any).locationId === locationId,
-      );
-      if (matched) {
-        await linkMarketplaceInstallToIntegration(locationId, body.companyId, matched);
-        logGhlOAuthDiagnostic("webhook_install_integration_linked", {
-          integrationId: matched.id,
-          userId: matched.userId,
-          locationId,
-          hasAccessToken: Boolean(matched.accessToken),
-        });
-      } else {
-        logGhlOAuthDiagnostic("webhook_install_no_integration", {
-          locationId,
-          companyId: body.companyId ?? null,
-          gohighlevelIntegrationCount: allGhl.length,
-          note: "GHL shows app Active but WhachatCRM has no matching integrations row — user must complete OAuth callback while logged into WhachatCRM",
-        });
-      }
-      return;
-    }
-
-    if (type === 'AppUninstall' || type === 'UNINSTALL') {
-      await markMarketplaceUninstalled(locationId, body.companyId);
-      const allGhl = await storage.getAllIntegrationsByType('gohighlevel');
-      const matched = allGhl.find(
-        (i: any) => i.config && (i.config as any).locationId === locationId,
-      );
-      if (matched) {
-        await storage.updateIntegration(matched.id, { isActive: false });
-        console.log(`[LeadConnector Webhook] ${timestamp} | Deactivated integration: ${matched.id}`);
-      } else {
-        console.log(`[LeadConnector Webhook] ${timestamp} | App uninstalled for location: ${locationId} (no integration row)`);
-      }
-      return;
-    }
+    // Contact and conversation events: verified, then processed after ack.
+    // AppInstall / Uninstall / PlanChange / payment are handled above before ack.
 
     const ghlIntegrations = await storage.getIntegrationsByType('gohighlevel');
     const integration = ghlIntegrations.find(
@@ -1014,7 +993,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
   } catch (error) {
     console.error(`[LeadConnector Webhook] ${timestamp} | Webhook processing error:`, error);
   }
-});
+}
 
 router.post('/refresh-token', async (req: Request, res: Response) => {
   try {
@@ -1088,6 +1067,12 @@ router.get('/connection-diagnostics', async (req: Request, res: Response) => {
 
     const response: Record<string, unknown> = {
       ...summary,
+      marketplaceBilling: {
+        ...ghlMarketplacePlanConfigReadiness(),
+        ...ghlWebhookSignatureReadiness(),
+        canonicalWebhookPath: "/api/ext/webhook",
+        aliasWebhookPath: "/api/ghl/webhook",
+      },
       currentSession: {
         userId: sessionUserId,
         email: user?.email ?? null,

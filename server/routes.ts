@@ -122,7 +122,12 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService, getEffectivePlanForUser } from "./subscriptionService";
+import {
+  AI_BRAIN_ADDON_RETIRED_CODE,
+  STARTER_CHECKOUT_RETIRED_CODE,
+} from "./stripePlanPriceIds";
 import { computeTrialStatus, isProAiTrialActive, hasActivePaidPlan } from "./trialEntitlements";
+import { paidSourceOptionsForUser } from "./ghlMarketplaceGrant";
 import {
   businessKnowledgeFromAiRecord,
   detectStrongAutoIntent,
@@ -181,7 +186,7 @@ import {
 import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from "./salespersonTaskPayout";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
-import ghlRoutes from "./ghlRoutes";
+import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
 import {
@@ -492,6 +497,8 @@ export async function registerRoutes(
 
   // LeadConnector integration routes
   app.use('/api/ext', ghlRoutes);
+  // Backward-compatible alias — same verified handler as POST /api/ext/webhook
+  app.post('/api/ghl/webhook', handleGhlWebhook);
 
   // Contact form endpoint (public - no auth required)
   app.post("/api/contact", async (req, res) => {
@@ -566,11 +573,13 @@ export async function registerRoutes(
         const snapshot = await storage.getUserSubscriptionDebugSnapshot(uid);
         const full = await storage.getUserForSession(uid);
         const now = new Date();
+        const paidSources = full ? await paidSourceOptionsForUser(uid) : { ghlMarketplaceProActive: false };
         res.json({
           ...snapshot,
-          effectivePlan: full ? getEffectivePlanForUser(full, now) : null,
-          hasActivePaidPlan: full ? hasActivePaidPlan(full, now) : null,
-          proAiTrialActive: full ? isProAiTrialActive(full, now) : null,
+          effectivePlan: full ? getEffectivePlanForUser(full, now, paidSources) : null,
+          hasActivePaidPlan: full ? hasActivePaidPlan(full, now, paidSources) : null,
+          proAiTrialActive: full ? isProAiTrialActive(full, now, paidSources) : null,
+          ghlMarketplaceProActive: paidSources.ghlMarketplaceProActive,
         });
       } catch (e: any) {
         console.error("[GET /api/debug/user-subscription-state]", e);
@@ -2320,7 +2329,7 @@ export async function registerRoutes(
         return res.status(403).json({
           error:
             limits.plan === "free"
-              ? "Your Free plan includes 1 user. Upgrade to Starter to invite team members."
+              ? "Your Free plan includes 1 user. Upgrade to Pro to invite team members."
               : limits.plan === "starter"
                 ? "Starter includes up to 3 users. Upgrade to Pro for unlimited team members."
                 : `Your ${limits.planName} plan does not allow more team members right now.`,
@@ -3709,9 +3718,10 @@ export async function registerRoutes(
 
   // Get available subscription plans
   app.get("/api/subscription/plans", (_req, res) => {
-    const plans = Object.entries(PLAN_LIMITS).map(([id, plan]) => ({
+    const publicIds: Array<keyof typeof PLAN_LIMITS> = ["free", "pro"];
+    const plans = publicIds.map((id) => ({
       id,
-      ...plan,
+      ...PLAN_LIMITS[id],
     }));
     res.json(plans);
   });
@@ -3732,7 +3742,9 @@ export async function registerRoutes(
       const shopQuery = typeof req.query.shop === "string" ? req.query.shop.trim() : "";
       const shopQueryLooksShopify = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shopQuery);
       const isShopify = !!(user?.shopifyShop) || shopQueryLooksShopify;
-      const paidProOrAi = user ? hasActivePaidPlan(user, now) : false;
+      const paidProOrAi = user
+        ? hasActivePaidPlan(user, now, { ghlMarketplaceProActive: limits?.ghlMarketplaceProActive })
+        : false;
       const showTrialUrgency =
         !!limits?.isInTrial && !paidProOrAi && (user?.trialPlan || "pro_ai") === "pro_ai";
 
@@ -3750,6 +3762,7 @@ export async function registerRoutes(
               plan: limits.plan,
               effectivePlan: limits.plan,
               effectiveHasAIBrain: limits.effectiveHasAIBrain,
+              hasAIBrain: limits.hasAIBrain ?? limits.hasAIBrainAddon,
             }
           : null,
         subscription: user
@@ -3760,12 +3773,15 @@ export async function registerRoutes(
               subscriptionStatus: user.subscriptionStatus,
               currentPeriodEnd: user.currentPeriodEnd,
               hasAIBrainAddon: limits?.hasAIBrainAddon ?? false,
+              hasAIBrain: limits?.hasAIBrain ?? limits?.hasAIBrainAddon ?? false,
               effectiveHasAIBrain: limits?.effectiveHasAIBrain ?? false,
               trialStatus: computeTrialStatus(user, now),
               trialStartedAt: user.trialStartedAt,
               trialEndsAt: user.trialEndsAt,
               trialDaysRemaining: limits?.trialDaysRemaining ?? 0,
-              trialIncludesAIBrain: isProAiTrialActive(user, now),
+              trialIncludesAIBrain: isProAiTrialActive(user, now, {
+                ghlMarketplaceProActive: limits?.ghlMarketplaceProActive,
+              }),
               trialPlan: user.trialPlan ?? null,
               isShopify,
               upgradeProvider: isShopify ? ("shopify" as const) : ("stripe" as const),
@@ -3925,6 +3941,9 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       console.error("Error creating checkout:", error);
+      if (error?.code === STARTER_CHECKOUT_RETIRED_CODE) {
+        return res.status(400).json({ error: error.message, code: error.code });
+      }
       res.status(500).json({ error: error.message || "Failed to create checkout" });
     }
   });
@@ -4016,7 +4035,7 @@ export async function registerRoutes(
     }
   });
 
-  // Starter or Pro monthly + AI Brain bundle (effective plan Free only)
+  // Legacy plan + AI Brain bundle — Pro routes to Pro-only checkout; Starter is rejected.
   app.post("/api/subscription/checkout/plan-ai-bundle", async (req, res) => {
     try {
       if (!req.user) {
@@ -4045,6 +4064,9 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       console.error("Error creating plan + AI bundle checkout:", error);
+      if (error?.code === STARTER_CHECKOUT_RETIRED_CODE) {
+        return res.status(400).json({ error: error.message, code: error.code });
+      }
       if (error?.code === "PLAN_AI_BUNDLE_NOT_FREE") {
         return res.status(400).json({ error: error.message });
       }
@@ -4052,7 +4074,7 @@ export async function registerRoutes(
     }
   });
 
-  // Create checkout session for AI Brain add-on ($29/mo)
+  // Legacy AI Brain add-on checkout — always retired (Brain is included with Pro).
   app.post("/api/subscription/addon/ai-brain", async (req, res) => {
     try {
       if (!req.user) {
@@ -4083,11 +4105,12 @@ export async function registerRoutes(
       res.json(result);
     } catch (error: any) {
       console.error("Error creating AI Brain add-on checkout:", error);
-      if (error?.code === "AI_BRAIN_PLAN_INELIGIBLE") {
-        return res.status(400).json({ error: error.message });
-      }
-      if (error?.code === "AI_BRAIN_TRIAL_INCLUDES_BRAIN") {
-        return res.status(400).json({ error: error.message });
+      if (
+        error?.code === AI_BRAIN_ADDON_RETIRED_CODE ||
+        error?.code === "AI_BRAIN_PLAN_INELIGIBLE" ||
+        error?.code === "AI_BRAIN_TRIAL_INCLUDES_BRAIN"
+      ) {
+        return res.status(400).json({ error: error.message, code: error.code });
       }
       res.status(500).json({ error: error.message || "Failed to create checkout" });
     }
@@ -4148,7 +4171,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Pro", upgradeRequired: true });
       }
       const userWorkflows = await storage.getWorkflows(req.user.id);
       res.json(userWorkflows);
@@ -4166,7 +4189,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Pro", upgradeRequired: true });
       }
       const { name, description, triggerType, triggerConditions, actions } = req.body;
       if (!name || !triggerType) {
@@ -4298,7 +4321,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Pro", upgradeRequired: true });
       }
       const campaigns = await storage.getDripCampaigns(req.user.id);
       res.json(campaigns);
@@ -4335,7 +4358,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "Automations require Starter or Pro", upgradeRequired: true });
+        return res.status(403).json({ error: "Automations require Pro", upgradeRequired: true });
       }
       const { name, description, triggerType, triggerConfig } = req.body;
       if (!name) {
@@ -4555,7 +4578,7 @@ export async function registerRoutes(
       }
       const limits = await subscriptionService.getUserLimits(req.user.id);
       if (!limits?.workflowsEnabled) {
-        return res.status(403).json({ error: "This feature requires Starter or Pro", upgradeRequired: true });
+        return res.status(403).json({ error: "This feature requires Pro", upgradeRequired: true });
       }
       const { chatId, title, frequency, dayOfWeek, dayOfMonth, timeOfDay } = req.body;
       if (!title || !frequency) {
@@ -9295,7 +9318,9 @@ export async function registerRoutes(
           limits = null;
         }
 
-        const effectivePlan = limits?.plan || getEffectivePlanForUser(user, now);
+        const effectivePlan = limits?.plan || getEffectivePlanForUser(user, now, {
+          ghlMarketplaceProActive: limits?.ghlMarketplaceProActive,
+        });
         const conversationsLimit =
           limits?.conversationsLimit ??
           PLAN_LIMITS[effectivePlan as SubscriptionPlan]?.conversationsPerMonth ??
@@ -10749,7 +10774,7 @@ export async function registerRoutes(
 
     // Free users: no AI access
     if (effectivePlan === 'free') {
-      return { hasAccess: false, reason: "AI features require a Starter or Pro plan", plan: effectivePlan, monthlyLimit: 0, hasAIBrain };
+      return { hasAccess: false, reason: "AI features require a Pro plan", plan: effectivePlan, monthlyLimit: 0, hasAIBrain };
     }
 
     // Auto mode requires Pro
@@ -10913,7 +10938,7 @@ export async function registerRoutes(
       const limits = await subscriptionService.getUserLimits(userId);
       if (!limits?.effectiveHasAIBrain) {
         return res.status(403).json({
-          error: "AI Brain add-on is required for business profile and premium intelligence settings.",
+          error: "AI Brain is required for business profile and premium intelligence settings. Upgrade to Pro to include AI Brain.",
           needsUpgrade: true,
           code: "AI_BRAIN_REQUIRED",
         });
@@ -10976,7 +11001,7 @@ export async function registerRoutes(
       const limits = await subscriptionService.getUserLimits(userId);
       if (!limits?.effectiveHasAIBrain) {
         return res.status(403).json({
-          error: "AI Brain add-on is required for business profile and premium intelligence settings.",
+          error: "AI Brain is required for business profile and premium intelligence settings. Upgrade to Pro to include AI Brain.",
           needsUpgrade: true,
           code: "AI_BRAIN_REQUIRED",
         });
@@ -10996,7 +11021,7 @@ export async function registerRoutes(
     const limits = await subscriptionService.getUserLimits(req.user!.id);
     if (!limits?.effectiveHasAIBrain) {
       res.status(403).json({
-        error: "AI Brain add-on is required for website knowledge.",
+        error: "AI Brain is required for website knowledge. Upgrade to Pro to include AI Brain.",
         needsUpgrade: true,
         code: "AI_BRAIN_REQUIRED",
       });
@@ -12165,7 +12190,7 @@ export async function registerRoutes(
       const limits = await subscriptionService.getUserLimits(userId);
       if (!limits?.effectiveHasAIBrain) {
         return res.status(403).json({
-          error: "AI Brain add-on is required for AI Memory.",
+          error: "AI Brain is required for AI Memory. Upgrade to Pro to include AI Brain.",
           needsUpgrade: true,
           code: "AI_BRAIN_REQUIRED",
         });

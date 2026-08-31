@@ -213,10 +213,16 @@ export function ProductPage({ content: baseContent }: Props) {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Link
-                  href={user ? "/app/inbox" : "/auth"}
+                  href={
+                    content.primaryCtaHref
+                      ? localeHref(content.primaryCtaHref)
+                      : user
+                        ? "/app/inbox"
+                        : "/auth"
+                  }
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-6 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                  {chrome.startFreeTrial}
+                  {content.primaryCtaLabel ?? chrome.startFreeTrial}
                   <ArrowRight className={arrowClass} />
                 </Link>
                 <Link

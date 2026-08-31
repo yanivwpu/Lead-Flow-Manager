@@ -75,7 +75,7 @@ export const BUYER_CRITERIA = [
   {
     title: "Automation templates",
     description:
-      "Pre-built flows for follow-ups, qualification, and handoffs save weeks compared with building every sequence from scratch. On WhachatCRM these ship on Starter and Pro.",
+      "Pre-built flows for follow-ups, qualification, and handoffs save weeks compared with building every sequence from scratch. On WhachatCRM these ship on Pro.",
     link: { href: "/automation-templates", label: "Automation templates" },
   },
   {
@@ -224,11 +224,11 @@ export const PLATFORM_COMPARISON: PlatformComparisonRow[] = [
 export const WHACHAT_DIFFERENTIATORS = [
   "Meta Embedded Signup with native WhatsApp Cloud API onboarding (Twilio not required for new setups)",
   "Omnichannel inbox for WhatsApp, Messenger, Instagram, Email (Gmail), SMS, Telegram, and website chat",
-  "AI Assist on Starter/Pro, with optional AI Brain add-on for deeper intelligence",
-  "Chatbot / Flow Builder and preset automation templates included on Starter and Pro",
+  "AI Assist and AI Brain included with Pro",
+  "Chatbot / Flow Builder and preset automation templates included on Pro",
   "Shopify integration and GoHighLevel sync from Integrations (available on Free)",
-  "Realtor Growth Engine for eligible Pro + AI Brain workspaces",
-  "Unlimited users on Pro ($49/mo) with Free and Starter ($19/mo) entry points",
+  "Realtor Growth Engine for eligible Pro workspaces",
+  "Unlimited users on Pro ($49/mo) with a Free forever starting plan",
   "0% WhachatCRM markup on Meta messaging fees—Meta may change its rates independently",
 ] as const;
 
@@ -319,17 +319,17 @@ export const FAQ_ITEMS = [
   {
     question: "Is the chatbot included on the Free plan?",
     answer:
-      "No. The visual chatbot / Flow Builder and preset automation templates are included on Starter ($19/mo) and Pro ($49/mo). Free is for validating Unified Inbox and CRM workflows before you upgrade.",
+      "No. The visual chatbot / Flow Builder and preset automation templates are included on Pro ($49/mo). Free is for validating Unified Inbox and CRM workflows before you upgrade.",
   },
   {
     question: "How much does WhachatCRM cost?",
     answer:
-      "WhachatCRM offers a Free plan, Starter at $19/mo (up to 3 users), and Pro at $49/mo with unlimited users. Optional AI Brain is $29/mo on Starter or Pro. Meta WhatsApp conversation fees are separate; WhachatCRM does not add its own per-message markup. Meta may update WhatsApp pricing independently.",
+      "WhachatCRM offers a Free plan and Pro at $49/mo with unlimited users and AI Brain included. Meta WhatsApp conversation fees are separate; WhachatCRM does not add its own per-message markup. Meta may update WhatsApp pricing independently.",
   },
   {
     question: "How is WhachatCRM different from Respond.io or WATI?",
     answer:
-      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot on Starter+, basic WhatsApp templates and integrations on Free, Shopify and GoHighLevel connections, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
+      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot on Pro, basic WhatsApp templates and integrations on Free, Shopify and GoHighLevel connections, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
   },
   {
     question: "What should I compare before choosing a WhatsApp CRM?",

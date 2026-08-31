@@ -105,9 +105,7 @@ export function generateAIFeaturesPDF() {
   
   const pricing = [
     { plan: 'Free', price: '$0/mo', note: 'Forever free' },
-    { plan: 'Starter', price: '$19/mo', note: 'For small businesses' },
-    { plan: 'Pro', price: '$49/mo', note: 'For growing teams' },
-    { plan: 'Full AI Brain Add-on', price: '+$29/mo', note: 'Requires Starter or Pro' },
+    { plan: 'Pro', price: '$49/mo', note: 'AI Brain included' },
   ];
   
   pricing.forEach((item) => {
@@ -138,8 +136,8 @@ export function generateAIFeaturesPDF() {
   
   const explanations = [
     'AI Recommended: Smart task prioritization based on engagement & urgency (available to all)',
-    'AI Assist: Reply suggestions & sentiment detection with fair use (Starter Basic / Pro Enhanced)',
-    'Full AI Brain: Advanced intelligence, lead qualification, automation builder & more (+$29/mo add-on)',
+    'AI Assist: Reply suggestions & sentiment detection with fair use (included with Pro)',
+    'AI Brain: Business knowledge, lead qualification, Copilot, and recommendations (included with Pro)',
   ];
   
   currentY += 12;

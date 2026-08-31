@@ -628,7 +628,7 @@ export function ChatbotBuilder() {
               <Zap className="h-8 w-8 text-white" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Flow Builder</h2>
-            <p className="text-gray-500 mb-6">Design automated conversation flows to qualify leads, answer questions, and route conversations — 24/7. Available on Starter and Pro.</p>
+            <p className="text-gray-500 mb-6">Design automated conversation flows to qualify leads, answer questions, and route conversations — 24/7. Available on Pro.</p>
             <Link href="/pricing">
               <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade">
                 <Crown className="h-4 w-4 mr-2" />View Plans

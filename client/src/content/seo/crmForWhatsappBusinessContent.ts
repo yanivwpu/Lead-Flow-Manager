@@ -173,7 +173,7 @@ export const FAQ_ITEMS = [
   {
     question: "How much does a WhatsApp Business CRM cost?",
     answer:
-      "Pricing varies by seats, channels, and automation depth. WhachatCRM offers a free plan; paid plans start at $19/month with Pro at $49/month. Meta bills WhatsApp conversation fees separately according to their published rates.",
+      "Pricing varies by seats, channels, and automation depth. WhachatCRM offers a free plan and Pro at $49/month. Meta bills WhatsApp conversation fees separately according to their published rates.",
   },
   {
     question: "Does WhachatCRM mark up Meta messaging fees?",

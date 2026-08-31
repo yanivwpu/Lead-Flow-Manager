@@ -36,7 +36,7 @@ test("Free / Starter / Pro are eligible via quota map (no hardcoded plan gate)",
 });
 
 test("upgrade path follows higher quota", () => {
-  assert.equal(nextProspectAiQuotaUpgradePlan("free"), "starter");
+  assert.equal(nextProspectAiQuotaUpgradePlan("free"), "pro");
   assert.equal(nextProspectAiQuotaUpgradePlan("starter"), "pro");
   assert.equal(nextProspectAiQuotaUpgradePlan("pro"), null);
 });
@@ -44,8 +44,8 @@ test("upgrade path follows higher quota", () => {
 test("exhausted copy is user-facing", () => {
   const freeMsg = prospectAiQuotaExceededUserMessage("free");
   assert.match(freeMsg, /monthly Prospect AI discovery limit/i);
-  assert.match(freeMsg, /Starter/i);
-  assert.match(freeMsg, /100/);
+  assert.match(freeMsg, /Pro/i);
+  assert.match(freeMsg, /500/);
   assert.ok(!/quota_exceeded|plan_limit|token/i.test(freeMsg));
 
   const starterMsg = prospectAiQuotaExceededUserMessage("starter");

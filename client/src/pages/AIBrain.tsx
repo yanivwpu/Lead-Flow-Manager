@@ -19,13 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
@@ -241,12 +234,10 @@ function AIBrainContent() {
   });
   const [newKeyword, setNewKeyword] = useState("");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [bundleModalOpen, setBundleModalOpen] = useState(false);
 
   const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
 
-  // AI Brain add-on checkout
-  const handleAddonCheckout = async () => {
+  const handleProCheckout = async () => {
     setIsCheckingOut(true);
     try {
       if (isShopify) {
@@ -261,11 +252,11 @@ function AIBrainContent() {
         return;
       }
 
-      const response = await fetch("/api/subscription/addon/ai-brain", {
+      const response = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(getCheckoutReturnPaths()),
+        body: JSON.stringify({ planId: "pro", billingInterval: "monthly", ...getCheckoutReturnPaths() }),
       });
       if (response.status === 401) {
         window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
@@ -289,51 +280,6 @@ function AIBrainContent() {
             )
           : error.message || "Failed to start checkout. Please try again.",
         variant: isShopify ? "default" : "destructive",
-      });
-    } finally {
-      setIsCheckingOut(false);
-    }
-  };
-
-  const handlePlanAIBundleCheckout = async (bundlePlan: "starter" | "pro") => {
-    if (isShopify) {
-      const opened = await openShopifyManagedPricing(shopHint);
-      if (!opened) {
-        toast({
-          title: "Choose plan in Shopify",
-          description: shopifyManagedPricingInstructions(
-            undefined,
-            "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
-          ),
-        });
-      }
-      return;
-    }
-    setIsCheckingOut(true);
-    try {
-      const response = await fetch("/api/subscription/checkout/plan-ai-bundle", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ plan: bundlePlan, ...getCheckoutReturnPaths() }),
-      });
-      if (response.status === 401) {
-        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-        return;
-      }
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to start checkout");
-      }
-      if (data.url) {
-        setBundleModalOpen(false);
-        window.location.href = data.url;
-      }
-    } catch (error: any) {
-      toast({
-        title: "Checkout Error",
-        description: error.message || "Failed to start checkout. Please try again.",
-        variant: "destructive",
       });
     } finally {
       setIsCheckingOut(false);
@@ -557,53 +503,15 @@ function AIBrainContent() {
               />
             </p>
             {isFree && !isShopify ? (
-              <>
-                <Button
-                  type="button"
-                  className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
-                  onClick={() => setBundleModalOpen(true)}
-                  disabled={isCheckingOut}
-                  data-testid="button-ai-workspace-choose-plan"
-                >
-                  {t("aiBrain.workspace.cta")}
-                </Button>
-                <Dialog open={bundleModalOpen} onOpenChange={setBundleModalOpen}>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Choose your bundle</DialogTitle>
-                      <DialogDescription>Monthly billing — plan plus intelligence add-on in one subscription.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-3 py-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-auto flex-col items-stretch gap-1 rounded-xl border-violet-100/90 py-4 hover:bg-violet-50/50"
-                        onClick={() => handlePlanAIBundleCheckout("starter")}
-                        disabled={isCheckingOut}
-                      >
-                        <span className="font-semibold text-violet-950">Starter + AI Brain</span>
-                        <span className="text-xs font-normal text-violet-800/80">AI Assist Basic + intelligence layer</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-auto flex-col items-stretch gap-1 rounded-xl border-violet-100/90 py-4 hover:bg-violet-50/50"
-                        onClick={() => handlePlanAIBundleCheckout("pro")}
-                        disabled={isCheckingOut}
-                      >
-                        <span className="font-semibold text-violet-950">Pro + AI Brain</span>
-                        <span className="text-xs font-normal text-violet-800/80">AI Assist Basic, Pro workflows + intelligence layer</span>
-                      </Button>
-                    </div>
-                    {isCheckingOut && (
-                      <div className="flex items-center justify-center gap-2 text-sm text-slate-600">
-                        <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
-                        Redirecting to checkout…
-                      </div>
-                    )}
-                  </DialogContent>
-                </Dialog>
-              </>
+              <Button
+                type="button"
+                className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
+                onClick={handleProCheckout}
+                disabled={isCheckingOut}
+                data-testid="button-ai-workspace-choose-plan"
+              >
+                {isCheckingOut ? "Processing…" : t("aiBrain.workspace.cta")}
+              </Button>
             ) : (
               <Link href="/pricing">
                 <Button
@@ -813,16 +721,16 @@ function AIBrainContent() {
                         "hover:from-violet-500 hover:to-purple-500 hover:shadow-lg hover:shadow-violet-500/25",
                         "border-0 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2",
                       )}
-                      onClick={handleAddonCheckout}
+                      onClick={handleProCheckout}
                       disabled={isCheckingOut}
                       data-testid="button-ai-brain-primary-cta"
                     >
-                      {isCheckingOut ? "Processing…" : isShopify ? "Choose plan in Shopify" : "Unlock AI Brain"}
+                      {isCheckingOut ? "Processing…" : isShopify ? "Choose plan in Shopify" : "Upgrade to Pro"}
                     </Button>
                     <p className="text-xs text-slate-500">
                       {isShopify
-                        ? "You will approve the AI Brain add-on in your Shopify admin."
-                        : "From $29/mo · cancel anytime from billing"}
+                        ? "Choose Pro in Shopify to include AI Brain."
+                        : "AI Brain is included with Pro."}
                     </p>
                   </div>
                 </div>

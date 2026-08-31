@@ -89,11 +89,14 @@ run("ordinary login path remains bcrypt local strategy", () => {
 
 run("AI Brain no longer grants access by Demo Agent email", () => {
   const sub = read("server/subscriptionService.ts");
+  const brain = read("shared/aiBrainEntitlement.ts");
   assert.equal(sub.includes("demo@whachat.com"), false);
+  assert.equal(brain.includes("demo@whachat.com"), false);
   assert.equal(sub.includes('source: "demo"'), false);
+  assert.equal(brain.includes('source: "demo"'), false);
   assert.doesNotMatch(sub, /"demo" \|/);
   assert.match(sub, /isManualAIBrainEmail/);
-  assert.match(sub, /isProAiTrialActive/);
+  assert.match(brain, /isProAiTrialActive/);
   assert.match(sub, /stripeCustomerHasActiveAIBrainAddon/);
 });
 

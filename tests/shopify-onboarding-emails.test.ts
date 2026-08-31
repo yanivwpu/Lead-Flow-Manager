@@ -115,7 +115,7 @@ test("E–H: first install Day 0 once, owner email recipient, Connect WhatsApp C
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_TEMPLATES_PATH}`));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_INTEGRATIONS_PATH}`));
   assert.match(welcomeHtml, /WhatsApp Coexistence/);
-  assert.match(welcomeHtml, /14-day Pro \+ AI Brain trial/);
+  assert.match(welcomeHtml, /14-day Pro trial with AI Brain/);
   assert.doesNotMatch(welcomeHtml, /WhaChatCRM/);
   assert.equal(DEFAULT_RESEND_FROM_EMAIL, "WhachatCRM <noreply@crm.whachatcrm.com>");
 

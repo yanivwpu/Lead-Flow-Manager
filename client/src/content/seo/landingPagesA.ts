@@ -122,7 +122,7 @@ export const crmWithMlsIntegrationConfig: SeoLandingPageConfig = {
       id: "get-started",
       title: "Getting started with MLS CRM in WhachatCRM",
       paragraphs: [
-        "Start on the Free plan to connect WhatsApp via Meta embedded signup, then upgrade to Pro for unlimited users, Growth Engine templates, and full AI Copilot. Connect your MLS source, verify sync, and enable AI Brain for deeper qualification.",
+        "Start on the Free plan to connect WhatsApp via Meta embedded signup, then upgrade to Pro for unlimited users, Growth Engine templates, full AI Copilot, and AI Brain. Connect your MLS source, verify sync, and use AI Brain for deeper qualification.",
         "Our Help Center walks through channel setup, MLS configuration, and preset real estate automations step by step.",
       ],
       image: {
@@ -299,7 +299,7 @@ export const realEstateCrmConfig: SeoLandingPageConfig = {
     {
       question: "Does it work for solo agents?",
       answer:
-        "Absolutely. The Free plan lets solo agents test WhatsApp CRM basics; Starter and Pro scale with automations, AI, and team features as your business grows.",
+        "Absolutely. The Free plan lets solo agents test WhatsApp CRM basics; Pro scales with automations, AI Brain, and team features as your business grows.",
     },
     {
       question: "How do agent pages help SEO?",

@@ -63,10 +63,10 @@ test("B–F: Day 0 covers Prospect AI, Inbox, Integrations, Templates, Coexisten
   assert.match(welcomeHtml, /does not become the WhachatCRM inbox/i);
 });
 
-test("G: Day 0 distinguishes 14-day Pro + AI Brain trial from permanent Free", () => {
-  assert.match(welcomeHtml, /14-day Pro \+ AI Brain trial/);
+test("G: Day 0 distinguishes 14-day Pro trial with AI Brain from permanent Free", () => {
+  assert.match(welcomeHtml, /14-day Pro trial with AI Brain/);
   assert.match(welcomeHtml, /Free plan/);
-  assert.match(welcomeHtml, /AI Brain is not included on Free after the trial/);
+  assert.match(welcomeHtml, /AI Brain is included with Pro and is not included on Free after the trial/);
   assert.doesNotMatch(welcomeHtml, /free AI assistant/i);
   assert.match(welcomeHtml, /Bulk template campaigns and workflow automation are not included on Free/);
 });

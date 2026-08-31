@@ -28,6 +28,8 @@ export type PricingPageContent = {
   freeUpsell: string;
   starterCallout: { title: string; body: string };
   proCallout: { title: string; body: string };
+  agency: { title: string; body: string; cta: string };
+  starterRetired: { title: string; body: string };
   proBadge: string;
   compareTitle: string;
   featureColumnHeader: string;
@@ -43,6 +45,8 @@ export type PricingPageContent = {
     title: string;
     body: string;
     quotaNote: string;
+    quotaFree: string;
+    quotaPro: string;
     cta: string;
   };
   capabilities: { title: string; cards: PricingCard[] };
@@ -60,6 +64,8 @@ export type PricingPageContent = {
   compareCells: {
     connectedChannels: string;
     notIncluded: string;
+    notIncludedAfterTrial: string;
+    included: string;
     addOn: string;
     growthEngineReady: string;
     unlimited: string;
@@ -84,6 +90,7 @@ export type PricingPageContent = {
     whatsappTemplatesAutomation: string;
     chatbotWidget: string;
     workflowAutomation: string;
+    aiBrainIncluded: string;
     growthEnginesRequired: string;
   };
   ssr: { h1: string; lead: string; bullets: string[] };
@@ -104,20 +111,19 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   seo: {
     title: "WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM",
     description:
-      "WhachatCRM Pricing: Prospect AI, Unified Inbox, WhatsApp CRM, AI Chatbot, and sales automation. Find, engage, and convert more customers. Free plan includes 50 Prospect AI discoveries/month.",
+      "WhachatCRM Pricing: start free or upgrade to Pro. Prospect AI, Unified Inbox, WhatsApp CRM, AI Chatbot, AI Brain, and sales automation. Free includes 50 Prospect AI discoveries/month.",
     ogTitle: "WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM",
     ogDescription:
-      "Multi-channel inbox, Prospect AI, AI Chatbot, and Workflow Automation in one platform. Start free.",
+      "Multi-channel inbox, Prospect AI, AI Chatbot, AI Brain, and Workflow Automation in one platform. Start free. Upgrade when you’re ready to scale.",
     twitterTitle: "WhachatCRM Pricing | Unified Inbox & Prospect AI",
     twitterDescription:
-      "Prospect AI, multi-channel inbox, AI Chatbot, and sales automation—clear plans from Free to Pro.",
+      "Prospect AI, multi-channel inbox, AI Chatbot, AI Brain, and sales automation—Free and Pro.",
   },
-  trialBanner: "Every new account includes a full 14-day Pro + AI Brain trial.",
+  trialBanner: "Every new account includes a 14-day Pro trial with AI Brain.",
   hero: {
-    h1: "Powerful tools to grow your business — pricing that grows with you.",
-    subtitle:
-      "Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging. Upgrade only when you need more conversations, automation, users, or AI.",
-    trustLine: "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
+    h1: "Simple pricing. Everything you need to grow.",
+    subtitle: "Start free. Upgrade when you’re ready to scale.",
+    trustLine: "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
   },
   billing: {
     monthly: "Monthly",
@@ -134,7 +140,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       "Upgrade only as your business grows",
     ],
   },
-  freeUpsell: "Upgrade when you need chatbot, campaign automation, and more capacity.",
+  freeUpsell: "Upgrade when you need chatbot, campaign automation, AI Brain, and more capacity.",
   starterCallout: {
     title: "AI Chatbot & Website Widget",
     body: "Capture, qualify and respond to website visitors automatically.",
@@ -143,14 +149,23 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     title: "Growth Engine Ready",
     body: "Activate compatible industry Growth Engines such as Realtor Growth Engine. Growth Engines may require a separate purchase.",
   },
+  agency: {
+    title: "Need multiple client accounts or higher messaging volume?",
+    body: "Talk to us about Agency & Enterprise options.",
+    cta: "Contact Sales",
+  },
+  starterRetired: {
+    title: "Starter is no longer available",
+    body: "Starter is no longer available for new purchases. Choose Free or Pro.",
+  },
   proBadge: "Most Popular",
   compareTitle: "Compare plans",
   featureColumnHeader: "Feature",
   aiBrain: {
-    badge: "Optional Add-on",
+    badge: "Included with Pro",
     title: "AI Brain",
-    intro: "Enhances WhachatCRM with your business knowledge—not a separate subscription plan.",
-    cardDesc: "Add AI Brain to Starter or Pro — enhances the platform, not a standalone plan.",
+    intro: "AI Brain is included with Pro. It enhances WhachatCRM with your business knowledge.",
+    cardDesc: "AI Brain is included with Pro — it learns your business and powers smarter Copilot, Prospect AI, and recommendations.",
     highlights: [
       "Learns your business",
       "Uses company knowledge",
@@ -165,6 +180,8 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     title: "Prospect AI Included — Free with Every Plan",
     body: "Find local businesses, qualify opportunities with AI, and launch personalized outreach campaigns—all within WhachatCRM.",
     quotaNote: "Monthly Prospect AI discoveries by plan",
+    quotaFree: "Free: {{count}}/month",
+    quotaPro: "Pro: {{count}}/month",
     cta: "Explore Prospect AI",
   },
   capabilities: {
@@ -218,7 +235,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         title: "AI Chatbot & Workflow Automation",
-        body: "Capture, qualify, and follow up automatically on Starter and Pro.",
+        body: "Capture, qualify, and follow up automatically on Pro.",
       },
     ],
   },
@@ -227,15 +244,15 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     items: [
       {
         q: "Are integrations included on Free?",
-        a: "Yes. Free users can open Integrations and connect supported tools such as Gmail, Shopify, Calendly, and GoHighLevel. Conversation, user, and channel limits still apply. Campaign automation and AI Brain remain separate paid capabilities.",
+        a: "Yes. Free users can open Integrations and connect supported tools such as Gmail, Shopify, Calendly, and GoHighLevel. Conversation, user, and channel limits still apply. Campaign automation and AI Brain are included with Pro.",
       },
       {
         q: "Are WhatsApp templates included on Free?",
-        a: "Yes. Free includes basic WhatsApp template messaging: view, sync, and send an approved template to a contact when Meta requires it outside the 24-hour window. Starter and Pro add WhatsApp templates in workflow automation.",
+        a: "Yes. Free includes basic WhatsApp template messaging: view, sync, and send an approved template to a contact when Meta requires it outside the 24-hour window. Pro adds WhatsApp templates in workflow automation.",
       },
       {
-        q: "Can I try Pro and AI Brain before upgrading?",
-        a: "Every new account receives a full-featured 14-day Pro + AI Brain trial. No feature restrictions during the trial.",
+        q: "Can I try Pro before upgrading?",
+        a: "Every new account receives a 14-day Pro trial with AI Brain. No feature restrictions during the trial. After the trial, Free does not include AI Brain.",
       },
       {
         q: "What is Prospect AI?",
@@ -243,11 +260,11 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         q: "Is Chatbot included?",
-        a: "AI Chatbot & Website Widget is included on Starter and Pro. Free does not include the visual chatbot builder. Chatbot captures, qualifies, and responds to website visitors; AI Brain is an optional add-on that makes conversations smarter.",
+        a: "AI Chatbot & Website Widget is included on Pro. Free does not include the visual chatbot builder. Chatbot captures, qualifies, and responds to website visitors; AI Brain is included with Pro and makes conversations smarter.",
       },
       {
         q: "What is AI Brain?",
-        a: "AI Brain is an optional $29/month add-on for Starter or Pro—not a base plan. It learns your business, uses company knowledge and Offers & Payment Links, improves Prospect AI personalization, and powers a smarter AI Copilot.",
+        a: "AI Brain is included with Pro. It learns your business, uses company knowledge and Offers & Payment Links, improves Prospect AI personalization, and powers a smarter AI Copilot. It is not included on Free after the trial.",
       },
       {
         q: "What counts as an active conversation?",
@@ -283,7 +300,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     chatbotWidget: "AI Chatbot & Website Widget",
     workflowAutomation: "Workflow Automation",
     followUps: "Follow-ups",
-    aiBrainAddon: "AI Brain add-on",
+    aiBrain: "AI Brain",
     assignment: "Assignment / collaboration",
     integrations: "Integrations",
     templateMessaging: "WhatsApp template messaging",
@@ -292,7 +309,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   compareHints: {
     growthEngines: "Required platform plan to activate compatible Growth Engines.",
     templateMessaging:
-      "Free includes approved 1:1 template sends. Starter and Pro add templates in workflow automation.",
+      "Free includes approved 1:1 template sends. Pro adds templates in workflow automation.",
     integrations: "Connect supported business tools. Conversation and usage limits still apply.",
   },
   compareGroups: {
@@ -308,6 +325,8 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   compareCells: {
     connectedChannels: "Connected channels",
     notIncluded: "Not included",
+    notIncludedAfterTrial: "Not included after trial",
+    included: "Included",
     addOn: "Add-on",
     growthEngineReady: "Growth Engine Ready",
     unlimited: "Unlimited",
@@ -332,17 +351,18 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     whatsappTemplatesAutomation: "WhatsApp templates + automation",
     chatbotWidget: "AI Chatbot & Website Widget",
     workflowAutomation: "Workflow Automation",
+    aiBrainIncluded: "AI Brain included",
     growthEnginesRequired: "Required plan for Industry Growth Engines",
   },
   ssr: {
-    h1: "Powerful tools to grow your business — pricing that grows with you.",
-    lead: "Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging. Upgrade only when you need more conversations, automation, users, or AI.",
+    h1: "Simple pricing. Everything you need to grow.",
+    lead: "Start free. Upgrade when you’re ready to scale.",
     bullets: [
-      "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
-      "Free, Starter, and Pro plans with clear conversation and user limits",
+      "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
+      "Free and Pro plans with clear conversation and user limits",
       "Prospect AI included on every plan",
       "Integrations and basic WhatsApp templates on Free",
-      "Optional AI Brain add-on for Starter and Pro",
+      "AI Brain included with Pro",
       "0% WhachatCRM markup on Meta conversation fees",
     ],
   },

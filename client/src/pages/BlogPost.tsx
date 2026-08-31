@@ -538,8 +538,7 @@ WATI (WhatsApp Team Inbox) is a popular WhatsApp Business solution, but it's not
 
 ### Pricing
 - Free: $0/month (basic inbox access, 1 user)
-- Starter: $19/month (up to 3 users, AI Assist Basic included)
-- Pro: $49/month (unlimited users, advanced workflows)
+- Pro: $49/month (unlimited users, AI Brain included, advanced workflows)
 
 ### Key Differences from WATI
 - **No Meta message markup** - Pay Meta/WhatsApp conversation fees directly

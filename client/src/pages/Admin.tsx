@@ -328,10 +328,10 @@ function SalespersonRolePayoutHint({ role }: { role: string }) {
   const r = role === "demo" ? "sales" : role || "sales";
   const text =
     r === "sales"
-      ? "$100 when a demo lead becomes a paying Starter or Pro subscriber. Free plan signups do not qualify. Demo completion alone does not create a payout."
+      ? "$100 when a demo lead becomes a paying Pro subscriber. Free plan signups do not qualify. Demo completion alone does not create a payout."
       : r === "setup"
         ? `$${ADMIN_DEFAULT_TASK_PAYOUT} per completed Growth Engine setup/onboarding session. Override setup payout below if needed.`
-        : `$100 per demo conversion when the lead becomes a paying Starter or Pro subscriber (free plans do not qualify), plus $${ADMIN_DEFAULT_TASK_PAYOUT} per completed GE setup session.`;
+        : `$100 per demo conversion when the lead becomes a paying Pro subscriber (free plans do not qualify), plus $${ADMIN_DEFAULT_TASK_PAYOUT} per completed GE setup session.`;
   return (
     <p className="mt-1.5 rounded-md border border-muted bg-muted/40 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground">
       {text}
@@ -451,7 +451,7 @@ function AdminAccessOverridesForm({ user, onApplied }: { user: AdminUser; onAppl
           onChange={(e) => setGeMode(e.target.value as EntitlementTriState)}
           aria-label="Growth Engine override"
         >
-          <option value="inherit">Use product rules (Pro + AI Brain + automations)</option>
+          <option value="inherit">Use product rules (active Pro + automations)</option>
           <option value="on">Force Growth Engine access on</option>
           <option value="off">Force Growth Engine access off</option>
         </select>
@@ -1376,7 +1376,7 @@ export function Admin() {
               <div className="p-4 border-b border-gray-200">
                 <h2 className="font-semibold text-gray-900">Demo conversion payouts</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  $100 when a demo lead becomes a paying Starter or Pro subscriber. Free plan signups do not qualify. Demo completion
+                  $100 when a demo lead becomes a paying Pro subscriber. Free plan signups do not qualify. Demo completion
                   alone does not create a payout. {SALES_PAYOUT_REVIEW_NOTE}
                 </p>
               </div>

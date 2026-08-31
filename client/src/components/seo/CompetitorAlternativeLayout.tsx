@@ -438,7 +438,7 @@ export function CompetitorAlternativeLayout({ content }: { content: CompetitorAl
             Compare WhachatCRM on your real workflows
           </h2>
           <p className="mb-8 text-emerald-100">
-            Start free to validate the Unified Inbox. Upgrade to Starter for chatbot and templates, or Pro for
+            Start free to validate the Unified Inbox. Upgrade to Pro for chatbot, automation, AI Brain, and
             unlimited users — Meta conversation fees pass through without WhachatCRM markup.
           </p>
           <Link href="/auth">

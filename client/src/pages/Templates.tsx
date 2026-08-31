@@ -776,7 +776,7 @@ function GrowthEnginesTab() {
           Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM follow-up logic.
         </p>
         <p className="w-full max-w-none overflow-visible text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
-          Premium engines require Pro + AI Brain because they use advanced automation and intelligence capacity.
+          Premium engines require an active Pro plan because they use advanced automation and intelligence capacity.
         </p>
       </div>
 

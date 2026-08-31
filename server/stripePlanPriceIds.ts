@@ -1,11 +1,22 @@
 /**
- * Stripe Price ID env mapping for Starter/Pro.
- * Yearly and monthly prices resolve to the same entitlement plan.
- * AI Brain is monthly-only — there is no yearly env key.
+ * Stripe Price ID env mapping.
+ * Public self-serve checkout is Pro only. Starter and AI Brain price IDs remain
+ * so webhooks can recognize historical subscriptions.
  */
 
 export type StripePaidPlan = "starter" | "pro";
+export type StripePublicCheckoutPlan = "pro";
 export type StripeBillingInterval = "monthly" | "yearly";
+
+export const STRIPE_PUBLIC_CHECKOUT_PLANS: readonly StripePublicCheckoutPlan[] = ["pro"];
+
+export const STARTER_CHECKOUT_RETIRED_CODE = "STARTER_NO_LONGER_OFFERED";
+export const STARTER_CHECKOUT_RETIRED_MESSAGE =
+  "Starter is no longer available for new purchases. Choose Free or Pro on the pricing page.";
+
+export const AI_BRAIN_ADDON_RETIRED_CODE = "AI_BRAIN_INCLUDED_IN_PRO";
+export const AI_BRAIN_ADDON_RETIRED_MESSAGE =
+  "AI Brain is included with Pro. Upgrade to Pro to use AI Brain.";
 
 export const STRIPE_PLAN_PRICE_ENV = {
   starter: {

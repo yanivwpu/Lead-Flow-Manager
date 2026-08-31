@@ -245,8 +245,8 @@
       "brainSalesTeam": "<brain>AI Brain</brain> — the intelligence behind your <team>AI Sales Team</team>.",
       "brainContext": "It learns your business context so <brand>WhachatCRM</brand> can recommend better next steps across conversations, prospects, and workflows.",
       "readyHeadline": "Ready for smarter AI?",
-      "readyBody": "Choose <starter>Starter</starter> or <pro>Pro</pro> to unlock <assist>AI Assist</assist>, then add <brain>AI Brain</brain> when you want the full intelligence layer.",
-      "cta": "Choose plan & AI options",
+      "readyBody": "Upgrade to <pro>Pro</pro> to unlock <assist>AI Assist</assist> and <brain>AI Brain</brain>. AI Brain is included with Pro.",
+      "cta": "Start Your 14-Day Free Trial",
       "viewPlans": "View plans"
     }
   },
@@ -311,7 +311,7 @@
       "notifications": "Email & push notifications",
       "webhooks3": "Core integrations",
       "aiAssistBasic": "AI Assist Basic included (reply suggestions & sentiment detection)",
-      "aiBrainAddon": "AI Brain add-on — premium intelligence layer (+$29/mo)",
+      "aiBrainAddon": "AI Brain is included with Pro",
       "everythingStarter": "Everything in Starter, plus:",
       "fiveNumbers": "Up to 5 WhatsApp Business numbers",
       "unlimitedTeam": "Unlimited users",
@@ -326,17 +326,17 @@
     "aiBrain": {
       "title": "AI Brain add-on",
       "subtitle": "Premium intelligence layer on top of AI Assist",
-      "price": "$29",
-      "perMonth": "/month",
-      "addon": "$29/mo ADD-ON",
-      "description": "Unlock the premium intelligence layer for business knowledge, lead scoring, qualifying questions, smarter Copilot recommendations, automation intelligence, handoff rules, and Growth Engine intelligence. Available on Starter or Pro.",
+      "price": "Included",
+      "perMonth": "with Pro",
+      "addon": "Included with Pro",
+      "description": "AI Brain is included with Pro. It adds business knowledge, lead scoring, qualifying questions, smarter Copilot recommendations, automation intelligence, handoff rules, and Growth Engine intelligence.",
       "feature1": "Business knowledge & qualifying context",
       "feature2": "Lead scoring & deeper Copilot",
       "feature3": "Automation intelligence & handoff rules",
       "feature4": "Growth Engine intelligence where your plan supports it",
-      "availableFor": "Available for Starter and Pro plan subscribers",
-      "unlockButton": "Add AI Brain — $29/mo",
-      "getStarterButton": "Get Starter to Access AI Features"
+      "availableFor": "Included with Pro",
+      "unlockButton": "Upgrade to Pro",
+      "getStarterButton": "Upgrade to Pro"
     },
     "notices": {
       "messageCosts": {
@@ -667,7 +667,7 @@
       "title": "Simple, Transparent Pricing",
       "subtitle": "Start for free. Upgrade only when you need more.",
       "freePlan": "Free plan for individuals",
-      "paidPlans": "Paid plans start at $19/month",
+      "paidPlans": "Pro starts at $49/month",
       "cancelAnytime": "Cancel anytime",
       "seePlans": "See Plans"
     },
@@ -766,7 +766,7 @@
     "checkEmail": "Check your email",
     "resetEmailSent": "If an account exists with this email, you will receive password reset instructions.",
     "checkEmailTitle": "Check your email",
-    "checkEmailPrimary": "We sent a verification link to {{email}}. Verify your email to start your 14-day Pro + AI Brain trial.",
+    "checkEmailPrimary": "We sent a verification link to {{email}}. Verify your email to start your 14-day Pro trial with AI Brain.",
     "checkEmailSpamHint": "If you don’t see it, check your Spam or Promotions folder.",
     "checkEmailLoginPending": "Your account still needs email verification before you can use WhachatCRM.",
     "resendVerification": "Resend verification email",
@@ -787,7 +787,7 @@
     "verifyMissingToken": "This verification link is missing a token.",
     "verifyInvalidLink": "This verification link is invalid or has expired.",
     "verifyNetworkError": "We couldn’t verify your email. Please try again.",
-    "verifyTrialStarted": "Your email is verified. Your 14-day Pro + AI Brain trial has started.",
+    "verifyTrialStarted": "Your email is verified. Your 14-day Pro trial with AI Brain has started.",
     "verifyContinue": "Your email is verified. You can continue to WhachatCRM.",
     "verifyNeedNewLink": "Need a new link? Return to Check your email to resend verification."
   },
@@ -922,9 +922,9 @@
       "platform": "Platform",
       "platformName": "WhachatCRM Pro",
       "platformPrice": "$49/mo",
-      "addon": "Add-On",
+      "addon": "Included",
       "addonName": "AI Brain",
-      "addonPrice": "$29/mo",
+      "addonPrice": "Included with Pro",
       "setup": "One-Time Template License",
       "setupName": "Automation Template",
       "setupOriginalPrice": "$199",
@@ -1080,7 +1080,7 @@
     "backSettings": "Back to Settings",
     "trialBanner": "All paid plans include a 14-day free trial.",
     "shopifyInstallBanner": "Shopify is connected. Next, connect WhatsApp or another messaging channel to bring customer conversations into your Unified Inbox. Already use WhatsApp Business App? You can keep using it with WhatsApp Coexistence.",
-    "shopifyChooseStarter": "Choose Starter",
+    "shopifyChooseStarter": "Choose Pro",
     "shopifyChoosePro": "Choose Pro",
     "shopifyChooseAiBrain": "Choose AI Brain",
     "shopifyManageInShopify": "Manage in Shopify",
@@ -1089,13 +1089,13 @@
     "shopifyManagedPricingInstructions": "Open WhachatCRM in your Shopify admin to choose or update your plan.",
     "trialNote": "14-day free Pro trial included",
     "trialState": {
-      "bannerHeadline": "🎉 You're currently using WhachatCRM Pro + AI Brain free for 14 days.",
+      "bannerHeadline": "🎉 You're currently using WhachatCRM Pro with AI Brain free for 14 days.",
       "bannerBodyShopify": "Connect your channels, explore all features, and choose a Shopify plan anytime before your trial ends.",
       "bannerBodyWeb": "Connect your channels, explore all features, and choose a paid plan anytime before your trial ends.",
       "daysRemaining_one": "{{count}} day left in your WhachatCRM trial.",
       "daysRemaining_other": "{{count}} days left in your WhachatCRM trial.",
-      "bannerShopify": "You're currently on a 14-day Pro + AI Brain trial. Choose a Shopify plan anytime to continue after your trial.",
-      "bannerWeb": "You're currently on a 14-day Pro + AI Brain trial. Choose a paid plan anytime to continue after your trial.",
+      "bannerShopify": "You're currently on a 14-day Pro trial with AI Brain. Choose a Shopify plan anytime to continue after your trial.",
+      "bannerWeb": "You're currently on a 14-day Pro trial with AI Brain. Choose a paid plan anytime to continue after your trial.",
       "freePlanBadge": "Base plan after trial",
       "freeAfterTrialNote": "Base plan after trial if no paid plan is selected.",
       "freeAfterTrialHelper": "If no Shopify plan is selected, your account will continue on the Free plan after the trial ends.",
@@ -1106,7 +1106,7 @@
       "aiBrainIncludedInTrial": "Included in your free trial",
       "aiBrainTrialHelper": "AI Brain is fully unlocked during your 14-day trial.",
       "shopifyBillingNote": "Billing is managed securely through Shopify. No credit card is required until you select a Shopify plan.",
-      "chooseStarterAfterTrial": "Choose Starter in Shopify",
+      "chooseStarterAfterTrial": "Choose Pro in Shopify",
       "keepProAfterTrialShopify": "Keep Pro After Trial",
       "keepProAfterTrialWeb": "Choose Pro after trial"
     },
@@ -1137,7 +1137,7 @@
       "proF2": "Deeper conversation context",
       "proF3": "Advanced AI assistance",
       "proF4": "AI Assist Enhanced included",
-      "brainTitle": "AI Brain add-on — $29/mo",
+      "brainTitle": "AI Brain — included with Pro",
       "brainDesc": "Optional add-on for Starter or Pro with deeper business memory, smarter suggestions, context assistance, insights, and advanced workflow intelligence.",
       "brainF1": "Deeper business memory",
       "brainF2": "Smarter suggestions and context assistance",
@@ -1169,7 +1169,7 @@
       },
       "starter": {
         "name": "Starter",
-        "price": "$19",
+        "price": "Retired",
         "period": "/mo",
         "desc": "For small businesses managing more conversations with built-in AI help",
         "f1": "500 active conversations",
@@ -1200,13 +1200,13 @@
         "f6": "Integrations",
         "f7": "Pipeline & tasks included",
         "f8": "Growth Engines access where eligible",
-        "f9": "AI Brain add-on available",
-        "upsell": "AI Brain add-on available for deeper intelligence.",
-        "cta": "Upgrade to Pro"
+        "f9": "AI Brain included",
+        "upsell": "AI Brain is included with Pro.",
+        "cta": "Start Your 14-Day Free Trial"
       },
       "aiBrain": {
-        "name": "AI Brain add-on",
-        "price": "$29",
+        "name": "AI Brain",
+        "price": "Included",
         "period": "/mo",
         "desc": "Optional add-on for Starter or Pro.",
         "f1": "Deeper business memory",
@@ -1250,7 +1250,7 @@
       "integrations": "Integrations",
       "growthEngines": "Growth Engines",
       "eligible": "Eligible",
-      "aiBrainAddon": "AI Brain add-on ($29/mo)",
+      "aiBrainAddon": "AI Brain included with Pro",
       "basic": "Basic",
       "full": "Full",
       "upTo3": "Up to 3",
@@ -1269,7 +1269,7 @@
       "q3": "Can I upgrade later?",
       "a3": "Yes. You can move to a higher plan as your team, conversation volume, and automation needs grow.",
       "q4": "What's the difference between Pro and AI Brain?",
-      "a4": "Pro unlocks unlimited users, 2,000 active conversations, advanced workflows, and Growth Engines access where eligible. AI Brain is an optional $29/mo intelligence layer for deeper business context, suggestions, insights, and AI workflow enhancements."
+      "a4": "Pro unlocks unlimited users, 2,000 active conversations, advanced workflows, Growth Engines access where eligible, and AI Brain. AI Brain is included with Pro — not a separate subscription."
     },
     "cta": {
       "title": "Start simple. Upgrade when your conversations grow.",
@@ -1286,7 +1286,7 @@
   },
   "trial": {
     "modal": {
-      "title": "You're in Pro + AI Trial 🚀",
+      "title": "You're in a Pro trial 🚀",
       "subtitle": "14 days to experience full automation power",
       "daysLeft_one": "{{count}} day left in your trial.",
       "daysLeft_other": "{{count}} days left in your trial.",
@@ -1295,13 +1295,13 @@
       "bullet3": "Higher conversation limits & Pro CRM features",
       "bullet4": "Full workflow & automation builder during trial",
       "footerNote": "After the trial, your account moves to Free unless you upgrade. Your data stays safe, but Pro and AI automations may pause until you subscribe.",
-      "ctaUnlock": "Unlock Pro + AI permanently",
+      "ctaUnlock": "Unlock Pro permanently",
       "ctaViewPlans": "View plans"
     },
     "pill": {
-      "badge": "Pro + AI Trial",
+      "badge": "Pro Trial",
       "daysLeftCompact": "{{days}}d left",
-      "tooltipActive": "Pro + AI Trial active",
+      "tooltipActive": "Pro trial active",
       "daysLeftTooltip_one": "{{count}} day remaining",
       "daysLeftTooltip_other": "{{count}} days remaining"
     }

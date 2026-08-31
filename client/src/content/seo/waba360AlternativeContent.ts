@@ -18,16 +18,16 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
   meta: {
     title: "360dialog Alternative 2026: API BSP vs Complete WhatsApp CRM | WhachatCRM",
     description:
-      "Compare 360dialog (WhatsApp API/BSP) vs WhachatCRM: developers get API access; SMBs get Embedded Signup, Unified Inbox, CRM, Starter+ chatbot/templates, and unlimited Pro users.",
+      "Compare 360dialog (WhatsApp API/BSP) vs WhachatCRM: developers get API access; SMBs get Embedded Signup, Unified Inbox, CRM, Pro chatbot/templates, and unlimited Pro users.",
     keywords:
       "360dialog alternative, WABA 360 alternative, 360dialog vs WhachatCRM, WhatsApp BSP alternative, WhatsApp Cloud API CRM, 360dialog competitor",
     h1: "360dialog Alternative: WhatsApp API Access vs Ready-Made CRM Inbox",
   },
   heroEyebrow: "360dialog Alternative · Updated for 2026",
   heroLead:
-    "360dialog is a strong WhatsApp Business API provider for teams that want direct API access and developer control. WhachatCRM is for operators who want Meta Embedded Signup, a ready Unified Inbox, CRM, and Starter+ automations — without building the product layer yourself.",
+    "360dialog is a strong WhatsApp Business API provider for teams that want direct API access and developer control. WhachatCRM is for operators who want Meta Embedded Signup, a ready Unified Inbox, CRM, and Pro automations — without building the product layer yourself.",
   quickSummary:
-    "Choose 360dialog when you have engineering capacity and only need WhatsApp API pipes — you will build inbox, CRM, chatbot, and reporting in your own stack. Choose WhachatCRM when you want Embedded Signup onboarding (Twilio not required), a multi-channel inbox with Email and Meta social channels, chatbot and preset templates on Starter+, and unlimited Pro users. BSP pricing and Meta fee handling vary — confirm current 360dialog packaging on their site.",
+    "Choose 360dialog when you have engineering capacity and only need WhatsApp API pipes — you will build inbox, CRM, chatbot, and reporting in your own stack. Choose WhachatCRM when you want Embedded Signup onboarding (Twilio not required), a multi-channel inbox with Email and Meta social channels, chatbot and preset templates on Pro, and unlimited Pro users. BSP pricing and Meta fee handling vary — confirm current 360dialog packaging on their site.",
   whoFor: [
     "Developers evaluating whether to keep building on 360dialog API vs buying a complete inbox",
     "SMBs who tried BSP-only paths and need a self-serve CRM without custom development",
@@ -67,7 +67,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     {
       title: "Chatbot and templates are on you",
       description:
-        "Flow builders, preset automations, and agent assignment require custom development or additional tools — unlike Starter+ WhachatCRM where they ship in-product.",
+        "Flow builders, preset automations, and agent assignment require custom development or additional tools — unlike Pro WhachatCRM where they ship in-product.",
     },
     {
       title: "Higher technical bar for SMB operators",
@@ -78,7 +78,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
   whachatBetterWhen: [
     "You want Meta Embedded Signup and WhatsApp Cloud API without hiring developers for day-one inbox",
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat in one timeline",
-    "You want chatbot, Flow Builder, and preset automation templates on Starter+ — not on Free",
+    "You want chatbot, Flow Builder, and preset automation templates on Pro — not on Free",
     "You need CRM, tags, pipeline, and team collaboration without building middleware",
     "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free matter",
     "You want unlimited users on Pro ($49/mo) instead of engineering headcount for every new agent workflow",
@@ -92,7 +92,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     {
       title: "Self-serve for non-developers",
       description:
-        "Support and sales teams can work in a shared inbox on day one. Free validates workflows; Starter+ unlocks automation — no webhook project required for basic ops.",
+        "Support and sales teams can work in a shared inbox on day one. Free validates workflows; Pro unlocks automation — no webhook project required for basic ops.",
     },
   ],
   matrix: withCompetitorMatrix({
@@ -135,7 +135,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     competitorSummary:
       "360dialog sells WhatsApp API/BSP access — typically usage- and plan-based rather than a complete CRM subscription. Philosophy: pay for API connectivity and build your product layer. Confirm current plan tiers, conversation billing, and any partner fees on 360dialog's official site; we do not quote live totals here.",
     whachatSummary:
-      "WhachatCRM: Free forever (1 user, inbox + CRM, no chatbot), Starter $19/mo (3 users, chatbot + templates + Integrations), Pro $49/mo unlimited users. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
+      "WhachatCRM: Free forever (1 user, inbox + CRM, basic WhatsApp templates). Pro $49/mo with unlimited users, chatbot, automation, AI Copilot, and AI Brain included. 0% WhachatCRM markup on Meta WhatsApp conversation fees.",
   },
   freeVsPaid: DEFAULT_FREE_VS_PAID,
   faqs: [
@@ -158,10 +158,10 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     {
       question: "What if my team is half developers and half support agents?",
       answer:
-        "Developers may prefer 360dialog for custom products. Mixed teams that need agents in a shared inbox without sprint cycles usually fit WhachatCRM — chatbot and preset campaign templates on Starter+, unlimited agents on Pro.",
+        "Developers may prefer 360dialog for custom products. Mixed teams that need agents in a shared inbox without sprint cycles usually fit WhachatCRM — chatbot and preset campaign templates on Pro, unlimited agents on Pro.",
     },
   ],
   recommendation:
-    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Starter+ chatbot/templates, Shopify/GHL on Free, and unlimited Pro users — without building the operations layer yourself.",
+    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Pro chatbot/templates, Shopify/GHL on Free, and unlimited Pro users — without building the operations layer yourself.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

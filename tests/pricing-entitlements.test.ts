@@ -93,7 +93,7 @@ test("inbox AI reply generations exist internally but are not public pricing cop
   assert.ok(!/Product expected Starter=50 \/ Pro=200 replies/.test(entitlements));
 });
 
-test("AI Brain is $29 add-on", () => {
+test("AI Brain historical add-on amount remains 29 for webhook matching only", () => {
   assert.equal(AI_BRAIN_ADDON_PRICE_USD, 29);
 });
 
@@ -124,23 +124,24 @@ test("compare rows include Prospect AI + chatbot", () => {
   const discoveries = rows.find((r) => r.featureKey === "prospectDiscoveries");
   assert.ok(discoveries);
   assert.equal(discoveries!.free, "50/month");
-  assert.equal(discoveries!.starter, "100/month");
+  assert.equal((discoveries as { starter?: string }).starter, undefined);
   assert.equal(discoveries!.pro, "500/month");
   const chatbot = rows.find((r) => r.featureKey === "chatbotWidget");
   assert.equal(chatbot!.free, false);
-  assert.equal(chatbot!.starter, true);
+  assert.equal((chatbot as { starter?: boolean }).starter, undefined);
   assert.equal(chatbot!.pro, true);
-  const brain = rows.find((r) => r.featureKey === "aiBrainAddon");
-  assert.equal(brain!.free, "Not included");
-  assert.equal(brain!.starter, "Add-on");
-  assert.equal(brain!.pro, "Add-on");
+  const brain = rows.find((r) => r.featureKey === "aiBrain");
+  assert.equal(brain!.free, "Not included after trial");
+  assert.equal(brain!.pro, "Included");
+  assert.equal(
+    rows.find((r) => r.featureKey === "aiBrainAddon"),
+    undefined,
+  );
   const integrations = rows.find((r) => r.featureKey === "integrations");
   assert.equal(integrations!.free, true);
-  assert.equal(integrations!.starter, true);
   assert.equal(integrations!.pro, true);
   const templates = rows.find((r) => r.featureKey === "templateMessaging");
   assert.equal(templates!.free, "Approved 1:1 template sends");
-  assert.equal(templates!.starter, "Templates with workflow automation");
   assert.equal(templates!.pro, "Templates with workflow automation");
   assert.equal(
     rows.find((r) => r.featureKey === "aiAssist"),
@@ -150,7 +151,6 @@ test("compare rows include Prospect AI + chatbot", () => {
   const growth = rows.find((r) => r.featureKey === "growthEngines");
   assert.ok(growth);
   assert.equal(growth!.free, false);
-  assert.equal(growth!.starter, false);
   assert.equal(growth!.pro, "Growth Engine Ready");
 });
 
@@ -175,6 +175,7 @@ test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)",
   assert.ok(!/Basic WhatsApp templates/i.test(pro));
   assert.match(pro, /AI Chatbot & Website Widget/);
   assert.match(pro, /Industry Growth Engines/);
+  assert.match(pro, /AI Brain included/);
   assert.ok(!/credits/i.test(pro));
 });
 
@@ -208,25 +209,21 @@ test("Pricing hero copy is localized and pills stay removed", () => {
   const he = getLocalizedPricingPage("he");
   assert.equal(
     en.hero.h1,
-    "Powerful tools to grow your business — pricing that grows with you.",
+    "Simple pricing. Everything you need to grow.",
   );
-  assert.match(en.hero.subtitle, /Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging/);
-  assert.match(en.hero.subtitle, /Upgrade only when you need/);
+  assert.equal(en.hero.subtitle, "Start free. Upgrade when you’re ready to scale.");
   assert.equal(
     en.hero.trustLine,
-    "14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees",
+    "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
   );
   assert.equal(
     es.hero.h1,
-    "Herramientas potentes para hacer crecer tu negocio — precios que crecen contigo.",
+    "Precios simples. Todo lo que necesitas para crecer.",
   );
-  assert.match(es.hero.subtitle, /Empieza gratis con Prospect AI/);
-  assert.match(es.hero.subtitle, /solo cuando necesites/);
-  assert.match(es.hero.trustLine, /Prueba de 14 días de Pro \+ AI Brain/);
-  assert.equal(he.hero.h1, "כלים חזקים לצמיחת העסק — תמחור שגדל יחד איתכם.");
-  assert.match(he.hero.subtitle, /התחילו בחינם עם Prospect AI/);
-  assert.match(he.hero.subtitle, /שדרגו רק כשאתם צריכים/);
-  assert.match(he.hero.trustLine, /ניסיון 14 יום ל-Pro \+ AI Brain/);
+  assert.match(es.hero.subtitle, /Empieza gratis/);
+  assert.match(es.hero.trustLine, /AI Brain incluido/);
+  assert.equal(he.hero.h1, "תמחור פשוט. כל מה שצריך כדי לצמוח.");
+  assert.match(he.hero.trustLine, /AI Brain כלול/);
 });
 
 test("Pricing page uses shared entitlements and avoids competitor names", () => {
@@ -243,13 +240,14 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(pricing.includes("section-pricing-hero"));
   assert.ok(pricing.includes("text-pricing-hero-title"));
   assert.ok(pricing.includes("text-pricing-hero-subtitle"));
-  assert.ok(!pricing.includes("text-pricing-hero-trust"));
-  assert.ok(!pricing.includes("pricingContent.hero.trustLine"));
+  assert.ok(pricing.includes("text-pricing-hero-trust"));
+  assert.ok(pricing.includes("pricingContent.hero.trustLine"));
   assert.ok(pricing.includes("TransparentPricingStrip"));
   assert.ok(pricing.includes("section-pricing-cards"));
   assert.ok(pricing.includes("PricingBottomCta"));
-  assert.ok(pricing.includes("section-optional-addon"));
-  assert.ok(pricing.includes('md:grid-cols-3'));
+  assert.ok(!pricing.includes("section-optional-addon"));
+  assert.ok(pricing.includes("md:grid-cols-2"));
+  assert.ok(!pricing.includes("md:grid-cols-3"));
   assert.ok(!pricing.includes("xl:grid-cols-4"));
   assert.ok(!pricing.includes("AiBrainSpotlight"));
   assert.ok(pricing.includes("billing-interval-toggle"));
@@ -266,10 +264,9 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
     "utf8",
   );
   assert.ok(content.includes("0% WhachatCRM markup"));
-  assert.ok(content.includes("Powerful tools to grow your business — pricing that grows with you."));
-  assert.ok(content.includes("Start free with Prospect AI, Unified Inbox, integrations, and WhatsApp messaging."));
-  assert.ok(content.includes("Upgrade only when you need more conversations"));
-  assert.ok(content.includes("14-day Pro + AI Brain trial · 0% WhachatCRM markup on Meta fees · No setup fees"));
+  assert.ok(content.includes("Simple pricing. Everything you need to grow."));
+  assert.ok(content.includes("Start free. Upgrade when you’re ready to scale."));
+  assert.ok(content.includes("14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees"));
   assert.ok(!content.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(!content.includes("Works with your customer channels"));
   assert.ok(content.includes("Transparent Pricing"));
@@ -282,7 +279,7 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(content.includes("Are WhatsApp templates included on Free?"));
   assert.ok(content.includes("Monthly Prospect AI Discoveries"));
   assert.ok(content.includes("Multi-channel Inbox"));
-  assert.ok(content.includes("Can I try Pro and AI Brain before upgrading?"));
+  assert.ok(content.includes("Can I try Pro before upgrading?"));
   assert.ok(content.includes("What counts as an active conversation?"));
   assert.ok(content.includes("What are Meta conversation fees?"));
   assert.ok(content.includes("FULL_PRO_AI_TRIAL_COPY"));

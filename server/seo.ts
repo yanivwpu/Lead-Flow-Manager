@@ -320,17 +320,17 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   "/respond-io-alternative": {
     title: "Best Respond.io Alternative | WhachatCRM",
-    description: "Switch from Respond.io to WhachatCRM: Starts at $19/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads.",
+    description: "Switch from Respond.io to WhachatCRM: Starts at $49/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads.",
     canonical: `${BASE_URL}/respond-io-alternative`
   },
   "/wati-alternative": {
     title: "Best WATI Alternative for SMBs | WhachatCRM",
-    description: "Switch from WATI to WhachatCRM: $19/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams.",
+    description: "Switch from WATI to WhachatCRM: $49/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams.",
     canonical: `${BASE_URL}/wati-alternative`
   },
   "/pabbly-alternative": {
     title: "Best Pabbly Alternative | WhachatCRM",
-    description: "Switch from Pabbly Chatflow to WhachatCRM: $19/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams.",
+    description: "Switch from Pabbly Chatflow to WhachatCRM: $49/mo, no credit limits, free plan available. Visual chatbot builder & unified inbox for small teams.",
     canonical: `${BASE_URL}/pabbly-alternative`
   },
   "/interakt-alternative": {
@@ -341,7 +341,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   "/waba360-alternative": {
     title: "Best 360dialog Alternative | WhachatCRM",
-    description: "Switch from 360dialog to WhachatCRM: $19/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed.",
+    description: "Switch from 360dialog to WhachatCRM: $49/mo, built-in CRM features, visual chatbot builder, team inbox. No separate inbox tool needed.",
     canonical: `${BASE_URL}/waba360-alternative`
   },
   "/crm-for-whatsapp-business": {
@@ -352,7 +352,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   "/zoko-alternative": {
     title: "Best Zoko Alternative for Shopify | WhachatCRM",
-    description: "Switch from Zoko to WhachatCRM: $19/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers.",
+    description: "Switch from Zoko to WhachatCRM: $49/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers.",
     canonical: `${BASE_URL}/zoko-alternative`
   },
   "/manychat-alternative": {

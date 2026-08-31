@@ -183,6 +183,8 @@ const NO_COMPRESS_PATH_PREFIXES = [
   "/api/shopify/webhooks",
   "/api/webhooks/calendly",
   "/api/webhooks/woocommerce",
+  "/api/ext/webhook",
+  "/api/ghl/webhook",
 ];
 
 app.use(compression({
@@ -267,30 +269,42 @@ app.use('/api/webhooks/woocommerce', express.json({
   }
 }));
 
-// Do NOT run the global JSON parser on /api/webhook/meta — a second parse can
+// GHL Marketplace: capture exact raw bytes for X-GHL-Signature (Ed25519) / X-WH-Signature.
+app.use('/api/ext/webhook', express.json({
+  type: "*/*",
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use('/api/ghl/webhook', express.json({
+  type: "*/*",
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+
+// Do NOT run the global JSON parser on signature-verified webhook paths — a second parse can
 // consume an already-read stream and replace req.body with {}, breaking HMAC + routing.
+function skipGlobalBodyParser(path: string): boolean {
+  return (
+    path.startsWith("/api/webhook/meta") ||
+    path.startsWith("/api/webhooks/calendly") ||
+    path.startsWith("/api/webhooks/woocommerce") ||
+    path === "/api/ext/webhook" ||
+    path === "/api/ghl/webhook"
+  );
+}
+
 const globalJsonParser = express.json();
 app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.path.startsWith("/api/webhook/meta")) {
-    return next();
-  }
-  if (req.path.startsWith("/api/webhooks/calendly")) {
-    return next();
-  }
-  if (req.path.startsWith("/api/webhooks/woocommerce")) {
+  if (skipGlobalBodyParser(req.path)) {
     return next();
   }
   return globalJsonParser(req, _res, next);
 });
 const globalUrlencodedParser = express.urlencoded({ extended: false });
 app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.path.startsWith("/api/webhook/meta")) {
-    return next();
-  }
-  if (req.path.startsWith("/api/webhooks/calendly")) {
-    return next();
-  }
-  if (req.path.startsWith("/api/webhooks/woocommerce")) {
+  if (skipGlobalBodyParser(req.path)) {
     return next();
   }
   return globalUrlencodedParser(req, _res, next);

@@ -2366,6 +2366,19 @@ export const ghlMarketplaceInstalls = pgTable(
     uninstallDate: timestamp("uninstall_date"),
     pricePlan: text("price_plan"),
     billingStatus: text("billing_status"),
+    appId: text("app_id"),
+    marketplacePlanId: text("marketplace_plan_id"),
+    paymentStatus: text("payment_status"),
+    ghlUserId: text("ghl_user_id"),
+    previousVersionId: text("previous_version_id"),
+    versionId: text("version_id"),
+    ghlTrialOnTrial: boolean("ghl_trial_on_trial"),
+    ghlTrialDuration: integer("ghl_trial_duration"),
+    ghlTrialStartDate: timestamp("ghl_trial_start_date"),
+    lastWebhookId: text("last_webhook_id"),
+    lastEventOccurredAt: timestamp("last_event_occurred_at"),
+    lastEventType: text("last_event_type"),
+    unknownPlanWarning: text("unknown_plan_warning"),
     integrationId: varchar("integration_id").references(() => integrations.id, { onDelete: "set null" }),
     whachatUserId: varchar("whachat_user_id").references(() => users.id, { onDelete: "set null" }),
     lastSyncedAt: timestamp("last_synced_at"),
@@ -2388,6 +2401,16 @@ export const insertGhlMarketplaceInstallSchema = createInsertSchema(ghlMarketpla
 });
 export type GhlMarketplaceInstall = typeof ghlMarketplaceInstalls.$inferSelect;
 export type InsertGhlMarketplaceInstall = z.infer<typeof insertGhlMarketplaceInstallSchema>;
+
+/** Lifecycle webhook idempotency that does not require an integrations row. */
+export const ghlMarketplaceWebhookDedup = pgTable("ghl_marketplace_webhook_dedup", {
+  webhookId: text("webhook_id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  companyId: text("company_id"),
+  locationId: text("location_id"),
+  occurredAt: timestamp("occurred_at"),
+  processedAt: timestamp("processed_at").defaultNow(),
+});
 
 /** Internal prospect import jobs (GHL → YaBa workspace, provider-agnostic). */
 export const prospectImportJobs = pgTable("prospect_import_jobs", {

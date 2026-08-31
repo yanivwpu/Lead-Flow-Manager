@@ -124,7 +124,10 @@ export function getLocalizedPlanPricingHighlights(
   }
   if (limits.chatbotEnabled) lines.push(content.highlights.chatbotWidget);
   if (limits.workflowsEnabled) lines.push(content.highlights.workflowAutomation);
-  if (plan === "pro") lines.push(content.highlights.growthEnginesRequired);
+  if (plan === "pro") {
+    lines.push(content.highlights.aiBrainIncluded);
+    lines.push(content.highlights.growthEnginesRequired);
+  }
   return lines;
 }
 
@@ -139,7 +142,6 @@ export function buildLocalizedPricingCompareRows(
   const includeGrowthEngines = opts?.includeGrowthEngines !== false;
   const content = getLocalizedPricingPage(locale);
   const free = PLAN_LIMITS.free;
-  const starter = PLAN_LIMITS.starter;
   const pro = PLAN_LIMITS.pro;
   const cells = content.compareCells;
 
@@ -148,119 +150,102 @@ export function buildLocalizedPricingCompareRows(
       group: "MESSAGING",
       featureKey: "activeConversations",
       free: formatConversationsLocalized(free.conversationsPerMonth, locale),
-      starter: formatConversationsLocalized(starter.conversationsPerMonth, locale),
       pro: formatConversationsLocalized(pro.conversationsPerMonth, locale),
     },
     {
       group: "MESSAGING",
       featureKey: "users",
       free: formatUsersLocalized(free.maxUsers, content),
-      starter: formatUsersLocalized(starter.maxUsers, content),
       pro: formatUsersLocalized(pro.maxUsers, content),
     },
     {
       group: "MESSAGING",
       featureKey: "whatsappNumbers",
       free: String(free.maxWhatsappNumbers),
-      starter: String(starter.maxWhatsappNumbers),
       pro: formatPricingTemplate(cells.upTo, { n: pro.maxWhatsappNumbers }),
     },
     {
       group: "MESSAGING",
       featureKey: "unifiedInbox",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "MESSAGING",
       featureKey: "supportedChannels",
       free: cells.connectedChannels,
-      starter: cells.connectedChannels,
       pro: cells.connectedChannels,
     },
     {
       group: "MESSAGING",
       featureKey: "templateMessaging",
       free: cells.templateOneToOne,
-      starter: cells.templateAutomation,
       pro: cells.templateAutomation,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectDiscoveries",
       free: `${PROSPECT_AI_MONTHLY_QUOTAS.free}${cells.perMonth}`,
-      starter: `${PROSPECT_AI_MONTHLY_QUOTAS.starter}${cells.perMonth}`,
       pro: `${PROSPECT_AI_MONTHLY_QUOTAS.pro}${cells.perMonth}`,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectReview",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectCampaigns",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "messageCreation",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectArchive",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "CHATBOT",
       featureKey: "chatbotWidget",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AUTOMATION",
       featureKey: "workflowAutomation",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AUTOMATION",
       featureKey: "followUps",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AI",
-      featureKey: "aiBrainAddon",
-      free: cells.notIncluded,
-      starter: cells.addOn,
-      pro: cells.addOn,
+      featureKey: "aiBrain",
+      free: cells.notIncludedAfterTrial,
+      pro: cells.included,
     },
     {
       group: "TEAM",
       featureKey: "assignment",
       free: false,
-      starter: false,
       pro: true,
     },
     {
       group: "SUPPORT",
       featureKey: "integrations",
       free: true,
-      starter: true,
       pro: true,
     },
   ];
@@ -270,7 +255,6 @@ export function buildLocalizedPricingCompareRows(
       group: "GROWTH ENGINES",
       featureKey: "growthEngines",
       free: false,
-      starter: false,
       pro: cells.growthEngineReady,
     });
   }

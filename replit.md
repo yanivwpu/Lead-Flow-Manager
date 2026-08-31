@@ -518,12 +518,11 @@ The application requires the following environment variables:
 - **Message count**: Each window tracks message count for throttling
 - **Both directions**: Inbound and outbound messages tracked
 
-### Subscription Plans
-| Plan | Price | Conversations/mo | Users | WhatsApp Numbers | Follow-ups |
-|------|-------|------------------|-------|------------------|------------|
-| Free | $0 | 100 | 1 | 1 | No |
-| Starter | $19 | 500 | 3 | 1 | Yes |
-| Pro | $49 | 2,000 | 10 | 3 | Yes |
+### Subscription Plans (public self-serve)
+| Plan | Price | Conversations/mo | Users | WhatsApp numbers | AI Brain |
+|------|-------|------------------|-------|------------------|----------|
+| Free | $0 | 50 | 1 | 1 | Trial only |
+| Pro | $49/mo ($490/year) | 2,000 | Unlimited | 5 | Included |
 
 ## API Endpoints
 

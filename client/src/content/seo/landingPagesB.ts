@@ -265,7 +265,7 @@ export const aiLeadScoringConfig: SeoLandingPageConfig = {
     },
     {
       question: "Which plan includes AI scoring?",
-      answer: "AI Assist features begin on Starter; deeper AI Brain capabilities are available as an add-on on Starter and Pro.",
+      answer: "AI Assist and AI Brain are included with Pro. Free does not include AI Brain after the trial.",
     },
     {
       question: "Can I disable AI for certain inboxes?",
@@ -362,7 +362,7 @@ export const sharedTeamInboxConfig: SeoLandingPageConfig = {
       id: "scale",
       title: "From two agents to unlimited users",
       paragraphs: [
-        "Starter supports small teams; Pro removes user caps for growing support and sales departments. Same shared inbox powers Shopify support squads and real estate brokerages with dozens of agents.",
+        "Pro removes user caps for growing support and sales departments. Same shared inbox powers Shopify support squads and real estate brokerages with dozens of agents.",
         "Pair with Unified Inbox for channel coverage and Automation Templates for consistent follow-ups when owners go offline.",
       ],
     },
@@ -370,7 +370,7 @@ export const sharedTeamInboxConfig: SeoLandingPageConfig = {
   faqs: [
     {
       question: "How many users can access the inbox?",
-      answer: "Free includes one user. Starter supports up to three. Pro includes unlimited users.",
+      answer: "Free includes one user. Pro includes unlimited users.",
     },
     {
       question: "Can I restrict agents to assigned threads only?",
@@ -486,7 +486,7 @@ export const automationTemplatesConfig: SeoLandingPageConfig = {
   faqs: [
     {
       question: "Are templates included on Free?",
-      answer: "Basic automations exist on Free; full preset library and advanced workflows require Starter or Pro.",
+      answer: "Basic automations exist on Free; the full preset library and advanced workflows require Pro.",
     },
     {
       question: "Can I duplicate and edit templates?",

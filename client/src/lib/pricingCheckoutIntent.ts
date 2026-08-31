@@ -226,6 +226,7 @@ export function shouldResumePricingCheckout(opts: {
   if (opts.authLoading || !opts.hasUser || !opts.subscriptionResolved) return false;
   if (opts.isShopify) return false;
   if (!opts.intent) return false;
+  if (opts.intent.plan === "starter") return false;
   if (opts.billingPlan === opts.intent.plan && !opts.isActiveProAiTrial) return false;
   return true;
 }

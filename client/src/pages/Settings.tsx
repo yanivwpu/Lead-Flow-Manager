@@ -740,8 +740,14 @@ export function Settings() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
-      toast({ title: "Subscription Canceled", description: data.message });
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      toast({
+        title: "Open billing portal",
+        description: data.message || "Manage or cancel your subscription in Stripe. Your plan stays active until Stripe confirms cancellation.",
+      });
     },
   });
 
@@ -983,7 +989,7 @@ export function Settings() {
                   {atTeamLimit && effectivePlan === "free" && (
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                       <p className="mb-2">
-                        Free includes 1 user. Upgrade to Starter to invite up to 3 users.
+                        Free includes 1 user. Upgrade to Pro to invite unlimited users.
                       </p>
                       <Button
                         type="button"
@@ -995,7 +1001,7 @@ export function Settings() {
                           setUpgradeModalOpen(true);
                         }}
                       >
-                        Upgrade to Starter
+                        Upgrade to Pro
                       </Button>
                     </div>
                   )}
@@ -1079,7 +1085,7 @@ export function Settings() {
                   </div>
                   {activeProAiTrial ? (
                     <>
-                      <p className="text-2xl font-bold text-gray-900 mb-1">Pro + AI Brain trial</p>
+                      <p className="text-2xl font-bold text-gray-900 mb-1">Pro trial with AI Brain</p>
                       <p className="text-sm text-emerald-800 font-medium mb-1">
                         {trialDaysLeft > 0
                           ? `${trialDaysLeft} day${trialDaysLeft === 1 ? "" : "s"} remaining`

@@ -3,6 +3,7 @@ import { users } from "@shared/schema";
 import { and, isNull, isNotNull, lte, eq } from "drizzle-orm";
 import { shouldSendTrialExpirationEmail } from "@shared/trialExpirationEmailEligibility";
 import { sendTrialExpirationEmail } from "./email";
+import { getGhlMarketplacePaidUserIds } from "./ghlMarketplaceService";
 
 function firstName(name: string | null | undefined): string {
   return (name || "there").split(" ")[0] || "there";
@@ -54,10 +55,14 @@ export async function runTrialExpirationEmails(): Promise<{
         ),
       );
 
+    const ghlPaidUserIds = await getGhlMarketplacePaidUserIds();
+
     console.log(`[Cron] Checking ${candidates.length} user(s) for trial-expiration email`);
 
     for (const user of candidates) {
-      const decision = shouldSendTrialExpirationEmail(user, now);
+      const decision = shouldSendTrialExpirationEmail(user, now, {
+        ghlMarketplaceProActive: ghlPaidUserIds.has(user.id),
+      });
       if (!decision.send) {
         skipped++;
         continue;

@@ -171,7 +171,7 @@ export function Blog() {
             <Link href="/pricing">
               <a className="block p-4 bg-gray-50 rounded-xl hover:bg-brand-green/5 transition-colors group">
                 <h3 className="font-semibold text-gray-900 group-hover:text-brand-green mb-1">Pricing Plans</h3>
-                <p className="text-sm text-gray-500">Free plan forever, Starter from $19/mo</p>
+                <p className="text-sm text-gray-500">Free plan forever. Upgrade to Pro when you're ready.</p>
               </a>
             </Link>
             <Link href="/respond-io-alternative">

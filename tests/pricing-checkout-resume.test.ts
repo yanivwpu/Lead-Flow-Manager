@@ -29,15 +29,13 @@ const resumeBase = {
   isActiveProAiTrial: false,
 };
 
-test("A–D: logged-out upgrade encodes plan+interval for auth redirect and resume", () => {
-  const cases = [
-    { plan: "starter", billingInterval: "monthly" },
-    { plan: "starter", billingInterval: "yearly" },
-    { plan: "pro", billingInterval: "monthly" },
-    { plan: "pro", billingInterval: "yearly" },
-  ] as const;
+test("A–D: logged-out Pro upgrade encodes plan+interval; old Starter URLs do not resume checkout", () => {
+  const proCases = [
+    { plan: "pro" as const, billingInterval: "monthly" as const },
+    { plan: "pro" as const, billingInterval: "yearly" as const },
+  ];
 
-  for (const c of cases) {
+  for (const c of proCases) {
     const href = buildPricingAuthRedirect({
       pricingPath: "/pricing",
       plan: c.plan,
@@ -51,6 +49,16 @@ test("A–D: logged-out upgrade encodes plan+interval for auth redirect and resu
     assert.equal(
       shouldResumePricingCheckout({ ...resumeBase, intent }),
       true,
+    );
+  }
+
+  for (const billingInterval of ["monthly", "yearly"] as const) {
+    const intent = parsePricingCheckoutIntent(`checkout=starter&billing=${billingInterval}`);
+    assert.deepEqual(intent, { plan: "starter", billingInterval });
+    assert.equal(
+      shouldResumePricingCheckout({ ...resumeBase, intent }),
+      false,
+      "old Starter checkout URLs must not auto-charge Pro",
     );
   }
 });

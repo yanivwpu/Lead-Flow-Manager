@@ -3,7 +3,7 @@ import { RGE_TEMPLATE_ID } from '@shared/rgePaths';
 import { getUncachableStripeClient } from './stripeClient';
 import { fulfillRgePurchaseAfterPayment, logRgeStripeWebhook } from './rgePurchase';
 import { storage } from './storage';
-import { entitlementPlanFromStripePriceIds } from './stripePlanPriceIds';
+import { buildUserUpdatesFromStripeSubscription } from './stripeSubscriptionSync';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string): Promise<void> {
@@ -59,25 +59,17 @@ export class WebhookHandlers {
       const items = subscription?.items?.data || [];
       const priceIds: string[] = items.map((it: any) => it?.price?.id).filter(Boolean);
 
-      const aiBrainMonthly = process.env.STRIPE_AI_BRAIN_MONTHLY_PRICE_ID;
-
-      // Yearly and monthly Price IDs map to the same entitlement plan.
-      const billingPlan = entitlementPlanFromStripePriceIds(priceIds);
-
-      const hasAIBrainAddon = !!(aiBrainMonthly && priceIds.includes(aiBrainMonthly));
-
       const currentPeriodEndSec: number | undefined = subscription?.current_period_end;
       const currentPeriodStartSec: number | undefined = subscription?.current_period_start;
 
-      const updates: Record<string, any> = {
-        stripeSubscriptionId: subscription?.id || user.stripeSubscriptionId,
-        subscriptionStatus: subscription?.status || user.subscriptionStatus,
-        ...(billingPlan ? { billingPlan } : {}),
-        ...(currentPeriodStartSec ? { currentPeriodStart: new Date(currentPeriodStartSec * 1000) } : {}),
-        ...(currentPeriodEndSec ? { currentPeriodEnd: new Date(currentPeriodEndSec * 1000) } : {}),
-        // Reuse this flag as a generic "AI Brain entitlement" boolean; name is historical.
-        shopifyAIBrainEnabled: hasAIBrainAddon || user.shopifyAIBrainEnabled,
-      };
+      const updates = buildUserUpdatesFromStripeSubscription({
+        status: subscription?.status,
+        cancelAtPeriodEnd: !!subscription?.cancel_at_period_end,
+        priceIds,
+        currentPeriodStartSec,
+        currentPeriodEndSec,
+        subscriptionId: subscription?.id || user.stripeSubscriptionId,
+      });
 
       const updated = await storage.updateUser(user.id, updates);
       safeLog("[Stripe Webhook] Updated user subscription fields", {
@@ -85,8 +77,8 @@ export class WebhookHandlers {
         customerId,
         subscriptionId: subscription?.id,
         priceIds,
-        billingPlan,
-        hasAIBrainAddon,
+        billingPlan: updates.billingPlan,
+        subscriptionStatus: updates.subscriptionStatus,
         updated: !!updated,
       });
     };
@@ -168,7 +160,7 @@ export class WebhookHandlers {
     }
 
     // Handle subscription renewal - reset monthly conversation counter
-    if (eventType === 'customer.subscription.updated' || eventType === 'customer.subscription.created') {
+    if (eventType === 'customer.subscription.updated' || eventType === 'customer.subscription.created' || eventType === 'customer.subscription.deleted') {
       const subscription = obj;
       const customerId = subscription.customer;
       

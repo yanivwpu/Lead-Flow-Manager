@@ -62,13 +62,11 @@ const emptyActivation: ActivationStatusPayload = {
   checklistComplete: false,
 };
 
-test("A–D: logged-out Starter/Pro monthly/yearly survive login redirect and auto-resume", () => {
+test("A–D: logged-out Pro monthly/yearly survive login redirect and auto-resume", () => {
   const cases = [
-    { plan: "starter", billingInterval: "monthly" },
-    { plan: "starter", billingInterval: "yearly" },
-    { plan: "pro", billingInterval: "monthly" },
-    { plan: "pro", billingInterval: "yearly" },
-  ] as const;
+    { plan: "pro" as const, billingInterval: "monthly" as const },
+    { plan: "pro" as const, billingInterval: "yearly" as const },
+  ];
 
   for (const c of cases) {
     const store = memoryStore();

@@ -126,7 +126,7 @@ test("Hebrew AI Brain SSR H1 uses flex bidi; EN/ES do not; one H1; meta intact",
     '<div id="root"></div>',
     `<div id="root">${he}</div>`,
   );
-  assert.match(html, /<html lang="he" dir="rtl">/);
+  assert.match(html, /<html lang="he" dir="rtl"(?: class="rtl")?>/);
   assert.match(html, /rel="canonical" href="https:\/\/www\.whachatcrm\.com\/he\/ai-brain"/);
   assert.match(html, /hreflang="es"/);
 });

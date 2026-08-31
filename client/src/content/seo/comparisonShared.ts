@@ -92,12 +92,12 @@ export const DEFAULT_COMPARISON_SCREENSHOTS: ProductScreenshot[] = [
   {
     src: "/images/screenshots/ai-copilot.webp",
     alt: "WhachatCRM AI Assist suggesting replies in the conversation timeline",
-    caption: "AI Assist on Starter/Pro; optional AI Brain add-on for deeper intelligence",
+    caption: "AI Assist and AI Brain included with Pro",
   },
   {
     src: "/images/screenshots/automation-template-cards.webp",
-    alt: "WhachatCRM preset automation templates for chatbots and workflows on Starter and Pro",
-    caption: "Chatbot + preset automation templates included on Starter and Pro",
+    alt: "WhachatCRM preset automation templates for chatbots and workflows on Pro",
+    caption: "Chatbot + preset automation templates included on Pro",
   },
   {
     src: "/images/screenshots/dashboard.webp",
@@ -126,12 +126,12 @@ export const WHACHAT_PLATFORM_ADVANTAGES: TitleDesc[] = [
   {
     title: "Unlimited users on Pro",
     description:
-      "Pro ($49/mo) includes unlimited team members so sales, support, and marketing can collaborate in one inbox without buying extra seats. Starter includes up to 3 users; Free is single-user.",
+      "Pro ($49/mo) includes unlimited team members so sales, support, and marketing can collaborate in one inbox without buying extra seats. Free is single-user.",
   },
   {
     title: "Chatbot and templates without hiring developers",
     description:
-      "Starter and Pro include the visual chatbot / Flow Builder plus ready-made automation templates so SMBs can launch FAQs, routing, and nurture flows without hiring a developer for day one. These are not included on Free.",
+      "Pro includes the visual chatbot / Flow Builder plus ready-made automation templates so SMBs can launch FAQs, routing, and nurture flows without hiring a developer for day one. These are not included on Free.",
   },
   {
     title: "Unified Inbox with Email beside WhatsApp",
@@ -141,12 +141,12 @@ export const WHACHAT_PLATFORM_ADVANTAGES: TitleDesc[] = [
   {
     title: "Shopify, GoHighLevel, and Calendly on Free",
     description:
-      "Free users can open Integrations and connect Shopify (orders/customers into inbox context), GoHighLevel (LeadConnector), and Calendly. Conversation, user, and channel limits still apply. Campaign automation remains on Starter+.",
+      "Free users can open Integrations and connect Shopify (orders/customers into inbox context), GoHighLevel (LeadConnector), and Calendly. Conversation, user, and channel limits still apply. Campaign automation remains on Pro.",
   },
   {
-    title: "AI Assist with optional AI Brain",
+    title: "AI Assist with AI Brain on Pro",
     description:
-      "Starter includes AI Assist Basic; Pro includes AI Assist Enhanced. An optional AI Brain add-on ($29/mo) unlocks deeper memory, scoring, and Growth Engine intelligence — including Realtor Growth Engine eligibility (Pro + AI Brain).",
+      "Pro includes AI Assist Enhanced and AI Brain. AI Brain powers deeper memory, scoring, and Growth Engine intelligence. Realtor Growth Engine eligibility requires an active Pro plan.",
   },
 ];
 
@@ -174,26 +174,26 @@ export const WHACHAT_MATRIX_BASE: Array<{
   { category: "Inbox & CRM", feature: "CRM / contact management", whachat: "yes" },
   { category: "Inbox & CRM", feature: "Team collaboration / shared inbox", whachat: "yes" },
   // Automation
-  { category: "Automation", feature: "Chatbot / flow builder", whachat: "Starter+" },
-  { category: "Automation", feature: "Ready-made automation templates", whachat: "Starter+" },
-  { category: "Automation", feature: "Workflow builder", whachat: "Starter+" },
+  { category: "Automation", feature: "Chatbot / flow builder", whachat: "Pro" },
+  { category: "Automation", feature: "Ready-made automation templates", whachat: "Pro" },
+  { category: "Automation", feature: "Workflow builder", whachat: "Pro" },
   // AI
-  { category: "AI", feature: "AI Assist / Copilot", whachat: "Starter+" },
-  { category: "AI", feature: "AI Brain (optional add-on)", whachat: "$29/mo on Starter/Pro" },
+  { category: "AI", feature: "AI Assist / Copilot", whachat: "Pro" },
+  { category: "AI", feature: "AI Brain", whachat: "Included with Pro" },
   // Integrations
   { category: "Integrations", feature: "Shopify integration (orders/customers → inbox)", whachat: "yes" },
   { category: "Integrations", feature: "GoHighLevel integration", whachat: "yes" },
   { category: "Integrations", feature: "Calendly booking integration", whachat: "yes" },
   { category: "Messaging", feature: "Basic WhatsApp template messaging", whachat: "yes" },
   // Vertical
-  { category: "Growth products", feature: "Realtor Growth Engine", whachat: "Pro + AI Brain" },
+  { category: "Growth products", feature: "Realtor Growth Engine", whachat: "Requires Pro" },
   { category: "Growth products", feature: "Conversation / template analytics", whachat: "partial" },
   // Team & pricing philosophy
-  { category: "Team & pricing", feature: "Included users", whachat: "Free 1 · Starter 3 · Pro unlimited" },
+  { category: "Team & pricing", feature: "Included users", whachat: "Free 1 · Pro unlimited" },
   { category: "Team & pricing", feature: "Unlimited users on Pro", whachat: "yes" },
   { category: "Team & pricing", feature: "Additional seat charges on Pro", whachat: "no" },
   { category: "Team & pricing", feature: "Free plan available", whachat: "yes" },
-  { category: "Team & pricing", feature: "Entry-level paid pricing", whachat: "Starter $19/mo" },
+  { category: "Team & pricing", feature: "Entry-level paid pricing", whachat: "Pro $49/mo" },
   { category: "Team & pricing", feature: "Pro subscription", whachat: "$49/mo" },
   { category: "Team & pricing", feature: "Cost predictability as team grows", whachat: "High (unlimited Pro seats)" },
   { category: "Team & pricing", feature: "Platform per-message markup on Meta", whachat: "no" },
@@ -238,7 +238,7 @@ export const DEFAULT_MIGRATION_STEPS = [
   "Create a WhachatCRM Free account and invite teammates only after you know which plan you need (Free = 1 user).",
   "Connect WhatsApp with Meta Embedded Signup (Cloud API). Twilio is not required for new setups.",
   "Connect Messenger, Instagram (via Meta/Facebook Page), Gmail, and web chat if those channels matter.",
-  "On Starter or Pro, rebuild critical chatbots and install preset automation templates.",
+  "On Pro, rebuild critical chatbots and install preset automation templates.",
   "Connect Shopify, GoHighLevel, or Calendly from Integrations if you use those systems (available on Free).",
   "Parallel-run for a few days: route a share of conversations to WhachatCRM and compare response time and context.",
   "Cut over templates and team login once the Unified Inbox matches your daily workflow.",
@@ -252,10 +252,8 @@ export const DEFAULT_FREE_VS_PAID = {
     "Chatbot, preset campaign automation, and AI Brain are not included on Free",
   ],
   paidHighlights: [
-    "Starter ($19/mo): up to 3 users, chatbot + Flow Builder, campaign automation, AI Assist Basic",
-    "Pro ($49/mo): unlimited users, higher conversation capacity, AI Assist Enhanced, advanced automations",
-    "Optional AI Brain add-on ($29/mo) on Starter or Pro for deeper intelligence and Growth Engine eligibility",
-    "Realtor Growth Engine requires Pro + AI Brain (specialized vertical — not a Free/Starter default)",
+    "Pro ($49/mo): unlimited users, higher conversation capacity, AI Chatbot, workflow automation, AI Brain included",
+    "Realtor Growth Engine requires an active Pro plan (specialized vertical — not included on Free)",
     "0% WhachatCRM markup on Meta WhatsApp conversation fees — Meta may change its rates independently",
   ],
 };
@@ -265,7 +263,7 @@ export function sharedComparisonFaqs(competitorName: string): FaqItem[] {
   return [
     {
       question: `Is WhachatCRM a complete ${competitorName} alternative?`,
-      answer: `For many SMBs, yes — if you need a Unified Inbox, CRM context, Meta Embedded Signup, Free integrations and basic WhatsApp templates, Starter+ chatbot/campaign automation, and transparent Meta fee pass-through. ${competitorName} may still fit better for niche workflows it specializes in; use the matrix on this page to decide.`,
+      answer: `For many SMBs, yes — if you need a Unified Inbox, CRM context, Meta Embedded Signup, Free integrations and basic WhatsApp templates, Pro chatbot/campaign automation with AI Brain included, and transparent Meta fee pass-through. ${competitorName} may still fit better for niche workflows it specializes in; use the matrix on this page to decide.`,
     },
     {
       question: "Does WhachatCRM use WhatsApp Cloud API without requiring Twilio?",
@@ -285,31 +283,31 @@ export function sharedComparisonFaqs(competitorName: string): FaqItem[] {
     {
       question: "Is the chatbot free?",
       answer:
-        "The visual chatbot / Flow Builder and preset automation templates are included on Starter ($19/mo) and Pro ($49/mo) — not on the Free plan. Free is for validating inbox and CRM workflows before you upgrade.",
+        "The visual chatbot / Flow Builder and preset automation templates are included on Pro ($49/mo) — not on the Free plan. Free is for validating inbox and CRM workflows before you upgrade.",
     },
     {
       question: "Are users unlimited?",
       answer:
-        "Unlimited users are included on Pro only. Starter includes up to 3 users; Free is 1 user. That is why growing sales + support teams often move to Pro to avoid seat packs.",
+        "Unlimited users are included on Pro only. Free is 1 user. That is why growing sales + support teams often move to Pro to avoid seat packs.",
     },
     {
       question: "Does WhachatCRM integrate with Shopify?",
       answer:
-        "Yes. Connect Shopify from Integrations on Free, Starter, and Pro. Shopify can bring new orders and customers into inbox context. Ecommerce campaign automation templates remain on Starter and Pro — confirm live webhook options in-product for your workflow.",
+        "Yes. Connect Shopify from Integrations on Free and Pro. Shopify can bring new orders and customers into inbox context. Ecommerce campaign automation templates remain on Pro — confirm live webhook options in-product for your workflow.",
     },
     {
       question: "Does WhachatCRM work with GoHighLevel?",
       answer:
-        "Yes. Connect GoHighLevel from the Integrations page (LeadConnector OAuth) on Free, Starter, and Pro for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
+        "Yes. Connect GoHighLevel from the Integrations page (LeadConnector OAuth) on Free and Pro for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
     },
     {
       question: "What about AI Brain and Realtor Growth Engine?",
       answer:
-        "AI Assist is included on Starter (Basic) and Pro (Enhanced). AI Brain is an optional $29/mo add-on. Realtor Growth Engine is a specialized product that requires Pro + AI Brain — it is not included on Free or as a default Starter feature.",
+        "AI Brain is included with Pro. Realtor Growth Engine is a specialized product that requires an active Pro plan — it is not included on Free.",
     },
     {
       question: "How hard is migration?",
-      answer: `Most teams export contacts and templates from ${competitorName}, reconnect WhatsApp via Embedded Signup, rebuild critical bots on Starter/Pro from templates, then parallel-run for a few days before full cutover. See the migration steps on this page.`,
+      answer: `Most teams export contacts and templates from ${competitorName}, reconnect WhatsApp via Embedded Signup, rebuild critical bots on Pro from templates, then parallel-run for a few days before full cutover. See the migration steps on this page.`,
     },
   ];
 }

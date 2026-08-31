@@ -12,6 +12,7 @@ import {
   hadProAiBrainTrial,
   hasActivePaidPlan,
   isProAiTrialActive,
+  type PaidSourceOptions,
 } from "./trialEntitlements";
 
 export type TrialExpirationEmailDecision =
@@ -56,6 +57,7 @@ export type TrialExpirationEmailUser = Pick<
 export function shouldSendTrialExpirationEmail(
   user: TrialExpirationEmailUser,
   now: Date = new Date(),
+  opts?: PaidSourceOptions,
 ): TrialExpirationEmailDecision {
   if (user.trialExpirationEmailSentAt) {
     return { send: false, reason: "already_sent" };
@@ -72,17 +74,17 @@ export function shouldSendTrialExpirationEmail(
   if (!hadProAiBrainTrial(user)) {
     return { send: false, reason: "never_had_pro_ai_trial" };
   }
-  if (hasActivePaidPlan(user, now)) {
+  if (hasActivePaidPlan(user, now, opts)) {
     return { send: false, reason: "paid_or_override" };
   }
   if (user.aiBrainEntitlementOverrideEnabled && user.aiBrainEntitlementOverrideGrant) {
     return { send: false, reason: "ai_brain_override_grant" };
   }
   // Never send before the (possibly extended) trialEndsAt wall-clock.
-  if (!user.trialEndsAt || new Date(user.trialEndsAt) > now || isProAiTrialActive(user, now)) {
+  if (!user.trialEndsAt || new Date(user.trialEndsAt) > now || isProAiTrialActive(user, now, opts)) {
     return { send: false, reason: "trial_still_active" };
   }
-  if (getEffectivePlanForUser(user, now) !== "free") {
+  if (getEffectivePlanForUser(user, now, opts) !== "free") {
     return { send: false, reason: "not_on_free" };
   }
   return { send: true };

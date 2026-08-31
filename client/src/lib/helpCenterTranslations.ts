@@ -136,7 +136,7 @@ To connect:
 
 You can add contacts manually or import them:
 - **Manual**: Click the + button in Chats to create a new conversation
-- **Import**: Go to Settings and use the import feature (Starter plan and above)
+- **Import**: Go to Settings and use the import feature (Pro plan)
 
 ## Step 3: Start Messaging
 
@@ -150,9 +150,8 @@ Once connected, you can:
 ## Step 4: Set Up Automation
 
 Create follow-ups, reminders, lead nurturing steps, and campaign flows across supported channels.
-- **Starter**: Basic automations, templates, and follow-ups
-- **Pro**: More advanced workflows, Growth Engine automations, and AI-assisted triggers where enabled
-- **AI Brain add-on**: Optional intelligence layer for smarter suggestions, context, and workflow enhancements
+- **Pro**: Workflows, templates, follow-ups, Growth Engine automations, and AI-assisted triggers where enabled
+- **AI Brain**: Included with Pro for smarter suggestions, context, and workflow intelligence
     `
   },
   {
@@ -164,7 +163,7 @@ Create follow-ups, reminders, lead nurturing steps, and campaign flows across su
     content: `
 # AI Brain - Your Intelligent Business Assistant
 
-AI Brain is a powerful add-on that turns WhachatCRM into your tireless business assistant. It learns about your business and helps you respond faster, capture leads automatically, and never miss an opportunity.
+AI Brain is a Pro feature that turns WhachatCRM into your tireless business assistant. It learns about your business and helps you respond faster, capture leads automatically, and never miss an opportunity.
 
 ## What is AI Brain?
 
@@ -174,7 +173,7 @@ Think of AI Brain as a smart assistant that:
 - **Captures leads** - automatically extracts customer information from conversations
 - **Adapts to your style** - choose from Neutral, Friendly, Professional, or Sales-focused tones
 
-AI Assist Basic is included in **Starter and above**. AI Brain is an optional add-on for teams that want deeper context, smart suggestions, lead scoring or insights where enabled, and advanced AI workflow enhancements.
+AI Brain is included with **Pro**. It adds deeper context, smarter Copilot, lead scoring, and workflow intelligence.
 
 ## What can AI Brain do?
 
@@ -192,8 +191,8 @@ Upload your company's unique information—products, pricing, policies, and FAQs
 
 ## Getting Started
 
-1. **Upgrade to Starter or Pro** - AI Brain requires a paid subscription
-2. **Enable AI Brain** - Go to Settings > AI Brain and subscribe
+1. **Upgrade to Pro** - AI Brain is included with Pro (and during the 14-day Pro trial)
+2. **Open AI Brain** - Go to Settings > AI Brain
 3. **Add Business Knowledge** - Teach AI about your business
 4. **Choose your AI behavior** - Start with suggestions and enable advanced modes only where your plan supports them
 5. **Start Using** - Click the brain icon in any chat
@@ -269,31 +268,19 @@ Manage your WhachatCRM subscription and billing information.
 - Limited active conversations
 - 1 user
 - Test supported channels
-
-### Starter - $19/month
-- Up to 3 users
-- AI Assist Basic included
-- Unified inbox
-- Templates and follow-ups
-- Basic automations
-- Core integrations
-- Better conversation capacity for small businesses
+- Basic WhatsApp templates
+- 50 Prospect AI discoveries per month
 
 ### Pro - $49/month
 - Unlimited users
-- Advanced automations
+- 2,000 active conversations
+- Up to 5 WhatsApp Business accounts
+- AI Chatbot and Website Widget
+- Workflow automation
+- AI Copilot
+- AI Brain included
 - Growth Engines access where eligible
-- Enhanced AI-assisted workflows
-- Larger conversation capacity
-- Multi-channel scaling features
-- Advanced workflow capabilities
-
-### AI Brain Add-on
-- Optional intelligence layer
-- Smart suggestions
-- AI context assistance
-- Lead scoring and insights where enabled
-- Advanced AI workflow enhancements
+- Priority support
 
 ## Meta Conversation Fees
 
@@ -441,7 +428,7 @@ WhachatCRM תומך ב-7 ערוצי הודעות בתיבת דואר מאוחד�
 
 ניתן להוסיף אנשי קשר ידנית או לייבא אותם:
 - **ידני**: לחץ על כפתור + בצ'אטים ליצירת שיחה חדשה
-- **ייבוא**: עבור להגדרות והשתמש בתכונת הייבוא (תוכנית Starter ומעלה)
+- **ייבוא**: עבור להגדרות והשתמש בתכונת הייבוא (תוכנית Pro)
 
 ## שלב 3: התחל לשלוח הודעות
 
@@ -471,7 +458,7 @@ WhachatCRM תומך ב-7 ערוצי הודעות בתיבת דואר מאוחד�
     content: `
 # AI Brain - העוזר העסקי החכם שלך
 
-AI Brain הוא תוסף עוצמתי שהופך את WhachatCRM לעוזר עסקי בלתי נלאה. הוא לומד על העסק שלך ועוזר לך להגיב מהר יותר, ללכוד לידים אוטומטית, ולעולם לא לפספס הזדמנות.
+AI Brain הוא יכולת Pro שהופכת את WhachatCRM לעוזר עסקי בלתי נלאה. הוא לומד על העסק שלך ועוזר לך להגיב מהר יותר, ללכוד לידים אוטומטית, ולעולם לא לפספס הזדמנות.
 
 ## מה זה AI Brain?
 
@@ -481,7 +468,7 @@ AI Brain הוא תוסף עוצמתי שהופך את WhachatCRM לעוזר עס
 - **לוכד לידים** - מחלץ אוטומטית מידע לקוחות משיחות
 - **מתאים לסגנון שלך** - בחר בין נייטרלי, ידידותי, מקצועי או ממוקד מכירות
 
-AI Assist Basic כלול ב-**Starter ומעלה**. AI Brain הוא תוסף אופציונלי לשכבת אינטליגנציה עמוקה יותר, הצעות חכמות, סיוע בהקשר, תובנות לידים כשמופעלות ושיפורי זרימת עבודה מבוססי AI.
+AI Assist כלול ב-**Pro**. AI Brain כלול ב-Pro — הוא מוסיף הקשר עמוק יותר, Copilot חכם יותר, דירוג לידים ואינטליגנציית תהליכים.
 
 ## מה AI Brain יכול לעשות?
 
@@ -499,8 +486,8 @@ AI Brain מזהה ומדרג לידים אוטומטית מ-0-100 על סמך כ
 
 ## איך להתחיל
 
-1. **שדרג ל-Starter או Pro** - AI Brain דורש מנוי בתשלום
-2. **הפעל AI Brain** - עבור להגדרות > AI Brain והירשם
+1. **שדרג ל-Pro** - AI Brain כלול ב-Pro (וגם בניסיון Pro של 14 יום)
+2. **פתח AI Brain** - עבור להגדרות > AI Brain
 3. **הוסף ידע עסקי** - למד את ה-AI על העסק שלך
 4. **הגדר מצב AI** - בחר הצעה בלבד, טיוטה אוטומטית או היברידי
 5. **התחל להשתמש** - לחץ על אייקון המוח בכל צ'אט
@@ -577,31 +564,19 @@ WhachatCRM מספקת תבניות אוטומציה מוכנות מראש כדי
 - שיחות פעילות מוגבלות
 - משתמש אחד
 - בדיקת ערוצים נתמכים
-
-### Starter - $19/חודש
-- עד 3 משתמשים
-- AI Assist Basic כלול
-- תיבת דואר מאוחדת
-- תבניות ומעקבים
-- אוטומציות בסיסיות
-- אינטגרציות ליבה
-- קיבולת שיחות טובה יותר לעסקים קטנים
+- תבניות WhatsApp בסיסיות
+- 50 גילויי Prospect AI בחודש
 
 ### Pro - $49/חודש
 - משתמשים ללא הגבלה
-- אוטומציות מתקדמות
+- 2,000 שיחות פעילות
+- עד 5 חשבונות WhatsApp Business
+- צ׳אטבוט AI ווידג׳ט לאתר
+- אוטומציית תהליכים
+- AI Copilot
+- AI Brain כלול
 - גישה ל-Growth Engines כשזכאים
-- זרימות עבודה משופרות בסיוע AI
-- קיבולת שיחות גדולה יותר
-- יכולות סקיילינג רב-ערוציות
-- יכולות זרימת עבודה מתקדמות
-
-### תוסף AI Brain
-- שכבת אינטליגנציה אופציונלית
-- הצעות חכמות
-- סיוע AI בהקשר
-- דירוג לידים ותובנות כשמופעלים
-- שיפורי זרימת עבודה מתקדמים בסיוע AI
+- תמיכה בעדיפות
 
 ## עמלות שיחה של Meta
 
@@ -747,7 +722,7 @@ Para conectar:
 
 Puedes agregar contactos manualmente o importarlos:
 - **Manual**: Haz clic en el botón + en Chats para crear una nueva conversación
-- **Importar**: Ve a Configuración y usa la función de importación (plan Starter y superior)
+- **Importar**: Ve a Configuración y usa la función de importación (plan Pro)
 
 ## Paso 3: Comienza a Enviar Mensajes
 
@@ -787,7 +762,7 @@ Piensa en AI Brain como un asistente inteligente que:
 - **Captura leads** - extrae automáticamente información del cliente de las conversaciones
 - **Se adapta a tu estilo** - elige entre Neutral, Amigable, Profesional o enfocado en Ventas
 
-AI Assist Basic está incluido en **Starter y planes superiores**. AI Brain es un complemento opcional para equipos que necesitan más contexto, sugerencias inteligentes, asistencia de IA, puntuación o insights de leads donde estén habilitados, y mejoras avanzadas de flujos con IA.
+AI Assist está incluido en **Pro**. AI Brain está incluido con Pro: añade contexto más profundo, Copilot más inteligente, puntuación de leads e inteligencia de flujos.
 
 ## ¿Qué puede hacer AI Brain?
 
@@ -805,8 +780,8 @@ Sube la información única de tu empresa: productos, precios, políticas y preg
 
 ## Cómo Empezar
 
-1. **Actualiza a Starter o Pro** - AI Brain requiere una suscripción de pago
-2. **Activa AI Brain** - Ve a Configuración > AI Brain y suscríbete
+1. **Actualiza a Pro** - AI Brain está incluido con Pro (y durante la prueba de Pro de 14 días)
+2. **Abre AI Brain** - Ve a Configuración > AI Brain
 3. **Agrega Conocimiento del Negocio** - Enseña a la IA sobre tu negocio
 4. **Configura el Modo IA** - Elige Solo Sugerencia, Auto Borrador o Híbrido
 5. **Comienza a Usar** - Haz clic en el ícono del cerebro en cualquier chat
@@ -883,31 +858,19 @@ Administra tu suscripción e información de facturación de WhachatCRM.
 - Conversaciones activas limitadas
 - 1 usuario
 - Prueba de canales compatibles
-
-### Starter - $19/mes
-- Hasta 3 usuarios
-- AI Assist Basic incluido
-- Bandeja unificada
-- Plantillas y seguimientos
-- Automatizaciones básicas
-- Integraciones principales
-- Más capacidad de conversaciones para pequeños negocios
+- Plantillas básicas de WhatsApp
+- 50 descubrimientos de Prospect AI al mes
 
 ### Pro - $49/mes
 - Usuarios ilimitados
-- Automatizaciones avanzadas
+- 2.000 conversaciones activas
+- Hasta 5 cuentas de WhatsApp Business
+- Chatbot con IA y widget web
+- Automatización de flujos
+- AI Copilot
+- AI Brain incluido
 - Acceso a Growth Engines donde corresponda
-- Flujos mejorados asistidos por IA
-- Mayor capacidad de conversaciones
-- Funciones para escalar múltiples canales
-- Capacidades avanzadas de workflow
-
-### Complemento AI Brain
-- Capa de inteligencia opcional
-- Sugerencias inteligentes
-- Asistencia contextual con IA
-- Puntuación e insights de leads donde estén habilitados
-- Mejoras avanzadas de workflow con IA
+- Soporte prioritario
 
 ## Tarifas de conversación de Meta
 

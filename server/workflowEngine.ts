@@ -72,7 +72,7 @@ export interface WorkflowCondition {
 }
 
 /**
- * Growth Engine workflows: single subscription gate (Pro + AI Brain + automations).
+ * Growth Engine workflows: single subscription gate (active Pro + automations).
  * Returns `null` when execution may proceed, or a human-readable block reason.
  * Logs + persists a workflow execution row so skips are never silent.
  */

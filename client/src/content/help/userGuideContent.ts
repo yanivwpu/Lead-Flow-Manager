@@ -43,16 +43,15 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
         title: "Free vs Pro plans",
         bullets: [
           "Free: test WhachatCRM with one user, Unified Inbox, Integrations, basic WhatsApp templates, Prospect AI, and limited active conversations.",
-          "Starter ($19/mo): up to 3 users, AI Assist Basic, campaign automation, follow-ups, and chatbot.",
-          "Pro ($49/mo): unlimited users, larger conversation capacity, advanced Growth Engine workflows, multi-channel scaling, and team assignment.",
-          "AI Brain add-on: deeper AI on Starter or Pro — check Pricing for current availability.",
+          "Pro ($49/mo): unlimited users, larger conversation capacity, chatbot, workflow automation, AI Brain included, Growth Engine–ready, and team assignment.",
+          "AI Brain is included with Pro.",
           "Meta/WhatsApp conversation fees bill separately through Meta; WhachatCRM adds no message markup.",
         ],
       },
       {
         title: "AI Trial",
         paragraphs: [
-          "Eligible new workspaces receive a limited AI Trial to experience Copilot summaries, suggested replies, and lead scoring before committing to a paid tier or AI Brain add-on.",
+          "Eligible new workspaces receive a 14-day Pro trial with AI Brain to experience Copilot summaries, suggested replies, and lead scoring before committing to Pro.",
           "Trial limits appear in Settings → Billing. When the trial ends, AI features downgrade per your plan unless you upgrade.",
         ],
       },
@@ -291,7 +290,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       {
         title: "Billing",
         paragraphs: [
-          "Manage plans in Settings → Billing via Stripe or Shopify depending on signup path. Upgrade to Starter or Pro for users, AI, and advanced automations.",
+          "Manage plans in Settings → Billing via Stripe or Shopify depending on signup path. Upgrade to Pro for more users, AI Brain, and advanced automations.",
         ],
       },
     ],
@@ -437,7 +436,7 @@ export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   { question: "What is the lead timeline?", answer: "A chronological history of messages, automation events, and stage changes for each contact." },
   { question: "How does AI lead scoring work?", answer: "AI analyzes conversation content and engagement to produce scores that help prioritize follow-ups." },
   { question: "Can AI send messages automatically?", answer: "Only if you enable Auto mode and configure automations accordingly. Default is human-approved sends." },
-  { question: "What is AI Brain?", answer: "An optional add-on that deepens AI capabilities on Starter or Pro plans." },
+  { question: "What is AI Brain?", answer: "AI Brain is included with Pro. It learns your business and powers smarter Copilot, Prospect AI personalization, and recommendations." },
   { question: "What is Growth Engine?", answer: "WhachatCRM's automation builder for triggers, conditions, messages, and AI actions." },
   { question: "How do I install preset automation templates?", answer: "Open Automations, browse the preset library, install, customize, and enroll contacts." },
   { question: "What are pipeline stages?", answer: "CRM phases like New, Qualified, or Closed that trigger automations and organize reporting." },

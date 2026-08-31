@@ -60,7 +60,7 @@ section("signup routes to /check-email and establishes a pending session");
 section("email copy and i18n");
 {
   const email = src("server/email.ts");
-  assert.ok(email.includes("Verify your email to start your 14-day Pro + AI Brain trial"));
+  assert.ok(email.includes("Verify your email to start your 14-day Pro trial with AI Brain"));
   assert.ok(email.includes("Verify email and start my 14-day trial"));
   assert.ok(email.includes("This link expires in 24 hours"));
 

@@ -2,8 +2,8 @@
  * Public pricing + in-app plan comparison presentation.
  * Derived from PLAN_LIMITS + Prospect AI quotas (confirmed public differentiators).
  *
- * Public commercial model (no numbers): Starter = AI Assist Basic (fair use),
- * Pro = AI Assist Enhanced (fair use), AI Brain = advanced intelligence (fair use).
+ * Public commercial model: Free and Pro. AI Brain is included with Pro.
+ * Starter remains in PLAN_LIMITS for grandfathered billing rows only.
  *
  * Inbox AI reply generation ceilings live in shared/inboxAiReplyGenerations.ts
  * (re-exported below for compatibility). Do not surface those numbers publicly.
@@ -49,7 +49,7 @@ export function limitsAllowTemplateCampaigns(
 }
 
 export const TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE =
-  "Campaign and bulk template automation requires Starter or Pro";
+  "Campaign and bulk template automation requires Pro";
 
 export const INTEGRATIONS_UNAVAILABLE_MESSAGE = "Integrations are not available on your plan";
 
@@ -72,9 +72,15 @@ export {
  */
 export const AI_BRAIN_PRO_CREDIT_BONUS = 0;
 
-export const AI_BRAIN_ADDON_PRICE_USD = 29;
+/**
+ * Historical AI Brain add-on list price. Not a public SKU.
+ * Webhooks still match Stripe items billed at this amount.
+ */
+export const LEGACY_AI_BRAIN_ADDON_PRICE_USD = 29;
+/** @deprecated Use LEGACY_AI_BRAIN_ADDON_PRICE_USD — not a public price. */
+export const AI_BRAIN_ADDON_PRICE_USD = LEGACY_AI_BRAIN_ADDON_PRICE_USD;
 
-/** Annual Stripe amounts for paid base plans. AI Brain has no yearly price. */
+/** Annual Stripe amounts. Starter yearly is grandfathered only. */
 export const PAID_PLAN_YEARLY_PRICE_USD = {
   starter: 190,
   pro: 490,
@@ -120,7 +126,6 @@ export type PricingCompareRow = {
   group: string;
   featureKey: string;
   free: PricingCompareCell;
-  starter: PricingCompareCell;
   pro: PricingCompareCell;
 };
 
@@ -162,6 +167,7 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
     lines.push("Workflow Automation");
   }
   if (plan === "pro") {
+    lines.push("AI Brain included");
     lines.push("Required plan for Industry Growth Engines");
   }
   return lines;
@@ -184,7 +190,6 @@ export function buildPricingCompareRows(opts?: {
 }): PricingCompareRow[] {
   const includeGrowthEngines = opts?.includeGrowthEngines !== false;
   const free = PLAN_LIMITS.free;
-  const starter = PLAN_LIMITS.starter;
   const pro = PLAN_LIMITS.pro;
 
   const rows: PricingCompareRow[] = [
@@ -192,119 +197,102 @@ export function buildPricingCompareRows(opts?: {
       group: "MESSAGING",
       featureKey: "activeConversations",
       free: formatConversations(free.conversationsPerMonth),
-      starter: formatConversations(starter.conversationsPerMonth),
       pro: formatConversations(pro.conversationsPerMonth),
     },
     {
       group: "MESSAGING",
       featureKey: "users",
       free: formatUsers(free.maxUsers),
-      starter: formatUsers(starter.maxUsers),
       pro: formatUsers(pro.maxUsers),
     },
     {
       group: "MESSAGING",
       featureKey: "whatsappNumbers",
       free: String(free.maxWhatsappNumbers),
-      starter: String(starter.maxWhatsappNumbers),
       pro: `Up to ${pro.maxWhatsappNumbers}`,
     },
     {
       group: "MESSAGING",
       featureKey: "unifiedInbox",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "MESSAGING",
       featureKey: "supportedChannels",
       free: "Connected channels",
-      starter: "Connected channels",
       pro: "Connected channels",
     },
     {
       group: "MESSAGING",
       featureKey: "templateMessaging",
       free: "Approved 1:1 template sends",
-      starter: "Templates with workflow automation",
       pro: "Templates with workflow automation",
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectDiscoveries",
       free: `${PROSPECT_AI_MONTHLY_QUOTAS.free}/month`,
-      starter: `${PROSPECT_AI_MONTHLY_QUOTAS.starter}/month`,
       pro: `${PROSPECT_AI_MONTHLY_QUOTAS.pro}/month`,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectReview",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectCampaigns",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "messageCreation",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "PROSPECT AI",
       featureKey: "prospectArchive",
       free: true,
-      starter: true,
       pro: true,
     },
     {
       group: "CHATBOT",
       featureKey: "chatbotWidget",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AUTOMATION",
       featureKey: "workflowAutomation",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AUTOMATION",
       featureKey: "followUps",
       free: false,
-      starter: true,
       pro: true,
     },
     {
       group: "AI",
-      featureKey: "aiBrainAddon",
-      free: "Not included",
-      starter: "Add-on",
-      pro: "Add-on",
+      featureKey: "aiBrain",
+      free: "Not included after trial",
+      pro: "Included",
     },
     {
       group: "TEAM",
       featureKey: "assignment",
       free: false,
-      starter: false,
       pro: true,
     },
     {
       group: "SUPPORT",
       featureKey: "integrations",
       free: true,
-      starter: true,
       pro: true,
     },
   ];
@@ -314,7 +302,6 @@ export function buildPricingCompareRows(opts?: {
       group: "GROWTH ENGINES",
       featureKey: "growthEngines",
       free: false,
-      starter: false,
       pro: "Growth Engine Ready",
     });
   }

@@ -6,11 +6,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import {
-  ArrowLeft, Check, Loader2, Shield, Brain,
+  ArrowLeft, Check, Loader2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import { getCheckoutReturnPaths, getPlanCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
+import { getPlanCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import {
   billingIntervalFromSearch,
   buildPricingAuthRedirect,
@@ -42,7 +42,6 @@ import {
 import { trackPricingEvent } from "@/lib/ga4Events";
 import {
   buildLocalizedPricingCompareRows,
-  getLocalizedAiBrainAddonHighlights,
   getLocalizedPlanPricingHighlights,
   getLocalizedPricingPage,
 } from "@shared/localizeMarketingContent";
@@ -255,8 +254,6 @@ export function Pricing() {
 
   const trialDaysRemaining = proAiTrialDaysRemaining(subscriptionData);
 
-  const hasAIBrainAddon = limits?.hasAIBrainAddon ?? false;
-  const aiBrainBasePlanEligible = limits?.aiBrainBasePlanEligible ?? false;
   const liveShopifyShop = getLiveShopifyShopFromSearch();
   const isShopify = isShopifyPlanCheckoutBlocked(
     subscriptionData?.subscription,
@@ -277,16 +274,8 @@ export function Pricing() {
     () => getLocalizedPlanPricingHighlights("free", marketingLocale),
     [marketingLocale],
   );
-  const starterHighlights = useMemo(
-    () => getLocalizedPlanPricingHighlights("starter", marketingLocale),
-    [marketingLocale],
-  );
   const proHighlights = useMemo(
     () => getLocalizedPlanPricingHighlights("pro", marketingLocale),
-    [marketingLocale],
-  );
-  const aiBrainHighlights = useMemo(
-    () => getLocalizedAiBrainAddonHighlights(marketingLocale),
     [marketingLocale],
   );
 
@@ -301,33 +290,24 @@ export function Pricing() {
     });
   }, [shopHint]);
 
-  const shopifyPlanButtonLabel = (
-    plan: "starter" | "pro" | "aiBrain",
-    isActiveBilling: boolean,
-  ): string => {
+  const shopifyPlanButtonLabel = (isActiveBilling: boolean): string => {
     if (isActiveBilling) return t(`${p}.shopifyManageInShopify`);
-    if (plan === "starter") return t(`${p}.shopifyChooseStarter`);
-    if (plan === "pro") return t(`${p}.shopifyChoosePro`);
-    return t(`${p}.shopifyChooseAiBrain`);
+    return t(`${p}.shopifyChoosePro`);
   };
 
-  const paidPlanButtonLabel = (
-    plan: "starter" | "pro",
-    isActiveBilling: boolean,
-  ): string => {
+  const paidPlanButtonLabel = (isActiveBilling: boolean): string => {
     if (isActiveProAiTrial) {
-      if (plan === "starter") return t(`${p}.trialState.chooseStarterAfterTrial`);
       return isShopify
         ? t(`${p}.trialState.keepProAfterTrialShopify`)
         : t(`${p}.trialState.keepProAfterTrialWeb`);
     }
     if (isActiveBilling) {
       return isShopify
-        ? shopifyPlanButtonLabel(plan, true)
+        ? shopifyPlanButtonLabel(true)
         : t(`${p}.plans.currentPlan`);
     }
-    if (isShopify) return shopifyPlanButtonLabel(plan, false);
-    return plan === "starter" ? t(`${p}.plans.starter.cta`) : t(`${p}.plans.pro.cta`);
+    if (isShopify) return shopifyPlanButtonLabel(false);
+    return t(`${p}.plans.pro.cta`);
   };
 
   const openShopifyPlans = async () => {
@@ -418,6 +398,13 @@ export function Pricing() {
 
   const handleUpgrade = (planId: string) => {
     trackPricingEvent("pricing_plan_cta_click", { plan: planId });
+    if (planId === "starter") {
+      toast({
+        title: pricingContent.starterRetired.title,
+        description: pricingContent.starterRetired.body,
+      });
+      return;
+    }
     if (!user) {
       const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
       if (liveShopifyShop) {
@@ -457,6 +444,22 @@ export function Pricing() {
 
     const intent = resolvePricingCheckoutIntent(window.location.search);
     if (!intent) return;
+
+    if (intent.plan === "starter") {
+      checkoutIntentHandledRef.current = true;
+      toast({
+        title: pricingContent.starterRetired.title,
+        description: pricingContent.starterRetired.body,
+      });
+      const skipped = consumePricingCheckoutIntentFromLocation(
+        `${window.location.pathname}${window.location.search}`,
+      );
+      if (skipped !== `${window.location.pathname}${window.location.search}`) {
+        window.history.replaceState(null, "", skipped);
+      }
+      return;
+    }
+
     if (!user || !subscriptionResolved) return;
 
     if (
@@ -494,57 +497,10 @@ export function Pricing() {
     billingPlan,
     isActiveProAiTrial,
     checkoutMutation,
+    pricingContent.starterRetired.title,
+    pricingContent.starterRetired.body,
+    toast,
   ]);
-
-  const [aiBrainAddonLoading, setAiBrainAddonLoading] = useState(false);
-
-  const handleAIBrainAddonCheckout = async () => {
-    trackPricingEvent("ai_brain_addon_click");
-    if (!user) {
-      const pricingBase = localizePath("/pricing", marketingLocale) || "/pricing";
-      setLocation(`/auth?redirect=${encodeURIComponent(pricingBase)}`);
-      return;
-    }
-    setAiBrainAddonLoading(true);
-    try {
-      if (isShopify) {
-        await openShopifyPlans();
-        return;
-      }
-
-      const response = await fetch("/api/subscription/addon/ai-brain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(getCheckoutReturnPaths()),
-      });
-      if (response.status === 401) {
-        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
-        return;
-      }
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to start checkout");
-      }
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (error: any) {
-      if (error?.message === "session_expired") return;
-      toast({
-        title: isShopify ? t(`${p}.shopifyToastTitle`) : "Error",
-        description: isShopify
-          ? shopifyManagedPricingInstructions(
-              { error: error?.message },
-              t(`${p}.shopifyManagedPricingInstructions`),
-            )
-          : error.message || "Failed to start checkout",
-        variant: isShopify ? "default" : "destructive",
-      });
-    } finally {
-      setAiBrainAddonLoading(false);
-    }
-  };
 
   return (
     // dir on the root div propagates to all children automatically.
@@ -651,6 +607,12 @@ export function Pricing() {
               ? renderRtlAwareHeadingText(pricingContent.hero.subtitle)
               : pricingContent.hero.subtitle}
           </p>
+          <p
+            className="mx-auto mt-3 w-full max-w-5xl text-pretty text-sm font-medium text-gray-700 sm:text-base"
+            data-testid="text-pricing-hero-trust"
+          >
+            {pricingContent.hero.trustLine}
+          </p>
         </div>
         <TransparentPricingStrip />
 
@@ -702,7 +664,7 @@ export function Pricing() {
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}
         <div
-          className="mb-6 grid grid-cols-1 items-stretch gap-4 md:grid-cols-3"
+          className="mx-auto mb-6 grid w-full max-w-3xl grid-cols-1 items-stretch gap-4 md:grid-cols-2"
           data-testid="section-pricing-cards"
         >
           {/* FREE */}
@@ -774,80 +736,6 @@ export function Pricing() {
                       : isCurrentBillingPlan
                         ? t(`${p}.plans.currentPlan`)
                         : t(`${p}.plans.free.cta`)}
-                  </Button>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* STARTER */}
-          {(() => {
-            const isCurrentBillingPlan = billingPlan === "starter";
-            const isLoading = loadingPlan === "starter";
-            return (
-              <div
-                className="bg-white rounded-2xl border-2 border-blue-200 p-5 sm:p-6 flex flex-col h-full"
-                data-testid="plan-card-starter"
-              >
-                <div className="mb-4">
-                  <span className="text-xs font-semibold text-blue-600 uppercase tracking-wider">
-                    {t(`${p}.plans.starter.name`)}
-                  </span>
-                  <PaidPlanPriceBlock
-                    plan="starter"
-                    billingInterval={isShopify ? "monthly" : billingInterval}
-                    periodLabel={t(`${p}.plans.starter.period`)}
-                    billedYearlyTemplate={pricingContent.billing.billedYearly}
-                    twoMonthsFreeLabel={pricingContent.billing.twoMonthsFree}
-                    isRTL={isRTL}
-                  />
-                  <p className="text-sm text-gray-500">
-                    {t(`${p}.plans.starter.desc`)}
-                  </p>
-                </div>
-                <ul className="flex-1 space-y-1.5">
-                  {starterHighlights.map((f) => (
-                    <FeatureItem key={f} text={f} iconClass="text-blue-500" isRTL={isRTL} />
-                  ))}
-                </ul>
-                <div className="mt-auto pt-4 space-y-3">
-                  <div
-                    className="rounded-md border border-blue-100 bg-blue-50/50 px-2.5 py-2"
-                    data-testid="starter-chatbot-callout"
-                  >
-                    <p className="flex items-start gap-1.5 text-xs font-semibold text-blue-950">
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" />
-                      <span>{pricingContent.starterCallout.title}</span>
-                    </p>
-                    <p className="mt-0.5 pl-5 text-[11px] leading-snug text-blue-900/75">
-                      {pricingContent.starterCallout.body}
-                    </p>
-                  </div>
-                  <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-starter">
-                    <span className="shrink-0">✓</span>{" "}
-                    <span>
-                      {isActiveProAiTrial
-                        ? t(`${p}.trialState.chooseStarterAfterTrial`)
-                        : pricingContent.trialBanner}
-                    </span>
-                  </p>
-                  <Button
-                    className={`w-full ${
-                      isCurrentBillingPlan && !isShopify
-                        ? "bg-gray-100 text-gray-500"
-                        : isCurrentBillingPlan && isShopify
-                          ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-                          : "bg-blue-600 hover:bg-blue-700 text-white"
-                    }`}
-                    disabled={planButtonsDisabled || (isCurrentBillingPlan && !isShopify) || isLoading}
-                    onClick={() => handleUpgrade("starter")}
-                    data-testid="button-upgrade-starter"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      paidPlanButtonLabel("starter", isCurrentBillingPlan)
-                    )}
                   </Button>
                 </div>
               </div>
@@ -936,7 +824,7 @@ export function Pricing() {
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      paidPlanButtonLabel("pro", isCurrentBillingPlan)
+                      paidPlanButtonLabel(isCurrentBillingPlan)
                     )}
                   </Button>
                 </div>
@@ -945,123 +833,20 @@ export function Pricing() {
           })()}
         </div>
 
-        {/* ─────────────── OPTIONAL ADD-ON: AI BRAIN ─────────────── */}
-        <section className="mb-8" data-testid="section-optional-addon">
-          <div className="mb-3 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-purple-700">
-              {pricingContent.aiBrain.badge}
-            </p>
-            <h2 className="mt-1 font-display text-xl font-bold text-gray-900 sm:text-2xl">
-              {pricingContent.aiBrain.title}
-            </h2>
-            <p className="mx-auto mt-1 max-w-xl text-sm text-gray-600">
-              {pricingContent.aiBrain.intro}
-            </p>
-          </div>
-          <div
-            className="mx-auto max-w-3xl bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200 p-6 sm:p-7"
-            data-testid="plan-card-ai-brain"
-          >
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-stretch">
-              <div className="sm:w-[42%] sm:shrink-0">
-                <span className="text-xs font-semibold text-purple-600 uppercase tracking-wider">
-                  {t(`${p}.plans.aiBrain.name`)}
-                </span>
-                <div
-                  className={`flex items-baseline gap-1 mt-1 mb-1 ${
-                    isRTL ? "justify-start" : ""
-                  }`}
-                  dir="ltr"
-                >
-                  <span className="text-3xl font-bold text-gray-900">
-                    {t(`${p}.plans.aiBrain.price`)}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {t(`${p}.plans.aiBrain.period`)}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600">
-                  {pricingContent.aiBrain.cardDesc}
-                </p>
-                <p className="text-xs font-medium text-purple-700 mt-3 mb-1 flex items-center gap-1" dir={isRTL ? "rtl" : "ltr"}>
-                  <Shield className="w-3 h-3 shrink-0" />
-                  {isActiveProAiTrial
-                    ? t(`${p}.trialState.aiBrainIncludedInTrial`)
-                    : t(`${p}.aiBrainNote`)}
-                </p>
-                {isActiveProAiTrial ? (
-                  <p
-                    className="text-xs text-purple-800/90 mb-3 leading-relaxed"
-                    data-testid="text-ai-brain-trial-helper"
-                  >
-                    {t(`${p}.trialState.aiBrainTrialHelper`)}
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 mb-4">
-                    {t(`${p}.plans.aiBrain.upsell`)}
-                  </p>
-                )}
-                {!subscriptionResolved ? (
-                  <Button className="w-full bg-gray-200 text-gray-500" disabled data-testid="button-ai-brain-loading">
-                    <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-                  </Button>
-                ) : hasAIBrainAddon ? (
-                  <Link href="/app/ai-brain">
-                    <Button
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                      data-testid="button-ai-brain-go"
-                    >
-                      <Brain className={`w-4 h-4 ${isRTL ? "ml-2" : "mr-2"}`} />
-                      {t(`${p}.plans.aiBrain.ctaOpenBrain`)}
-                    </Button>
-                  </Link>
-                ) : isActiveProAiTrial && isShopify ? (
-                  <Button
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                    onClick={handleAIBrainAddonCheckout}
-                    disabled={aiBrainAddonLoading || planButtonsDisabled}
-                    data-testid="button-ai-brain-addon-checkout"
-                  >
-                    {aiBrainAddonLoading ? (
-                      <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-                    ) : null}
-                    {shopifyPlanButtonLabel("aiBrain", false)}
-                  </Button>
-                ) : aiBrainBasePlanEligible ? (
-                  <Button
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                    onClick={handleAIBrainAddonCheckout}
-                    disabled={aiBrainAddonLoading || planButtonsDisabled}
-                    data-testid="button-ai-brain-addon-checkout"
-                  >
-                    {aiBrainAddonLoading ? (
-                      <Loader2 className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`} />
-                    ) : null}
-                    {isShopify ? shopifyPlanButtonLabel("aiBrain", false) : t(`${p}.plans.aiBrain.ctaUnlock`)}
-                  </Button>
-                ) : (
-                  <Button
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                    onClick={() => handleUpgrade("starter")}
-                    disabled={planButtonsDisabled || loadingPlan === "starter"}
-                    data-testid="button-upgrade-for-ai-brain"
-                  >
-                    {loadingPlan === "starter" && (
-                      <Loader2
-                        className={`w-4 h-4 animate-spin ${isRTL ? "ml-2" : "mr-2"}`}
-                      />
-                    )}
-                    {t(`${p}.plans.aiBrain.ctaUpgrade`)}
-                  </Button>
-                )}
-              </div>
-              <ul className="flex-1 space-y-1.5 sm:border-l sm:border-purple-200/80 sm:pl-8">
-                {aiBrainHighlights.map((f) => (
-                  <FeatureItem key={f} text={f} iconClass="text-purple-500" isRTL={isRTL} />
-                ))}
-              </ul>
-            </div>
-          </div>
+        <section
+          className="mx-auto mb-8 max-w-3xl rounded-2xl border border-gray-200 bg-white px-5 py-5 text-center"
+          data-testid="section-agency-enterprise"
+        >
+          <p className="text-base font-semibold text-gray-900">{pricingContent.agency.title}</p>
+          <p className="mt-1 text-sm text-gray-600">{pricingContent.agency.body}</p>
+          <Link href="/contact">
+            <Button
+              className="mt-4 bg-gray-900 hover:bg-gray-800 text-white"
+              data-testid="button-contact-sales"
+            >
+              {pricingContent.agency.cta}
+            </Button>
+          </Link>
         </section>
 
         {isShopify ? (
@@ -1083,14 +868,13 @@ export function Pricing() {
             {pricingContent.compareTitle}
           </h2>
           <div className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[480px] text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="w-[40%] px-5 py-4 text-start font-semibold text-gray-700">
+                  <th className="w-[50%] px-5 py-4 text-start font-semibold text-gray-700">
                     {pricingContent.featureColumnHeader}
                   </th>
                   <th className="px-3 py-4 text-center font-semibold text-gray-700">Free</th>
-                  <th className="px-3 py-4 text-center font-semibold text-blue-700">Starter</th>
                   <th className="px-3 py-4 text-center font-semibold text-brand-green">Pro</th>
                 </tr>
               </thead>
@@ -1103,7 +887,7 @@ export function Pricing() {
                       {showGroup ? (
                         <tr className="bg-gray-100/80">
                           <td
-                            colSpan={4}
+                            colSpan={3}
                             className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500"
                           >
                             {pricingContent.compareGroups[row.group] || row.group}
@@ -1126,9 +910,6 @@ export function Pricing() {
                         </td>
                         <td className="px-3 py-3 text-center">
                           <TableCellValue val={row.free} />
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <TableCellValue val={row.starter} />
                         </td>
                         <td className="px-3 py-3 text-center">
                           <TableCellValue val={row.pro} />

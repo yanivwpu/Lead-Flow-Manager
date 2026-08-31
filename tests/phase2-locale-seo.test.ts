@@ -168,8 +168,8 @@ test("localized SSR bodies are not English fallbacks", () => {
   assert.ok(!es!.includes("Teach WhachatCRM your business profile"), "ES SSR should not use English hero fallback verbatim");
   const esPricing = generateMarketingPageSsrHtml("/es/pricing");
   const hePricing = generateMarketingPageSsrHtml("/he/pricing");
-  assert.ok(esPricing?.includes("Herramientas potentes para hacer crecer tu negocio"));
-  assert.ok(hePricing?.includes("כלים חזקים לצמיחת העסק"));
+  assert.ok(esPricing?.includes("Precios simples. Todo lo que necesitas para crecer."));
+  assert.ok(hePricing?.includes("תמחור פשוט. כל מה שצריך כדי לצמוח."));
 });
 
 test("injectPageMeta sets lang/dir and self canonical for localized routes", () => {
@@ -180,7 +180,7 @@ test("injectPageMeta sets lang/dir and self canonical for localized routes", () 
   assert.match(es, /hreflang="he"/);
   assert.match(es, /hreflang="x-default"/);
   const he = injectPageMeta(shell, "/he/pricing");
-  assert.match(he, /<html lang="he" dir="rtl">/);
+  assert.match(he, /<html lang="he" dir="rtl"(?: class="rtl")?>/);
   assert.match(he, /rel="canonical" href="https:\/\/www\.whachatcrm\.com\/he\/pricing"/);
 });
 
