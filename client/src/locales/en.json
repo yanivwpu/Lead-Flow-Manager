@@ -1202,7 +1202,8 @@
         "f8": "Growth Engines access where eligible",
         "f9": "AI Brain included",
         "upsell": "AI Brain is included with Pro.",
-        "cta": "Start Your 14-Day Free Trial"
+        "cta": "Start Your 14-Day Free Trial",
+        "upgradeCta": "Upgrade to Pro"
       },
       "aiBrain": {
         "name": "AI Brain",

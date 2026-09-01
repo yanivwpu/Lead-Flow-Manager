@@ -222,11 +222,29 @@ export function shouldResumePricingCheckout(opts: {
   billingPlan: "free" | "starter" | "pro";
   isActiveProAiTrial: boolean;
   intent: PricingCheckoutIntent | null;
+  canStartInternalTrial?: boolean;
 }): boolean {
   if (opts.authLoading || !opts.hasUser || !opts.subscriptionResolved) return false;
   if (opts.isShopify) return false;
+  if (opts.canStartInternalTrial) return false;
   if (!opts.intent) return false;
   if (opts.intent.plan === "starter") return false;
   if (opts.billingPlan === opts.intent.plan && !opts.isActiveProAiTrial) return false;
+  return true;
+}
+
+/** After login, eligible Free users activate the internal trial instead of Stripe. */
+export function shouldStartInternalTrialAfterLogin(opts: {
+  hasUser: boolean;
+  authLoading: boolean;
+  subscriptionResolved: boolean;
+  isShopify: boolean;
+  canStartInternalTrial: boolean;
+  intent: PricingCheckoutIntent | null;
+}): boolean {
+  if (opts.authLoading || !opts.hasUser || !opts.subscriptionResolved) return false;
+  if (opts.isShopify) return false;
+  if (!opts.canStartInternalTrial) return false;
+  if (!opts.intent || opts.intent.plan !== "pro") return false;
   return true;
 }

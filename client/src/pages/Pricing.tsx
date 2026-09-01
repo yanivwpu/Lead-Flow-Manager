@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,7 @@ import {
   parsePricingCheckoutPlan,
   resolvePricingCheckoutIntent,
   shouldResumePricingCheckout,
+  shouldStartInternalTrialAfterLogin,
   markPricingCheckoutResumeStarted,
   hasPricingCheckoutResumeStarted,
   clearPersistedPricingCheckoutIntent,
@@ -64,6 +65,7 @@ import {
 import { renderRtlAwareHeadingText } from "@/components/marketing/RtlAwareHeadingText";
 import { useLocalizedHref, useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { getDirection } from "@/lib/i18n";
+import { resolvePricingProCta, type PricingProCtaKind } from "@shared/pricingProCta";
 
 // ─── Shared structural components ───────────────────────────────────────────
 function FeatureItem({
@@ -169,6 +171,7 @@ function TableCellValue({ val }: { val: boolean | string }) {
 export function Pricing() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const shopHint = useShopifyShopHint();
   const { toast } = useToast();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -215,6 +218,7 @@ export function Pricing() {
       isPaidSubscriber?: boolean;
       trialPlan?: string | null;
       trialDaysRemaining?: number;
+      canStartInternalTrial?: boolean;
     } | null;
   }>({
     queryKey: ["/api/subscription", getLiveShopifyShopFromSearch() ?? "web"],
@@ -259,6 +263,16 @@ export function Pricing() {
     subscriptionData?.subscription,
     typeof window !== "undefined" ? window.location.search : "",
   );
+  const canStartInternalTrial =
+    !!user && subscriptionResolved && !!subscriptionMeta?.canStartInternalTrial;
+  const proCtaKind: PricingProCtaKind = resolvePricingProCta({
+    loggedIn: !!user,
+    isShopify,
+    isPaidPro: billingPlan === "pro",
+    isActiveProAiTrial,
+    canStartInternalTrial,
+  });
+  const showTrialOfferCopy = !isActiveProAiTrial && (!user || canStartInternalTrial);
   const planButtonsDisabled = !!user && !subscriptionResolved;
 
   const compareRows = useMemo(
@@ -290,24 +304,23 @@ export function Pricing() {
     });
   }, [shopHint]);
 
-  const shopifyPlanButtonLabel = (isActiveBilling: boolean): string => {
-    if (isActiveBilling) return t(`${p}.shopifyManageInShopify`);
-    return t(`${p}.shopifyChoosePro`);
-  };
-
-  const paidPlanButtonLabel = (isActiveBilling: boolean): string => {
-    if (isActiveProAiTrial) {
-      return isShopify
-        ? t(`${p}.trialState.keepProAfterTrialShopify`)
-        : t(`${p}.trialState.keepProAfterTrialWeb`);
+  const paidPlanButtonLabel = (): string => {
+    switch (proCtaKind) {
+      case "current_plan":
+        return t(`${p}.plans.currentPlan`);
+      case "keep_pro_after_trial":
+        return isShopify
+          ? t(`${p}.trialState.keepProAfterTrialShopify`)
+          : t(`${p}.trialState.keepProAfterTrialWeb`);
+      case "start_trial":
+        return t(`${p}.plans.pro.cta`);
+      case "upgrade_pro":
+        return t(`${p}.plans.pro.upgradeCta`);
+      case "shopify_manage":
+        return t(`${p}.shopifyManageInShopify`);
+      case "shopify_choose":
+        return t(`${p}.shopifyChoosePro`);
     }
-    if (isActiveBilling) {
-      return isShopify
-        ? shopifyPlanButtonLabel(true)
-        : t(`${p}.plans.currentPlan`);
-    }
-    if (isShopify) return shopifyPlanButtonLabel(false);
-    return t(`${p}.plans.pro.cta`);
   };
 
   const openShopifyPlans = async () => {
@@ -396,6 +409,46 @@ export function Pricing() {
     },
   });
 
+  const startTrialMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/subscription/start-trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        setLocation(`/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
+        throw new Error("session_expired");
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to start trial");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      const next = consumePricingCheckoutIntentFromLocation(
+        `${window.location.pathname}${window.location.search}`,
+      );
+      if (next !== `${window.location.pathname}${window.location.search}`) {
+        window.history.replaceState(null, "", next);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      setLoadingPlan(null);
+      setLocation("/app/inbox");
+    },
+    onError: (error: any) => {
+      if (error.message !== "session_expired") {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to start trial",
+          variant: "destructive",
+        });
+      }
+      setLoadingPlan(null);
+    },
+  });
+
   const handleUpgrade = (planId: string) => {
     trackPricingEvent("pricing_plan_cta_click", { plan: planId });
     if (planId === "starter") {
@@ -425,9 +478,12 @@ export function Pricing() {
       return;
     }
     if (planId === "free") return;
+    if (proCtaKind === "current_plan") return;
     setLoadingPlan(planId);
     if (isShopify) {
       shopifyCheckoutMutation.mutate(planId);
+    } else if (proCtaKind === "start_trial") {
+      startTrialMutation.mutate();
     } else {
       checkoutMutation.mutate({ planId, interval: billingInterval });
     }
@@ -463,6 +519,24 @@ export function Pricing() {
     if (!user || !subscriptionResolved) return;
 
     if (
+      shouldStartInternalTrialAfterLogin({
+        hasUser: true,
+        authLoading: false,
+        subscriptionResolved: true,
+        isShopify,
+        canStartInternalTrial,
+        intent,
+      })
+    ) {
+      checkoutIntentHandledRef.current = true;
+      markPricingCheckoutResumeStarted();
+      clearPersistedPricingCheckoutIntent();
+      setLoadingPlan("pro");
+      startTrialMutation.mutate();
+      return;
+    }
+
+    if (
       !shouldResumePricingCheckout({
         hasUser: true,
         authLoading: false,
@@ -471,6 +545,7 @@ export function Pricing() {
         billingPlan,
         isActiveProAiTrial,
         intent,
+        canStartInternalTrial,
       })
     ) {
       checkoutIntentHandledRef.current = true;
@@ -496,7 +571,9 @@ export function Pricing() {
     isShopify,
     billingPlan,
     isActiveProAiTrial,
+    canStartInternalTrial,
     checkoutMutation,
+    startTrialMutation,
     pricingContent.starterRetired.title,
     pricingContent.starterRetired.body,
     toast,
@@ -583,12 +660,12 @@ export function Pricing() {
               </p>
             ) : null}
           </div>
-        ) : (
+        ) : showTrialOfferCopy ? (
         <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 mb-4 text-sm text-emerald-800" data-testid="banner-free-trial">
           <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
           <span>{pricingContent.trialBanner}</span>
         </div>
-        )}
+        ) : null}
 
         <div className="mb-4 text-center" data-testid="section-pricing-hero">
           <h1
@@ -744,7 +821,6 @@ export function Pricing() {
 
           {/* PRO */}
           {(() => {
-            const isCurrentBillingPlan = billingPlan === "pro";
             const isLoading = loadingPlan === "pro";
             return (
               <div
@@ -799,7 +875,7 @@ export function Pricing() {
                       {pricingContent.proCallout.body}
                     </p>
                   </div>
-                  {!isActiveProAiTrial ? (
+                  {showTrialOfferCopy ? (
                     <p className="text-xs font-medium text-emerald-700 flex items-start gap-1" data-testid="text-trial-pro">
                       <span className="shrink-0">✓</span>
                       <span>{pricingContent.trialBanner}</span>
@@ -807,24 +883,25 @@ export function Pricing() {
                   ) : null}
                   <Button
                     className={`w-full ${
-                      isCurrentBillingPlan && !isShopify && !isActiveProAiTrial
+                      proCtaKind === "current_plan"
                         ? "bg-gray-100 text-gray-500"
-                        : isCurrentBillingPlan && isShopify && !isActiveProAiTrial
+                        : proCtaKind === "shopify_manage"
                           ? "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
                           : "bg-brand-green hover:bg-emerald-700 text-white"
                     }`}
                     disabled={
                       planButtonsDisabled ||
-                      (isCurrentBillingPlan && !isShopify && !isActiveProAiTrial) ||
+                      proCtaKind === "current_plan" ||
                       isLoading
                     }
                     onClick={() => handleUpgrade("pro")}
                     data-testid="button-upgrade-pro"
+                    data-pro-cta={proCtaKind}
                   >
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      paidPlanButtonLabel(isCurrentBillingPlan)
+                      paidPlanButtonLabel()
                     )}
                   </Button>
                 </div>

@@ -122,11 +122,17 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { subscriptionService, getEffectivePlanForUser } from "./subscriptionService";
+import { registerSubscriptionCheckoutRoutes } from "./subscriptionCheckoutRoutes";
 import {
   AI_BRAIN_ADDON_RETIRED_CODE,
   STARTER_CHECKOUT_RETIRED_CODE,
 } from "./stripePlanPriceIds";
-import { computeTrialStatus, isProAiTrialActive, hasActivePaidPlan } from "./trialEntitlements";
+import {
+  computeTrialStatus,
+  isProAiTrialActive,
+  hasActivePaidPlan,
+  canStartInternalProAiTrial,
+} from "./trialEntitlements";
 import { paidSourceOptionsForUser } from "./ghlMarketplaceGrant";
 import {
   businessKnowledgeFromAiRecord,
@@ -3789,6 +3795,9 @@ export async function registerRoutes(
               /** Hide countdown promotions when user already pays for Pro (or higher). */
               isPaidSubscriber: paidProOrAi,
               showTrialUrgency,
+              canStartInternalTrial: canStartInternalProAiTrial(user, now, {
+                ghlMarketplaceProActive: limits?.ghlMarketplaceProActive,
+              }),
             }
           : null,
       } as const;
@@ -3905,48 +3914,7 @@ export async function registerRoutes(
     }
   });
 
-  // Create checkout session for upgrading
-  app.post("/api/subscription/checkout", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      if (await blockStripeForShopify(req, res, "subscription/checkout")) return;
-
-      const { planId, billingInterval, redirectTo, cancelTo } = req.body as {
-        planId?: string;
-        billingInterval?: "monthly" | "yearly";
-        redirectTo?: string;
-        cancelTo?: string;
-      };
-
-      if (!planId || !["starter", "pro"].includes(planId)) {
-        return res.status(400).json({ error: "Invalid plan" });
-      }
-
-      if (billingInterval && !["monthly", "yearly"].includes(billingInterval)) {
-        return res.status(400).json({ error: "Invalid billing interval" });
-      }
-
-      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
-      const successPath = sanitizeStripeReturnPath(redirectTo, "/app/inbox");
-      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
-      const result = await subscriptionService.createCheckoutSession(
-        req.user.id,
-        planId as SubscriptionPlan,
-        baseUrl,
-        billingInterval || "monthly",
-        { successReturnPath: successPath, cancelReturnPath: cancelPath }
-      );
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error creating checkout:", error);
-      if (error?.code === STARTER_CHECKOUT_RETIRED_CODE) {
-        return res.status(400).json({ error: error.message, code: error.code });
-      }
-      res.status(500).json({ error: error.message || "Failed to create checkout" });
-    }
-  });
+  registerSubscriptionCheckoutRoutes(app);
 
   /** GA4 purchase helper — returns paid Checkout Session fields for the authenticated owner only. */
   app.get("/api/subscription/checkout-session", async (req, res) => {
@@ -4007,70 +3975,6 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("Error loading checkout session for GA4:", error);
       res.status(500).json({ error: "Failed to load checkout session" });
-    }
-  });
-
-  app.post("/api/subscription/checkout/pro-ai", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      if (await blockStripeForShopify(req, res, "subscription/checkout/pro-ai")) return;
-
-      const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
-      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get('host')}`;
-      const successPath = sanitizeStripeReturnPath(
-        redirectTo,
-        "/app/templates/realtor-growth-engine",
-      );
-      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
-      const result = await subscriptionService.createProPlusAICheckoutSession(req.user.id, baseUrl, {
-        successReturnPath: successPath,
-        cancelReturnPath: cancelPath,
-      });
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error creating Pro+AI checkout:", error);
-      res.status(500).json({ error: error.message || "Failed to create checkout" });
-    }
-  });
-
-  // Legacy plan + AI Brain bundle — Pro routes to Pro-only checkout; Starter is rejected.
-  app.post("/api/subscription/checkout/plan-ai-bundle", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      if (await blockStripeForShopify(req, res, "subscription/checkout/plan-ai-bundle")) return;
-
-      const { plan, redirectTo, cancelTo } = (req.body || {}) as {
-        plan?: string;
-        redirectTo?: string;
-        cancelTo?: string;
-      };
-      if (plan !== "starter" && plan !== "pro") {
-        return res.status(400).json({ error: "plan must be starter or pro" });
-      }
-
-      const baseUrl = getAppOrigin() || `${req.protocol}://${req.get("host")}`;
-      const successPath = sanitizeStripeReturnPath(redirectTo, "/app/ai-brain");
-      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, successPath);
-      const result = await subscriptionService.createPlanAIBundleCheckoutSession(
-        req.user.id,
-        plan,
-        baseUrl,
-        { successReturnPath: successPath, cancelReturnPath: cancelPath },
-      );
-      res.json(result);
-    } catch (error: any) {
-      console.error("Error creating plan + AI bundle checkout:", error);
-      if (error?.code === STARTER_CHECKOUT_RETIRED_CODE) {
-        return res.status(400).json({ error: error.message, code: error.code });
-      }
-      if (error?.code === "PLAN_AI_BUNDLE_NOT_FREE") {
-        return res.status(400).json({ error: error.message });
-      }
-      res.status(500).json({ error: error.message || "Failed to create checkout" });
     }
   });
 

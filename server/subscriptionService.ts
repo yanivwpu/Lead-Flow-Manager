@@ -7,6 +7,7 @@ import {
   hasActivePaidPlan,
 } from "./trialEntitlements";
 import { paidSourceOptionsForUser } from "./ghlMarketplaceGrant";
+import { getUncachableStripeClient } from "./stripeClient";
 import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
 import { getAppOrigin } from "./urlOrigins";
 import {
@@ -358,6 +359,8 @@ class SubscriptionService {
     if (!user) throw new Error("User not found");
     assertStripeNotAllowedForShopifyUser(user, "createCheckoutSession");
 
+    // Paid Stripe Checkout only. Never grant or extend the internal 14-day trial.
+    // Expired-trial accounts pay the normal Pro subscription price.
     const stripe = await getUncachableStripeClient();
     const resolvedBaseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin() || baseUrl);
 

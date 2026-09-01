@@ -10,12 +10,25 @@ async function getCredentials() {
   return { publishableKey, secretKey };
 }
 
-export async function getUncachableStripeClient() {
+type StripeClientFactory = () => Promise<Stripe>;
+
+const defaultUncachableStripeClientFactory: StripeClientFactory = async () => {
   const { secretKey } = await getCredentials();
 
   console.log("STRIPE KEY USED:", process.env.STRIPE_SECRET_KEY?.slice(-5));
 
   return new Stripe(secretKey);
+};
+
+let uncachableStripeClientFactory: StripeClientFactory = defaultUncachableStripeClientFactory;
+
+export async function getUncachableStripeClient() {
+  return uncachableStripeClientFactory();
+}
+
+/** Test-only seam. Does not add a second Stripe client — production still uses this factory. */
+export function setUncachableStripeClientFactoryForTests(next: StripeClientFactory | null) {
+  uncachableStripeClientFactory = next ?? defaultUncachableStripeClientFactory;
 }
 
 export async function getStripePublishableKey() {

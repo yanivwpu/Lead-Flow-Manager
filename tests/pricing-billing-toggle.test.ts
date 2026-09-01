@@ -86,8 +86,10 @@ test("Pricing page defaults to Monthly, wires yearly checkout, and keeps pills r
 
 test("Checkout route and Stripe mapping keep yearly on the same entitlement plan", () => {
   const routes = readFileSync(join(root, "server/routes.ts"), "utf8");
-  assert.ok(routes.includes("createCheckoutSession"));
-  assert.ok(routes.includes("billingInterval || \"monthly\""));
+  assert.ok(routes.includes("registerSubscriptionCheckoutRoutes(app)"));
+  const checkoutRoutes = readFileSync(join(root, "server/subscriptionCheckoutRoutes.ts"), "utf8");
+  assert.ok(checkoutRoutes.includes("createCheckoutSession"));
+  assert.ok(checkoutRoutes.includes("billingInterval || \"monthly\""));
 
   const service = readFileSync(join(root, "server/subscriptionService.ts"), "utf8");
   assert.ok(service.includes("resolveStripePlanPriceId(plan, billingInterval)"));

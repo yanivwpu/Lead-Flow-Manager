@@ -1134,7 +1134,8 @@
         "f8": "Reorientación inteligente",
         "f9": "AI Brain incluido",
         "upsell": "AI Brain está incluido con Pro.",
-        "cta": "Empieza tu prueba gratis de 14 días"
+        "cta": "Empieza tu prueba gratis de 14 días",
+        "upgradeCta": "Actualizar a Pro"
       },
       "aiBrain": {
         "name": "AI Brain",

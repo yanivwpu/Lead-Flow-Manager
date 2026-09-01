@@ -131,3 +131,33 @@ export function hadProAiBrainTrial(user: Pick<User, "trialEndsAt" | "trialPlan">
   const plan = user.trialPlan || "pro_ai";
   return plan === "pro_ai";
 }
+
+/**
+ * Whether the account may still receive the one-time WhachatCRM 14-day Pro trial.
+ * Fail closed after any prior trial window (including expired trialEndsAt ≈ 2026-05-31).
+ */
+export function canStartInternalProAiTrial(
+  user: Pick<
+    User,
+    | "trialEndsAt"
+    | "trialStartedAt"
+    | "trialStatus"
+    | "trialPlan"
+    | "planOverrideEnabled"
+    | "planOverride"
+    | "billingPlan"
+    | "subscriptionStatus"
+    | "shopifyShop"
+    | "shopifySubscriptionStatus"
+  >,
+  now: Date = new Date(),
+  opts?: PaidSourceOptions,
+): boolean {
+  if (hasActivePaidPlan(user, now, opts)) return false;
+  if (user.shopifyShop) return false;
+  if (isProAiTrialActive(user, now, opts)) return false;
+  if (user.trialEndsAt) return false;
+  if (user.trialStartedAt) return false;
+  if (user.trialStatus === "expired" || user.trialStatus === "active") return false;
+  return true;
+}
