@@ -13,6 +13,7 @@ import {
   userHasActiveGhlMarketplaceProGrant,
   ghlUninstallIntegrationCredentialPatch,
 } from "../shared/ghlMarketplaceBilling";
+import { mergeGhlLifecycleRawPayload } from "../shared/ghlConnectionState";
 import {
   applyGhlMarketplaceLifecycleEvent,
   emptyGhlMarketplaceBillingState,
@@ -315,6 +316,16 @@ test("18. Event arriving before OAuth linking is reconciled later", () => {
     readFileSync(join(root, "server/ghlMarketplaceLifecycleService.ts"), "utf8"),
     /accessToken:\s*["']/,
   );
+});
+
+test("18b. PLAN_CHANGE overlay does not drop existing OAuth credential keys", () => {
+  const merged = mergeGhlLifecycleRawPayload(
+    { access_token: "keep-me", refresh_token: "keep-refresh", type: "INSTALL" },
+    { type: "PLAN_CHANGE", newPlanId: PRO_ID },
+  );
+  assert.equal(merged.access_token, "keep-me");
+  assert.equal(merged.refresh_token, "keep-refresh");
+  assert.equal(merged.type, "PLAN_CHANGE");
 });
 
 test("19. Duplicate events are idempotent", () => {

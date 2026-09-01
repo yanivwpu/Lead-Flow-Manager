@@ -3,7 +3,7 @@
  * Does not mint OAuth tokens from webhooks.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { ghlMarketplaceInstalls, ghlMarketplaceWebhookDedup } from "@shared/schema";
 import {
@@ -12,11 +12,13 @@ import {
   sanitizeGhlLifecyclePayloadForStorage,
   type GhlMarketplaceBillingState,
 } from "@shared/ghlMarketplaceLifecycle";
+import { mergeGhlLifecycleRawPayload, selectMarketplaceRowForOAuthLink, stripGhlOAuthSecretsFromPayload } from "@shared/ghlConnectionState";
 import { ghlMarketplacePlanConfigFromEnv } from "@shared/ghlMarketplacePlanIds";
 import { storage } from "./storage";
 import { logGhlOAuthDiagnostic } from "./ghlConnectionDiagnostics";
 import { linkMarketplaceInstallToIntegration } from "./ghlMarketplaceService";
 import { isActiveGhlMarketplaceProGrant, ghlUninstallIntegrationCredentialPatch } from "@shared/ghlMarketplaceBilling";
+import { revokeGhlOAuthHandoffsForInstall } from "./ghlOAuthHandoff";
 
 export type GhlLifecyclePersistResult = {
   kind: "applied" | "duplicate" | "stale" | "ignored";
@@ -49,33 +51,8 @@ function rowToState(row: typeof ghlMarketplaceInstalls.$inferSelect): GhlMarketp
 }
 
 async function findInstall(companyId: string, locationId: string | null) {
-  if (locationId) {
-    const byBoth = await db
-      .select()
-      .from(ghlMarketplaceInstalls)
-      .where(
-        and(eq(ghlMarketplaceInstalls.locationId, locationId), eq(ghlMarketplaceInstalls.companyId, companyId)),
-      )
-      .limit(1);
-    if (byBoth[0]) return byBoth[0];
-    const byLocation = await db
-      .select()
-      .from(ghlMarketplaceInstalls)
-      .where(eq(ghlMarketplaceInstalls.locationId, locationId))
-      .limit(1);
-    if (byLocation[0]) return byLocation[0];
-  }
-  const byCompany = await db
-    .select()
-    .from(ghlMarketplaceInstalls)
-    .where(
-      and(
-        eq(ghlMarketplaceInstalls.companyId, companyId),
-        sql`${ghlMarketplaceInstalls.locationId} IS NULL`,
-      ),
-    )
-    .limit(1);
-  return byCompany[0] ?? null;
+  const rows = await db.select().from(ghlMarketplaceInstalls);
+  return selectMarketplaceRowForOAuthLink(rows, locationId, companyId) ?? null;
 }
 
 async function deactivateLinkedGhlIntegrations(locationId: string | null, companyId: string): Promise<void> {
@@ -146,11 +123,15 @@ export async function persistGhlMarketplaceLifecycleEvent(
 
   const state = result.next;
   const now = new Date();
-  const sanitized = sanitizeGhlLifecyclePayloadForStorage(body);
+  const sanitized = stripGhlOAuthSecretsFromPayload(sanitizeGhlLifecyclePayloadForStorage(body));
+  const existingPayload =
+    existing?.rawPayload && typeof existing.rawPayload === "object"
+      ? (existing.rawPayload as Record<string, unknown>)
+      : {};
   const patch = {
     agency: existing?.agency ?? null,
     companyId: state.companyId,
-    locationId: state.locationId,
+    locationId: state.locationId || existing?.locationId || null,
     appId: state.appId,
     marketplacePlanId: state.marketplacePlanId,
     paymentStatus: state.paymentStatus,
@@ -169,7 +150,7 @@ export async function persistGhlMarketplaceLifecycleEvent(
     pricePlan: state.marketplacePlanId,
     billingStatus: state.paymentStatus,
     source: existing?.source ?? "webhook",
-    rawPayload: sanitized,
+    rawPayload: mergeGhlLifecycleRawPayload(existingPayload, sanitized),
     lastSyncedAt: now,
     updatedAt: now,
     installDate: existing?.installDate ?? event.occurredAt ?? now,
@@ -212,6 +193,10 @@ export async function persistGhlMarketplaceLifecycleEvent(
 
   if (event.type === "UNINSTALL") {
     await deactivateLinkedGhlIntegrations(event.locationId, event.companyId);
+    await revokeGhlOAuthHandoffsForInstall({
+      locationId: event.locationId,
+      companyId: event.companyId,
+    });
   } else if (event.type === "INSTALL" && event.locationId) {
     const allGhl = await storage.getAllIntegrationsByType("gohighlevel");
     const matched = allGhl.find((i) => {

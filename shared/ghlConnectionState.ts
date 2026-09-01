@@ -114,12 +114,66 @@ export function selectMarketplaceRowForOAuthLink<
   if (!loc && !company) return undefined;
 
   if (loc && company) {
-    return rows.find((r) => (r.locationId || "").trim() === loc && (r.companyId || "").trim() === company);
+    const exact = rows.find(
+      (r) => (r.locationId || "").trim() === loc && (r.companyId || "").trim() === company,
+    );
+    if (exact) return exact;
   }
   if (loc) {
-    return rows.find((r) => (r.locationId || "").trim() === loc);
+    const byLocation = rows.find((r) => (r.locationId || "").trim() === loc);
+    if (byLocation) return byLocation;
   }
-  return rows.find((r) => (r.companyId || "").trim() === company && !(r.locationId || "").trim());
+  if (!company) return undefined;
+
+  const companyRows = rows.filter((r) => (r.companyId || "").trim() === company);
+  const companyWithoutLocation = companyRows.find((r) => !(r.locationId || "").trim());
+  if (companyWithoutLocation) return companyWithoutLocation;
+
+  const companyWithLocation = companyRows.filter((r) => Boolean((r.locationId || "").trim()));
+  if (companyWithLocation.length === 1) return companyWithLocation[0];
+
+  return undefined;
+}
+
+export const GHL_OAUTH_SECRET_PAYLOAD_KEYS = [
+  "access_token",
+  "refresh_token",
+  "accessToken",
+  "refreshToken",
+  "authorizationCode",
+  "authorization_code",
+  "code",
+  "client_secret",
+  "clientSecret",
+] as const;
+
+export function stripGhlOAuthSecretsFromPayload(
+  payload: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (!payload || typeof payload !== "object") return {};
+  const out: Record<string, unknown> = { ...payload };
+  for (const key of GHL_OAUTH_SECRET_PAYLOAD_KEYS) {
+    if (key in out) delete out[key];
+  }
+  return out;
+}
+
+export function ghlPayloadContainsOAuthSecrets(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const record = payload as Record<string, unknown>;
+  return GHL_OAUTH_SECRET_PAYLOAD_KEYS.some((key) => {
+    const value = record[key];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
+/** Overlay sanitized lifecycle fields without dropping existing OAuth credential keys. */
+export function mergeGhlLifecycleRawPayload(
+  existing: Record<string, unknown> | null | undefined,
+  sanitized: Record<string, unknown>,
+): Record<string, unknown> {
+  const base = existing && typeof existing === "object" ? { ...existing } : {};
+  return { ...base, ...sanitized };
 }
 
 const ADMIN_SECRET_KEYS = [

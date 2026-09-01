@@ -28,7 +28,13 @@ export type GhlOAuthDiagnosticEvent =
   | "oauth_recovery_no_candidates"
   | "oauth_recovery_token_invalid"
   | "oauth_recovery_succeeded"
-  | "oauth_recovery_attempted";
+  | "oauth_recovery_attempted"
+  | "oauth_handoff_created"
+  | "oauth_handoff_claimed"
+  | "oauth_handoff_rejected"
+  | "oauth_recovery_admin_override"
+  | "webhook_uninstall_credentials_revoked"
+  | "webhook_lifecycle_warning";
 
 export type UserEligibleGhlMarketplaceInstall = {
   id: string;

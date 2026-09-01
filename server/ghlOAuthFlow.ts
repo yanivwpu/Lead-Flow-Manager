@@ -135,12 +135,24 @@ export async function exchangeGhlAuthorizationCode(
   return { ok: true, data: tokenData };
 }
 
+export type GhlOAuthIdentityHints = {
+  appId?: string | null;
+  versionId?: string | null;
+  ghlUserId?: string | null;
+};
+
 export async function persistGhlIntegrationForUser(
   ownerUserId: string,
   tokenData: GhlTokenPayload,
+  identityHints?: GhlOAuthIdentityHints,
 ): Promise<{ integration: Integration; created: boolean }> {
   const tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in || 86400) * 1000);
   const locationOrCompanyId = tokenData.locationId || tokenData.companyId || "unknown";
+  const identityConfig = {
+    appId: identityHints?.appId || undefined,
+    versionId: identityHints?.versionId || undefined,
+    ghlUserId: identityHints?.ghlUserId || undefined,
+  };
 
   const existingIntegrations = await storage.getAllIntegrationsByType("gohighlevel");
   const existing = existingIntegrations.find(
@@ -151,6 +163,7 @@ export async function persistGhlIntegrationForUser(
   );
 
   if (existing) {
+    const prev = (existing.config as Record<string, unknown>) || {};
     await storage.updateIntegration(existing.id, {
       userId: ownerUserId,
       accessToken: tokenData.access_token,
@@ -158,12 +171,13 @@ export async function persistGhlIntegrationForUser(
       tokenExpiresAt,
       isActive: true,
       config: {
-        ...(existing.config as Record<string, unknown>),
-        locationId: tokenData.locationId,
-        companyId: tokenData.companyId,
+        ...prev,
+        locationId: tokenData.locationId || prev.locationId,
+        companyId: tokenData.companyId || prev.companyId,
         userType: tokenData.userType,
         scope: tokenData.scope,
-        installedAt: (existing.config as Record<string, unknown>)?.installedAt || new Date().toISOString(),
+        ...identityConfig,
+        installedAt: prev.installedAt || new Date().toISOString(),
         reconnectedAt: new Date().toISOString(),
       },
       lastSyncAt: new Date(),
@@ -174,7 +188,7 @@ export async function persistGhlIntegrationForUser(
       userId: ownerUserId,
       accessToken: tokenData.access_token,
     }) as Integration;
-    await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration);
+    await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration, identityHints);
     return { integration, created: false };
   }
 
@@ -191,11 +205,12 @@ export async function persistGhlIntegrationForUser(
       companyId: tokenData.companyId,
       userType: tokenData.userType,
       scope: tokenData.scope,
+      ...identityConfig,
       installedAt: new Date().toISOString(),
     },
   });
 
-  await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration);
+  await linkMarketplaceInstallToIntegration(tokenData.locationId, tokenData.companyId, integration, identityHints);
   return { integration, created: true };
 }
 

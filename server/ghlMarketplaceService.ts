@@ -15,6 +15,8 @@ import {
   isUnmatchedGhlMarketplaceInstall,
   isUsableGhlConnectionForUser,
   normalizeGhlMarketplaceInstallStatus,
+  selectMarketplaceRowForOAuthLink,
+  stripGhlOAuthSecretsFromPayload,
   type GhlAdminLinkState,
 } from "@shared/ghlConnectionState";
 import { isActiveGhlMarketplaceProGrant } from "@shared/ghlMarketplaceBilling";
@@ -291,6 +293,7 @@ export type GhlMarketplaceInstallInput = {
   marketplacePlanId?: string | null;
   paymentStatus?: string | null;
   ghlUserId?: string | null;
+  versionId?: string | null;
   source?: string;
   rawPayload?: Record<string, unknown>;
 };
@@ -395,6 +398,18 @@ function mapMarketplaceOnlyToRow(
   };
 }
 
+export async function findMarketplaceInstallByOAuthIdentity(params: {
+  locationId?: string | null;
+  companyId?: string | null;
+}): Promise<GhlMarketplaceInstall | undefined> {
+  const loc = params.locationId?.trim() || null;
+  const company = params.companyId?.trim() || null;
+  if (!loc && !company) return undefined;
+
+  const rows = await db.select().from(ghlMarketplaceInstalls);
+  return selectMarketplaceRowForOAuthLink(rows, loc, company);
+}
+
 export async function upsertGhlMarketplaceInstall(
   input: GhlMarketplaceInstallInput,
 ): Promise<GhlMarketplaceInstall> {
@@ -403,34 +418,15 @@ export async function upsertGhlMarketplaceInstall(
 
   const locationId = input.locationId?.trim() || null;
   const now = new Date();
-
-  const existing = locationId
-    ? await db
-        .select()
-        .from(ghlMarketplaceInstalls)
-        .where(
-          and(
-            eq(ghlMarketplaceInstalls.locationId, locationId),
-            eq(ghlMarketplaceInstalls.companyId, companyId),
-          ),
-        )
-        .limit(1)
-    : await db
-        .select()
-        .from(ghlMarketplaceInstalls)
-        .where(
-          and(
-            eq(ghlMarketplaceInstalls.companyId, companyId),
-            sql`${ghlMarketplaceInstalls.locationId} IS NULL`,
-          ),
-        )
-        .limit(1);
+  const existing = await findMarketplaceInstallByOAuthIdentity({ locationId, companyId });
 
   const normalizedStatus = normalizeGhlMarketplaceInstallStatus(input.installationStatus) ?? input.installationStatus;
-  const patch = {
+  const sanitizedPayload =
+    input.rawPayload !== undefined ? stripGhlOAuthSecretsFromPayload(input.rawPayload) : undefined;
+  const patch: Record<string, unknown> = {
     agency: input.agency ?? undefined,
     companyId,
-    locationId: locationId ?? undefined,
+    locationId: locationId || existing?.locationId || undefined,
     subAccountName: input.subAccountName ?? undefined,
     whiteLabeled: input.whiteLabeled ?? undefined,
     agencyOwner: input.agencyOwner ?? undefined,
@@ -444,17 +440,20 @@ export async function upsertGhlMarketplaceInstall(
     marketplacePlanId: input.marketplacePlanId ?? undefined,
     paymentStatus: input.paymentStatus ?? undefined,
     ghlUserId: input.ghlUserId ?? undefined,
+    versionId: input.versionId ?? undefined,
     source: input.source ?? "webhook",
-    rawPayload: input.rawPayload ?? {},
     lastSyncedAt: now,
     updatedAt: now,
   };
+  if (sanitizedPayload !== undefined) {
+    patch.rawPayload = sanitizedPayload;
+  }
 
-  if (existing[0]) {
+  if (existing) {
     const [updated] = await db
       .update(ghlMarketplaceInstalls)
       .set(patch)
-      .where(eq(ghlMarketplaceInstalls.id, existing[0].id))
+      .where(eq(ghlMarketplaceInstalls.id, existing.id))
       .returning();
     return updated;
   }
@@ -478,8 +477,9 @@ export async function upsertGhlMarketplaceInstall(
       marketplacePlanId: input.marketplacePlanId ?? null,
       paymentStatus: input.paymentStatus ?? null,
       ghlUserId: input.ghlUserId ?? null,
+      versionId: input.versionId ?? null,
       source: input.source ?? "webhook",
-      rawPayload: input.rawPayload ?? {},
+      rawPayload: sanitizedPayload ?? {},
       lastSyncedAt: now,
     })
     .returning();
@@ -490,42 +490,20 @@ export async function linkMarketplaceInstallToIntegration(
   locationId: string | null | undefined,
   companyId: string | null | undefined,
   integration: Integration,
+  identityHints?: { appId?: string | null; versionId?: string | null; ghlUserId?: string | null },
 ): Promise<void> {
   if (!companyId && !locationId) return;
 
   const loc = locationId?.trim() || null;
   const company = companyId?.trim() || null;
-
-  let existing: GhlMarketplaceInstall | undefined;
-  if (loc && company) {
-    existing = (
-      await db
-        .select()
-        .from(ghlMarketplaceInstalls)
-        .where(and(eq(ghlMarketplaceInstalls.locationId, loc), eq(ghlMarketplaceInstalls.companyId, company)))
-        .limit(1)
-    )[0];
-  } else if (loc) {
-    existing = (
-      await db
-        .select()
-        .from(ghlMarketplaceInstalls)
-        .where(eq(ghlMarketplaceInstalls.locationId, loc))
-        .limit(1)
-    )[0];
-  } else if (company) {
-    existing = (
-      await db
-        .select()
-        .from(ghlMarketplaceInstalls)
-        .where(and(eq(ghlMarketplaceInstalls.companyId, company), sql`${ghlMarketplaceInstalls.locationId} IS NULL`))
-        .limit(1)
-    )[0];
-  }
+  const existing = await findMarketplaceInstallByOAuthIdentity({ locationId: loc, companyId: company });
 
   const linkFields = {
     integrationId: integration.id,
     whachatUserId: integration.userId,
+    appId: identityHints?.appId || undefined,
+    versionId: identityHints?.versionId || undefined,
+    ghlUserId: identityHints?.ghlUserId || undefined,
     lastSyncedAt: new Date(),
     updatedAt: new Date(),
   };
@@ -545,23 +523,16 @@ export async function linkMarketplaceInstallToIntegration(
     subAccountName: integration.name,
     installDate: (config.installedAt as string) || integration.createdAt || new Date(),
     installationStatus: integration.isActive ? "Active" : "Uninstalled",
+    appId: identityHints?.appId ?? (config.appId as string) ?? null,
+    versionId: identityHints?.versionId ?? (config.versionId as string) ?? null,
+    ghlUserId: identityHints?.ghlUserId ?? (config.ghlUserId as string) ?? null,
     source: "oauth",
   });
 
-  const created = (
-    await db
-      .select()
-      .from(ghlMarketplaceInstalls)
-      .where(
-        and(
-          eq(ghlMarketplaceInstalls.companyId, company || (config.companyId as string) || "unknown"),
-          loc
-            ? eq(ghlMarketplaceInstalls.locationId, loc)
-            : sql`${ghlMarketplaceInstalls.locationId} IS NULL`,
-        ),
-      )
-      .limit(1)
-  )[0];
+  const created = await findMarketplaceInstallByOAuthIdentity({
+    locationId: loc || (config.locationId as string) || null,
+    companyId: company || (config.companyId as string) || "unknown",
+  });
 
   if (created) {
     await db.update(ghlMarketplaceInstalls).set(linkFields).where(eq(ghlMarketplaceInstalls.id, created.id));
@@ -634,10 +605,11 @@ export function extractInstallFromWebhook(body: Record<string, unknown>): GhlMar
     pricePlan: (install.planId as string) || (install.pricePlan as string) || (install.plan as string) || (body.planId as string) || null,
     marketplacePlanId: (body.planId as string) || (install.planId as string) || null,
     appId: (body.appId as string) || null,
+    versionId: (body.versionId as string) || (body.version_id as string) || null,
     ghlUserId: (body.userId as string) || null,
     billingStatus: (install.billingStatus as string) || null,
     source: "webhook",
-    rawPayload: body,
+    rawPayload: stripGhlOAuthSecretsFromPayload(body),
   };
 }
 
@@ -987,7 +959,7 @@ function buildIntegrationBackfillPatch(
     whachatUserId: integration.userId,
     lastSyncedAt: integration.lastSyncAt || now,
     source: existing ? existing.source : "integration_backfill",
-    rawPayload: {
+    rawPayload: stripGhlOAuthSecretsFromPayload({
       ...((existing?.rawPayload as Record<string, unknown>) || {}),
       backfillIntegration: {
         integrationId: integration.id,
@@ -998,7 +970,7 @@ function buildIntegrationBackfillPatch(
         isActive: integration.isActive,
         backfilledAt: now.toISOString(),
       },
-    },
+    }),
   };
 
   if (!existing) {

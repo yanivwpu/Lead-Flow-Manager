@@ -2412,6 +2412,39 @@ export const ghlMarketplaceWebhookDedup = pgTable("ghl_marketplace_webhook_dedup
   processedAt: timestamp("processed_at").defaultNow(),
 });
 
+/** Encrypted, single-use GHL OAuth handoff for Marketplace installs without a WhachatCRM session. */
+export const ghlOAuthPendingHandoffs = pgTable(
+  "ghl_oauth_pending_handoffs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    claimTokenHash: text("claim_token_hash").notNull(),
+    accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    refreshTokenEncrypted: text("refresh_token_encrypted"),
+    tokenExpiresAt: timestamp("token_expires_at"),
+    scope: text("scope"),
+    userType: text("user_type"),
+    companyId: text("company_id").notNull(),
+    locationId: text("location_id"),
+    appId: text("app_id"),
+    versionId: text("version_id"),
+    ghlUserId: text("ghl_user_id"),
+    marketplaceInstallId: varchar("marketplace_install_id").references(() => ghlMarketplaceInstalls.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at").notNull(),
+    consumedAt: timestamp("consumed_at"),
+    consumedByUserId: varchar("consumed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    claimTokenHashUq: uniqueIndex("ghl_oauth_pending_handoffs_claim_token_hash_uidx").on(t.claimTokenHash),
+    expiresIdx: index("ghl_oauth_pending_handoffs_expires_idx").on(t.expiresAt),
+    companyLocationIdx: index("ghl_oauth_pending_handoffs_company_location_idx").on(t.companyId, t.locationId),
+  }),
+);
+
+export type GhlOAuthPendingHandoff = typeof ghlOAuthPendingHandoffs.$inferSelect;
+
 /** Internal prospect import jobs (GHL → YaBa workspace, provider-agnostic). */
 export const prospectImportJobs = pgTable("prospect_import_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

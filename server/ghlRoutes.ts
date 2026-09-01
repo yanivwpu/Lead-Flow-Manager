@@ -10,6 +10,7 @@ import { getAppOrigin } from './urlOrigins';
 import { scheduleHubSpotAutoSync } from './hubspotAutoSync';
 import {
   evaluateUnlinkedOAuthRecoveryEligibility,
+  findMarketplaceInstallByOAuthIdentity,
   upsertGhlMarketplaceInstall,
 } from './ghlMarketplaceService';
 import { getGhlMarketplaceOAuthConfig } from './ghlOAuthConfig';
@@ -34,6 +35,8 @@ import {
   saveSessionValue,
 } from './ghlOAuthFlow';
 import { recoverGhlOAuthFromMarketplaceInstall } from './ghlOAuthRecovery';
+import { claimGhlOAuthHandoffForUser, claimGhlOAuthHandoffIfPresent, createGhlOAuthPendingHandoff } from './ghlOAuthHandoff';
+import { GHL_OAUTH_HANDOFF_POST_AUTH_REDIRECT } from '@shared/ghlOAuthHandoff';
 import { requireAuth } from './auth';
 import {
   canAccessGhlOAuthRecoveryTools,
@@ -42,6 +45,7 @@ import {
 import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from '@shared/contactCrmVisibility';
 import { promoteInboxIdentityToCrm } from './emailChannel/contactMatch';
 import { persistGhlMarketplaceLifecycleEvent } from './ghlMarketplaceLifecycleService';
+import { stripGhlOAuthSecretsFromPayload } from '@shared/ghlConnectionState';
 import { verifyGhlWebhookSignature, ghlWebhookSignatureReadiness } from './ghlWebhookSignature';
 import { normalizeGhlLifecycleEventType } from '@shared/ghlMarketplaceLifecycle';
 import { ghlMarketplacePlanConfigReadiness } from '@shared/ghlMarketplacePlanIds';
@@ -118,7 +122,7 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
       recovered: false,
       reason: 'not_authenticated',
       reasonCategory: 'other',
-      oauthRequired: false,
+      oauthRequired: true,
     };
     console.log(JSON.stringify({ tag: '[GHL-OAuth-Recovery]', event: 'recover_oauth_response', ...body }));
     return res.status(401).json(body);
@@ -128,21 +132,49 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
     const user = await storage.getUser(userId);
     const marketplaceInstallId =
       typeof req.body?.marketplaceInstallId === 'string' ? req.body.marketplaceInstallId : undefined;
-    const recoveryAllowlistEligible = isGhlOAuthRecoveryAllowlisted(user?.email);
+    const adminOverrideRequested = req.body?.adminOverride === true;
+    const recoveryContext = await resolveGhlOAuthRecoveryContext(req);
+    const adminOverride =
+      adminOverrideRequested && Boolean(recoveryContext?.canAccessRecoveryTools);
 
-    logGhlOAuthDiagnostic('oauth_recovery_attempted', {
-      userId,
-      userEmail: user?.email ?? null,
-      marketplaceInstallId: marketplaceInstallId ?? null,
-      isPlatformAdmin: isPlatformAdminSession(req),
-      recoveryAllowlistEligible,
-    });
+    const claim = await claimGhlOAuthHandoffIfPresent(req, res, userId);
+    if (claim?.claimed) {
+      const body = {
+        recovered: true,
+        reason: 'handoff_claimed',
+        reasonCategory: 'other',
+        oauthRequired: false,
+        integrationId: claim.integrationId,
+        created: claim.created,
+        locationId: claim.locationId,
+        companyId: claim.companyId,
+      };
+      console.log(JSON.stringify({ tag: '[GHL-OAuth-Recovery]', event: 'recover_oauth_response', userId, ...body }));
+      return res.json(body);
+    }
+
+    if (adminOverride) {
+      logGhlOAuthDiagnostic('oauth_recovery_admin_override', {
+        userId,
+        userEmail: user?.email ?? null,
+        marketplaceInstallId: marketplaceInstallId ?? null,
+      });
+    } else {
+      logGhlOAuthDiagnostic('oauth_recovery_attempted', {
+        userId,
+        userEmail: user?.email ?? null,
+        marketplaceInstallId: marketplaceInstallId ?? null,
+        isPlatformAdmin: false,
+        recoveryAllowlistEligible: false,
+        customerFacing: true,
+      });
+    }
 
     const result = await recoverGhlOAuthFromMarketplaceInstall({
       userId,
       userEmail: user?.email,
-      isPlatformAdmin: isPlatformAdminSession(req),
-      isRecoveryAllowlisted: recoveryAllowlistEligible,
+      isPlatformAdmin: adminOverride,
+      isRecoveryAllowlisted: adminOverride,
       marketplaceInstallId,
     });
 
@@ -152,14 +184,16 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
         event: 'recover_oauth_response',
         userId,
         userEmail: user?.email ?? null,
-        recoveryAllowlistEligible,
-        sessionIsAdmin: isPlatformAdminSession(req),
+        adminOverride,
         ...result,
       }),
     );
 
     if (!result.recovered) {
-      return res.status(result.reason === 'install_not_owned_or_missing_tokens' ? 403 : 200).json(result);
+      return res.status(result.reason === 'install_not_owned_or_missing_tokens' ? 403 : 200).json({
+        ...result,
+        oauthRequired: true,
+      });
     }
 
     return res.json(result);
@@ -168,7 +202,7 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
       recovered: false,
       reason: 'recovery_failed',
       reasonCategory: 'other',
-      oauthRequired: false,
+      oauthRequired: true,
       error: error instanceof Error ? error.message : String(error),
     };
     logGhlOAuthDiagnostic('oauth_recovery_token_invalid', {
@@ -182,10 +216,30 @@ router.post('/recover-oauth', requireAuth, async (req: Request, res: Response) =
   }
 });
 
+router.post('/claim-oauth', requireAuth, async (req: Request, res: Response) => {
+  const userId = resolveSessionUserId(req);
+  if (!userId) {
+    return res.status(401).json({ claimed: false, reason: 'not_authenticated', oauthRequired: true });
+  }
+  const result = await claimGhlOAuthHandoffForUser(req, res, userId, {
+    companyId: typeof req.body?.companyId === 'string' ? req.body.companyId : undefined,
+    locationId: typeof req.body?.locationId === 'string' ? req.body.locationId : undefined,
+    appId: typeof req.body?.appId === 'string' ? req.body.appId : undefined,
+    versionId: typeof req.body?.versionId === 'string' ? req.body.versionId : undefined,
+    ghlUserId: typeof req.body?.ghlUserId === 'string' ? req.body.ghlUserId : undefined,
+  });
+  if (!result.claimed) {
+    return res.status(result.reason === 'identity_mismatch' ? 403 : 200).json({
+      ...result,
+      oauthRequired: result.reason !== 'missing_token',
+    });
+  }
+  return res.json(result);
+});
+
 const GHL_TOKEN_URL = 'https://services.leadconnectorhq.com/oauth/token';
 const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID || '';
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET || '';
-const GHL_REDIRECT_URI = getDefaultGhlRedirectUri();
 
 function isUniqueExternalMessageViolation(err: unknown): boolean {
   const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
@@ -359,16 +413,24 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     if (!code || typeof code !== 'string') {
       logGhlOAuthDiagnostic("callback_missing_code", {
-        queryKeys: Object.keys(req.query),
+        queryKeys: Object.keys(req.query).filter((key) => key !== "code"),
         sessionUserId: sessionUserId ?? null,
+        alreadyInstalledHint:
+          "If the CRM app is already installed, GHL may not issue a new code. Uninstall and reinstall, or finish login to claim a pending Marketplace install.",
       });
-      console.error('[LeadConnector] No authorization code received. Query params:', req.query);
-      return res.status(400).send('Missing authorization code. Please try again from the Marketplace.');
+      console.error('[LeadConnector] No authorization code received. Query keys:', Object.keys(req.query).filter((key) => key !== "code"));
+      return res.status(400).send(
+        'Missing authorization code. If the CRM app is already installed, uninstall it in CRM settings and install again, or log in to WhachatCRM to finish a pending Marketplace install.',
+      );
     }
 
     console.log('[LeadConnector] Received authorization code, exchanging for tokens...');
 
-    if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
+    const clientId = String(process.env.GHL_CLIENT_ID || "").trim();
+    const clientSecret = String(process.env.GHL_CLIENT_SECRET || "").trim();
+    const redirectUri = getDefaultGhlRedirectUri();
+
+    if (!clientId || !clientSecret) {
       console.error('[LeadConnector] Missing GHL_CLIENT_ID or GHL_CLIENT_SECRET');
       return res.status(500).send('CRM integration is not configured. Please contact support.');
     }
@@ -377,9 +439,9 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     const exchange = await exchangeGhlAuthorizationCode(
       code,
-      GHL_REDIRECT_URI,
-      GHL_CLIENT_ID,
-      GHL_CLIENT_SECRET,
+      redirectUri,
+      clientId,
+      clientSecret,
     );
 
     if (!exchange.ok) {
@@ -390,9 +452,9 @@ router.get('/callback', async (req: Request, res: Response) => {
         oauthError: exchange.data?.error ?? null,
         oauthErrorDescription: exchange.data?.error_description ?? null,
         reason: exchange.data ? undefined : "non_json_response",
-        redirectUri: GHL_REDIRECT_URI,
+        redirectUri,
       });
-      console.error('[LeadConnector] Token exchange failed:', exchange.httpStatus, exchange.data || exchange);
+      console.error('[LeadConnector] Token exchange failed:', exchange.httpStatus, exchange.data?.error || exchange.httpStatus);
       return res.status(400).send(
         `Failed to connect CRM account: ${exchange.data?.error_description || exchange.data?.error || 'Unknown error'}. Please try again.`,
       );
@@ -419,78 +481,101 @@ router.get('/callback', async (req: Request, res: Response) => {
       expiresIn: tokenData.expires_in,
     });
 
-    if (!ownerUserId) {
-      logGhlOAuthDiagnostic("callback_no_session_user", {
-        locationId: tokenData.locationId ?? null,
-        companyId: tokenData.companyId ?? null,
-        note: "Marketplace install recorded only — integrations row NOT created without WhachatCRM login session. Use /api/ext/oauth-authorize while logged in.",
-      });
-      console.error('[LeadConnector OAuth] No authenticated user — recording marketplace install without integration link');
-      // Do NOT auto-create a WhachatCRM user. Unmatched installs stay on Activation until a real owner OAuths.
-      await upsertGhlMarketplaceInstall({
-        companyId: tokenData.companyId || "unknown",
-        locationId: tokenData.locationId || null,
-        installDate: new Date().toISOString(),
-        installationStatus: "Active",
-        source: "oauth",
-        rawPayload: tokenData,
-      });
-    } else {
-      const { integration, created } = await persistGhlIntegrationForUser(ownerUserId, tokenData);
-      console.log(
-        `[LeadConnector] ${created ? "Created" : "Updated"} integration:`,
-        integration.id,
-        "for user:",
-        ownerUserId,
-      );
-      logGhlOAuthDiagnostic(
-        created ? "callback_integration_created" : "callback_integration_updated",
-        {
-          integrationId: integration.id,
-          userId: ownerUserId,
-          locationId: tokenData.locationId ?? null,
-          companyId: tokenData.companyId ?? null,
-          sessionUserId: sessionUserId ?? null,
-          oauthIntentUserId: oauthIntentUserId ?? null,
-        },
-      );
-      logGhlOAuthDiagnostic("connection_completed", {
-        integrationId: integration.id,
-        userId: ownerUserId,
-        locationId: tokenData.locationId ?? null,
-        companyId: tokenData.companyId ?? null,
-        created,
-        hasAccessToken: true,
-        hasRefreshToken: Boolean(tokenData.refresh_token),
-      });
-      clearGhlOAuthPending(req);
-    }
-
-    clearGhlOAuthSession(req);
-
-    await upsertGhlMarketplaceInstall({
+    const marketplaceRow = await upsertGhlMarketplaceInstall({
       companyId: tokenData.companyId || "unknown",
       locationId: tokenData.locationId || null,
       subAccountName: `CRM Integration - ${tokenData.userType === 'Location' ? 'Location' : 'Agency'} (${tokenData.locationId || tokenData.companyId || 'unknown'})`,
       installDate: new Date().toISOString(),
       installationStatus: "Active",
       source: "oauth",
-      rawPayload: tokenData,
+      rawPayload: stripGhlOAuthSecretsFromPayload({
+        userType: tokenData.userType,
+        locationId: tokenData.locationId,
+        companyId: tokenData.companyId,
+        scope: tokenData.scope,
+        expires_in: tokenData.expires_in,
+      }),
     });
+    const matchedInstall =
+      (await findMarketplaceInstallByOAuthIdentity({
+        locationId: tokenData.locationId || marketplaceRow.locationId,
+        companyId: tokenData.companyId || marketplaceRow.companyId,
+      })) || marketplaceRow;
 
     logGhlOAuthDiagnostic("callback_marketplace_upserted", {
-      locationId: tokenData.locationId ?? null,
-      companyId: tokenData.companyId ?? null,
+      locationId: matchedInstall.locationId ?? null,
+      companyId: matchedInstall.companyId ?? null,
+      appId: matchedInstall.appId ?? null,
+      versionId: matchedInstall.versionId ?? null,
       sessionUserId: sessionUserId ?? null,
       ownerUserId: ownerUserId ?? null,
     });
+
+    const identityHints = {
+      appId: matchedInstall.appId,
+      versionId: matchedInstall.versionId,
+      ghlUserId: matchedInstall.ghlUserId,
+    };
+
+    if (!ownerUserId) {
+      logGhlOAuthDiagnostic("callback_no_session_user", {
+        locationId: matchedInstall.locationId ?? null,
+        companyId: matchedInstall.companyId ?? null,
+        note: "Creating encrypted pending OAuth handoff for login/signup claim",
+      });
+      await createGhlOAuthPendingHandoff(
+        {
+          tokenData,
+          companyId: matchedInstall.companyId,
+          locationId: matchedInstall.locationId,
+          appId: matchedInstall.appId,
+          versionId: matchedInstall.versionId,
+          ghlUserId: matchedInstall.ghlUserId,
+          marketplaceInstallId: matchedInstall.id,
+        },
+        res,
+      );
+      clearGhlOAuthSession(req);
+      const authUrl = `${getAppOrigin()}/auth?redirect=${encodeURIComponent(GHL_OAUTH_HANDOFF_POST_AUTH_REDIRECT)}`;
+      return res.redirect(302, authUrl);
+    }
+
+    const { integration, created } = await persistGhlIntegrationForUser(ownerUserId, tokenData, identityHints);
+    console.log(
+      `[LeadConnector] ${created ? "Created" : "Updated"} integration:`,
+      integration.id,
+      "for user:",
+      ownerUserId,
+    );
+    logGhlOAuthDiagnostic(
+      created ? "callback_integration_created" : "callback_integration_updated",
+      {
+        integrationId: integration.id,
+        userId: ownerUserId,
+        locationId: tokenData.locationId ?? matchedInstall.locationId ?? null,
+        companyId: tokenData.companyId ?? matchedInstall.companyId ?? null,
+        sessionUserId: sessionUserId ?? null,
+        oauthIntentUserId: oauthIntentUserId ?? null,
+      },
+    );
+    logGhlOAuthDiagnostic("connection_completed", {
+      integrationId: integration.id,
+      userId: ownerUserId,
+      locationId: tokenData.locationId ?? matchedInstall.locationId ?? null,
+      companyId: tokenData.companyId ?? matchedInstall.companyId ?? null,
+      created,
+      hasAccessToken: true,
+      hasRefreshToken: Boolean(tokenData.refresh_token),
+    });
+    clearGhlOAuthPending(req);
+    clearGhlOAuthSession(req);
 
     const postSummary = await summarizeGhlConnectionState();
     logGhlOAuthDiagnostic("callback_completed", {
       sessionUserId: sessionUserId ?? null,
       oauthIntentUserId: oauthIntentUserId ?? null,
-      ownerUserId: ownerUserId ?? null,
-      integrationPersisted: Boolean(ownerUserId),
+      ownerUserId,
+      integrationPersisted: true,
       eligibleProspectImportLocations: postSummary.prospectImport.eligibleForImport,
       likelyIssue: postSummary.likelyIssue,
     });
@@ -1137,21 +1222,25 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       req.query.recover === 'true';
     const user = await storage.getUser(userId);
     const oauthPending = Boolean((req as any).session?.ghlMarketplaceInstallPending);
-    const sessionIsAdmin = isPlatformAdminSession(req);
-    const recoveryAllowlistEligible = isGhlOAuthRecoveryAllowlisted(user?.email);
+
+    const claim = await claimGhlOAuthHandoffIfPresent(req, res, userId);
+    if (claim?.claimed) {
+      clearGhlOAuthPending(req);
+    }
 
     if (tryRecover) {
       logGhlOAuthDiagnostic('oauth_recovery_attempted', {
         userId,
         source: 'connection_status',
-        isPlatformAdmin: sessionIsAdmin,
-        recoveryAllowlistEligible,
+        isPlatformAdmin: false,
+        recoveryAllowlistEligible: false,
+        customerFacing: true,
       });
       const recovery = await recoverGhlOAuthFromMarketplaceInstall({
         userId,
         userEmail: user?.email,
-        isPlatformAdmin: sessionIsAdmin,
-        isRecoveryAllowlisted: recoveryAllowlistEligible,
+        isPlatformAdmin: false,
+        isRecoveryAllowlisted: false,
       });
       if (recovery.recovered) {
         clearGhlOAuthPending(req);
@@ -1161,8 +1250,8 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     const status = await resolveUserGhlConnectionStatus(userId, user?.email, {
       oauthPending,
       queryLocationId,
-      isPlatformAdmin: sessionIsAdmin,
-      isRecoveryAllowlisted: recoveryAllowlistEligible,
+      isPlatformAdmin: false,
+      isRecoveryAllowlisted: false,
     });
 
     res.json({

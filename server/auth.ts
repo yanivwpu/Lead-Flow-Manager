@@ -1,7 +1,7 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
-import type { Express, Request } from 'express';
+import type { Express, Request, Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
@@ -32,6 +32,15 @@ import {
 import { consumeEmailVerificationToken, issueEmailVerification, resendVerificationForEmail } from './emailVerification';
 import { consumePasswordResetToken, issuePasswordResetForEmail } from './passwordResetTokens';
 import { isRetiredCrmDemoEmail } from '@shared/retiredCrmDemoAgent';
+import { claimGhlOAuthHandoffIfPresent } from './ghlOAuthHandoff';
+
+async function finishGhlOAuthHandoffAfterAuth(req: Request, res: Response, userId: string): Promise<void> {
+  try {
+    await claimGhlOAuthHandoffIfPresent(req, res, userId);
+  } catch (error) {
+    console.error('[LeadConnector] post-auth OAuth claim failed');
+  }
+}
 
 const PgStore = connectPgSimple(session);
 
@@ -549,6 +558,8 @@ export function registerAuthRoutes(app: Express) {
         console.warn("[Signup] pending session not established", loginErr);
       });
 
+      await finishGhlOAuthHandoffAfterAuth(req, res, user.id);
+
       return res.status(201).json({
         pendingVerification: true,
         emailSent,
@@ -786,13 +797,15 @@ export function registerAuthRoutes(app: Express) {
             verified: true,
           });
         }
-        const { password: _, ...safeUser } = user;
-        return res.json({
-          success: true,
-          verified: true,
-          alreadyVerified: result.alreadyVerified,
-          trialStarted: result.trialStarted,
-          user: safeUser,
+        void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
+          const { password: _, ...safeUser } = user;
+          return res.json({
+            success: true,
+            verified: true,
+            alreadyVerified: result.alreadyVerified,
+            trialStarted: result.trialStarted,
+            user: safeUser,
+          });
         });
       });
     } catch (error) {
@@ -840,8 +853,10 @@ export function registerAuthRoutes(app: Express) {
           req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
         }
 
-        const { password: _, ...safeUser } = user;
-        res.json(safeUser);
+        void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
+          const { password: _, ...safeUser } = user;
+          res.json(safeUser);
+        });
       });
     })(req, res, next);
   });
@@ -1100,8 +1115,10 @@ export function registerAuthRoutes(app: Express) {
           return res.json({ success: true, message: 'Password has been reset successfully. Please log in.' });
         }
 
-        const { password: _, ...safeUser } = updatedUser;
-        res.json({ success: true, message: 'Password has been reset successfully', user: safeUser });
+        void finishGhlOAuthHandoffAfterAuth(req, res, updatedUser.id).finally(() => {
+          const { password: _, ...safeUser } = updatedUser;
+          res.json({ success: true, message: 'Password has been reset successfully', user: safeUser });
+        });
       });
     } catch (error) {
       console.error('Reset password error:', error);

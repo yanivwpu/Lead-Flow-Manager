@@ -709,23 +709,26 @@ export function Integrations() {
     try {
       const recovery = await attemptCrmOAuthRecovery();
       setCrmOAuthRecoveryResult(recovery);
+      if (recovery.recovered) {
+        showCrmOAuthRecoveryToast(recovery);
+        return;
+      }
+      if (recovery.oauthRequired !== false) {
+        startCrmFullOAuthAuthorization();
+        return;
+      }
       showCrmOAuthRecoveryToast(recovery);
     } catch {
       const fallback: CrmOAuthRecoveryAttemptResult = {
         recovered: false,
-        oauthRequired: false,
+        oauthRequired: true,
         reason: "network_error",
         reasonCategory: "other",
         httpStatus: 0,
         raw: {},
       };
       setCrmOAuthRecoveryResult(fallback);
-      toast({
-        title: "CRM recovery failed",
-        description:
-          "recovered=false, oauthRequired=false, reasonCategory=other, reason=network_error. Could not reach /api/ext/recover-oauth.",
-        variant: "destructive",
-      });
+      startCrmFullOAuthAuthorization();
     } finally {
       setRecoveringCrmOAuth(false);
     }

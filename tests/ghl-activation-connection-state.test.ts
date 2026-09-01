@@ -168,6 +168,12 @@ run("I: company-level OAuth selects locationId=null match", () => {
   assert.equal(locPick?.locationId, "loc-B");
 });
 
+run("I2: agency token merges into the sole location INSTALL row", () => {
+  const rows = [{ locationId: "loc-only", companyId: "co-9" }];
+  const picked = selectMarketplaceRowForOAuthLink(rows, null, "co-9");
+  assert.equal(picked?.locationId, "loc-only");
+});
+
 run("J: Un-installed normalizes correctly", () => {
   assert.equal(normalizeGhlMarketplaceInstallStatus("Un-installed"), "Uninstalled");
   assert.equal(normalizeGhlMarketplaceInstallStatus("uninstalled"), "Uninstalled");
@@ -223,17 +229,19 @@ run("N: WA/FB/IG/Shopify unchanged when only GHL/email change", () => {
 
 run("no auto-provision user from unmatched OAuth", () => {
   const routes = read("server/ghlRoutes.ts");
-  assert.match(routes, /Do NOT auto-create a WhachatCRM user/);
-  assert.match(routes, /recording marketplace install without integration link/);
+  assert.match(routes, /createGhlOAuthPendingHandoff/);
+  assert.match(routes, /Creating encrypted pending OAuth handoff/);
+  assert.doesNotMatch(routes, /storage\.createUser\(/);
 });
 
-run("company-only link query requires locationId IS NULL", () => {
+run("company-only OAuth reuses findMarketplaceInstallByOAuthIdentity", () => {
   const svc = read("server/ghlMarketplaceService.ts");
   const link = svc.slice(
     svc.indexOf("export async function linkMarketplaceInstallToIntegration"),
     svc.indexOf("export async function markMarketplaceUninstalled"),
   );
-  assert.match(link, /locationId} IS NULL/);
+  assert.match(link, /findMarketplaceInstallByOAuthIdentity/);
+  assert.match(svc, /selectMarketplaceRowForOAuthLink/);
 });
 
 console.log("ghl-activation-connection-state.test.ts OK");

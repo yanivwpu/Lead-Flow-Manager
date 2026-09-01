@@ -14,6 +14,7 @@ import {
   classifyGhlMarketplacePlanId,
   type GhlMarketplacePlanConfig,
 } from "./ghlMarketplacePlanIds";
+import { stripGhlOAuthSecretsFromPayload } from "./ghlConnectionState";
 
 export const GHL_LIFECYCLE_EVENT_TYPES = [
   "INSTALL",
@@ -386,5 +387,5 @@ export function sanitizeGhlLifecyclePayloadForStorage(
   for (const key of keys) {
     if (key in body) out[key] = body[key];
   }
-  return out;
+  return stripGhlOAuthSecretsFromPayload(out);
 }
