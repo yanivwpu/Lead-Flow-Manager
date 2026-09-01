@@ -30,6 +30,7 @@ import {
 } from "@/lib/shopifyCheckout";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { BusinessKnowledgeSteps } from "@/components/aibrain/BusinessKnowledgeSteps";
 import {
   CustomerQuestions,
@@ -72,6 +73,8 @@ interface SubscriptionData {
     trialIncludesAIBrain?: boolean;
     trialEndsAt?: string | null;
     trialDaysRemaining?: number;
+    canStartInternalTrial?: boolean;
+    isPaidSubscriber?: boolean;
   };
 }
 
@@ -205,7 +208,6 @@ function AIBrainContent() {
 
   const limits = subscription?.limits;
   const plan = (limits?.plan || limits?.effectivePlan || "free") as string;
-  const isFree = plan === "free";
   const isPro = plan === "pro" || plan === "enterprise";
   const isStarter = plan === "starter";
   /** Starter / Pro (effective), including unpaid Pro + AI trial window. */
@@ -502,27 +504,12 @@ function AIBrainContent() {
                 }}
               />
             </p>
-            {isFree && !isShopify ? (
-              <Button
-                type="button"
-                className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
-                onClick={handleProCheckout}
-                disabled={isCheckingOut}
-                data-testid="button-ai-workspace-choose-plan"
-              >
-                {isCheckingOut ? "Processing…" : t("aiBrain.workspace.cta")}
-              </Button>
-            ) : (
-              <Link href="/pricing">
-                <Button
-                  type="button"
-                  className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
-                  data-testid="button-ai-workspace-choose-plan"
-                >
-                  {t("aiBrain.workspace.cta")}
-                </Button>
-              </Link>
-            )}
+            <InAppProUpgradeButton
+              canStartInternalTrial={!!subMeta?.canStartInternalTrial}
+              isShopify={isShopify}
+              className="h-11 w-full rounded-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-[15px] font-semibold text-white shadow-md shadow-violet-500/25 hover:from-violet-500 hover:to-purple-500 focus-visible:ring-2 focus-visible:ring-violet-400/50 focus-visible:ring-offset-2"
+              testId="button-ai-workspace-choose-plan"
+            />
           </div>
         </div>
       </div>

@@ -28,3 +28,19 @@ export function resolvePricingProCta(input: {
   if (!input.loggedIn || input.canStartInternalTrial) return "start_trial";
   return "upgrade_pro";
 }
+
+/**
+ * Authenticated product upgrade CTA (AI Brain, Settings, upgrade modals, feature gates).
+ * Uses the server canStartInternalTrial flag only — never plan name or client dates.
+ * Shopify never receives the web internal trial.
+ */
+export type InAppUpgradeCtaKind = "start_trial" | "upgrade_pro" | "shopify_choose";
+
+export function resolveInAppUpgradeCta(input: {
+  canStartInternalTrial: boolean;
+  isShopify: boolean;
+}): InAppUpgradeCtaKind {
+  if (input.isShopify) return "shopify_choose";
+  if (input.canStartInternalTrial) return "start_trial";
+  return "upgrade_pro";
+}

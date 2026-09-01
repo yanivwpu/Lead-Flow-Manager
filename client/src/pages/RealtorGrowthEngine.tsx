@@ -78,17 +78,13 @@ import {
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
-import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import {
   getRgePurchaseBillingPayload,
   getSubscriptionApiUrl,
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import {
-  openShopifyManagedPricing,
-  shopifyManagedPricingInstructions,
-} from "@/lib/shopifyCheckout";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
@@ -970,11 +966,9 @@ export function RealtorGrowthEngine() {
   const totalSteps = 5;
   const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
-  const [shopifyGateLoading, setShopifyGateLoading] = useState(false);
-
   const shopHint = useShopifyShopHint();
   const { data: billingAccount } = useQuery<{
-    subscription?: { isShopify?: boolean };
+    subscription?: { isShopify?: boolean; canStartInternalTrial?: boolean };
   }>({
     queryKey: ["/api/subscription", shopHint ?? ""],
     queryFn: async () => {
@@ -2242,62 +2236,16 @@ export function RealtorGrowthEngine() {
           >
             Cancel
           </Button>
-          <Button
+          <InAppProUpgradeButton
+            canStartInternalTrial={!!billingAccount?.subscription?.canStartInternalTrial}
+            isShopify={isShopify}
             className="bg-brand-green hover:bg-brand-green/90"
-            disabled={shopifyGateLoading}
-            onClick={async () => {
-              try {
-                if (isShopify) {
-                  setShopifyGateLoading(true);
-                  const opened = await openShopifyManagedPricing(shopHint);
-                  if (!opened) {
-                    toast({
-                      title: "Choose plan in Shopify",
-                      description: shopifyManagedPricingInstructions(
-                        undefined,
-                        "Plan selection is managed by Shopify. Open WhachatCRM in Shopify Admin → Billing / App subscription to choose a plan.",
-                      ),
-                    });
-                  }
-                  return;
-                }
-
-                const res = await fetch("/api/subscription/checkout/pro-ai", {
-                  method: "POST",
-                  credentials: "include",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(getCheckoutReturnPaths()),
-                });
-                if (res.status === 401) {
-                  window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-                  return;
-                }
-                if (!res.ok) throw new Error("Failed to create checkout");
-                const data = await res.json();
-                if (data.url) {
-                  window.location.href = data.url;
-                }
-              } catch (err) {
-                console.error("Checkout error:", err);
-                toast({
-                  title: "Could not start checkout",
-                  description: err instanceof Error ? err.message : "Please try again.",
-                  variant: "destructive",
-                });
-              } finally {
-                setShopifyGateLoading(false);
-              }
+            testId="button-upgrade-plan"
+            onStartedTrial={() => {
+              setSubscriptionGate({ ...subscriptionGate, show: false });
+              window.location.reload();
             }}
-            data-testid="button-upgrade-plan"
-          >
-            {shopifyGateLoading
-              ? "Opening Shopify…"
-              : isShopify
-                ? !subscriptionGate.hasPro
-                  ? "Choose plan in Shopify"
-                  : "Manage plan in Shopify"
-                : "Upgrade to Pro"}
-          </Button>
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

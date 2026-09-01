@@ -63,6 +63,7 @@ interface SubscriptionData {
     upgradeProvider?: "shopify" | "stripe";
     isPaidSubscriber?: boolean;
     showTrialUrgency?: boolean;
+    canStartInternalTrial?: boolean;
   } | null;
 }
 

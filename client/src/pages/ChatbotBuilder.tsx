@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet";
 import {
   Zap, Plus, Trash2, Save, MessageSquare, GitBranch,
-  Clock, Tag, Loader2, AlertCircle, Crown,
+  Clock, Tag, Loader2, AlertCircle,
   X, CheckCircle2, Image, Video,
   FileText, ListOrdered, Upload, MoreHorizontal,
   Search, Settings2, Copy,
@@ -36,8 +36,11 @@ import {
 } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { useSubscription } from "@/lib/subscription-context";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
@@ -402,6 +405,10 @@ function AddStepPicker({ onAdd, hint }: { onAdd: (type: ChatbotNode["type"]) => 
 export function ChatbotBuilder() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: subscription } = useSubscription();
+  const shopHint = useShopifyShopHint();
+  const isShopifyBilling = mustUseShopifyBilling(subscription?.subscription, shopHint);
+  const canStartInternalTrial = !!subscription?.subscription?.canStartInternalTrial;
 
   const [selectedFlow, setSelectedFlow] = useState<ChatbotFlow | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -629,11 +636,12 @@ export function ChatbotBuilder() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Flow Builder</h2>
             <p className="text-gray-500 mb-6">Design automated conversation flows to qualify leads, answer questions, and route conversations — 24/7. Available on Pro.</p>
-            <Link href="/pricing">
-              <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade">
-                <Crown className="h-4 w-4 mr-2" />View Plans
-              </Button>
-            </Link>
+            <InAppProUpgradeButton
+              canStartInternalTrial={canStartInternalTrial}
+              isShopify={isShopifyBilling}
+              className="bg-brand-green hover:bg-brand-green/90"
+              testId="button-upgrade"
+            />
           </div>
         </div>
       );

@@ -1,16 +1,20 @@
-import { Lock, ArrowUpRight } from "lucide-react";
+import { Lock, ArrowUpRight, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useLocation } from "wouter";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useSubscription } from "@/lib/subscription-context";
-import { getUpgradeNavigationPath } from "@/lib/proAiTrialState";
+import { performInAppProUpgrade } from "@/lib/inAppProUpgrade";
+import { resolveInAppUpgradeCta } from "@shared/pricingProCta";
+import { inAppUpgradeCtaLabel } from "@/components/InAppProUpgradeButton";
+import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AIUpgradePromptProps {
-  feature:     string;          // e.g. "Auto mode", "Workflow recommendations"
-  requiredPlan: string;         // e.g. "Pro"
-  reason?:     string;          // optional extra context
-  size?:       "sm" | "md";    // compact vs default
+  feature:     string;
+  requiredPlan: string;
+  reason?:     string;
+  size?:       "sm" | "md";
   className?:  string;
 }
 
@@ -21,14 +25,32 @@ export function AIUpgradePrompt({
   size = "md",
   className,
 }: AIUpgradePromptProps) {
-  const [, setLocation] = useLocation();
+  const { t } = useTranslation();
   const shopHint = useShopifyShopHint();
+  const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
   const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
+  const kind = resolveInAppUpgradeCta({
+    canStartInternalTrial: !!subscription?.subscription?.canStartInternalTrial,
+    isShopify,
+  });
+  const [loading, setLoading] = useState(false);
 
-  const goUpgrade = () => {
-    setLocation(getUpgradeNavigationPath({ shopHint, isShopify }));
+  const goUpgrade = async () => {
+    setLoading(true);
+    try {
+      const result = await performInAppProUpgrade(kind, { shopHint });
+      if (result === "started_trial") {
+        await queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const cta = loading ? null : inAppUpgradeCtaLabel(kind, t);
 
   if (size === "sm") {
     return (
@@ -37,19 +59,20 @@ export function AIUpgradePrompt({
           "inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium cursor-pointer hover:text-amber-700 transition-colors",
           className
         )}
-        onClick={goUpgrade}
+        onClick={() => void goUpgrade()}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            goUpgrade();
+            void goUpgrade();
           }
         }}
         data-testid="upgrade-prompt-sm"
+        data-in-app-upgrade-cta={kind}
       >
-        <Lock className="w-2.5 h-2.5 shrink-0" />
-        {requiredPlan} only · Upgrade ↗
+        {loading ? <Loader2 className="w-2.5 h-2.5 shrink-0 animate-spin" /> : <Lock className="w-2.5 h-2.5 shrink-0" />}
+        {cta ?? "…"}
       </span>
     );
   }
@@ -72,11 +95,12 @@ export function AIUpgradePrompt({
         )}
         <button
           type="button"
-          onClick={goUpgrade}
+          onClick={() => void goUpgrade()}
           className="mt-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 hover:text-amber-900 transition-colors"
           data-testid="button-upgrade-cta"
+          data-in-app-upgrade-cta={kind}
         >
-          Upgrade to {requiredPlan} <ArrowUpRight className="w-2.5 h-2.5" />
+          {loading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <>{cta} <ArrowUpRight className="w-2.5 h-2.5" /></>}
         </button>
       </div>
     </div>

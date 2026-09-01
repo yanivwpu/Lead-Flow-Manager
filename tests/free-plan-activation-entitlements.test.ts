@@ -87,6 +87,8 @@ test("Templates page opens for Free; campaigns remain a paid action gate", () =>
   assert.ok(!page.includes("button-upgrade-templates"));
   assert.ok(page.includes("presets-paid-gate"));
   assert.ok(page.includes("button-upgrade-template-campaigns"));
+  assert.ok(page.includes("InAppProUpgradeButton"));
+  assert.ok(page.includes("canStartInternalTrial"));
   assert.ok(page.includes("workflowsEnabled"));
   assert.ok(templateRoutes.includes("limitsAllowBasicTemplateMessaging"));
   assert.ok(templateRoutes.includes("limitsAllowTemplateCampaigns"));

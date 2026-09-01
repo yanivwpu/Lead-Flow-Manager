@@ -8,6 +8,9 @@ function RealtorMark() {
 }
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@/lib/subscription-context";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,9 +35,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link, useLocation, useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { 
-  FileText, RefreshCw, Lock, Zap, Send, Clock, CheckCircle2, XCircle, Eye,
+  FileText, RefreshCw, Lock, Send, Clock, CheckCircle2, XCircle, Eye,
   AlertCircle, Image, LayoutGrid,
   Users, Target,   Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
@@ -803,6 +806,9 @@ export function Templates() {
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription();
+  const shopHint = useShopifyShopHint();
+  const isShopifyBilling = mustUseShopifyBilling(subscription?.subscription, shopHint);
+  const canStartInternalTrial = !!subscription?.subscription?.canStartInternalTrial;
   const templatesEnabled = Boolean((subscription?.limits as { templatesEnabled?: boolean } | undefined)?.templatesEnabled);
   const workflowsEnabled = Boolean(subscription?.limits?.workflowsEnabled);
   const templatesMainTabValue = useMemo(() => {
@@ -1578,12 +1584,12 @@ export function Templates() {
                     window. Preset campaigns, bulk enrollment, and automation sequences require Starter
                     or Pro.
                   </p>
-                  <Link href="/pricing">
-                    <Button className="bg-brand-green hover:bg-brand-green/90" data-testid="button-upgrade-template-campaigns">
-                      <Zap className="h-4 w-4 mr-2" />
-                      Upgrade for campaigns
-                    </Button>
-                  </Link>
+                  <InAppProUpgradeButton
+                    canStartInternalTrial={canStartInternalTrial}
+                    isShopify={isShopifyBilling}
+                    className="bg-brand-green hover:bg-brand-green/90"
+                    testId="button-upgrade-template-campaigns"
+                  />
                 </CardContent>
               </Card>
             ) : (

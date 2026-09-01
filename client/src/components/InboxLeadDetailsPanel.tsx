@@ -30,7 +30,9 @@ import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useSubscription } from "@/lib/subscription-context";
-import { Link } from "wouter";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import {
   formatScoreActivityEvent,
   sanitizeUserFacingText,
@@ -864,6 +866,8 @@ export function InboxLeadDetailsPanel({
   const { toast } = useToast();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { data: subscription } = useSubscription();
+  const shopHint = useShopifyShopHint();
+  const isShopifyBilling = mustUseShopifyBilling(subscription?.subscription, shopHint);
   const templateCampaignsEnabled = Boolean(subscription?.limits?.workflowsEnabled);
 
   // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.
@@ -3439,14 +3443,12 @@ export function InboxLeadDetailsPanel({
                   Add Campaign
                 </button>
               ) : (
-                <Link href="/pricing">
-                  <a
-                    className="text-[11px] font-medium text-brand-green hover:underline"
-                    data-testid="button-upgrade-campaign-enroll"
-                  >
-                    Upgrade to enroll
-                  </a>
-                </Link>
+                <InAppProUpgradeButton
+                  canStartInternalTrial={!!subscription?.subscription?.canStartInternalTrial}
+                  isShopify={isShopifyBilling}
+                  className="h-auto bg-transparent p-0 text-[11px] font-medium text-brand-green shadow-none hover:bg-transparent hover:underline"
+                  testId="button-upgrade-campaign-enroll"
+                />
               )}
             </div>
             {campaignEnrollmentBuckets.primary.length === 0 &&

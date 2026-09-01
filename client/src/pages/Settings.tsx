@@ -10,6 +10,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import { InAppProUpgradeButton, inAppUpgradeCtaLabel } from "@/components/InAppProUpgradeButton";
 import { ConnectTwilioWizard } from "@/components/ConnectTwilioWizard";
 import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
@@ -28,6 +29,8 @@ import {
   shopifyManagedPricingInstructions,
 } from "@/lib/shopifyCheckout";
 import { SHOPIFY_RECONNECT_REQUIRED_CODE } from "@shared/shopifyBilling";
+import { resolveInAppUpgradeCta } from "@shared/pricingProCta";
+import { useTranslation } from "react-i18next";
 
 interface TeamMember {
   id: string;
@@ -72,6 +75,7 @@ interface SubscriptionData {
     trialPlan?: string | null;
     trialEndsAt?: string | null;
     trialDaysRemaining?: number;
+    canStartInternalTrial?: boolean;
   } | null;
 }
 
@@ -374,6 +378,7 @@ class SettingsErrorBoundary extends React.Component<
 
 export function Settings() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const searchString = useSearch();
   const [, setLocation] = useLocation();
@@ -595,6 +600,10 @@ export function Settings() {
     usersCountVal >= usersLimitVal;
 
   const billingUsesShopify = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
+  const freeTeamUpgradeKind = resolveInAppUpgradeCta({
+    canStartInternalTrial: !!subscriptionData?.subscription?.canStartInternalTrial,
+    isShopify: billingUsesShopify,
+  });
   const activeProAiTrial = isActiveProAiTrial(subscriptionData);
   const trialDaysLeft = proAiTrialDaysRemaining(subscriptionData);
   const billingPlanLabel = subscriptionData?.subscription?.isPaidSubscriber
@@ -1000,8 +1009,9 @@ export function Settings() {
                           setUpgradeReason("team_invite_upgrade_starter");
                           setUpgradeModalOpen(true);
                         }}
+                        data-in-app-upgrade-cta={freeTeamUpgradeKind}
                       >
-                        Upgrade to Pro
+                        {inAppUpgradeCtaLabel(freeTeamUpgradeKind, t)}
                       </Button>
                     </div>
                   )}
@@ -1132,6 +1142,16 @@ export function Settings() {
                         Choose plan in Shopify
                       </Button>
                     )}
+                    {!billingUsesShopify &&
+                    effectivePlan === "free" &&
+                    !activeProAiTrial ? (
+                      <InAppProUpgradeButton
+                        canStartInternalTrial={!!subscriptionData?.subscription?.canStartInternalTrial}
+                        isShopify={false}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                        testId="button-settings-pro-upgrade"
+                      />
+                    ) : (
                     <Link
                       href={
                         billingUsesShopify
@@ -1144,11 +1164,10 @@ export function Settings() {
                         <Zap className="h-4 w-4 mr-2" />
                         {activeProAiTrial
                           ? "View plans for after trial"
-                          : effectivePlan === "free" && !subscriptionData?.limits?.isInTrial
-                            ? "Upgrade Plan"
-                            : "View Plans"}
+                          : "View Plans"}
                       </Button>
                     </Link>
+                    )}
                   </div>
                 </div>
 

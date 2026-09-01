@@ -22,6 +22,7 @@ const WORKSPACE_KEYS = [
   "readyHeadline",
   "readyBody",
   "cta",
+  "ctaUpgrade",
   "viewPlans",
 ] as const;
 
@@ -56,7 +57,7 @@ test("locked AI Workspace uses value-first EN copy via i18n keys", () => {
     en.readyBody,
     /Upgrade to <pro>Pro<\/pro> to unlock <assist>AI Assist<\/assist> and <brain>AI Brain<\/brain>. AI Brain is included with Pro/,
   );
-  assert.equal(en.cta, "Start Your 14-Day Free Trial");
+  assert.equal(en.cta, "Start Your 14-Day Pro Trial");
 
   assert.ok(page.includes('t("aiBrain.workspace.title")'));
   assert.ok(page.includes('t("aiBrain.workspace.valueLead")'));
@@ -66,10 +67,12 @@ test("locked AI Workspace uses value-first EN copy via i18n keys", () => {
   assert.ok(page.includes('i18nKey="aiBrain.workspace.brainContext"'));
   assert.ok(page.includes('t("aiBrain.workspace.readyHeadline")'));
   assert.ok(page.includes('i18nKey="aiBrain.workspace.readyBody"'));
-  assert.ok(page.includes('t("aiBrain.workspace.cta")'));
+  assert.ok(page.includes("InAppProUpgradeButton"));
+  assert.ok(page.includes("canStartInternalTrial"));
+  assert.ok(!page.includes("Start Your 14-Day Free Trial"));
+  assert.ok(!page.includes('t("aiBrain.workspace.cta")'));
   assert.ok(page.includes('data-testid="ai-workspace-locked"'));
-  assert.ok(page.includes('data-testid="button-ai-workspace-choose-plan"'));
-  assert.ok(page.includes("handleProCheckout"));
+  assert.ok(page.includes('testId="button-ai-workspace-choose-plan"'));
   assert.ok(!page.includes("setBundleModalOpen(true)"));
   assert.ok(!page.includes("handlePlanAIBundleCheckout"));
 });
@@ -79,7 +82,7 @@ test("obsolete plan-jargon copy is gone from the locked screen", () => {
   const en = flattenWorkspace(loadJson(EN));
   const lockedIntro = page.slice(
     page.indexOf("!hasAIAssist && !effectiveHasAIBrain"),
-    page.indexOf("isFree && !isShopify"),
+    page.indexOf("if (settingsLoading"),
   );
 
   for (const gone of [
@@ -118,7 +121,7 @@ test("entitlement gates are unchanged: Free locked vs active vs Starter upgrade"
 
   assert.ok(locked.includes("aiBrain.workspace.readyHeadline"));
   assert.ok(!active.includes("aiBrain.workspace.readyHeadline"));
-  assert.ok(!active.includes("aiBrain.workspace.cta"));
+  assert.ok(!active.includes("InAppProUpgradeButton"));
   assert.ok(active.includes("AI Brain is active — your intelligence layer is unlocked below."));
 });
 
@@ -143,10 +146,10 @@ test("EN/ES/HE workspace strings exist and locales stay aligned", () => {
   const heAll = flattenWorkspace(loadJson(HE));
   assert.match(esAll, /Convierte tus conversaciones/);
   assert.match(esAll, /¿Listo para una IA más inteligente\?/);
-  assert.match(esAll, /prueba gratis de 14 días/);
+  assert.match(esAll, /prueba Pro de 14 días/);
   assert.match(heAll, /הפוך את השיחות שלך/);
   assert.match(heAll, /מוכנים ל-AI חכם יותר/);
-  assert.match(heAll, /ניסיון 14 הימים בחינם/);
+  assert.match(heAll, /ניסיון ה-Pro ל-14 ימים/);
   assert.ok(!esAll.toLowerCase().includes("serious upgrade"));
   assert.ok(!heAll.toLowerCase().includes("serious upgrade"));
 });

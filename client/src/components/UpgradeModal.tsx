@@ -1,12 +1,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getCheckoutReturnPaths } from "@/lib/checkoutReturnPaths";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
-import {
-  openShopifyManagedPricing,
-  shopifyManagedPricingInstructions,
-} from "@/lib/shopifyCheckout";
+import { shopifyManagedPricingInstructions } from "@/lib/shopifyCheckout";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -14,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Zap, MessageSquare, Users, Phone, Sparkles, Loader2, Check, Info } from "lucide-react";
 import { PROSPECT_AI_MONTHLY_QUOTAS } from "@shared/prospectAI";
 import { PLAN_LIMITS } from "@shared/schema";
+import { resolveInAppUpgradeCta } from "@shared/pricingProCta";
+import { performInAppProUpgrade } from "@/lib/inAppProUpgrade";
+import { inAppUpgradeCtaLabel } from "@/components/InAppProUpgradeButton";
 
 export type UpgradeReason =
   | "conversation_limit"
@@ -231,7 +230,7 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
   const isAutomationsPaidPlan = reason === "automations_paid_plan";
 
   const { data: subscription } = useQuery<{
-    subscription: { plan: string; isShopify?: boolean } | null;
+    subscription: { plan: string; isShopify?: boolean; canStartInternalTrial?: boolean } | null;
   }>({
     queryKey: ["/api/subscription", shopHint ?? ""],
     queryFn: async () => {
@@ -243,6 +242,8 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
   });
 
   const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
+  const canStartInternalTrial = !!subscription?.subscription?.canStartInternalTrial;
+  const inAppCtaKind = resolveInAppUpgradeCta({ canStartInternalTrial, isShopify });
 
   const content = useMemo(() => {
     if (isAutomationsPaidPlan) return null;
@@ -267,41 +268,17 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
   const runCheckout = async (plan: TargetPlan) => {
     setLoadingPlan(plan);
     try {
-      if (isShopify) {
-        const opened = await openShopifyManagedPricing(shopHint);
-        if (!opened) {
-          toast({
-            title: t(`${p}.shopifyToastTitle`),
-            description: t(`${p}.shopifyToastHint`),
-          });
-        }
-        setLoadingPlan(null);
-        return;
-      }
-
-      const response = await fetch("/api/subscription/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ planId: plan, ...getCheckoutReturnPaths() }),
-      });
-
-      if (response.status === 401) {
-        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
-        return;
-      }
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to start checkout");
-      }
-
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
-        setLoadingPlan(null);
+      const result = await performInAppProUpgrade(inAppCtaKind, { shopHint });
+      if (result === "started_trial") {
         onOpenChange(false);
+        window.location.reload();
+        return;
       }
+      if (result === "checkout" || result === "shopify" || result === "auth") {
+        setLoadingPlan(null);
+        return;
+      }
+      setLoadingPlan(null);
     } catch (error: any) {
       if (error?.message !== "session_expired") {
         toast({
@@ -363,13 +340,12 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
                 onClick={() => runCheckout("pro")}
                 disabled={loadingPlan !== null}
                 data-testid="button-upgrade-modal-pro"
+                data-in-app-upgrade-cta={inAppCtaKind}
               >
                 {loadingPlan === "pro" ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
-                ) : isShopify ? (
-                  t(`${p}.shopifyChoosePro`)
                 ) : (
-                  "Upgrade to Pro"
+                  inAppUpgradeCtaLabel(inAppCtaKind, t)
                 )}
               </Button>
             </div>
@@ -397,13 +373,16 @@ export function UpgradeModal({ open, onOpenChange, reason, currentPlan, limitInf
                 onClick={() => runCheckout(content!.targetPlan)}
                 disabled={loadingPlan !== null}
                 data-testid="button-upgrade-modal-cta"
+                data-in-app-upgrade-cta={inAppCtaKind}
               >
                 {loadingPlan ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>
                     <Zap className="h-5 w-5 mr-2" />
-                    {content!.ctaText} — {PLAN_PRICES[content!.targetPlan]}/mo
+                    {inAppCtaKind === "upgrade_pro"
+                      ? `${inAppUpgradeCtaLabel(inAppCtaKind, t)} — ${PLAN_PRICES[content!.targetPlan]}/mo`
+                      : inAppUpgradeCtaLabel(inAppCtaKind, t)}
                   </>
                 )}
               </Button>

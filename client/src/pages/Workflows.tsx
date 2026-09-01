@@ -33,6 +33,9 @@ import { MODAL_OVERLAY_BACKDROP } from "@/lib/modalOverlay";
 import { useSubscription } from "@/lib/subscription-context";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { UpgradeModal, type UpgradeReason } from "@/components/UpgradeModal";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import {
   CRM_WORKFLOW_ACTIONS,
   GROWTH_ENGINE_WORKFLOW_ACTIONS,
@@ -1047,10 +1050,13 @@ export function Workflows() {
   const queryClient = useQueryClient();
   const { data: subscriptionData, isLoading: subscriptionLoading } = useSubscription();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+  const shopHint = useShopifyShopHint();
   const limits = subscriptionData?.limits;
   const plan = limits?.plan ?? "free";
   const workflowsEnabled = limits?.workflowsEnabled ?? false;
   const isStarterPlan = plan === "starter";
+  const isShopifyBilling = mustUseShopifyBilling(subscriptionData?.subscription, shopHint);
+  const canStartInternalTrial = !!subscriptionData?.subscription?.canStartInternalTrial;
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<UpgradeReason>("automations_paid_plan");
@@ -1438,9 +1444,12 @@ export function Workflows() {
               <Zap className="h-7 w-7 text-brand-green" />
             </div>
             <p className="text-gray-900 font-medium">Automations are available on the Pro plan</p>
-            <Button className="bg-brand-green hover:bg-brand-green/90" onClick={openPaidAutomationsUpgrade} data-testid="button-automations-upgrade">
-              Upgrade to Pro
-            </Button>
+            <InAppProUpgradeButton
+              canStartInternalTrial={canStartInternalTrial}
+              isShopify={isShopifyBilling}
+              className="bg-brand-green hover:bg-brand-green/90"
+              testId="button-automations-upgrade"
+            />
           </div>
         </div>
         {upgradeModal}

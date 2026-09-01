@@ -253,9 +253,14 @@
       "brainContext": "הוא לומד את ההקשר העסקי שלך כדי ש-<brand>WhachatCRM</brand> יוכל להמליץ על הצעדים הבאים הטובים יותר בשיחות, בלידים ובזרימות עבודה.",
       "readyHeadline": "מוכנים ל-AI חכם יותר?",
       "readyBody": "שדרגו ל-<pro>Pro</pro> כדי לפתוח את <assist>AI Assist</assist> ו-<brain>AI Brain</brain>. AI Brain כלול ב-Pro.",
-      "cta": "התחילו את ניסיון 14 הימים בחינם",
+      "cta": "התחילו את ניסיון ה-Pro ל-14 ימים",
+      "ctaUpgrade": "שדרג לפרו",
       "viewPlans": "צפייה בתוכניות"
     }
+  },
+  "inAppUpgrade": {
+    "startTrial": "התחילו את ניסיון ה-Pro ל-14 ימים",
+    "upgradePro": "שדרג לפרו"
   },
   "pricing": {
     "backToSettings": "חזרה להגדרות",

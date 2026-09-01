@@ -1,7 +1,9 @@
-import { AlertTriangle, X, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { AlertTriangle, X } from "lucide-react";
 import { useState } from "react";
+import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
+import { useSubscription } from "@/lib/subscription-context";
+import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
+import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 interface UsageWarningBannerProps {
   conversationsUsed: number;
@@ -11,9 +13,11 @@ interface UsageWarningBannerProps {
 
 export function UsageWarningBanner({ conversationsUsed, conversationsLimit, planName }: UsageWarningBannerProps) {
   const [dismissed, setDismissed] = useState(false);
-  
+  const { data: subscription } = useSubscription();
+  const shopHint = useShopifyShopHint();
+  const isShopify = mustUseShopifyBilling(subscription?.subscription, shopHint);
+
   const percentUsed = (conversationsUsed / conversationsLimit) * 100;
-  const isWarning = percentUsed >= 80 && percentUsed < 100;
   const isAtLimit = percentUsed >= 100;
 
   if (dismissed || percentUsed < 80) {
@@ -44,19 +48,16 @@ export function UsageWarningBanner({ conversationsUsed, conversationsLimit, plan
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Link href="/pricing">
-          <Button 
-            size="sm" 
-            className={isAtLimit 
-              ? "bg-red-600 hover:bg-red-700" 
-              : "bg-amber-600 hover:bg-amber-700"
-            }
-            data-testid="button-upgrade-banner"
-          >
-            <Zap className="h-4 w-4 mr-1" />
-            Upgrade
-          </Button>
-        </Link>
+        <InAppProUpgradeButton
+          canStartInternalTrial={!!subscription?.subscription?.canStartInternalTrial}
+          isShopify={isShopify}
+          className={
+            isAtLimit
+              ? "h-8 bg-red-600 px-3 text-sm hover:bg-red-700"
+              : "h-8 bg-amber-600 px-3 text-sm hover:bg-amber-700"
+          }
+          testId="button-upgrade-banner"
+        />
         {!isAtLimit && (
           <button 
             onClick={() => setDismissed(true)}

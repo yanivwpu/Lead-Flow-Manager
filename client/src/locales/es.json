@@ -253,9 +253,14 @@
       "brainContext": "Aprende el contexto de tu negocio para que <brand>WhachatCRM</brand> pueda recomendar mejores siguientes pasos en conversaciones, prospectos y flujos de trabajo.",
       "readyHeadline": "¿Listo para una IA más inteligente?",
       "readyBody": "Mejora a <pro>Pro</pro> para desbloquear <assist>AI Assist</assist> y <brain>AI Brain</brain>. AI Brain está incluido con Pro.",
-      "cta": "Empieza tu prueba gratis de 14 días",
+      "cta": "Empieza tu prueba Pro de 14 días",
+      "ctaUpgrade": "Actualizar a Pro",
       "viewPlans": "Ver planes"
     }
+  },
+  "inAppUpgrade": {
+    "startTrial": "Empieza tu prueba Pro de 14 días",
+    "upgradePro": "Actualizar a Pro"
   },
   "pricing": {
     "backToSettings": "Volver a Configuración",
