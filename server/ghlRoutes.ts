@@ -639,6 +639,10 @@ export async function handleGhlWebhook(req: Request, res: Response) {
     headers: req.headers as Record<string, unknown>,
   });
   if (!verified.ok) {
+    logGhlOAuthDiagnostic("webhook_signature_rejected", {
+      reason: verified.reason,
+      hasRawBody: Boolean(rawBody && rawBody.length > 0),
+    });
     return res.status(401).json({ error: "Invalid webhook signature" });
   }
 
@@ -653,9 +657,30 @@ export async function handleGhlWebhook(req: Request, res: Response) {
     `[LeadConnector Webhook] ${timestamp} | Event: ${type} | Location: ${locationId || "N/A"}`,
   );
 
+  logGhlOAuthDiagnostic("webhook_event_received", {
+    eventType: type,
+    normalizedEventType: lifecycleType,
+    appId: body.appId ?? null,
+    versionId: body.versionId ?? null,
+    companyId: body.companyId ?? null,
+    locationId,
+    ghlUserId: body.userId ?? null,
+    installType: body.installType ?? null,
+    hasCompanyId: Boolean(body.companyId),
+  });
+
   if (lifecycleType) {
     try {
       const result = await persistGhlMarketplaceLifecycleEvent(body);
+      if (result.kind === "ignored") {
+        logGhlOAuthDiagnostic("webhook_lifecycle_ignored", {
+          eventType: type,
+          normalizedEventType: lifecycleType,
+          locationId,
+          companyId: body.companyId ?? null,
+          appId: body.appId ?? null,
+        });
+      }
       if (result.warning) {
         logGhlOAuthDiagnostic("webhook_lifecycle_warning", {
           eventType: lifecycleType,
@@ -669,6 +694,15 @@ export async function handleGhlWebhook(req: Request, res: Response) {
       console.error("[LeadConnector Webhook] Lifecycle processing error:", error instanceof Error ? error.message : "error");
       return res.status(500).json({ error: "Webhook processing error" });
     }
+  }
+
+  if (type === "UNKNOWN" || String(type).toUpperCase().includes("INSTALL") || String(type).toUpperCase().includes("PLAN")) {
+    logGhlOAuthDiagnostic("webhook_unrecognized_lifecycle_event", {
+      eventType: type,
+      locationId,
+      companyId: body.companyId ?? null,
+      appId: body.appId ?? null,
+    });
   }
 
   res.status(200).json({ received: true });

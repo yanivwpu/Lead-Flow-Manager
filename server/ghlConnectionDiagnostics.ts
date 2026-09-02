@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
-import { ghlMarketplaceInstalls, integrations } from "@shared/schema";
+import { integrations } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { listGhlInstallationsForAdmin, listRecoverableMarketplaceInstallsForUser } from "./ghlMarketplaceService";
 import { storage } from "./storage";
+import { getGhlLifecyclePersistence } from "./ghlMarketplaceLifecycleStore";
+import { isGhlTokenIntegrationStaleAfterMarketplaceUninstall } from "@shared/ghlMarketplaceUninstallMatch";
 
 export type GhlOAuthDiagnosticEvent =
   | "oauth_authorize_started"
@@ -34,6 +36,12 @@ export type GhlOAuthDiagnosticEvent =
   | "oauth_handoff_rejected"
   | "oauth_recovery_admin_override"
   | "webhook_uninstall_credentials_revoked"
+  | "webhook_uninstall_already_revoked"
+  | "webhook_uninstall_match"
+  | "webhook_event_received"
+  | "webhook_lifecycle_ignored"
+  | "webhook_unrecognized_lifecycle_event"
+  | "webhook_signature_rejected"
   | "webhook_lifecycle_warning";
 
 export type UserEligibleGhlMarketplaceInstall = {
@@ -56,7 +64,7 @@ export async function listUserEligibleGhlMarketplaceInstalls(
   userId: string,
   userEmail?: string | null,
 ): Promise<UserEligibleGhlMarketplaceInstall[]> {
-  const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
+  const marketplaceRows = await getGhlLifecyclePersistence().listInstalls();
   const normalizedEmail = userEmail ? normalizeEmail(userEmail) : null;
 
   return marketplaceRows
@@ -101,7 +109,17 @@ export async function resolveUserGhlConnectionStatus(
 ): Promise<UserGhlConnectionStatus> {
   const userIntegrations = await storage.getIntegrations(userId);
   const ghlIntegrations = userIntegrations.filter((i) => i.type === "gohighlevel");
-  const ghlWithTokens = ghlIntegrations.filter((i) => i.isActive && i.accessToken);
+  const marketplaceRows = await getGhlLifecyclePersistence().listInstalls();
+  const ghlWithTokens = ghlIntegrations.filter((i) => {
+    if (!i.isActive || !i.accessToken) return false;
+    const cfg = (i.config || {}) as Record<string, unknown>;
+    return !isGhlTokenIntegrationStaleAfterMarketplaceUninstall({
+      integrationId: i.id,
+      configLocationId: (cfg.locationId as string) || null,
+      configCompanyId: (cfg.companyId as string) || null,
+      marketplaceRows,
+    });
+  });
 
   let activeIntegration = options?.queryLocationId
     ? ghlWithTokens.find(
@@ -127,10 +145,13 @@ export async function resolveUserGhlConnectionStatus(
   }
 
   const userEligibleInstalls = await listUserEligibleGhlMarketplaceInstalls(userId, userEmail);
-  const recoverableInstalls = await listRecoverableMarketplaceInstallsForUser(userId, userEmail, {
-    isPlatformAdmin: options?.isPlatformAdmin,
-    isRecoveryAllowlisted: options?.isRecoveryAllowlisted,
-  });
+  const recoverableInstalls =
+    process.env.GHL_WEBHOOK_ROUTE_TEST === "1"
+      ? []
+      : await listRecoverableMarketplaceInstallsForUser(userId, userEmail, {
+          isPlatformAdmin: options?.isPlatformAdmin,
+          isRecoveryAllowlisted: options?.isRecoveryAllowlisted,
+        });
   const hasIncompleteIntegration = ghlIntegrations.some((i) => !i.accessToken);
   const hasUnlinkedUserInstall = userEligibleInstalls.some((r) => !r.integrationId);
   const installedInGhlNotConnected =
@@ -157,7 +178,7 @@ export async function resolveUserGhlConnectionStatus(
 
 /** @deprecated Use listUserEligibleGhlMarketplaceInstalls — platform-wide listing is not user-safe. */
 export async function listUnlinkedActiveGhlMarketplaceInstalls(): Promise<UserEligibleGhlMarketplaceInstall[]> {
-  const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
+  const marketplaceRows = await getGhlLifecyclePersistence().listInstalls();
   return marketplaceRows
     .filter(
       (r) =>
@@ -227,7 +248,7 @@ export async function summarizeGhlConnectionState(): Promise<{
     .from(integrations)
     .where(eq(integrations.type, "gohighlevel"));
 
-  const marketplaceRows = await db.select().from(ghlMarketplaceInstalls);
+  const marketplaceRows = await getGhlLifecyclePersistence().listInstalls();
   const adminRows = await listGhlInstallationsForAdmin();
 
   const byUser = new Map<string, { count: number; hasToken: boolean; locationId: string | null }>();

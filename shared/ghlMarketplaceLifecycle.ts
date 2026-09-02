@@ -15,6 +15,7 @@ import {
   type GhlMarketplacePlanConfig,
 } from "./ghlMarketplacePlanIds";
 import { stripGhlOAuthSecretsFromPayload } from "./ghlConnectionState";
+import { resolvedGhlCompanyId } from "./ghlMarketplaceUninstallMatch";
 
 export const GHL_LIFECYCLE_EVENT_TYPES = [
   "INSTALL",
@@ -287,7 +288,7 @@ export function applyGhlMarketplaceLifecycleEvent(
   const next: GhlMarketplaceBillingState = {
     ...base,
     appId: event.appId ?? base.appId,
-    companyId: event.companyId || base.companyId,
+    companyId: resolvedGhlCompanyId(event.companyId, base.companyId),
     locationId: event.locationId ?? base.locationId,
     ghlUserId: event.ghlUserId ?? base.ghlUserId,
     lastWebhookId: event.webhookId,

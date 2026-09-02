@@ -438,6 +438,34 @@ test("sanitized stored payload does not keep tokens", () => {
   assert.equal("refreshToken" in stored, false);
 });
 
+test("location-only UNINSTALL parses without companyId and does not clobber existing companyId", () => {
+  const parsed = parseGhlLifecycleEvent({
+    type: "UNINSTALL",
+    appId: "698aac74b0b22c778055e2cc",
+    locationId: "EOFOVqrgSM7x1c2WAV4m",
+    webhookId: "a8acc102-542e-4425-927c-30a0dbae0fe3",
+    timestamp: "2026-09-02T02:14:26.534Z",
+    versionId: "6a9508949596830098ee3525",
+    userId: "MDWRlJpN0ePLWn51JUaM",
+    planId: "698abb1fc7198bfbf0b89a99",
+    installType: "Location",
+  });
+  assert.ok(parsed);
+  assert.equal(parsed.type, "UNINSTALL");
+  assert.equal(parsed.locationId, "EOFOVqrgSM7x1c2WAV4m");
+  assert.equal(parsed.companyId, "unknown");
+  const installed = apply("INSTALL", {
+    planId: FREE_ID,
+    companyId: "Jyk3C3jKACswbgW8duhg",
+    locationId: "EOFOVqrgSM7x1c2WAV4m",
+    timestamp: "2026-09-02T02:11:59.557Z",
+  });
+  const uninstalled = applyGhlMarketplaceLifecycleEvent(installed.next, parsed, config);
+  assert.equal(uninstalled.next.installationStatus, "Uninstalled");
+  assert.equal(uninstalled.next.companyId, "Jyk3C3jKACswbgW8duhg");
+  assert.equal(uninstalled.next.locationId, "EOFOVqrgSM7x1c2WAV4m");
+});
+
 test("diagnostics expose configured flags not plan ID values", () => {
   const env = {
     GHL_MARKETPLACE_FREE_PLAN_ID: FREE_ID,

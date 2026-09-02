@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import type { Request, Response } from "express";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { ghlOAuthPendingHandoffs } from "@shared/schema";
 import {
@@ -294,44 +294,10 @@ export async function claimGhlOAuthHandoffIfPresent(
 export async function revokeGhlOAuthHandoffsForInstall(params: {
   locationId?: string | null;
   companyId?: string | null;
-}): Promise<void> {
-  const locationId = params.locationId?.trim() || null;
-  const companyId = params.companyId?.trim() || null;
-  if (!locationId && !companyId) return;
-
-  const now = new Date();
-  if (locationId && companyId) {
-    await db
-      .update(ghlOAuthPendingHandoffs)
-      .set({ expiresAt: now, consumedAt: now })
-      .where(
-        and(
-          eq(ghlOAuthPendingHandoffs.locationId, locationId),
-          eq(ghlOAuthPendingHandoffs.companyId, companyId),
-          isNull(ghlOAuthPendingHandoffs.consumedAt),
-        ),
-      );
-    return;
-  }
-  if (locationId) {
-    await db
-      .update(ghlOAuthPendingHandoffs)
-      .set({ expiresAt: now, consumedAt: now })
-      .where(
-        and(eq(ghlOAuthPendingHandoffs.locationId, locationId), isNull(ghlOAuthPendingHandoffs.consumedAt)),
-      );
-    return;
-  }
-  if (companyId) {
-    await db
-      .update(ghlOAuthPendingHandoffs)
-      .set({ expiresAt: now, consumedAt: now })
-      .where(
-        and(
-          eq(ghlOAuthPendingHandoffs.companyId, companyId),
-          sql`${ghlOAuthPendingHandoffs.locationId} IS NULL`,
-          isNull(ghlOAuthPendingHandoffs.consumedAt),
-        ),
-      );
-  }
+}): Promise<{ revokedCount: number }> {
+  const { getGhlLifecyclePersistence } = await import("./ghlMarketplaceLifecycleStore");
+  return getGhlLifecyclePersistence().revokeHandoffs({
+    locationId: params.locationId ?? null,
+    companyId: params.companyId ?? null,
+  });
 }
