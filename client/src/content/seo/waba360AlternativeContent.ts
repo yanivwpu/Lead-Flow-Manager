@@ -80,7 +80,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     "You need Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat in one timeline",
     "You want chatbot, Flow Builder, and preset automation templates on Pro — not on Free",
     "You need CRM, tags, pipeline, and team collaboration without building middleware",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free matter",
+    "Shopify orders/customers in inbox or CRM Integration sync on Free matter",
     "You want unlimited users on Pro ($49/mo) instead of engineering headcount for every new agent workflow",
   ],
   advantages: [
@@ -113,7 +113,7 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "no",
     "AI Brain (optional add-on)": "no",
     "Shopify integration (orders/customers → inbox)": "no",
-    "GoHighLevel integration": "no",
+    "CRM integration": "no",
     "Calendly booking integration": "no",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "partial",
@@ -162,6 +162,6 @@ export const waba360AlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Pro chatbot/templates, Shopify/GHL on Free, and unlimited Pro users — without building the operations layer yourself.",
+    "Stay on 360dialog if engineering owns your messaging product and you only need API pipes. Move to WhachatCRM when you want Embedded Signup, a ready Unified Inbox with CRM and Email, Pro chatbot/templates, Shopify and CRM Integration on Free, and unlimited Pro users — without building the operations layer yourself.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

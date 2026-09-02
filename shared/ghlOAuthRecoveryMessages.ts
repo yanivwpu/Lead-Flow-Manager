@@ -19,33 +19,33 @@ export type CrmOAuthRecoveryDisplayInput = {
 export function humanReadableCrmOAuthRecoveryMessage(input: CrmOAuthRecoveryDisplayInput): string {
   if (input.recovered) {
     return input.refreshed
-      ? "Existing OAuth tokens were recovered successfully and the access token was refreshed."
-      : "Existing OAuth tokens were recovered successfully.";
+      ? "Your CRM connection was recovered and renewed."
+      : "Your CRM connection was recovered successfully.";
   }
 
   switch (input.reasonCategory) {
     case "no_recoverable_install":
-      return "No recoverable OAuth installation was found.";
+      return "No recoverable CRM connection was found.";
     case "invalid_access_token":
-      return "Stored access token is invalid.";
+      return "Your CRM connection needs to be renewed.";
     case "refresh_failed":
-      return "Refresh token failed.";
+      return "Your CRM connection needs to be renewed.";
     case "ownership_mismatch":
-      return "Ownership could not be verified.";
+      return "This CRM connection could not be verified for your account.";
     default:
       break;
   }
 
   if (input.httpStatus === 401 || input.reason === "not_authenticated") {
-    return "WhachatCRM session expired. Log in again and retry recovery.";
+    return "Your WhachatCRM session expired. Log in again and finish connecting.";
   }
   if (input.reason === "recovery_failed") {
-    return "Server error while recovering OAuth tokens.";
+    return "Could not recover your CRM connection. Reconnect CRM to continue.";
   }
   if (input.reason) {
-    return `Recovery failed: ${input.reason}`;
+    return "Could not finish your CRM connection. Reconnect CRM to continue.";
   }
-  return "Recovery failed for an unknown reason.";
+  return "Could not finish your CRM connection. Reconnect CRM to continue.";
 }
 
-export const CRM_TRY_FULL_OAUTH_CTA = "Try full OAuth authorization";
+export const CRM_TRY_FULL_OAUTH_CTA = "Reconnect CRM";

@@ -45,7 +45,7 @@ export function getGhlMarketplaceOAuthConfig(): GhlMarketplaceOAuthConfig {
       marketplaceInstallUrl: null,
       installUrl: null,
       error:
-        "CRM app credentials are not configured on the server (GHL_CLIENT_ID / GHL_CLIENT_SECRET). Contact support.",
+        "CRM app credentials are not configured on the server. Contact support.",
     };
   }
 
@@ -65,7 +65,7 @@ export function getGhlMarketplaceOAuthConfig(): GhlMarketplaceOAuthConfig {
       oauthAuthorizeUrl: null,
       marketplaceInstallUrl: null,
       installUrl: null,
-      error: err instanceof Error ? err.message : "Failed to build CRM OAuth authorize URL",
+      error: err instanceof Error ? err.message : "Failed to build CRM connection URL",
     };
   }
 

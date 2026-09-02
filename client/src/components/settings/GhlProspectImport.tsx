@@ -62,6 +62,7 @@ import type {
 } from "@shared/prospectImport";
 import {
   PROSPECT_IMPORT_INTERNAL_TAGS,
+  PROSPECT_IMPORT_INTERNAL_TAG_LABELS,
   PROSPECT_IMPORT_PRESET_TEMPLATES,
   PROSPECT_IMPORT_PROVIDER_LABELS,
   PROSPECT_IMPORT_PROVIDERS,
@@ -228,7 +229,7 @@ export function GhlProspectImport({
     setStep(1);
     toast({
       title: `${tpl.templateName} template applied`,
-      description: "Filters are pre-filled. Please select a GoHighLevel location to continue.",
+      description: "Filters are pre-filled. Please select a CRM location to continue.",
     });
   };
 
@@ -518,11 +519,11 @@ export function GhlProspectImport({
               </div>
             ) : null}
             <h2 className="text-lg font-semibold text-gray-900">
-              {embedded ? "GoHighLevel Import" : "Prospect Import"}
+              {embedded ? "Import from CRM" : "Prospect Import"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-gray-600">
               {embedded
-                ? "Import prospects from GoHighLevel into your workspace for Review and campaigns. Contacts only — no inbox threads."
+                ? "Import prospects from CRM into your workspace for Review and campaigns. Contacts only — no inbox threads."
                 : "Import prospects from external CRMs into your YaBa workspace for outbound sales, partnerships, and recruitment. Contacts only — no inbox threads."}
             </p>
           </div>
@@ -599,7 +600,7 @@ export function GhlProspectImport({
           {appliedTemplateName && !selectedIntegrationId ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
               <span className="font-semibold">{appliedTemplateName}</span> template applied. Please
-              select a GoHighLevel location to continue.
+              select a CRM location to continue.
             </div>
           ) : null}
 
@@ -627,7 +628,7 @@ export function GhlProspectImport({
             <>
               <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
                 <MapPin className="h-4 w-4 text-brand-green" />
-                Select GoHighLevel location
+                Select CRM location
               </h3>
               {locationsQuery.isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -635,7 +636,7 @@ export function GhlProspectImport({
                 </div>
               ) : (locationsQuery.data?.locations ?? []).length === 0 ? (
                 <p className="text-sm text-gray-600">
-                  No connected GoHighLevel locations found. Connect a GHL sub-account first.
+                  No connected CRM locations found. Connect CRM first.
                 </p>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -668,7 +669,7 @@ export function GhlProspectImport({
                 </div>
               )}
               {!canContinueFromStep1 && !locationsQuery.isLoading ? (
-                <WizardValidationHint>Please select a GoHighLevel location.</WizardValidationHint>
+                <WizardValidationHint>Please select a CRM location.</WizardValidationHint>
               ) : null}
             </>
           ) : null}
@@ -679,7 +680,7 @@ export function GhlProspectImport({
               disabled={!canContinueFromStep1}
               onClick={() => setStep(2)}
               className="bg-brand-green hover:bg-brand-green/90"
-              title={!canContinueFromStep1 ? "Select a GoHighLevel location first" : undefined}
+              title={!canContinueFromStep1 ? "Select a CRM location first" : undefined}
             >
               Continue <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -708,7 +709,7 @@ export function GhlProspectImport({
               />
             </div>
             <div>
-              <Label>Scan scope (contacts to scan in GHL)</Label>
+              <Label>Scan scope (CRM contacts to scan)</Label>
               <Select
                 value={String(filters.scanScope ?? PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE)}
                 onValueChange={(v) =>
@@ -915,7 +916,7 @@ export function GhlProspectImport({
           <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6">
             <div className="flex items-center gap-2 text-sm font-semibold text-blue-900">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Scanning GHL contacts…
+              Scanning CRM contacts…
             </div>
             <p className="mt-2 text-sm text-blue-800">
               {previewJob.progressScanned.toLocaleString()}
@@ -937,7 +938,7 @@ export function GhlProspectImport({
             ) : null}
             {previewJob.ghlReportedTotal != null ? (
               <p className="mt-3 text-xs text-blue-700">
-                GHL reported total contacts: {previewJob.ghlReportedTotal.toLocaleString()}
+                CRM reported total contacts: {previewJob.ghlReportedTotal.toLocaleString()}
               </p>
             ) : null}
           </div>
@@ -950,7 +951,7 @@ export function GhlProspectImport({
             <p className="text-sm font-semibold text-blue-900">Dry run — no database writes</p>
             {preview.stats.ghlReportedTotal != null ? (
               <p className="mt-1 text-xs text-blue-800">
-                GHL reported total contacts: {preview.stats.ghlReportedTotal.toLocaleString()}
+                CRM reported total contacts: {preview.stats.ghlReportedTotal.toLocaleString()}
               </p>
             ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-sm">
@@ -959,7 +960,7 @@ export function GhlProspectImport({
                 { label: "Matching filters", value: preview.stats.totalMatching },
                 { label: "Will import (new)", value: preview.stats.willImportNew },
                 { label: "Already exists", value: preview.stats.alreadyExists },
-                { label: "Dup by GHL ID", value: preview.stats.duplicatesByGhlId },
+                { label: "Dup by CRM ID", value: preview.stats.duplicatesByGhlId },
                 { label: "Dup by email", value: preview.stats.duplicatesByEmail },
                 { label: "Dup by phone", value: preview.stats.duplicatesByPhone },
                 { label: "Missing email", value: preview.stats.missingEmail },
@@ -1129,7 +1130,7 @@ export function GhlProspectImport({
               <SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {PROSPECT_IMPORT_INTERNAL_TAGS.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                  <SelectItem key={t} value={t}>{PROSPECT_IMPORT_INTERNAL_TAG_LABELS[t]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1146,7 +1147,7 @@ export function GhlProspectImport({
                 onChange={() => setDuplicateMode("skip")}
               />
               <span>
-                Skip duplicates — contacts matching GHL ID, email, or phone are not imported.
+                Skip duplicates — contacts matching CRM ID, email, or phone are not imported.
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm text-gray-700">

@@ -237,7 +237,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/solutions/marketing-agencies": {
     title: "WhatsApp & Messaging Platform for Marketing Agencies | WhachatCRM",
     description:
-      "Agency messaging platform for WhatsApp, multi-channel inbox, chatbots, automation, AI Copilot, and client engagement. Optional GoHighLevel connection and Partner Program.",
+      "Agency messaging platform for WhatsApp, multi-channel inbox, chatbots, automation, AI Copilot, and client engagement. Optional CRM Integration and Partner Program.",
     canonical: `${BASE_URL}/solutions/marketing-agencies`
   },
   "/solutions/med-spas": {
@@ -285,7 +285,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/integrations": {
     title: "CRM Integrations Directory | WhachatCRM",
     description:
-      "Connect WhachatCRM to messaging channels and business tools you already use — WhatsApp, Instagram, Facebook, SMS, email, Shopify, GoHighLevel, Calendly, Stripe, and more.",
+      "Connect WhachatCRM to messaging channels and business tools you already use — WhatsApp, Instagram, Facebook, SMS, email, Shopify, CRM Integration, Calendly, Stripe, and more.",
     canonical: `${BASE_URL}/integrations`
   },
   "/shopify-crm": {

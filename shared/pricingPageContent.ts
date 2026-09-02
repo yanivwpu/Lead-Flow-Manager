@@ -244,7 +244,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     items: [
       {
         q: "Are integrations included on Free?",
-        a: "Yes. Free users can open Integrations and connect supported tools such as Gmail, Shopify, Calendly, and GoHighLevel. Conversation, user, and channel limits still apply. Campaign automation and AI Brain are included with Pro.",
+        a: "Yes. Free users can open Integrations and connect supported tools such as Gmail, Shopify, Calendly, and CRM Integration. Conversation, user, and channel limits still apply. Campaign automation and AI Brain are included with Pro.",
       },
       {
         q: "Are WhatsApp templates included on Free?",

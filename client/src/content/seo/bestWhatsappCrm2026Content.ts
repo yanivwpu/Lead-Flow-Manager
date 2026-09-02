@@ -97,9 +97,9 @@ export const BUYER_CRITERIA = [
     link: { href: "/unified-inbox", label: "Unified inbox overview" },
   },
   {
-    title: "GoHighLevel and CRM sync",
+    title: "CRM Integration and contact sync",
     description:
-      "Agencies often need contact and pipeline sync with tools like GoHighLevel. Prefer platforms with documented OAuth/integrations rather than one-way CSV workarounds.",
+      "Agencies often need contact and pipeline sync with CRM platforms. Prefer platforms with documented authorization and integrations rather than one-way CSV workarounds.",
     link: { href: "/pricing", label: "Plans and integrations" },
   },
   {
@@ -226,7 +226,7 @@ export const WHACHAT_DIFFERENTIATORS = [
   "Omnichannel inbox for WhatsApp, Messenger, Instagram, Email (Gmail), SMS, Telegram, and website chat",
   "AI Assist and AI Brain included with Pro",
   "Chatbot / Flow Builder and preset automation templates included on Pro",
-  "Shopify integration and GoHighLevel sync from Integrations (available on Free)",
+  "Shopify integration and CRM Integration from Integrations (available on Free)",
   "Realtor Growth Engine for eligible Pro workspaces",
   "Unlimited users on Pro ($49/mo) with a Free forever starting plan",
   "0% WhachatCRM markup on Meta messaging fees—Meta may change its rates independently",
@@ -329,11 +329,11 @@ export const FAQ_ITEMS = [
   {
     question: "How is WhachatCRM different from Respond.io or WATI?",
     answer:
-      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot on Pro, basic WhatsApp templates and integrations on Free, Shopify and GoHighLevel connections, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
+      "Respond.io and WATI are strong WhatsApp and omnichannel options for many teams. WhachatCRM differentiates with Meta Embedded Signup, Email/Gmail in the same inbox, chatbot on Pro, basic WhatsApp templates and integrations on Free, Shopify and CRM Integration connections, unlimited users on Pro, a free plan to start, and 0% WhachatCRM markup on Meta messaging fees—aimed at SMBs and agencies that want breadth without enterprise complexity.",
   },
   {
     question: "What should I compare before choosing a WhatsApp CRM?",
     answer:
-      "Compare Embedded Signup, channel coverage (including Email), automation depth, AI features, team inbox controls, integrations (Shopify or GoHighLevel), seat model, and how Meta conversation fees are passed through. A side-by-side trial on your real workflows beats feature checklists alone.",
+      "Compare Embedded Signup, channel coverage (including Email), automation depth, AI features, team inbox controls, integrations (Shopify or CRM Integration), seat model, and how Meta conversation fees are passed through. A side-by-side trial on your real workflows beats feature checklists alone.",
   },
 ] as const;

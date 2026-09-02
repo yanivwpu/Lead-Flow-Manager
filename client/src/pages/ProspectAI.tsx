@@ -1217,7 +1217,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-gray-800">GoHighLevel Import</p>
+              <p className="text-sm font-medium text-gray-800">Import from CRM</p>
               <Badge
                 variant="outline"
                 className="border-gray-200 bg-white px-1.5 py-0 text-[10px] font-medium uppercase tracking-wide text-gray-500 shadow-none"
@@ -1239,7 +1239,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
             onClick={() => setGhlOpen((v) => !v)}
             data-testid="prospect-ai-toggle-ghl"
           >
-            {ghlOpen ? "Hide import" : "Open GoHighLevel Import"}
+            {ghlOpen ? "Hide import" : "Import from CRM"}
           </Button>
         </div>
         {ghlOpen ? (

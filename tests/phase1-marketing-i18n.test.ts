@@ -34,7 +34,7 @@ const BRAND_ALLOWLIST = [
   "Stripe",
   "Calendly",
   "Shopify",
-  "GoHighLevel",
+  "CRM Integration",
   "Meta",
   "MLS",
   "SMS",

@@ -27,7 +27,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "WATI is a proven WhatsApp operations platform with strong shared-inbox and broadcast workflows. WhachatCRM targets SMBs that want Meta Embedded Signup, WhatsApp beside Email and Meta social channels, and predictable seat economics on Pro — without rebuilding around a WhatsApp-only console.",
   quickSummary:
-    "Stay on WATI when your team already runs mature WhatsApp campaigns, template ops, and agent playbooks on their stack. Consider WhachatCRM when you need a Unified Inbox across WhatsApp, Messenger, Instagram, and Gmail; Pro chatbot and preset templates (not on Free); unlimited users on Pro; Shopify and GoHighLevel integrations; and Meta conversation fees passed through without WhachatCRM markup. Confirm current WATI packaging on their site before modeling total cost.",
+    "Stay on WATI when your team already runs mature WhatsApp campaigns, template ops, and agent playbooks on their stack. Consider WhachatCRM when you need a Unified Inbox across WhatsApp, Messenger, Instagram, and Gmail; Pro chatbot and preset templates (not on Free); unlimited users on Pro; Shopify and CRM Integration; and Meta conversation fees passed through without WhachatCRM markup. Confirm current WATI packaging on their site before modeling total cost.",
   whoFor: [
     "SMBs outgrowing WATI seat packs or channel limits and exploring omnichannel inbox options",
     "Support leads who want Email beside WhatsApp without a separate mailbox",
@@ -80,7 +80,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     "You need one Unified Inbox across WhatsApp, Messenger, Instagram, Email (Gmail), and web chat",
     "You want chatbot, Flow Builder, and preset automation templates on Pro — Free includes inbox, integrations, and basic WhatsApp templates",
     "You need unlimited users on Pro so sales, support, and marketing share one workspace without seat packs",
-    "Shopify orders/customers in inbox context or GoHighLevel LeadConnector sync matter on Free",
+    "Shopify orders/customers in inbox context or CRM Integration sync matter on Free",
     "You want 0% WhachatCRM markup on Meta conversation fees with clear Free / Pro $49 plans",
   ],
   advantages: [
@@ -113,7 +113,7 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "partial",
     "AI Brain (optional add-on)": NOT_CLEARLY_DISCLOSED,
     "Shopify integration (orders/customers → inbox)": "partial",
-    "GoHighLevel integration": NOT_CLEARLY_DISCLOSED,
+    "CRM integration": NOT_CLEARLY_DISCLOSED,
     "Calendly booking integration": "partial",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "yes",
@@ -162,6 +162,6 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep WATI if WhatsApp broadcast maturity and existing WATI playbooks are your competitive advantage. Switch to WhachatCRM when you need Meta Embedded Signup, a Unified Inbox with Email and social channels, Pro chatbot/templates, unlimited Pro users, Shopify/GHL on Free, and transparent Meta fee pass-through — with a self-serve SMB workspace instead of a WhatsApp-only ops console.",
+    "Keep WATI if WhatsApp broadcast maturity and existing WATI playbooks are your competitive advantage. Switch to WhachatCRM when you need Meta Embedded Signup, a Unified Inbox with Email and social channels, Pro chatbot/templates, unlimited Pro users, Shopify and CRM Integration on Free, and transparent Meta fee pass-through — with a self-serve SMB workspace instead of a WhatsApp-only ops console.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

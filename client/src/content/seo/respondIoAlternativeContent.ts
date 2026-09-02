@@ -27,7 +27,7 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "Respond.io is a capable omnichannel conversation platform for teams managing high conversation volume across WhatsApp, social, and more. WhachatCRM offers a similar multi-channel vision with simpler SMB packaging: Free to start, Pro chatbot and templates, and unlimited users on Pro without enterprise seat negotiations.",
   quickSummary:
-    "Choose Respond.io when you need mature omnichannel routing for larger teams and your budget fits their tiered contact and seat model. Choose WhachatCRM when you want Meta Embedded Signup, WhatsApp plus Email and social in one inbox, Pro automation templates, Shopify and GoHighLevel integrations, and predictable Free / Pro $49 pricing with unlimited Pro users. Confirm current Respond.io packaging on their site before modeling total cost.",
+    "Choose Respond.io when you need mature omnichannel routing for larger teams and your budget fits their tiered contact and seat model. Choose WhachatCRM when you want Meta Embedded Signup, WhatsApp plus Email and social in one inbox, Pro automation templates, Shopify and CRM Integration, and predictable Free / Pro $49 pricing with unlimited Pro users. Confirm current Respond.io packaging on their site before modeling total cost.",
   whoFor: [
     "SMBs evaluating Respond.io but wanting simpler seat economics and a free starting tier",
     "Growing teams that need unlimited Pro users without stacking per-agent licenses",
@@ -80,7 +80,7 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
     "You need unlimited users on Pro ($49/mo) as sales, support, and marketing share one workspace",
     "Meta Embedded Signup and WhatsApp Cloud API onboarding should be self-serve (Twilio not required)",
     "Pro chatbot, Flow Builder, and preset templates should launch without enterprise procurement",
-    "Shopify orders/customers in inbox or GoHighLevel LeadConnector sync on Free are in your stack",
+    "Shopify orders/customers in inbox or CRM Integration sync on Free are in your stack",
     "You want 0% WhachatCRM markup on Meta conversation fees with partial conversation analytics — not a full BI suite",
   ],
   advantages: [
@@ -113,7 +113,7 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "yes",
     "AI Brain (optional add-on)": NOT_CLEARLY_DISCLOSED,
     "Shopify integration (orders/customers → inbox)": "partial",
-    "GoHighLevel integration": "partial",
+    "CRM integration": "partial",
     "Calendly booking integration": "partial",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "yes",
@@ -162,6 +162,6 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Respond.io if enterprise omnichannel routing and existing team playbooks are working at your scale. Switch to WhachatCRM when you want SMB-friendly Free / Pro $49 pricing, unlimited Pro users, Meta Embedded Signup, Pro chatbot/templates, Shopify/GHL on Free, and transparent Meta fee pass-through — without enterprise seat negotiations.",
+    "Keep Respond.io if enterprise omnichannel routing and existing team playbooks are working at your scale. Switch to WhachatCRM when you want SMB-friendly Free / Pro $49 pricing, unlimited Pro users, Meta Embedded Signup, Pro chatbot/templates, Shopify and CRM Integration on Free, and transparent Meta fee pass-through — without enterprise seat negotiations.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

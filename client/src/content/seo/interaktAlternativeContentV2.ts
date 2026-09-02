@@ -27,7 +27,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
   heroLead:
     "Interakt is a popular WhatsApp engagement platform — especially for India-based ecommerce and support teams running campaigns, chatbots, and catalog workflows. WhachatCRM adds Email beside WhatsApp, multi-channel Unified Inbox, and SMB seat economics with unlimited users on Pro.",
   quickSummary:
-    "Stay on Interakt when your India WhatsApp commerce playbooks, catalog flows, and campaign cadence are already optimized on their stack. Consider WhachatCRM when you need Gmail in the same inbox, Messenger and Instagram beside WhatsApp, Pro chatbot and preset templates, Shopify and GoHighLevel integrations, and unlimited Pro users at $49/mo. Confirm current Interakt plan packaging on their site before comparing totals.",
+    "Stay on Interakt when your India WhatsApp commerce playbooks, catalog flows, and campaign cadence are already optimized on their stack. Consider WhachatCRM when you need Gmail in the same inbox, Messenger and Instagram beside WhatsApp, Pro chatbot and preset templates, Shopify and CRM Integration, and unlimited Pro users at $49/mo. Confirm current Interakt plan packaging on their site before comparing totals.",
   whoFor: [
     "India and APAC teams expanding beyond WhatsApp-only commerce engagement",
     "Brands that need Email and social DMs in one CRM timeline — not separate campaign tools",
@@ -79,7 +79,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     "You want Email (Gmail OAuth) beside WhatsApp in one Unified Inbox",
     "Messenger and Instagram Messaging should share CRM context with WhatsApp — not live in silos",
     "You need chatbot, Flow Builder, and preset templates on Pro (not available on Free)",
-    "Shopify orders/customers in inbox and GoHighLevel LeadConnector sync on Free fit your stack",
+    "Shopify orders/customers in inbox and CRM Integration sync on Free fit your stack",
     "Unlimited users on Pro ($49/mo) matter as sales, support, and marketing scale together",
     "You want 0% WhachatCRM markup on Meta fees with Meta Embedded Signup (Twilio not required)",
   ],
@@ -113,7 +113,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "partial",
     "AI Brain (optional add-on)": "no",
     "Shopify integration (orders/customers → inbox)": "yes",
-    "GoHighLevel integration": NOT_CLEARLY_DISCLOSED,
+    "CRM integration": NOT_CLEARLY_DISCLOSED,
     "Calendly booking integration": "partial",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "partial",
@@ -143,7 +143,7 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     {
       question: "Is WhachatCRM better for India WhatsApp ecommerce than Interakt?",
       answer:
-        "Interakt has strong India market presence for WhatsApp campaigns and catalog workflows. WhachatCRM fits better when you need Email beside WhatsApp, broader channel inbox, unlimited Pro users, and Shopify/GHL on Free — validate cart and template workflows during trial.",
+        "Interakt has strong India market presence for WhatsApp campaigns and catalog workflows. WhachatCRM fits better when you need Email beside WhatsApp, broader channel inbox, unlimited Pro users, and Shopify and CRM Integration on Free — validate cart and template workflows during trial.",
     },
     {
       question: "Can I migrate Interakt chatbots to WhachatCRM?",
@@ -162,6 +162,6 @@ export const interaktAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Interakt if India WhatsApp commerce campaigns and existing Interakt playbooks are your growth engine. Switch to WhachatCRM when you need Email and social channels in one Unified Inbox, Pro chatbot/templates, Shopify and GoHighLevel integrations, unlimited Pro users, and transparent Meta fee pass-through — with SMB pricing you can forecast.",
+    "Keep Interakt if India WhatsApp commerce campaigns and existing Interakt playbooks are your growth engine. Switch to WhachatCRM when you need Email and social channels in one Unified Inbox, Pro chatbot/templates, Shopify and CRM Integration, unlimited Pro users, and transparent Meta fee pass-through — with SMB pricing you can forecast.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

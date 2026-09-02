@@ -79,7 +79,7 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     "You want Shopify on Free plus Email, Messenger, Instagram, and web chat in one inbox",
     "Meta Embedded Signup should onboard WhatsApp without Twilio for new setups",
     "Chatbot, Flow Builder, and preset automation templates on Pro should support non-commerce flows too",
-    "GoHighLevel LeadConnector sync on Free matters alongside Shopify",
+    "CRM Integration sync on Free matters alongside Shopify",
     "Calendly booking integration on Free fits service-and-commerce hybrid businesses",
     "You need unlimited users on Pro ($49/mo) with 0% WhachatCRM markup on Meta fees",
   ],
@@ -113,7 +113,7 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "partial",
     "AI Brain (optional add-on)": "no",
     "Shopify integration (orders/customers → inbox)": "yes",
-    "GoHighLevel integration": NOT_CLEARLY_DISCLOSED,
+    "CRM integration": NOT_CLEARLY_DISCLOSED,
     "Calendly booking integration": "partial",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "partial",
@@ -162,6 +162,6 @@ export const zokoAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Free alongside Email, social channels, and CRM in one Unified Inbox, Pro chatbot and campaign templates, GoHighLevel on Free, unlimited Pro users, and transparent Meta fee pass-through.",
+    "Keep Zoko if Shopify + WhatsApp commerce flows are fully optimized and your team prefers their ecommerce-native UX. Switch to WhachatCRM when you need Shopify on Free alongside Email, social channels, and CRM in one Unified Inbox, Pro chatbot and campaign templates, CRM Integration on Free, unlimited Pro users, and transparent Meta fee pass-through.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };

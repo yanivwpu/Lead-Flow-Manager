@@ -714,11 +714,11 @@ export const marketingAgenciesSolution: SolutionPageContent = {
   breadcrumbLabel: "Marketing Agencies",
   title: "WhatsApp & Messaging Platform for Marketing Agencies | WhachatCRM",
   metaDescription:
-    "Agency messaging platform for WhatsApp, multi-channel inbox, chatbots, automation, AI Copilot, and client engagement. Optional GoHighLevel connection and Partner Program.",
+    "Agency messaging platform for WhatsApp, multi-channel inbox, chatbots, automation, AI Copilot, and client engagement. Optional CRM Integration and Partner Program.",
   ogTitle: "Messaging & AI Automation for Agencies | WhachatCRM",
   h1: "Deliver Smarter Messaging and AI Automation for Your Clients",
   heroIntro:
-    "Whether you run campaigns for clients, manage community replies, or extend an existing CRM stack, WhachatCRM gives agencies a practical messaging, automation, and AI workspace — with or without GoHighLevel.",
+    "Whether you run campaigns for clients, manage community replies, or extend an existing CRM stack, WhachatCRM gives agencies a practical messaging, automation, and AI workspace — with or without CRM Integration.",
   heroVisual: {
     inquiryLabel: "Client campaign reply",
     inquiryMessage: "Saw your ad — can you send details on the offer?",
@@ -748,7 +748,7 @@ export const marketingAgenciesSolution: SolutionPageContent = {
     },
   ],
   helpsIntro:
-    "Use WhachatCRM as the messaging and AI layer for client engagement — then connect GoHighLevel or join the Partner Program when those paths fit your business.",
+    "Use WhachatCRM as the messaging and AI layer for client engagement — then connect CRM Integration or join the Partner Program when those paths fit your business.",
   helpsPoints: [
     {
       title: "Official WhatsApp and multi-channel messaging",
@@ -763,8 +763,8 @@ export const marketingAgenciesSolution: SolutionPageContent = {
       description: "AI Copilot assists replies; AI Brain supports personalization and strategy where enabled.",
     },
     {
-      title: "Optional GHL and partner growth paths",
-      description: "Use the GoHighLevel Marketplace connection when needed, and earn through the Partner Program.",
+      title: "Optional CRM and partner growth paths",
+      description: "Use the CRM Marketplace connection when needed, and earn through the Partner Program.",
     },
   ],
   workflowTitle: "From client channel setup to ongoing engagement",
@@ -821,8 +821,8 @@ export const marketingAgenciesSolution: SolutionPageContent = {
       href: "/shared-team-inbox",
     },
     {
-      label: "GoHighLevel for agencies",
-      description: "Marketplace-oriented integration details for GHL agencies.",
+      label: "CRM Integration for agencies",
+      description: "Marketplace-oriented integration details for agencies using a CRM.",
       href: "/go-high-level-agencies",
     },
     {
@@ -848,8 +848,8 @@ export const marketingAgenciesSolution: SolutionPageContent = {
       outcome: "Response quality stays consistent even as volume rises.",
     },
     {
-      situation: "Your agency already operates inside GoHighLevel.",
-      action: "Use WhachatCRM as the messaging and AI layer alongside GHL where connected.",
+      situation: "Your agency already operates inside a CRM platform.",
+      action: "Use WhachatCRM as the messaging and AI layer alongside CRM Integration where connected.",
       outcome: "Clients get stronger conversation handling without replacing your whole stack.",
     },
     {
@@ -860,14 +860,14 @@ export const marketingAgenciesSolution: SolutionPageContent = {
   ],
   channels: ["WhatsApp", "Instagram", "Facebook Messenger", "SMS", "Email", "Web chat"],
   integrations: [
-    { label: "GoHighLevel Marketplace", href: "/go-high-level-agencies" },
+    { label: "CRM Marketplace", href: "/go-high-level-agencies" },
     { label: "Meta Embedded Signup", href: "/whatsapp-business-api" },
     { label: "Partner Program", href: "/partner-program" },
   ],
   howItWorks: [
     {
       title: "Pick the client delivery model",
-      description: "Use WhachatCRM standalone, with GHL, or as part of a partner-led offer.",
+      description: "Use WhachatCRM standalone, with CRM Integration, or as part of a partner-led offer.",
     },
     {
       title: "Connect channels and build flows",
@@ -884,9 +884,9 @@ export const marketingAgenciesSolution: SolutionPageContent = {
   ],
   relatedLinks: [
     {
-      label: "GoHighLevel Agencies",
+      label: "Agency CRM path",
       href: "/go-high-level-agencies",
-      description: "How WhachatCRM extends GHL with messaging and AI.",
+      description: "How WhachatCRM extends CRM Integration with messaging and AI.",
     },
     {
       label: "Partner Program",
@@ -906,13 +906,13 @@ export const marketingAgenciesSolution: SolutionPageContent = {
   ],
   finalCtaHeadline: "Give your clients a stronger messaging and AI layer",
   finalCtaSubtitle:
-    "Start free, package WhachatCRM for client delivery, and explore GoHighLevel or Partner Program paths when they fit.",
+    "Start free, package WhachatCRM for client delivery, and explore CRM Integration or Partner Program paths when they fit.",
   ssrBullets: [
     "Official WhatsApp API and multi-channel messaging",
     "Unified Inbox with team collaboration for client operators",
     "Chatbots, automations, and campaigns for engagement",
     "AI Copilot and AI Brain assistance where enabled",
-    "Optional GoHighLevel connection and Partner Program",
+    "Optional CRM Integration and Partner Program",
   ],
 };
 

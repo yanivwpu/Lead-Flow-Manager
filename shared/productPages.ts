@@ -715,7 +715,7 @@ export const chatbotBuilderProduct: ProductPageContent = {
     },
     {
       label: "Supported channels",
-      description: "WhatsApp, Instagram, Facebook, SMS, web chat, Telegram, and GoHighLevel where connected.",
+      description: "WhatsApp, Instagram, Facebook, SMS, web chat, Telegram, and CRM Integration where connected.",
     },
   ],
   workflowTitle: "A typical qualification journey",
@@ -1234,7 +1234,7 @@ export const integrationsProduct: ProductPageContent = {
   breadcrumbLabel: "Integrations",
   title: "CRM Integrations Directory | WhachatCRM",
   metaDescription:
-    "Connect WhachatCRM to messaging channels and business tools you already use — WhatsApp, Instagram, Facebook, SMS, email, Shopify, GoHighLevel, Calendly, Stripe, and more.",
+    "Connect WhachatCRM to messaging channels and business tools you already use — WhatsApp, Instagram, Facebook, SMS, email, Shopify, CRM Integration, Calendly, Stripe, and more.",
   ogTitle: "Integrations — Connect Your Tools | WhachatCRM",
   h1: "Connect WhachatCRM to the Tools Your Business Already Uses",
   heroIntro:
@@ -1285,7 +1285,7 @@ export const integrationsProduct: ProductPageContent = {
     },
     {
       title: "Use dedicated guides when needed",
-      description: "Shopify, GoHighLevel, WhatsApp API, and MLS pages go deeper on setup and value.",
+      description: "Shopify, CRM Integration, WhatsApp API, and MLS pages go deeper on setup and value.",
     },
     {
       title: "Keep working in one inbox",
@@ -1310,8 +1310,8 @@ export const integrationsProduct: ProductPageContent = {
       href: "/shopify-crm",
     },
     {
-      label: "GoHighLevel",
-      description: "Agency-friendly connection for teams already operating in GHL.",
+      label: "CRM Integration",
+      description: "Agency-friendly connection for teams already operating in a CRM.",
       href: "/go-high-level-agencies",
     },
     {
@@ -1363,8 +1363,8 @@ export const integrationsProduct: ProductPageContent = {
       outcome: "Messaging and store operations stay closer together.",
     },
     {
-      situation: "Your agency already uses GoHighLevel.",
-      action: "Connect WhachatCRM through the GHL agencies path.",
+      situation: "Your agency already uses a CRM platform.",
+      action: "Connect WhachatCRM through the agency marketplace path.",
       outcome: "Messaging and AI sit beside your existing stack.",
     },
     {
@@ -1377,7 +1377,7 @@ export const integrationsProduct: ProductPageContent = {
     { label: "Unified Inbox", href: "/unified-inbox", description: "Where connected channels meet." },
     { label: "WhatsApp Business API", href: "/whatsapp-business-api", description: "Official WhatsApp setup guide." },
     { label: "Shopify CRM", href: "/shopify-crm", description: "Shopify integration product page." },
-    { label: "GoHighLevel Agencies", href: "/go-high-level-agencies", description: "GHL marketplace path." },
+    { label: "Agency CRM path", href: "/go-high-level-agencies", description: "Marketplace path for agencies." },
   ],
   industryLinks: [
     { label: "E-commerce", href: "/solutions/ecommerce" },
@@ -1434,8 +1434,8 @@ export const integrationsProduct: ProductPageContent = {
           href: "/shopify-crm",
         },
         {
-          name: "GoHighLevel",
-          description: "Agency marketplace connection for GHL operators.",
+          name: "CRM Integration",
+          description: "Agency marketplace connection for CRM operators.",
           href: "/go-high-level-agencies",
         },
         {
@@ -1496,12 +1496,12 @@ export const integrationsProduct: ProductPageContent = {
   ],
   finalCtaHeadline: "Bring your tools into one conversation workspace",
   finalCtaSubtitle:
-    "Start free, connect your first channel, and explore deeper guides for Shopify, WhatsApp, and GoHighLevel.",
+    "Start free, connect your first channel, and explore deeper guides for Shopify, WhatsApp, and CRM Integration.",
   ssrBullets: [
     "Messaging channels including WhatsApp, Instagram, Facebook, SMS, Telegram, web chat, and email",
-    "Business platforms such as Shopify, GoHighLevel, Calendly, and Stripe",
+    "Business platforms such as Shopify, CRM Integration, Calendly, and Stripe",
     "Real estate paths for MLS and Showcase IDX",
-    "Dedicated guides for WhatsApp API, Shopify CRM, and GHL agencies",
+    "Dedicated guides for WhatsApp API, Shopify CRM, and agency CRM connections",
     "Unified Inbox as the destination for connected conversations",
   ],
 };

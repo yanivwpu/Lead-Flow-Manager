@@ -156,7 +156,7 @@ async function runPreviewScanJob(jobId: string): Promise<void> {
     await updatePreviewJob(jobId, { status: "running", startedAt: new Date() });
 
     const integration = await getIntegrationById(job.integrationId);
-    if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
+    if (!integration?.isActive) throw new Error("CRM Integration not found or inactive");
 
     const filters = normalizeProspectImportFilters((job.filters || {}) as ProspectImportContactFilter);
     const scanScope = (job.scanScope || PROSPECT_IMPORT_DEFAULT_SCAN_SCOPE) as ProspectImportScanScope;
@@ -171,7 +171,7 @@ async function runPreviewScanJob(jobId: string): Promise<void> {
       resumeFromPage: job.lastPage ?? 1,
       getToken: async () => {
         const fresh = await getIntegrationById(job.integrationId);
-        if (!fresh?.isActive) throw new Error("GHL integration unavailable during scan");
+        if (!fresh?.isActive) throw new Error("CRM Integration unavailable during scan");
         integrationRef = fresh;
         const resolved = await getGhlProspectApiToken(fresh, job.locationId);
         return resolved.token;
@@ -298,7 +298,7 @@ export async function createGhlProspectPreviewJob(params: {
   activePreviewFingerprints.add(fingerprint);
   try {
     const integration = await getIntegrationById(params.integrationId);
-    if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
+    if (!integration?.isActive) throw new Error("CRM Integration not found or inactive");
 
     const resolved = await getGhlProspectApiToken(integration, params.locationId);
     const scan = await scanGhlContactsPaginated({
@@ -307,7 +307,7 @@ export async function createGhlProspectPreviewJob(params: {
       scanScope,
       getToken: async () => {
         const fresh = await getIntegrationById(params.integrationId);
-        if (!fresh?.isActive) throw new Error("GHL integration unavailable during scan");
+        if (!fresh?.isActive) throw new Error("CRM Integration unavailable during scan");
         const next = await getGhlProspectApiToken(fresh, params.locationId);
         return next.token;
       },

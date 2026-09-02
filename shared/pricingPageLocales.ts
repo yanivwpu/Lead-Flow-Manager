@@ -150,7 +150,7 @@ const ES: DeepPartial<PricingPageContent> = {
     items: [
       {
         q: "¿Las integraciones están incluidas en Free?",
-        a: "Sí. Los usuarios Free pueden abrir Integraciones y conectar herramientas compatibles como Gmail, Shopify, Calendly y GoHighLevel. Siguen aplicando los límites de conversaciones, usuarios y canales. La automatización de campañas y AI Brain están incluidos con Pro.",
+        a: "Sí. Los usuarios Free pueden abrir Integraciones y conectar herramientas compatibles como Gmail, Shopify, Calendly e integración CRM. Siguen aplicando los límites de conversaciones, usuarios y canales. La automatización de campañas y AI Brain están incluidos con Pro.",
       },
       {
         q: "¿Las plantillas de WhatsApp están incluidas en Free?",
@@ -411,7 +411,7 @@ const HE: DeepPartial<PricingPageContent> = {
     items: [
       {
         q: "האם אינטגרציות כלולות ב-Free?",
-        a: "כן. משתמשי Free יכולים לפתוח את אינטגרציות ולחבר כלים נתמכים כמו Gmail, Shopify, Calendly ו-GoHighLevel. מגבלות שיחה, משתמשים וערוצים עדיין חלות. אוטומציית קמפיינים ו-AI Brain כלולים ב-Pro.",
+        a: "כן. משתמשי Free יכולים לפתוח את אינטגרציות ולחבר כלים נתמכים כמו Gmail, Shopify, Calendly ואינטגרציית CRM. מגבלות שיחה, משתמשים וערוצים עדיין חלות. אוטומציית קמפיינים ו-AI Brain כלולים ב-Pro.",
       },
       {
         q: "האם תבניות WhatsApp כלולות ב-Free?",

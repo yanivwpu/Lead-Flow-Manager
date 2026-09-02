@@ -636,7 +636,7 @@ export const PRODUCT_PAGE_LOCALES = {
       },
       {
         "label": "Canales compatibles",
-        "description": "WhatsApp, Instagram, Facebook, SMS, chat web, Telegram y GoHighLevel donde esté conectado."
+        "description": "WhatsApp, Instagram, Facebook, SMS, chat web, Telegram e integración CRM donde esté conectado."
       }
     ],
     "workflowTitle": "Un recorrido típico de calificación",
@@ -1252,7 +1252,7 @@ export const PRODUCT_PAGE_LOCALES = {
     "productLabel": "Integraciones",
     "breadcrumbLabel": "Integraciones",
     "title": "Directorio de integraciones CRM | WhachatCRM",
-    "metaDescription": "Conecta WhachatCRM a canales de mensajería y herramientas empresariales que ya usas — WhatsApp, Instagram, Facebook, SMS, email, Shopify, GoHighLevel, Calendly, Stripe y más.",
+    "metaDescription": "Conecta WhachatCRM a canales de mensajería y herramientas empresariales que ya usas — WhatsApp, Instagram, Facebook, SMS, email, Shopify, integración CRM, Calendly, Stripe y más.",
     "ogTitle": "Integraciones — Conecta tus herramientas | WhachatCRM",
     "h1": "Conecta WhachatCRM a las herramientas que tu negocio ya usa",
     "heroIntro": "Las integraciones reúnen conversaciones con clientes y herramientas empresariales cotidianas en un espacio de trabajo CRM — para que mensajería, programación, comercio y seguimiento permanezcan conectados.",
@@ -1301,7 +1301,7 @@ export const PRODUCT_PAGE_LOCALES = {
       },
       {
         "title": "Usa guías dedicadas cuando haga falta",
-        "description": "Las páginas de Shopify, GoHighLevel, WhatsApp API y MLS profundizan en configuración y valor."
+        "description": "Las páginas de Shopify, integración CRM, WhatsApp API y MLS profundizan en configuración y valor."
       },
       {
         "title": "Sigue trabajando en un inbox",
@@ -1326,8 +1326,8 @@ export const PRODUCT_PAGE_LOCALES = {
         "href": "/shopify-crm"
       },
       {
-        "label": "GoHighLevel",
-        "description": "Conexión amigable para agencias que ya operan en GHL.",
+        "label": "Integración CRM",
+        "description": "Conexión amigable para agencias que ya operan en un CRM.",
         "href": "/go-high-level-agencies"
       },
       {
@@ -1379,8 +1379,8 @@ export const PRODUCT_PAGE_LOCALES = {
         "outcome": "Mensajería y operaciones de tienda permanecen más cerca."
       },
       {
-        "situation": "Tu agencia ya usa GoHighLevel.",
-        "action": "Conecta WhachatCRM a través de la ruta de agencias GHL.",
+        "situation": "Tu agencia ya usa una plataforma CRM.",
+        "action": "Conecta WhachatCRM a través de la ruta marketplace de agencias.",
         "outcome": "Mensajería e IA se sitúan junto a tu stack existente."
       },
       {
@@ -1406,9 +1406,9 @@ export const PRODUCT_PAGE_LOCALES = {
         "description": "Página de producto de integración Shopify."
       },
       {
-        "label": "Agencias GoHighLevel",
+        "label": "Ruta CRM para agencias",
         "href": "/go-high-level-agencies",
-        "description": "Ruta marketplace GHL."
+        "description": "Ruta marketplace para agencias."
       }
     ],
     "industryLinks": [
@@ -1475,8 +1475,8 @@ export const PRODUCT_PAGE_LOCALES = {
             "href": "/shopify-crm"
           },
           {
-            "name": "GoHighLevel",
-            "description": "Conexión marketplace de agencia para operadores GHL.",
+            "name": "Integración CRM",
+            "description": "Conexión marketplace de agencia para operadores CRM.",
             "href": "/go-high-level-agencies"
           },
           {
@@ -1536,12 +1536,12 @@ export const PRODUCT_PAGE_LOCALES = {
       }
     ],
     "finalCtaHeadline": "Reúne tus herramientas en un espacio de conversación",
-    "finalCtaSubtitle": "Empieza gratis, conecta tu primer canal y explora guías más profundas para Shopify, WhatsApp y GoHighLevel.",
+    "finalCtaSubtitle": "Empieza gratis, conecta tu primer canal y explora guías más profundas para Shopify, WhatsApp e integración CRM.",
     "ssrBullets": [
       "Canales de mensajería incluido WhatsApp, Instagram, Facebook, SMS, Telegram, chat web y email",
-      "Plataformas empresariales como Shopify, GoHighLevel, Calendly y Stripe",
+      "Plataformas empresariales como Shopify, integración CRM, Calendly y Stripe",
       "Rutas inmobiliarias para MLS y Showcase IDX",
-      "Guías dedicadas para WhatsApp API, Shopify CRM y agencias GHL",
+      "Guías dedicadas para WhatsApp API, Shopify CRM y conexiones CRM de agencia",
       "Unified Inbox como destino de conversaciones conectadas"
     ]
   },
@@ -2583,7 +2583,7 @@ export const PRODUCT_PAGE_LOCALES = {
       },
       {
         "label": "ערוצים נתמכים",
-        "description": "WhatsApp, Instagram, Facebook, SMS, צ'אט web, Telegram ו-GoHighLevel כשמחובר."
+        "description": "WhatsApp, Instagram, Facebook, SMS, צ'אט web, Telegram ואינטגרציית CRM כשמחובר."
       }
     ],
     "workflowTitle": "מסע סינון טיפוסי",
@@ -3199,7 +3199,7 @@ export const PRODUCT_PAGE_LOCALES = {
     "productLabel": "אינטגרציות",
     "breadcrumbLabel": "אינטגרציות",
     "title": "מדריך אינטגרציות CRM | WhachatCRM",
-    "metaDescription": "חברו WhachatCRM לערוצי הודעות וכלים עסקיים שכבר בשימוש — WhatsApp, Instagram, Facebook, SMS, email, Shopify, GoHighLevel, Calendly, Stripe ועוד.",
+    "metaDescription": "חברו WhachatCRM לערוצי הודעות וכלים עסקיים שכבר בשימוש — WhatsApp, Instagram, Facebook, SMS, email, Shopify, אינטגרציית CRM, Calendly, Stripe ועוד.",
     "ogTitle": "אינטגרציות — חברו את הכלים שלכם | WhachatCRM",
     "h1": "חברו WhachatCRM לכלים שהעסק שלכם כבר משתמש בהם",
     "heroIntro": "אינטגרציות מביאות שיחות עם לקוחות וכלים עסקיים יומיומיים לסביבת CRM אחת — כדי שהודעות, תזמון, מסחר ומעקב יישארו מחוברים.",
@@ -3248,7 +3248,7 @@ export const PRODUCT_PAGE_LOCALES = {
       },
       {
         "title": "השתמשו במדריכים ייעודיים כשצריך",
-        "description": "דפי Shopify, GoHighLevel, WhatsApp API ו-MLS מעמיקים בהגדרה וערך."
+        "description": "דפי Shopify, אינטגרציית CRM, WhatsApp API ו-MLS מעמיקים בהגדרה וערך."
       },
       {
         "title": "המשיכו לעבוד ב-inbox אחד",
@@ -3273,8 +3273,8 @@ export const PRODUCT_PAGE_LOCALES = {
         "href": "/shopify-crm"
       },
       {
-        "label": "GoHighLevel",
-        "description": "חיבור ידידותי לסוכנויות שכבר פועלות ב-GHL.",
+        "label": "אינטגרציית CRM",
+        "description": "חיבור ידידותי לסוכנויות שכבר פועלות ב-CRM.",
         "href": "/go-high-level-agencies"
       },
       {
@@ -3326,8 +3326,8 @@ export const PRODUCT_PAGE_LOCALES = {
         "outcome": "הודעות ותפעול חנות נשארים קרובים יותר."
       },
       {
-        "situation": "הסוכנות כבר משתמשת ב-GoHighLevel.",
-        "action": "חברו WhachatCRM דרך נתיב סוכנויות GHL.",
+        "situation": "הסוכנות כבר משתמשת בפלטפורמת CRM.",
+        "action": "חברו WhachatCRM דרך נתיב marketplace לסוכנויות.",
         "outcome": "הודעות ו-AI יושבים ליד ה-stack הקיים."
       },
       {
@@ -3353,9 +3353,9 @@ export const PRODUCT_PAGE_LOCALES = {
         "description": "דף מוצר אינטגרציית Shopify."
       },
       {
-        "label": "סוכנויות GoHighLevel",
+        "label": "נתיב CRM לסוכנויות",
         "href": "/go-high-level-agencies",
-        "description": "נתיב marketplace GHL."
+        "description": "נתיב marketplace לסוכנויות."
       }
     ],
     "industryLinks": [
@@ -3422,8 +3422,8 @@ export const PRODUCT_PAGE_LOCALES = {
             "href": "/shopify-crm"
           },
           {
-            "name": "GoHighLevel",
-            "description": "חיבור marketplace סוכנות למפעילי GHL.",
+            "name": "אינטגרציית CRM",
+            "description": "חיבור marketplace סוכנות למפעילי CRM.",
             "href": "/go-high-level-agencies"
           },
           {
@@ -3483,12 +3483,12 @@ export const PRODUCT_PAGE_LOCALES = {
       }
     ],
     "finalCtaHeadline": "הביאו את הכלים שלכם לסביבת שיחה אחת",
-    "finalCtaSubtitle": "התחילו בחינם, חברו את הערוץ הראשון, וגלו מדריכים מעמיקים ל-Shopify, WhatsApp ו-GoHighLevel.",
+    "finalCtaSubtitle": "התחילו בחינם, חברו את הערוץ הראשון, וגלו מדריכים מעמיקים ל-Shopify, WhatsApp ואינטגרציית CRM.",
     "ssrBullets": [
       "ערוצי הודעות כולל WhatsApp, Instagram, Facebook, SMS, Telegram, צ'אט web ו-email",
-      "פלטפורמות עסקיות כמו Shopify, GoHighLevel, Calendly ו-Stripe",
+      "פלטפורמות עסקיות כמו Shopify, אינטגרציית CRM, Calendly ו-Stripe",
       "נתיבי נדל״ן ל-MLS ו-Showcase IDX",
-      "מדריכים ייעודיים ל-WhatsApp API, Shopify CRM וסוכנויות GHL",
+      "מדריכים ייעודיים ל-WhatsApp API, Shopify CRM וחיבורי CRM לסוכנויות",
       "Unified Inbox כיעד לשיחות מחוברות"
     ]
   },

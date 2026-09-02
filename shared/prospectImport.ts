@@ -4,7 +4,7 @@ export const PROSPECT_IMPORT_PROVIDERS = ["gohighlevel", "shopify", "hubspot", "
 export type ProspectImportProvider = (typeof PROSPECT_IMPORT_PROVIDERS)[number];
 
 export const PROSPECT_IMPORT_PROVIDER_LABELS: Record<ProspectImportProvider, string> = {
-  gohighlevel: "GoHighLevel",
+  gohighlevel: "CRM",
   shopify: "Shopify",
   hubspot: "HubSpot",
   csv: "CSV",
@@ -19,6 +19,14 @@ export const PROSPECT_IMPORT_INTERNAL_TAGS = [
   "Imported-Affiliate",
 ] as const;
 export type ProspectImportInternalTag = (typeof PROSPECT_IMPORT_INTERNAL_TAGS)[number];
+
+/** Customer-visible labels; stored tag values above stay unchanged. */
+export const PROSPECT_IMPORT_INTERNAL_TAG_LABELS: Record<ProspectImportInternalTag, string> = {
+  "Imported-GHL": "Imported-CRM",
+  "Imported-Agency": "Imported-Agency",
+  "Imported-Shopify": "Imported-Shopify",
+  "Imported-Affiliate": "Imported-Affiliate",
+};
 
 export const PROSPECT_IMPORT_REASONS = [
   "Agency recruitment",

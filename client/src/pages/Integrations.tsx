@@ -26,11 +26,16 @@ import {
   CRM_INTEGRATION_LABEL,
   CRM_INSTALL_CTA,
   CRM_COMPLETE_OAUTH_CTA,
+  CRM_RECONNECT_CTA,
   CRM_MARKETPLACE_CTA,
+  CRM_CONNECTION_REQUIRED_STATUS,
+  CRM_NOT_CONNECTED_DESCRIPTION,
   CRM_INSTALLED_NOT_CONNECTED,
+  CRM_TOKEN_EXPIRED_DESCRIPTION,
+  CRM_CONNECTED_DESCRIPTION,
+  CRM_OPENING_AUTHORIZATION,
 } from "@shared/leadConnectorWhiteLabel";
 import {
-  CRM_TRY_FULL_OAUTH_CTA,
   humanReadableCrmOAuthRecoveryMessage,
 } from "@shared/ghlOAuthRecoveryMessages";
 import { ShopifyManagePanel } from "@/components/integrations/ShopifyManagePanel";
@@ -228,6 +233,7 @@ type CrmConnectionStatus = {
   tokenExpired?: boolean;
   installedInGhlNotConnected?: boolean;
   recoverableOAuthInstalls?: number;
+  canAccessCrmDiagnostics?: boolean;
   locationId?: string;
   companyId?: string;
   installedAt?: string;
@@ -249,7 +255,13 @@ type GhlOAuthAuthorizeDebugSnapshot = {
   notes: string[];
 };
 
-function CrmOAuthRecoveryResultPanel({ result }: { result: CrmOAuthRecoveryAttemptResult }) {
+function CrmOAuthRecoveryResultPanel({
+  result,
+  showDiagnostics,
+}: {
+  result: CrmOAuthRecoveryAttemptResult;
+  showDiagnostics: boolean;
+}) {
   const humanMessage = humanReadableCrmOAuthRecoveryMessage({
     recovered: result.recovered,
     oauthRequired: result.oauthRequired,
@@ -269,18 +281,36 @@ function CrmOAuthRecoveryResultPanel({ result }: { result: CrmOAuthRecoveryAttem
       data-testid="crm-oauth-recovery-result"
     >
       <p className="text-sm font-medium leading-snug">{humanMessage}</p>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
-        <dt className="font-medium">recovered</dt>
-        <dd>{String(result.recovered)}</dd>
-        <dt className="font-medium">oauthRequired</dt>
-        <dd>{String(result.oauthRequired)}</dd>
-        <dt className="font-medium">reasonCategory</dt>
-        <dd>{result.reasonCategory ?? "—"}</dd>
-        <dt className="font-medium">reason</dt>
-        <dd className="break-all">{result.reason ?? "—"}</dd>
-      </dl>
+      {showDiagnostics ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
+          <dt className="font-medium">recovered</dt>
+          <dd>{String(result.recovered)}</dd>
+          <dt className="font-medium">oauthRequired</dt>
+          <dd>{String(result.oauthRequired)}</dd>
+          <dt className="font-medium">reasonCategory</dt>
+          <dd>{result.reasonCategory ?? "—"}</dd>
+          <dt className="font-medium">reason</dt>
+          <dd className="break-all">{result.reason ?? "—"}</dd>
+        </dl>
+      ) : null}
     </div>
   );
+}
+
+function crmIntegrationCardCopy(status: CrmConnectionStatus | undefined): {
+  description: string;
+  statusLabel: string | null;
+} {
+  if (status?.connected) {
+    return { description: CRM_CONNECTED_DESCRIPTION, statusLabel: "Connected" };
+  }
+  if (status?.tokenExpired) {
+    return { description: CRM_TOKEN_EXPIRED_DESCRIPTION, statusLabel: CRM_CONNECTION_REQUIRED_STATUS };
+  }
+  if (status?.installedInGhlNotConnected) {
+    return { description: CRM_INSTALLED_NOT_CONNECTED, statusLabel: CRM_CONNECTION_REQUIRED_STATUS };
+  }
+  return { description: CRM_NOT_CONNECTED_DESCRIPTION, statusLabel: null };
 }
 
 const CALENDLY_PAT_URL = "https://calendly.com/integrations/api_webhooks";
@@ -290,10 +320,10 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "leadconnector", 
     name: CRM_INTEGRATION_LABEL, 
     icon: Link2, 
-    description: "Connect your CRM account to sync leads and activity", 
+    description: CRM_NOT_CONNECTED_DESCRIPTION, 
     color: "bg-indigo-600",
     category: "crm",
-    tagline: "Sync leads & activity with your CRM",
+    tagline: CRM_NOT_CONNECTED_DESCRIPTION,
     fields: [],
     syncOptions: [
       { id: "sync_contacts", label: "Sync Contacts", description: "Keep leads synced between platforms" },
@@ -696,26 +726,33 @@ export function Integrations() {
       httpStatus: result.httpStatus,
       refreshed: result.raw.refreshed === true,
     });
-    const detail = `recovered=${result.recovered}, oauthRequired=${result.oauthRequired}, reasonCategory=${result.reasonCategory ?? "—"}, reason=${result.reason ?? "—"}. ${description}`;
     if (result.recovered) {
-      toast({ title: "CRM recovery succeeded", description: detail });
+      toast({ title: "CRM connected", description });
       return;
     }
-    toast({ title: "CRM recovery failed", description: detail, variant: "destructive" });
+    toast({ title: "Connection required", description, variant: "destructive" });
   };
 
   const runCrmOAuthRecovery = async () => {
     setRecoveringCrmOAuth(true);
+    let redirectingToAuthorization = false;
     try {
       const recovery = await attemptCrmOAuthRecovery();
-      setCrmOAuthRecoveryResult(recovery);
       if (recovery.recovered) {
+        if (lcStatus?.canAccessCrmDiagnostics) setCrmOAuthRecoveryResult(recovery);
+        else setCrmOAuthRecoveryResult(null);
         showCrmOAuthRecoveryToast(recovery);
         return;
       }
       if (recovery.oauthRequired !== false) {
+        redirectingToAuthorization = true;
+        if (lcStatus?.canAccessCrmDiagnostics) setCrmOAuthRecoveryResult(recovery);
+        else setCrmOAuthRecoveryResult(null);
         startCrmFullOAuthAuthorization();
         return;
+      }
+      if (lcStatus?.canAccessCrmDiagnostics) {
+        setCrmOAuthRecoveryResult(recovery);
       }
       showCrmOAuthRecoveryToast(recovery);
     } catch {
@@ -727,10 +764,12 @@ export function Integrations() {
         httpStatus: 0,
         raw: {},
       };
-      setCrmOAuthRecoveryResult(fallback);
+      redirectingToAuthorization = true;
+      if (lcStatus?.canAccessCrmDiagnostics) setCrmOAuthRecoveryResult(fallback);
+      else setCrmOAuthRecoveryResult(null);
       startCrmFullOAuthAuthorization();
     } finally {
-      setRecoveringCrmOAuth(false);
+      if (!redirectingToAuthorization) setRecoveringCrmOAuth(false);
     }
   };
 
@@ -752,8 +791,8 @@ export function Integrations() {
       const data = (await res.json().catch(() => ({}))) as GhlOAuthAuthorizeDebugSnapshot & { error?: string };
       if (!res.ok) {
         toast({
-          title: "OAuth debug unavailable",
-          description: data.error || "Could not load OAuth authorize debug snapshot.",
+          title: "Connection preview unavailable",
+          description: data.error || "Could not load CRM connection diagnostics.",
           variant: "destructive",
         });
         return;
@@ -763,8 +802,8 @@ export function Integrations() {
       console.info("[CRM OAuth debug]", data);
     } catch {
       toast({
-        title: "OAuth debug failed",
-        description: "Could not load OAuth authorize debug snapshot.",
+        title: "Connection preview failed",
+        description: "Could not load CRM connection diagnostics.",
         variant: "destructive",
       });
     } finally {
@@ -787,7 +826,7 @@ export function Integrations() {
       title: "CRM marketplace link unavailable",
       description:
         config?.error ||
-        "The CRM marketplace install link is not configured (GHL_APP_VERSION_ID). Use Connect CRM or Complete OAuth to authorize an already-installed app.",
+        "The CRM marketplace install link is not configured. Use Connect CRM or Finish connection to authorize an already-installed app.",
       variant: "destructive",
     });
   };
@@ -1103,19 +1142,25 @@ export function Integrations() {
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
       ]);
       if (data?.connected) {
-        toast({ title: "Connected", description: "CRM integration is connected with valid OAuth tokens." });
+        toast({ title: "Connected", description: CRM_CONNECTED_DESCRIPTION });
       } else if (data?.tokenExpired) {
-        toast({ title: "Token Expired", description: "Your CRM OAuth token has expired. Use Complete OAuth.", variant: "destructive" });
+        toast({
+          title: CRM_CONNECTION_REQUIRED_STATUS,
+          description: CRM_TOKEN_EXPIRED_DESCRIPTION,
+          variant: "destructive",
+        });
       } else if (data?.installedInGhlNotConnected) {
         toast({
-          title: data.recoverableOAuthInstalls ? "Recovery still needed" : "Installed in GHL only",
-          description: data.recoverableOAuthInstalls
-            ? "Stored CRM tokens could not be recovered automatically. Use Complete OAuth to retry recovery or re-authorize."
-            : CRM_INSTALLED_NOT_CONNECTED,
+          title: CRM_CONNECTION_REQUIRED_STATUS,
+          description: CRM_INSTALLED_NOT_CONNECTED,
           variant: "destructive",
         });
       } else {
-        toast({ title: "Not Connected", description: "No CRM integration with OAuth tokens found. Connect CRM to authorize.", variant: "destructive" });
+        toast({
+          title: "Not connected",
+          description: "No CRM Integration found. Connect CRM to continue.",
+          variant: "destructive",
+        });
       }
     } catch {
       toast({ title: "Error", description: "Could not check connection status. Please try again.", variant: "destructive" });
@@ -1192,6 +1237,9 @@ export function Integrations() {
                       const isLeadConnector = integration.id === "leadconnector";
                       const lcConnected = !!lcStatus?.connected;
                       const lcInstalledNotConnected = !!lcStatus?.installedInGhlNotConnected && !lcConnected;
+                      const lcTokenExpired = !!lcStatus?.tokenExpired && !lcConnected;
+                      const crmCard = isLeadConnector ? crmIntegrationCardCopy(lcStatus) : null;
+                      const canAccessCrmDiagnostics = !!lcStatus?.canAccessCrmDiagnostics;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
                       const shopifyManageConnected = integration.id === "shopify" && shopifyConnected;
@@ -1219,12 +1267,12 @@ export function Integrations() {
                           primaryTestId = "button-install-leadconnector";
                           primaryDisabled = true;
                           primaryLabel = lcInstalledNotConnected ? CRM_COMPLETE_OAUTH_CTA : CRM_INSTALL_CTA;
-                        } else if (lcInstalledNotConnected || lcStatus?.tokenExpired) {
+                        } else if (lcInstalledNotConnected || lcTokenExpired) {
                           primaryTestId = "button-complete-oauth-leadconnector";
                           primaryLabel = recoveringCrmOAuth
-                            ? "Recovering…"
-                            : (lcStatus?.recoverableOAuthInstalls ?? 0) > 0
-                              ? "Link existing connection"
+                            ? CRM_OPENING_AUTHORIZATION
+                            : lcTokenExpired
+                              ? CRM_RECONNECT_CTA
                               : CRM_COMPLETE_OAUTH_CTA;
                           primaryDisabled = recoveringCrmOAuth;
                           primaryAction = runCrmOAuthRecovery;
@@ -1282,18 +1330,18 @@ export function Integrations() {
                                   Connected
                                 </Badge>
                               )}
-                              {isLeadConnector && lcInstalledNotConnected && (
+                              {isLeadConnector && crmCard?.statusLabel === CRM_CONNECTION_REQUIRED_STATUS && (
                                 <Badge
                                   variant="outline"
-                                  className="shrink-0 border-amber-200 bg-amber-50 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+                                  className="shrink-0 border-amber-200 bg-amber-50 text-[10px] font-semibold tracking-wide text-amber-900"
                                 >
-                                  Needs OAuth
+                                  {CRM_CONNECTION_REQUIRED_STATUS}
                                 </Badge>
                               )}
                             </div>
                           </div>
-                          <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-1">
-                            {integration.tagline}
+                          <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-2">
+                            {isLeadConnector ? crmCard?.description : integration.tagline}
                           </p>
                           <div className="mt-5 space-y-2">
                             <Button
@@ -1329,7 +1377,7 @@ export function Integrations() {
                               ) : recoveringCrmOAuth && isLeadConnector ? (
                                 <span className="inline-flex items-center gap-2">
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
-                                  Recovering…
+                                  {CRM_OPENING_AUTHORIZATION}
                                 </span>
                               ) : (
                                 primaryLabel
@@ -1347,15 +1395,32 @@ export function Integrations() {
                                 Manage integration
                               </Button>
                             )}
-                            {isLeadConnector && lcInstalledNotConnected && !crmOAuthRecoveryResult && (
+                            {isLeadConnector && lcInstalledNotConnected && !recoveringCrmOAuth && !crmOAuthRecoveryResult && (
                               <p className="text-xs text-amber-900" role="alert">
                                 {CRM_INSTALLED_NOT_CONNECTED}
                               </p>
                             )}
-                            {isLeadConnector && crmOAuthRecoveryResult && (
-                              <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} />
+                            {isLeadConnector && lcTokenExpired && !recoveringCrmOAuth && !crmOAuthRecoveryResult && (
+                              <p className="text-xs text-amber-900" role="alert">
+                                {CRM_TOKEN_EXPIRED_DESCRIPTION}
+                              </p>
                             )}
-                            {isLeadConnector && !lcConnected && crmOAuthRecoveryResult && !crmOAuthRecoveryResult.recovered && (
+                            {isLeadConnector && recoveringCrmOAuth && (
+                              <p className="text-xs text-gray-600" role="status">
+                                {CRM_OPENING_AUTHORIZATION}
+                              </p>
+                            )}
+                            {isLeadConnector && canAccessCrmDiagnostics && crmOAuthRecoveryResult && (
+                              <CrmOAuthRecoveryResultPanel
+                                result={crmOAuthRecoveryResult}
+                                showDiagnostics
+                              />
+                            )}
+                            {isLeadConnector &&
+                              canAccessCrmDiagnostics &&
+                              !lcConnected &&
+                              crmOAuthRecoveryResult &&
+                              !crmOAuthRecoveryResult.recovered && (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -1364,10 +1429,10 @@ export function Integrations() {
                                 onClick={startCrmFullOAuthAuthorization}
                                 data-testid="button-try-full-oauth-leadconnector"
                               >
-                                {CRM_TRY_FULL_OAUTH_CTA}
+                                {CRM_RECONNECT_CTA}
                               </Button>
                             )}
-                            {isLeadConnector && !lcConnected && (
+                            {isLeadConnector && canAccessCrmDiagnostics && !lcConnected && (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1377,7 +1442,7 @@ export function Integrations() {
                                 disabled={ghlOAuthDebugLoading}
                                 data-testid="button-ghl-oauth-debug"
                               >
-                                {ghlOAuthDebugLoading ? "Loading OAuth debug…" : "Preview OAuth URL (debug)"}
+                                {ghlOAuthDebugLoading ? "Loading connection preview…" : "Preview connection URL"}
                               </Button>
                             )}
                             {isLeadConnector && lcConnected && (
@@ -1923,7 +1988,7 @@ export function Integrations() {
                 <Button variant="outline" onClick={startCrmOAuthAuthorizeDebugPage}>
                   Open debug redirect page
                 </Button>
-                <Button onClick={startCrmFullOAuthAuthorization}>{CRM_TRY_FULL_OAUTH_CTA}</Button>
+                <Button onClick={startCrmFullOAuthAuthorization}>{CRM_RECONNECT_CTA}</Button>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -1962,6 +2027,14 @@ export function Integrations() {
                   {CRM_INSTALLED_NOT_CONNECTED}
                 </div>
               ) : null}
+              {lcStatus?.tokenExpired && !lcStatus?.connected ? (
+                <div
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                  role="alert"
+                >
+                  {CRM_TOKEN_EXPIRED_DESCRIPTION}
+                </div>
+              ) : null}
               {!lcStatus?.connected ? (
                 <Button
                   variant="default"
@@ -1972,18 +2045,25 @@ export function Integrations() {
                   data-testid="button-complete-oauth-leadconnector-dialog"
                 >
                   {recoveringCrmOAuth
-                    ? "Recovering…"
-                    : (lcStatus?.recoverableOAuthInstalls ?? 0) > 0
-                      ? "Link existing connection"
-                      : lcStatus?.installedInGhlNotConnected || lcStatus?.tokenExpired
+                    ? CRM_OPENING_AUTHORIZATION
+                    : lcStatus?.tokenExpired
+                      ? CRM_RECONNECT_CTA
+                      : lcStatus?.installedInGhlNotConnected
                         ? CRM_COMPLETE_OAUTH_CTA
                         : CRM_INSTALL_CTA}
                 </Button>
               ) : null}
-              {crmOAuthRecoveryResult ? (
-                <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} />
+              {lcStatus?.canAccessCrmDiagnostics && crmOAuthRecoveryResult ? (
+                <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} showDiagnostics />
+              ) : recoveringCrmOAuth && !lcStatus?.connected ? (
+                <p className="text-xs text-gray-600" role="status">
+                  {CRM_OPENING_AUTHORIZATION}
+                </p>
               ) : null}
-              {!lcStatus?.connected && crmOAuthRecoveryResult && !crmOAuthRecoveryResult.recovered ? (
+              {lcStatus?.canAccessCrmDiagnostics &&
+              !lcStatus?.connected &&
+              crmOAuthRecoveryResult &&
+              !crmOAuthRecoveryResult.recovered ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1991,7 +2071,7 @@ export function Integrations() {
                   onClick={startCrmFullOAuthAuthorization}
                   data-testid="button-try-full-oauth-leadconnector-dialog"
                 >
-                  {CRM_TRY_FULL_OAUTH_CTA}
+                  {CRM_RECONNECT_CTA}
                 </Button>
               ) : null}
               <Button
@@ -2017,9 +2097,11 @@ export function Integrations() {
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    {(lcStatus?.recoverableOAuthInstalls ?? 0) > 0
-                      ? "Stored CRM authorization tokens were found. Use Link existing connection to recover them. Results appear on this card — no redirect during diagnostics."
-                      : "Link existing connection tries token recovery first. Use Try full OAuth authorization only if recovery fails."}
+                    {lcStatus?.tokenExpired
+                      ? "Your CRM connection needs to be renewed. Use Reconnect CRM."
+                      : lcStatus?.installedInGhlNotConnected
+                        ? "Your CRM app is installed, but authorization is incomplete. Use Finish connection."
+                        : "Connect CRM to authorize your CRM Integration."}
                   </p>
                   <Button
                     variant="outline"

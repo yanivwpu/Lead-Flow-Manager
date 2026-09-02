@@ -115,7 +115,7 @@ export async function exchangeGhlLocationAccessToken(params: {
   }
 
   throw new GhlProspectTokenError(
-    `Could not obtain a Location access token for Prospect Import (HTTP ${lastStatus}): ${lastError}`,
+    `Could not obtain a CRM location token for Prospect Import (HTTP ${lastStatus}). Reconnect CRM and try again.`,
     "location_token_exchange_failed",
   );
 }
@@ -128,7 +128,7 @@ export async function getGhlProspectApiToken(
   const locationId = resolveGhlProspectLocationId(integration, selectedLocationId);
   if (!locationId) {
     throw new GhlProspectTokenError(
-      "GHL token or location unavailable. Select a sub-account location for Company-scoped CRM tokens.",
+      "CRM token or location unavailable. Select a client account location for company-scoped CRM tokens.",
       "location_unavailable",
     );
   }
@@ -147,7 +147,7 @@ export async function getGhlProspectApiToken(
     const token = await getValidGhlAgencyAccessToken(integration, deps);
     if (!token) {
       throw new GhlProspectTokenError(
-        "GHL Location token is unavailable or could not be refreshed.",
+        "CRM location token is unavailable or could not be refreshed.",
         "location_token_unavailable",
       );
     }
@@ -175,7 +175,7 @@ export async function getGhlProspectApiToken(
 
   if (!isGhlCompanyScopedIntegration(integration)) {
     throw new GhlProspectTokenError(
-      "Unsupported GHL integration token type for Prospect Import.",
+      "Unsupported CRM Integration token type for Prospect Import.",
       "unsupported_token_type",
     );
   }
@@ -183,7 +183,7 @@ export async function getGhlProspectApiToken(
   const companyId = readGhlCompanyId(integration);
   if (!companyId) {
     throw new GhlProspectTokenError(
-      "Company-scoped GHL integration is missing companyId.",
+      "Company-scoped CRM Integration is missing a business account id.",
       "company_id_missing",
     );
   }
@@ -232,7 +232,7 @@ export async function getGhlProspectApiToken(
       error: "agency_token_unavailable",
     });
     throw new GhlProspectTokenError(
-      "GHL Company token is unavailable or could not be refreshed.",
+      "CRM business-account token is unavailable or could not be refreshed.",
       "agency_token_unavailable",
     );
   }

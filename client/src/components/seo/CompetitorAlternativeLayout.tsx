@@ -60,7 +60,7 @@ export function CompetitorAlternativeLayout({ content }: { content: CompetitorAl
     operatingSystem: "Web",
     url: MARKETING_URL,
     description:
-      "Unified inbox and CRM for WhatsApp, Messenger, Instagram, Email, SMS, and more — with AI Assist, chatbot on Starter+, Shopify and GoHighLevel integrations.",
+      "Unified inbox and CRM for WhatsApp, Messenger, Instagram, Email, SMS, and more — with AI Assist, chatbot on Starter+, Shopify and CRM Integration.",
     offers: {
       "@type": "AggregateOffer",
       lowPrice: "0",

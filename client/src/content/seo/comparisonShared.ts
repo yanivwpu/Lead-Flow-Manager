@@ -139,9 +139,9 @@ export const WHACHAT_PLATFORM_ADVANTAGES: TitleDesc[] = [
       "One timeline per contact across WhatsApp, Messenger, Instagram, Email, and web chat — with notes, tags, and pipeline — instead of separate channel inboxes and a disconnected mailbox.",
   },
   {
-    title: "Shopify, GoHighLevel, and Calendly on Free",
+    title: "Shopify, CRM Integration, and Calendly on Free",
     description:
-      "Free users can open Integrations and connect Shopify (orders/customers into inbox context), GoHighLevel (LeadConnector), and Calendly. Conversation, user, and channel limits still apply. Campaign automation remains on Pro.",
+      "Free users can open Integrations and connect Shopify (orders/customers into inbox context), CRM Integration, and Calendly. Conversation, user, and channel limits still apply. Campaign automation remains on Pro.",
   },
   {
     title: "AI Assist with AI Brain on Pro",
@@ -182,7 +182,7 @@ export const WHACHAT_MATRIX_BASE: Array<{
   { category: "AI", feature: "AI Brain", whachat: "Included with Pro" },
   // Integrations
   { category: "Integrations", feature: "Shopify integration (orders/customers → inbox)", whachat: "yes" },
-  { category: "Integrations", feature: "GoHighLevel integration", whachat: "yes" },
+  { category: "Integrations", feature: "CRM integration", whachat: "yes" },
   { category: "Integrations", feature: "Calendly booking integration", whachat: "yes" },
   { category: "Messaging", feature: "Basic WhatsApp template messaging", whachat: "yes" },
   // Vertical
@@ -239,7 +239,7 @@ export const DEFAULT_MIGRATION_STEPS = [
   "Connect WhatsApp with Meta Embedded Signup (Cloud API). Twilio is not required for new setups.",
   "Connect Messenger, Instagram (via Meta/Facebook Page), Gmail, and web chat if those channels matter.",
   "On Pro, rebuild critical chatbots and install preset automation templates.",
-  "Connect Shopify, GoHighLevel, or Calendly from Integrations if you use those systems (available on Free).",
+  "Connect Shopify, CRM Integration, or Calendly from Integrations if you use those systems (available on Free).",
   "Parallel-run for a few days: route a share of conversations to WhachatCRM and compare response time and context.",
   "Cut over templates and team login once the Unified Inbox matches your daily workflow.",
 ];
@@ -296,9 +296,9 @@ export function sharedComparisonFaqs(competitorName: string): FaqItem[] {
         "Yes. Connect Shopify from Integrations on Free and Pro. Shopify can bring new orders and customers into inbox context. Ecommerce campaign automation templates remain on Pro — confirm live webhook options in-product for your workflow.",
     },
     {
-      question: "Does WhachatCRM work with GoHighLevel?",
+      question: "Does WhachatCRM connect to CRM platforms?",
       answer:
-        "Yes. Connect GoHighLevel from the Integrations page (LeadConnector OAuth) on Free and Pro for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
+        "Yes. Connect CRM Integration from the Integrations page on Free and Pro for contact, message, and pipeline sync. Always verify the latest sync scope in Settings → Integrations.",
     },
     {
       question: "What about AI Brain and Realtor Growth Engine?",

@@ -77,7 +77,7 @@ const SEGMENT_CONTEXT: Record<WhachatPositioningSegment, WhachatPositioningConte
     ],
     positioningSentence:
       "WhachatCRM is an AI-powered CRM built for agencies that qualify leads and manage client conversations across WhatsApp Business API, email, Instagram, Messenger, and more — with outreach automation and follow-up that fits a client-service stack.",
-    optionalCloser: "We also offer agency and white-label opportunities for GHL and digital agencies.",
+    optionalCloser: "We also offer agency and white-label opportunities for digital agencies.",
     avoidTopics: ["MLS", "Shopify storefront", "abandoned cart", "analytics dashboard", "insights platform"],
   },
   shopify: {

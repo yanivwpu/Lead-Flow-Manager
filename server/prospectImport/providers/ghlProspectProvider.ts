@@ -147,9 +147,9 @@ export async function getGhlLocationMetadata(
   workspaceUserId?: string,
 ): Promise<GhlLocationMetadata> {
   const integration = await getIntegrationById(integrationId);
-  if (!integration?.isActive) throw new Error("GHL integration not found or inactive");
+  if (!integration?.isActive) throw new Error("CRM Integration not found or inactive");
   if (workspaceUserId && integration.userId !== workspaceUserId) {
-    throw new Error("GHL integration not found or inactive");
+    throw new Error("CRM Integration not found or inactive");
   }
   const resolved = await getGhlProspectApiToken(integration, selectedLocationId);
 
@@ -174,7 +174,7 @@ export async function previewGhlProspectImport(params: {
 > {
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive || integration.userId !== params.destinationUserId) {
-    throw new Error("GHL integration not found or inactive");
+    throw new Error("CRM Integration not found or inactive");
   }
 
   const outcome = await createGhlProspectPreviewJob({

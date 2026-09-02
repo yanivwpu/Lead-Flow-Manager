@@ -172,10 +172,10 @@ export async function createProspectImportJob(params: {
     (await resolveProspectImportDestinationUserId());
   const integration = await getIntegrationById(params.integrationId);
   if (!integration?.isActive || integration.userId !== destinationUserId) {
-    throw new Error("GHL integration not found or inactive");
+    throw new Error("CRM Integration not found or inactive");
   }
   const locationId = resolveGhlProspectLocationId(integration, params.locationId);
-  if (!locationId) throw new Error("GHL token or location unavailable");
+  if (!locationId) throw new Error("CRM token or location unavailable");
 
   const previewData = await loadPreviewSnapshotsForImport(
     params.previewJobId.trim(),

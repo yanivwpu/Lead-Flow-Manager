@@ -51,7 +51,8 @@ try {
 
   const missing = getGhlMarketplaceOAuthConfig();
   assert.equal(missing.configured, false);
-  assert.match(missing.error ?? "", /GHL_CLIENT_ID/i);
+  assert.match(missing.error ?? "", /CRM app credentials are not configured/i);
+  assert.doesNotMatch(missing.error ?? "", /GHL_CLIENT_ID/i);
 
   process.env.GHL_CLIENT_ID = "live-client-id-xyz";
   process.env.GHL_CLIENT_SECRET = "secret";

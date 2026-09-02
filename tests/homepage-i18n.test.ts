@@ -49,7 +49,7 @@ const NARROW_ALLOWLIST = [
   "Realtor Growth Engine",
   "Chatbot Builder",
   "MLS",
-  "GoHighLevel",
+  "CRM Integration",
   "Interakt",
   "360dialog",
 ];

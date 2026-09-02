@@ -45,7 +45,7 @@ export function registerProspectImportRoutes(app: Express): void {
         res.json({ locations });
       } catch (err) {
         console.error("[ProspectImport] locations error:", err);
-        res.status(500).json({ error: "Failed to list GHL locations" });
+        res.status(500).json({ error: "Failed to list CRM locations" });
       }
     },
   );

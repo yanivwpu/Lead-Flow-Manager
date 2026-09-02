@@ -150,8 +150,8 @@ assert.equal(getCachedGhlLocationToken("int-1", "loc-1"), null);
     (err: unknown) => {
       assert.ok(err instanceof GhlProspectTokenError);
       assert.equal(err.code, "location_token_exchange_failed");
-      assert.match(err.message, /Location access token/i);
-      assert.match(err.message, /authClass/i);
+      assert.match(err.message, /CRM location token/i);
+      assert.doesNotMatch(err.message, /authClass/i);
       return true;
     },
   );

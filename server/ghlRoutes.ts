@@ -294,6 +294,10 @@ router.get('/oauth-authorize-debug', requireAuth, async (req: Request, res: Resp
   if (!userId) {
     return res.status(401).json({ error: "Authentication required" });
   }
+  const recoveryContext = await resolveGhlOAuthRecoveryContext(req);
+  if (!recoveryContext?.canAccessRecoveryTools) {
+    return res.status(403).json({ error: "CRM connection diagnostics are not available for this account." });
+  }
   const snapshot = buildGhlOAuthAuthorizeDebugSnapshot(userId);
   logGhlOAuthAuthorizeDebugSnapshot("oauth_authorize_debug_requested", snapshot, {
     sessionUserId: userId,
@@ -354,7 +358,7 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
     });
     return res
       .status(503)
-      .send(config.error || "CRM OAuth is not configured on the server. Contact support.");
+      .send(config.error || "CRM connection is not configured on the server. Contact support.");
   }
 
   try {
@@ -372,7 +376,10 @@ router.get('/oauth-authorize', requireAuth, async (req: Request, res: Response) 
     });
 
     if (req.query.debug === "1" || req.query.debug === "true") {
-      return res.send(renderGhlOAuthAuthorizeDebugHtml(debugSnapshot));
+      const recoveryContext = await resolveGhlOAuthRecoveryContext(req);
+      if (recoveryContext?.canAccessRecoveryTools) {
+        return res.send(renderGhlOAuthAuthorizeDebugHtml(debugSnapshot));
+      }
     }
 
     return res.redirect(authorizeUrl);
@@ -1259,6 +1266,7 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       tokenExpired: status.tokenExpired,
       installedInGhlNotConnected: status.installedInGhlNotConnected,
       recoverableOAuthInstalls: status.recoverableOAuthInstalls,
+      canAccessCrmDiagnostics: canAccessGhlOAuthRecoveryTools(user, readSessionForRecovery(req)),
       locationId: status.locationId,
       companyId: status.companyId,
       installedAt: status.installedAt,

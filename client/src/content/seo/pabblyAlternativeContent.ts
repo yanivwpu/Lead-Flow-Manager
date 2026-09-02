@@ -80,7 +80,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     "Meta Embedded Signup and WhatsApp Cloud API onboarding should be self-serve (Twilio not required)",
     "Unified Inbox across WhatsApp, Messenger, Instagram, Email, and web chat matters daily",
     "Chatbot, Flow Builder, and preset templates on Pro should not consume separate credit pools",
-    "Shopify, GoHighLevel, and Calendly Integrations on Free are part of your workflow",
+    "Shopify, CRM Integration, and Calendly Integrations on Free are part of your workflow",
     "You want 0% WhachatCRM markup on Meta fees — competitor markup claims unverified here",
   ],
   advantages: [
@@ -113,7 +113,7 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     "AI Assist / Copilot": "partial",
     "AI Brain (optional add-on)": "no",
     "Shopify integration (orders/customers → inbox)": "partial",
-    "GoHighLevel integration": "partial",
+    "CRM integration": "partial",
     "Calendly booking integration": "partial",
     "Realtor Growth Engine": "no",
     "Conversation / template analytics": "partial",
@@ -162,6 +162,6 @@ export const pabblyAlternativeContent: CompetitorAlternativeContent = {
     },
   ],
   recommendation:
-    "Keep Pabbly if upfront credit economics and existing Pabbly automations fit your procurement style. Switch to WhachatCRM when you want predictable Free / Pro $49 SaaS, Meta Embedded Signup, Unified Inbox with Email, Pro chatbot/templates, Shopify/GHL on Free, unlimited Pro users, and transparent Meta fee pass-through.",
+    "Keep Pabbly if upfront credit economics and existing Pabbly automations fit your procurement style. Switch to WhachatCRM when you want predictable Free / Pro $49 SaaS, Meta Embedded Signup, Unified Inbox with Email, Pro chatbot/templates, Shopify and CRM Integration on Free, unlimited Pro users, and transparent Meta fee pass-through.",
   relatedLinks: relatedLinksExcluding(SLUG),
 };
