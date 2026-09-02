@@ -73,6 +73,7 @@ test("LanguageSelector notes explicit selection before persist and skips unauthe
   assert.match(sel, /noteExplicitLanguageSelection/);
   assert.match(sel, /persistAuthenticatedLanguage/);
   assert.match(sel, /changeLanguage\(lang\)/);
+  assert.match(read("client/src/lib/userLanguagePreference.ts"), /TRUSTED_LANGUAGE_SOURCE/);
   // Must not raw-fetch PATCH for every visitor (including logged-out)
   assert.doesNotMatch(sel, /fetch\(\s*['"]\/api\/user\/language['"]/);
 });
@@ -121,13 +122,14 @@ test("schema language field exists — no migration required", () => {
 
 test("i18n changeLanguage updates localStorage, lang, dir, and notifies listeners", () => {
   const i18n = read("client/src/lib/i18n.ts");
-  assert.match(i18n, /localStorage\.setItem\('whachatcrm_language'/);
+  assert.match(i18n, /localStorage\.setItem\(LANGUAGE_CACHE_KEY/);
   assert.match(i18n, /document\.documentElement\.dir/);
   assert.match(i18n, /document\.documentElement\.lang/);
   assert.match(i18n, /languageChanged/);
   assert.match(i18n, /split\('-'\)\[0\]/);
   assert.match(i18n, /order:\s*\[\s*'localStorage'\s*\]/);
   assert.doesNotMatch(i18n, /order:\s*\[[^\]]*navigator/);
+  assert.doesNotMatch(i18n, /LANGUAGE_SOURCE_KEY|TRUSTED_LANGUAGE_SOURCE/);
 });
 
 test("logout keeps localStorage language preference", () => {
@@ -136,6 +138,10 @@ test("logout keeps localStorage language preference", () => {
   assert.doesNotMatch(
     logout.slice(0, 800),
     /removeItem\(\s*['"]whachatcrm_language['"]/,
+  );
+  assert.doesNotMatch(
+    logout.slice(0, 900),
+    /whachatcrm_language_source/,
   );
   assert.match(logout.slice(0, 800), /clearExplicitLanguageSelection/);
 });
@@ -150,17 +156,25 @@ test("marketing URL sync still forces public locale (Phase 2 regression guard)",
 
 test("bootstrap prefers URL locale and forces English i18n on unprefixed Phase 2", () => {
   const boot = read("client/src/bootstrap.tsx");
-  assert.match(boot, /whachatcrm_language/);
+  assert.match(boot, /LANGUAGE_CACHE_KEY/);
   assert.match(boot, /parseLocalizedPath/);
   assert.match(boot, /changeLanguage\("en"\)|changeLanguage\('en'\)/);
+  assert.match(boot, /overwriteUntrustedLanguageCache/);
+  assert.match(boot, /startsWith\("\/app\/"\)/);
   assert.doesNotMatch(boot, /\/api\/auth\/me|applyDatabaseLanguagePreference/);
 });
 
 test("authenticated restore defaults missing DB language to en rather than leaving detector locale", () => {
   const pref = read("client/src/lib/userLanguagePreference.ts");
-  assert.match(pref, /normalizeUserLanguage\(rawLanguage\) \?\? "en"/);
-  assert.match(pref, /resolveAuthenticatedAppLocale/);
+  assert.match(pref, /resolveAuthenticatedAppLocaleFromState/);
+  assert.match(pref, /overwriteUntrustedLanguageCache/);
+  assert.match(pref, /LANGUAGE_SOURCE_KEY/);
   assert.match(pref, /isCrmMarketplaceHandoffRedirect/);
+  assert.match(pref, /markTrustedLanguageSource/);
+  assert.doesNotMatch(
+    pref.slice(pref.indexOf("export function resolveAuthenticatedAppLocale"), pref.indexOf("export function __reset")),
+    /getCurrentLanguage\(\)/,
+  );
 });
 
 test("RTL helpers: Hebrew uses rtl; others ltr via supportedLanguages", () => {

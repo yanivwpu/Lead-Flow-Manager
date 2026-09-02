@@ -162,7 +162,8 @@ test("6. OAuth handoff/login does not overwrite an existing authenticated locale
   assert.doesNotMatch(loginFn, /\/api\/user\/language/);
   assert.match(auth, /applyDatabaseLanguagePreference\(user\.language\)/);
   assert.match(pref, /isCrmMarketplaceHandoffRedirect/);
-  assert.match(pref, /normalizeUserLanguage\(rawLanguage\) \?\? "en"/);
+  assert.match(pref, /overwriteUntrustedLanguageCache/);
+  assert.match(pref, /resolveAuthenticatedAppLocaleFromState/);
   assert.equal(isCrmMarketplaceHandoffRedirect("/app/integrations"), true);
 });
 

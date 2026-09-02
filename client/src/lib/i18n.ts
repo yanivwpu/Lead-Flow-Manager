@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
+import { LANGUAGE_CACHE_KEY } from '@shared/authenticatedLocale';
 import en from '../locales/en.json';
 
 export const supportedLanguages = {
@@ -29,7 +30,7 @@ i18n
       // Authenticated + first-visit locale must not follow Accept-Language / navigator.
       // Explicit user choice and URL locale write whachatcrm_language; DB restore is authoritative in-app.
       order: ['localStorage'],
-      lookupLocalStorage: 'whachatcrm_language',
+      lookupLocalStorage: LANGUAGE_CACHE_KEY,
       caches: ['localStorage'],
     },
   });
@@ -48,7 +49,7 @@ export async function loadLocale(lng: string): Promise<void> {
 export const changeLanguage = async (lng: SupportedLanguage) => {
   await loadLocale(lng);
   await i18n.changeLanguage(lng);
-  localStorage.setItem('whachatcrm_language', lng);
+  localStorage.setItem(LANGUAGE_CACHE_KEY, lng);
 
   const dir = supportedLanguages[lng].dir;
   document.documentElement.dir = dir;

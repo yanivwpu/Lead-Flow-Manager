@@ -9,6 +9,14 @@ import {
 } from "@shared/localeRoutes";
 import { isCrmMarketplaceHandoffRedirect } from "@shared/ghlOAuthHandoff";
 import {
+  LANGUAGE_CACHE_KEY,
+  LANGUAGE_SOURCE_KEY,
+  TRUSTED_LANGUAGE_SOURCE,
+  overwriteUntrustedLanguageCache,
+  resolveAuthenticatedAppLocaleFromState,
+  shouldOverwriteUntrustedLanguageCache,
+} from "@shared/authenticatedLocale";
+import {
   normalizeUserLanguage,
   type UserLanguage,
 } from "@shared/userLanguage";
@@ -25,9 +33,34 @@ let explicitGeneration = 0;
 let lastKnownPersistedLanguage: UserLanguage | null = null;
 let persistInFlightFor: UserLanguage | null = null;
 
+function readLanguageStorage(): { cachedLanguage: string | null; languageSource: string | null } {
+  if (typeof localStorage === "undefined") {
+    return { cachedLanguage: null, languageSource: null };
+  }
+  try {
+    return {
+      cachedLanguage: localStorage.getItem(LANGUAGE_CACHE_KEY),
+      languageSource: localStorage.getItem(LANGUAGE_SOURCE_KEY),
+    };
+  } catch {
+    return { cachedLanguage: null, languageSource: null };
+  }
+}
+
+function markTrustedLanguageSource(lang: UserLanguage): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(LANGUAGE_SOURCE_KEY, TRUSTED_LANGUAGE_SOURCE);
+    localStorage.setItem(LANGUAGE_CACHE_KEY, lang);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function noteExplicitLanguageSelection(lang: UserLanguage): void {
   explicitSessionLanguage = lang;
   explicitGeneration += 1;
+  markTrustedLanguageSource(lang);
 }
 
 export function clearExplicitLanguageSelection(): void {
@@ -63,20 +96,44 @@ export async function applyDatabaseLanguagePreference(
     return;
   }
 
-  const lang = normalizeUserLanguage(rawLanguage) ?? "en";
+  const stored = readLanguageStorage();
+  const locale = resolveAuthenticatedAppLocaleFromState({
+    explicitSessionLanguage: null,
+    userLanguage: rawLanguage,
+    cachedLanguage: stored.cachedLanguage,
+    languageSource: stored.languageSource,
+  });
 
-  markLanguagePersisted(lang);
-
-  if (getCurrentLanguage() === lang) {
+  if (
+    shouldOverwriteUntrustedLanguageCache({
+      explicitSessionLanguage: null,
+      userLanguage: rawLanguage,
+      cachedLanguage: stored.cachedLanguage,
+      languageSource: stored.languageSource,
+    })
+  ) {
     try {
-      localStorage.setItem("whachatcrm_language", lang);
+      overwriteUntrustedLanguageCache(localStorage);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const fromDb = normalizeUserLanguage(rawLanguage);
+  if (fromDb) {
+    markLanguagePersisted(fromDb);
+  }
+
+  if (getCurrentLanguage() === locale) {
+    try {
+      localStorage.setItem(LANGUAGE_CACHE_KEY, locale);
     } catch {
       /* ignore */
     }
     return;
   }
 
-  await changeLanguage(lang as SupportedLanguage);
+  await changeLanguage(locale as SupportedLanguage);
 
   if (generationAtStart !== explicitGeneration && explicitSessionLanguage) {
     await changeLanguage(explicitSessionLanguage as SupportedLanguage);
@@ -138,10 +195,13 @@ export function resolveSignupLanguagePreference(): UserLanguage {
       }
       // Marketplace handoff must not persist browser/detector language.
       if (isCrmMarketplaceHandoffRedirect(redirect)) {
-        const stored = normalizeUserLanguage(
-          typeof localStorage !== "undefined" ? localStorage.getItem("whachatcrm_language") : null,
-        );
-        return stored || "en";
+        const stored = readLanguageStorage();
+        return resolveAuthenticatedAppLocaleFromState({
+          explicitSessionLanguage: getExplicitSessionLanguage(),
+          userLanguage: null,
+          cachedLanguage: stored.cachedLanguage,
+          languageSource: stored.languageSource,
+        });
       }
     } catch {
       /* ignore */
@@ -150,13 +210,15 @@ export function resolveSignupLanguagePreference(): UserLanguage {
   return normalizeUserLanguage(getCurrentLanguage()) || "en";
 }
 
-/** Authenticated in-app locale: saved account language, else current i18n (never navigator). */
+/** Authenticated in-app locale: DB preference, else trusted explicit choice, else English. */
 export function resolveAuthenticatedAppLocale(userLanguage: unknown): UserLanguage {
-  return (
-    getExplicitSessionLanguage() ||
-    normalizeUserLanguage(userLanguage) ||
-    getCurrentLanguage()
-  );
+  const stored = readLanguageStorage();
+  return resolveAuthenticatedAppLocaleFromState({
+    explicitSessionLanguage: getExplicitSessionLanguage(),
+    userLanguage,
+    cachedLanguage: stored.cachedLanguage,
+    languageSource: stored.languageSource,
+  });
 }
 
 /** Test-only reset of module session state. */
