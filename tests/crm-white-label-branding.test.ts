@@ -118,6 +118,8 @@ test("CRM Integration card uses required customer-facing states", () => {
   assert.match(white, /CRM_COMPLETE_OAUTH_CTA = "Finish connection"/);
   assert.match(white, /CRM_RECONNECT_CTA = "Reconnect CRM"/);
   assert.match(white, /CRM_CONNECTION_REQUIRED_STATUS = "Connection required"/);
+  assert.match(white, /CRM_NOT_CONNECTED_STATUS = "Not connected"/);
+  assert.match(white, /CRM_MANAGE_CTA = "Manage integration"/);
   assert.match(white, /Connect WhachatCRM with your CRM to sync prospects, contacts, and conversations/);
   assert.match(white, /Your CRM app is installed, but authorization is incomplete/);
   assert.match(white, /Your CRM connection needs to be renewed/);

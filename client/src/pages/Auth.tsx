@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { navigateAfterAuth } from "@/lib/postAuthRedirect";
 import { CHECK_EMAIL_PATH } from "@/lib/pendingVerification";
+import { sanitizeClientRedirectPath } from "@/lib/postAuthRedirect";
+import { isCrmMarketplaceHandoffRedirect } from "@shared/ghlOAuthHandoff";
 import { getDirection } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +28,9 @@ export function AuthPage() {
   const params = new URLSearchParams(window.location.search);
   const defaultToLogin = params.get('mode') === 'login';
   const redirectTo = params.get('redirect') || null;
+  const isCrmHandoffAuth =
+    isCrmMarketplaceHandoffRedirect(redirectTo) &&
+    isCrmMarketplaceHandoffRedirect(sanitizeClientRedirectPath(redirectTo));
   const [, setLocation] = useLocation();
   const [isLogin, setIsLogin] = useState(defaultToLogin);
   const [email, setEmail] = useState("");
@@ -179,10 +184,18 @@ export function AuthPage() {
         >
           <div className="mb-6 md:mb-8 text-center">
             <h2 className="text-xl md:text-2xl font-bold text-gray-900 font-display">
-              {isLogin ? t('auth.welcomeBack') : t('auth.createAccount')}
+              {isCrmHandoffAuth
+                ? t('auth.crmHandoffHeading')
+                : isLogin
+                  ? t('auth.welcomeBack')
+                  : t('auth.createAccount')}
             </h2>
             <p className="text-gray-500 mt-2 text-sm">
-              {isLogin ? t('auth.loginSubtitle') : t('auth.signupSubtitle')}
+              {isCrmHandoffAuth
+                ? t('auth.crmHandoffSubtitle')
+                : isLogin
+                  ? t('auth.loginSubtitle')
+                  : t('auth.signupSubtitle')}
             </p>
           </div>
 
@@ -362,22 +375,40 @@ export function AuthPage() {
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">
-            {isLogin ? t('auth.noAccount') + " " : t('auth.haveAccount') + " "}
-            <button 
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError("");
-                const newMode = isLogin ? '' : 'login';
-                const newParams = new URLSearchParams();
-                if (newMode) newParams.set('mode', newMode);
-                if (redirectTo) newParams.set('redirect', redirectTo);
-                const qs = newParams.toString();
-                window.history.replaceState({}, '', `/auth${qs ? '?' + qs : ''}`);
-              }}
-              className="font-semibold text-brand-green hover:underline"
-            >
-              {isLogin ? t('common.signup') : t('common.login')}
-            </button>
+            {isCrmHandoffAuth && !isLogin ? (
+              <button
+                onClick={() => {
+                  setIsLogin(true);
+                  setError("");
+                  const newParams = new URLSearchParams();
+                  newParams.set('mode', 'login');
+                  if (redirectTo) newParams.set('redirect', redirectTo);
+                  window.history.replaceState({}, '', `/auth?${newParams.toString()}`);
+                }}
+                className="font-semibold text-brand-green hover:underline"
+              >
+                {t('auth.crmHandoffHaveAccount')}
+              </button>
+            ) : (
+              <>
+                {isLogin ? t('auth.noAccount') + " " : t('auth.haveAccount') + " "}
+                <button
+                  onClick={() => {
+                    setIsLogin(!isLogin);
+                    setError("");
+                    const newMode = isLogin ? '' : 'login';
+                    const newParams = new URLSearchParams();
+                    if (newMode) newParams.set('mode', newMode);
+                    if (redirectTo) newParams.set('redirect', redirectTo);
+                    const qs = newParams.toString();
+                    window.history.replaceState({}, '', `/auth${qs ? '?' + qs : ''}`);
+                  }}
+                  className="font-semibold text-brand-green hover:underline"
+                >
+                  {isLogin ? t('common.signup') : t('common.login')}
+                </button>
+              </>
+            )}
           </div>
 
           <div className="mt-4 text-center">

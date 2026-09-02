@@ -318,14 +318,15 @@ test("18. Event arriving before OAuth linking is reconciled later", () => {
   );
 });
 
-test("18b. PLAN_CHANGE overlay does not drop existing OAuth credential keys", () => {
+test("18b. PLAN_CHANGE overlay cannot reintroduce OAuth secrets into raw_payload", () => {
   const merged = mergeGhlLifecycleRawPayload(
     { access_token: "keep-me", refresh_token: "keep-refresh", type: "INSTALL" },
     { type: "PLAN_CHANGE", newPlanId: PRO_ID },
   );
-  assert.equal(merged.access_token, "keep-me");
-  assert.equal(merged.refresh_token, "keep-refresh");
+  assert.equal("access_token" in merged, false);
+  assert.equal("refresh_token" in merged, false);
   assert.equal(merged.type, "PLAN_CHANGE");
+  assert.equal(merged.newPlanId, PRO_ID);
 });
 
 test("19. Duplicate events are idempotent", () => {

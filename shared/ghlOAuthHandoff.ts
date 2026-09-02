@@ -7,6 +7,30 @@ export const GHL_OAUTH_HANDOFF_COOKIE = "ghl_oauth_handoff";
 export const GHL_OAUTH_HANDOFF_TTL_MS = 30 * 60 * 1000;
 export const GHL_OAUTH_HANDOFF_POST_AUTH_REDIRECT = "/app/integrations";
 
+/** True only for a same-origin, already-validated Integrations handoff redirect. */
+export function isCrmMarketplaceHandoffRedirect(raw: string | null | undefined): boolean {
+  if (!raw || typeof raw !== "string") return false;
+  let candidate = raw.trim();
+  if (!candidate) return false;
+  if (candidate.startsWith("%2F") || candidate.startsWith("%2f")) {
+    try {
+      candidate = decodeURIComponent(candidate);
+    } catch {
+      return false;
+    }
+  }
+  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("://")) {
+    return false;
+  }
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) return false;
+  try {
+    const resolved = new URL(candidate, "https://placeholder.local");
+    return resolved.pathname === GHL_OAUTH_HANDOFF_POST_AUTH_REDIRECT;
+  } catch {
+    return false;
+  }
+}
+
 export type GhlOAuthHandoffClaimFailure =
   | "missing_token"
   | "not_found"

@@ -11,6 +11,8 @@ export const CRM_COMPLETE_OAUTH_CTA = "Finish connection";
 export const CRM_RECONNECT_CTA = "Reconnect CRM";
 export const CRM_MARKETPLACE_CTA = "Open Marketplace";
 export const CRM_CONNECTION_REQUIRED_STATUS = "Connection required";
+export const CRM_NOT_CONNECTED_STATUS = "Not connected";
+export const CRM_MANAGE_CTA = "Manage integration";
 export const CRM_NOT_CONNECTED_DESCRIPTION =
   "Connect WhachatCRM with your CRM to sync prospects, contacts, and conversations.";
 export const CRM_INSTALLED_NOT_CONNECTED =

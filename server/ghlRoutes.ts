@@ -1252,7 +1252,12 @@ router.get('/connection-status', async (req: Request, res: Response) => {
   try {
     const userId = resolveSessionUserId(req);
     if (!userId) {
-      return res.json({ connected: false, installedInGhlNotConnected: false, recoverableOAuthInstalls: 0 });
+      return res.json({
+        connected: false,
+        installedInGhlNotConnected: false,
+        connectionState: "not_connected",
+        recoverableOAuthInstalls: 0,
+      });
     }
 
     const queryLocationId = req.query.locationId as string | undefined;
@@ -1299,6 +1304,7 @@ router.get('/connection-status', async (req: Request, res: Response) => {
       connected: status.connected,
       tokenExpired: status.tokenExpired,
       installedInGhlNotConnected: status.installedInGhlNotConnected,
+      connectionState: status.connectionState,
       recoverableOAuthInstalls: status.recoverableOAuthInstalls,
       canAccessCrmDiagnostics: canAccessGhlOAuthRecoveryTools(user, readSessionForRecovery(req)),
       locationId: status.locationId,
@@ -1308,7 +1314,12 @@ router.get('/connection-status', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[LeadConnector] Connection status check error:', error);
-    res.json({ connected: false, installedInGhlNotConnected: false, recoverableOAuthInstalls: 0 });
+    res.json({
+      connected: false,
+      installedInGhlNotConnected: false,
+      connectionState: "not_connected",
+      recoverableOAuthInstalls: 0,
+    });
   }
 });
 

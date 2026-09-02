@@ -494,6 +494,9 @@
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",
     "createAccount": "Crea tu cuenta",
+    "crmHandoffHeading": "Termina de conectar tu CRM",
+    "crmHandoffSubtitle": "Inicia sesión o crea una cuenta de WhachatCRM para completar la conexión con tu CRM.",
+    "crmHandoffHaveAccount": "¿Ya tienes una cuenta? Inicia sesión",
     "loginSubtitle": "Ingresa tus datos para acceder a tu cuenta",
     "signupSubtitle": "Comienza tu prueba gratuita de 14 días, sin tarjeta de crédito",
     "fullName": "Nombre Completo",
@@ -544,6 +547,22 @@
     "verifyTrialStarted": "Tu correo está verificado. Tu prueba de 14 días de Pro con AI Brain ha comenzado.",
     "verifyContinue": "Tu correo está verificado. Puedes continuar en WhachatCRM.",
     "verifyNeedNewLink": "¿Necesitas un enlace nuevo? Vuelve a Revisa tu correo para reenviar la verificación."
+  },
+  "integrations": {
+    "crm": {
+      "connectedStatus": "Conectado",
+      "connectedDescription": "Tu conexión de CRM está activa.",
+      "connectionRequiredStatus": "Conexión requerida",
+      "incompleteDescription": "Tu aplicación de CRM está instalada, pero la autorización está incompleta.",
+      "expiredDescription": "Tu conexión de CRM necesita renovarse.",
+      "notConnectedStatus": "No conectado",
+      "notConnectedDescription": "Conecta WhachatCRM con tu CRM para sincronizar prospectos, contactos y conversaciones.",
+      "connectCta": "Conectar CRM",
+      "finishCta": "Terminar conexión",
+      "reconnectCta": "Volver a conectar CRM",
+      "manageCta": "Administrar integración",
+      "checkConnection": "Comprobar estado de conexión"
+    }
   },
   "home": {
     "hero": {

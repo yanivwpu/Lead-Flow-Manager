@@ -15,6 +15,7 @@ import {
   evaluateGhlOAuthHandoffClaim,
   GHL_OAUTH_HANDOFF_COOKIE,
   GHL_OAUTH_HANDOFF_TTL_MS,
+  isCrmMarketplaceHandoffRedirect,
 } from "../shared/ghlOAuthHandoff";
 import { DEFAULT_GHL_OAUTH_SCOPES } from "../shared/ghlMarketplaceOAuth";
 import { sanitizeGhlLifecyclePayloadForStorage } from "../shared/ghlMarketplaceLifecycle";
@@ -49,7 +50,7 @@ const merged = mergeGhlLifecycleRawPayload(tokenPayload, {
   locationId: "loc_1",
   newPlanId: "plan_pro",
 });
-assert.equal(merged.access_token, "secret-access");
+assert.equal("access_token" in merged, false);
 assert.equal(merged.type, "PLAN_CHANGE");
 assert.equal(merged.newPlanId, "plan_pro");
 
@@ -62,6 +63,10 @@ const sanitizedLifecycle = sanitizeGhlLifecyclePayloadForStorage({
 });
 assert.equal(sanitizedLifecycle.access_token, undefined);
 assert.equal(sanitizedLifecycle.versionId, "ver_1");
+
+assert.equal(isCrmMarketplaceHandoffRedirect("/app/integrations"), true);
+assert.equal(isCrmMarketplaceHandoffRedirect("https://evil.example"), false);
+assert.equal(isCrmMarketplaceHandoffRedirect("/app/inbox"), false);
 
 const hash = hashGhlOAuthHandoffToken("claim-token-abc");
 assert.equal(hash, hashGhlOAuthHandoffToken("claim-token-abc"));

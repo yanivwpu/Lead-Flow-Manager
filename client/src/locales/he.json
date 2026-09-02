@@ -752,6 +752,9 @@
   "auth": {
     "welcomeBack": "ברוך שובך",
     "createAccount": "צור את החשבון שלך",
+    "crmHandoffHeading": "השלם את חיבור ה-CRM שלך",
+    "crmHandoffSubtitle": "התחבר או צור חשבון WhachatCRM כדי להשלים את חיבור ה-CRM.",
+    "crmHandoffHaveAccount": "כבר יש לך חשבון? התחבר",
     "loginSubtitle": "הזן את הפרטים שלך כדי לגשת לחשבון",
     "signupSubtitle": "התחל תקופת ניסיון חינמית של 14 יום, ללא כרטיס אשראי",
     "fullName": "שם מלא",
@@ -802,6 +805,22 @@
     "verifyTrialStarted": "האימייל אומת. תקופת הניסיון של 14 יום ל-Pro עם AI Brain התחילה.",
     "verifyContinue": "האימייל אומת. אפשר להמשיך ל-WhachatCRM.",
     "verifyNeedNewLink": "צריכים קישור חדש? חזרו למסך בדיקת האימייל כדי לשלוח שוב."
+  },
+  "integrations": {
+    "crm": {
+      "connectedStatus": "מחובר",
+      "connectedDescription": "חיבור ה-CRM שלך פעיל.",
+      "connectionRequiredStatus": "נדרש חיבור",
+      "incompleteDescription": "אפליקציית ה-CRM מותקנת, אך ההרשאה לא הושלמה.",
+      "expiredDescription": "יש לחדש את חיבור ה-CRM שלך.",
+      "notConnectedStatus": "לא מחובר",
+      "notConnectedDescription": "חברו את WhachatCRM ל-CRM שלכם כדי לסנכרן לידים, אנשי קשר ושיחות.",
+      "connectCta": "חבר CRM",
+      "finishCta": "השלם חיבור",
+      "reconnectCta": "חבר מחדש CRM",
+      "manageCta": "ניהול אינטגרציה",
+      "checkConnection": "בדיקת מצב החיבור"
+    }
   },
   "rge": {
     "nav": {

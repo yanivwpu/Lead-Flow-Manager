@@ -4,6 +4,11 @@ import { db } from "../drizzle/db";
 import { listGhlInstallationsForAdmin, listRecoverableMarketplaceInstallsForUser } from "./ghlMarketplaceService";
 import { storage } from "./storage";
 import { getGhlLifecyclePersistence } from "./ghlMarketplaceLifecycleStore";
+import {
+  deriveCrmMarketplaceConnectionState,
+  hasCustomerFacingActiveGhlMarketplaceInstall,
+  type CrmMarketplaceConnectionState,
+} from "@shared/ghlConnectionState";
 import { isGhlTokenIntegrationStaleAfterMarketplaceUninstall } from "@shared/ghlMarketplaceUninstallMatch";
 
 export type GhlOAuthDiagnosticEvent =
@@ -90,6 +95,7 @@ export type UserGhlConnectionStatus = {
   connected: boolean;
   tokenExpired: boolean;
   installedInGhlNotConnected: boolean;
+  connectionState: CrmMarketplaceConnectionState;
   recoverableOAuthInstalls: number;
   locationId: string | null;
   companyId: string | null;
@@ -132,10 +138,16 @@ export async function resolveUserGhlConnectionStatus(
       activeIntegration.tokenExpiresAt && new Date(activeIntegration.tokenExpiresAt) < new Date(),
     );
     const cfg = (activeIntegration.config || {}) as Record<string, unknown>;
-    return {
-      connected: !tokenExpired,
+    const connectionState = deriveCrmMarketplaceConnectionState({
+      hasUsableTokens: true,
       tokenExpired,
-      installedInGhlNotConnected: tokenExpired,
+      hasActiveMarketplaceInstall: true,
+    });
+    return {
+      connected: connectionState === "connected",
+      tokenExpired: connectionState === "installed_expired",
+      installedInGhlNotConnected: false,
+      connectionState,
       recoverableOAuthInstalls: 0,
       locationId: (cfg.locationId as string) || null,
       companyId: (cfg.companyId as string) || null,
@@ -144,7 +156,6 @@ export async function resolveUserGhlConnectionStatus(
     };
   }
 
-  const userEligibleInstalls = await listUserEligibleGhlMarketplaceInstalls(userId, userEmail);
   const recoverableInstalls =
     process.env.GHL_WEBHOOK_ROUTE_TEST === "1"
       ? []
@@ -152,21 +163,30 @@ export async function resolveUserGhlConnectionStatus(
           isPlatformAdmin: options?.isPlatformAdmin,
           isRecoveryAllowlisted: options?.isRecoveryAllowlisted,
         });
-  const hasIncompleteIntegration = ghlIntegrations.some((i) => !i.accessToken);
-  const hasUnlinkedUserInstall = userEligibleInstalls.some((r) => !r.integrationId);
-  const installedInGhlNotConnected =
-    hasUnlinkedUserInstall ||
-    hasIncompleteIntegration ||
-    recoverableInstalls.length > 0 ||
-    Boolean(options?.oauthPending);
+  const normalizedEmail = userEmail ? normalizeEmail(userEmail) : null;
+  const userMarketplaceRows = marketplaceRows.filter((r) => {
+    if (r.whachatUserId === userId) return true;
+    if (normalizedEmail && r.agencyEmail && normalizeEmail(r.agencyEmail) === normalizedEmail) {
+      return true;
+    }
+    return false;
+  });
+  const hasActiveMarketplaceInstall = hasCustomerFacingActiveGhlMarketplaceInstall(userMarketplaceRows);
+  const connectionState = deriveCrmMarketplaceConnectionState({
+    hasUsableTokens: false,
+    tokenExpired: false,
+    hasActiveMarketplaceInstall,
+    oauthPending: options?.oauthPending,
+  });
 
   const fallbackCfg = (ghlIntegrations[0]?.config || {}) as Record<string, unknown>;
   const recoverablePrimary = recoverableInstalls[0];
   return {
     connected: false,
     tokenExpired: false,
-    installedInGhlNotConnected,
-    recoverableOAuthInstalls: recoverableInstalls.length,
+    installedInGhlNotConnected: connectionState === "installed_incomplete",
+    connectionState,
+    recoverableOAuthInstalls: connectionState === "not_connected" ? 0 : recoverableInstalls.length,
     locationId:
       (fallbackCfg.locationId as string) || recoverablePrimary?.locationId || null,
     companyId:

@@ -312,6 +312,8 @@ test("2. INSTALL → agency-token Connected → location UNINSTALL → not Conne
   assert.equal(integration?.refreshToken, null);
   const after = await resolveUserGhlConnectionStatus(USER_ID);
   assert.equal(after.connected, false);
+  assert.equal(after.connectionState, "not_connected");
+  assert.equal(after.installedInGhlNotConnected, false);
   assert.match(logs.join("\n"), /webhook_uninstall_credentials_revoked/);
   assertNoSecretsInLogs();
 });
@@ -342,7 +344,9 @@ test("4. duplicate agency/location rows cannot leave a stale Connected result", 
   await withWebhookApp(async (baseUrl) => {
     await postWebhook(baseUrl, productionUninstallBody());
   });
-  assert.equal(await (await resolveUserGhlConnectionStatus(USER_ID)).connected, false);
+  const duplicateStatus = await resolveUserGhlConnectionStatus(USER_ID);
+  assert.equal(duplicateStatus.connected, false);
+  assert.equal(duplicateStatus.connectionState, "not_connected");
   assert.equal(
     memory.installs
       .filter((row) => row.integrationId === "int_agency_1")

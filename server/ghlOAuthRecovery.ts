@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { ghlMarketplaceInstalls, type GhlMarketplaceInstall, type Integration } from "@shared/schema";
 import { db } from "../drizzle/db";
 import { logGhlOAuthDiagnostic } from "./ghlConnectionDiagnostics";
+import { stripGhlOAuthSecretsFromPayload } from "@shared/ghlConnectionState";
 import {
   listRecoverableMarketplaceInstallsForUser,
   type RecoverableMarketplaceInstall,
@@ -269,12 +270,16 @@ export async function recoverGhlOAuthFromMarketplaceInstall(params: {
   await db
     .update(ghlMarketplaceInstalls)
     .set({
-      rawPayload: {
+      rawPayload: stripGhlOAuthSecretsFromPayload({
         ...((target.rawPayload as Record<string, unknown>) || {}),
-        ...tokenResult.data,
         recoveredAt: new Date().toISOString(),
         recoveredByUserId: params.userId,
-      },
+        userType: tokenResult.data.userType,
+        locationId: tokenResult.data.locationId,
+        companyId: tokenResult.data.companyId,
+        scope: tokenResult.data.scope,
+        expires_in: tokenResult.data.expires_in,
+      }),
       source: target.source || "oauth",
       updatedAt: new Date(),
     })
