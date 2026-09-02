@@ -25,23 +25,17 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
   CRM_INTEGRATION_LABEL,
-  CRM_INSTALL_CTA,
-  CRM_COMPLETE_OAUTH_CTA,
   CRM_RECONNECT_CTA,
   CRM_MARKETPLACE_CTA,
-  CRM_CONNECTION_REQUIRED_STATUS,
   CRM_NOT_CONNECTED_DESCRIPTION,
-  CRM_INSTALLED_NOT_CONNECTED,
-  CRM_TOKEN_EXPIRED_DESCRIPTION,
-  CRM_CONNECTED_DESCRIPTION,
   CRM_OPENING_AUTHORIZATION,
-  CRM_NOT_CONNECTED_STATUS,
-  CRM_MANAGE_CTA,
 } from "@shared/leadConnectorWhiteLabel";
 import {
   deriveCrmMarketplaceConnectionState,
   type CrmMarketplaceConnectionState,
 } from "@shared/ghlConnectionState";
+import { crmIntegrationCardCopy } from "@/lib/crmIntegrationCardCopy";
+import { resolveAuthenticatedAppLocale } from "@/lib/userLanguagePreference";
 import {
   humanReadableCrmOAuthRecoveryMessage,
 } from "@shared/ghlOAuthRecoveryMessages";
@@ -314,48 +308,6 @@ export function resolveCrmIntegrationCardState(
     tokenExpired: Boolean(status?.tokenExpired),
     hasActiveMarketplaceInstall: Boolean(status?.installedInGhlNotConnected || status?.tokenExpired),
   });
-}
-
-export function crmIntegrationCardCopy(
-  status: CrmConnectionStatus | undefined,
-  t: (key: string, fallback: string) => string,
-): {
-  state: CrmMarketplaceConnectionState;
-  description: string;
-  statusLabel: string;
-  cta: string;
-} {
-  const state = resolveCrmIntegrationCardState(status);
-  if (state === "connected") {
-    return {
-      state,
-      description: t("integrations.crm.connectedDescription", CRM_CONNECTED_DESCRIPTION),
-      statusLabel: t("integrations.crm.connectedStatus", "Connected"),
-      cta: t("integrations.crm.connectedStatus", "Connected"),
-    };
-  }
-  if (state === "installed_expired") {
-    return {
-      state,
-      description: t("integrations.crm.expiredDescription", CRM_TOKEN_EXPIRED_DESCRIPTION),
-      statusLabel: t("integrations.crm.connectionRequiredStatus", CRM_CONNECTION_REQUIRED_STATUS),
-      cta: t("integrations.crm.reconnectCta", CRM_RECONNECT_CTA),
-    };
-  }
-  if (state === "installed_incomplete") {
-    return {
-      state,
-      description: t("integrations.crm.incompleteDescription", CRM_INSTALLED_NOT_CONNECTED),
-      statusLabel: t("integrations.crm.connectionRequiredStatus", CRM_CONNECTION_REQUIRED_STATUS),
-      cta: t("integrations.crm.finishCta", CRM_COMPLETE_OAUTH_CTA),
-    };
-  }
-  return {
-    state,
-    description: t("integrations.crm.notConnectedDescription", CRM_NOT_CONNECTED_DESCRIPTION),
-    statusLabel: t("integrations.crm.notConnectedStatus", CRM_NOT_CONNECTED_STATUS),
-    cta: t("integrations.crm.connectCta", CRM_INSTALL_CTA),
-  };
 }
 
 const CALENDLY_PAT_URL = "https://calendly.com/integrations/api_webhooks";
@@ -647,6 +599,7 @@ export function Integrations() {
   const { t } = useTranslation();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const { user, sessionAligned } = useAuth();
+  const crmLocale = resolveAuthenticatedAppLocale(user?.language);
   const queryClient = useQueryClient();
   const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false);
   const [connectingIntegration, setConnectingIntegration] = useState<IntegrationConfig | null>(null);
@@ -736,6 +689,12 @@ export function Integrations() {
     staleTime: 60_000,
   });
 
+  const crmCard = crmIntegrationCardCopy(
+    resolveCrmIntegrationCardState(lcStatus),
+    t,
+    crmLocale,
+  );
+
   const attemptCrmOAuthRecovery = async (): Promise<CrmOAuthRecoveryAttemptResult> => {
     const res = await fetch("/api/ext/recover-oauth", {
       method: "POST",
@@ -773,10 +732,10 @@ export function Integrations() {
       refreshed: result.raw.refreshed === true,
     });
     if (result.recovered) {
-      toast({ title: "CRM connected", description });
+      toast({ title: crmCard.connectedToast, description });
       return;
     }
-    toast({ title: "Connection required", description, variant: "destructive" });
+    toast({ title: crmCard.statusLabel, description, variant: "destructive" });
   };
 
   const runCrmOAuthRecovery = async () => {
@@ -1188,14 +1147,18 @@ export function Integrations() {
         refetchLcStatus(),
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }),
       ]);
-      const checked = crmIntegrationCardCopy(data ?? { connectionState: "not_connected" }, t);
+      const checked = crmIntegrationCardCopy(
+        resolveCrmIntegrationCardState(data ?? { connectionState: "not_connected" }),
+        t,
+        crmLocale,
+      );
       toast({
         title: checked.statusLabel,
         description: checked.description,
         variant: checked.state === "connected" ? "default" : "destructive",
       });
     } catch {
-      toast({ title: "Error", description: "Could not check connection status. Please try again.", variant: "destructive" });
+      toast({ title: crmCard.statusLabel, description: crmCard.checkFailed, variant: "destructive" });
     } finally {
       setCheckingLcConnection(false);
     }
@@ -1268,9 +1231,8 @@ export function Integrations() {
                       const connected = getConnectedIntegration(integration.id);
                       const isLeadConnector = integration.id === "leadconnector";
                       const lcConnected = !!lcStatus?.connected;
-                      const crmCard = isLeadConnector ? crmIntegrationCardCopy(lcStatus, t) : null;
-                      const lcInstalledNotConnected = crmCard?.state === "installed_incomplete";
-                      const lcTokenExpired = crmCard?.state === "installed_expired";
+                      const lcInstalledNotConnected = isLeadConnector && crmCard.state === "installed_incomplete";
+                      const lcTokenExpired = isLeadConnector && crmCard.state === "installed_expired";
                       const canAccessCrmDiagnostics = !!lcStatus?.canAccessCrmDiagnostics;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
@@ -1292,23 +1254,23 @@ export function Integrations() {
                       if (isLeadConnector) {
                         if (lcConnected) {
                           primaryTestId = "button-leadconnector-connected";
-                          primaryLabel = crmCard?.cta ?? "Connected";
+                          primaryLabel = crmCard.cta;
                           primaryDisabled = true;
                           primaryAction = () => {};
                         } else if (lcStatusFetching) {
                           primaryTestId = "button-install-leadconnector";
                           primaryDisabled = true;
-                          primaryLabel = crmCard?.cta ?? CRM_INSTALL_CTA;
+                          primaryLabel = crmCard.cta;
                         } else if (lcInstalledNotConnected || lcTokenExpired) {
                           primaryTestId = "button-complete-oauth-leadconnector";
                           primaryLabel = recoveringCrmOAuth
-                            ? CRM_OPENING_AUTHORIZATION
-                            : crmCard?.cta ?? CRM_COMPLETE_OAUTH_CTA;
+                            ? crmCard.openingAuthorization
+                            : crmCard.cta;
                           primaryDisabled = recoveringCrmOAuth;
                           primaryAction = runCrmOAuthRecovery;
                         } else {
                           primaryTestId = "button-install-leadconnector";
-                          primaryLabel = crmCard?.cta ?? CRM_INSTALL_CTA;
+                          primaryLabel = crmCard.cta;
                           primaryAction = runCrmOAuthRecovery;
                         }
                       } else if (wooConnected) {
@@ -1347,7 +1309,9 @@ export function Integrations() {
                               integrationId={integration.id}
                             />
                             <div className="min-w-0 flex-1 flex items-center gap-2">
-                              <h3 className="text-sm font-semibold leading-snug text-gray-900">{integration.name}</h3>
+                              <h3 className="text-sm font-semibold leading-snug text-gray-900">
+                                {isLeadConnector ? crmCard.label : integration.name}
+                              </h3>
                               {(wooConnected ||
                                 calendlyConnected ||
                                 shopifyManageConnected ||
@@ -1357,10 +1321,10 @@ export function Integrations() {
                                   variant="outline"
                                   className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
                                 >
-                                  {isLeadConnector ? crmCard?.statusLabel ?? "Connected" : "Connected"}
+                                  {isLeadConnector ? crmCard.statusLabel : "Connected"}
                                 </Badge>
                               )}
-                              {isLeadConnector && crmCard?.state === "installed_incomplete" && (
+                              {isLeadConnector && crmCard.state === "installed_incomplete" && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-amber-200 bg-amber-50 text-[10px] font-semibold tracking-wide text-amber-900"
@@ -1368,7 +1332,7 @@ export function Integrations() {
                                   {crmCard.statusLabel}
                                 </Badge>
                               )}
-                              {isLeadConnector && crmCard?.state === "installed_expired" && (
+                              {isLeadConnector && crmCard.state === "installed_expired" && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-amber-200 bg-amber-50 text-[10px] font-semibold tracking-wide text-amber-900"
@@ -1376,7 +1340,7 @@ export function Integrations() {
                                   {crmCard.statusLabel}
                                 </Badge>
                               )}
-                              {isLeadConnector && crmCard?.state === "not_connected" && !lcStatusFetching && (
+                              {isLeadConnector && crmCard.state === "not_connected" && !lcStatusFetching && (
                                 <Badge
                                   variant="outline"
                                   className="shrink-0 border-gray-200 bg-gray-50 text-[10px] font-semibold tracking-wide text-gray-600"
@@ -1387,7 +1351,7 @@ export function Integrations() {
                             </div>
                           </div>
                           <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-2">
-                            {isLeadConnector ? crmCard?.description : integration.tagline}
+                            {isLeadConnector ? crmCard.description : integration.tagline}
                           </p>
                           <div className="mt-5 space-y-2">
                             <Button
@@ -1403,12 +1367,12 @@ export function Integrations() {
                               {lcStatusFetching && isLeadConnector ? (
                                 <span className="inline-flex items-center gap-2">
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
-                                  Loading…
+                                  {crmCard.loading}
                                 </span>
                               ) : lcConnected && isLeadConnector ? (
                                 <span className="inline-flex items-center justify-center gap-1.5 text-emerald-800">
                                   <Check className="h-3.5 w-3.5" aria-hidden />
-                                  {crmCard?.cta ?? "Connected"}
+                                  {crmCard.cta}
                                 </span>
                               ) : shopifyStatusFetching && integration.id === "shopify" ? (
                                 <span className="inline-flex items-center gap-2">
@@ -1423,7 +1387,7 @@ export function Integrations() {
                               ) : recoveringCrmOAuth && isLeadConnector ? (
                                 <span className="inline-flex items-center gap-2">
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-gray-400" />
-                                  {CRM_OPENING_AUTHORIZATION}
+                                  {crmCard.openingAuthorization}
                                 </span>
                               ) : (
                                 primaryLabel
@@ -1443,7 +1407,7 @@ export function Integrations() {
                             )}
                             {isLeadConnector && recoveringCrmOAuth && (
                               <p className="text-xs text-gray-600" role="status">
-                                {CRM_OPENING_AUTHORIZATION}
+                                {crmCard.openingAuthorization}
                               </p>
                             )}
                             {isLeadConnector && canAccessCrmDiagnostics && crmOAuthRecoveryResult && (
@@ -1465,7 +1429,7 @@ export function Integrations() {
                                 onClick={startCrmFullOAuthAuthorization}
                                 data-testid="button-try-full-oauth-leadconnector"
                               >
-                                {CRM_RECONNECT_CTA}
+                                {crmCard.reconnectCta}
                               </Button>
                             )}
                             {isLeadConnector && canAccessCrmDiagnostics && !lcConnected && (
@@ -1478,7 +1442,9 @@ export function Integrations() {
                                 disabled={ghlOAuthDebugLoading}
                                 data-testid="button-ghl-oauth-debug"
                               >
-                                {ghlOAuthDebugLoading ? "Loading connection preview…" : "Preview connection URL"}
+                                {ghlOAuthDebugLoading
+                                  ? crmCard.loadingPreview
+                                  : crmCard.previewConnectionUrl}
                               </Button>
                             )}
                             {isLeadConnector && lcConnected && (
@@ -1490,13 +1456,12 @@ export function Integrations() {
                                 onClick={() => setLeadManageOpen(true)}
                                 data-testid="button-leadconnector-manage"
                               >
-                                {t("integrations.crm.manageCta", CRM_MANAGE_CTA)}
+                                {crmCard.manageCta}
                               </Button>
                             )}
                             {isLeadConnector && lcStatusError && (
                               <p className="text-xs text-amber-800" role="alert">
-                                Could not verify connection with the server. You can still open the marketplace to
-                                install or manage your CRM integration.
+                                {crmCard.verifyError}
                               </p>
                             )}
                           </div>
@@ -1964,17 +1929,18 @@ export function Integrations() {
         <Dialog open={ghlOAuthDebugOpen} onOpenChange={setGhlOAuthDebugOpen}>
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>CRM OAuth URL debug</DialogTitle>
+              <DialogTitle>
+                {crmCard.debugTitle}
+              </DialogTitle>
               <DialogDescription>
-                Temporary diagnostic from /api/ext/oauth-authorize-debug. Search Railway for{" "}
-                <code className="text-xs">oauth_authorize_started</code>.
+                {crmCard.debugDescription}
               </DialogDescription>
             </DialogHeader>
             {ghlOAuthDebug ? (
               <div className="space-y-3 text-xs">
                 {ghlOAuthDebug.warnings.length > 0 && (
                   <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950">
-                    <p className="font-semibold mb-1">Warnings</p>
+                    <p className="font-semibold mb-1">{crmCard.debugWarnings}</p>
                     <ul className="list-disc pl-4 space-y-1">
                       {ghlOAuthDebug.warnings.map((w) => (
                         <li key={w}>{w}</li>
@@ -2018,13 +1984,13 @@ export function Integrations() {
             ) : null}
             <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="outline" onClick={() => setGhlOAuthDebugOpen(false)}>
-                Close
+                {crmCard.debugClose}
               </Button>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={startCrmOAuthAuthorizeDebugPage}>
-                  Open debug redirect page
+                  {crmCard.debugOpenRedirect}
                 </Button>
-                <Button onClick={startCrmFullOAuthAuthorization}>{CRM_RECONNECT_CTA}</Button>
+                <Button onClick={startCrmFullOAuthAuthorization}>{crmCard.reconnectCta}</Button>
               </div>
             </DialogFooter>
           </DialogContent>
@@ -2037,12 +2003,14 @@ export function Integrations() {
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <IntegrationBrandLogo
-                  name={CRM_INTEGRATION_LABEL}
+                  name={crmCard.label}
                   integrationId="leadconnector"
                 />
                 <div>
-                  <DialogTitle>{CRM_INTEGRATION_LABEL}</DialogTitle>
-                  <DialogDescription>Install the app from the Marketplace and verify your connection</DialogDescription>
+                  <DialogTitle>
+                    {crmCard.label}
+                  </DialogTitle>
+                  <DialogDescription>{crmCard.manageDescription}</DialogDescription>
                 </div>
               </div>
             </DialogHeader>
@@ -2056,15 +2024,11 @@ export function Integrations() {
                     "CRM marketplace install is not configured. Contact support before installing."}
                 </div>
               ) : null}
-              {(() => {
-                const dialogCopy = crmIntegrationCardCopy(lcStatus, t);
-                if (dialogCopy.state === "connected") return null;
-                return (
+              {crmCard.state !== "connected" ? (
                   <p className="text-sm text-gray-600" data-testid="crm-manage-state-description">
-                    {dialogCopy.description}
+                    {crmCard.description}
                   </p>
-                );
-              })()}
+                ) : null}
               {!lcStatus?.connected ? (
                 <Button
                   variant="default"
@@ -2075,15 +2039,15 @@ export function Integrations() {
                   data-testid="button-complete-oauth-leadconnector-dialog"
                 >
                   {recoveringCrmOAuth
-                    ? CRM_OPENING_AUTHORIZATION
-                    : crmIntegrationCardCopy(lcStatus, t).cta}
+                    ? crmCard.openingAuthorization ?? CRM_OPENING_AUTHORIZATION
+                    : crmCard.cta}
                 </Button>
               ) : null}
               {lcStatus?.canAccessCrmDiagnostics && crmOAuthRecoveryResult ? (
                 <CrmOAuthRecoveryResultPanel result={crmOAuthRecoveryResult} showDiagnostics />
               ) : recoveringCrmOAuth && !lcStatus?.connected ? (
                 <p className="text-xs text-gray-600" role="status">
-                  {CRM_OPENING_AUTHORIZATION}
+                  {crmCard.openingAuthorization}
                 </p>
               ) : null}
               {lcStatus?.canAccessCrmDiagnostics &&
@@ -2097,7 +2061,7 @@ export function Integrations() {
                   onClick={startCrmFullOAuthAuthorization}
                   data-testid="button-try-full-oauth-leadconnector-dialog"
                 >
-                  {CRM_RECONNECT_CTA}
+                  {crmCard.reconnectCta ?? CRM_RECONNECT_CTA}
                 </Button>
               ) : null}
               <Button
@@ -2111,11 +2075,11 @@ export function Integrations() {
                 {crmInstallConfigFetching ? (
                   <>
                     <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
-                    Loading install link…
+                    {crmCard.loadingInstallLink}
                   </>
                 ) : (
                   <>
-                    {CRM_MARKETPLACE_CTA}
+                    {crmCard.marketplaceCta ?? CRM_MARKETPLACE_CTA}
                     <ExternalLink className="h-3 w-3 ml-2" />
                   </>
                 )}
@@ -2123,7 +2087,7 @@ export function Integrations() {
               {!lcStatus?.connected && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50/80 p-3">
                   <p className="text-xs text-gray-600 flex-1">
-                    {t("integrations.crm.checkConnection", "Check connection status")}
+                    {crmCard.checkConnection}
                   </p>
                   <Button
                     variant="outline"
@@ -2134,7 +2098,7 @@ export function Integrations() {
                     data-testid="button-check-leadconnector-connection"
                   >
                     <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? "animate-spin" : ""}`} />
-                    {checkingLcConnection ? "Checking…" : "Check"}
+                    {checkingLcConnection ? crmCard.checking : crmCard.check}
                   </Button>
                 </div>
               )}
@@ -2148,7 +2112,7 @@ export function Integrations() {
                   data-testid="button-verify-leadconnector"
                 >
                   <RefreshCw className={`h-3 w-3 mr-1 ${checkingLcConnection ? "animate-spin" : ""}`} />
-                  {checkingLcConnection ? "Verifying…" : "Verify connection"}
+                  {checkingLcConnection ? crmCard.verifying : crmCard.verifyConnection}
                 </Button>
               )}
             </div>

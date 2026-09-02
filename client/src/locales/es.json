@@ -561,7 +561,27 @@
       "finishCta": "Terminar conexión",
       "reconnectCta": "Volver a conectar CRM",
       "manageCta": "Administrar integración",
-      "checkConnection": "Comprobar estado de conexión"
+      "checkConnection": "Comprobar estado de conexión",
+      "label": "Integración CRM",
+      "previewConnectionUrl": "Vista previa de la URL de conexión",
+      "loadingPreview": "Cargando vista previa de la conexión…",
+      "debugTitle": "Diagnóstico de conexión CRM",
+      "openingAuthorization": "Abriendo la autorización de tu CRM…",
+      "marketplaceCta": "Abrir Marketplace",
+      "loading": "Cargando…",
+      "verifyError": "No se pudo verificar la conexión con el servidor. Aún puedes abrir el Marketplace para instalar o administrar tu integración de CRM.",
+      "manageDescription": "Instala la aplicación desde el Marketplace y verifica tu conexión",
+      "loadingInstallLink": "Cargando enlace de instalación…",
+      "checking": "Comprobando…",
+      "check": "Comprobar",
+      "verifying": "Verificando…",
+      "verifyConnection": "Verificar conexión",
+      "connectedToast": "CRM conectado",
+      "checkFailed": "No se pudo comprobar el estado de la conexión. Inténtalo de nuevo.",
+      "debugDescription": "Diagnóstico temporal de la vista previa de conexión.",
+      "debugWarnings": "Avisos",
+      "debugClose": "Cerrar",
+      "debugOpenRedirect": "Abrir página de redirección de diagnóstico"
     }
   },
   "home": {

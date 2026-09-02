@@ -7,6 +7,7 @@ import {
   isPublicLocaleAuthoritativePath,
   parseLocalizedPath,
 } from "@shared/localeRoutes";
+import { isCrmMarketplaceHandoffRedirect } from "@shared/ghlOAuthHandoff";
 import {
   normalizeUserLanguage,
   type UserLanguage,
@@ -62,8 +63,7 @@ export async function applyDatabaseLanguagePreference(
     return;
   }
 
-  const lang = normalizeUserLanguage(rawLanguage);
-  if (!lang) return;
+  const lang = normalizeUserLanguage(rawLanguage) ?? "en";
 
   markLanguagePersisted(lang);
 
@@ -136,11 +136,27 @@ export function resolveSignupLanguagePreference(): UserLanguage {
       if (redirectParsed.isLocalePrefixed && redirectParsed.isSupported) {
         return redirectParsed.locale as UserLanguage;
       }
+      // Marketplace handoff must not persist browser/detector language.
+      if (isCrmMarketplaceHandoffRedirect(redirect)) {
+        const stored = normalizeUserLanguage(
+          typeof localStorage !== "undefined" ? localStorage.getItem("whachatcrm_language") : null,
+        );
+        return stored || "en";
+      }
     } catch {
       /* ignore */
     }
   }
   return normalizeUserLanguage(getCurrentLanguage()) || "en";
+}
+
+/** Authenticated in-app locale: saved account language, else current i18n (never navigator). */
+export function resolveAuthenticatedAppLocale(userLanguage: unknown): UserLanguage {
+  return (
+    getExplicitSessionLanguage() ||
+    normalizeUserLanguage(userLanguage) ||
+    getCurrentLanguage()
+  );
 }
 
 /** Test-only reset of module session state. */

@@ -812,7 +812,27 @@
       "finishCta": "Finish connection",
       "reconnectCta": "Reconnect CRM",
       "manageCta": "Manage integration",
-      "checkConnection": "Check connection status"
+      "checkConnection": "Check connection status",
+      "label": "CRM Integration",
+      "previewConnectionUrl": "Preview connection URL",
+      "loadingPreview": "Loading connection preview…",
+      "debugTitle": "CRM connection diagnostics",
+      "openingAuthorization": "Opening your CRM authorization…",
+      "marketplaceCta": "Open Marketplace",
+      "loading": "Loading…",
+      "verifyError": "Could not verify connection with the server. You can still open the marketplace to install or manage your CRM integration.",
+      "manageDescription": "Install the app from the Marketplace and verify your connection",
+      "loadingInstallLink": "Loading install link…",
+      "checking": "Checking…",
+      "check": "Check",
+      "verifying": "Verifying…",
+      "verifyConnection": "Verify connection",
+      "connectedToast": "CRM connected",
+      "checkFailed": "Could not check connection status. Please try again.",
+      "debugDescription": "Temporary diagnostic from the connection preview.",
+      "debugWarnings": "Warnings",
+      "debugClose": "Close",
+      "debugOpenRedirect": "Open debug redirect page"
     }
   },
   "rge": {

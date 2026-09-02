@@ -20,12 +20,15 @@ i18n
       en: { translation: en },
     },
     fallbackLng: 'en',
+    lng: 'en',
     supportedLngs: ['en', 'he', 'es'],
     interpolation: {
       escapeValue: false,
     },
     detection: {
-      order: ['localStorage', 'navigator'],
+      // Authenticated + first-visit locale must not follow Accept-Language / navigator.
+      // Explicit user choice and URL locale write whachatcrm_language; DB restore is authoritative in-app.
+      order: ['localStorage'],
       lookupLocalStorage: 'whachatcrm_language',
       caches: ['localStorage'],
     },

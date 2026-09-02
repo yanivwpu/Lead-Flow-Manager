@@ -142,10 +142,10 @@ test("7. No duplicated state descriptions", () => {
 });
 
 test("8. Diagnostic URL hidden for ordinary users", () => {
-  assert.equal(integrationsSrc.split("Preview connection URL").length - 1, 1);
+  assert.match(integrationsSrc, /previewConnectionUrl/);
   assert.match(
     integrationsSrc,
-    /isLeadConnector && canAccessCrmDiagnostics && !lcConnected && \([\s\S]{0,800}?Preview connection URL/,
+    /isLeadConnector && canAccessCrmDiagnostics && !lcConnected && \([\s\S]{0,800}?previewConnectionUrl/,
   );
   assert.match(integrationsSrc, /lcStatus\?\.canAccessCrmDiagnostics \? \(/);
 });

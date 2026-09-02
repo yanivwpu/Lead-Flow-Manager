@@ -126,6 +126,8 @@ test("i18n changeLanguage updates localStorage, lang, dir, and notifies listener
   assert.match(i18n, /document\.documentElement\.lang/);
   assert.match(i18n, /languageChanged/);
   assert.match(i18n, /split\('-'\)\[0\]/);
+  assert.match(i18n, /order:\s*\[\s*'localStorage'\s*\]/);
+  assert.doesNotMatch(i18n, /order:\s*\[[^\]]*navigator/);
 });
 
 test("logout keeps localStorage language preference", () => {
@@ -152,6 +154,13 @@ test("bootstrap prefers URL locale and forces English i18n on unprefixed Phase 2
   assert.match(boot, /parseLocalizedPath/);
   assert.match(boot, /changeLanguage\("en"\)|changeLanguage\('en'\)/);
   assert.doesNotMatch(boot, /\/api\/auth\/me|applyDatabaseLanguagePreference/);
+});
+
+test("authenticated restore defaults missing DB language to en rather than leaving detector locale", () => {
+  const pref = read("client/src/lib/userLanguagePreference.ts");
+  assert.match(pref, /normalizeUserLanguage\(rawLanguage\) \?\? "en"/);
+  assert.match(pref, /resolveAuthenticatedAppLocale/);
+  assert.match(pref, /isCrmMarketplaceHandoffRedirect/);
 });
 
 test("RTL helpers: Hebrew uses rtl; others ltr via supportedLanguages", () => {

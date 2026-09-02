@@ -819,7 +819,27 @@
       "finishCta": "השלם חיבור",
       "reconnectCta": "חבר מחדש CRM",
       "manageCta": "ניהול אינטגרציה",
-      "checkConnection": "בדיקת מצב החיבור"
+      "checkConnection": "בדיקת מצב החיבור",
+      "label": "אינטגרציית CRM",
+      "previewConnectionUrl": "תצוגה מקדימה של כתובת החיבור",
+      "loadingPreview": "טוען תצוגה מקדימה של החיבור…",
+      "debugTitle": "אבחון חיבור CRM",
+      "openingAuthorization": "פותח את הרשאת ה-CRM שלך…",
+      "marketplaceCta": "פתח Marketplace",
+      "loading": "טוען…",
+      "verifyError": "לא ניתן לאמת את החיבור עם השרת. עדיין אפשר לפתוח את Marketplace כדי להתקין או לנהל את אינטגרציית ה-CRM.",
+      "manageDescription": "התקינו את האפליקציה מ-Marketplace ואמתו את החיבור",
+      "loadingInstallLink": "טוען קישור התקנה…",
+      "checking": "בודק…",
+      "check": "בדיקה",
+      "verifying": "מאמת…",
+      "verifyConnection": "אמת חיבור",
+      "connectedToast": "CRM מחובר",
+      "checkFailed": "לא ניתן לבדוק את מצב החיבור. נסו שוב.",
+      "debugDescription": "אבחון זמני מתצוגת החיבור המקדימה.",
+      "debugWarnings": "אזהרות",
+      "debugClose": "סגור",
+      "debugOpenRedirect": "פתח דף הפניה לאבחון"
     }
   },
   "rge": {
