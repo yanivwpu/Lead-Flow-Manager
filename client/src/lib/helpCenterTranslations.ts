@@ -123,7 +123,7 @@ WhachatCRM brings supported channels into one unified inbox so your team can rep
 - **WhatsApp**: Connected through Meta Embedded Signup
 - **Instagram DMs**: Connected through Meta and linked Facebook Pages
 - **Facebook Messenger**: Connected through your Facebook Page
-- **Web Chat**: Website widget for inbound conversations
+- **Web Chat**: Website Chat Widget for inbound conversations in the unified Inbox
 - **SMS, Telegram, and TikTok lead intake**: Available where enabled
 
 To connect:
@@ -275,7 +275,7 @@ Manage your WhachatCRM subscription and billing information.
 - Unlimited users
 - 2,000 active conversations
 - Up to 5 WhatsApp Business accounts
-- AI Chatbot and Website Widget
+- AI Chatbot and Website Chat Widget
 - Workflow automation
 - AI Copilot
 - AI Brain included
@@ -865,7 +865,7 @@ Administra tu suscripción e información de facturación de WhachatCRM.
 - Usuarios ilimitados
 - 2.000 conversaciones activas
 - Hasta 5 cuentas de WhatsApp Business
-- Chatbot con IA y widget web
+- Chatbot con IA y chat del sitio web
 - Automatización de flujos
 - AI Copilot
 - AI Brain incluido

@@ -166,14 +166,14 @@ test("plan highlights include Prospect AI + chatbot on paid (no Assist quotas)",
   assert.match(starter, /100 Prospect AI/);
   assert.match(starter, /WhatsApp templates \+ automation/);
   assert.ok(!/Basic WhatsApp templates/i.test(starter));
-  assert.match(starter, /AI Chatbot & Website Widget/);
+  assert.match(starter, /AI Chatbot & Website Chat Widget/);
   assert.match(starter, /Workflow Automation/);
   assert.ok(!/credits/i.test(starter));
   const pro = getPlanPricingHighlights("pro").join(" | ");
   assert.match(pro, /500 Prospect AI/);
   assert.match(pro, /WhatsApp templates \+ automation/);
   assert.ok(!/Basic WhatsApp templates/i.test(pro));
-  assert.match(pro, /AI Chatbot & Website Widget/);
+  assert.match(pro, /AI Chatbot & Website Chat Widget/);
   assert.match(pro, /Industry Growth Engines/);
   assert.match(pro, /AI Brain included/);
   assert.ok(!/credits/i.test(pro));

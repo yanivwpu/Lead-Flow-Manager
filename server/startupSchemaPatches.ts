@@ -1184,6 +1184,10 @@ WHERE user_id IS NULL;
 CREATE INDEX IF NOT EXISTS flow_jobs_user_id_idx ON flow_jobs (user_id);
 `.trim(),
   },
+  {
+    tag: "0090_widget_settings_neutral_default",
+    sql: `ALTER TABLE users ALTER COLUMN widget_settings SET DEFAULT '{"enabled":false,"color":"#10b981","welcomeMessage":"Hi! How can we help you today?","position":"right","showOnMobile":true,"showOnDesktop":true,"triggerType":"always","triggerDelaySeconds":5,"triggerScrollPercent":50,"pageRules":[],"allowedOrigins":[],"allowAnyOrigin":false}'::jsonb`,
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

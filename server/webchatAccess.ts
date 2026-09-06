@@ -29,8 +29,7 @@ export type WidgetSettingsShape = {
 };
 
 export function isWidgetEnabled(settings: Record<string, unknown> | undefined): boolean {
-  if (!settings) return true;
-  return settings.enabled !== false;
+  return settings?.enabled === true;
 }
 
 export function parseAllowedOrigins(settings: Record<string, unknown> | undefined): string[] {

@@ -474,6 +474,12 @@ app.use((req, res, next) => {
   // land before workers or HTTP traffic SELECT contacts columns from shared/schema.
   const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
   const schemaPatches = await applyStartupSchemaPatches();
+  try {
+    const { backfillLegacyDefaultWidgetSettings } = await import("./widgetSettingsBackfill");
+    await backfillLegacyDefaultWidgetSettings();
+  } catch (backfillErr) {
+    console.error("[WidgetSettingsBackfill] non-fatal failure", backfillErr);
+  }
   if (!schemaPatches.contactsAutomationsPausedPatchOk) {
     throw new Error(
       "[StartupSchema] FATAL: contacts automations_paused columns are not ready (patch 0083)",

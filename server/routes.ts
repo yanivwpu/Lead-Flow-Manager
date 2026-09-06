@@ -1185,10 +1185,10 @@ export async function registerRoutes(
       `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
 
     // Fetch widget settings if widgetId is known (best-effort, skip on error)
-    let color = "#25D366";
+    let color = "#10b981";
     let position = "right";
-    let welcomeMessage = "Hi there! How can we help you today?";
-    let enabled = true;
+    let welcomeMessage = "Hi! How can we help you today?";
+    let enabled = false;
     let triggerType: "always" | "delay" | "scroll" | "exit_intent" = "always";
     let triggerDelaySeconds = 5;
     let triggerScrollPercent = 50;
@@ -1208,8 +1208,8 @@ export async function registerRoutes(
         if (!access.ok) {
           enabled = false;
         } else {
+          enabled = true;
           const ws = access.owner.widgetSettings as any;
-          if (ws.enabled === false) { enabled = false; }
           if (ws.color) color = ws.color;
           if (ws.position) position = ws.position;
           if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
@@ -1319,7 +1319,7 @@ export async function registerRoutes(
 
   function createButton() {
     btn = document.createElement('button');
-    btn.setAttribute('aria-label', 'Open chat');
+    btn.setAttribute('aria-label', 'Open website chat');
     btn.setAttribute('data-wcw', 'toggle');
     btn.style.cssText = [
       'position:fixed;bottom:20px;' + posStyle(),
@@ -1383,7 +1383,7 @@ export async function registerRoutes(
     frame.src = iframeSrc();
     frame.style.cssText = 'width:100%;height:100%;border:none;display:block;';
     frame.setAttribute('loading', 'lazy');
-    frame.setAttribute('title', 'Chat');
+    frame.setAttribute('title', 'Website chat');
     frame.setAttribute('allow', 'clipboard-write');
     container.appendChild(frame);
     document.body.appendChild(container);
@@ -1404,7 +1404,7 @@ export async function registerRoutes(
   function toggleChat() {
     chatOpen = !chatOpen;
     if (chatOpen) {
-      btn.setAttribute('aria-label', 'Close chat');
+      btn.setAttribute('aria-label', 'Close website chat');
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
       bubble.style.opacity = '0';
       bubble.style.pointerEvents = 'none';
@@ -1422,7 +1422,7 @@ export async function registerRoutes(
         });
       }
     } else {
-      btn.setAttribute('aria-label', 'Open chat');
+      btn.setAttribute('aria-label', 'Open website chat');
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
       if (frameContainer) {
         frameContainer.style.transform = 'scale(0.9) translateY(16px)';
@@ -1533,35 +1533,7 @@ export async function registerRoutes(
     res.send(js);
   });
 
-  // ============= Website Widget Settings Endpoints =============
-  
-  const defaultWidgetPageRules = [
-    { urlContains: "/pricing", greeting: "Questions about pricing?", prefilledMessage: "Hi! I have a question about your pricing.", suggestedQuestions: [] as string[] },
-    { urlContains: "/contact", greeting: "Let us get in touch", prefilledMessage: "Hi! I would like to get in touch.", suggestedQuestions: [] as string[] },
-    { urlContains: "/services", greeting: "Tell us what you need", prefilledMessage: "Hi! I am interested in your services.", suggestedQuestions: [] as string[] },
-  ];
-
-  const baseWidgetSettings = {
-    enabled: false,
-    color: "#25D366",
-    welcomeMessage: "Hi there! How can we help you today?",
-    position: "right" as const,
-    showOnMobile: true,
-    showOnDesktop: true,
-    triggerType: "always" as const,
-    triggerDelaySeconds: 5,
-    triggerScrollPercent: 50,
-    pageRules: defaultWidgetPageRules,
-  };
-
-  function mergeWidgetSettingsFromDb(stored: unknown) {
-    const s = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
-    return {
-      ...baseWidgetSettings,
-      ...s,
-      pageRules: Array.isArray(s.pageRules) ? s.pageRules : baseWidgetSettings.pageRules,
-    };
-  }
+  // ============= Website Chat Widget Settings Endpoints =============
 
   // Get widget settings
   app.get("/api/widget-settings", async (req, res) => {
@@ -1573,10 +1545,20 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
+      const {
+        classifyWidgetSettings,
+        mergeNeutralWidgetSettings,
+        resolveWidgetActivationState,
+      } = await import("@shared/webchatWidgetSettings");
+      const classified = classifyWidgetSettings(user.widgetSettings);
+      let merged = mergeNeutralWidgetSettings(user.widgetSettings) as Record<string, unknown>;
+      if (classified === "exact_legacy_default") {
+        await storage.updateUser(req.user.id, { widgetSettings: merged });
+      }
       const widgetPublicId = await getWidgetPublicIdForUser(req.user.id);
-      const merged = mergeWidgetSettingsFromDb(user.widgetSettings) as Record<string, unknown>;
-      const { publicWidgetEmbedDecision } = await import("@shared/webchatOriginPolicy");
-      const embed = publicWidgetEmbedDecision(merged);
+      const activation = resolveWidgetActivationState(merged);
+      const { normalizeAllowedOriginsList } = await import("@shared/webchatOriginPolicy");
+      const originCount = normalizeAllowedOriginsList(merged.allowedOrigins).length;
       const { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } = await import(
         "./webchatServerAiRollout"
       );
@@ -1584,9 +1566,9 @@ export async function registerRoutes(
         ...merged,
         widgetPublicId,
         originDiagnostics: {
-          canPubliclyEmbed: embed.ok,
-          reason: embed.ok ? (embed.allowAny ? "allow_any" : "ok") : embed.reason,
-          allowedOriginCount: embed.ok ? embed.allowedOrigins.length : 0,
+          canPubliclyEmbed: activation.effectivePublic,
+          reason: activation.reason,
+          allowedOriginCount: originCount,
           allowAnyOrigin: merged.allowAnyOrigin === true,
           httpsRequiredInProduction: true,
           localhostAllowedInDevelopment: true,
@@ -1655,7 +1637,10 @@ export async function registerRoutes(
       }
       
       const user = await storage.getUserForSession(req.user.id);
-      const currentSettings = mergeWidgetSettingsFromDb(user?.widgetSettings);
+      const { mergeNeutralWidgetSettings, validateWidgetPageRules, hasWidgetOriginPrerequisite } = await import(
+        "@shared/webchatWidgetSettings"
+      );
+      const currentSettings = mergeNeutralWidgetSettings(user?.widgetSettings);
       
       const patch = Object.fromEntries(
         Object.entries(validation.data).filter(([, v]) => v !== undefined)
@@ -1667,8 +1652,15 @@ export async function registerRoutes(
       }
 
       if (Array.isArray(patch.pageRules)) {
+        const nonempty = (patch.pageRules as Array<Record<string, unknown>>).filter(
+          (rule) => String(rule.urlContains || "").trim(),
+        );
+        const pageRuleCheck = validateWidgetPageRules(nonempty);
+        if (!pageRuleCheck.ok) {
+          return res.status(400).json({ error: pageRuleCheck.error, code: "INVALID_PAGE_RULES" });
+        }
         const scoped: typeof patch.pageRules = [];
-        for (const rule of patch.pageRules as Array<Record<string, unknown>>) {
+        for (const rule of pageRuleCheck.rules as Array<Record<string, unknown>>) {
           const flowId = typeof rule.chatbotFlowId === "string" ? rule.chatbotFlowId.trim() : "";
           if (flowId) {
             const owned = await getChatbotFlowForWorkspace(req.user.id, flowId);
@@ -1682,15 +1674,16 @@ export async function registerRoutes(
       }
       
       const newSettings = { ...currentSettings, ...patch } as Record<string, unknown>;
-      const { publicWidgetEmbedDecision } = await import("@shared/webchatOriginPolicy");
-      if (newSettings.enabled === true) {
-        const embed = publicWidgetEmbedDecision(newSettings);
-        if (!embed.ok) {
+      newSettings.allowAnyOrigin = newSettings.allowAnyOrigin === true;
+      newSettings.enabled = newSettings.enabled === true;
+      if (!hasWidgetOriginPrerequisite(newSettings) && newSettings.enabled === true) {
+        if (patch.enabled === true) {
           return res.status(400).json({
-            error: "Add at least one allowed website origin, or enable “Allow on any website”, before activating the widget.",
+            error: "Add a website domain before enabling the widget.",
             code: "ORIGIN_REQUIRED",
           });
         }
+        newSettings.enabled = false;
       }
 
       await storage.updateUser(req.user.id, { widgetSettings: newSettings });

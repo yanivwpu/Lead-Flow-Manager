@@ -37,7 +37,7 @@ export function MobileNav() {
       ? [{ label: t('nav.prospectAi', 'Prospect AI'), href: PROSPECT_AI_PATH, testId: "prospect-ai" }]
       : []),
     { label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "templates" },
-    { label: t('nav.websiteWidget', 'Website Widget'), href: "/app/widget", testId: "website-widget" },
+    { label: t('nav.websiteWidget', 'Website Chat Widget'), href: "/app/widget", testId: "website-widget" },
     { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },
     { label: t('nav.aiFeatures', 'AI Features'), href: "/app/ai-brain", testId: "ai-features" },
     { label: t('nav.search', 'Search'), href: "/app/search", testId: "search" },

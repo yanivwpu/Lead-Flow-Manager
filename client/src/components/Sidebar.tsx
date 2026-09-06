@@ -113,7 +113,7 @@ export function Sidebar() {
       label: t("nav.toolsSetup", "Tools & Setup"),
       items: [
         { icon: FileText, label: t("nav.templates", "Templates"), href: "/app/templates", testId: "sidebar-templates" },
-        { icon: Globe, label: t("nav.widget", "Website Widget"), href: "/app/widget", testId: "sidebar-widget" },
+        { icon: Globe, label: t("nav.widget", "Website Chat Widget"), href: "/app/widget", testId: "sidebar-widget" },
         { icon: Plug, label: t("nav.integrations", "Integrations"), href: "/app/integrations", testId: "sidebar-integrations" },
         { icon: Search, label: t("common.search", "Search"), href: "/app/search", testId: "sidebar-search" },
       ],

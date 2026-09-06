@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { 
   Copy, Check, Smartphone, Monitor, MessageCircle,
@@ -27,8 +39,15 @@ import {
   buildWebchatIframeSnippet,
   buildWebchatScriptSnippet,
 } from "@shared/webchatWidgetSnippet";
+import {
+  leftoverLegacyExamplePageRules,
+  NEUTRAL_WIDGET_COLOR,
+  NEUTRAL_WIDGET_SETTINGS,
+  resolveWidgetActivationState,
+  widgetSurfaceStatus,
+} from "@shared/webchatWidgetSettings";
 
-/** Website → WhatsApp widget settings UI (Appearance / Page Rules layout + stable rule ids). */
+/** Website Chat Widget settings — Inbox channel `webchat`, not WhatsApp click-to-chat. */
 
 export type WidgetTriggerType = "always" | "delay" | "scroll" | "exit_intent";
 
@@ -68,25 +87,43 @@ interface WidgetSettings {
   };
 }
 
-const DEFAULT_PAGE_RULES: WidgetPageRule[] = [
-  {
-    id: "default-pricing",
-    urlContains: "/pricing",
-    greeting: "Questions about pricing?",
-    prefilledMessage: "Hi! I have a question about your pricing.",
-  },
-  {
-    id: "default-contact",
-    urlContains: "/contact",
-    greeting: "Let us get in touch",
-    prefilledMessage: "Hi! I would like to get in touch.",
-  },
-  {
-    id: "default-services",
-    urlContains: "/services",
-    greeting: "Tell us what you need",
-    prefilledMessage: "Hi! I am interested in your services.",
-  },
+const DEFAULT_SETTINGS: WidgetSettings = {
+  enabled: NEUTRAL_WIDGET_SETTINGS.enabled,
+  color: NEUTRAL_WIDGET_SETTINGS.color,
+  welcomeMessage: NEUTRAL_WIDGET_SETTINGS.welcomeMessage,
+  position: NEUTRAL_WIDGET_SETTINGS.position,
+  showOnMobile: NEUTRAL_WIDGET_SETTINGS.showOnMobile,
+  showOnDesktop: NEUTRAL_WIDGET_SETTINGS.showOnDesktop,
+  triggerType: NEUTRAL_WIDGET_SETTINGS.triggerType,
+  triggerDelaySeconds: NEUTRAL_WIDGET_SETTINGS.triggerDelaySeconds,
+  triggerScrollPercent: NEUTRAL_WIDGET_SETTINGS.triggerScrollPercent,
+  pageRules: [],
+  allowedOrigins: [],
+  allowAnyOrigin: false,
+};
+
+function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): WidgetSettings {
+  if (!input || typeof input !== "object") {
+    return { ...DEFAULT_SETTINGS, pageRules: [] };
+  }
+  return {
+    ...DEFAULT_SETTINGS,
+    ...input,
+    pageRules: Array.isArray(input.pageRules)
+      ? normalizePageRulesFromServer(input.pageRules as WidgetPageRule[])
+      : [],
+    allowAnyOrigin: input.allowAnyOrigin === true,
+    enabled: input.enabled === true,
+  };
+}
+
+const COLOR_PRESETS = [
+  { name: "Brand Green", value: NEUTRAL_WIDGET_COLOR },
+  { name: "Green", value: "#25D366" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Purple", value: "#8b5cf6" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Pink", value: "#ec4899" },
 ];
 
 function newRuleId(): string {
@@ -160,41 +197,6 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageR
   };
 }
 
-const DEFAULT_SETTINGS: WidgetSettings = {
-  enabled: false,
-  color: "#25D366",
-  welcomeMessage: "Hi there! How can we help you today?",
-  position: "right",
-  showOnMobile: true,
-  showOnDesktop: true,
-  triggerType: "always",
-  triggerDelaySeconds: 5,
-  triggerScrollPercent: 50,
-  pageRules: DEFAULT_PAGE_RULES,
-};
-
-function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): WidgetSettings {
-  if (!input || typeof input !== "object") {
-    return { ...DEFAULT_SETTINGS, pageRules: DEFAULT_PAGE_RULES.map((r) => ({ ...r })) };
-  }
-  return {
-    ...DEFAULT_SETTINGS,
-    ...input,
-    pageRules: Array.isArray(input.pageRules)
-      ? normalizePageRulesFromServer(input.pageRules as WidgetPageRule[])
-      : DEFAULT_PAGE_RULES.map((r) => ({ ...r })),
-  };
-}
-
-const COLOR_PRESETS = [
-  { name: "WhatsApp Green", value: "#25D366" },
-  { name: "Brand Green", value: "#10b981" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Purple", value: "#8b5cf6" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Pink", value: "#ec4899" },
-];
-
 function WidgetPreview({ settings }: { settings: WidgetSettings }) {
   const [isOpen, setIsOpen] = useState(false);
   
@@ -251,6 +253,7 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
             <button 
               onClick={() => setIsOpen(false)}
               className="absolute top-1 right-1 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30"
+              aria-label="Close website chat preview"
               data-testid="button-close-preview"
             >
               ×
@@ -261,6 +264,7 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
             onClick={() => setIsOpen(true)}
             className="w-8 h-8 sm:w-10 sm:h-10 rounded-full shadow-lg flex items-center justify-center text-white transition-transform hover:scale-110"
             style={{ backgroundColor: settings.color }}
+            aria-label="Open website chat"
             data-testid="button-open-preview"
           >
             <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -278,15 +282,18 @@ function WidgetPreview({ settings }: { settings: WidgetSettings }) {
 }
 
 export function WebsiteWidget() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const originsSectionRef = useRef<HTMLDivElement | null>(null);
   const [copiedType, setCopiedType] = useState<
     "script" | "iframe" | "iframeParent" | "hosted" | null
   >(null);
   const [settings, setSettings] = useState<WidgetSettings>(() => ({
     ...DEFAULT_SETTINGS,
-    pageRules: DEFAULT_PAGE_RULES.map((r) => ({ ...r })),
+    pageRules: [],
   }));
+  const [enableBlockedHint, setEnableBlockedHint] = useState(false);
   const [leadSource, setLeadSource] = useState("");
   /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
   const didHydrateFromWidgetQuery = useRef(false);
@@ -427,6 +434,7 @@ export function WebsiteWidget() {
   };
 
   const removePageRule = (index: number) => {
+    if (!window.confirm("Remove this page rule?")) return;
     clearPageRulesSaveDebounce();
     setSettings((prev) => {
       const next = {
@@ -437,16 +445,31 @@ export function WebsiteWidget() {
       return next;
     });
   };
+
+  const activation = resolveWidgetActivationState(settings);
+  const surface = widgetSurfaceStatus(activation);
+  const showOriginHint = Boolean(surface.originHint) || enableBlockedHint;
+  const showLeftoverLegacyRules = leftoverLegacyExamplePageRules(settings);
+
+  const focusDomainSetup = () => {
+    setEnableBlockedHint(true);
+    originsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const el = document.querySelector<HTMLTextAreaElement>("[data-testid='input-allowed-origins']");
+    el?.focus();
+  };
   
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden bg-gray-50/50">
       <div className="p-3 sm:p-4 md:p-6 max-w-4xl mx-auto pb-20">
         <div className="mb-4 sm:mb-6">
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900" data-testid="text-page-title">
-            Website → WhatsApp
+            {t("widgetPage.title", "Website Chat Widget")}
           </h1>
           <p className="text-gray-500 mt-1 text-xs sm:text-sm max-w-xl">
-            Capture visitors and start WhatsApp conversations automatically.
+            {t(
+              "widgetPage.subtitle",
+              "Capture, qualify and assist website visitors directly inside your unified Inbox.",
+            )}
           </p>
         </div>
 
@@ -456,11 +479,18 @@ export function WebsiteWidget() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <CardTitle className="text-base sm:text-lg font-bold">Status</CardTitle>
-                  <CardDescription className="text-xs">Widget visibility</CardDescription>
+                  <CardDescription className="text-xs">Public availability on your website</CardDescription>
                 </div>
                 <Switch
-                  checked={settings.enabled}
-                  onCheckedChange={(enabled) => updateSettings({ enabled })}
+                  checked={surface.switchChecked}
+                  onCheckedChange={(enabled) => {
+                    if (enabled && !activation.hasOriginPrerequisite) {
+                      focusDomainSetup();
+                      return;
+                    }
+                    setEnableBlockedHint(false);
+                    updateSettings({ enabled });
+                  }}
                   data-testid="switch-widget-enabled"
                   className="data-[state=checked]:bg-emerald-500 shrink-0"
                 />
@@ -468,23 +498,25 @@ export function WebsiteWidget() {
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
               <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 w-fit">
-                {settings.enabled && savedSettings?.originDiagnostics?.canPubliclyEmbed ? (
+                {surface.switchChecked ? (
                   <>
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-xs text-emerald-700 font-medium">Active</span>
+                    <span className="text-xs text-emerald-700 font-medium" data-testid="text-widget-effective-status">
+                      {surface.widgetStatusLabel}
+                    </span>
                   </>
                 ) : (
                   <>
                     <div className="w-2 h-2 rounded-full bg-gray-400" />
-                    <span className="text-xs text-gray-600">
-                      {settings.enabled ? "Cannot activate yet" : "Disabled"}
+                    <span className="text-xs text-gray-600" data-testid="text-widget-effective-status">
+                      {surface.widgetStatusLabel}
                     </span>
                   </>
                 )}
               </div>
-              {settings.enabled && savedSettings?.originDiagnostics?.reason === "no_origins" && (
+              {showOriginHint && (
                 <p className="text-xs text-amber-800" data-testid="text-origin-required">
-                  Add at least one HTTPS website origin below, or turn on “Allow on any website”, before visitors can load this widget.
+                  Add a website domain before enabling the widget.
                 </p>
               )}
             </CardContent>
@@ -696,8 +728,7 @@ export function WebsiteWidget() {
                 <div>
                   <CardTitle className="text-base sm:text-lg font-semibold">Page Rules</CardTitle>
                   <CardDescription className="text-xs">
-                    If the visitor&apos;s URL contains your text, use that greeting and optional prefilled message.
-                    First matching rule wins.
+                    Optional rules for specific URLs. The first matching rule wins. No page-specific rules are configured until you add one.
                   </CardDescription>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addPageRule} className="shrink-0">
@@ -707,6 +738,30 @@ export function WebsiteWidget() {
               </div>
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
+              {showLeftoverLegacyRules && (
+                <div
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-2"
+                  data-testid="recommend-clear-legacy-rules"
+                >
+                  <p>
+                    These look like starter example rules (/pricing, /contact, /services). They were not changed automatically because this widget is customized. You can remove them if they do not apply.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateSettings({ pageRules: [] })}
+                    data-testid="button-clear-legacy-example-rules"
+                  >
+                    Remove example rules
+                  </Button>
+                </div>
+              )}
+              {settings.pageRules.length === 0 ? (
+                <p className="text-sm text-gray-500" data-testid="empty-page-rules">
+                  No page-specific rules are configured.
+                </p>
+              ) : null}
               {settings.pageRules.map((rule, index) => (
                 <div
                   key={rule.id}
@@ -731,7 +786,7 @@ export function WebsiteWidget() {
                     <Input
                       value={rule.urlContains}
                       onChange={(e) => updatePageRule(index, { urlContains: e.target.value })}
-                      placeholder="/pricing or ?campaign=spring"
+                      placeholder="/about or ?campaign=spring"
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-url-${index}`}
                     />
@@ -770,7 +825,7 @@ export function WebsiteWidget() {
                             .slice(0, 8),
                         })
                       }
-                      placeholder="What are your hours?, Book a demo"
+                      placeholder="Optional — e.g. What are your hours?"
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-questions-${index}`}
                     />
@@ -799,7 +854,7 @@ export function WebsiteWidget() {
                       <Input
                         value={rule.ctaLabel || ""}
                         onChange={(e) => updatePageRule(index, { ctaLabel: e.target.value })}
-                        placeholder="Book a demo"
+                        placeholder="Optional"
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-cta-label-${index}`}
                       />
@@ -810,7 +865,7 @@ export function WebsiteWidget() {
                     <Input
                       value={rule.ctaUrl || ""}
                       onChange={(e) => updatePageRule(index, { ctaUrl: e.target.value })}
-                      placeholder="https://…"
+                      placeholder="https://example.com/contact (optional)"
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-cta-url-${index}`}
                     />
@@ -832,46 +887,66 @@ export function WebsiteWidget() {
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">Public widget ID</h3>
                     <p className="text-xs text-slate-500">
-                      Used in embed snippets. Rotating invalidates the previous ID — replace existing snippets.
+                      This is a public installation identifier, not a secret. Rotating it invalidates existing embed snippets until you paste the new code.
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      const res = await fetch("/api/widget-settings/rotate-id", {
-                        method: "POST",
-                        credentials: "include",
-                      });
-                      if (res.ok) {
-                        didHydrateFromWidgetQuery.current = false;
-                        queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
-                      }
-                    }}
-                    data-testid="button-rotate-widget-id"
-                  >
-                    Rotate ID
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" data-testid="button-rotate-widget-id">
+                        Rotate ID
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Rotate the public widget ID?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Existing website snippets that use the current ID will stop loading. You will need to replace them with the new snippet. This does not change your Inbox conversations.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          data-testid="button-confirm-rotate-widget-id"
+                          onClick={async () => {
+                            const res = await fetch("/api/widget-settings/rotate-id", {
+                              method: "POST",
+                              credentials: "include",
+                            });
+                            if (res.ok) {
+                              didHydrateFromWidgetQuery.current = false;
+                              queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
+                            }
+                          }}
+                        >
+                          Rotate ID
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
                 <code className="block text-xs font-mono bg-slate-50 rounded p-2 break-all" data-testid="text-widget-public-id">
                   {widgetPublicId || "Loading…"}
                 </code>
-                <div className="space-y-1">
+                <div className="space-y-1" id="widget-origins" ref={originsSectionRef}>
                   <Label className="text-xs text-gray-600">Allowed website origins (required unless you allow any site)</Label>
                   <p className="text-[11px] text-slate-500">
                     Production origins must be HTTPS. Adding example.com also allows www.example.com (exact hosts only — subdomains are not wildcards). Localhost is allowed only in development.
                   </p>
                   <Textarea
                     value={(settings.allowedOrigins || []).join("\n")}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const allowedOrigins = e.target.value
+                        .split("\n")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                        .slice(0, 50);
                       updateSettings({
-                        allowedOrigins: e.target.value
-                          .split("\n")
-                          .map((s) => s.trim())
-                          .filter(Boolean)
-                          .slice(0, 50),
-                      })
-                    }
+                        allowedOrigins,
+                        ...(allowedOrigins.length === 0 && settings.allowAnyOrigin !== true
+                          ? { enabled: false }
+                          : {}),
+                      });
+                    }}
                     placeholder="https://www.example.com"
                     rows={2}
                     className="text-xs font-mono"
@@ -882,31 +957,44 @@ export function WebsiteWidget() {
                       type="checkbox"
                       className="mt-0.5"
                       checked={settings.allowAnyOrigin === true}
-                      onChange={(e) => updateSettings({ allowAnyOrigin: e.target.checked })}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const ok = window.confirm(
+                            "Allow this widget on any website? Anyone with the public widget ID can embed it. This is never turned on automatically.",
+                          );
+                          if (!ok) return;
+                        }
+                        updateSettings({ allowAnyOrigin: e.target.checked });
+                      }}
                       data-testid="checkbox-allow-any-origin"
                     />
                     <span>
-                      Allow on any website. Anyone who has this public widget ID can embed it. Use only if you understand the risk.
+                      Allow on any website. Anyone who has this public widget ID can embed it. Use only if you understand the risk. This is never enabled automatically.
                     </span>
                   </label>
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2" data-testid="section-webchat-ai-mode">
                 <h3 className="text-sm font-semibold text-slate-900">Web Chat AI replies</h3>
+                <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
+                  <li>Manual: your team replies in the Inbox.</li>
+                  <li>Suggest: AI prepares a suggestion in the Inbox but does not send.</li>
+                  <li>Auto: AI Brain can respond to eligible Web Chat conversations without the Inbox being open.</li>
+                </ul>
                 <p className="text-xs text-slate-500">
-                  Mode follows AI Brain settings
-                  {aiSettings?.aiMode ? ` (currently ${aiSettings.aiMode.replace("_", " ")})` : ""}.
-                  Auto requires AI Brain
-                  {subscription?.limits?.effectiveHasAIBrain ? " (available on this account)" : " (not entitled on this account)"}.
+                  Auto requires active Pro or trial AI Brain access
+                  {subscription?.limits?.effectiveHasAIBrain ? " (available on this account)" : " (not entitled on this account)"}
+                  , plus server rollout eligibility for this workspace. AI Brain availability does not automatically enable Auto.
+                  {aiSettings?.aiMode ? ` Current mode: ${aiSettings.aiMode.replace("_", " ")}.` : ""}
                 </p>
                 {savedSettings?.webchatServerAi && !savedSettings.webchatServerAi.rolloutEnabled && (
                   <p className="text-xs text-amber-800" data-testid="text-auto-rollout-off">
-                    Unattended Auto replies are rolled out server-side and are currently off for this workspace.
+                    Unattended Auto replies are currently off for this workspace.
                   </p>
                 )}
                 {savedSettings?.webchatServerAi?.rolloutEnabled && !savedSettings.webchatServerAi.allowlisted && (
                   <p className="text-xs text-amber-800" data-testid="text-auto-not-allowlisted">
-                    Auto rollout is on, but this workspace is not on the allowlist yet.
+                    Auto is available in this rollout, but this workspace is not included yet.
                   </p>
                 )}
               </div>
@@ -1006,7 +1094,7 @@ export function WebsiteWidget() {
                           inside a static <code className="rounded bg-slate-100 px-1">src</code>. This snippet creates the
                           iframe and appends{" "}
                           <code className="rounded bg-slate-100 px-1">?parentUrl=…</code> so greetings and prefills can
-                          match your real page URL (e.g. <code className="rounded bg-slate-100 px-1">/pricing</code>).
+                          match your real page URL (e.g. <code className="rounded bg-slate-100 px-1">/about</code>).
                         </p>
                         <div className="flex justify-end">
                           <Button

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   MessageCircle,
@@ -58,6 +58,7 @@ import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { buildWebchatScriptSnippet } from "@shared/webchatWidgetSnippet";
+import { resolveWidgetActivationState, widgetSurfaceStatus } from "@shared/webchatWidgetSettings";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -161,7 +162,7 @@ const CHANNEL_CONFIG: Record<Channel, {
   webchat: {
     color: '#3B82F6',
     label: 'Web Chat',
-    description: 'Embed a chat widget on your website',
+    description: "Website Chat Widget for your unified Inbox",
     isMessaging: true,
   },
   telegram: {
@@ -228,6 +229,7 @@ function ChannelStatusPill({ kind, label }: { kind: UnifiedPillKind; label?: str
 
 export function ChannelSettings() {
   const { user, sessionAligned } = useAuth();
+  const [, setLocation] = useLocation();
   const searchString = useSearch();
   const queryClient = useQueryClient();
   const [configChannel, setConfigChannel] = useState<Channel | null>(null);
@@ -462,9 +464,15 @@ export function ChannelSettings() {
     queryKey: withUserQueryScope(["/api/integrations/tiktok/lead-url"], user?.id),
     enabled: configChannel === "tiktok" && !!user?.id,
   });
-  const { data: widgetInstall } = useQuery<{ widgetPublicId?: string }>({
+  const { data: widgetInstall } = useQuery<{
+    widgetPublicId?: string;
+    enabled?: boolean;
+    allowedOrigins?: string[];
+    allowAnyOrigin?: boolean;
+    originDiagnostics?: { canPubliclyEmbed?: boolean; reason?: string };
+  }>({
     queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
-    enabled: configChannel === "webchat" && !!user?.id,
+    enabled: !!user?.id && sessionAligned,
   });
   const { data: telegramIngress } = useQuery<{ webhookUrl: string | null; secretConfigured?: boolean }>({
     queryKey: withUserQueryScope(["/api/integrations/telegram/webhook-url"], user?.id),
@@ -809,6 +817,22 @@ export function ChannelSettings() {
     const baseOk = "bg-gray-50 border-gray-200";
     const baseAmber = "bg-amber-50/60 border-amber-200";
     const baseErr = "bg-red-50/50 border-red-200";
+
+    if (channel === "webchat") {
+      const activation = resolveWidgetActivationState(widgetInstall);
+      const surface = widgetSurfaceStatus(activation);
+      const openWidget = () => setLocation("/app/widget");
+      return {
+        pill: surface.channelPill,
+        pillLabel: surface.widgetStatusLabel,
+        subline: surface.channelSubline,
+        action: "manage",
+        actionLabel: "Manage",
+        onAction: openWidget,
+        cardClass: surface.channelPill === "connected" ? baseOk : surface.channelPill === "needs_attention" ? baseAmber : baseNeutral,
+        showReceiveToggle: false,
+      };
+    }
 
     if (channel === "whatsapp") {
       if (waIntegrationStatus === undefined) {
@@ -1173,7 +1197,6 @@ export function ChannelSettings() {
 
       <div className="space-y-3">
         {(Object.keys(CHANNEL_CONFIG) as Channel[])
-          .filter((channel) => channel !== "webchat")
           .map((channel) => {
             const config = CHANNEL_CONFIG[channel];
             const row = resolveUnifiedChannelRow(channel);
@@ -1192,6 +1215,13 @@ export function ChannelSettings() {
                     <div className="w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0 bg-[#EA4335]">
                       <Mail className="w-5 h-5 text-white" />
                     </div>
+                  ) : channel === "webchat" ? (
+                    <div
+                      className="w-10 h-10 flex items-center justify-center rounded-lg flex-shrink-0"
+                      style={{ backgroundColor: CHANNEL_CONFIG.webchat.color }}
+                    >
+                      <MessageCircle className="w-5 h-5 text-white" data-testid="icon-webchat-neutral" />
+                    </div>
                   ) : (
                     <ChannelBrandIcon channel={channel as ChannelWithBrandLogo} className="shrink-0" />
                   )}
@@ -1199,6 +1229,11 @@ export function ChannelSettings() {
                     <div className="flex flex-wrap items-center gap-2 gap-y-1.5">
                       <span className="font-medium text-gray-900">{config.label}</span>
                       <ChannelStatusPill kind={row.pill} label={row.pillLabel} />
+                      {channel === "webchat" ? (
+                        <span className="sr-only" data-testid="text-webchat-effective-status">
+                          {row.pillLabel || row.subline}
+                        </span>
+                      ) : null}
                       {!config.isMessaging && (
                         <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
                           Lead intake
@@ -1650,7 +1685,7 @@ export function ChannelSettings() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5" style={{ color: CHANNEL_CONFIG.webchat.color }} />
-              Web Chat Widget
+              Website Chat Widget
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
@@ -1686,21 +1721,17 @@ export function ChannelSettings() {
               </Button>
             </div>
             <p className="text-xs text-gray-500">
-              Manage allowed domains, rotation, and page rules in Website Widget. Do not post messages to a URL that contains your account id.
+              Manage domains, rotation, and page rules in Website Chat Widget. Do not post messages to a URL that contains your account id.
             </p>
             <Button
               className="w-full"
               onClick={() => {
-                updateChannelMutation.mutate({
-                  channel: 'webchat',
-                  data: { isConnected: true, isEnabled: true },
-                });
                 setConfigChannel(null);
+                setLocation("/app/widget");
               }}
-              disabled={updateChannelMutation.isPending}
               data-testid="button-enable-webchat"
             >
-              Enable Web Chat
+              Open Website Chat Widget
             </Button>
           </div>
         </DialogContent>

@@ -55,12 +55,17 @@
     "chatbot": "Chatbot",
     "aiBrain": "AI Features",
     "templates": "Templates",
-    "widget": "Website Widget",
+    "widget": "Website Chat Widget",
+    "websiteWidget": "Website Chat Widget",
     "contacts": "Contacts",
     "integrations": "Integrations",
     "settings": "Settings",
     "help": "Help Center",
     "pricing": "Pricing"
+  },
+  "widgetPage": {
+    "title": "Website Chat Widget",
+    "subtitle": "Capture, qualify and assist website visitors directly inside your unified Inbox."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -294,7 +299,7 @@
     "features": {
       "unifiedInbox": "Unified inbox (all channels)",
       "whatsappWebchat": "WhatsApp + Web Chat",
-      "websiteWidget": "Website Widget",
+      "websiteWidget": "Website Chat Widget",
       "oneUser": "1 user",
       "activeConversations50": "50 active conversations / month",
       "autoRouting": "Auto channel routing",

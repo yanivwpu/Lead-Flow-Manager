@@ -142,8 +142,8 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   },
   freeUpsell: "Upgrade when you need chatbot, campaign automation, AI Brain, and more capacity.",
   starterCallout: {
-    title: "AI Chatbot & Website Widget",
-    body: "Capture, qualify and respond to website visitors automatically.",
+    title: "AI Chatbot & Website Chat Widget",
+    body: "Capture, qualify and assist website visitors in your unified Inbox.",
   },
   proCallout: {
     title: "Growth Engine Ready",
@@ -260,7 +260,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         q: "Is Chatbot included?",
-        a: "AI Chatbot & Website Widget is included on Pro. Free does not include the visual chatbot builder. Chatbot captures, qualifies, and responds to website visitors; AI Brain is included with Pro and makes conversations smarter.",
+        a: "AI Chatbot & Website Chat Widget is included on Pro. Free does not include the visual chatbot builder. Chatbot captures, qualifies, and responds to website visitors; AI Brain is included with Pro and makes conversations smarter.",
       },
       {
         q: "What is AI Brain?",
@@ -297,7 +297,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     prospectCampaigns: "Campaign builder",
     messageCreation: "Message Creation modes",
     prospectArchive: "Archive / Restore",
-    chatbotWidget: "AI Chatbot & Website Widget",
+    chatbotWidget: "AI Chatbot & Website Chat Widget",
     workflowAutomation: "Workflow Automation",
     followUps: "Follow-ups",
     aiBrain: "AI Brain",
@@ -349,7 +349,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     connectIntegrations: "Connect integrations",
     basicWhatsappTemplates: "Basic WhatsApp templates",
     whatsappTemplatesAutomation: "WhatsApp templates + automation",
-    chatbotWidget: "AI Chatbot & Website Widget",
+    chatbotWidget: "AI Chatbot & Website Chat Widget",
     workflowAutomation: "Workflow Automation",
     aiBrainIncluded: "AI Brain included",
     growthEnginesRequired: "Required plan for Industry Growth Engines",

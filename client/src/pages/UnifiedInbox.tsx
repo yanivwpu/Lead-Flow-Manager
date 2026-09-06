@@ -473,7 +473,7 @@ const SOURCE_LABELS: Record<string, string> = {
   whatsapp: 'WhatsApp',
   instagram: 'Instagram DM',
   facebook: 'Facebook',
-  webchat: 'Website Widget',
+  webchat: 'Web Chat',
   import: 'CSV Import',
   api: 'API',
   tiktok: 'TikTok',
@@ -489,7 +489,7 @@ const SOURCE_OPTIONS = [
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'instagram', label: 'Instagram DM' },
   { value: 'facebook', label: 'Facebook' },
-  { value: 'webchat', label: 'Website Widget' },
+  { value: 'webchat', label: 'Web Chat' },
   { value: 'import', label: 'CSV Import' },
   { value: 'api', label: 'API' },
 ];

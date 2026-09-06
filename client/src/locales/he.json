@@ -59,8 +59,8 @@
     "aiBrain": "תכונות AI",
     "aiFeatures": "תכונות AI",
     "templates": "תבניות",
-    "widget": "ווידג׳ט לאתר",
-    "websiteWidget": "ווידג׳ט לאתר",
+    "widget": "ווידג׳ט צ׳אט לאתר",
+    "websiteWidget": "ווידג׳ט צ׳אט לאתר",
     "contacts": "אנשי קשר",
     "integrations": "אינטגרציות",
     "settings": "הגדרות",
@@ -68,6 +68,10 @@
     "pricing": "מחירים",
     "more": "עוד",
     "search": "חיפוש"
+  },
+  "widgetPage": {
+    "title": "ווידג׳ט צ׳אט לאתר",
+    "subtitle": "קלטו, סננו ועזרו למבקרי האתר ישירות בתיבת הדואר הנכנס המאוחדת."
   },
   "dashboard": {
     "title": "לוח בקרה",
@@ -301,7 +305,7 @@
     "features": {
       "unifiedInbox": "תיבה מאוחדת (כל הערוצים)",
       "whatsappWebchat": "WhatsApp + צ׳אט באתר",
-      "websiteWidget": "ווידג׳ט לאתר",
+      "websiteWidget": "ווידג׳ט צ׳אט לאתר",
       "oneUser": "משתמש 1",
       "activeConversations50": "שיחות פעילות מוגבלות",
       "autoRouting": "ניתוב ערוצים אוטומטי",

@@ -59,8 +59,8 @@
     "aiBrain": "Funciones IA",
     "aiFeatures": "Funciones IA",
     "templates": "Plantillas",
-    "widget": "Widget Web",
-    "websiteWidget": "Widget Web",
+    "widget": "Chat del sitio web",
+    "websiteWidget": "Chat del sitio web",
     "contacts": "Contactos",
     "integrations": "Integraciones",
     "settings": "Configuración",
@@ -68,6 +68,10 @@
     "pricing": "Precios",
     "more": "Más",
     "search": "Buscar"
+  },
+  "widgetPage": {
+    "title": "Chat del sitio web",
+    "subtitle": "Captura, califica y atiende a los visitantes del sitio directamente en tu bandeja unificada."
   },
   "dashboard": {
     "title": "Panel de Control",
@@ -301,7 +305,7 @@
     "features": {
       "unifiedInbox": "Bandeja unificada (todos los canales)",
       "whatsappWebchat": "WhatsApp + Chat Web",
-      "websiteWidget": "Widget para Sitios Web",
+      "websiteWidget": "Chat del sitio web",
       "oneUser": "1 usuario",
       "activeConversations50": "Conversaciones activas limitadas",
       "autoRouting": "Enrutamiento automático de canales",

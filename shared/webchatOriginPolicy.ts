@@ -91,7 +91,7 @@ export type PublicEmbedDecision =
   | { ok: false; reason: "no_origins" | "disabled" };
 
 export function publicWidgetEmbedDecision(settings: Record<string, unknown> | undefined): PublicEmbedDecision {
-  const enabled = !settings || settings.enabled !== false;
+  const enabled = settings?.enabled === true;
   if (!enabled) return { ok: false, reason: "disabled" };
   const allowAny = parseAllowAnyOrigin(settings);
   const allowedOrigins = normalizeAllowedOriginsList(settings?.allowedOrigins);

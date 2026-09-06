@@ -31,7 +31,7 @@ function mergeWidgetEnabled(widgetSettings: unknown): boolean {
   const ws = widgetSettings && typeof widgetSettings === "object"
     ? (widgetSettings as Record<string, unknown>)
     : {};
-  return ws.enabled !== false;
+  return ws.enabled === true;
 }
 
 export async function buildAgentPageSettingsResponse(

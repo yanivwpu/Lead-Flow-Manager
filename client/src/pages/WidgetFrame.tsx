@@ -80,10 +80,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
-  const [widgetColor, setWidgetColor] = useState("#25D366");
-  const [widgetName, setWidgetName] = useState("Chat with us");
+  const [widgetColor, setWidgetColor] = useState("#10b981");
+  const [widgetName, setWidgetName] = useState("Website chat");
   const [settingsWelcome, setSettingsWelcome] = useState(
-    "Hi! How can we help you today? 👋"
+    "Hi! How can we help you today?"
   );
   const [apiPrefill, setApiPrefill] = useState("");
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);

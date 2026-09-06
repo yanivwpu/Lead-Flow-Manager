@@ -161,7 +161,7 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
     );
   }
   if (limits.chatbotEnabled) {
-    lines.push("AI Chatbot & Website Widget");
+    lines.push("AI Chatbot & Website Chat Widget");
   }
   if (limits.workflowsEnabled) {
     lines.push("Workflow Automation");

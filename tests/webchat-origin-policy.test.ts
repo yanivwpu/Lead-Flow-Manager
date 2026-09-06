@@ -43,6 +43,9 @@ import { originAllowed } from "../server/webchatAccess";
   assert.equal(listed.ok, true);
   const off = publicWidgetEmbedDecision({ enabled: false, allowedOrigins: ["https://www.example.com"] });
   assert.equal(off.ok, false);
+  const missingEnabled = publicWidgetEmbedDecision({ allowedOrigins: ["https://www.example.com"] });
+  assert.equal(missingEnabled.ok, false);
+  if (!missingEnabled.ok) assert.equal(missingEnabled.reason, "disabled");
 }
 
 {

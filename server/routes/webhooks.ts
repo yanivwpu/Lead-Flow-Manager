@@ -298,7 +298,7 @@ export function registerWebhookRoutes(app: Express): void {
       }
       const ws = access.owner.widgetSettings;
       const defaults = {
-        color: "#25D366",
+        color: "#10b981",
         welcomeMessage: "Hi! How can we help you today?",
       };
       const welcomeMessage =

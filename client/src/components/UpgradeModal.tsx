@@ -157,7 +157,7 @@ const UPGRADE_CONTENT: Record<
     ctaText: "Upgrade Plan",
     benefits: [
       `Pro: ${PROSPECT_AI_MONTHLY_QUOTAS.pro} discoveries/month`,
-      "AI Chatbot & Website Widget",
+      "AI Chatbot & Website Chat Widget",
       "Unlimited users",
       `${PLAN_LIMITS.pro.conversationsPerMonth.toLocaleString("en-US")} active conversations`,
     ],

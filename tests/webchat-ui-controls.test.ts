@@ -18,7 +18,10 @@ function read(rel: string): string {
   assert.match(website, /checkbox-allow-any-origin/);
   assert.match(website, /text-origin-required/);
   assert.match(website, /buildWebchatScriptSnippet/);
+  assert.match(website, /resolveWidgetActivationState/);
+  assert.match(website, /widgetSurfaceStatus/);
   assert.doesNotMatch(website, /input-rule-flow-/);
+  assert.doesNotMatch(website, /checked=\{settings\.enabled\}/);
 }
 
 {
