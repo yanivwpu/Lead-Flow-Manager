@@ -3,6 +3,8 @@ import { storage } from "../storage";
 import {
   applyWebchatPublicCacheHeaders,
   consumeWebchatContactCap,
+  consumeWebchatMediaGetRateLimits,
+  consumeWebchatMediaUploadRateLimits,
   consumeWebchatPollRateLimits,
   consumeWebchatRateLimits,
   matchWidgetPageRule,
@@ -13,7 +15,7 @@ import {
   WEBCHAT_GENERIC_RATE_LIMIT,
 } from "../webchatAccess";
 import { isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
-import { mergeWebchatPageContext, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
+import { mergeWebchatPageContext, parseHttpUrl, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
 import { resolveTelegramWebhookOwner, resolveTiktokLeadOwner } from "../ingressPublicTokens";
 import { getChatbotFlowForWorkspace } from "../tenantOwnership";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
@@ -21,6 +23,13 @@ import { handleCalendlyWebhook } from "../calendlyWebhook";
 import { handleGrowthEngineSetupCalendlyWebhook } from "../growthEngineSetupCalendly";
 import { handleMarketingDemoCalendlyWebhook } from "../marketingDemoCalendlyWebhook";
 import { scheduleHubSpotAutoSync } from "../hubspotAutoSync";
+import multer from "multer";
+import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
+
+const webchatVisitorUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: WEBCHAT_IMAGE_MAX_BYTES, files: 1 },
+});
 
 export function registerWebhookRoutes(app: Express): void {
   // ============= UNIFIED INBOX WEBHOOKS =============
@@ -298,7 +307,7 @@ export function registerWebhookRoutes(app: Express): void {
         strictOrigin: false,
       });
       if (!access.ok) {
-        return res.status(access.status).json(access.body);
+        return sendWebchatPublicJson(res, access.status, access.body);
       }
       const ws = access.owner.widgetSettings;
       const defaults = {
@@ -313,7 +322,9 @@ export function registerWebhookRoutes(app: Express): void {
       const chatGreeting =
         matched?.greeting && matched.greeting.trim() ? matched.greeting : welcomeMessage;
       const chatPrefill = matched?.prefilledMessage || "";
-      res.json({
+      const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
+      const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
+      return sendWebchatPublicJson(res, 200, {
         color:
           typeof ws.color === "string" && ws.color.trim() ? String(ws.color) : defaults.color,
         welcomeMessage,
@@ -323,9 +334,10 @@ export function registerWebhookRoutes(app: Express): void {
         suggestedQuestions: matched?.suggestedQuestions || [],
         ctaLabel: matched?.ctaLabel || "",
         ctaUrl: matched?.ctaUrl || "",
+        ...(leadForm ? { leadForm } : {}),
       });
     } catch {
-      return res.status(404).json(WEBCHAT_GENERIC_NOT_FOUND);
+      return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
     }
   });
 
@@ -368,14 +380,317 @@ export function registerWebhookRoutes(app: Express): void {
       }
 
       const { toPublicWebchatMessages } = await import("@shared/webchatPublicMessages");
+      const { buildSignedWebchatVisitorMediaUrl } = await import("../webchatVisitorMedia");
+      const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
       const messages = await storage.getMessages(conversation.id, 50);
-      return sendWebchatPublicJson(res, 200, toPublicWebchatMessages(messages));
+      return sendWebchatPublicJson(res, 200, toPublicWebchatMessages(messages, (message) => {
+        if (!isWebchatImageContentType(message.contentType)) return null;
+        return buildSignedWebchatVisitorMediaUrl({
+          widgetPublicId: access.owner.widgetPublicId,
+          visitorId,
+          messageId: message.id,
+        });
+      }));
     } catch (error) {
       console.error("Web chat messages error:", error);
       applyWebchatPublicCacheHeaders(res);
       res.status(500).json({ error: "Failed to fetch messages" });
     }
   });
+
+  app.get("/api/webchat/:userId/:visitorId/media/:messageId", async (req, res) => {
+    applyWebchatPublicCacheHeaders(res);
+    try {
+      const hrefParam =
+        typeof req.query.href === "string" ? req.query.href.slice(0, 4000) : "";
+      const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        parentUrl: hrefParam || undefined,
+        requireEnabled: true,
+        strictOrigin: false,
+      });
+      if (!access.ok) {
+        return sendWebchatPublicJson(res, access.status, access.body);
+      }
+      const visitorId = String(req.params.visitorId || "");
+      if (!isPublicWebchatVisitorId(visitorId)) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const allowed = await consumeWebchatMediaGetRateLimits({
+        req,
+        widgetPublicId: access.owner.widgetPublicId,
+        visitorId,
+      });
+      if (!allowed) {
+        return sendWebchatPublicJson(res, 429, WEBCHAT_GENERIC_RATE_LIMIT);
+      }
+      const contact = await storage.getContactByChannelId(access.owner.userId, "webchat", visitorId);
+      if (!contact || contact.userId !== access.owner.userId) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const conversation = await storage.getConversationByContactAndChannel(contact.id, "webchat");
+      if (!conversation || conversation.userId !== access.owner.userId) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const message = await storage.getMessage(String(req.params.messageId || ""));
+      if (
+        !message ||
+        message.userId !== access.owner.userId ||
+        message.conversationId !== conversation.id ||
+        message.contactId !== contact.id
+      ) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const exp = Number(req.query.exp);
+      const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+      const { verifyWebchatVisitorMedia, loadWebchatVisitorImageBytes } = await import(
+        "../webchatVisitorMedia"
+      );
+      const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
+      if (
+        !isWebchatImageContentType(message.contentType) ||
+        !verifyWebchatVisitorMedia({
+          widgetPublicId: access.owner.widgetPublicId,
+          visitorId,
+          messageId: message.id,
+          expiresUnixSec: exp,
+          signature: sig,
+        })
+      ) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const bytes = await loadWebchatVisitorImageBytes({
+        userId: access.owner.userId,
+        mediaUrl: message.mediaUrl,
+        mediaStorageKey: message.mediaStorageKey,
+      });
+      if (!bytes) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      res.setHeader("Content-Type", bytes.mime);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+      res.setHeader("Content-Disposition", "inline");
+      return res.status(200).send(bytes.buffer);
+    } catch {
+      return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+    }
+  });
+
+  app.post("/api/webchat/:userId/:visitorId/media", (req, res) => {
+    webchatVisitorUpload.single("file")(req, res, async (err) => {
+      try {
+        if (err) {
+          return sendWebchatPublicJson(res, 400, { error: "Invalid image" });
+        }
+        const parentUrlRaw = typeof req.body?.parentUrl === "string" ? req.body.parentUrl : "";
+        const parentUrl = parentUrlRaw.trim().slice(0, 2000);
+        if (parentUrl && !parseHttpUrl(parentUrl)) {
+          return sendWebchatPublicJson(res, 400, { error: "Invalid message" });
+        }
+        const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+          parentUrl: parentUrl || undefined,
+          requireEnabled: true,
+          strictOrigin: true,
+        });
+        if (!access.ok) {
+          return sendWebchatPublicJson(res, access.status, access.body);
+        }
+        const visitorId = String(req.params.visitorId || "");
+        if (!isPublicWebchatVisitorId(visitorId)) {
+          return sendWebchatPublicJson(res, 400, { error: "Invalid message" });
+        }
+        const allowed = await consumeWebchatMediaUploadRateLimits({
+          req,
+          widgetPublicId: access.owner.widgetPublicId,
+          visitorId,
+        });
+        if (!allowed) {
+          return sendWebchatPublicJson(res, 429, WEBCHAT_GENERIC_RATE_LIMIT);
+        }
+        const file = req.file;
+        if (!file?.buffer) {
+          return sendWebchatPublicJson(res, 400, { error: "Invalid image" });
+        }
+        const { prepareWebchatVisitorImage, storeWebchatVisitorImage } = await import(
+          "../webchatVisitorMedia"
+        );
+        const prepared = await prepareWebchatVisitorImage({
+          buffer: file.buffer,
+          declaredMime: file.mimetype,
+        });
+        if (!prepared.ok) {
+          return sendWebchatPublicJson(res, 400, { error: "Invalid image" });
+        }
+        const existing = await storage.getContactByChannelId(access.owner.userId, "webchat", visitorId);
+        const newContactOk = await consumeWebchatContactCap({
+          widgetPublicId: access.owner.widgetPublicId,
+          visitorId,
+          isNewContact: !existing,
+        });
+        if (!newContactOk) {
+          return sendWebchatPublicJson(res, 429, WEBCHAT_GENERIC_RATE_LIMIT);
+        }
+        const stored = await storeWebchatVisitorImage({
+          userId: access.owner.userId,
+          buffer: prepared.buffer,
+          mime: prepared.mime,
+        });
+        const caption =
+          typeof req.body?.caption === "string" ? req.body.caption.trim().slice(0, 4000) : "";
+        const source = typeof req.body?.source === "string" ? req.body.source.trim().slice(0, 80) : undefined;
+        const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 120) : undefined;
+        const uploadId =
+          typeof req.body?.uploadId === "string"
+            ? req.body.uploadId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80)
+            : "";
+        const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
+          "@shared/agent/webchatLeadContext"
+        );
+        const webchatLeadSource = resolveWebchatLeadSource({ source, parentUrl });
+        const { channelService } = await import("../channelService");
+        const result = await channelService.processIncomingMessage({
+          userId: access.owner.userId,
+          channel: "webchat",
+          channelContactId: visitorId,
+          contactName: name || resolveWebchatVisitorDisplayName(webchatLeadSource),
+          content: caption,
+          contentType: "image",
+          mediaUrl: stored.mediaUrl,
+          mediaStorageKey: stored.mediaStorageKey,
+          mediaFilename: "photo",
+          externalMessageId: uploadId ? `webchat_media_${visitorId}_${uploadId}` : undefined,
+          webchatLeadSource,
+        });
+        if (!result.success) {
+          return sendWebchatPublicJson(res, 500, { error: "Failed to process message" });
+        }
+        return sendWebchatPublicJson(res, 200, { success: true, visitorId });
+      } catch (error) {
+        console.error("[Inbound] Web chat media error:", error);
+        return sendWebchatPublicJson(res, 500, { error: "Failed to process message" });
+      }
+    });
+  });
+
+  app.post("/api/webchat/:userId/:visitorId/forms", async (req, res) => {
+    try {
+      const parentUrl =
+        typeof req.body?.parentUrl === "string" ? req.body.parentUrl.trim().slice(0, 2000) : "";
+      if (parentUrl && !parseHttpUrl(parentUrl)) {
+        return sendWebchatPublicJson(res, 400, { error: "Invalid form" });
+      }
+      const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        parentUrl: parentUrl || undefined,
+        requireEnabled: true,
+        strictOrigin: true,
+      });
+      if (!access.ok) {
+        return sendWebchatPublicJson(res, access.status, access.body);
+      }
+      const visitorId = String(req.params.visitorId || "");
+      if (!isPublicWebchatVisitorId(visitorId)) {
+        return sendWebchatPublicJson(res, 400, { error: "Invalid form" });
+      }
+      const allowed = await consumeWebchatRateLimits({
+        req,
+        widgetPublicId: access.owner.widgetPublicId,
+        visitorId,
+      });
+      if (!allowed) {
+        return sendWebchatPublicJson(res, 429, WEBCHAT_GENERIC_RATE_LIMIT);
+      }
+      const contact = await storage.getContactByChannelId(access.owner.userId, "webchat", visitorId);
+      if (!contact || contact.userId !== access.owner.userId) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const conversation = await storage.getConversationByContactAndChannel(contact.id, "webchat");
+      if (!conversation || conversation.userId !== access.owner.userId) {
+        return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
+      }
+      const { sanitizeWebchatFormDefinition, validateWebchatFormSubmission, toInboxFormSubmission } =
+        await import("@shared/webchatStructuredForm");
+      const formId = typeof req.body?.formId === "string" ? req.body.formId.trim().toLowerCase() : "";
+      const messageId = typeof req.body?.messageId === "string" ? req.body.messageId.trim() : "";
+      let form = sanitizeWebchatFormDefinition(
+        (access.owner.widgetSettings as { leadForm?: unknown } | undefined)?.leadForm,
+      );
+      if (messageId) {
+        const outbound = await storage.getMessage(messageId);
+        if (
+          outbound &&
+          outbound.userId === access.owner.userId &&
+          outbound.conversationId === conversation.id &&
+          outbound.contactId === contact.id &&
+          outbound.direction === "outbound"
+        ) {
+          const fromMessage = sanitizeWebchatFormDefinition(
+            (outbound.templateVariables as { webchatForm?: unknown } | null)?.webchatForm,
+          );
+          if (fromMessage) form = fromMessage;
+        }
+      }
+      if (form && formId && form.id !== formId) {
+        const recent = await storage.getMessages(conversation.id, 50);
+        const match = recent.find((row) => {
+          if (row.direction !== "outbound" || row.contentType !== "form") return false;
+          const def = sanitizeWebchatFormDefinition(
+            (row.templateVariables as { webchatForm?: unknown } | null)?.webchatForm,
+          );
+          return def?.id === formId;
+        });
+        form = match
+          ? sanitizeWebchatFormDefinition(
+              (match.templateVariables as { webchatForm?: unknown } | null)?.webchatForm,
+            )
+          : null;
+      }
+      if (!form) {
+        return sendWebchatPublicJson(res, 400, { error: "Invalid form" });
+      }
+      const validated = validateWebchatFormSubmission(form, req.body?.values);
+      if (!validated.ok) {
+        return sendWebchatPublicJson(res, 400, { error: validated.error });
+      }
+      const submission = toInboxFormSubmission(form, validated.values);
+      const { applyWebchatFormToContact } = await import("../webchatFormService");
+      await applyWebchatFormToContact({
+        userId: access.owner.userId,
+        contact,
+        form,
+        values: validated.values,
+        submission,
+      });
+      const { channelService } = await import("../channelService");
+      const result = await channelService.processIncomingMessage({
+        userId: access.owner.userId,
+        channel: "webchat",
+        channelContactId: visitorId,
+        contactName: contact.name,
+        content: submission.fields
+          .map((field) => `${field.label}: ${Array.isArray(field.value) ? field.value.join(", ") : String(field.value)}`)
+          .join(" / "),
+        contentType: "form_result",
+        templateVariables: { webchatFormSubmission: submission },
+        externalMessageId: `webchat_form_${visitorId}_${form.id}_${submission.submittedAt}`,
+      });
+      if (result.success && result.contact && result.conversation && !result.deduped) {
+        const { dispatchWebchatInboundWorkflows } = await import("../webchatInboundWorkflows");
+        void dispatchWebchatInboundWorkflows({
+          userId: access.owner.userId,
+          contact: result.contact,
+          conversation: result.conversation,
+          messageBody: result.message?.content || "Form submitted",
+          isNewConversation: Boolean(result.isNewConversation),
+          chatbotWillFire: Boolean(result.chatbotWillFire),
+        }).catch((err) => console.error("[WebchatWorkflows]", err instanceof Error ? err.message : err));
+      }
+      return sendWebchatPublicJson(res, 200, { success: true });
+    } catch (error) {
+      console.error("[Inbound] Web chat form error:", error);
+      return sendWebchatPublicJson(res, 500, { error: "Failed to process form" });
+    }
+  });
+
 
   // Unified inbox webhook for Twilio (secondary endpoint — primary is /api/webhook/twilio/incoming)
   app.post("/api/webhook/inbox/twilio", async (req, res) => {

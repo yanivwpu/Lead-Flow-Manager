@@ -931,6 +931,7 @@ class ChannelService {
     contentType: string;
     mediaUrl?: string;
     mediaFilename?: string;
+    mediaStorageKey?: string | null;
     platformMediaId?: string;
     telegramMedia?: { botToken: string; fileId: string };
   }): Promise<{
@@ -947,7 +948,13 @@ class ChannelService {
     const rawMediaUrl = p.mediaUrl?.trim() || "";
     const rawProviderMediaId = p.platformMediaId?.trim() || "";
     const hasMedia = !!rawMediaUrl || !!rawProviderMediaId || !!p.telegramMedia?.fileId;
-    if (!hasMedia || p.contentType === "text") {
+    if (
+      !hasMedia ||
+      p.contentType === "text" ||
+      p.contentType === "form" ||
+      p.contentType === "form_result" ||
+      p.contentType === "buttons"
+    ) {
       return {};
     }
 
@@ -967,6 +974,7 @@ class ChannelService {
         providerMediaUrl: null,
         providerMediaId: rawProviderMediaId || null,
         mediaType,
+        mediaStorageKey: p.mediaStorageKey || undefined,
       };
     }
 
@@ -1056,6 +1064,8 @@ class ChannelService {
     contentType?: string;
     mediaUrl?: string;
     mediaFilename?: string; // Actual filename for documents/attachments
+    mediaStorageKey?: string | null;
+    templateVariables?: Record<string, unknown>;
     platformMediaId?: string; // Platform-assigned media ID for proxy fetching (e.g. WhatsApp Meta mediaId)
     externalMessageId?: string;
     /** Telegram file_id + bot token — downloaded and stored like other channels */
@@ -1081,6 +1091,8 @@ class ChannelService {
       contentType = "text",
       mediaUrl,
       mediaFilename,
+      mediaStorageKey: inboundMediaStorageKey,
+      templateVariables,
       platformMediaId,
       externalMessageId,
       channelAccountId,
@@ -1301,6 +1313,7 @@ class ChannelService {
         contentType,
         mediaUrl,
         mediaFilename,
+        mediaStorageKey: inboundMediaStorageKey,
         platformMediaId,
         telegramMedia,
       });
@@ -1337,10 +1350,11 @@ class ChannelService {
         providerMediaId: persisted.providerMediaId ?? undefined,
         mediaMimeType: persisted.mediaMimeType ?? undefined,
         mediaSize: persisted.mediaSize ?? undefined,
-        mediaStorageKey: persisted.mediaStorageKey ?? undefined,
+        mediaStorageKey: persisted.mediaStorageKey ?? inboundMediaStorageKey ?? undefined,
         mediaStoredAt: persisted.mediaStoredAt ?? undefined,
         status: "delivered",
         externalMessageId,
+        ...(templateVariables ? { templateVariables } : {}),
       });
     } catch (err: unknown) {
       if (externalMessageId && isUniqueExternalMessageViolation(err)) {

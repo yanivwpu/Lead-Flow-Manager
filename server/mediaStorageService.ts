@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 import { objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
@@ -364,4 +364,127 @@ export async function uploadOutboundUserMedia(params: {
   const flatName = `${uuid}${ext}`;
   const fb = await putFallbackObjectOrLocal(flatName, buffer, contentType);
   return { mediaUrl: fb.publicUrl, mediaStorageKey: fb.storageKey };
+}
+
+function tenantMediaPrefix(userId: string): string {
+  return `media/${userId}/`;
+}
+
+function r2Client(): S3Client {
+  const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID!;
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
+    },
+  });
+}
+
+function inferOwnedStorageKey(params: {
+  userId: string;
+  mediaUrl?: string | null;
+}): string | null {
+  const url = String(params.mediaUrl || "").trim();
+  if (!url) return null;
+  const prefix = tenantMediaPrefix(params.userId);
+  try {
+    if (url.startsWith("/objects/uploads/")) {
+      return `uploads/${url.slice("/objects/uploads/".length).split("?")[0]}`;
+    }
+    if (url.startsWith("/uploads/")) {
+      return `uploads/${url.slice("/uploads/".length).split("?")[0]}`;
+    }
+    const parsed = new URL(url, "https://placeholder.local");
+    const pathName = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+    const r2Base = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/\/$/, "");
+    if (r2Base && url.startsWith(r2Base)) {
+      const key = url.slice(r2Base.length).replace(/^\/+/, "").split("?")[0];
+      return key || null;
+    }
+    const mediaIdx = pathName.indexOf(prefix);
+    if (mediaIdx >= 0) return pathName.slice(mediaIdx);
+    if (pathName.startsWith("objects/uploads/")) {
+      return `uploads/${pathName.slice("objects/uploads/".length)}`;
+    }
+    if (pathName.startsWith("uploads/")) return pathName;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function isOwnedStorageKey(userId: string, key: string): boolean {
+  const normalized = key.replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..")) return false;
+  if (normalized.startsWith("media/")) return normalized.startsWith(tenantMediaPrefix(userId));
+  return normalized.startsWith("uploads/");
+}
+
+async function readR2Object(key: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  try {
+    const res = await r2Client().send(
+      new GetObjectCommand({
+        Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+        Key: key,
+      }),
+    );
+    if (!res.Body) return null;
+    const bytes = await res.Body.transformToByteArray();
+    const mimeType =
+      (typeof res.ContentType === "string" && res.ContentType.split(";")[0].trim()) ||
+      "application/octet-stream";
+    return { buffer: Buffer.from(bytes), mimeType };
+  } catch {
+    return null;
+  }
+}
+
+async function readFallbackObject(key: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const filename = key.replace(/^uploads\//, "").replace(/^objects\/uploads\//, "");
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    return null;
+  }
+  const privateObjectDir = process.env.PRIVATE_OBJECT_DIR;
+  if (privateObjectDir) {
+    try {
+      const dirParts = privateObjectDir.split("/").filter(Boolean);
+      const bucketName = dirParts[0];
+      const prefix = dirParts.slice(1).join("/");
+      const objectName = `${prefix}/uploads/${filename}`;
+      const [buf] = await objectStorageClient.bucket(bucketName).file(objectName).download();
+      return { buffer: Buffer.from(buf), mimeType: "application/octet-stream" };
+    } catch {
+      /* try local */
+    }
+  }
+  const filePath = path.resolve(path.join(process.cwd(), "uploads", filename));
+  const uploadDir = path.resolve(path.join(process.cwd(), "uploads"));
+  if (!filePath.startsWith(uploadDir + path.sep) && filePath !== uploadDir) return null;
+  if (!fs.existsSync(filePath)) return null;
+  return { buffer: fs.readFileSync(filePath), mimeType: "application/octet-stream" };
+}
+
+/** Tenant-owned stored bytes only. Never follows another workspace's media/{userId}/ prefix. */
+export async function readOwnedStoredMedia(params: {
+  userId: string;
+  mediaUrl?: string | null;
+  mediaStorageKey?: string | null;
+}): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const userId = String(params.userId || "").trim();
+  if (!userId) return null;
+  let key = String(params.mediaStorageKey || "").trim().replace(/^\/+/, "");
+  if (key && !isOwnedStorageKey(userId, key)) return null;
+  if (!key) {
+    const inferred = inferOwnedStorageKey({ userId, mediaUrl: params.mediaUrl });
+    if (!inferred || !isOwnedStorageKey(userId, inferred)) return null;
+    key = inferred;
+  }
+  if (r2Configured() && key.startsWith(tenantMediaPrefix(userId))) {
+    const fromR2 = await readR2Object(key);
+    if (fromR2) return fromR2;
+  }
+  if (key.startsWith(tenantMediaPrefix(userId)) && r2Configured()) return null;
+  return readFallbackObject(key);
 }

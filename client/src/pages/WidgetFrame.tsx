@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRoute, useSearch } from "wouter";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Paperclip, Send, X } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { loadOrRotateWebchatVisitorId } from "@shared/webchatVisitorId";
+import { WebchatMediaBubble } from "@/components/webchat/WebchatMediaBubble";
+import { WebchatFormCard } from "@/components/webchat/WebchatFormCard";
+import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
+import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
 import {
   WEBCHAT_POLL_BACKOFF_MS,
   WEBCHAT_POLL_HIDDEN_MS,
@@ -25,6 +29,7 @@ interface ChatMessage {
   status?: string | null;
   templateVariables?: {
     chatbotButtons?: ButtonOption[];
+    webchatForm?: WebchatFormDefinition;
   } | null;
 }
 
@@ -111,11 +116,17 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
+  const [leadForm, setLeadForm] = useState<WebchatFormDefinition | null>(null);
+  const [submittedFormIds, setSubmittedFormIds] = useState<Set<string>>(new Set());
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
   const [widgetUnavailable, setWidgetUnavailable] = useState(false);
   const [pollError, setPollError] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadsRef = useRef<Map<string, File>>(new Map());
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollBackoffIndexRef = useRef(0);
   const userId = widgetId;
@@ -159,6 +170,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
+        setLeadForm(sanitizeWebchatFormDefinition(data?.leadForm));
         setWidgetUnavailable(false);
         setIsLoading(false);
       })
@@ -279,10 +291,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     );
   }, []);
 
-  const sendMessage = useCallback(async (text: string, retryId?: string) => {
-    if (!text.trim() || !userId || !visitorId || isSending || widgetUnavailable) return;
+  const sendMessage = useCallback(async (text: string, retryId?: string, fileOverride?: File | null) => {
+    const file = fileOverride || (!retryId ? pendingFile : pendingUploadsRef.current.get(retryId) || null);
+    if ((!text.trim() && !file) || !userId || !visitorId || isSending || widgetUnavailable) return;
     setIsSending(true);
     const optId = retryId || `opt_${Date.now()}`;
+    if (file) pendingUploadsRef.current.set(optId, file);
     if (retryId) {
       setMessages((prev) =>
         prev.map((m) => (m.id === retryId ? { ...m, status: undefined } : m)),
@@ -291,35 +305,59 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       const optimisticMsg: ChatMessage = {
         id: optId,
         direction: "inbound",
-        content: text,
-        contentType: "text",
-        mediaUrl: null,
+        content: text || null,
+        contentType: file ? "image" : "text",
+        mediaUrl: file ? URL.createObjectURL(file) : null,
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, optimisticMsg]);
       setInputText("");
+      setPendingFile(null);
+      setAttachError(null);
     }
 
     try {
       const visitorLabel =
         urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
-      const res = await fetch(`/api/webchat/${userId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          visitorId,
-          message: text,
-          name: visitorLabel,
-          source: urlLeadSource || undefined,
-          parentUrl: parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined),
-          pageTitle: typeof document !== "undefined" ? document.title : undefined,
-          referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
-        }),
-      });
+      const parentUrl = parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined);
+      let res: Response;
+      if (file) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("visitorId", visitorId);
+        if (text.trim()) form.append("caption", text.trim());
+        form.append("uploadId", optId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80));
+        form.append("name", visitorLabel);
+        if (urlLeadSource) form.append("source", urlLeadSource);
+        if (parentUrl) form.append("parentUrl", parentUrl);
+        if (typeof document !== "undefined") {
+          form.append("pageTitle", document.title);
+          if (document.referrer) form.append("referrer", document.referrer);
+        }
+        res = await fetch(`/api/webchat/${userId}/${visitorId}/media`, {
+          method: "POST",
+          body: form,
+        });
+      } else {
+        res = await fetch(`/api/webchat/${userId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            visitorId,
+            message: text,
+            name: visitorLabel,
+            source: urlLeadSource || undefined,
+            parentUrl,
+            pageTitle: typeof document !== "undefined" ? document.title : undefined,
+            referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+          }),
+        });
+      }
       if (!res.ok) {
         markFailed(optId);
         return;
       }
+      pendingUploadsRef.current.delete(optId);
       await new Promise((r) => setTimeout(r, 800));
       await fetchMessages();
     } catch (e) {
@@ -329,7 +367,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed]);
+  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed, pendingFile]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks
@@ -346,6 +384,45 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
     await sendMessage(btn.value);
   }, [clickedButtons, sendMessage]);
+
+  const submitForm = useCallback(async (form: WebchatFormDefinition, values: Record<string, unknown>, messageId?: string) => {
+    if (!userId || !visitorId || widgetUnavailable) throw new Error("Chat is unavailable.");
+    const parentUrl = parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined);
+    const res = await fetch(`/api/webchat/${userId}/${visitorId}/forms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        formId: form.id,
+        values,
+        messageId,
+        parentUrl,
+        source: urlLeadSource || undefined,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(typeof data.error === "string" ? data.error : "Could not submit the form.");
+    }
+    setSubmittedFormIds((prev) => new Set([...prev, form.id]));
+    await fetchMessages();
+  }, [userId, visitorId, widgetUnavailable, parentPageHref, urlLeadSource, fetchMessages]);
+
+  const handleAttachChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = "";
+    if (!file) return;
+    const mime = (file.type || "").toLowerCase();
+    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime)) {
+      setAttachError("Use a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > WEBCHAT_IMAGE_MAX_BYTES) {
+      setAttachError("That image is too large.");
+      return;
+    }
+    setAttachError(null);
+    setPendingFile(file);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -377,13 +454,20 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   return (
     <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex min-w-0 items-center gap-2 px-4 py-3 text-white flex-shrink-0 shadow-sm" style={{ background: widgetColor }}>
+      <div
+        className="flex min-w-0 items-center gap-2 px-4 py-3 flex-shrink-0 shadow-sm"
+        style={{ background: widgetColor, color: "#ffffff" }}
+      >
         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold shrink-0">
-          {widgetName.charAt(0)}
+          W
         </div>
-        <div className="min-w-0">
-          <h1 className="font-semibold text-sm leading-none truncate">{widgetName}</h1>
-          <p className="text-xs opacity-80 mt-0.5 truncate">We're here to help</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="font-semibold text-sm leading-tight break-words [overflow-wrap:anywhere]">
+            {widgetName}
+          </h1>
+          <p className="text-xs opacity-80 mt-0.5 break-words [overflow-wrap:anywhere]">
+            We're here to help
+          </p>
         </div>
       </div>
 
@@ -428,12 +512,24 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           </a>
         )}
 
+        {leadForm && !submittedFormIds.has(leadForm.id) && !deduped.some((m) => m.contentType === "form" || m.contentType === "form_result") && (
+          <WebchatFormCard
+            form={leadForm}
+            widgetColor={widgetColor}
+            disabled={widgetUnavailable}
+            onSubmit={(values) => submitForm(leadForm, values)}
+          />
+        )}
+
         {deduped.map((msg) => {
           const isOutbound = msg.direction === "outbound";
           const sendFailed = !isOutbound && msg.status === "failed";
           const buttons: ButtonOption[] = msg.templateVariables?.chatbotButtons ?? [];
           const isButtonMessage = msg.contentType === "buttons" && buttons.length > 0;
+          const formDef = sanitizeWebchatFormDefinition(msg.templateVariables?.webchatForm);
+          const isFormMessage = msg.contentType === "form" && !!formDef && isOutbound;
           const messageResponded = clickedButtons.has(msg.id);
+          const formSubmitted = formDef ? submittedFormIds.has(formDef.id) || deduped.some((m) => m.contentType === "form_result") : false;
 
           return (
             <div
@@ -442,8 +538,15 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
               data-testid={`msg-${msg.id}`}
             >
               <div className="min-w-0 max-w-[80%]">
-                {/* Message bubble */}
-                {(msg.content || msg.contentType === "buttons") && (
+                {msg.contentType === "image" && msg.mediaUrl ? (
+                  <WebchatMediaBubble
+                    src={msg.mediaUrl}
+                    caption={msg.content}
+                    isOutbound={isOutbound}
+                    sendFailed={sendFailed}
+                    widgetColor={widgetColor}
+                  />
+                ) : (msg.content || msg.contentType === "buttons") ? (
                   <div
                     className={`px-3 py-2 rounded-2xl text-sm shadow-sm break-words [overflow-wrap:anywhere] ${
                       isOutbound
@@ -454,17 +557,21 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     }`}
                     style={!isOutbound && !sendFailed ? { background: widgetColor } : {}}
                   >
-                    {msg.contentType === "image" && msg.mediaUrl ? (
-                      <img src={msg.mediaUrl} alt="image" className="max-w-full rounded-lg max-h-48 object-cover" />
-                    ) : msg.contentType === "video" && msg.mediaUrl ? (
-                      <video src={msg.mediaUrl} controls className="max-w-full rounded-lg max-h-48" />
-                    ) : (
-                      <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>
-                    )}
+                    <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>
+                  </div>
+                ) : null}
+
+                {isFormMessage && formDef && (
+                  <div className="mt-1.5 min-w-0">
+                    <WebchatFormCard
+                      form={formDef}
+                      widgetColor={widgetColor}
+                      disabled={widgetUnavailable}
+                      submitted={formSubmitted}
+                      onSubmit={(values) => submitForm(formDef, values, msg.id)}
+                    />
                   </div>
                 )}
-
-                {/* Interactive buttons rendered below outbound bot messages */}
                 {isButtonMessage && isOutbound && (
                   <div className="mt-1.5 flex flex-col gap-1.5">
                     {buttons.map((btn, i) => {
@@ -542,7 +649,46 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             Chat is unavailable.
           </p>
         )}
+        {attachError && (
+          <p className="text-xs text-red-600 mb-2" data-testid="text-attach-error">
+            {attachError}
+          </p>
+        )}
+        {pendingFile && (
+          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5">
+            <span className="min-w-0 flex-1 truncate text-xs text-gray-600" data-testid="text-pending-image">
+              {pendingFile.name}
+            </span>
+            <button
+              type="button"
+              className="flex-shrink-0 text-gray-400 hover:text-gray-700"
+              data-testid="btn-remove-image"
+              onClick={() => setPendingFile(null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex min-w-0 gap-2 items-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            className="hidden"
+            data-testid="input-chat-image"
+            onChange={handleAttachChange}
+          />
+          <button
+            type="button"
+            data-testid="btn-attach-image"
+            disabled={isSending || widgetUnavailable}
+            className="flex-shrink-0 w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach image"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
           <input
             ref={inputRef}
             type="text"
@@ -557,7 +703,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           />
           <button
             onClick={() => sendMessage(inputText)}
-            disabled={isSending || widgetUnavailable || !inputText.trim()}
+            disabled={isSending || widgetUnavailable || (!inputText.trim() && !pendingFile)}
             data-testid="btn-send-chat"
             className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity disabled:opacity-40"
             style={{ background: widgetColor }}

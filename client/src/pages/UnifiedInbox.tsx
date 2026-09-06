@@ -177,7 +177,7 @@ import {
   isMediaChannelValidationError,
   mediaChannelValidationBubbleText,
 } from "@/lib/mediaChannelValidationError";
-import { outboundDocumentBlockHint } from "@/lib/outboundAttachmentChannelGate";
+import { outboundDocumentBlockHint, outboundWebchatMediaHint } from "@/lib/outboundAttachmentChannelGate";
 import {
   applyInboxConversationMarkRead,
   inboxConversationRowChromeClassName,
@@ -2565,6 +2565,11 @@ export function UnifiedInbox() {
         setFilePickerHint(docHint);
         return;
       }
+      const webchatHint = outboundWebchatMediaHint(outboundChannel, pendingFile.mediaType);
+      if (webchatHint) {
+        setFilePickerHint(webchatHint);
+        return;
+      }
     }
     if (contactReachableChannels.length === 0) {
       toast({
@@ -2649,6 +2654,11 @@ export function UnifiedInbox() {
     const docHint = outboundDocumentBlockHint(outboundChannel, mediaType);
     if (docHint) {
       setFilePickerHint(docHint);
+      return;
+    }
+    const webchatHint = outboundWebchatMediaHint(outboundChannel, mediaType);
+    if (webchatHint) {
+      setFilePickerHint(webchatHint);
       return;
     }
 
@@ -4247,6 +4257,33 @@ export function UnifiedInbox() {
                             const isVideo = ct === 'video' || msg.mediaType?.startsWith('video');
                             const isAudio = ct === 'audio' || msg.mediaType?.startsWith('audio');
                             const isDoc = ct === 'document' || msg.mediaType === 'document';
+                            if (ct === "form_result") {
+                              const submission = msg.templateVariables?.webchatFormSubmission as
+                                | {
+                                    title?: string;
+                                    fields?: Array<{ label?: string; value?: string | string[] | boolean }>;
+                                    consent?: { accepted?: boolean; text?: string };
+                                  }
+                                | undefined;
+                              return (
+                                <div className="min-w-0 space-y-1" data-testid="inbox-webchat-form-result">
+                                  <p className="text-xs font-semibold text-gray-700">
+                                    {submission?.title || "Form submitted"}
+                                  </p>
+                                  {(submission?.fields || []).map((field, idx) => (
+                                    <p key={`${field.label || "field"}-${idx}`} className="text-sm leading-snug [overflow-wrap:anywhere] break-words">
+                                      <span className="font-medium">{field.label}: </span>
+                                      {Array.isArray(field.value) ? field.value.join(", ") : String(field.value ?? "")}
+                                    </p>
+                                  ))}
+                                  {submission?.consent ? (
+                                    <p className="text-xs text-gray-500 [overflow-wrap:anywhere] break-words">
+                                      Consent{submission.consent.accepted ? " accepted" : ""}: {submission.consent.text}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            }
                             if (hasMedia && isImage) return (
                               <div className="min-w-0 max-w-full">
                                 <img

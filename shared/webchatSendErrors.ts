@@ -22,6 +22,12 @@ export const WEBCHAT_SESSION_INACTIVE_EXPANDED_MESSAGE =
 export const WEBCHAT_DELIVERY_FAILED_MESSAGE =
   "Unable to deliver the message. Please try again.";
 
+export const WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE =
+  "This image could not be delivered to the visitor.";
+
+export const WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE =
+  "Website Chat only supports JPEG, PNG, and WebP images.";
+
 export function webchatErrorCodeForMessage(error: string | null | undefined): WebchatSendErrorCode | undefined {
   const msg = (error || "").trim();
   if (msg === WEBCHAT_NOT_CONFIGURED_MESSAGE) return "webchat_not_configured";
@@ -29,6 +35,9 @@ export function webchatErrorCodeForMessage(error: string | null | undefined): We
     return "webchat_session_inactive";
   }
   if (msg === WEBCHAT_DELIVERY_FAILED_MESSAGE) return "webchat_delivery_failed";
+  if (msg === WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE || msg === WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE) {
+    return "webchat_delivery_failed";
+  }
   if (msg.includes("is not connected for this workspace") && msg.toLowerCase().includes("web chat")) {
     return "webchat_not_configured";
   }
@@ -66,6 +75,8 @@ export function webchatSendErrorDescription(
   if (code === "webchat_delivery_failed" || msg === WEBCHAT_DELIVERY_FAILED_MESSAGE) {
     return WEBCHAT_DELIVERY_FAILED_MESSAGE;
   }
+  if (msg === WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE) return WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE;
+  if (msg === WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE) return WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE;
   if (msg.includes("is not connected for this workspace") && msg.toLowerCase().includes("web chat")) {
     return WEBCHAT_NOT_CONFIGURED_MESSAGE;
   }

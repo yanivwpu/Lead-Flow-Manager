@@ -19,6 +19,13 @@ import {
   WEBCHAT_POLL_LIMIT_WIDGET,
   WEBCHAT_POLL_WINDOW_MS,
 } from "@shared/webchatPollPolicy";
+import {
+  WEBCHAT_MEDIA_GET_LIMIT_IP,
+  WEBCHAT_MEDIA_GET_LIMIT_VISITOR,
+  WEBCHAT_MEDIA_GET_WINDOW_MS,
+  WEBCHAT_VISITOR_UPLOAD_LIMIT_PER_WINDOW,
+  WEBCHAT_VISITOR_UPLOAD_WINDOW_MS,
+} from "@shared/webchatImagePolicy";
 import { consumeRateLimit, getClientIp } from "./rateLimitMiddleware";
 import { getWidgetOwnerByPublicId, type WidgetOwner } from "./widgetIdentity";
 
@@ -235,6 +242,47 @@ export async function consumeWebchatPollRateLimits(params: {
     windowMs,
   );
   return vis.allowed;
+}
+
+export async function consumeWebchatMediaGetRateLimits(params: {
+  req: Request;
+  widgetPublicId: string;
+  visitorId: string;
+}): Promise<boolean> {
+  const ip = getClientIp(params.req);
+  const windowMs = WEBCHAT_MEDIA_GET_WINDOW_MS;
+  const vis = await consumeRateLimit(
+    `webchat:media:get:visitor:${params.widgetPublicId}:${params.visitorId}`,
+    WEBCHAT_MEDIA_GET_LIMIT_VISITOR,
+    windowMs,
+  );
+  if (!vis.allowed) return false;
+  const ipBucket = await consumeRateLimit(
+    `webchat:media:get:ip:${ip}`,
+    WEBCHAT_MEDIA_GET_LIMIT_IP,
+    windowMs,
+  );
+  return ipBucket.allowed;
+}
+
+export async function consumeWebchatMediaUploadRateLimits(params: {
+  req: Request;
+  widgetPublicId: string;
+  visitorId: string;
+}): Promise<boolean> {
+  const vis = await consumeRateLimit(
+    `webchat:media:upload:visitor:${params.widgetPublicId}:${params.visitorId}`,
+    WEBCHAT_VISITOR_UPLOAD_LIMIT_PER_WINDOW,
+    WEBCHAT_VISITOR_UPLOAD_WINDOW_MS,
+  );
+  if (!vis.allowed) return false;
+  const ip = getClientIp(params.req);
+  const ipBucket = await consumeRateLimit(
+    `webchat:media:upload:ip:${ip}`,
+    WEBCHAT_VISITOR_UPLOAD_LIMIT_PER_WINDOW * 8,
+    WEBCHAT_VISITOR_UPLOAD_WINDOW_MS,
+  );
+  return ipBucket.allowed;
 }
 
 export async function consumeWebchatContactCap(params: {

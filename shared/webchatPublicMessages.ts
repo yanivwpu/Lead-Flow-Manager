@@ -1,6 +1,13 @@
 /**
  * Public widget poll payload: machine-readable, no tenant secrets.
+ * Stored media URLs are never passed through; visitors receive signed proxy URLs only.
  */
+
+import { isWebchatImageContentType } from "./webchatImagePolicy";
+import {
+  sanitizeWebchatFormDefinition,
+  WEBCHAT_FORM_PUBLIC_SUBMITTED_CONTENT,
+} from "./webchatStructuredForm";
 
 export type PublicWebchatMessage = {
   id: string;
@@ -10,7 +17,7 @@ export type PublicWebchatMessage = {
   mediaUrl: string | null;
   createdAt: string | Date | null;
   status: string | null;
-  templateVariables: { chatbotButtons?: unknown } | null;
+  templateVariables: { chatbotButtons?: unknown; webchatForm?: unknown } | null;
 };
 
 export type PublicWebchatMessageSource = {
@@ -21,7 +28,11 @@ export type PublicWebchatMessageSource = {
   mediaUrl?: string | null;
   createdAt?: string | Date | null;
   status?: string | null;
-  templateVariables?: { chatbotButtons?: unknown } | null;
+  templateVariables?: {
+    chatbotButtons?: unknown;
+    webchatForm?: unknown;
+    webchatFormSubmission?: unknown;
+  } | null;
   userId?: unknown;
   contactId?: unknown;
   conversationId?: unknown;
@@ -33,6 +44,10 @@ export type PublicWebchatMessageSource = {
   sentByUserId?: unknown;
 };
 
+export type PublicWebchatMediaUrlRewriter = (
+  message: PublicWebchatMessageSource,
+) => string | null | undefined;
+
 function isPublicDirection(value: unknown): value is "inbound" | "outbound" {
   return value === "inbound" || value === "outbound";
 }
@@ -43,25 +58,46 @@ export function isPublicWebchatMessageVisible(message: PublicWebchatMessageSourc
   return message.direction !== "outbound" || message.status !== "failed";
 }
 
-export function toPublicWebchatMessage(message: PublicWebchatMessageSource): PublicWebchatMessage | null {
+export function toPublicWebchatMessage(
+  message: PublicWebchatMessageSource,
+  rewriteMediaUrl?: PublicWebchatMediaUrlRewriter,
+): PublicWebchatMessage | null {
   if (!isPublicWebchatMessageVisible(message)) return null;
+  const contentType = message.contentType || "text";
   const buttons = message.templateVariables?.chatbotButtons;
+  const form = sanitizeWebchatFormDefinition(message.templateVariables?.webchatForm);
+  let mediaUrl: string | null = null;
+  if (isWebchatImageContentType(contentType) && rewriteMediaUrl) {
+    const rewritten = rewriteMediaUrl(message);
+    mediaUrl = typeof rewritten === "string" && rewritten.trim() ? rewritten.trim() : null;
+  }
+  const isFormResult = contentType === "form_result";
+  const templateVariables =
+    Array.isArray(buttons) || form
+      ? {
+          ...(Array.isArray(buttons) ? { chatbotButtons: buttons } : {}),
+          ...(form ? { webchatForm: form } : {}),
+        }
+      : null;
   return {
     id: message.id,
-    direction: message.direction,
-    content: message.content ?? null,
-    contentType: message.contentType || "text",
-    mediaUrl: message.mediaUrl ?? null,
+    direction: message.direction as "inbound" | "outbound",
+    content: isFormResult ? WEBCHAT_FORM_PUBLIC_SUBMITTED_CONTENT : message.content ?? null,
+    contentType,
+    mediaUrl,
     createdAt: message.createdAt ?? null,
     status: message.status ?? null,
-    templateVariables: Array.isArray(buttons) ? { chatbotButtons: buttons } : null,
+    templateVariables,
   };
 }
 
-export function toPublicWebchatMessages(messages: PublicWebchatMessageSource[]): PublicWebchatMessage[] {
+export function toPublicWebchatMessages(
+  messages: PublicWebchatMessageSource[],
+  rewriteMediaUrl?: PublicWebchatMediaUrlRewriter,
+): PublicWebchatMessage[] {
   const out: PublicWebchatMessage[] = [];
   for (const message of messages) {
-    const mapped = toPublicWebchatMessage(message);
+    const mapped = toPublicWebchatMessage(message, rewriteMediaUrl);
     if (mapped) out.push(mapped);
   }
   return out;
