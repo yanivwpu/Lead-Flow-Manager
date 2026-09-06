@@ -65,10 +65,27 @@
     overflow-y: scroll;
     scrollbar-gutter: stable;
   }
+  /* Public chat iframe (/widget-frame, /chat): never reserve a page scrollbar gutter.
+     `scrollbar-gutter: stable` + child `w-screen` (100vw) overflowed ~10px horizontally. */
+  html.wcw-embed {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+    height: 100%;
+    max-width: 100%;
+  }
   html, body, #root {
     width: 100%;
     margin: 0;
     padding: 0;
+  }
+  html.wcw-embed,
+  html.wcw-embed body,
+  html.wcw-embed #root {
+    height: 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
   }
   /* While the static marketing shell is visible, do not force #root to a full viewport
      height (that reserved empty space below the shell and inflated CLS on swap). */

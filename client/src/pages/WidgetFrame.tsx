@@ -356,7 +356,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
   if (!userId) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-full w-full min-w-0 items-center justify-center bg-gray-50">
         <p className="text-sm text-gray-500">Widget not found</p>
       </div>
     );
@@ -364,7 +364,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-full w-full min-w-0 items-center justify-center bg-gray-50">
         <Loader2 className="h-8 w-8 animate-spin" style={{ color: widgetColor }} />
       </div>
     );
@@ -375,20 +375,20 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   );
 
   return (
-    <div className="h-screen w-screen bg-white flex flex-col overflow-hidden">
+    <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 text-white flex-shrink-0 shadow-sm" style={{ background: widgetColor }}>
-        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">
+      <div className="flex min-w-0 items-center gap-2 px-4 py-3 text-white flex-shrink-0 shadow-sm" style={{ background: widgetColor }}>
+        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold shrink-0">
           {widgetName.charAt(0)}
         </div>
-        <div>
-          <h1 className="font-semibold text-sm leading-none">{widgetName}</h1>
-          <p className="text-xs opacity-80 mt-0.5">We're here to help</p>
+        <div className="min-w-0">
+          <h1 className="font-semibold text-sm leading-none truncate">{widgetName}</h1>
+          <p className="text-xs opacity-80 mt-0.5 truncate">We're here to help</p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 p-3 space-y-2">
+      <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-3 space-y-2">
         {pollError && (
           <p className="text-xs text-amber-800" data-testid="text-poll-error" role="status">
             Couldn't refresh messages. Retrying…
@@ -397,7 +397,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         {/* Welcome bubble */}
         {deduped.length === 0 && (
           <div className="flex justify-start">
-            <div className="max-w-[75%] bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap">
+            <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
               {urlGreeting || settingsWelcome}
             </div>
           </div>
@@ -441,11 +441,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
               className={`flex ${isOutbound ? "justify-start" : "justify-end"}`}
               data-testid={`msg-${msg.id}`}
             >
-              <div className={`max-w-[80%] ${isOutbound ? "" : ""}`}>
+              <div className="min-w-0 max-w-[80%]">
                 {/* Message bubble */}
                 {(msg.content || msg.contentType === "buttons") && (
                   <div
-                    className={`px-3 py-2 rounded-2xl text-sm shadow-sm ${
+                    className={`px-3 py-2 rounded-2xl text-sm shadow-sm break-words [overflow-wrap:anywhere] ${
                       isOutbound
                         ? "bg-white text-gray-800 rounded-bl-none border border-gray-100"
                         : sendFailed
@@ -459,7 +459,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     ) : msg.contentType === "video" && msg.mediaUrl ? (
                       <video src={msg.mediaUrl} controls className="max-w-full rounded-lg max-h-48" />
                     ) : (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                      <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>
                     )}
                   </div>
                 )}
@@ -536,13 +536,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-100 p-3 bg-white flex-shrink-0">
+      <div className="min-w-0 border-t border-gray-100 p-3 bg-white flex-shrink-0">
         {widgetUnavailable && (
           <p className="text-xs text-red-600 mb-2" data-testid="text-widget-unavailable">
             Chat is unavailable.
           </p>
         )}
-        <div className="flex gap-2 items-center">
+        <div className="flex min-w-0 gap-2 items-center">
           <input
             ref={inputRef}
             type="text"
@@ -552,7 +552,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             placeholder={widgetUnavailable ? "Chat unavailable" : "Type a message…"}
             disabled={isSending || widgetUnavailable}
             data-testid="input-chat-message"
-            className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
+            className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
             style={{ "--tw-ring-color": widgetColor } as React.CSSProperties}
           />
           <button

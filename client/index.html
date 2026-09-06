@@ -100,6 +100,10 @@
             document.documentElement.classList.add("wcs-hide-static-marketing");
           }
 
+          if (p.indexOf("/widget-frame") === 0 || p.indexOf("/chat/") === 0) {
+            document.documentElement.classList.add("wcw-embed");
+          }
+
           if (p === "/" && shopOk && !shopifyInstalled && !persistedShopify) {
             window.location.replace(
               "/api/shopify/install?shop=" + encodeURIComponent(shop)
