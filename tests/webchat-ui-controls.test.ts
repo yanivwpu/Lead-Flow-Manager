@@ -56,6 +56,7 @@ function read(rel: string): string {
   assert.match(frame, /status !== "failed"/);
   assert.match(frame, /if \(!res\.ok\)/);
   assert.match(frame, /text-delivery-error/);
+  assert.match(frame, /text-poll-error/);
   assert.match(frame, /setWidgetUnavailable/);
 }
 

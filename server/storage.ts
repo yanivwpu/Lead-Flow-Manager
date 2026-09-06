@@ -2817,12 +2817,14 @@ export class DbStorage implements IStorage {
 
   async getConversationByContactAndChannel(contactId: string, channel: Channel, channelAccountId?: string): Promise<Conversation | undefined> {
     if (!channelAccountId) {
-      // Single-number or non-WhatsApp path: backward-compatible lookup
+      // Latest thread wins — duplicate webchat rows must not hide newer outbound.
       const result = await db.select().from(conversations)
         .where(and(
           eq(conversations.contactId, contactId),
           eq(conversations.channel, channel)
-        ));
+        ))
+        .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt))
+        .limit(1);
       return result[0];
     }
 

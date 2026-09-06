@@ -106,6 +106,19 @@ export function originMatchesAllowlist(allowed: string[], candidateOrigin: strin
   return allowed.some((o) => o.replace(/\/$/, "").toLowerCase() === needle);
 }
 
+/**
+ * POST inbound uses strict origin. Poll/settings use strictOrigin=false so the
+ * widget iframe Referer (WhachatCRM host) is not compared to the customer's allowlist.
+ * A Referer/Origin hint must not re-enable that gate.
+ */
+export function publicWidgetOriginGateRequired(opts: {
+  strictOrigin: boolean;
+  allowAny: boolean;
+}): boolean {
+  if (opts.allowAny) return false;
+  return opts.strictOrigin === true;
+}
+
 export type OwnerOriginDiagnostics = {
   canPubliclyEmbed: boolean;
   reason: "ok" | "disabled" | "no_origins" | "allow_any";

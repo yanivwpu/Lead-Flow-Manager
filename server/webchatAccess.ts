@@ -9,19 +9,50 @@ import {
   originMatchesAllowlist,
   parseAllowAnyOrigin,
   publicWidgetEmbedDecision,
+  publicWidgetOriginGateRequired,
 } from "@shared/webchatOriginPolicy";
 import { parseHttpUrl } from "@shared/webchatPageContext";
+import { createWebchatVisitorId, isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
+import {
+  WEBCHAT_POLL_LIMIT_IP,
+  WEBCHAT_POLL_LIMIT_VISITOR,
+  WEBCHAT_POLL_LIMIT_WIDGET,
+  WEBCHAT_POLL_WINDOW_MS,
+} from "@shared/webchatPollPolicy";
 import { consumeRateLimit, getClientIp } from "./rateLimitMiddleware";
 import { getWidgetOwnerByPublicId, type WidgetOwner } from "./widgetIdentity";
 
 export const WEBCHAT_GENERIC_NOT_FOUND = { error: "Not found" };
-export const WEBCHAT_GENERIC_DISABLED = { error: "Widget unavailable" };
 export const WEBCHAT_GENERIC_RATE_LIMIT = { error: "Too many requests. Please try again shortly." };
 
 const MAX_MESSAGE = 4000;
 const MAX_NAME = 120;
-const MAX_VISITOR_ID = 80;
 const MAX_TITLE = 300;
+
+export const WEBCHAT_PUBLIC_CACHE_CONTROL = "private, no-store, no-cache, must-revalidate";
+
+export function applyWebchatPublicCacheHeaders(res: {
+  setHeader(name: string, value: string): unknown;
+}): void {
+  res.setHeader("Cache-Control", WEBCHAT_PUBLIC_CACHE_CONTROL);
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+}
+
+export function sendWebchatPublicJson(
+  res: {
+    setHeader(name: string, value: string): unknown;
+    status(code: number): { json(body: unknown): unknown };
+    json(body: unknown): unknown;
+  },
+  status: number,
+  body: unknown,
+): unknown {
+  applyWebchatPublicCacheHeaders(res);
+  if (status === 200) return res.json(body);
+  return res.status(status).json(body);
+}
 
 export type WidgetSettingsShape = {
   enabled?: boolean;
@@ -145,9 +176,8 @@ export function parseWebchatInboundBody(body: unknown): { ok: true; data: Webcha
   const message = typeof b.message === "string" ? b.message.trim() : "";
   if (!message || message.length > MAX_MESSAGE) return { ok: false };
   let visitorId = typeof b.visitorId === "string" ? b.visitorId.trim() : "";
-  if (!visitorId) visitorId = `visitor_${Date.now()}`;
-  if (visitorId.length > MAX_VISITOR_ID) return { ok: false };
-  if (!/^[a-zA-Z0-9._:-]+$/.test(visitorId)) return { ok: false };
+  if (!visitorId) visitorId = createWebchatVisitorId();
+  if (!isPublicWebchatVisitorId(visitorId)) return { ok: false };
   const name = typeof b.name === "string" ? b.name.trim().slice(0, MAX_NAME) : undefined;
   const source = typeof b.source === "string" ? b.source.trim().slice(0, 80) : undefined;
   const parentUrl = typeof b.parentUrl === "string" ? b.parentUrl.trim().slice(0, 2000) : undefined;
@@ -183,6 +213,30 @@ export async function consumeWebchatRateLimits(params: {
   return true;
 }
 
+/** Separate from inbound buckets so 2.5s polling cannot starve POST or trip the 40/visitor write cap. */
+export async function consumeWebchatPollRateLimits(params: {
+  req: Request;
+  widgetPublicId: string;
+  visitorId: string;
+}): Promise<boolean> {
+  const ip = getClientIp(params.req);
+  const windowMs = WEBCHAT_POLL_WINDOW_MS;
+  const widget = await consumeRateLimit(
+    `webchat:poll:widget:${params.widgetPublicId}`,
+    WEBCHAT_POLL_LIMIT_WIDGET,
+    windowMs,
+  );
+  if (!widget.allowed) return false;
+  const ipBucket = await consumeRateLimit(`webchat:poll:ip:${ip}`, WEBCHAT_POLL_LIMIT_IP, windowMs);
+  if (!ipBucket.allowed) return false;
+  const vis = await consumeRateLimit(
+    `webchat:poll:visitor:${params.widgetPublicId}:${params.visitorId}`,
+    WEBCHAT_POLL_LIMIT_VISITOR,
+    windowMs,
+  );
+  return vis.allowed;
+}
+
 export async function consumeWebchatContactCap(params: {
   widgetPublicId: string;
   visitorId: string;
@@ -209,18 +263,21 @@ export async function resolvePublicWidgetAccess(
   const requireEnabled = opts?.requireEnabled !== false;
   const embed = publicWidgetEmbedDecision(owner.widgetSettings);
   if (requireEnabled && !embed.ok) {
-    return { ok: false, status: 404, body: WEBCHAT_GENERIC_DISABLED };
+    return { ok: false, status: 404, body: WEBCHAT_GENERIC_NOT_FOUND };
   }
   const allowAny = parseAllowAnyOrigin(owner.widgetSettings);
   const allowedOrigins = embed.ok ? embed.allowedOrigins : parseAllowedOrigins(owner.widgetSettings);
   const origin = requestOrigin(req);
   const strictOrigin = opts?.strictOrigin !== false;
-  const hasHint = Boolean(origin || opts?.parentUrl);
-  if (!allowAny && (strictOrigin || hasHint)) {
+  if (publicWidgetOriginGateRequired({ strictOrigin, allowAny })) {
     if (!originAllowed(allowedOrigins, origin, opts?.parentUrl, { allowAny })) {
       return { ok: false, status: 404, body: WEBCHAT_GENERIC_NOT_FOUND };
     }
     if (opts?.parentUrl && !parentUrlAllowed(allowedOrigins, opts.parentUrl, { allowAny })) {
+      return { ok: false, status: 404, body: WEBCHAT_GENERIC_NOT_FOUND };
+    }
+  } else if (!allowAny && opts?.parentUrl) {
+    if (!parentUrlAllowed(allowedOrigins, opts.parentUrl, { allowAny })) {
       return { ok: false, status: 404, body: WEBCHAT_GENERIC_NOT_FOUND };
     }
   }

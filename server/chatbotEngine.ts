@@ -302,6 +302,7 @@ async function sendChatbotReply(
         contactId: ctx.contactId,
         content,
         contentType: "text",
+        forceChannel: ctx.channel as Channel,
       })
     );
     if (!guarded.ok) {
@@ -358,6 +359,7 @@ async function sendChatbotMedia(
         content: caption || "",
         contentType: normalisedType,
         mediaUrl,
+        forceChannel: ctx.channel as Channel,
       })
     );
     if (!guarded.ok) {
@@ -511,6 +513,7 @@ async function sendChatbotButtonsWebchat(
         content: promptText,
         contentType: "buttons",
         templateVariables: { chatbotButtons: buttons },
+        forceChannel: ctx.channel as Channel,
       })
     );
     if (!guarded.ok) {

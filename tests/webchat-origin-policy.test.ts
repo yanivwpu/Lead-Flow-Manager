@@ -8,6 +8,7 @@ import {
   normalizeAllowedOriginsList,
   originPairFor,
   publicWidgetEmbedDecision,
+  publicWidgetOriginGateRequired,
 } from "../shared/webchatOriginPolicy";
 import { originAllowed } from "../server/webchatAccess";
 
@@ -55,6 +56,13 @@ import { originAllowed } from "../server/webchatAccess";
   assert.equal(originAllowed(allowed, "https://evil.example.com", null), false);
   assert.equal(originAllowed([], "https://example.com", null), false);
   assert.equal(originAllowed([], "https://example.com", null, { allowAny: true }), true);
+}
+
+{
+  assert.equal(publicWidgetOriginGateRequired({ strictOrigin: true, allowAny: false }), true);
+  assert.equal(publicWidgetOriginGateRequired({ strictOrigin: false, allowAny: false }), false);
+  assert.equal(publicWidgetOriginGateRequired({ strictOrigin: true, allowAny: true }), false);
+  assert.equal(publicWidgetOriginGateRequired({ strictOrigin: false, allowAny: true }), false);
 }
 
 console.log("webchat-origin-policy.test.ts: all assertions passed");

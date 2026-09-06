@@ -2,6 +2,12 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRoute, useSearch } from "wouter";
 import { Loader2, Send } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
+import { loadOrRotateWebchatVisitorId } from "@shared/webchatVisitorId";
+import {
+  WEBCHAT_POLL_BACKOFF_MS,
+  WEBCHAT_POLL_HIDDEN_MS,
+  WEBCHAT_POLL_VISIBLE_MS,
+} from "@shared/webchatPollPolicy";
 
 interface ButtonOption {
   label: string;
@@ -22,7 +28,7 @@ interface ChatMessage {
   } | null;
 }
 
-const POLL_INTERVAL = 2500; // ms
+const POLL_INTERVAL = WEBCHAT_POLL_VISIBLE_MS;
 
 export type WebchatWidgetProps = {
   widgetId: string;
@@ -75,6 +81,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     if (resolvePageHref != null && resolvePageHref !== "") return resolvePageHref;
     return parentUrlForRules;
   }, [resolvePageHref, parentUrlForRules]);
+
+  /** Parent site URL for origin/page-rule checks — never the iframe host. */
+  const parentPageHref = useMemo(() => {
+    const preferred = ruleMatchHref != null && ruleMatchHref !== "" ? ruleMatchHref : "";
+    if (preferred) return preferred.slice(0, 4000);
+    if (typeof document === "undefined") return null;
+    const referrer = String(document.referrer || "").trim();
+    if (!referrer) return null;
+    try {
+      const parsed = new URL(referrer);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+      return referrer.slice(0, 4000);
+    } catch {
+      return null;
+    }
+  }, [ruleMatchHref]);
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
@@ -91,25 +113,25 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [ctaUrl, setCtaUrl] = useState("");
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
   const [widgetUnavailable, setWidgetUnavailable] = useState(false);
+  const [pollError, setPollError] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollBackoffIndexRef = useRef(0);
   const userId = widgetId;
 
   // Init: get/create visitorId from localStorage
   useEffect(() => {
     if (!userId) return;
     const storageKey = `wchat_visitor_${userId}`;
-    let vid = localStorage.getItem(storageKey);
-    if (!vid) {
-      vid = `visitor_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      localStorage.setItem(storageKey, vid);
-    }
+    const stored = localStorage.getItem(storageKey);
+    const { visitorId: vid } = loadOrRotateWebchatVisitorId(stored);
+    localStorage.setItem(storageKey, vid);
     setVisitorId(vid);
 
     const settingsUrl =
-      ruleMatchHref != null && ruleMatchHref !== ""
-        ? `/api/webchat/${userId}/settings?href=${encodeURIComponent(ruleMatchHref)}`
+      parentPageHref != null && parentPageHref !== ""
+        ? `/api/webchat/${userId}/settings?href=${encodeURIComponent(parentPageHref)}`
         : `/api/webchat/${userId}/settings`;
 
     fetch(settingsUrl)
@@ -144,7 +166,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         setWidgetUnavailable(true);
         setIsLoading(false);
       });
-  }, [userId, ruleMatchHref]);
+  }, [userId, parentPageHref]);
 
   useEffect(() => {
     const fromUrl = urlPrefill || "";
@@ -153,29 +175,98 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     if (prefill) setInputText(prefill);
   }, [urlPrefill, apiPrefill]);
 
-  const fetchMessages = useCallback(async () => {
-    if (!userId || !visitorId) return;
+  const fetchMessages = useCallback(async (): Promise<boolean> => {
+    if (!userId || !visitorId) return false;
     try {
-      const res = await fetch(`/api/webchat/${userId}/${visitorId}/messages`);
-      if (!res.ok) return;
-      const data: ChatMessage[] = await res.json();
+      const qs =
+        parentPageHref != null && parentPageHref !== ""
+          ? `?href=${encodeURIComponent(parentPageHref)}`
+          : "";
+      const res = await fetch(`/api/webchat/${userId}/${visitorId}/messages${qs}`);
+      if (!res.ok) {
+        setPollError(true);
+        return false;
+      }
+      const data: unknown = await res.json();
+      if (!Array.isArray(data)) {
+        setPollError(true);
+        return false;
+      }
+      setPollError(false);
       setMessages(
-        data.filter((m) => m.direction !== "outbound" || m.status !== "failed"),
+        data.filter(
+          (m: ChatMessage) => m && m.id && (m.direction !== "outbound" || m.status !== "failed"),
+        ),
       );
+      return true;
     } catch {
-      // silently ignore poll errors
+      setPollError(true);
+      return false;
     }
-  }, [userId, visitorId]);
+  }, [userId, visitorId, parentPageHref]);
 
-  // Start polling once we have visitorId
+  const fetchMessagesRef = useRef(fetchMessages);
+  fetchMessagesRef.current = fetchMessages;
+
+  // Visibility-aware poll: pause when hidden (WEBCHAT_POLL_HIDDEN_MS === 0), bounded backoff on errors.
   useEffect(() => {
     if (!visitorId || widgetUnavailable) return;
-    fetchMessages();
-    pollRef.current = setInterval(fetchMessages, POLL_INTERVAL);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+    let cancelled = false;
+
+    const arm = (delayMs: number) => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+      pollRef.current = setTimeout(() => {
+        void tick();
+      }, delayMs);
     };
-  }, [visitorId, fetchMessages, widgetUnavailable]);
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const ok = await fetchMessagesRef.current();
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (ok) {
+        pollBackoffIndexRef.current = 0;
+        arm(POLL_INTERVAL);
+        return;
+      }
+      const idx = Math.min(pollBackoffIndexRef.current, WEBCHAT_POLL_BACKOFF_MS.length - 1);
+      pollBackoffIndexRef.current = Math.min(idx + 1, WEBCHAT_POLL_BACKOFF_MS.length - 1);
+      arm(WEBCHAT_POLL_BACKOFF_MS[idx]);
+    };
+
+    const onVisibility = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "visible") {
+        pollBackoffIndexRef.current = 0;
+        void tick();
+        return;
+      }
+      if (WEBCHAT_POLL_HIDDEN_MS === 0 && pollRef.current) {
+        clearTimeout(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    if (typeof document === "undefined" || document.visibilityState === "visible") {
+      void tick();
+    }
+
+    return () => {
+      cancelled = true;
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+      if (pollRef.current) {
+        clearTimeout(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [visitorId, widgetUnavailable]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -220,7 +311,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           message: text,
           name: visitorLabel,
           source: urlLeadSource || undefined,
-          parentUrl: parentUrlForRules || (typeof window !== "undefined" ? window.location.href : undefined),
+          parentUrl: parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined),
           pageTitle: typeof document !== "undefined" ? document.title : undefined,
           referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
         }),
@@ -238,7 +329,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentUrlForRules, markFailed]);
+  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks
@@ -298,6 +389,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto bg-gray-50 p-3 space-y-2">
+        {pollError && (
+          <p className="text-xs text-amber-800" data-testid="text-poll-error" role="status">
+            Couldn't refresh messages. Retrying…
+          </p>
+        )}
         {/* Welcome bubble */}
         {deduped.length === 0 && (
           <div className="flex justify-start">

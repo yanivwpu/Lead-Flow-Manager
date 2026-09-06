@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import IORedis from "ioredis";
+import { WEBCHAT_POLL_GLOBAL_IP_LIMIT, WEBCHAT_POLL_WINDOW_MS } from "@shared/webchatPollPolicy";
 
 /** Webhook routes must never be rate-limited (provider retries + signature verification). */
 export const WEBHOOK_RATE_LIMIT_EXCLUDED_PREFIXES = [
@@ -109,6 +110,13 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
     // Inbox polls detail/timeline/notes heavily — keep separate from writes
     limit: 1200,
     windowMs: 15 * 60 * 1000,
+  },
+  {
+    id: "widget-poll",
+    match: (path, method) =>
+      method.toUpperCase() === "GET" && path.startsWith("/api/webchat"),
+    limit: WEBCHAT_POLL_GLOBAL_IP_LIMIT,
+    windowMs: WEBCHAT_POLL_WINDOW_MS,
   },
   {
     id: "widget",
@@ -320,6 +328,7 @@ export function listProtectedRateLimitPatterns(): string[] {
     "GET /api/contacts/*",
     "PATCH|POST|PUT|DELETE /api/contacts/*",
     "/api/widget*",
+    "GET /api/webchat*",
     "/widget.js",
     "/api/ai/*",
     "POST /api/templates/send",

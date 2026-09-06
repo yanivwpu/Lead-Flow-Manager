@@ -1,14 +1,18 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import {
+  applyWebchatPublicCacheHeaders,
   consumeWebchatContactCap,
+  consumeWebchatPollRateLimits,
   consumeWebchatRateLimits,
   matchWidgetPageRule,
   parseWebchatInboundBody,
   resolvePublicWidgetAccess,
+  sendWebchatPublicJson,
   WEBCHAT_GENERIC_NOT_FOUND,
   WEBCHAT_GENERIC_RATE_LIMIT,
 } from "../webchatAccess";
+import { isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
 import { mergeWebchatPageContext, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
 import { resolveTelegramWebhookOwner, resolveTiktokLeadOwner } from "../ingressPublicTokens";
 import { getChatbotFlowForWorkspace } from "../tenantOwnership";
@@ -326,18 +330,33 @@ export function registerWebhookRoutes(app: Express): void {
   });
 
   app.get("/api/webchat/:userId/:visitorId/messages", async (req, res) => {
+    applyWebchatPublicCacheHeaders(res);
     try {
+      const hrefParam =
+        typeof req.query.href === "string" ? req.query.href.slice(0, 4000) : "";
       const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        parentUrl: hrefParam || undefined,
         requireEnabled: true,
         strictOrigin: false,
       });
       if (!access.ok) {
-        return res.status(access.status).json(access.body);
+        return sendWebchatPublicJson(res, access.status, access.body);
       }
-      const visitorId = String(req.params.visitorId || "").slice(0, 80);
+      const visitorId = String(req.params.visitorId || "");
+      if (!isPublicWebchatVisitorId(visitorId)) {
+        return sendWebchatPublicJson(res, 200, []);
+      }
+      const allowed = await consumeWebchatPollRateLimits({
+        req,
+        widgetPublicId: access.owner.widgetPublicId,
+        visitorId,
+      });
+      if (!allowed) {
+        return sendWebchatPublicJson(res, 429, WEBCHAT_GENERIC_RATE_LIMIT);
+      }
       const contact = await storage.getContactByChannelId(access.owner.userId, "webchat", visitorId);
       if (!contact || contact.userId !== access.owner.userId) {
-        return res.json([]);
+        return sendWebchatPublicJson(res, 200, []);
       }
 
       const { touchWebchatVisitorSession } = await import("../webchatSession");
@@ -345,15 +364,15 @@ export function registerWebhookRoutes(app: Express): void {
 
       const conversation = await storage.getConversationByContactAndChannel(contact.id, "webchat");
       if (!conversation || conversation.userId !== access.owner.userId) {
-        return res.json([]);
+        return sendWebchatPublicJson(res, 200, []);
       }
 
+      const { toPublicWebchatMessages } = await import("@shared/webchatPublicMessages");
       const messages = await storage.getMessages(conversation.id, 50);
-      res.json(
-        messages.filter((m) => m.direction !== "outbound" || m.status !== "failed"),
-      );
+      return sendWebchatPublicJson(res, 200, toPublicWebchatMessages(messages));
     } catch (error) {
       console.error("Web chat messages error:", error);
+      applyWebchatPublicCacheHeaders(res);
       res.status(500).json({ error: "Failed to fetch messages" });
     }
   });

@@ -47,16 +47,17 @@ const OPAQUE = "wgt_" + "b".repeat(48);
 {
   const access = read("server/webchatAccess.ts");
   assert.match(access, /export const WEBCHAT_GENERIC_NOT_FOUND = \{ error: "Not found" \}/);
-  assert.match(access, /export const WEBCHAT_GENERIC_DISABLED = \{ error: "Widget unavailable" \}/);
+  assert.doesNotMatch(access, /Widget unavailable/);
   const resolve = access.slice(
     access.indexOf("export async function resolvePublicWidgetAccess"),
-    access.indexOf("export async function resolvePublicWidgetAccess") + 1600,
+    access.indexOf("export async function resolvePublicWidgetAccess") + 1800,
   );
   assert.match(resolve, /getWidgetOwnerByPublicId/);
   const ownerNull = resolve.indexOf("if (!owner)");
   const enabledCheck = resolve.indexOf("!embed.ok");
   assert.ok(ownerNull >= 0 && enabledCheck > ownerNull);
   assert.match(resolve.slice(ownerNull, ownerNull + 180), /status: 404, body: WEBCHAT_GENERIC_NOT_FOUND/);
+  assert.match(resolve.slice(enabledCheck, enabledCheck + 220), /status: 404, body: WEBCHAT_GENERIC_NOT_FOUND/);
 }
 
 {
