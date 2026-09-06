@@ -1,7 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
+import { formatLoginUserMessage } from "@/lib/authErrorMessages";
 import { navigateAfterAuth } from "@/lib/postAuthRedirect";
 import { CHECK_EMAIL_PATH } from "@/lib/pendingVerification";
 import { sanitizeClientRedirectPath } from "@/lib/postAuthRedirect";
@@ -50,8 +51,20 @@ export function AuthPage() {
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [honeypot, setHoneypot] = useState("");
   const [showDemoModal, setShowDemoModal] = useState(false);
+  const [loginLockoutUntil, setLoginLockoutUntil] = useState(0);
   const { login, signup } = useAuth();
   const turnstileConfigured = !!(import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined);
+
+  useEffect(() => {
+    if (!loginLockoutUntil) return;
+    const ms = loginLockoutUntil - Date.now();
+    if (ms <= 0) {
+      setLoginLockoutUntil(0);
+      return;
+    }
+    const timer = setTimeout(() => setLoginLockoutUntil(0), ms);
+    return () => clearTimeout(timer);
+  }, [loginLockoutUntil]);
 
   const onTurnstileToken = useCallback((token: string | null) => {
     setTurnstileToken(token);
@@ -100,13 +113,22 @@ export function AuthPage() {
     try {
       const postAuthRedirect = redirectTo || "/app/inbox";
       if (isLogin) {
+        if (Date.now() < loginLockoutUntil) {
+          const waitSec = Math.max(1, Math.ceil((loginLockoutUntil - Date.now()) / 1000));
+          setError(formatLoginUserMessage({ ok: false, errorKind: "rate_limited", retryAfterSec: waitSec }));
+          return;
+        }
         const result = await login(email, password, rememberMe);
         if (result.ok && result.pendingVerification) {
           setLocation(CHECK_EMAIL_PATH);
         } else if (result.ok) {
           navigateAfterAuth(postAuthRedirect);
         } else {
-          setError("Invalid email or password");
+          if (result.errorKind === "rate_limited") {
+            const waitMs = Math.max(1, result.retryAfterSec || 900) * 1000;
+            setLoginLockoutUntil(Date.now() + waitMs);
+          }
+          setError(formatLoginUserMessage(result));
         }
       } else {
         const result = await signup(name, email, password, {
@@ -361,7 +383,7 @@ export function AuthPage() {
             <Button 
                 type="submit" 
                 className="w-full bg-brand-green hover:bg-emerald-700 h-11 text-base shadow-sm"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (isLogin && loginLockoutUntil > Date.now())}
               >
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

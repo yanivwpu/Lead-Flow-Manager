@@ -10,10 +10,17 @@ import {
 import {
   clearAccountLocalHints,
   fetchAuthoritativeSessionUser,
+  fetchAuthoritativeSessionUserResult,
   resetAccountQueryCache,
   sessionIdentitiesMatch,
   type SessionUser,
 } from "@/lib/accountQueryScope";
+import {
+  classifyLoginHttpStatus,
+  parseRetryAfterHeader,
+  type LoginAttemptResult,
+} from "@/lib/authErrorMessages";
+import { holdUntilAfterSessionStatus, shouldSkipSessionProbe } from "@/lib/sessionProbePolicy";
 import {
   rememberPendingVerificationEmail,
   rememberPendingVerificationSend,
@@ -52,7 +59,7 @@ interface AuthContextType {
   isLoading: boolean;
   /** True after a no-store /api/auth/me confirms cookie identity matches `user`. */
   sessionAligned: boolean;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ ok: boolean; pendingVerification?: boolean }>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<LoginAttemptResult>;
   signup: (
     name: string,
     email: string,
@@ -77,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const userRef = useRef<User | null>(null);
   const mismatchAttemptsRef = useRef(0);
+  const sessionHoldUntilRef = useRef(0);
 
   const replaceSessionUser = useCallback((next: User | null, aligned: boolean) => {
     const prevId = userRef.current?.id ?? null;
@@ -90,9 +98,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionAligned(aligned && !!nextId);
   }, []);
 
-  const refreshSession = useCallback(async () => {
+  const refreshSession = useCallback(async (reason: "mount" | "focus" | "manual" = "manual") => {
+    if (
+      shouldSkipSessionProbe({
+        now: Date.now(),
+        holdUntil: sessionHoldUntilRef.current,
+        hasLocalUser: !!userRef.current,
+        reason,
+      })
+    ) {
+      return;
+    }
     try {
-      const session = await fetchAuthoritativeSessionUser();
+      const result = await fetchAuthoritativeSessionUserResult();
+      if (result.status === 401 || result.status === 429 || result.status === 0) {
+        sessionHoldUntilRef.current = holdUntilAfterSessionStatus(
+          result.status,
+          result.retryAfterSec,
+          Date.now(),
+        );
+      } else {
+        sessionHoldUntilRef.current = 0;
+      }
+      if (result.status === 429 || result.status === 0) {
+        // Do not treat rate-limit / network as signed-out.
+        return;
+      }
+      const session = result.user;
       const currentId = userRef.current?.id ?? null;
       if (!session) {
         mismatchAttemptsRef.current = 0;
@@ -112,8 +144,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mismatchAttemptsRef.current = 0;
       replaceSessionUser(asAppUser(session), true);
     } catch (error) {
+      sessionHoldUntilRef.current = holdUntilAfterSessionStatus(0, null, Date.now());
       console.error("Failed to refresh session:", error);
-      // Transient network errors must not flip AUTH MATCH → splash/mismatch loop.
     }
   }, [replaceSessionUser]);
 
@@ -130,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onFocus = () => {
       if (document.visibilityState === "hidden") return;
-      void refreshSession();
+      void refreshSession("focus");
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
@@ -146,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void applyDatabaseLanguagePreference(user.language);
   }, [user?.id, user?.language, location, isLoading]);
 
-  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<{ ok: boolean; pendingVerification?: boolean }> => {
+  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<LoginAttemptResult> => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -156,12 +188,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: "no-store",
       });
 
-      if (!response.ok) return { ok: false };
+      if (!response.ok) {
+        const retryAfterSec = parseRetryAfterHeader(response.headers.get("Retry-After"));
+        return {
+          ok: false,
+          status: response.status,
+          retryAfterSec,
+          errorKind: classifyLoginHttpStatus(response.status),
+        };
+      }
 
-      const session = await fetchAuthoritativeSessionUser();
+      sessionHoldUntilRef.current = 0;
+      let session = await fetchAuthoritativeSessionUser();
+      if (!session) {
+        await new Promise((r) => setTimeout(r, 400));
+        session = await fetchAuthoritativeSessionUser();
+      }
       if (!session) {
         replaceSessionUser(null, false);
-        return { ok: false };
+        return { ok: false, status: 500, errorKind: "server" };
       }
       replaceSessionUser(asAppUser(session), true);
       const pending = session.emailVerifiedAt === null;
@@ -171,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { ok: true, pendingVerification: pending };
     } catch (error) {
       console.error("Login error:", error);
-      return { ok: false };
+      return { ok: false, status: 0, errorKind: "network" };
     }
   };
 

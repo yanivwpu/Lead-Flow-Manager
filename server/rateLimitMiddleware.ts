@@ -45,8 +45,34 @@ const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
  * - contacts-read: authenticated CRM reads (generous)
  * - contacts-write: authenticated CRM mutations (manual edits / sends)
  */
+const AUTH_WINDOW_MS = 15 * 60 * 1000;
+
+function isAuthSessionPath(path: string, method: string): boolean {
+  if (method === "GET" && path === "/api/auth/me") return true;
+  if (method === "POST" && path === "/api/auth/logout") return true;
+  return false;
+}
+
+function isAuthSensitivePath(path: string, method: string): boolean {
+  if (method !== "POST" || !path.startsWith("/api/auth/")) return false;
+  // Login uses a dedicated failed-attempt limiter (not this request counter).
+  if (path === "/api/auth/login" || path === "/api/auth/logout") return false;
+  return true;
+}
+
 export const RATE_LIMIT_RULES: RateLimitRule[] = [
-  { id: "auth", match: (path) => path.startsWith("/api/auth"), limit: 30, windowMs: 15 * 60 * 1000 },
+  {
+    id: "auth-session",
+    match: (path, method) => isAuthSessionPath(path, method),
+    limit: 300,
+    windowMs: AUTH_WINDOW_MS,
+  },
+  {
+    id: "auth-sensitive",
+    match: (path, method) => isAuthSensitivePath(path, method),
+    limit: 40,
+    windowMs: AUTH_WINDOW_MS,
+  },
   {
     id: "portal-password-reset",
     match: (path) =>
@@ -179,6 +205,16 @@ function memoryIncrement(key: string, windowMs: number): number {
   return existing.count;
 }
 
+function memoryInspect(key: string): { count: number; ttlMs: number } {
+  const now = Date.now();
+  const existing = memoryCounters.get(key);
+  if (!existing || existing.expiresAt <= now) {
+    if (existing) memoryCounters.delete(key);
+    return { count: 0, ttlMs: 0 };
+  }
+  return { count: existing.count, ttlMs: Math.max(0, existing.expiresAt - now) };
+}
+
 async function incrementCounter(key: string, windowMs: number): Promise<number> {
   const redis = getOptionalRedis();
   if (redis && redis.status === "ready") {
@@ -208,24 +244,66 @@ export async function consumeRateLimit(
   return { allowed: count <= limit, count };
 }
 
+export async function inspectRateLimit(key: string): Promise<{ count: number; ttlMs: number }> {
+  const redis = getOptionalRedis();
+  if (redis && redis.status === "ready") {
+    try {
+      const [raw, pttl] = await Promise.all([redis.get(key), redis.pttl(key)]);
+      const count = raw ? parseInt(raw, 10) || 0 : 0;
+      return { count, ttlMs: pttl > 0 ? pttl : 0 };
+    } catch (err) {
+      console.warn("[RATE_LIMIT] Redis inspect failed — in-memory fallback:", err);
+    }
+  }
+  return memoryInspect(key);
+}
+
+export async function resetRateLimitKey(key: string): Promise<void> {
+  memoryCounters.delete(key);
+  const redis = getOptionalRedis();
+  if (redis && redis.status === "ready") {
+    try {
+      await redis.del(key);
+    } catch (err) {
+      console.warn("[RATE_LIMIT] Redis del failed:", err);
+    }
+  }
+}
+
+/** Strip IPv4-mapped IPv6 and trailing ports so limiter keys stay stable. */
+export function normalizeClientIp(raw: string | null | undefined): string {
+  let ip = String(raw || "").trim().toLowerCase();
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(ip)) {
+    ip = ip.replace(/:\d+$/, "");
+  }
+  return ip || "unknown";
+}
+
 /**
- * Client IP behind Railway/proxies. Relies on Express `trust proxy` (set in setupAuth)
- * so `req.ip` reflects the first trusted hop; X-Forwarded-For is only used as a secondary
- * fallback when trust proxy has already been configured by the app.
+ * Client IP for rate limiting. Uses Express `req.ip` after `trust proxy` (Railway = 1 hop).
+ * Does **not** read X-Forwarded-For directly — that header is attacker-controlled beyond
+ * the trusted hop count Express already applied.
  */
 export function getClientIp(req: Request): string {
-  // Prefer Express-resolved IP when trust proxy is enabled (Railway / reverse proxy).
-  if (typeof req.ip === "string" && req.ip.length > 0 && req.ip !== "127.0.0.1") {
-    return req.ip;
+  if (typeof req.ip === "string" && req.ip.trim()) {
+    return normalizeClientIp(req.ip);
   }
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0].trim();
+  const remote = req.socket?.remoteAddress;
+  if (typeof remote === "string" && remote.trim()) {
+    return normalizeClientIp(remote);
   }
-  if (Array.isArray(forwarded) && forwarded[0]) {
-    return forwarded[0].split(",")[0].trim();
-  }
-  return req.ip || req.socket.remoteAddress || "unknown";
+  return "unknown";
+}
+
+export function remainingWindowRetryAfterSec(windowMs: number, now = Date.now()): number {
+  const windowStart = Math.floor(now / windowMs);
+  const windowEnd = (windowStart + 1) * windowMs;
+  return Math.max(1, Math.ceil((windowEnd - now) / 1000));
+}
+
+export function setRetryAfterHeader(res: Response, retryAfterSec: number): void {
+  res.set("Retry-After", String(Math.max(1, Math.floor(retryAfterSec))));
 }
 
 export function findRateLimitRule(path: string, method: string): RateLimitRule | undefined {
@@ -235,7 +313,9 @@ export function findRateLimitRule(path: string, method: string): RateLimitRule |
 
 export function listProtectedRateLimitPatterns(): string[] {
   return [
-    "/api/auth/*",
+    "GET /api/auth/me",
+    "POST /api/auth/logout",
+    "POST /api/auth/* (except login — dedicated failure limiter)",
     "POST /api/contact",
     "GET /api/contacts/*",
     "PATCH|POST|PUT|DELETE /api/contacts/*",
@@ -274,14 +354,25 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
   void incrementCounter(key, rule.windowMs)
     .then((count) => {
       if (count > rule.limit) {
-        console.log(
-          `[RATE_LIMIT] ${req.method} ${path} ${ip} ${userId ?? "-"} limiter=${rule.id} limit=${rule.limit} windowMs=${rule.windowMs} count=${count}`,
+        const retryAfterSec = remainingWindowRetryAfterSec(rule.windowMs);
+        console.info(
+          JSON.stringify({
+            tag: "[RATE_LIMIT]",
+            event: "blocked",
+            method: req.method,
+            path,
+            limiter: rule.id,
+            limit: rule.limit,
+            count,
+            retryAfterSec,
+          }),
         );
+        setRetryAfterHeader(res, retryAfterSec);
         res.status(429).json({
           error: "Too many requests. Please try again shortly.",
           code: "RATE_LIMITED",
           limiter: rule.id,
-          retryAfterSec: Math.ceil(rule.windowMs / 1000),
+          retryAfterSec,
         });
         return;
       }

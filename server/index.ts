@@ -26,6 +26,7 @@ import { getAppOrigin } from "./urlOrigins";
 import { isEmailImageRequestPath } from "@shared/emailImagePolicy";
 import { corsMiddleware } from "./corsMiddleware";
 import { rateLimitMiddleware } from "./rateLimitMiddleware";
+import { formatHttpAccessLog } from "@shared/safeLogRedaction";
 import { requireAdmin as requireSalesAdmin } from "./adminAuth";
 import { logGhlOAuthRecoveryAllowlistAtStartup } from "./ghlOAuthRecoveryStartup";
 import { logMetaCredentialEncryptionBootDiag } from "./metaCredentialCrypto";
@@ -347,13 +348,6 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
@@ -362,12 +356,16 @@ app.use((req, res, next) => {
         console.log(`[SLOW_API] ${req.method} ${path} ${duration}`);
       }
 
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      const requestIdHeader = req.get("x-request-id") || req.get("x-correlation-id");
+      log(
+        formatHttpAccessLog({
+          method: req.method,
+          path,
+          status: res.statusCode,
+          durationMs: duration,
+          requestId: requestIdHeader ? requestIdHeader.slice(0, 120) : null,
+        }),
+      );
     }
   });
 

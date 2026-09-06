@@ -72,6 +72,8 @@ export function resetAccountQueryCache(queryClient: QueryClient): void {
   queryClient.clear();
 }
 
+import { parseRetryAfterHeader } from "@/lib/authErrorMessages";
+
 export type SessionUser = {
   id: string;
   name?: string;
@@ -79,17 +81,37 @@ export type SessionUser = {
   [key: string]: unknown;
 };
 
+export type SessionFetchResult = {
+  user: SessionUser | null;
+  status: number;
+  retryAfterSec: number | null;
+};
+
 /** Cookie-session identity only. Never use login JSON as a substitute. */
 export async function fetchAuthoritativeSessionUser(): Promise<SessionUser | null> {
-  const response = await fetch("/api/auth/me", {
-    credentials: "include",
-    cache: "no-store",
-    headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
-  });
-  if (!response.ok) return null;
-  const data = (await response.json().catch(() => null)) as SessionUser | null;
-  if (!data || typeof data.id !== "string" || !data.id.trim()) return null;
-  return data;
+  const result = await fetchAuthoritativeSessionUserResult();
+  return result.user;
+}
+
+export async function fetchAuthoritativeSessionUserResult(): Promise<SessionFetchResult> {
+  try {
+    const response = await fetch("/api/auth/me", {
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    const retryAfterSec = parseRetryAfterHeader(response.headers.get("Retry-After"));
+    if (!response.ok) {
+      return { user: null, status: response.status, retryAfterSec };
+    }
+    const data = (await response.json().catch(() => null)) as SessionUser | null;
+    if (!data || typeof data.id !== "string" || !data.id.trim()) {
+      return { user: null, status: response.status, retryAfterSec };
+    }
+    return { user: data, status: response.status, retryAfterSec };
+  } catch {
+    return { user: null, status: 0, retryAfterSec: null };
+  }
 }
 
 export function sessionIdentitiesMatch(

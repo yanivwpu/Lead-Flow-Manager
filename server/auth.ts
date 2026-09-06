@@ -10,19 +10,24 @@ import { isDisposableEmail } from '@shared/disposableEmail';
 import { normalizeUserLanguage } from '@shared/userLanguage';
 import {
   AUTH_RATE_LIMIT_MESSAGE,
+  LOGIN_RATE_LIMIT_MESSAGE,
   checkForgotPasswordEmailLimit,
   checkForgotPasswordIpLimit,
   checkSignupEmailLimit,
   checkSignupIpLimit,
   checkVerificationResendCooldown,
   checkVerificationResendLimit,
+  clearLoginFailures,
+  evaluateLoginRateLimit,
   getAuthClientIp,
   getAuthUserAgent,
   getRequestId,
   isEmailVerified,
   logAuthSecurityEvent,
+  recordLoginFailure,
   softAuthDelay,
 } from './authSecurity';
+import { setRetryAfterHeader } from './rateLimitMiddleware';
 import {
   TURNSTILE_GENERIC_ERROR,
   isTurnstileRequired,
@@ -59,17 +64,6 @@ async function resolveUserForLogin(rawEmail: string): Promise<User | undefined> 
   return storage.getUserByEmail(typeof rawEmail === 'string' ? rawEmail : '');
 }
 
-/** Lowercase email for logs without exposing full address (unless AUTH_LOGIN_VERBOSE). */
-function maskEmailForLog(email: string): string {
-  const s = (email || '').trim().toLowerCase();
-  const at = s.indexOf('@');
-  if (at <= 0) return '[no-email]';
-  const local = s.slice(0, at);
-  const domain = s.slice(at + 1);
-  const prefix = local.length <= 2 ? local[0] ?? '?' : local.slice(0, 2);
-  return `${prefix}***@${domain}`;
-}
-
 function authLoginVerbose(): boolean {
   return process.env.AUTH_LOGIN_VERBOSE === 'true' || process.env.AUTH_LOGIN_VERBOSE === '1';
 }
@@ -84,28 +78,21 @@ export function normalizeEmailForAuth(raw: string): string {
   }
 }
 
-function classifyStoredPassword(stored: string | null | undefined): 'bcrypt' | 'plaintext' | 'empty' | 'unknown' {
-  if (stored == null || stored === '') return 'empty';
-  if (/^\$2[aby]\$\d{2}\$/.test(stored)) return 'bcrypt';
-  return 'plaintext';
-}
-
 function emitLoginAttempt(req: Request, patch: Record<string, unknown>): void {
   const base = (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt ?? {};
   (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt = { ...base, ...patch };
 }
 
 function logLoginAttemptLine(req: Request, extras: Record<string, unknown>): void {
-  const ctx = (req as unknown as { __loginAttempt?: Record<string, unknown> }).__loginAttempt ?? {};
-  const payload = {
-    ...ctx,
-    ...extras,
-    host: req.get('host') ?? null,
-    origin: req.get('origin') ?? req.get('referer') ?? null,
-    cookieDomain: process.env.SESSION_COOKIE_DOMAIN?.trim() || '(unset â€” host-only cookie)',
-    secureCookie: process.env.NODE_ENV === 'production',
-  };
-  console.log(`[LoginAttempt] ${JSON.stringify(payload)}`);
+  const requestId = getRequestId(req);
+  console.info(
+    JSON.stringify({
+      tag: "[LoginAttempt]",
+      requestId,
+      phase: extras.phase ?? null,
+      sessionCreated: extras.sessionCreated ?? false,
+    }),
+  );
 }
 
 /** Supports bcrypt hashes and legacy plaintext (re-hashed after successful login). */
@@ -144,7 +131,9 @@ async function verifyLoginPassword(
 }
 
 export function setupAuth(app: Express) {
-  // Trust proxy for Railway / reverse proxies (req.ip from first trusted hop)
+  // Railway terminates TLS at one reverse-proxy hop. Express then sets req.ip from
+  // the right-most trusted X-Forwarded-For entry. Do not raise this without measuring
+  // extra hops (e.g. orange-cloud Cloudflare in front of Railway).
   app.set('trust proxy', 1);
   warnIfTurnstileMisconfigured();
 
@@ -188,15 +177,8 @@ export function setupAuth(app: Express) {
 
           if (isRetiredCrmDemoEmail(normalizedEmail)) {
             emitLoginAttempt(req, {
-              emailNormalized: maskEmailForLog(normalizedEmail),
-              emailRawLen: trimmedEmail.length,
-              userFound: false,
-              userId: null,
-              passwordMatch: false,
-              passwordStoredPresent: false,
-              storedHashKind: 'empty',
-              failureReason: 'retired_crm_demo',
               path: 'local_strategy',
+              outcome: 'retired_crm_demo',
             });
             return done(null, false, { message: 'Invalid email or password' });
           }
@@ -204,7 +186,6 @@ export function setupAuth(app: Express) {
           // Normal login (case-insensitive email match + NFKC via storage.getUserByEmail)
           let user = await resolveUserForLogin(normalizedEmail);
           const passwordFieldPresent = !!(user?.password && user.password.length > 0);
-          const storedHashKind = classifyStoredPassword(user?.password);
 
           let verifyOk = false;
           if (user && passwordFieldPresent) {
@@ -217,33 +198,19 @@ export function setupAuth(app: Express) {
             }
           }
 
-          const verbose = authLoginVerbose();
-          const emailForLog = verbose ? normalizedEmail : maskEmailForLog(normalizedEmail);
+          const verbose = authLoginVerbose() && process.env.NODE_ENV !== "production";
 
           emitLoginAttempt(req, {
-            emailNormalized: emailForLog,
-            emailRawLen: trimmedEmail.length,
-            userFound: !!user,
-            userId: user?.id ?? null,
-            passwordMatch: verifyOk,
-            passwordStoredPresent: passwordFieldPresent,
-            storedHashKind,
-            failureReason: !user
-              ? 'user_not_found'
-              : !passwordFieldPresent
-                ? 'empty_stored_password'
-                : verifyOk
-                  ? null
-                  : 'password_mismatch_or_invalid_hash',
             path: 'local_strategy',
+            outcome: !user || !verifyOk ? 'reject' : 'verify_ok',
           });
 
-          if (authLoginVerbose()) {
-            console.log('[AUTH LOGIN verbose]', {
-              email: emailForLog,
-              passwordSubmittedLen: typeof password === 'string' ? password.length : 0,
-              passwordStoredLen: user?.password?.length ?? 0,
-            });
+          if (verbose) {
+            console.info(JSON.stringify({
+              tag: "[AUTH LOGIN verbose]",
+              passwordSubmittedLen: typeof password === "string" ? password.length : 0,
+              passwordStoredPresent: passwordFieldPresent,
+            }));
           }
 
           if (!user || !verifyOk) {
@@ -814,51 +781,98 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Login
+  // Login — failed-attempt limiter is in-route (not the global /api/auth request bucket).
   app.post('/api/auth/login', (req, res, next) => {
-    passport.authenticate('local', (err: any, user: User, info: any) => {
-      if (err) {
-        console.error('[AUTH LOGIN route] passport error:', err);
-        logLoginAttemptLine(req, {
-          sessionCreated: false,
-          phase: 'passport_exception',
-          passportError: String((err as Error)?.message || err),
+    const ip = getAuthClientIp(req);
+    const email = normalizeEmailForAuth(typeof req.body?.email === 'string' ? req.body.email : '');
+
+    void (async () => {
+      const pre = await evaluateLoginRateLimit({ email, ip });
+      if (!pre.allowed) {
+        await logAuthSecurityEvent({
+          eventType: 'login_rate_limited',
+          email,
+          ipAddress: ip,
+          userAgent: getAuthUserAgent(req),
+          outcome: 'rate_limited',
+          reasonCode: pre.limiter,
+          requestId: getRequestId(req),
         });
-        return res.status(500).json({ error: 'Authentication failed' });
-      }
-      if (!user) {
-        logLoginAttemptLine(req, {
-          sessionCreated: false,
-          phase: 'reject_credentials',
+        logLoginAttemptLine(req, { sessionCreated: false, phase: 'rate_limited' });
+        console.info(JSON.stringify({ tag: "[RATE_LIMIT]", event: "blocked", method: "POST", path: "/api/auth/login", limiter: pre.limiter, retryAfterSec: pre.retryAfterSec }));
+        setRetryAfterHeader(res, pre.retryAfterSec);
+        return res.status(429).json({
+          error: LOGIN_RATE_LIMIT_MESSAGE,
+          code: "RATE_LIMITED",
+          retryAfterSec: pre.retryAfterSec,
         });
-        return res.status(401).json({ error: info?.message || 'Invalid email or password' });
       }
 
-      // Set session duration based on rememberMe flag
-      const rememberMe = req.body.rememberMe || false;
-
-      req.login(user, (loginErr: any) => {
-        logLoginAttemptLine(req, {
-          sessionCreated: !loginErr,
-          phase: loginErr ? 'req_login_failed' : 'success',
-          rememberMe: !!rememberMe,
-          reqLoginError: loginErr ? String(loginErr?.message || loginErr) : null,
-        });
-        if (loginErr) {
-          return res.status(500).json({ error: 'Failed to log in' });
+      passport.authenticate('local', (err: any, user: User, info: any) => {
+        if (err) {
+          console.error('[AUTH LOGIN route] passport error');
+          logLoginAttemptLine(req, {
+            sessionCreated: false,
+            phase: 'passport_exception',
+          });
+          return res.status(500).json({ error: 'Authentication failed' });
+        }
+        if (!user) {
+          void recordLoginFailure({ email, ip }).then((after) => {
+            if (!after.allowed) {
+              void logAuthSecurityEvent({
+                eventType: 'login_rate_limited',
+                email,
+                ipAddress: ip,
+                userAgent: getAuthUserAgent(req),
+                outcome: 'rate_limited',
+                reasonCode: after.limiter,
+                requestId: getRequestId(req),
+              });
+              logLoginAttemptLine(req, { sessionCreated: false, phase: 'rate_limited' });
+              console.info(JSON.stringify({ tag: "[RATE_LIMIT]", event: "blocked", method: "POST", path: "/api/auth/login", limiter: after.limiter, retryAfterSec: after.retryAfterSec }));
+              setRetryAfterHeader(res, after.retryAfterSec);
+              return res.status(429).json({
+                error: LOGIN_RATE_LIMIT_MESSAGE,
+                code: "RATE_LIMITED",
+                retryAfterSec: after.retryAfterSec,
+              });
+            }
+            logLoginAttemptLine(req, {
+              sessionCreated: false,
+              phase: 'reject_credentials',
+            });
+            return res.status(401).json({ error: info?.message || 'Invalid email or password' });
+          });
+          return;
         }
 
-        // Extend session if remember me is checked (30 days vs 7 days default)
-        if (rememberMe && req.session.cookie) {
-          req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
-        }
+        void clearLoginFailures({ email, ip });
 
-        void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
-          const { password: _, ...safeUser } = user;
-          res.json(safeUser);
+        // Set session duration based on rememberMe flag
+        const rememberMe = req.body.rememberMe || false;
+
+        req.login(user, (loginErr: any) => {
+          logLoginAttemptLine(req, {
+            sessionCreated: !loginErr,
+            phase: loginErr ? 'req_login_failed' : 'success',
+          });
+          if (loginErr) {
+            return res.status(500).json({ error: 'Failed to log in' });
+          }
+
+          // Extend session if remember me is checked (30 days vs 7 days default)
+          if (rememberMe && req.session.cookie) {
+            req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+          }
+
+          void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
+            const { password: _, ...safeUser } = user;
+            res.json(safeUser);
+          });
         });
-      });
-    })(req, res, next);
+      })(req, res, next);
+    })();
   });
 
   // Logout

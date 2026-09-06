@@ -2,6 +2,7 @@
  * Auth abuse rate limits + privacy-conscious security event audit log.
  * Reuses Redis from rateLimitMiddleware when available.
  */
+import { createHash } from "crypto";
 import type { Request } from "express";
 import { lt } from "drizzle-orm";
 import { authSecurityEvents } from "@shared/schema";
@@ -9,10 +10,21 @@ import { db } from "../drizzle/db";
 import {
   consumeRateLimit,
   getClientIp as resolveClientIp,
+  inspectRateLimit,
+  normalizeClientIp,
+  resetRateLimitKey,
 } from "./rateLimitMiddleware";
 import { normalizeEmailAddress } from "@shared/disposableEmail";
 
 export const AUTH_RATE_LIMIT_MESSAGE = "Too many requests. Please try again shortly.";
+export const LOGIN_RATE_LIMIT_MESSAGE = "Too many login attempts. Please try again shortly.";
+
+/** Failed logins per normalized-email + client-IP pair. */
+export const LOGIN_PAIR_LIMIT = 8;
+export const LOGIN_PAIR_WINDOW_MS = 15 * 60 * 1000;
+/** Failed logins per client IP across emails (password spraying). */
+export const LOGIN_IP_SPRAY_LIMIT = 40;
+export const LOGIN_IP_SPRAY_WINDOW_MS = 15 * 60 * 1000;
 
 const HOUR_MS = 60 * 60 * 1000;
 const RETENTION_DAYS = 90;
@@ -29,7 +41,8 @@ export type AuthSecurityEventType =
   | "verification_resent"
   | "change_pending_email"
   | "forgot_password_requested"
-  | "forgot_password_rate_limited";
+  | "forgot_password_rate_limited"
+  | "login_rate_limited";
 
 export type AuthSecurityOutcome = "allowed" | "rejected" | "rate_limited" | "success" | "noop";
 
@@ -129,6 +142,90 @@ export async function checkForgotPasswordIpLimit(ip: string): Promise<RateLimitC
 
 export async function checkForgotPasswordEmailLimit(email: string): Promise<RateLimitCheck> {
   return checkBucket(`forgot:email:${normalizeEmailAddress(email)}`, 3);
+}
+
+export function loginEmailFingerprint(email: string): string {
+  const normalized = normalizeEmailAddress(email);
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
+
+export function loginPairRateLimitKey(email: string, ip: string): string {
+  return `loginfail:pair:${loginEmailFingerprint(email)}:${normalizeClientIp(ip)}`;
+}
+
+export function loginIpSprayRateLimitKey(ip: string): string {
+  return `loginfail:ip:${normalizeClientIp(ip)}`;
+}
+
+export type LoginRateLimitDecision = {
+  allowed: boolean;
+  retryAfterSec: number;
+  limiter: "login-pair" | "login-ip" | null;
+};
+
+function retryAfterFromTtl(ttlMs: number, windowMs: number): number {
+  if (ttlMs > 0) return Math.max(1, Math.ceil(ttlMs / 1000));
+  return Math.max(1, Math.ceil(windowMs / 1000));
+}
+
+/** Peek-only: does not increment. Used before credential verification. */
+export async function evaluateLoginRateLimit(input: {
+  email: string;
+  ip: string;
+}): Promise<LoginRateLimitDecision> {
+  const pairKey = loginPairRateLimitKey(input.email, input.ip);
+  const ipKey = loginIpSprayRateLimitKey(input.ip);
+  const [pair, spray] = await Promise.all([inspectRateLimit(pairKey), inspectRateLimit(ipKey)]);
+  if (pair.count >= LOGIN_PAIR_LIMIT) {
+    return {
+      allowed: false,
+      retryAfterSec: retryAfterFromTtl(pair.ttlMs, LOGIN_PAIR_WINDOW_MS),
+      limiter: "login-pair",
+    };
+  }
+  if (spray.count >= LOGIN_IP_SPRAY_LIMIT) {
+    return {
+      allowed: false,
+      retryAfterSec: retryAfterFromTtl(spray.ttlMs, LOGIN_IP_SPRAY_WINDOW_MS),
+      limiter: "login-ip",
+    };
+  }
+  return { allowed: true, retryAfterSec: 0, limiter: null };
+}
+
+/** Count a failed credential attempt. */
+export async function recordLoginFailure(input: {
+  email: string;
+  ip: string;
+}): Promise<LoginRateLimitDecision> {
+  const pairKey = loginPairRateLimitKey(input.email, input.ip);
+  const ipKey = loginIpSprayRateLimitKey(input.ip);
+  const [pair, spray] = await Promise.all([
+    consumeRateLimit(pairKey, LOGIN_PAIR_LIMIT, LOGIN_PAIR_WINDOW_MS),
+    consumeRateLimit(ipKey, LOGIN_IP_SPRAY_LIMIT, LOGIN_IP_SPRAY_WINDOW_MS),
+  ]);
+  if (!pair.allowed) {
+    const inspected = await inspectRateLimit(pairKey);
+    return {
+      allowed: false,
+      retryAfterSec: retryAfterFromTtl(inspected.ttlMs, LOGIN_PAIR_WINDOW_MS),
+      limiter: "login-pair",
+    };
+  }
+  if (!spray.allowed) {
+    const inspected = await inspectRateLimit(ipKey);
+    return {
+      allowed: false,
+      retryAfterSec: retryAfterFromTtl(inspected.ttlMs, LOGIN_IP_SPRAY_WINDOW_MS),
+      limiter: "login-ip",
+    };
+  }
+  return { allowed: true, retryAfterSec: 0, limiter: null };
+}
+
+/** Clear email+IP failure state after successful authentication. Does not reset IP spray. */
+export async function clearLoginFailures(input: { email: string; ip: string }): Promise<void> {
+  await resetRateLimitKey(loginPairRateLimitKey(input.email, input.ip));
 }
 
 /** Constant-ish delay helper to reduce timing enumeration on forgot-password. */
