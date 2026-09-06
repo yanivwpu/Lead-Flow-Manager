@@ -25,6 +25,8 @@ import { handleMarketingDemoCalendlyWebhook } from "../marketingDemoCalendlyWebh
 import { scheduleHubSpotAutoSync } from "../hubspotAutoSync";
 import multer from "multer";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
+import { getRequestId } from "../authSecurity";
+import { logWebchatInboundMediaError } from "../webchatVisitorMedia";
 
 const webchatVisitorUpload = multer({
   storage: multer.memoryStorage(),
@@ -566,7 +568,7 @@ export function registerWebhookRoutes(app: Express): void {
         }
         return sendWebchatPublicJson(res, 200, { success: true, visitorId });
       } catch (error) {
-        console.error("[Inbound] Web chat media error:", error);
+        logWebchatInboundMediaError({ error, requestId: getRequestId(req) });
         return sendWebchatPublicJson(res, 500, { error: "Failed to process message" });
       }
     });

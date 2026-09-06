@@ -21,9 +21,18 @@ import {
   WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE,
 } from "../shared/webchatSendErrors";
 import {
+  WEBCHAT_PUBLIC_CACHE_CONTROL,
+  WEBCHAT_PUBLIC_NOSNIFF,
+  sendWebchatPublicJson,
+  WEBCHAT_GENERIC_NOT_FOUND,
+  WEBCHAT_GENERIC_RATE_LIMIT,
+} from "../server/webchatAccess";
+import {
   buildSignedWebchatVisitorMediaUrl,
+  classifyWebchatMediaError,
   signWebchatVisitorMedia,
   verifyWebchatVisitorMedia,
+  webchatInboundMediaErrorLog,
 } from "../server/webchatVisitorMedia";
 
 const root = process.cwd();
@@ -273,4 +282,103 @@ test("Inbox blocks non-image webchat attachments before send", () => {
   assert.match(gate, /JPEG, PNG, and WebP/);
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   assert.match(inbox, /outboundWebchatMediaHint/);
+});
+
+test("public media JSON 404 and 429 set no-store and nosniff", () => {
+  const cases: Array<[number, unknown]> = [
+    [404, WEBCHAT_GENERIC_NOT_FOUND],
+    [429, WEBCHAT_GENERIC_RATE_LIMIT],
+    [400, { error: "Invalid image" }],
+    [500, { error: "Failed to process message" }],
+  ];
+  for (const [status, payload] of cases) {
+    const headers: Record<string, string> = {};
+    let statusCode = 200;
+    let body: unknown;
+    const res = {
+      setHeader(name: string, value: string) {
+        headers[name] = value;
+      },
+      status(code: number) {
+        statusCode = code;
+        return {
+          json(next: unknown) {
+            body = next;
+          },
+        };
+      },
+      json(next: unknown) {
+        body = next;
+      },
+    };
+    sendWebchatPublicJson(res, status, payload);
+    assert.equal(statusCode, status);
+    assert.equal(headers["Cache-Control"], WEBCHAT_PUBLIC_CACHE_CONTROL);
+    assert.equal(headers["X-Content-Type-Options"], WEBCHAT_PUBLIC_NOSNIFF);
+    assert.equal(headers["Pragma"], "no-cache");
+    assert.equal(headers["Expires"], "0");
+    assert.equal(headers["Surrogate-Control"], "no-store");
+    assert.deepEqual(body, payload);
+  }
+
+  const webhooks = read("server/routes/webhooks.ts");
+  const mediaGet = webhooks.slice(
+    webhooks.indexOf('app.get("/api/webchat/:userId/:visitorId/media/:messageId"'),
+    webhooks.indexOf('app.post("/api/webchat/:userId/:visitorId/media"'),
+  );
+  const mediaPost = webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId/:visitorId/media"'));
+  const postWindow = mediaPost.slice(0, 7000);
+  assert.match(mediaGet, /sendWebchatPublicJson\(res, 404, WEBCHAT_GENERIC_NOT_FOUND\)/);
+  assert.match(mediaGet, /sendWebchatPublicJson\(res, 429, WEBCHAT_GENERIC_RATE_LIMIT\)/);
+  assert.match(postWindow, /sendWebchatPublicJson\(res, 429, WEBCHAT_GENERIC_RATE_LIMIT\)/);
+  assert.match(postWindow, /sendWebchatPublicJson\(res, access\.status, access\.body\)/);
+});
+
+test("inbound media errors log only a generic category and requestId", () => {
+  const bucket = "prod-whachat-media-bucket";
+  const storageKey = "media/tenant-user-99/webchat/secret-photo.jpg";
+  const signedUrl = "/api/webchat/wgt_abc/11111111-1111-4111-8111-111111111111/media/m1?exp=1&sig=deadbeef";
+  const tenantId = "11111111-2222-4333-8444-555555555555";
+  const filename = "passport-scan.webp";
+  const credential = "AKIAIOSFODNN7EXAMPLE";
+  const sdkError = Object.assign(new Error(`GetObject ${bucket} Key=${storageKey} ${signedUrl}`), {
+    name: "NoSuchKey",
+    code: "NoSuchKey",
+    Bucket: bucket,
+    Key: storageKey,
+    userId: tenantId,
+    filename,
+    credentials: { accessKeyId: credential },
+  });
+
+  const logged = webchatInboundMediaErrorLog({ error: sdkError, requestId: "req-media-1" });
+  assert.deepEqual(logged, {
+    event: "inbound_media_error",
+    requestId: "req-media-1",
+    category: "storage",
+  });
+  const serialized = JSON.stringify(logged);
+  assert.equal(serialized.includes(bucket), false);
+  assert.equal(serialized.includes(storageKey), false);
+  assert.equal(serialized.includes(signedUrl), false);
+  assert.equal(serialized.includes(tenantId), false);
+  assert.equal(serialized.includes(filename), false);
+  assert.equal(serialized.includes(credential), false);
+  assert.equal(serialized.includes("GetObject"), false);
+  assert.equal(classifyWebchatMediaError({ name: "TimeoutError" }), "timeout");
+  assert.equal(classifyWebchatMediaError({ code: "ECONNRESET" }), "network");
+  assert.equal(classifyWebchatMediaError({ name: "MulterError", code: "LIMIT_FILE_SIZE" }), "payload");
+  assert.equal(classifyWebchatMediaError(new Error("bucket leak")), "unknown");
+  assert.equal(webchatInboundMediaErrorLog({ error: sdkError, requestId: "bad id / url" }).requestId, null);
+
+  const webhooks = read("server/routes/webhooks.ts");
+  const mediaPostStart = webhooks.indexOf('app.post("/api/webchat/:userId/:visitorId/media"');
+  const mediaPostEnd = webhooks.indexOf('app.post("/api/webchat/:userId/:visitorId/forms"');
+  const postWindow = webhooks.slice(
+    mediaPostStart,
+    mediaPostEnd > mediaPostStart ? mediaPostEnd : mediaPostStart + 8000,
+  );
+  assert.match(postWindow, /logWebchatInboundMediaError\(\{ error, requestId: getRequestId\(req\) \}\)/);
+  assert.doesNotMatch(postWindow, /Web chat media error:", error/);
+  assert.doesNotMatch(postWindow, /console\.error\(/);
 });

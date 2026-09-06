@@ -37,6 +37,7 @@ const MAX_NAME = 120;
 const MAX_TITLE = 300;
 
 export const WEBCHAT_PUBLIC_CACHE_CONTROL = "private, no-store, no-cache, must-revalidate";
+export const WEBCHAT_PUBLIC_NOSNIFF = "nosniff";
 
 export function applyWebchatPublicCacheHeaders(res: {
   setHeader(name: string, value: string): unknown;
@@ -45,6 +46,7 @@ export function applyWebchatPublicCacheHeaders(res: {
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
   res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", WEBCHAT_PUBLIC_NOSNIFF);
 }
 
 export function sendWebchatPublicJson(

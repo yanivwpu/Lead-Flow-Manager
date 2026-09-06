@@ -17,6 +17,70 @@ import { readOwnedStoredMedia, uploadOutboundUserMedia } from "./mediaStorageSer
 const WEAK_PLACEHOLDER = "webchat-media-dev-only";
 const MIN_PROD_SECRET_LEN = 32;
 export const WEBCHAT_VISITOR_MEDIA_TTL_SEC = 10 * 60;
+export const WEBCHAT_INBOUND_MEDIA_ERROR_EVENT = "inbound_media_error";
+
+export type WebchatMediaErrorCategory = "timeout" | "network" | "storage" | "payload" | "unknown";
+
+const SAFE_TOKEN_RE = /^[A-Za-z0-9._-]{1,64}$/;
+const SAFE_REQUEST_ID_RE = /^[A-Za-z0-9._-]{1,120}$/;
+const TIMEOUT_TOKENS = new Set(["TimeoutError", "AbortError", "Timeout", "ETIMEDOUT", "ESOCKETTIMEDOUT", "UND_ERR_CONNECT_TIMEOUT"]);
+const NETWORK_TOKENS = new Set(["FetchError", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "EPIPE", "UND_ERR_SOCKET"]);
+const STORAGE_TOKENS = new Set([
+  "NoSuchKey",
+  "NotFound",
+  "AccessDenied",
+  "NoSuchBucket",
+  "InvalidObjectState",
+  "SlowDown",
+  "InternalError",
+  "PermanentRedirect",
+  "InvalidAccessKeyId",
+  "SignatureDoesNotMatch",
+  "NetworkingError",
+]);
+const PAYLOAD_TOKENS = new Set(["MulterError", "LIMIT_FILE_SIZE", "LIMIT_UNEXPECTED_FILE", "LIMIT_FILE_COUNT"]);
+
+function safeErrorToken(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const token = value.trim();
+  return SAFE_TOKEN_RE.test(token) ? token : "";
+}
+
+function tokensFromUnknownError(error: unknown): string[] {
+  if (!error || typeof error !== "object") return [];
+  const record = error as { name?: unknown; code?: unknown; Code?: unknown };
+  return [safeErrorToken(record.name), safeErrorToken(record.code), safeErrorToken(record.Code)].filter(Boolean);
+}
+
+export function classifyWebchatMediaError(error: unknown): WebchatMediaErrorCategory {
+  const tokens = tokensFromUnknownError(error);
+  if (tokens.some((token) => TIMEOUT_TOKENS.has(token))) return "timeout";
+  if (tokens.some((token) => NETWORK_TOKENS.has(token))) return "network";
+  if (tokens.some((token) => STORAGE_TOKENS.has(token))) return "storage";
+  if (tokens.some((token) => PAYLOAD_TOKENS.has(token))) return "payload";
+  return "unknown";
+}
+
+export function webchatInboundMediaErrorLog(params: {
+  error: unknown;
+  requestId?: string | null;
+}): { event: string; requestId: string | null; category: WebchatMediaErrorCategory } {
+  const requestId = typeof params.requestId === "string" && SAFE_REQUEST_ID_RE.test(params.requestId)
+    ? params.requestId
+    : null;
+  return {
+    event: WEBCHAT_INBOUND_MEDIA_ERROR_EVENT,
+    requestId,
+    category: classifyWebchatMediaError(params.error),
+  };
+}
+
+export function logWebchatInboundMediaError(params: {
+  error: unknown;
+  requestId?: string | null;
+}): void {
+  console.error("[WebchatInboundMedia]", webchatInboundMediaErrorLog(params));
+}
 
 function isProductionRuntime(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.NODE_ENV === "production";

@@ -215,6 +215,7 @@ test("poll 200, 404, and 429 responses all set Cache-Control no-store", () => {
     sendWebchatPublicJson(res, status, payload);
     assert.equal(res.statusCode, status);
     assert.equal(res.headers["Cache-Control"], WEBCHAT_PUBLIC_CACHE_CONTROL);
+    assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
     assert.equal(res.headers["Surrogate-Control"], "no-store");
     assert.equal(res.headers["Pragma"], "no-cache");
     assert.equal(res.headers["Expires"], "0");
@@ -322,7 +323,7 @@ test("supplied href must match the tenant allowlist; WidgetFrame sends parent-pa
   assert.match(frame, /parentPageHref/);
   assert.match(frame, /document\.referrer/);
   assert.match(frame, /href=\$\{encodeURIComponent\(parentPageHref\)\}/);
-  const widgetJs = read("server/webchatPublicScript.ts");
+  const widgetJs = read("server/routes.ts");
   assert.match(widgetJs, /qs\.push\('parentUrl=' \+ encodeURIComponent\(window\.location\.href\)\)/);
   const hosted = read("client/src/pages/WidgetChat.tsx");
   assert.match(hosted, /resolvePageHref=\{pageHref\}/);
