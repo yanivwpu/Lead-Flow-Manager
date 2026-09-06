@@ -90,6 +90,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
+  const [widgetUnavailable, setWidgetUnavailable] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -112,8 +113,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         : `/api/webchat/${userId}/settings`;
 
     fetch(settingsUrl)
-      .then(r => r.json())
-      .then(data => {
+      .then(async (r) => {
+        if (!r.ok) {
+          setWidgetUnavailable(true);
+          setIsLoading(false);
+          return;
+        }
+        const data = await r.json();
         if (data?.color) setWidgetColor(data.color);
         if (data?.businessName) setWidgetName(`Chat with ${data.businessName}`);
         const resolved =
@@ -131,9 +137,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
+        setWidgetUnavailable(false);
         setIsLoading(false);
       })
-      .catch(() => setIsLoading(false));
+      .catch(() => {
+        setWidgetUnavailable(true);
+        setIsLoading(false);
+      });
   }, [userId, ruleMatchHref]);
 
   useEffect(() => {
@@ -159,37 +169,50 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
   // Start polling once we have visitorId
   useEffect(() => {
-    if (!visitorId) return;
+    if (!visitorId || widgetUnavailable) return;
     fetchMessages();
     pollRef.current = setInterval(fetchMessages, POLL_INTERVAL);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [visitorId, fetchMessages]);
+  }, [visitorId, fetchMessages, widgetUnavailable]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = useCallback(async (text: string) => {
-    if (!text.trim() || !userId || !visitorId || isSending) return;
+  const markFailed = useCallback((optId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === optId ? { ...m, status: "failed" } : m)),
+    );
+  }, []);
+
+  const sendMessage = useCallback(async (text: string, retryId?: string) => {
+    if (!text.trim() || !userId || !visitorId || isSending || widgetUnavailable) return;
     setIsSending(true);
-    const optimisticMsg: ChatMessage = {
-      id: `opt_${Date.now()}`,
-      direction: "inbound",
-      content: text,
-      contentType: "text",
-      mediaUrl: null,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, optimisticMsg]);
-    setInputText("");
+    const optId = retryId || `opt_${Date.now()}`;
+    if (retryId) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === retryId ? { ...m, status: undefined } : m)),
+      );
+    } else {
+      const optimisticMsg: ChatMessage = {
+        id: optId,
+        direction: "inbound",
+        content: text,
+        contentType: "text",
+        mediaUrl: null,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      setInputText("");
+    }
 
     try {
       const visitorLabel =
         urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
-      await fetch(`/api/webchat/${userId}`, {
+      const res = await fetch(`/api/webchat/${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -202,16 +225,20 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
         }),
       });
-      // Re-fetch to get server-confirmed messages + any bot replies
-      await new Promise(r => setTimeout(r, 800));
+      if (!res.ok) {
+        markFailed(optId);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 800));
       await fetchMessages();
     } catch (e) {
       console.error("Send error", e);
+      markFailed(optId);
     } finally {
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, fetchMessages, urlLeadSource, parentUrlForRules]);
+  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentUrlForRules, markFailed]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks
@@ -307,6 +334,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
         {deduped.map((msg) => {
           const isOutbound = msg.direction === "outbound";
+          const sendFailed = !isOutbound && msg.status === "failed";
           const buttons: ButtonOption[] = msg.templateVariables?.chatbotButtons ?? [];
           const isButtonMessage = msg.contentType === "buttons" && buttons.length > 0;
           const messageResponded = clickedButtons.has(msg.id);
@@ -324,9 +352,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     className={`px-3 py-2 rounded-2xl text-sm shadow-sm ${
                       isOutbound
                         ? "bg-white text-gray-800 rounded-bl-none border border-gray-100"
-                        : "text-white rounded-br-none"
+                        : sendFailed
+                          ? "bg-red-50 text-gray-800 rounded-br-none border border-red-200"
+                          : "text-white rounded-br-none"
                     }`}
-                    style={!isOutbound ? { background: widgetColor } : {}}
+                    style={!isOutbound && !sendFailed ? { background: widgetColor } : {}}
                   >
                     {msg.contentType === "image" && msg.mediaUrl ? (
                       <img src={msg.mediaUrl} alt="image" className="max-w-full rounded-lg max-h-48 object-cover" />
@@ -386,6 +416,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     )}
                   </div>
                 )}
+                {sendFailed && (
+                  <div className="mt-1 flex items-center justify-end gap-2">
+                    <p className="text-xs text-red-600" data-testid="text-delivery-error">
+                      Message could not be delivered.
+                    </p>
+                    <button
+                      type="button"
+                      data-testid="btn-retry-send"
+                      disabled={isSending || widgetUnavailable}
+                      className="text-xs font-medium text-red-700 underline disabled:opacity-40"
+                      onClick={() => sendMessage(msg.content || "", msg.id)}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -395,6 +441,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
       {/* Input */}
       <div className="border-t border-gray-100 p-3 bg-white flex-shrink-0">
+        {widgetUnavailable && (
+          <p className="text-xs text-red-600 mb-2" data-testid="text-widget-unavailable">
+            Chat is unavailable.
+          </p>
+        )}
         <div className="flex gap-2 items-center">
           <input
             ref={inputRef}
@@ -402,15 +453,15 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message…"
-            disabled={isSending}
+            placeholder={widgetUnavailable ? "Chat unavailable" : "Type a message…"}
+            disabled={isSending || widgetUnavailable}
             data-testid="input-chat-message"
             className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
             style={{ "--tw-ring-color": widgetColor } as React.CSSProperties}
           />
           <button
             onClick={() => sendMessage(inputText)}
-            disabled={isSending || !inputText.trim()}
+            disabled={isSending || widgetUnavailable || !inputText.trim()}
             data-testid="btn-send-chat"
             className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity disabled:opacity-40"
             style={{ background: widgetColor }}

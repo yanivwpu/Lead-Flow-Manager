@@ -54,6 +54,9 @@ function read(rel: string): string {
 {
   const frame = read("client/src/pages/WidgetFrame.tsx");
   assert.match(frame, /status !== "failed"/);
+  assert.match(frame, /if \(!res\.ok\)/);
+  assert.match(frame, /text-delivery-error/);
+  assert.match(frame, /setWidgetUnavailable/);
 }
 
 {
