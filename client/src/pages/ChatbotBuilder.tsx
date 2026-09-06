@@ -44,7 +44,7 @@ import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
-type MessageType = "text" | "image" | "video" | "file" | "buttons" | "template";
+type MessageType = "text" | "image" | "video" | "file" | "buttons" | "template" | "form";
 
 export interface ButtonOption {
   label: string;
@@ -69,6 +69,13 @@ interface ChatbotNode {
     mediaCaption?: string;
     fileName?: string;
     buttons?: ButtonOption[];
+    webchatForm?: {
+      id: string;
+      title: string;
+      description?: string;
+      submitLabel?: string;
+      fields: Array<Record<string, unknown>>;
+    };
     options?: { label: string; nextNodeId: string }[];
     condition?: { type: string; value: string };
     /** For assign: value = memberId; memberName is display cache for the builder. */
@@ -167,6 +174,7 @@ const MESSAGE_TYPES: { value: MessageType; label: string; icon: any }[] = [
   { value: "video", label: "Video", icon: Video },
   { value: "file", label: "File", icon: FileText },
   { value: "buttons", label: "Buttons", icon: ListOrdered },
+  { value: "form", label: "Form", icon: FileText },
   { value: "template", label: "Template", icon: FileText },
 ];
 
@@ -196,6 +204,7 @@ function stepSummary(node: ChatbotNode, teamMembers: TeamMember[] = []): string 
       if (node.data.messageType === "video") return node.data.mediaCaption ? `🎥 ${node.data.mediaCaption}` : "🎥 Video";
       if (node.data.messageType === "file") return `📎 ${node.data.fileName || "File"}`;
       if (node.data.messageType === "buttons") return node.data.content || "Message with quick-reply buttons";
+      if (node.data.messageType === "form") return node.data.webchatForm?.title || "Structured form";
       return node.data.content || "No message written yet";
     case "question":
       return node.data.content || "No question written yet";
@@ -1330,6 +1339,26 @@ export function ChatbotBuilder() {
                               messageType: mt.value,
                               ...(mt.value === "text" ? { mediaUrl: undefined, mediaCaption: undefined, fileName: undefined, buttons: undefined } : {}),
                               ...(mt.value === "buttons" && !selectedStep.data.buttons ? { buttons: [{ label: "Option 1", value: "option_1" }] as ButtonOption[] } : {}),
+                              ...(mt.value === "form" && !selectedStep.data.webchatForm ? {
+                                webchatForm: {
+                                  id: "lead_capture",
+                                  title: "Contact details",
+                                  submitLabel: "Submit",
+                                  fields: [
+                                    { id: "name", type: "name", label: "Name", required: true },
+                                    { id: "email", type: "email", label: "Email", required: true },
+                                    { id: "phone", type: "phone", label: "Phone", required: false },
+                                    {
+                                      id: "consent",
+                                      type: "consent",
+                                      label: "Consent",
+                                      required: true,
+                                      consentText:
+                                        "I agree to be contacted about my inquiry. Message and data rates may apply. This is not a claim of A2P registration or carrier approval.",
+                                    },
+                                  ],
+                                },
+                              } : {}),
                             })}
                             className={cn(
                               "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all border",
@@ -1499,6 +1528,57 @@ export function ChatbotBuilder() {
                       </div>
                     );
                   })()}
+
+                  {selectedStep.data.messageType === "form" && (
+                    <div className="space-y-3">
+                      <p className="text-[11px] text-slate-600">
+                        Safe fields only (name, email, phone, select, consent). No HTML or scripts. Website Chat only.
+                      </p>
+                      <div>
+                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Prompt</Label>
+                        <Textarea
+                          value={selectedStep.data.content || ""}
+                          onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
+                          placeholder="Please share your details"
+                          className="min-h-[60px] text-sm resize-none border-gray-200"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Form title</Label>
+                        <Input
+                          value={selectedStep.data.webchatForm?.title || ""}
+                          onChange={(e) =>
+                            updateStep(selectedStep.id, {
+                              webchatForm: {
+                                ...(selectedStep.data.webchatForm || { id: "lead_capture", fields: [] }),
+                                title: e.target.value,
+                              },
+                            })
+                          }
+                          className="text-sm h-8 border-gray-200"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Consent text</Label>
+                        <Textarea
+                          value={
+                            String(
+                              selectedStep.data.webchatForm?.fields?.find((f) => f.type === "consent")?.consentText ||
+                                "",
+                            )
+                          }
+                          onChange={(e) => {
+                            const current = selectedStep.data.webchatForm || { id: "lead_capture", title: "Contact details", fields: [] };
+                            const fields = (current.fields || []).map((f) =>
+                              f.type === "consent" ? { ...f, consentText: e.target.value, required: true } : f,
+                            );
+                            updateStep(selectedStep.id, { webchatForm: { ...current, fields } });
+                          }}
+                          className="min-h-[80px] text-sm resize-none border-gray-200"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

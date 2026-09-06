@@ -40,6 +40,7 @@ interface ChatbotNode {
     mediaCaption?: string;
     fileName?: string;
     buttons?: (string | ButtonOption)[];
+    webchatForm?: unknown;
     options?: { label: string; nextNodeId: string }[];
     condition?: { type: string; value: string };
     action?: { type: string; value: string };
@@ -534,6 +535,47 @@ async function sendChatbotButtonsWebchat(
 }
 
 /**
+ * WebChat: store a tenant-configured structured form (no HTML/JS).
+ */
+async function sendChatbotFormWebchat(
+  ctx: TriggerContext,
+  promptText: string,
+  rawForm: unknown,
+): Promise<void> {
+  const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
+  const form = sanitizeWebchatFormDefinition(rawForm);
+  if (!form) {
+    if (promptText) await sendChatbotReply(ctx, promptText);
+    return;
+  }
+  try {
+    const { channelService } = await import("./channelService");
+    const guarded = await withAutomationSendGuard({
+      userId: ctx.userId,
+      contactId: ctx.contactId,
+      conversationId: ctx.conversationId,
+      channel: ctx.channel as Channel,
+      source: "chatbot",
+      idempotencyKey: `chatbot:webchat_form:${ctx.conversationId}:${form.id}`,
+    }, async () =>
+      channelService.sendMessage({
+        userId: ctx.userId,
+        contactId: ctx.contactId,
+        content: promptText || form.title,
+        contentType: "form",
+        templateVariables: { webchatForm: form },
+        forceChannel: ctx.channel as Channel,
+      })
+    );
+    if (!guarded.ok) {
+      console.warn(`[Chatbot] WebChat form blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+    }
+  } catch (err: any) {
+    console.error(`[Chatbot] ❌ WebChat form exception: ${err.message}`);
+  }
+}
+
+/**
  * Fallback for Twilio WhatsApp, SMS, Telegram, Instagram, Facebook:
  * send a numbered plain-text list.
  * NOTE: Twilio WhatsApp interactive buttons require the Content API with
@@ -876,7 +918,7 @@ async function executeFlow(
         const hasText = content.length > 0;
         const hasMedia = mediaUrl.length > 0;
 
-        if (!hasText && !hasMedia && msgType !== "buttons") {
+        if (!hasText && !hasMedia && msgType !== "buttons" && msgType !== "form") {
           console.log(
             `[Chatbot] Node "${nodeId}" (type: ${msgType}) has no content or mediaUrl — skipping send`
           );
@@ -920,6 +962,16 @@ async function executeFlow(
           const rawButtons = (currentNode.data.buttons as (string | ButtonOption)[] | undefined) || [];
           await sendChatbotButtons(ctx, content, rawButtons);
           console.log(`[Chatbot] ⏸ Pausing flow execution after buttons node — awaiting user reply`);
+          return { visitorFacing: true, reason: "wait_for_input" };
+        } else if (msgType === "form") {
+          if (ctx.channel !== "webchat") {
+            await sendChatbotReply(ctx, content || "Please share your contact details.");
+            visitorFacing = true;
+            visitorReason = "scripted_reply";
+            break;
+          }
+          await sendChatbotFormWebchat(ctx, content, currentNode.data.webchatForm);
+          console.log(`[Chatbot] ⏸ Pausing flow execution after form node — awaiting user submit`);
           return { visitorFacing: true, reason: "wait_for_input" };
         } else {
           if (hasText) {
