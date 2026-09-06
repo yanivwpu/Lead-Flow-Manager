@@ -164,6 +164,14 @@ export async function getPublicAgentPageData(
     publicPhone: str(agent.publicPhone),
     schedulingUrl: calendly || scheduling.url || "",
     widgetEnabled,
+    widgetPublicId: await (async () => {
+      try {
+        const { getWidgetPublicIdForUser } = await import("../widgetIdentity");
+        return await getWidgetPublicIdForUser(agent.userId);
+      } catch {
+        return "";
+      }
+    })(),
     preferredLeadCapture: (agent.agentPagePreferredLeadCapture as "webchat" | "email" | "phone") || "webchat",
     showHomeValueCta: agent.agentPageShowHomeValueCta,
     listings: browse.listings,

@@ -82,7 +82,6 @@ run("shared delete service is used by single and bulk routes", () => {
   assert.ok(bulkSlice.includes("not_owned_or_missing"));
   const singleSlice = routes.slice(deleteIdx, deleteIdx + 900);
   assert.ok(singleSlice.includes("deleteContactSafely"));
-  assert.ok(singleSlice.includes('status(403)'));
   assert.ok(singleSlice.includes('status(404)'));
 });
 

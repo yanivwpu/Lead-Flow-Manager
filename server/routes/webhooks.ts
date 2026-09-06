@@ -1,25 +1,17 @@
 import type { Express } from "express";
 import { storage } from "../storage";
-
-/** Match widget pageRules against a URL (same order / semantics as /widget.js). */
-function resolveWebchatPageCopy(ws: Record<string, unknown>, href: string): { greeting: string; prefill: string } {
-  const defaultGreeting =
-    typeof ws.welcomeMessage === "string" && ws.welcomeMessage.trim()
-      ? String(ws.welcomeMessage)
-      : "Hi! How can we help you today?";
-  const trimmedHref = href.slice(0, 4000);
-  const rules = Array.isArray(ws.pageRules) ? ws.pageRules : [];
-  for (const raw of rules) {
-    const r = raw as Record<string, unknown>;
-    const q = String(r?.urlContains ?? "").trim();
-    if (q && trimmedHref.indexOf(q) !== -1) {
-      const g = typeof r.greeting === "string" && r.greeting.trim() ? String(r.greeting) : defaultGreeting;
-      const prefill = typeof r.prefilledMessage === "string" ? String(r.prefilledMessage) : "";
-      return { greeting: g, prefill };
-    }
-  }
-  return { greeting: defaultGreeting, prefill: "" };
-}
+import {
+  consumeWebchatContactCap,
+  consumeWebchatRateLimits,
+  matchWidgetPageRule,
+  parseWebchatInboundBody,
+  resolvePublicWidgetAccess,
+  WEBCHAT_GENERIC_NOT_FOUND,
+  WEBCHAT_GENERIC_RATE_LIMIT,
+} from "../webchatAccess";
+import { mergeWebchatPageContext, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
+import { resolveTelegramWebhookOwner, resolveTiktokLeadOwner } from "../ingressPublicTokens";
+import { getChatbotFlowForWorkspace } from "../tenantOwnership";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
 import { handleCalendlyWebhook } from "../calendlyWebhook";
 import { handleGrowthEngineSetupCalendlyWebhook } from "../growthEngineSetupCalendly";
@@ -41,12 +33,22 @@ export function registerWebhookRoutes(app: Express): void {
     void handleCalendlyWebhook(req, res);
   });
 
-  // Telegram webhook for incoming messages
+  // Telegram webhook for incoming messages (opaque public id + secret header)
   app.post("/api/webhook/telegram/:userId", async (req, res) => {
     try {
-      const { userId } = req.params;
+      const owner = await resolveTelegramWebhookOwner({
+        pathToken: req.params.userId,
+        secretHeader:
+          typeof req.headers["x-telegram-bot-api-secret-token"] === "string"
+            ? req.headers["x-telegram-bot-api-secret-token"]
+            : undefined,
+      });
+      if (!owner) {
+        return res.status(200).json({ ok: true });
+      }
+      const userId = owner.userId;
       const update = req.body;
-      console.log(`[Inbound] Webhook received — channel: telegram, userId: ${userId}`);
+      console.log(`[Inbound] Webhook received — channel: telegram`);
 
       if (update.message) {
         const message = update.message;
@@ -126,15 +128,20 @@ export function registerWebhookRoutes(app: Express): void {
     }
   });
 
-  // TikTok Lead Intake webhook (lead generation, not messaging)
-  app.post("/api/webhook/tiktok/lead", async (req, res) => {
-    try {
-      const { userId, name, phone, email, source, metadata } = req.body;
-      console.log("TikTok lead received:", { name, phone, email, source });
+  // Legacy TikTok path — never trusts body.userId. Disabled (use /lead/:publicId).
+  app.post("/api/webhook/tiktok/lead", async (_req, res) => {
+    return res.status(404).json(WEBCHAT_GENERIC_NOT_FOUND);
+  });
 
-      if (!userId) {
-        return res.status(400).json({ error: "userId required" });
+  app.post("/api/webhook/tiktok/lead/:publicId", async (req, res) => {
+    try {
+      const owner = await resolveTiktokLeadOwner(req.params.publicId);
+      if (!owner) {
+        return res.status(404).json(WEBCHAT_GENERIC_NOT_FOUND);
       }
+      const userId = owner.userId;
+      const { name, phone, email, source, metadata } = req.body || {};
+      console.log("TikTok lead received:", { name, phone, email, source });
 
       const contact = await storage.createContact({
         userId,
@@ -164,18 +171,61 @@ export function registerWebhookRoutes(app: Express): void {
     }
   });
 
-  // Web Chat widget endpoint for visitors
+  // Web Chat widget endpoint for visitors — public ID only (never users.id).
   app.post("/api/webchat/:userId", async (req, res) => {
     try {
-      const { userId } = req.params;
-      const { visitorId, name, message, source, parentUrl } = req.body;
-
-      if (!message) {
-        return res.status(400).json({ error: "Message required" });
+      const parsed = parseWebchatInboundBody(req.body);
+      if (!parsed.ok) {
+        return res.status(400).json({ error: "Invalid message" });
+      }
+      const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        parentUrl: parsed.data.parentUrl,
+        requireEnabled: true,
+        strictOrigin: true,
+      });
+      if (!access.ok) {
+        return res.status(access.status).json(access.body);
+      }
+      const allowed = await consumeWebchatRateLimits({
+        req,
+        widgetPublicId: access.owner.widgetPublicId,
+        visitorId: parsed.data.visitorId,
+      });
+      if (!allowed) {
+        return res.status(429).json(WEBCHAT_GENERIC_RATE_LIMIT);
       }
 
+      const userId = access.owner.userId;
+      const { visitorId, message, name, source, parentUrl, pageTitle, referrer } = parsed.data;
+      const existing = await storage.getContactByChannelId(userId, "webchat", visitorId);
+      const newContactOk = await consumeWebchatContactCap({
+        widgetPublicId: access.owner.widgetPublicId,
+        visitorId,
+        isNewContact: !existing,
+      });
+      if (!newContactOk) {
+        return res.status(429).json(WEBCHAT_GENERIC_RATE_LIMIT);
+      }
+
+      const matched = matchWidgetPageRule(access.owner.widgetSettings, parentUrl || "");
+      let preferredChatbotFlowId: string | undefined;
+      if (matched?.chatbotFlowId) {
+        const ownedFlow = await getChatbotFlowForWorkspace(userId, matched.chatbotFlowId);
+        if (ownedFlow?.isActive) preferredChatbotFlowId = ownedFlow.id;
+      }
+      const sanitized = sanitizeWebchatPageContextInput({
+        parentUrl,
+        pageTitle,
+        referrer,
+        matchedPageRule: matched?.urlContains,
+      });
+      const webchatPageContext = mergeWebchatPageContext(
+        (existing?.webchatContext as Record<string, unknown>) || {},
+        sanitized,
+        new Date().toISOString(),
+      );
+
       const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const webchatVisitorId = visitorId || `visitor_${Date.now()}`;
       const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
         "@shared/agent/webchatLeadContext"
       );
@@ -184,25 +234,48 @@ export function registerWebhookRoutes(app: Express): void {
         (typeof name === "string" && name.trim()) ||
         resolveWebchatVisitorDisplayName(webchatLeadSource);
 
-      console.log(`[Inbound] Webhook received — channel: webchat, userId: ${userId}, visitorId: ${webchatVisitorId}, leadSource: ${webchatLeadSource || "website"}`);
-      console.log(`[Inbound] Channel identified: webchat — starting processIncomingMessage`);
-
       const { channelService } = await import("../channelService");
-      await channelService.processIncomingMessage({
+      const result = await channelService.processIncomingMessage({
         userId,
-        channel: 'webchat',
-        channelContactId: webchatVisitorId,
+        channel: "webchat",
+        channelContactId: visitorId,
         contactName,
         content: message,
-        contentType: 'text',
+        contentType: "text",
         externalMessageId: webchatExternalId,
         webchatLeadSource,
+        webchatPageContext,
+        preferredChatbotFlowId,
       });
 
-      console.log(`[Inbound] Webhook returned 200 — channel: webchat, userId: ${userId}`);
+      if (result.success && result.contact && result.conversation && !result.deduped) {
+        const { dispatchWebchatInboundWorkflows } = await import("../webchatInboundWorkflows");
+        void dispatchWebchatInboundWorkflows({
+          userId,
+          contact: result.contact,
+          conversation: result.conversation,
+          messageBody: message,
+          isNewConversation: Boolean(result.isNewConversation),
+          chatbotWillFire: Boolean(result.chatbotWillFire),
+        }).catch((err) => console.error("[WebchatWorkflows]", err instanceof Error ? err.message : err));
+
+        void import("../webchatAiAutoReply").then(({ maybeRunWebchatServerAi }) =>
+          maybeRunWebchatServerAi({
+            userId,
+            contact: result.contact!,
+            conversation: result.conversation!,
+            inboundMessageId: result.message?.id || webchatExternalId,
+            inboundText: message,
+            chatbotWillFire: Boolean(result.chatbotWillFire),
+            bookingOwnsReply: result.turnOwner === "booking",
+            widgetSettings: access.owner.widgetSettings,
+          }).catch((err) => console.error("[WebchatServerAi]", err instanceof Error ? err.message : err)),
+        );
+      }
+
       res.json({
         success: true,
-        visitorId: webchatVisitorId,
+        visitorId,
         queued: false,
       });
     } catch (error) {
@@ -211,83 +284,74 @@ export function registerWebhookRoutes(app: Express): void {
     }
   });
 
-  // Public widget settings (no auth — returns only appearance fields)
-  // Optional query ?href=… resolves chatGreeting/chatPrefill from pageRules (hosted /chat page).
   app.get("/api/webchat/:userId/settings", async (req, res) => {
     try {
-      const { userId } = req.params;
       const hrefParam =
         typeof req.query.href === "string" ? req.query.href.slice(0, 4000) : "";
-      const user = await storage.getUser(userId);
+      const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        parentUrl: hrefParam || undefined,
+        requireEnabled: true,
+        strictOrigin: false,
+      });
+      if (!access.ok) {
+        return res.status(access.status).json(access.body);
+      }
+      const ws = access.owner.widgetSettings;
       const defaults = {
         color: "#25D366",
         welcomeMessage: "Hi! How can we help you today?",
-        businessName: "",
       };
-      if (!user) {
-        return res.json({
-          ...defaults,
-          chatGreeting: defaults.welcomeMessage,
-          chatPrefill: "",
-        });
-      }
-      const ws = (user.widgetSettings as Record<string, unknown>) || {};
       const welcomeMessage =
         typeof ws.welcomeMessage === "string" && ws.welcomeMessage.trim()
           ? String(ws.welcomeMessage)
           : defaults.welcomeMessage;
-      let chatGreeting = welcomeMessage;
-      let chatPrefill = "";
-      if (hrefParam) {
-        const resolved = resolveWebchatPageCopy(ws, hrefParam);
-        chatGreeting = resolved.greeting;
-        chatPrefill = resolved.prefill;
-      }
+      const matched = hrefParam ? matchWidgetPageRule(ws, hrefParam) : null;
+      const chatGreeting =
+        matched?.greeting && matched.greeting.trim() ? matched.greeting : welcomeMessage;
+      const chatPrefill = matched?.prefilledMessage || "";
       res.json({
         color:
-          typeof ws.color === "string" && ws.color.trim()
-            ? String(ws.color)
-            : defaults.color,
+          typeof ws.color === "string" && ws.color.trim() ? String(ws.color) : defaults.color,
         welcomeMessage,
-        businessName: String((user as { businessName?: string }).businessName || (user as { name?: string }).name || ""),
+        businessName: access.owner.businessName || "",
         chatGreeting,
         chatPrefill,
+        suggestedQuestions: matched?.suggestedQuestions || [],
+        ctaLabel: matched?.ctaLabel || "",
+        ctaUrl: matched?.ctaUrl || "",
       });
     } catch {
-      const fallback = "Hi! How can we help you?";
-      res.json({
-        color: "#25D366",
-        welcomeMessage: fallback,
-        businessName: "",
-        chatGreeting: fallback,
-        chatPrefill: "",
-      });
+      return res.status(404).json(WEBCHAT_GENERIC_NOT_FOUND);
     }
   });
 
-  // Get web chat messages for a visitor
   app.get("/api/webchat/:userId/:visitorId/messages", async (req, res) => {
     try {
-      const { userId, visitorId } = req.params;
-
-      const contact = await storage.getContactByChannelId(userId, 'webchat', visitorId);
-      if (!contact) {
+      const access = await resolvePublicWidgetAccess(req, req.params.userId, {
+        requireEnabled: true,
+        strictOrigin: false,
+      });
+      if (!access.ok) {
+        return res.status(access.status).json(access.body);
+      }
+      const visitorId = String(req.params.visitorId || "").slice(0, 80);
+      const contact = await storage.getContactByChannelId(access.owner.userId, "webchat", visitorId);
+      if (!contact || contact.userId !== access.owner.userId) {
         return res.json([]);
       }
 
       const { touchWebchatVisitorSession } = await import("../webchatSession");
       void touchWebchatVisitorSession(contact.id);
 
-      const conversation = await storage.getConversationByContactAndChannel(
-        contact.id,
-        'webchat'
-      );
-      if (!conversation) {
+      const conversation = await storage.getConversationByContactAndChannel(contact.id, "webchat");
+      if (!conversation || conversation.userId !== access.owner.userId) {
         return res.json([]);
       }
 
       const messages = await storage.getMessages(conversation.id, 50);
-      res.json(messages);
+      res.json(
+        messages.filter((m) => m.direction !== "outbound" || m.status !== "failed"),
+      );
     } catch (error) {
       console.error("Web chat messages error:", error);
       res.status(500).json({ error: "Failed to fetch messages" });

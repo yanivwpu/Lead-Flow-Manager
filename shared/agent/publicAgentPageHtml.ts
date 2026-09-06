@@ -635,7 +635,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
   <script type="application/json" id="page-config">${JSON.stringify({
     slug,
-    userId: data.userId,
+    widgetPublicId: data.widgetPublicId,
     schedulingUrl: data.schedulingUrl,
     widgetEnabled: data.widgetEnabled,
     preferredLeadCapture: data.preferredLeadCapture,
@@ -787,12 +787,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       var chatBubble = document.getElementById("chat-bubble");
 
       function ensureChatIframeSrc() {
-        if (!chatIframe || !config.userId) return false;
+        if (!chatIframe || !config.widgetPublicId) return false;
         var current = chatIframe.getAttribute("src") || "";
         if (!current || current === "about:blank") {
           var prefill = encodeURIComponent(config.chatPrefill || "");
           var parentUrl = encodeURIComponent(window.location.href);
-          chatIframe.src = "/widget-frame/" + encodeURIComponent(config.userId)
+          chatIframe.src = "/widget-frame/" + encodeURIComponent(config.widgetPublicId)
             + "?prefill=" + prefill + "&parentUrl=" + parentUrl + "&source=" + CHAT_WIDGET_SOURCE;
         }
         return true;
@@ -803,7 +803,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           openModal("message");
           return;
         }
-        if (!chatWidget || !chatIframe || !config.userId) {
+        if (!chatWidget || !chatIframe || !config.widgetPublicId) {
           openModal("message");
           return;
         }

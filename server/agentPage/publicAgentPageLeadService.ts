@@ -138,7 +138,7 @@ export async function processPublicAgentPageLead(
         ? { reasonForSelling: { value: body.reasonForSelling, source: "explicit" as const, confidence: 1, updatedAt: new Date().toISOString() } }
         : {}),
     };
-    await persistSellerPreferenceProfile(contactId, profile);
+    await persistSellerPreferenceProfile(contactId, profile, userId);
   }
 
   if (body.intent === "ask_about") {

@@ -160,7 +160,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const {
         readBuyerPreferenceProfile,
@@ -195,7 +195,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const {
         shouldRunBuyerPreferencePipeline,
@@ -242,7 +242,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const {
         shouldRunBuyerPreferencePipeline,
@@ -437,7 +437,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(404).json({ error: "Contact not found" });
       }
       if (result.contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
       res.json(result);
     } catch (error) {
@@ -491,7 +491,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(404).json({ error: "Contact not found" });
       }
       if (contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
       // Coerce date strings → Date objects for timestamp columns
       const body = { ...req.body };
@@ -621,7 +621,7 @@ export function registerContactRoutes(app: Express): void {
 
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const bucket = String(req.body?.bucket || "").toLowerCase();
       const score = typeof req.body?.score === "number" ? req.body.score : undefined;
@@ -724,6 +724,19 @@ export function registerContactRoutes(app: Express): void {
         });
       }
 
+      if (desiredTag == null) {
+        return res.json({
+          applied: false,
+          skipped: true,
+          reason: "no_system_tag",
+          oldTag,
+          newTag: null,
+          bucket,
+          score,
+          confidence,
+        });
+      }
+
       const updated = await storage.updateContact(contact.id, { tag: desiredTag });
       scheduleHubSpotAutoSync(req.user.id, contact.id);
 
@@ -765,7 +778,7 @@ export function registerContactRoutes(app: Express): void {
       const result = await deleteContactSafely(req.user.id, req.params.id);
       if (!result.ok) {
         if (result.code === "forbidden") {
-          return res.status(403).json({ error: "Forbidden" });
+          return res.status(404).json({ error: "Not found" });
         }
         return res.status(404).json({ error: "Contact not found" });
       }
@@ -799,7 +812,7 @@ export function registerContactRoutes(app: Express): void {
       if (!target) return res.status(404).json({ error: "Target contact not found" });
       if (!source) return res.status(404).json({ error: "Source contact not found" });
       if (target.userId !== req.user.id || source.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
 
       const merged = await storage.mergeContacts(targetId, sourceId);
@@ -822,7 +835,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(404).json({ error: "Contact not found" });
       }
       if (contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
 
       const { channel } = req.body;
@@ -1027,7 +1040,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const entity = await resolveEntityForNotes(req.params.id);
       if (!entity) return res.status(404).json({ error: "Not found" });
-      if (entity.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (entity.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
       const notes = await storage.getContactNotes(entity.userId, req.params.id);
       res.json(notes);
     } catch (error) {
@@ -1042,7 +1055,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const entity = await resolveEntityForNotes(req.params.id);
       if (!entity) return res.status(404).json({ error: "Not found" });
-      if (entity.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (entity.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
       const { content } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "Content is required" });
       const note = await storage.addContactNote({
@@ -1115,7 +1128,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const { conversations: convs } = await storage.getContactWithConversations(req.params.id) || { conversations: [] };
       const notes = await storage.getContactNotes(req.user.id, req.params.id);
@@ -1194,7 +1207,7 @@ export function registerContactRoutes(app: Express): void {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const contact = await storage.getContact(req.params.id);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (contact.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const result = await clearBookedMeetingsForContact(req.user.id, req.params.id);
       const updated = await storage.getContact(req.params.id);
@@ -1261,7 +1274,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(404).json({ error: "Contact not found" });
       }
       if (contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
       const limit = parseInt(req.query.limit as string) || 100;
       const events = await storage.getActivityEvents(req.params.id, limit);
@@ -1282,7 +1295,7 @@ export function registerContactRoutes(app: Express): void {
         return res.status(404).json({ error: "Contact not found" });
       }
       if (contact.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
       const conversationId = req.body?.conversationId as string | undefined;
       const reason = (req.body?.reason as string) || "user_unsnooze";

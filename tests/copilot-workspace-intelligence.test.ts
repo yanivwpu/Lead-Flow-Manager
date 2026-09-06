@@ -3,6 +3,8 @@
  * Run: npx tsx tests/copilot-workspace-intelligence.test.ts
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assembleWorkspaceIntelligence,
   toWorkspaceIntelligenceSnapshot,
@@ -280,11 +282,9 @@ run("11. Cross-workspace isolation of snapshot influence", () => {
 });
 
 run("12. Client query key is workspace-scoped (not contact-scoped)", () => {
-  // Contract assertion: React Query key must not include contactId.
-  const queryKey = ["/api/ai/workspace-intelligence"];
-  assert.equal(queryKey.length, 1);
-  assert.equal(queryKey[0], "/api/ai/workspace-intelligence");
-  assert.ok(!queryKey.some((k) => /contact/i.test(String(k))));
+  const inbox = readFileSync(join(process.cwd(), "client/src/pages/UnifiedInbox.tsx"), "utf8");
+  assert.match(inbox, /withUserQueryScope\(\["\/api\/ai\/workspace-intelligence"\]/);
+  assert.ok(!/queryKey:\s*\["\/api\/ai\/workspace-intelligence"\]/.test(inbox));
 });
 
 run("13. Provenance includes source/evidence and blocked high-intent reasons", () => {

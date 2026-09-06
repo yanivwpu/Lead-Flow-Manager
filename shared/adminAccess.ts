@@ -25,3 +25,18 @@ export async function isAdminAuthorized(
   if (!token) return false;
   return verifyAdminToken(token);
 }
+
+export type AdminDenialStatus = 401 | 403;
+
+/**
+ * Unauthenticated (no CRM session, no admin session/token) → 401.
+ * Authenticated CRM owner who is not Sales Admin → 403.
+ */
+export function adminDenialStatus(input: {
+  isAdmin: boolean;
+  hasCrmUser: boolean;
+}): AdminDenialStatus | null {
+  if (input.isAdmin) return null;
+  if (input.hasCrmUser) return 403;
+  return 401;
+}

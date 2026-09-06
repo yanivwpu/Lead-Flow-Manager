@@ -598,7 +598,7 @@ function AIBrainContent() {
   const showBrainUpgradeSection = hasAIAssist && !effectiveHasAIBrain;
   const hidePaidBrainCta = isInTrial && trialIncludesAIBrain && effectiveHasAIBrain;
   const starterOnly = isStarter && !isPro;
-  const autoModeLocked = starterOnly;
+  const autoModeLocked = !effectiveHasAIBrain;
 
   return (
     <div
@@ -749,7 +749,7 @@ function AIBrainContent() {
                         aria-checked={selected}
                         title={
                           autoLocked
-                            ? "Auto mode requires Pro workflow access. Upgrade or complete your trial on Pro."
+                            ? "Auto mode requires AI Brain on this workspace."
                             : mode.tooltip
                         }
                         onClick={() => {

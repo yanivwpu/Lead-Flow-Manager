@@ -77,6 +77,12 @@ import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
 import {
+  generateTelegramWebhookPublicId,
+  generateTelegramWebhookSecret,
+  generateTiktokLeadPublicId,
+  generateWidgetPublicId,
+} from "./opaquePublicId";
+import {
   isDemoBookingsSchemaMismatchError,
   mapDemoBookingRow,
 } from "./demoBookingRows";
@@ -182,6 +188,8 @@ function logUserSessionLoadFailure(phase: string, userId: string, err: unknown):
 export type UpdateContactOptions = {
   /** When true, suppress automation dispatch (tag/stage) to avoid workflow recursion */
   skipAutomationHooks?: boolean;
+  /** When set, UPDATE ... WHERE id AND user_id — foreign rows are a no-op. */
+  expectedWorkspaceUserId?: string;
 };
 
 export interface IStorage {
@@ -863,7 +871,17 @@ export class DbStorage implements IStorage {
         })()
       : insertUser;
 
-    const result = await db.insert(users).values(values).returning();
+    const withPublicIds = {
+      ...(values as InsertUser),
+      widgetPublicId: (values as InsertUser).widgetPublicId || generateWidgetPublicId(),
+      telegramWebhookPublicId:
+        (values as InsertUser).telegramWebhookPublicId || generateTelegramWebhookPublicId(),
+      telegramWebhookSecret:
+        (values as InsertUser).telegramWebhookSecret || generateTelegramWebhookSecret(),
+      tiktokLeadPublicId: (values as InsertUser).tiktokLeadPublicId || generateTiktokLeadPublicId(),
+    };
+
+    const result = await db.insert(users).values(withPublicIds).returning();
     const created = result[0];
 
     const trialPlan = created?.trialPlan ?? providedTrialPlan ?? null;
@@ -2461,7 +2479,11 @@ export class DbStorage implements IStorage {
           buyerPreferenceProfile: profileJson,
           updatedAt: new Date(),
         })
-        .where(eq(contacts.id, contactId))
+        .where(
+          options?.expectedWorkspaceUserId
+            ? and(eq(contacts.id, contactId), eq(contacts.userId, options.expectedWorkspaceUserId))
+            : eq(contacts.id, contactId),
+        )
         .returning();
 
       after = result[0];
@@ -2537,7 +2559,11 @@ export class DbStorage implements IStorage {
         sellerPreferenceProfile: profileJson,
         updatedAt: new Date(),
       })
-      .where(eq(contacts.id, contactId))
+      .where(
+        _options?.expectedWorkspaceUserId
+          ? and(eq(contacts.id, contactId), eq(contacts.userId, _options.expectedWorkspaceUserId))
+          : eq(contacts.id, contactId),
+      )
       .returning();
     return result[0];
   }
@@ -2581,7 +2607,11 @@ export class DbStorage implements IStorage {
 
     const result = await db.update(contacts)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contacts.id, id))
+      .where(
+        options?.expectedWorkspaceUserId
+          ? and(eq(contacts.id, id), eq(contacts.userId, options.expectedWorkspaceUserId))
+          : eq(contacts.id, id),
+      )
       .returning();
     const after = result[0];
     if (!after) return undefined;
@@ -3233,6 +3263,16 @@ export class DbStorage implements IStorage {
   }
 
   async createActivityEvent(event: InsertActivityEvent): Promise<ActivityEvent> {
+    const contact = await this.getContact(event.contactId);
+    if (!contact || contact.userId !== event.userId) {
+      throw new Error("activity_event_wrong_workspace");
+    }
+    if (event.conversationId) {
+      const conv = await this.getConversation(event.conversationId);
+      if (!conv || conv.userId !== event.userId || conv.contactId !== event.contactId) {
+        throw new Error("activity_event_wrong_workspace");
+      }
+    }
     const result = await db.insert(activityEvents).values(event).returning();
     return result[0];
   }
@@ -3744,11 +3784,14 @@ export class DbStorage implements IStorage {
   }
 
   async upsertAiLeadScore(chatId: string, userId: string, data: Partial<AiLeadScore>): Promise<AiLeadScore> {
-    const existing = await db.select().from(aiLeadScores).where(eq(aiLeadScores.chatId, chatId));
+    const existing = await db
+      .select()
+      .from(aiLeadScores)
+      .where(and(eq(aiLeadScores.chatId, chatId), eq(aiLeadScores.userId, userId)));
     if (existing.length > 0) {
       const result = await db.update(aiLeadScores)
         .set({ ...data, lastUpdatedAt: new Date() })
-        .where(eq(aiLeadScores.chatId, chatId))
+        .where(and(eq(aiLeadScores.chatId, chatId), eq(aiLeadScores.userId, userId)))
         .returning();
       return result[0];
     }

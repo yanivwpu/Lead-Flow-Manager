@@ -41,6 +41,8 @@ export interface InboundProcessingResult {
   /** Backward-compatible aliases for existing callers. */
   isNewConversation: boolean;
   chatbotWillFire: boolean;
+  /** Who owns the visitor-facing reply for this inbound turn. */
+  turnOwner?: "chatbot" | "booking" | "ai_eligible" | "none";
 }
 
 export function inboundProcessingLog(event: string, data: Record<string, unknown>): void {

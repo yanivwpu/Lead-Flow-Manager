@@ -171,7 +171,7 @@ run("routes require Sales Admin and target only :userId", () => {
   assert.match(deleteChunk, /permanentlyDeleteEmptyAdminAccount/);
   assert.match(deleteChunk, /emailConfirmation/);
   assert.doesNotMatch(deleteChunk, /delete-by-name|deleteByEmail|bulkDelete|email domain/i);
-  assert.match(routes, /Admin authentication required/);
+  assert.match(read("server/adminAuth.ts"), /Admin authentication required/);
 });
 
 run("deletion request re-runs preflight inside a locked transaction", () => {
@@ -322,12 +322,11 @@ run("UI loads preflight, shows blockers without bypass, and requires typed email
 
 run("unauthorized non-admin path still uses requireAdmin 401", () => {
   const routes = read("server/routes.ts");
-  const mw = routes.slice(
-    routes.indexOf("const requireAdmin"),
-    routes.indexOf("const requireAdmin") + 700,
-  );
-  assert.match(mw, /isAdminAuthorized/);
-  assert.match(mw, /status\(401\)\.json\(\{ error: "Admin authentication required" \}\)/);
+  assert.match(routes, /const requireAdmin = requireSalesAdmin/);
+  const auth = read("server/adminAuth.ts");
+  assert.match(auth, /isAdminAuthorized/);
+  assert.match(auth, /adminDenialStatus/);
+  assert.match(auth, /Admin authentication required/);
 });
 
 console.log("admin-account-permanent-delete.test.ts: all assertions passed");

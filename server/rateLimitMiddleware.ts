@@ -86,7 +86,8 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
   },
   {
     id: "widget",
-    match: (path) => path.startsWith("/api/widget") || path === "/widget.js",
+    match: (path) =>
+      path.startsWith("/api/widget") || path.startsWith("/api/webchat") || path === "/widget.js",
     limit: 180,
     windowMs: 15 * 60 * 1000,
   },

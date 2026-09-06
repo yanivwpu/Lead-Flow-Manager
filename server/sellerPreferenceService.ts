@@ -28,8 +28,11 @@ export function readSellerPreferenceProfile(contact: Contact): SellerPreferenceP
 export async function persistSellerPreferenceProfile(
   contactId: string,
   profile: SellerPreferenceProfile,
+  workspaceUserId?: string,
 ): Promise<void> {
-  await storage.updateContactSellerPreferenceProfile(contactId, profile);
+  await storage.updateContactSellerPreferenceProfile(contactId, profile, {
+    expectedWorkspaceUserId: workspaceUserId,
+  });
 }
 
 export function resolveSellerIntentForContact(
@@ -103,7 +106,7 @@ export async function syncSellerPreferencesForInboundMessage(input: {
     lastInboundAt: new Date().toISOString(),
   });
 
-  await persistSellerPreferenceProfile(input.contact.id, merged);
+  await persistSellerPreferenceProfile(input.contact.id, merged, input.contact.userId);
 
   const cf = (input.contact.customFields || {}) as Record<string, unknown>;
   const cfPatch: Record<string, unknown> = { ...cf };
@@ -116,7 +119,7 @@ export async function syncSellerPreferencesForInboundMessage(input: {
   await storage.updateContact(
     input.contact.id,
     { customFields: cfPatch },
-    { skipAutomationHooks: true },
+    { skipAutomationHooks: true, expectedWorkspaceUserId: input.contact.userId },
   );
 
   return merged;

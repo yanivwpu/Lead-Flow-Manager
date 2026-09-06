@@ -29,6 +29,8 @@ import {
 import type { ContactNote } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
+import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { useSubscription } from "@/lib/subscription-context";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
@@ -165,9 +167,13 @@ interface Contact {
   automationsPausedByUserId?: string | null;
   source?: string;
   createdAt: string;
+  lastIncomingChannel?: Channel;
   customFields?: Record<string, unknown>;
   sourceDetails?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
+  sellerPreferenceProfile?: unknown;
+  webchatContext?: unknown;
+  userId?: string;
 }
 
 interface Conversation {
@@ -176,6 +182,7 @@ interface Conversation {
   status: string;
   unreadCount: number;
   subject?: string | null;
+  aiControl?: { paused?: boolean; reason?: string } | null;
 }
 
 interface TeamMember {
@@ -864,6 +871,7 @@ export function InboxLeadDetailsPanel({
   workspaceIntelligence: workspaceIntelligenceProp,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const { data: subscription } = useSubscription();
   const shopHint = useShopifyShopHint();
@@ -872,7 +880,7 @@ export function InboxLeadDetailsPanel({
 
   // Workspace-scoped snapshot — long staleTime; not refetched per conversation/contact.
   const { data: workspaceIntelligenceQuery } = useQuery<WorkspaceIntelligenceSnapshot>({
-    queryKey: ["/api/ai/workspace-intelligence"],
+    queryKey: withUserQueryScope(["/api/ai/workspace-intelligence"], user?.id),
     queryFn: async () => {
       const res = await fetch("/api/ai/workspace-intelligence", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load workspace intelligence");
@@ -3187,6 +3195,77 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
           </div>
+
+          {primaryConversation && (
+            <>
+            <div data-testid="section-conversation-ai-control">
+              <RowLabel>AI Brain</RowLabel>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "text-[11px] font-medium",
+                    primaryConversation.aiControl?.paused ? "text-amber-800" : "text-emerald-700",
+                  )}
+                  data-testid="text-ai-control-state"
+                >
+                  {primaryConversation.aiControl?.paused
+                    ? `AI paused${primaryConversation.aiControl.reason ? ` (${primaryConversation.aiControl.reason})` : ""}`
+                    : "AI automation available"}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const action = primaryConversation.aiControl?.paused ? "resume" : "pause";
+                    await fetch(`/api/conversations/${primaryConversation.id}/ai-control`, {
+                      method: "POST",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action }),
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+                  }}
+                  className={cn(
+                    "shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors",
+                    primaryConversation.aiControl?.paused
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                  )}
+                  data-testid="button-toggle-ai-control"
+                >
+                  {primaryConversation.aiControl?.paused ? "Resume AI" : "Take over"}
+                </button>
+              </div>
+            </div>
+            {(() => {
+              const suggestion = [...contactActivityRaw]
+                .reverse()
+                .find((e) => e.eventType === "ai_suggestion");
+              const text =
+                suggestion && typeof suggestion.eventData?.suggestion === "string"
+                  ? suggestion.eventData.suggestion
+                  : "";
+              if (!text) return null;
+              return (
+                <div className="mt-2 rounded-md border border-violet-100 bg-violet-50/70 p-2" data-testid="section-ai-suggestion">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">Suggested reply</p>
+                  <p className="mt-1 text-xs text-slate-800 whitespace-pre-wrap">{text}</p>
+                  <button
+                    type="button"
+                    className="mt-1 text-[10px] font-semibold text-violet-800 underline"
+                    data-testid="button-copy-ai-suggestion"
+                    onClick={() => {
+                      navigator.clipboard.writeText(text);
+                      window.dispatchEvent(new CustomEvent("inbox-use-ai-suggestion", { detail: { text } }));
+                    }}
+                  >
+                    Use in composer
+                  </button>
+                </div>
+              );
+            })()}
+            </>
+          )}
 
           {showMarkWon ? (
             <div className="mt-2 space-y-1.5" data-testid="prospect-ai-won-actions">

@@ -359,6 +359,17 @@ export async function scheduleNoReplyJobsAfterTeamOutbound(params: {
 }
 
 export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
+  const { assertJobTenantBoundary } = await import("./tenantOwnership");
+  const bound = await assertJobTenantBoundary({
+    jobUserId: job.userId,
+    contactId: job.contactId,
+    conversationId: job.conversationId,
+  });
+  if (!bound.ok) {
+    await storage.markNoReplyJobSkipped(job.id, `tenant_mismatch:${bound.reason}`);
+    return;
+  }
+
   const entitlement = await resolveExecutionEntitlement(job.userId);
   if (!entitlement.paidAutomationAllowed) {
     logEntitlementSkip({
@@ -374,6 +385,10 @@ export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
   const wf = await storage.getWorkflow(job.workflowId);
   if (!wf || !wf.isActive) {
     await storage.markNoReplyJobSkipped(job.id, "workflow_missing_or_inactive");
+    return;
+  }
+  if (wf.userId !== job.userId || wf.userId !== bound.userId) {
+    await storage.markNoReplyJobSkipped(job.id, "tenant_mismatch:workflow");
     return;
   }
 
@@ -422,6 +437,21 @@ export async function processNoReplyJob(job: NoReplyJob): Promise<void> {
     ? await storage.getConversation(job.conversationId)
     : undefined;
   const channel = conversation?.channel ?? null;
+
+  const { contactHasAutomationsPaused } = await import("@shared/contactAutomationsPause");
+  if (contactHasAutomationsPaused(contact)) {
+    await storage.markNoReplyJobSkipped(job.id, "automations_paused");
+    return;
+  }
+  if (conversation) {
+    const { isConversationHandoffActive } = await import("@shared/handoffActivity");
+    const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+    const events = await storage.getActivityEvents(contact.id, 80);
+    if (isConversationHandoffActive(events, conversation.id) || readConversationAiControl(conversation.aiControl).paused) {
+      await storage.markNoReplyJobSkipped(job.id, "handoff_or_ai_paused");
+      return;
+    }
+  }
 
   const chat = await resolveLegacyChatForContact(contact, job.userId);
   const exec = await executeWorkflowActions(

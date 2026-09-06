@@ -366,7 +366,7 @@ async function testPTenantIsolation() {
 
   const contacts = read("server/routes/contacts.ts");
   assert.match(contacts, /contact\.userId !== req\.user\.id/);
-  assert.match(contacts, /status\(403\)\.json\(\{ error: "Forbidden" \}\)/);
+  assert.match(contacts, /status\(404\)\.json\(\{ error: "Not found" \}\)/);
   assert.match(contacts, /buildContactAutomationPausePatch\(req\.body\.automationsPaused === true, req\.user\.id\)/);
   assert.match(contacts, /delete body\.automationsPausedAt/);
   assert.match(contacts, /delete body\.automationsPausedByUserId/);

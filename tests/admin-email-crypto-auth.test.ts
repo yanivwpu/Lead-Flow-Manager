@@ -69,7 +69,11 @@ import { hasAdminSession, isAdminAuthorized } from "../shared/adminAccess";
   // Route must be registered with requireAdmin (same pattern as other admin endpoints)
   const window = routesSrc.slice(Math.max(0, start - 200), start + 400);
   assert.ok(window.includes("requireAdmin"));
-  assert.ok(routesSrc.includes("isAdminAuthorized"));
+  const adminAuthSrc = readFileSync(
+    join(import.meta.dirname, "..", "server/adminAuth.ts"),
+    "utf8",
+  );
+  assert.ok(adminAuthSrc.includes("isAdminAuthorized"));
   assert.ok(
     routesSrc.includes("Does NOT accept normal WhachatCRM owner login"),
   );

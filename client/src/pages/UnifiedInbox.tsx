@@ -248,6 +248,11 @@ interface Contact {
   customFields?: Record<string, unknown>;
   sourceDetails?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
+  sellerPreferenceProfile?: unknown;
+  webchatContext?: unknown;
+  userId?: string;
+  avatarFetchedAt?: string | null;
+  updatedAt?: string | null;
 }
 
 interface Conversation {
@@ -261,6 +266,7 @@ interface Conversation {
   lastMessageAt?: string;
   lastMessagePreview?: string;
   lastMessageDirection?: string;
+  aiControl?: { paused?: boolean; reason?: string } | null;
 }
 
 /** Stable empty list — never allocate a fresh `[]` for unmatched selection (React #185). */
@@ -289,6 +295,7 @@ interface Message {
   errorCode?: string | null;
   /** Actual inbound Email From — used for Copilot system/notification detection. */
   fromAddress?: string | null;
+  generatedBy?: string | null;
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -656,15 +663,15 @@ export function UnifiedInbox() {
   const { data: subscription } = useSubscription();
 
   // AI access flags (legacy — kept for backward compat with other components)
-  const plan = (subscription?.limits as any)?.plan || "free";
+  const plan = (subscription?.limits as { plan?: string; effectiveHasAIBrain?: boolean })?.plan || "free";
   const hasAIAssist = plan === "starter" || plan === "pro" || plan === "enterprise";
-  const hasAIBrainAddon = (subscription?.limits as any)?.hasAIBrainAddon ?? false;
-  const hasFullAIBrain = hasAIBrainAddon && hasAIAssist;
+  const effectiveHasAIBrain = !!(subscription?.limits as { effectiveHasAIBrain?: boolean } | undefined)?.effectiveHasAIBrain;
+  const hasFullAIBrain = effectiveHasAIBrain;
   const { data: aiSettings } = useQuery({
     queryKey: ["/api/ai/settings"],
     enabled: !!user && hasAIAssist,
   });
-  const aiEnabled = hasAIAssist && (hasFullAIBrain ? ((aiSettings as any)?.aiMode !== "off") : true);
+  const aiEnabled = hasAIAssist && (effectiveHasAIBrain ? ((aiSettings as { aiMode?: string })?.aiMode !== "off") : true);
 
   const businessAiMode = useMemo((): "off" | "suggest" | "auto" => {
     const raw = (aiSettings as any)?.aiMode as string | undefined;
@@ -710,6 +717,17 @@ export function UnifiedInbox() {
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'email', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
+
+  useEffect(() => {
+    const onSuggestion = (event: Event) => {
+      const text = (event as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text === "string" && text.trim()) {
+        setMessageInput(text);
+      }
+    };
+    window.addEventListener("inbox-use-ai-suggestion", onSuggestion);
+    return () => window.removeEventListener("inbox-use-ai-suggestion", onSuggestion);
+  }, []);
   const [emailSubject, setEmailSubject] = useState("");
   /** PI / manual: compose a brand-new email thread (not reply to an existing Gmail thread). */
   const [forceNewEmailCompose, setForceNewEmailCompose] = useState(() => {
@@ -984,7 +1002,7 @@ export function UnifiedInbox() {
       const candidates =
         matchedContact && selectedContactId
           ? selectPinCandidates(
-              inboxItemsFromContactDetail(matchedContact, matchedConversations) as InboxItem[],
+              inboxItemsFromContactDetail(matchedContact, matchedConversations),
               selectedConversationId,
             )
           : EMPTY_PIN_CANDIDATES;
@@ -2927,7 +2945,7 @@ export function UnifiedInbox() {
 
   // Workspace Intelligence Snapshot — workspace-scoped; long staleTime; not per-conversation.
   const { data: workspaceIntelligence = null } = useQuery<WorkspaceIntelligenceSnapshot>({
-    queryKey: ["/api/ai/workspace-intelligence"],
+    queryKey: withUserQueryScope(["/api/ai/workspace-intelligence"], user?.id),
     queryFn: async () => {
       const res = await fetch("/api/ai/workspace-intelligence", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load workspace intelligence");
@@ -4293,6 +4311,11 @@ export function UnifiedInbox() {
                             })()}
                           </div>
                           <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">
+                            {msg.generatedBy === "ai_brain" && (
+                              <span className="text-[10px] text-violet-700" data-testid="text-ai-generated-message">
+                                AI
+                              </span>
+                            )}
                             {msg.sentViaFallback && (
                               <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">via {msg.fallbackChannel}</span>
                             )}

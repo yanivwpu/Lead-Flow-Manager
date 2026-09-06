@@ -135,13 +135,8 @@ export function registerConversationRoutes(app: Express): void {
           ...dbErrorPayload(e),
         });
       }
-      if (!conversation) {
-        console.warn("[GET /api/conversations/:id/messages] conversation not found", { conversationId, userId });
-        return res.status(404).json({ error: "Conversation not found" });
-      }
-      if (conversation.userId !== req.user.id) {
-        console.warn("[GET /api/conversations/:id/messages] forbidden", { conversationId, userId });
-        return res.status(403).json({ error: "Forbidden" });
+      if (!conversation || conversation.userId !== req.user.id) {
+        return res.status(404).json({ error: "Not found" });
       }
       const rawL = parseInt(String(req.query.limit ?? ""), 10);
       const rawO = parseInt(String(req.query.offset ?? ""), 10);
@@ -196,7 +191,7 @@ export function registerConversationRoutes(app: Express): void {
         return res.status(404).json({ error: "Conversation not found" });
       }
       if (conversation.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
       const allowed = ['status'];
       const updates: Record<string, unknown> = {};
@@ -208,6 +203,62 @@ export function registerConversationRoutes(app: Express): void {
     } catch (error) {
       console.error("Error updating conversation:", error);
       res.status(500).json({ error: "Failed to update conversation" });
+    }
+  });
+
+  app.post("/api/conversations/:id/ai-control", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const conversation = await storage.getConversation(req.params.id);
+      if (!conversation || conversation.userId !== req.user.id) {
+        return res.status(404).json({ error: "Not found" });
+      }
+      const action = String(req.body?.action || "").trim();
+      const { pauseAiControl, resumeAiControl, readConversationAiControl } = await import(
+        "@shared/webchatAiPolicy"
+      );
+      if (action === "pause") {
+        const { abortWebchatGeneration } = await import("../webchatGenerationAbort");
+        abortWebchatGeneration(conversation.id);
+        const next = pauseAiControl({
+          reason: "manual_takeover",
+          actor: "user",
+          userId: req.user.id,
+        }, conversation.aiControl);
+        const updated = await storage.updateConversation(conversation.id, { aiControl: next });
+        await storage.createActivityEvent({
+          userId: req.user.id,
+          contactId: conversation.contactId,
+          conversationId: conversation.id,
+          eventType: "ai_paused",
+          eventData: { reason: "manual_takeover", pausedByUserId: req.user.id },
+          actorType: "user",
+          actorId: req.user.id,
+        });
+        return res.json({ aiControl: updated?.aiControl || next });
+      }
+      if (action === "resume") {
+        const { abortWebchatGeneration } = await import("../webchatGenerationAbort");
+        abortWebchatGeneration(conversation.id);
+        const next = resumeAiControl(conversation.aiControl);
+        const updated = await storage.updateConversation(conversation.id, { aiControl: next });
+        await storage.createActivityEvent({
+          userId: req.user.id,
+          contactId: conversation.contactId,
+          conversationId: conversation.id,
+          eventType: "ai_resumed",
+          eventData: { resumedByUserId: req.user.id },
+          actorType: "user",
+          actorId: req.user.id,
+        });
+        return res.json({ aiControl: updated?.aiControl || next });
+      }
+      return res.json({ aiControl: readConversationAiControl(conversation.aiControl) });
+    } catch (error) {
+      console.error("Error updating AI control:", error);
+      res.status(500).json({ error: "Failed to update AI control" });
     }
   });
 
@@ -223,7 +274,7 @@ export function registerConversationRoutes(app: Express): void {
         return res.status(404).json({ error: "Conversation not found" });
       }
       if (conversation.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
 
       const { logEmailUnreadDiag } = await import("../emailChannel/emailUnreadDiag");
@@ -320,7 +371,7 @@ export function registerConversationRoutes(app: Express): void {
         console.warn(
           `[MediaProxy] messageId=${messageId} reason=forbidden userId=${req.user.id}`
         );
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
 
       const channel = conversation.channel;
@@ -543,7 +594,7 @@ export function registerConversationRoutes(app: Express): void {
         return res.status(404).json({ error: "Conversation not found" });
       }
       if (conversation.userId !== req.user.id) {
-        return res.status(403).json({ error: "Forbidden" });
+        return res.status(404).json({ error: "Not found" });
       }
 
       // WhatsApp also enforces a 24-hour messaging window, same as Instagram/Facebook.

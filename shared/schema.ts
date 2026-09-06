@@ -154,6 +154,15 @@ export const users = pgTable("users", {
   onboardingCompleted: boolean("onboarding_completed").default(false),
   // Website widget settings
   widgetSettings: jsonb("widget_settings").default(sql`'{"enabled":true,"color":"#25D366","welcomeMessage":"Hi there! How can we help you today?","position":"right","showOnMobile":true,"showOnDesktop":true,"triggerType":"always","triggerDelaySeconds":5,"triggerScrollPercent":50,"pageRules":[{"urlContains":"/pricing","greeting":"Questions about pricing?","prefilledMessage":"Hi! I have a question about your pricing."},{"urlContains":"/contact","greeting":"Let us get in touch","prefilledMessage":"Hi! I would like to get in touch."},{"urlContains":"/services","greeting":"Tell us what you need","prefilledMessage":"Hi! I am interested in your services."}]}'::jsonb`),
+  /** Opaque public widget token (wgt_…). Never equal to users.id. */
+  widgetPublicId: varchar("widget_public_id").unique(),
+  widgetPublicIdRotatedAt: timestamp("widget_public_id_rotated_at"),
+  /** Opaque Telegram webhook path token (tgk_…). */
+  telegramWebhookPublicId: varchar("telegram_webhook_public_id").unique(),
+  /** Secret for X-Telegram-Bot-Api-Secret-Token. */
+  telegramWebhookSecret: text("telegram_webhook_secret"),
+  /** Opaque TikTok lead webhook path token (ttk_…). */
+  tiktokLeadPublicId: varchar("tiktok_lead_public_id").unique(),
   // Partner referral tracking - locked after first assignment (first-touch wins)
   partnerId: varchar("partner_id"),
   partnerAssignedAt: timestamp("partner_assigned_at"), // when partner was assigned (for commission duration)
@@ -1215,6 +1224,8 @@ export const contacts = pgTable("contacts", {
   
   // Custom fields (flexible JSON)
   customFields: jsonb("custom_fields").default(sql`'{}'::jsonb`),
+  /** Sanitized website visitor page context (landing/latest URL, UTM, matched rule). */
+  webchatContext: jsonb("webchat_context").notNull().default(sql`'{}'::jsonb`),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1252,6 +1263,8 @@ export const conversations = pgTable("conversations", {
    * DB: `migrations/0013_conversations_re_engagement.sql` (additive jsonb; not a boolean flag).
    */
   reEngagement: jsonb("re_engagement").notNull().default(sql`'{}'::jsonb`),
+  /** AI Brain pause/resume for this conversation (not contact-level Pause Automations). */
+  aiControl: jsonb("ai_control").notNull().default(sql`'{}'::jsonb`),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1299,6 +1312,10 @@ export const messages = pgTable(
 
     /** WhachatCRM team member who clicked Send (workspace attribution). */
     sentByUserId: varchar("sent_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** Origin of outbound copy: human | ai_brain | chatbot | workflow | auto_reply */
+    generatedBy: text("generated_by"),
+    /** Policy/debug outcome only — never store hidden prompts. */
+    generationMeta: jsonb("generation_meta"),
 
     // Fallback delivery tracking
     sentViaFallback: boolean("sent_via_fallback").default(false),
@@ -2794,6 +2811,7 @@ export type InsertAppointment = z.infer<typeof insertAppointmentSchema>;
 // ─── Flow Jobs (Durable Wait/Delay scheduling) ────────────────────────────────
 export const flowJobs = pgTable("flow_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
   flowId: varchar("flow_id").notNull(),
   contactId: varchar("contact_id").notNull(),
   conversationId: varchar("conversation_id").notNull(),

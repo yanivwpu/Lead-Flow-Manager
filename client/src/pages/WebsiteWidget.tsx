@@ -21,6 +21,12 @@ import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  buildWebchatHostedChatUrl,
+  buildWebchatIframeParentSnippet,
+  buildWebchatIframeSnippet,
+  buildWebchatScriptSnippet,
+} from "@shared/webchatWidgetSnippet";
 
 /** Website → WhatsApp widget settings UI (Appearance / Page Rules layout + stable rule ids). */
 
@@ -32,6 +38,10 @@ export interface WidgetPageRule {
   urlContains: string;
   greeting: string;
   prefilledMessage: string;
+  suggestedQuestions?: string[];
+  chatbotFlowId?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
 }
 
 interface WidgetSettings {
@@ -45,6 +55,17 @@ interface WidgetSettings {
   triggerDelaySeconds: number;
   triggerScrollPercent: number;
   pageRules: WidgetPageRule[];
+  widgetPublicId?: string;
+  allowedOrigins?: string[];
+  allowAnyOrigin?: boolean;
+  originDiagnostics?: {
+    canPubliclyEmbed?: boolean;
+    reason?: string;
+  };
+  webchatServerAi?: {
+    rolloutEnabled?: boolean;
+    allowlisted?: boolean;
+  };
 }
 
 const DEFAULT_PAGE_RULES: WidgetPageRule[] = [
@@ -77,31 +98,70 @@ function newRuleId(): string {
 
 /** Ensure every rule has an id for stable React keys (API may omit id). */
 function normalizePageRulesFromServer(
-  rules: Array<{ urlContains?: string; greeting?: string; prefilledMessage?: string; id?: string }>
+  rules: Array<{
+    urlContains?: string;
+    greeting?: string;
+    prefilledMessage?: string;
+    suggestedQuestions?: string[];
+    chatbotFlowId?: string;
+    ctaLabel?: string;
+    ctaUrl?: string;
+    id?: string;
+  }>
 ): WidgetPageRule[] {
   return rules.map((r) => ({
     urlContains: String(r.urlContains ?? ""),
     greeting: String(r.greeting ?? ""),
     prefilledMessage: String(r.prefilledMessage ?? ""),
+    suggestedQuestions: Array.isArray(r.suggestedQuestions)
+      ? r.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
+      : [],
+    chatbotFlowId: typeof r.chatbotFlowId === "string" ? r.chatbotFlowId : "",
+    ctaLabel: typeof r.ctaLabel === "string" ? r.ctaLabel : "",
+    ctaUrl: typeof r.ctaUrl === "string" ? r.ctaUrl : "",
     id: typeof r.id === "string" && r.id.length > 0 ? r.id : newRuleId(),
   }));
 }
 
-function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageRules"> & {
-  pageRules: { urlContains: string; greeting: string; prefilledMessage: string }[];
+function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageRules" | "widgetPublicId"> & {
+  pageRules: {
+    urlContains: string;
+    greeting: string;
+    prefilledMessage: string;
+    suggestedQuestions?: string[];
+    chatbotFlowId?: string;
+    ctaLabel?: string;
+    ctaUrl?: string;
+  }[];
 } {
   return {
-    ...settings,
-    pageRules: settings.pageRules.map(({ urlContains, greeting, prefilledMessage }) => ({
-      urlContains,
-      greeting,
-      prefilledMessage,
-    })),
+    enabled: settings.enabled,
+    color: settings.color,
+    welcomeMessage: settings.welcomeMessage,
+    position: settings.position,
+    showOnMobile: settings.showOnMobile,
+    showOnDesktop: settings.showOnDesktop,
+    triggerType: settings.triggerType,
+    triggerDelaySeconds: settings.triggerDelaySeconds,
+    triggerScrollPercent: settings.triggerScrollPercent,
+    allowedOrigins: settings.allowedOrigins,
+    allowAnyOrigin: settings.allowAnyOrigin === true,
+    pageRules: settings.pageRules.map(
+      ({ urlContains, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl }) => ({
+        urlContains,
+        greeting,
+        prefilledMessage,
+        suggestedQuestions: suggestedQuestions?.filter(Boolean).slice(0, 8) || [],
+        chatbotFlowId: chatbotFlowId || "",
+        ctaLabel: ctaLabel || "",
+        ctaUrl: ctaUrl || "",
+      }),
+    ),
   };
 }
 
 const DEFAULT_SETTINGS: WidgetSettings = {
-  enabled: true,
+  enabled: false,
   color: "#25D366",
   welcomeMessage: "Hi there! How can we help you today?",
   position: "right",
@@ -243,6 +303,18 @@ export function WebsiteWidget() {
     queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
     enabled: !!user?.id,
   });
+  const { data: chatbotFlows } = useQuery<Array<{ id: string; name: string; isActive?: boolean }>>({
+    queryKey: withUserQueryScope(["/api/chatbot-flows"], user?.id),
+    enabled: !!user?.id,
+  });
+  const { data: aiSettings } = useQuery<{ aiMode?: string }>({
+    queryKey: ["/api/ai/settings"],
+    enabled: !!user?.id,
+  });
+  const { data: subscription } = useQuery<{ limits?: { effectiveHasAIBrain?: boolean } }>({
+    queryKey: ["/api/subscription"],
+    enabled: !!user?.id,
+  });
   
   useEffect(() => {
     if (savedSettings === undefined) return;
@@ -292,44 +364,12 @@ export function WebsiteWidget() {
   // widget.js receives ?id= so the server can inline the user's colour/position/welcome settings.
   // fetchpriority="low" tells the browser to deprioritise this script behind page-critical assets.
   // The setTimeout(fn, 1) wrapper defers execution until after the first paint on mobile.
-  const scriptCode = user ? `<!-- WhachatCRM Chat Widget -->
-<script>
-  (function(w,d,o,f){
-    w['WhachatWidget']=o;
-    var js=d.createElement('script');
-    js.src=f+'?id=${user.id}';
-    js.async=true;
-    js.setAttribute('fetchpriority','low');
-    d.head.appendChild(js);
-  }(window,document,'wcw','${baseUrl}/widget.js'));
-</script>` : '';
+  const widgetPublicId = savedSettings?.widgetPublicId || "";
+  const scriptCode = buildWebchatScriptSnippet({ baseUrl, widgetPublicId });
+  const iframeFloatingCode = buildWebchatIframeSnippet({ baseUrl, widgetPublicId });
+  const iframeWithParentScript = buildWebchatIframeParentSnippet({ baseUrl, widgetPublicId });
 
-  const iframeFloatingCode = user
-    ? `<iframe
-  src="${baseUrl}/widget-frame/${user.id}"
-  style="position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;"
-></iframe>`
-    : "";
-
-  const iframeWithParentScript = user
-    ? `<!-- WhachatCRM — floating iframe + parent URL (for page rules) -->
-<script>
-(function(){
-  var base=${JSON.stringify(`${baseUrl}/widget-frame/${user.id}`)};
-  var f=document.createElement('iframe');
-  f.src=base+'?parentUrl='+encodeURIComponent(window.location.href);
-  f.setAttribute('title','WhachatCRM chat');
-  f.style.cssText='position:fixed;bottom:20px;right:20px;width:380px;height:620px;border:none;z-index:9999;';
-  document.body.appendChild(f);
-})();
-</script>`
-    : "";
-
-  const hostedLinkUrl = user
-    ? leadSource
-      ? `${baseUrl}/chat/${user.id}?source=${encodeURIComponent(leadSource)}`
-      : `${baseUrl}/chat/${user.id}`
-    : "";
+  const hostedLinkUrl = buildWebchatHostedChatUrl({ baseUrl, widgetPublicId, leadSource });
 
   const copyScript = () => {
     if (!scriptCode) return;
@@ -426,9 +466,9 @@ export function WebsiteWidget() {
                 />
               </div>
             </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0">
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
               <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 w-fit">
-                {settings.enabled ? (
+                {settings.enabled && savedSettings?.originDiagnostics?.canPubliclyEmbed ? (
                   <>
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-xs text-emerald-700 font-medium">Active</span>
@@ -436,10 +476,17 @@ export function WebsiteWidget() {
                 ) : (
                   <>
                     <div className="w-2 h-2 rounded-full bg-gray-400" />
-                    <span className="text-xs text-gray-600">Disabled</span>
+                    <span className="text-xs text-gray-600">
+                      {settings.enabled ? "Cannot activate yet" : "Disabled"}
+                    </span>
                   </>
                 )}
               </div>
+              {settings.enabled && savedSettings?.originDiagnostics?.reason === "no_origins" && (
+                <p className="text-xs text-amber-800" data-testid="text-origin-required">
+                  Add at least one HTTPS website origin below, or turn on “Allow on any website”, before visitors can load this widget.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -710,6 +757,64 @@ export function WebsiteWidget() {
                       data-testid={`input-rule-prefill-${index}`}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">Suggested questions (comma-separated)</Label>
+                    <Input
+                      value={(rule.suggestedQuestions || []).join(", ")}
+                      onChange={(e) =>
+                        updatePageRule(index, {
+                          suggestedQuestions: e.target.value
+                            .split(",")
+                            .map((q) => q.trim())
+                            .filter(Boolean)
+                            .slice(0, 8),
+                        })
+                      }
+                      placeholder="What are your hours?, Book a demo"
+                      className="h-9 text-sm border-gray-200 bg-white"
+                      data-testid={`input-rule-questions-${index}`}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-600">Chatbot flow (optional)</Label>
+                      <select
+                        value={rule.chatbotFlowId || ""}
+                        onChange={(e) => updatePageRule(index, { chatbotFlowId: e.target.value })}
+                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
+                        data-testid={`select-rule-flow-${index}`}
+                      >
+                        <option value="">None — use default matching</option>
+                        {(chatbotFlows || [])
+                          .filter((f) => f.isActive !== false)
+                          .map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-600">CTA label</Label>
+                      <Input
+                        value={rule.ctaLabel || ""}
+                        onChange={(e) => updatePageRule(index, { ctaLabel: e.target.value })}
+                        placeholder="Book a demo"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-cta-label-${index}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">CTA URL</Label>
+                    <Input
+                      value={rule.ctaUrl || ""}
+                      onChange={(e) => updatePageRule(index, { ctaUrl: e.target.value })}
+                      placeholder="https://…"
+                      className="h-9 text-sm border-gray-200 bg-white"
+                      data-testid={`input-rule-cta-url-${index}`}
+                    />
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -722,6 +827,89 @@ export function WebsiteWidget() {
             </CardHeader>
 
             <CardContent className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">Public widget ID</h3>
+                    <p className="text-xs text-slate-500">
+                      Used in embed snippets. Rotating invalidates the previous ID — replace existing snippets.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      const res = await fetch("/api/widget-settings/rotate-id", {
+                        method: "POST",
+                        credentials: "include",
+                      });
+                      if (res.ok) {
+                        didHydrateFromWidgetQuery.current = false;
+                        queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
+                      }
+                    }}
+                    data-testid="button-rotate-widget-id"
+                  >
+                    Rotate ID
+                  </Button>
+                </div>
+                <code className="block text-xs font-mono bg-slate-50 rounded p-2 break-all" data-testid="text-widget-public-id">
+                  {widgetPublicId || "Loading…"}
+                </code>
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-600">Allowed website origins (required unless you allow any site)</Label>
+                  <p className="text-[11px] text-slate-500">
+                    Production origins must be HTTPS. Adding example.com also allows www.example.com (exact hosts only — subdomains are not wildcards). Localhost is allowed only in development.
+                  </p>
+                  <Textarea
+                    value={(settings.allowedOrigins || []).join("\n")}
+                    onChange={(e) =>
+                      updateSettings({
+                        allowedOrigins: e.target.value
+                          .split("\n")
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                          .slice(0, 50),
+                      })
+                    }
+                    placeholder="https://www.example.com"
+                    rows={2}
+                    className="text-xs font-mono"
+                    data-testid="input-allowed-origins"
+                  />
+                  <label className="flex items-start gap-2 text-xs text-slate-700 pt-1">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={settings.allowAnyOrigin === true}
+                      onChange={(e) => updateSettings({ allowAnyOrigin: e.target.checked })}
+                      data-testid="checkbox-allow-any-origin"
+                    />
+                    <span>
+                      Allow on any website. Anyone who has this public widget ID can embed it. Use only if you understand the risk.
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2" data-testid="section-webchat-ai-mode">
+                <h3 className="text-sm font-semibold text-slate-900">Web Chat AI replies</h3>
+                <p className="text-xs text-slate-500">
+                  Mode follows AI Brain settings
+                  {aiSettings?.aiMode ? ` (currently ${aiSettings.aiMode.replace("_", " ")})` : ""}.
+                  Auto requires AI Brain
+                  {subscription?.limits?.effectiveHasAIBrain ? " (available on this account)" : " (not entitled on this account)"}.
+                </p>
+                {savedSettings?.webchatServerAi && !savedSettings.webchatServerAi.rolloutEnabled && (
+                  <p className="text-xs text-amber-800" data-testid="text-auto-rollout-off">
+                    Unattended Auto replies are rolled out server-side and are currently off for this workspace.
+                  </p>
+                )}
+                {savedSettings?.webchatServerAi?.rolloutEnabled && !savedSettings.webchatServerAi.allowlisted && (
+                  <p className="text-xs text-amber-800" data-testid="text-auto-not-allowlisted">
+                    Auto rollout is on, but this workspace is not on the allowlist yet.
+                  </p>
+                )}
+              </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">

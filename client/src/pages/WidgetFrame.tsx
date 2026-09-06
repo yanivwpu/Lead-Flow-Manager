@@ -16,6 +16,7 @@ interface ChatMessage {
   contentType: string;
   mediaUrl: string | null;
   createdAt: string;
+  status?: string | null;
   templateVariables?: {
     chatbotButtons?: ButtonOption[];
   } | null;
@@ -85,6 +86,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     "Hi! How can we help you today? 👋"
   );
   const [apiPrefill, setApiPrefill] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [ctaLabel, setCtaLabel] = useState("");
+  const [ctaUrl, setCtaUrl] = useState("");
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,6 +124,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
               : null;
         if (resolved) setSettingsWelcome(resolved);
         if (typeof data?.chatPrefill === "string") setApiPrefill(data.chatPrefill);
+        if (Array.isArray(data?.suggestedQuestions)) {
+          setSuggestedQuestions(
+            data.suggestedQuestions.filter((q: unknown): q is string => typeof q === "string" && q.trim().length > 0),
+          );
+        }
+        if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
+        if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
@@ -138,7 +149,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       const res = await fetch(`/api/webchat/${userId}/${visitorId}/messages`);
       if (!res.ok) return;
       const data: ChatMessage[] = await res.json();
-      setMessages(data);
+      setMessages(
+        data.filter((m) => m.direction !== "outbound" || m.status !== "failed"),
+      );
     } catch {
       // silently ignore poll errors
     }
@@ -184,7 +197,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           message: text,
           name: visitorLabel,
           source: urlLeadSource || undefined,
-          parentUrl: parentUrlForRules || undefined,
+          parentUrl: parentUrlForRules || (typeof window !== "undefined" ? window.location.href : undefined),
+          pageTitle: typeof document !== "undefined" ? document.title : undefined,
+          referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
         }),
       });
       // Re-fetch to get server-confirmed messages + any bot replies
@@ -263,6 +278,31 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
               {urlGreeting || settingsWelcome}
             </div>
           </div>
+        )}
+        {deduped.length === 0 && suggestedQuestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {suggestedQuestions.map((q) => (
+              <button
+                key={q}
+                type="button"
+                className="text-xs rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-700 hover:bg-gray-50"
+                onClick={() => sendMessage(q)}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+        {deduped.length === 0 && ctaLabel && ctaUrl && (
+          <a
+            href={ctaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex text-xs font-medium underline"
+            style={{ color: widgetColor }}
+          >
+            {ctaLabel}
+          </a>
         )}
 
         {deduped.map((msg) => {

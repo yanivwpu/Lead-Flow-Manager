@@ -43,6 +43,7 @@ export type PublicAgentPageRenderInput = {
   publicPhone: string;
   schedulingUrl: string;
   widgetEnabled: boolean;
+  widgetPublicId?: string;
   preferredLeadCapture: "webchat" | "email" | "phone";
   showHomeValueCta: boolean;
   agentPageSlug: string;

@@ -137,6 +137,7 @@ function buildInboundResult(params: {
   errors?: InboundProcessingResult["errors"];
   isNewConversation?: boolean;
   chatbotWillFire?: boolean;
+  turnOwner?: InboundProcessingResult["turnOwner"];
 }): InboundProcessingResult {
   const chatbotWillFire = params.chatbotWillFire ?? params.chatbotState?.willFire ?? false;
   const result: InboundProcessingResult = {
@@ -163,6 +164,7 @@ function buildInboundResult(params: {
     errors: params.errors || [],
     isNewConversation: Boolean(params.isNewConversation),
     chatbotWillFire,
+    turnOwner: params.turnOwner,
   };
   if (!result.contact) inboundProcessingLog("missing_contact", { channel: params.channel, sourceEventId: result.sourceEventId });
   if (!result.conversation) inboundProcessingLog("missing_conversation", { channel: params.channel, sourceEventId: result.sourceEventId });
@@ -470,6 +472,8 @@ class ChannelService {
     /** Optional email-rich payload (subject, html, to/cc, mailboxId, replyMode). */
     emailRich?: import("@shared/emailChannel").EmailRichSendPayload;
     sentByUserId?: string;
+    generatedBy?: string;
+    generationMeta?: Record<string, unknown>;
   }): Promise<SendMessageResult> {
     const {
       userId,
@@ -484,6 +488,8 @@ class ChannelService {
       templateVariables,
       emailRich,
       sentByUserId,
+      generatedBy,
+      generationMeta,
     } = params;
     let content = params.content ?? '';
 
@@ -493,6 +499,9 @@ class ChannelService {
 
     const contact = await storage.getContact(contactId);
     if (!contact) {
+      return { success: false, channel: 'whatsapp', error: 'Contact not found' };
+    }
+    if (contact.userId !== userId) {
       return { success: false, channel: 'whatsapp', error: 'Contact not found' };
     }
 
@@ -683,6 +692,9 @@ class ChannelService {
       mediaType,
       mediaFilename,
       status: 'pending',
+      sentByUserId: sentByUserId || undefined,
+      generatedBy: generatedBy || (sentByUserId ? "human" : undefined),
+      generationMeta: generationMeta || undefined,
       ...(templateVariables ? { templateVariables } : {}),
     });
 
@@ -722,6 +734,24 @@ class ChannelService {
       });
 
       await this.resolveHandoffIfActive(userId, contactId, conversation.id, "agent_outbound_message");
+
+      if (sentByUserId) {
+        const { pauseAiControl } = await import("@shared/webchatAiPolicy");
+        const { abortWebchatGeneration } = await import("./webchatGenerationAbort");
+        abortWebchatGeneration(conversation.id);
+        const latest = (await storage.getConversation(conversation.id)) || conversation;
+        await storage.updateConversation(conversation.id, {
+          aiControl: pauseAiControl({
+            reason: "human_reply",
+            actor: "user",
+            userId: sentByUserId,
+          }, latest.aiControl),
+        });
+        await this.logActivity(userId, contactId, conversation.id, "ai_paused", {
+          reason: "human_reply",
+          pausedByUserId: sentByUserId,
+        });
+      }
 
       void import("./automationNoReply").then(({ scheduleNoReplyJobsAfterTeamOutbound }) =>
         scheduleNoReplyJobsAfterTeamOutbound({
@@ -1041,6 +1071,8 @@ class ChannelService {
     inboundMode?: "commerce";
     /** Public webchat attribution — e.g. agent page embed sets `agent_page`. */
     webchatLeadSource?: "agent_page" | "agent_page_embed" | "website";
+    webchatPageContext?: import("@shared/webchatPageContext").WebchatPageContext;
+    preferredChatbotFlowId?: string;
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -1057,6 +1089,8 @@ class ChannelService {
       preferredContactId,
       inboundMode,
       webchatLeadSource,
+      webchatPageContext,
+      preferredChatbotFlowId,
     } = params;
     const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
@@ -1204,6 +1238,19 @@ class ChannelService {
       }
       await storage.updateContact(contact.id, contactUpdates);
     }
+
+    if (!contact) {
+      return buildInboundResult({
+        success: false,
+        contact: null,
+        conversation: null,
+        message: null,
+        channel,
+        sourceEventId: externalMessageId || null,
+        errors: [{ code: "contact_missing", message: "Contact missing after inbound resolve", recoverable: false, stage: "contact" }],
+      });
+    }
+    const inboundContactId = contact.id;
 
     // For WhatsApp/SMS with a channelAccountId (multi-number), isolate by destination number
     const acctId = (channel === 'whatsapp' || channel === 'sms') ? channelAccountId : undefined;
@@ -1383,7 +1430,7 @@ class ChannelService {
       if (isCommerceInbound) {
         void import("./buyerPreferenceService").then(({ debugLogBuyerPreference }) =>
           debugLogBuyerPreference("extraction_skipped", {
-            contactId: contact.id,
+            contactId: inboundContactId,
             userId,
             triggerSource,
             reason: "commerce_inbound",
@@ -1394,7 +1441,7 @@ class ChannelService {
       } else if (inboundTrimmed.length > 0 && inboundTrimmed.length < 12) {
         void import("./buyerPreferenceService").then(({ debugLogBuyerPreference }) =>
           debugLogBuyerPreference("extraction_skipped", {
-            contactId: contact.id,
+            contactId: inboundContactId,
             userId,
             triggerSource,
             reason: "inbound_text_too_short",
@@ -1428,7 +1475,7 @@ class ChannelService {
             triggerSource,
           }).catch((err) => {
             console.warn("[BuyerPreference] inbound sync failed", {
-              contactId: contact.id,
+              contactId: inboundContactId,
               messageId: message.id,
               error: err instanceof Error ? err.message : String(err),
             });
@@ -1497,6 +1544,16 @@ class ChannelService {
             : { message: (content || "").slice(0, 500) }),
           reason: handoff.reason || "handoff_keyword_match",
         });
+        const { pauseAiControl } = await import("@shared/webchatAiPolicy");
+        const { abortWebchatGeneration } = await import("./webchatGenerationAbort");
+        abortWebchatGeneration(conversation.id);
+        const latest = (await storage.getConversation(conversation.id)) || conversation;
+        await storage.updateConversation(conversation.id, {
+          aiControl: pauseAiControl({
+            reason: "visitor_handoff",
+            actor: "visitor",
+          }, latest.aiControl),
+        });
       }
     } catch (err: any) {
       console.warn("[HANDOFF_TRIGGERED] check failed", err?.message || err);
@@ -1508,7 +1565,7 @@ class ChannelService {
       void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
         onInboundMessageForNoReplyTimers({
           userId,
-          contactId: contact.id,
+          contactId: inboundContactId,
           conversationId: conversation.id,
           channel,
           reschedule: false,
@@ -1542,18 +1599,61 @@ class ChannelService {
 
     // Evaluate chatbot trigger once — used both to fire the flow and to let
     // callers gate their own outbound messages without an extra DB round-trip.
+    if (!contact) {
+      return buildInboundResult({
+        success: false,
+        contact: null,
+        conversation: null,
+        message: null,
+        channel,
+        sourceEventId: externalMessageId || null,
+        errors: [{ code: "contact_missing", message: "Contact missing after inbound resolve", recoverable: false, stage: "contact" }],
+      });
+    }
+
+    if (webchatPageContext && Object.keys(webchatPageContext).length > 0) {
+      const merged = {
+        ...((contact.webchatContext as Record<string, unknown>) || {}),
+        ...webchatPageContext,
+      };
+      const updated = await storage.updateContact(
+        contact.id,
+        { webchatContext: merged },
+        { expectedWorkspaceUserId: userId, skipAutomationHooks: true },
+      );
+      if (updated) contact = updated;
+    }
+
     const { evaluateChatbotInboundArbitration, triggerChatbotFlows } = await import('./chatbotEngine');
-    const chatbotArb = await evaluateChatbotInboundArbitration({
+    const bookingIntent =
+      detectHighConfidenceBookingIntent(content) || detectSellerConsultationBookingIntent(content);
+    const chatbotCtx = {
       userId,
       contactId: contact.id,
       conversationId: conversation.id,
       channel,
       message: content,
       isNewConversation,
+      preferredFlowId: preferredChatbotFlowId,
+      skipBookingIntent: bookingIntent,
+      awaitExecution: channel === "webchat",
+    };
+    const chatbotArb = await evaluateChatbotInboundArbitration(chatbotCtx);
+    const chatbotResult = bookingIntent
+      ? { triggered: false, visitorFacing: false, reason: "booking_fast_path_priority" as const }
+      : await triggerChatbotFlows(chatbotCtx);
+    const { decideWebchatTurnOwner } = await import("@shared/webchatTurnOwner");
+    const turn = decideWebchatTurnOwner({
+      bookingIntent,
+      chatbot: chatbotResult,
     });
-    const bookingIntent =
-      detectHighConfidenceBookingIntent(content) || detectSellerConsultationBookingIntent(content);
-    const chatbotWillFire = chatbotArb.flowMatched && !bookingIntent;
+    const chatbotWillFire = turn.chatbotOwnsReply;
+    const latestForTurn = (await storage.getConversation(conversation.id)) || conversation;
+    const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+    const turnControl = readConversationAiControl(latestForTurn.aiControl);
+    await storage.updateConversation(conversation.id, {
+      aiControl: { ...turnControl, lastTurnOwner: turn.owner },
+    });
     console.info("[INBOUND_AUTOMATION]", {
       tag: "channel_inbound",
       conversationId: conversation.id,
@@ -1561,8 +1661,9 @@ class ChannelService {
       flowMatched: chatbotArb.flowMatched,
       bookingIntent,
       chatbotWillFire,
+      turnOwner: turn.owner,
       aiAutoSuppressed: chatbotWillFire,
-      reason: bookingIntent ? "booking_fast_path_priority" : chatbotArb.reason,
+      reason: bookingIntent ? "booking_fast_path_priority" : chatbotResult.reason || chatbotArb.reason,
     });
 
     if (bookingIntent) {
@@ -1578,18 +1679,6 @@ class ChannelService {
         }),
       );
     }
-
-    // Trigger chatbot flows asynchronously (does not block webhook response)
-    triggerChatbotFlows({
-      userId,
-      contactId: contact.id,
-      conversationId: conversation.id,
-      channel,
-      message: content,
-      isNewConversation,
-    }).catch((err: Error) =>
-      console.error('[Chatbot] triggerChatbotFlows error:', err.message)
-    );
 
     // ── Auto-Reply & Business Hours — runs for every channel ─────────────────
     // Chatbot takes full priority: skip auto-reply when a flow will fire.
@@ -1640,6 +1729,7 @@ class ChannelService {
       errors: inboundErrors,
       isNewConversation,
       chatbotWillFire,
+      turnOwner: turn.owner,
     });
   }
 
@@ -1962,7 +2052,6 @@ class ChannelService {
         status: "sent",
         externalMessageId: echo.id || undefined,
         sentAt: occurredAt,
-        createdAt: occurredAt,
       });
     } catch (err: unknown) {
       if (echo.id && isUniqueExternalMessageViolation(err)) {

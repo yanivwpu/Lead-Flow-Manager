@@ -2,28 +2,40 @@
  * Build InboxItem rows from a contact + conversations payload (deep-link pin).
  */
 
-import { buildInboxItemsForContact } from "@shared/inboxRowModel";
-import type { Channel, Contact, Conversation, InboxItem } from "@shared/schema";
+import { buildInboxItemsForContact, type InboxRowContactLike, type InboxRowConversationLike } from "@shared/inboxRowModel";
 
-export function inboxItemsFromContactDetail(
-  contact: Contact,
-  conversations: readonly Conversation[],
-): InboxItem[] {
-  const built = buildInboxItemsForContact({ contact, conversations });
-  return built.map((row) => {
-    const lastMessageAtDate =
-      row.lastMessageAt instanceof Date
-        ? row.lastMessageAt
-        : row.lastMessageAt
-          ? new Date(row.lastMessageAt)
-          : null;
+export type PinInboxItem<C extends InboxRowContactLike, V extends InboxRowConversationLike> = {
+  contact: C;
+  conversation: V | null;
+  channel: string;
+  lastMessage: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  contactUnreadTotal: number;
+  lastEmailMessageId: null;
+  formIdentity: null;
+};
+
+export function inboxItemsFromContactDetail<
+  C extends InboxRowContactLike,
+  V extends InboxRowConversationLike,
+>(
+  contact: C,
+  conversations: readonly V[],
+): PinInboxItem<C, V>[] {
+  return buildInboxItemsForContact({ contact, conversations }).map((row) => {
+    const lastMessageAt =
+      row.lastMessageAt == null
+        ? null
+        : row.lastMessageAt instanceof Date
+          ? row.lastMessageAt.toISOString()
+          : String(row.lastMessageAt);
     return {
-      contact: row.contact as Contact,
-      conversation: (row.conversation as Conversation) || (null as unknown as Conversation),
-      channel: row.channel as Channel,
+      contact: row.contact,
+      conversation: row.conversation,
+      channel: row.channel,
       lastMessage: row.lastMessage,
-      // Client inbox rows typically deserialize dates as ISO strings.
-      lastMessageAt: lastMessageAtDate,
+      lastMessageAt,
       unreadCount: row.unreadCount,
       contactUnreadTotal: row.contactUnreadTotal,
       lastEmailMessageId: null,
@@ -36,10 +48,10 @@ export function inboxItemsFromContactDetail(
  * Prefer the deep-linked conversation row when `conversationId` is set;
  * otherwise keep all built rows for that contact (chat primary + email threads).
  */
-export function selectPinCandidates(
-  items: InboxItem[],
+export function selectPinCandidates<T extends { conversation?: { id: string } | null }>(
+  items: T[],
   conversationId: string | null,
-): InboxItem[] {
+): T[] {
   if (!conversationId) return items;
   const match = items.filter((item) => item.conversation?.id === conversationId);
   return match.length > 0 ? match : items;

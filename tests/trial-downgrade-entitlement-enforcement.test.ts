@@ -343,6 +343,8 @@ test("runtime: no-reply and timer jobs skip on Free without marking failed", asy
   const origNr = storage.markNoReplyJobSkipped.bind(storage);
   const origTimer = storage.markAutomationTimerJobSkipped.bind(storage);
   const origWf = storage.getWorkflow.bind(storage);
+  const origGetContact = storage.getContact.bind(storage);
+  const origGetConversation = storage.getConversation.bind(storage);
   let nrReason = "";
   let timerReason = "";
   (subscriptionService as { getUserLimits: typeof subscriptionService.getUserLimits }).getUserLimits = async () =>
@@ -356,6 +358,10 @@ test("runtime: no-reply and timer jobs skip on Free without marking failed", asy
   storage.getWorkflow = async () => {
     throw new Error("should not load workflow");
   };
+  storage.getContact = async () =>
+    ({ id: "c1", userId: "user-1" }) as never;
+  storage.getConversation = async () =>
+    ({ id: "conv-1", userId: "user-1", contactId: "c1" }) as never;
   try {
     await processNoReplyJob({
       id: "nr-1",
@@ -376,6 +382,8 @@ test("runtime: no-reply and timer jobs skip on Free without marking failed", asy
     storage.markNoReplyJobSkipped = origNr;
     storage.markAutomationTimerJobSkipped = origTimer;
     storage.getWorkflow = origWf;
+    storage.getContact = origGetContact;
+    storage.getConversation = origGetConversation;
   }
 });
 });

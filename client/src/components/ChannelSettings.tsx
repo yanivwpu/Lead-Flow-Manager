@@ -57,6 +57,7 @@ import { GmailVerificationGuidance } from "@/components/GmailVerificationGuidanc
 import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { buildWebchatScriptSnippet } from "@shared/webchatWidgetSnippet";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -455,6 +456,19 @@ export function ChannelSettings() {
   const { data: channels = [], isLoading, isPending: channelsPending } = useQuery<ChannelSetting[]>({
     queryKey: withUserQueryScope(["/api/channels"], user?.id),
     enabled: !!user?.id && sessionAligned,
+  });
+
+  const { data: tiktokLeadIngress, isLoading: tiktokLeadUrlLoading, isError: tiktokLeadUrlError } = useQuery<{ webhookUrl: string }>({
+    queryKey: withUserQueryScope(["/api/integrations/tiktok/lead-url"], user?.id),
+    enabled: configChannel === "tiktok" && !!user?.id,
+  });
+  const { data: widgetInstall } = useQuery<{ widgetPublicId?: string }>({
+    queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
+    enabled: configChannel === "webchat" && !!user?.id,
+  });
+  const { data: telegramIngress } = useQuery<{ webhookUrl: string | null; secretConfigured?: boolean }>({
+    queryKey: withUserQueryScope(["/api/integrations/telegram/webhook-url"], user?.id),
+    enabled: configChannel === "telegram" && !!user?.id,
   });
 
   // TikTok: derived active state — must live AFTER channels is declared
@@ -1450,6 +1464,25 @@ export function ChannelSettings() {
                   >
                     Open @{activeResult.username}
                   </Button>
+                  {telegramIngress?.webhookUrl ? (
+                    <div className="space-y-1" data-testid="section-telegram-webhook-url">
+                      <p className="text-xs font-medium text-gray-700">Webhook URL</p>
+                      <Input
+                        readOnly
+                        value={telegramIngress.webhookUrl}
+                        className="text-xs font-mono bg-gray-50"
+                        data-testid="input-telegram-webhook-url"
+                      />
+                      <p className="text-[11px] text-gray-500">
+                        Secret is stored on the server
+                        {telegramIngress.secretConfigured ? " and is set" : ""}. Reconnect the bot to rotate it. The secret is never shown.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-800">
+                      Reconnect the bot after deployment to register the new webhook URL.
+                    </p>
+                  )}
                   <Button
                     variant="ghost"
                     className="w-full text-sm text-gray-500"
@@ -1623,16 +1656,28 @@ export function ChannelSettings() {
           <div className="space-y-4 mt-4">
             <div>
               <Label>Embed Code</Label>
-              <p className="text-xs text-gray-500 mb-2">Add this script to your website</p>
-              <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">
-                {`<script src="${webhookBaseUrl}/widget.js" data-user-id="${user?.id || 'YOUR_USER_ID'}"></script>`}
+              <p className="text-xs text-gray-500 mb-2">Add this script to your website. It uses a rotatable public widget ID, not your account id.</p>
+              <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono overflow-x-auto" data-testid="text-webchat-embed">
+                {widgetInstall?.widgetPublicId
+                  ? buildWebchatScriptSnippet({
+                      baseUrl: webhookBaseUrl,
+                      widgetPublicId: widgetInstall.widgetPublicId,
+                    })
+                  : "Loading widget ID…"}
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-2"
+                disabled={!widgetInstall?.widgetPublicId}
                 onClick={() => {
-                  copyWebhookUrl(`<script src="${webhookBaseUrl}/widget.js" data-user-id="${user?.id}"></script>`);
+                  if (!widgetInstall?.widgetPublicId) return;
+                  copyWebhookUrl(
+                    buildWebchatScriptSnippet({
+                      baseUrl: webhookBaseUrl,
+                      widgetPublicId: widgetInstall.widgetPublicId,
+                    }),
+                  );
                 }}
                 data-testid="button-copy-webchat-code"
               >
@@ -1640,15 +1685,9 @@ export function ChannelSettings() {
                 Copy Code
               </Button>
             </div>
-            <div>
-              <Label>API Endpoint</Label>
-              <p className="text-xs text-gray-500 mb-2">Send messages via POST request</p>
-              <Input
-                readOnly
-                value={`${webhookBaseUrl}/api/webchat/${user?.id || 'YOUR_USER_ID'}`}
-                className="text-xs font-mono bg-gray-50"
-              />
-            </div>
+            <p className="text-xs text-gray-500">
+              Manage allowed domains, rotation, and page rules in Website Widget. Do not post messages to a URL that contains your account id.
+            </p>
             <Button
               className="w-full"
               onClick={() => {
@@ -1671,11 +1710,18 @@ export function ChannelSettings() {
       {(() => {
         const tiktokChannel = channels.find(c => c.channel === 'tiktok');
         const isAlreadyEnabled = tiktokChannel?.isConnected && tiktokChannel?.isEnabled;
-        const webhookUrl = `${webhookBaseUrl}/api/webhook/tiktok/lead`;
+        const webhookUrl = tiktokLeadIngress?.webhookUrl || "";
 
         const TiktokWebhookRow = () => (
           <div className="space-y-1">
             <p className="text-xs font-medium text-gray-700">Where TikTok sends your leads</p>
+            {tiktokLeadUrlLoading ? (
+              <p className="text-xs text-gray-500" data-testid="text-tiktok-webhook-loading">Loading webhook URL…</p>
+            ) : tiktokLeadUrlError || !webhookUrl ? (
+              <p className="text-xs text-red-600" data-testid="text-tiktok-webhook-error">
+                Could not load the TikTok webhook URL. Refresh and try again. Do not use a URL without a ttk_ identifier.
+              </p>
+            ) : (
             <div className="flex gap-2">
               <Input
                 readOnly
@@ -1692,6 +1738,7 @@ export function ChannelSettings() {
                 {tiktokCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
               </Button>
             </div>
+            )}
           </div>
         );
 
@@ -1861,7 +1908,6 @@ export function ChannelSettings() {
                   {tiktokWebhookExpanded && (
                     <div className="bg-gray-900 text-gray-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">
 {`{
-  "userId": "${user?.id || 'YOUR_USER_ID'}",
   "name": "Lead Name",
   "phone": "+1234567890",
   "email": "lead@example.com",

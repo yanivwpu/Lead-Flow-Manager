@@ -26,6 +26,7 @@ import { getAppOrigin } from "./urlOrigins";
 import { isEmailImageRequestPath } from "@shared/emailImagePolicy";
 import { corsMiddleware } from "./corsMiddleware";
 import { rateLimitMiddleware } from "./rateLimitMiddleware";
+import { requireAdmin as requireSalesAdmin } from "./adminAuth";
 import { logGhlOAuthRecoveryAllowlistAtStartup } from "./ghlOAuthRecoveryStartup";
 import { logMetaCredentialEncryptionBootDiag } from "./metaCredentialCrypto";
 
@@ -410,11 +411,11 @@ app.use((req, res, next) => {
       queues: [new BullMQAdapter(queue)],
       serverAdapter,
     });
-    app.use("/admin/queues", serverAdapter.getRouter());
+    app.use("/admin/queues", requireSalesAdmin, serverAdapter.getRouter());
     console.log("[Queue] Bull Board mounted at /admin/queues");
 
     // Admin endpoint: reprocess failed jobs
-    app.post("/api/admin/queue/reprocess-failed", async (req, res) => {
+    app.post("/api/admin/queue/reprocess-failed", requireSalesAdmin, async (req, res) => {
       try {
         const failed = await queue.getFailed(0, 1000);
         let reprocessed = 0;
@@ -430,7 +431,7 @@ app.use((req, res, next) => {
     });
 
     // Admin endpoint: get queue stats
-    app.get("/api/admin/queue/stats", async (_req, res) => {
+    app.get("/api/admin/queue/stats", requireSalesAdmin, async (_req, res) => {
       try {
         const [waiting, active, completed, failed, delayed] = await Promise.all([
           queue.getWaitingCount(),
@@ -447,7 +448,7 @@ app.use((req, res, next) => {
     });
 
     // Admin endpoint: get failed jobs detail
-    app.get("/api/admin/queue/failed", async (_req, res) => {
+    app.get("/api/admin/queue/failed", requireSalesAdmin, async (_req, res) => {
       try {
         const failed = await queue.getFailed(0, 100);
         const jobs = failed.map(job => ({

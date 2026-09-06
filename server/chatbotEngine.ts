@@ -63,6 +63,12 @@ export interface TriggerContext {
   channel: string;
   message: string;
   isNewConversation: boolean;
+  /** Optional page-rule chatbot flow; must belong to userId. */
+  preferredFlowId?: string;
+  /** When true, do not execute or claim the turn (booking fast-path owns the reply). */
+  skipBookingIntent?: boolean;
+  /** When true, wait for the first visitor-facing work instead of fire-and-forget. */
+  awaitExecution?: boolean;
 }
 
 // ─── Per-conversation cooldown ─────────────────────────────────────────────
@@ -176,7 +182,20 @@ export type InboundChatbotArbitration = {
   reason: string;
 };
 
+export type ChatbotTriggerResult = {
+  triggered: boolean;
+  visitorFacing: boolean;
+  reason: string;
+};
+
 import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
+import { detectSellerConsultationBookingIntent } from "@shared/sellerIntent";
+import { flowWouldOwnVisitorTurn } from "@shared/webchatTurnOwner";
+
+function inboundHasBookingIntent(ctx: TriggerContext): boolean {
+  if (ctx.skipBookingIntent) return true;
+  return detectHighConfidenceBookingIntent(ctx.message) || detectSellerConsultationBookingIntent(ctx.message);
+}
 
 /**
  * Read-only: whether an active chatbot flow would own this inbound (same rules as
@@ -186,7 +205,7 @@ import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 export async function evaluateChatbotInboundArbitration(
   ctx: TriggerContext
 ): Promise<InboundChatbotArbitration> {
-  if (detectHighConfidenceBookingIntent(ctx.message)) {
+  if (inboundHasBookingIntent(ctx)) {
     return { flowMatched: false, reason: "booking_fast_path_priority" };
   }
   const entitlement = await resolveExecutionEntitlement(ctx.userId);
@@ -209,6 +228,12 @@ export async function evaluateChatbotInboundArbitration(
     }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
+    if (ctx.preferredFlowId) {
+      const preferred = activeFlows.find((f) => f.id === ctx.preferredFlowId);
+      if (preferred) {
+        return { flowMatched: true, reason: `page_rule_flow:${preferred.id}` };
+      }
+    }
     for (const flow of activeFlows) {
       const keywords = (flow.triggerKeywords as string[]) || [];
       const triggerOnNewChat = flow.triggerOnNewChat ?? false;
@@ -602,7 +627,15 @@ async function executeActionNode(
         break;
       case "assign":
         if (value) {
-          await storage.updateContact(ctx.contactId, { assignedTo: value });
+          const { isAssigneeInWorkspace } = await import("./tenantOwnership");
+          const allowed = await isAssigneeInWorkspace(ctx.userId, value);
+          if (!allowed) {
+            console.warn(`[Chatbot] Action — assign rejected, assignee not in workspace`);
+            break;
+          }
+          await storage.updateContact(ctx.contactId, { assignedTo: value }, {
+            expectedWorkspaceUserId: ctx.userId,
+          });
           console.log(`[Chatbot] Action — assign: "${value}" on contactId: ${ctx.contactId}`);
         }
         break;
@@ -632,10 +665,11 @@ async function sendFlowTemplate(
   templateId: string,
   templateVariables: Record<string, string>
 ): Promise<void> {
+  const { getMessageTemplateForWorkspace, getContactForWorkspace } = await import("./tenantOwnership");
   const [user, template, contact] = await Promise.all([
     storage.getUserForSession(ctx.userId),
-    storage.getMessageTemplate(templateId),
-    storage.getContact(ctx.contactId),
+    getMessageTemplateForWorkspace(ctx.userId, templateId),
+    getContactForWorkspace(ctx.userId, ctx.contactId),
   ]);
 
   if (!user) throw new Error(`User ${ctx.userId} not found`);
@@ -774,13 +808,13 @@ async function executeFlow(
   flow: ChatbotFlow,
   ctx: TriggerContext,
   startFromNodeId?: string
-): Promise<void> {
+): Promise<{ visitorFacing: boolean; reason: string }> {
   const nodes = (flow.nodes as ChatbotNode[]) || [];
   const edges = (flow.edges as ChatbotEdge[]) || [];
 
   if (nodes.length === 0) {
     console.log(`[Chatbot] Flow "${flow.name}" has no nodes — skipping`);
-    return;
+    return { visitorFacing: false, reason: "empty_flow" };
   }
 
   console.log(
@@ -811,6 +845,8 @@ async function executeFlow(
   }
 
   const visited = new Set<string>();
+  let visitorFacing = false;
+  let visitorReason = "action_only_or_empty";
 
   while (currentNode) {
     const nodeId = currentNode.id;
@@ -860,9 +896,10 @@ async function executeFlow(
           }
           try {
             await sendFlowTemplate(ctx, templateId, templateVariables);
+            visitorFacing = true;
+            visitorReason = "scripted_reply";
           } catch (err: any) {
             console.error(`[Chatbot] ❌ Template node "${nodeId}" failed: ${err.message}`);
-            // Do NOT fall back to plain text — log the failure clearly and stop this step
           }
           break;
         } else if (isMediaNode) {
@@ -873,17 +910,19 @@ async function executeFlow(
             console.warn(`[Chatbot] ⚠ Media node "${nodeId}" has messageType "${msgType}" but no mediaUrl — skipping send`);
           } else {
             await sendChatbotMedia(ctx, mediaUrl, msgType, mediaCaption);
+            visitorFacing = true;
+            visitorReason = "scripted_reply";
           }
         } else if (msgType === "buttons") {
           const rawButtons = (currentNode.data.buttons as (string | ButtonOption)[] | undefined) || [];
           await sendChatbotButtons(ctx, content, rawButtons);
-          // After a buttons node, stop linear execution — resume only when user responds
-          // (pending button state will route to nextNodeId on next message)
           console.log(`[Chatbot] ⏸ Pausing flow execution after buttons node — awaiting user reply`);
-          return;
+          return { visitorFacing: true, reason: "wait_for_input" };
         } else {
           if (hasText) {
             await sendChatbotReply(ctx, content);
+            visitorFacing = true;
+            visitorReason = "scripted_reply";
           } else {
             console.log(`[Chatbot] Node "${nodeId}" text node has no content — skipping send`);
           }
@@ -897,7 +936,7 @@ async function executeFlow(
 
         if (!nextNodeId) {
           console.log(`[Chatbot] Delay node "${nodeId}" has no next node — nothing to schedule`);
-          return;
+          return { visitorFacing: false, reason: "delay_without_next" };
         }
 
         const runAt = new Date(Date.now() + minutes * 60 * 1000);
@@ -910,6 +949,7 @@ async function executeFlow(
             snapshotLastInboundAt = null;
           }
           await storage.createFlowJob({
+            userId: ctx.userId,
             flowId: flow.id,
             contactId: ctx.contactId,
             conversationId: ctx.conversationId,
@@ -918,6 +958,7 @@ async function executeFlow(
             status: "pending",
             payload: {
               ...(ctx as any),
+              userId: ctx.userId,
               _stopReplySnapshot: { lastInboundAt: snapshotLastInboundAt?.toISOString() ?? null },
             },
             snapshotLastInboundAt: snapshotLastInboundAt ?? undefined,
@@ -928,11 +969,16 @@ async function executeFlow(
         } catch (err: any) {
           console.error(`[Chatbot] ❌ Failed to create flow job for delay node "${nodeId}": ${err.message}`);
         }
-        return; // STOP execution — worker will resume after the delay
+        return { visitorFacing: true, reason: "delay_scheduled" };
       }
 
       case "action": {
+        const actionType = currentNode.data.action?.type || "";
         await executeActionNode(ctx, currentNode);
+        if (actionType === "assign") {
+          visitorFacing = true;
+          visitorReason = "handoff";
+        }
         break;
       }
 
@@ -946,6 +992,7 @@ async function executeFlow(
 
   console.log(`[Chatbot] ✅ Flow "${flow.name}" execution complete`);
   storage.incrementChatbotFlowExecution(flow.id).catch(() => {});
+  return { visitorFacing, reason: visitorReason };
 }
 
 // ─── Pending button branch continuation ────────────────────────────────────
@@ -1017,8 +1064,11 @@ async function checkAndResolvePendingButton(ctx: TriggerContext): Promise<boolea
 
 // ─── Public entry point ────────────────────────────────────────────────────
 
-export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
+export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotTriggerResult> {
   try {
+    if (inboundHasBookingIntent(ctx)) {
+      return { triggered: false, visitorFacing: false, reason: "booking_fast_path_priority" };
+    }
     const entitlement = await resolveExecutionEntitlement(ctx.userId);
     if (!entitlement.chatbotAllowed) {
       logEntitlementSkip({
@@ -1026,97 +1076,94 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<void> {
         userId: ctx.userId,
         extra: { conversationId: ctx.conversationId, action: "skip_terminal" },
       });
-      return;
+      return { triggered: false, visitorFacing: false, reason: ENTITLEMENT_BLOCKED_REASON };
     }
 
     console.log(
       `[Chatbot] Evaluating flows — userId: ${ctx.userId}, channel: ${ctx.channel}, isNewConversation: ${ctx.isNewConversation}, message: "${ctx.message.substring(0, 80)}"`
     );
 
-    // ── Step 1: Check for pending button state first ──────────────────────
     const handledAsButton = await checkAndResolvePendingButton(ctx);
     if (handledAsButton) {
       console.log(`[Chatbot] Message handled as button reply — skipping keyword matching`);
-      return;
+      return { triggered: true, visitorFacing: true, reason: "pending_button_reply" };
     }
 
-    // ── Step 2: Per-conversation cooldown ─────────────────────────────────
     if (isCoolingDown(ctx.conversationId)) {
       console.log(
         `[Chatbot] ⏳ Cooldown active for conversationId: ${ctx.conversationId} — skipping`
       );
-      return;
+      return { triggered: true, visitorFacing: true, reason: "chatbot_post_flow_cooldown" };
     }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
-
     if (activeFlows.length === 0) {
       console.log(`[Chatbot] No active flows for userId: ${ctx.userId} — skipping`);
-      return;
+      return { triggered: false, visitorFacing: false, reason: "no_flow_match" };
     }
 
     console.log(`[Chatbot] Found ${activeFlows.length} active flow(s) for userId: ${ctx.userId}`);
 
-    let flowTriggered = false;
+    const preferred =
+      ctx.preferredFlowId ? activeFlows.find((f) => f.id === ctx.preferredFlowId) : undefined;
+    const chosen = preferred
+      ? { flow: preferred, reason: `page_rule_flow:${preferred.id}` }
+      : findKeywordOrNewChatFlow(activeFlows, ctx);
 
-    for (const flow of activeFlows) {
-      const keywords = (flow.triggerKeywords as string[]) || [];
-      const triggerOnNewChat = flow.triggerOnNewChat ?? false;
-      const triggerChannels = (flow.triggerChannels as string[] | null) || [];
-
-      // ── Channel filter ────────────────────────────────────────────────────
-      if (triggerChannels.length > 0 && !triggerChannels.includes(ctx.channel)) {
-        console.log(
-          `[Chatbot] Flow "${flow.name}" — channel "${ctx.channel}" not in triggerChannels [${triggerChannels.join(", ")}] — skipping`
-        );
-        continue;
-      }
-
-      let shouldTrigger = false;
-      let triggerReason = "";
-
-      if (keywords.length > 0) {
-        const matched = keywordMatches(ctx.message, keywords);
-        if (matched) {
-          shouldTrigger = true;
-          triggerReason = `keyword match — message: "${normalizeText(ctx.message)}", matched against: [${keywords.map(normalizeText).join(", ")}]`;
-        } else {
-          console.log(
-            `[Chatbot] Flow "${flow.name}" — keyword NOT matched. Message: "${normalizeText(ctx.message)}", keywords: [${keywords.map(normalizeText).join(", ")}]`
-          );
-        }
-      }
-
-      if (!shouldTrigger && triggerOnNewChat && ctx.isNewConversation) {
-        shouldTrigger = true;
-        triggerReason = "new conversation trigger";
-      }
-
-      if (!shouldTrigger) {
-        console.log(`[Chatbot] Flow "${flow.name}" — no trigger matched, skipping`);
-        continue;
-      }
-
-      console.log(
-        `[Chatbot] ✅ Flow "${flow.name}" (id: ${flow.id}) TRIGGERED — ${triggerReason}`
-      );
-
-      markFired(ctx.conversationId);
-      flowTriggered = true;
-
-      executeFlow(flow, ctx).catch((err) =>
-        console.error(`[Chatbot] Flow execution error for flow "${flow.name}": ${err.message}`, err.stack)
-      );
-
-      break;
-    }
-
-    if (!flowTriggered) {
+    if (!chosen) {
       console.log(`[Chatbot] No flows triggered for message: "${ctx.message.substring(0, 80)}"`);
+      return { triggered: false, visitorFacing: false, reason: "no_flow_match" };
     }
+
+    console.log(
+      `[Chatbot] ✅ Flow "${chosen.flow.name}" (id: ${chosen.flow.id}) TRIGGERED — ${chosen.reason}`
+    );
+    markFired(ctx.conversationId);
+    const predicted = flowWouldOwnVisitorTurn(
+      (chosen.flow.nodes as { id: string; type?: string; data?: Record<string, unknown> }[]) || [],
+      (chosen.flow.edges as { source?: string; target?: string }[]) || [],
+    );
+    if (ctx.awaitExecution) {
+      const executed = await executeFlow(chosen.flow, ctx);
+      return {
+        triggered: true,
+        visitorFacing: executed.visitorFacing || predicted.visitorFacing,
+        reason: executed.visitorFacing ? executed.reason : predicted.reason || chosen.reason,
+      };
+    }
+    executeFlow(chosen.flow, ctx).catch((err) =>
+      console.error(`[Chatbot] Flow execution error for flow "${chosen.flow.name}": ${err.message}`, err.stack),
+    );
+    return {
+      triggered: true,
+      visitorFacing: predicted.visitorFacing,
+      reason: predicted.visitorFacing ? predicted.reason : chosen.reason,
+    };
   } catch (err: any) {
     console.error(`[Chatbot] triggerChatbotFlows error: ${err.message}`, err.stack);
+    return { triggered: false, visitorFacing: false, reason: `arbitration_error:${err.message}` };
   }
+}
+
+function findKeywordOrNewChatFlow(
+  activeFlows: ChatbotFlow[],
+  ctx: TriggerContext,
+): { flow: ChatbotFlow; reason: string } | null {
+  for (const flow of activeFlows) {
+    const keywords = (flow.triggerKeywords as string[]) || [];
+    const triggerOnNewChat = flow.triggerOnNewChat ?? false;
+    const triggerChannels = (flow.triggerChannels as string[] | null) || [];
+    if (triggerChannels.length > 0 && !triggerChannels.includes(ctx.channel)) {
+      continue;
+    }
+    if (keywords.length > 0 && keywordMatches(ctx.message, keywords)) {
+      return { flow, reason: `keyword_match:${flow.id}` };
+    }
+    if (triggerOnNewChat && ctx.isNewConversation) {
+      return { flow, reason: `new_chat_trigger:${flow.id}` };
+    }
+  }
+  return null;
 }
 
 // ─── Public API for FlowJobWorker ───────────────────────────────────────────

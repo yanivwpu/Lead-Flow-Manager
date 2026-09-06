@@ -132,6 +132,10 @@ export async function processAutomationTimerJob(job: AutomationTimerJob): Promis
     await storage.markAutomationTimerJobSkipped(job.id, "contact_missing");
     return;
   }
+  if (contact.userId !== job.userId) {
+    await storage.markAutomationTimerJobSkipped(job.id, "tenant_mismatch");
+    return;
+  }
   if (
     job.snapshotLastInboundAt &&
     contact.lastIncomingAt &&

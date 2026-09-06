@@ -43,6 +43,10 @@ import {
 } from "./whatsappService";
 import { storage } from "./storage";
 import { evaluateAutomationSendGuard } from "./automationSendGuard";
+import { requireAdmin as requireSalesAdmin } from "./adminAuth";
+import { getWidgetPublicIdForUser, rotateWidgetPublicId } from "./widgetIdentity";
+import { getChatbotFlowForWorkspace, getContactForWorkspace, getConversationForWorkspace } from "./tenantOwnership";
+import { FOREIGN_RESOURCE_BODY } from "@shared/tenantOwnership";
 import { devLog } from "./devLog";
 import { toPublicIntegration } from "@shared/integrationPublic";
 import {
@@ -812,7 +816,7 @@ export async function registerRoutes(
       });
 
       // Enforce monthly conversation limit before creating
-      const limitCheck = await subscriptionService.checkConversationLimit(req.user.id);
+      const limitCheck = await subscriptionService.checkAndDecrementConversation(req.user.id);
       if (!limitCheck.allowed) {
         const limits = await subscriptionService.getUserLimits(req.user.id);
         return res.status(429).json({ 
@@ -1190,16 +1194,25 @@ export async function registerRoutes(
     let triggerScrollPercent = 50;
     let showOnDesktop = true;
     let showOnMobile = true;
-    let pageRules: { urlContains: string; greeting: string; prefilledMessage: string }[] = [];
+    let pageRules: { urlContains: string; greeting: string; prefilledMessage: string; suggestedQuestions?: string[] }[] = [];
 
-    if (widgetId) {
+    if (!widgetId) {
+      enabled = false;
+    } else if (widgetId) {
       try {
-        const widgetUser = await storage.getUser(widgetId);
-        const ws = (widgetUser?.widgetSettings as any) || {};
-        if (ws.enabled === false) { enabled = false; }
-        if (ws.color) color = ws.color;
-        if (ws.position) position = ws.position;
-        if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
+        const { resolvePublicWidgetAccess } = await import("./webchatAccess");
+        const access = await resolvePublicWidgetAccess(req, widgetId, {
+          requireEnabled: true,
+          strictOrigin: false,
+        });
+        if (!access.ok) {
+          enabled = false;
+        } else {
+          const ws = access.owner.widgetSettings as any;
+          if (ws.enabled === false) { enabled = false; }
+          if (ws.color) color = ws.color;
+          if (ws.position) position = ws.position;
+          if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
         const tt = ws.triggerType;
         if (tt === "delay" || tt === "scroll" || tt === "exit_intent" || tt === "always") {
           triggerType = tt;
@@ -1217,7 +1230,11 @@ export async function registerRoutes(
             urlContains: String(r?.urlContains ?? "").slice(0, 500),
             greeting: String(r?.greeting ?? "").slice(0, 500),
             prefilledMessage: String(r?.prefilledMessage ?? "").slice(0, 2000),
+            suggestedQuestions: Array.isArray(r?.suggestedQuestions)
+              ? r.suggestedQuestions.map((q: unknown) => String(q).slice(0, 200)).slice(0, 8)
+              : [],
           }));
+        }
         }
       } catch { /* non-fatal */ }
     }
@@ -1519,13 +1536,13 @@ export async function registerRoutes(
   // ============= Website Widget Settings Endpoints =============
   
   const defaultWidgetPageRules = [
-    { urlContains: "/pricing", greeting: "Questions about pricing?", prefilledMessage: "Hi! I have a question about your pricing." },
-    { urlContains: "/contact", greeting: "Let us get in touch", prefilledMessage: "Hi! I would like to get in touch." },
-    { urlContains: "/services", greeting: "Tell us what you need", prefilledMessage: "Hi! I am interested in your services." },
+    { urlContains: "/pricing", greeting: "Questions about pricing?", prefilledMessage: "Hi! I have a question about your pricing.", suggestedQuestions: [] as string[] },
+    { urlContains: "/contact", greeting: "Let us get in touch", prefilledMessage: "Hi! I would like to get in touch.", suggestedQuestions: [] as string[] },
+    { urlContains: "/services", greeting: "Tell us what you need", prefilledMessage: "Hi! I am interested in your services.", suggestedQuestions: [] as string[] },
   ];
 
   const baseWidgetSettings = {
-    enabled: true,
+    enabled: false,
     color: "#25D366",
     welcomeMessage: "Hi there! How can we help you today?",
     position: "right" as const,
@@ -1552,14 +1569,51 @@ export async function registerRoutes(
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const user = await storage.getUser(req.user.id);
+      const user = await storage.getUserForSession(req.user.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(mergeWidgetSettingsFromDb(user.widgetSettings));
+      const widgetPublicId = await getWidgetPublicIdForUser(req.user.id);
+      const merged = mergeWidgetSettingsFromDb(user.widgetSettings) as Record<string, unknown>;
+      const { publicWidgetEmbedDecision } = await import("@shared/webchatOriginPolicy");
+      const embed = publicWidgetEmbedDecision(merged);
+      const { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } = await import(
+        "./webchatServerAiRollout"
+      );
+      res.json({
+        ...merged,
+        widgetPublicId,
+        originDiagnostics: {
+          canPubliclyEmbed: embed.ok,
+          reason: embed.ok ? (embed.allowAny ? "allow_any" : "ok") : embed.reason,
+          allowedOriginCount: embed.ok ? embed.allowedOrigins.length : 0,
+          allowAnyOrigin: merged.allowAnyOrigin === true,
+          httpsRequiredInProduction: true,
+          localhostAllowedInDevelopment: true,
+          apexAndWwwArePaired: true,
+          subdomainsAreExactMatchOnly: true,
+        },
+        webchatServerAi: {
+          rolloutEnabled: isWebchatServerAiRolloutEnabled(),
+          allowlisted: isWebchatServerAiAllowlisted(req.user.id),
+        },
+      });
     } catch (error) {
       console.error("Error fetching widget settings:", error);
       res.status(500).json({ error: "Failed to fetch widget settings" });
+    }
+  });
+
+  app.post("/api/widget-settings/rotate-id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const widgetPublicId = await rotateWidgetPublicId(req.user.id);
+      res.json({ widgetPublicId });
+    } catch (error) {
+      console.error("Error rotating widget public id:", error);
+      res.status(500).json({ error: "Failed to rotate widget ID" });
     }
   });
 
@@ -1568,6 +1622,10 @@ export async function registerRoutes(
     urlContains: z.string().max(500),
     greeting: z.string().max(500),
     prefilledMessage: z.string().max(2000),
+    suggestedQuestions: z.array(z.string().max(200)).max(8).optional(),
+    chatbotFlowId: z.string().max(64).optional().or(z.literal("")),
+    ctaLabel: z.string().max(80).optional(),
+    ctaUrl: z.string().max(2000).optional(),
   });
 
   const widgetSettingsSchema = z.object({
@@ -1581,6 +1639,8 @@ export async function registerRoutes(
     triggerDelaySeconds: z.number().int().min(0).max(3600).optional(),
     triggerScrollPercent: z.number().int().min(1).max(100).optional(),
     pageRules: z.array(widgetPageRuleSchema).max(30).optional(),
+    allowedOrigins: z.array(z.string().max(200)).max(50).optional(),
+    allowAnyOrigin: z.boolean().optional(),
   });
   
   app.patch("/api/widget-settings", async (req, res) => {
@@ -1594,17 +1654,48 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid widget settings", details: validation.error.errors });
       }
       
-      const user = await storage.getUser(req.user.id);
+      const user = await storage.getUserForSession(req.user.id);
       const currentSettings = mergeWidgetSettingsFromDb(user?.widgetSettings);
       
       const patch = Object.fromEntries(
         Object.entries(validation.data).filter(([, v]) => v !== undefined)
       ) as Record<string, unknown>;
+
+      if (Array.isArray(patch.allowedOrigins)) {
+        const { normalizeAllowedOriginsList } = await import("@shared/webchatOriginPolicy");
+        patch.allowedOrigins = normalizeAllowedOriginsList(patch.allowedOrigins);
+      }
+
+      if (Array.isArray(patch.pageRules)) {
+        const scoped: typeof patch.pageRules = [];
+        for (const rule of patch.pageRules as Array<Record<string, unknown>>) {
+          const flowId = typeof rule.chatbotFlowId === "string" ? rule.chatbotFlowId.trim() : "";
+          if (flowId) {
+            const owned = await getChatbotFlowForWorkspace(req.user.id, flowId);
+            if (!owned) {
+              return res.status(404).json(FOREIGN_RESOURCE_BODY);
+            }
+          }
+          scoped.push(rule);
+        }
+        patch.pageRules = scoped;
+      }
       
-      const newSettings = { ...currentSettings, ...patch };
+      const newSettings = { ...currentSettings, ...patch } as Record<string, unknown>;
+      const { publicWidgetEmbedDecision } = await import("@shared/webchatOriginPolicy");
+      if (newSettings.enabled === true) {
+        const embed = publicWidgetEmbedDecision(newSettings);
+        if (!embed.ok) {
+          return res.status(400).json({
+            error: "Add at least one allowed website origin, or enable “Allow on any website”, before activating the widget.",
+            code: "ORIGIN_REQUIRED",
+          });
+        }
+      }
 
       await storage.updateUser(req.user.id, { widgetSettings: newSettings });
-      res.json(newSettings);
+      const widgetPublicId = await getWidgetPublicIdForUser(req.user.id);
+      res.json({ ...newSettings, widgetPublicId });
     } catch (error) {
       console.error("Error updating widget settings:", error);
       res.status(500).json({ error: "Failed to update widget settings" });
@@ -4771,7 +4862,7 @@ export async function registerRoutes(
       }
       
       const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limitsAllowIntegrations(limits)) {
+      if (!limitsAllowIntegrations(limits) || !limits) {
         return res.status(403).json({ error: INTEGRATIONS_UNAVAILABLE_MESSAGE });
       }
       
@@ -6759,16 +6850,22 @@ export async function registerRoutes(
       const botId = botInfo.id as number;
 
       // 2. Auto-set webhook to this server's endpoint
+      const { ensureTelegramIngress } = await import("./ingressPublicTokens");
+      const telegramIngress = await ensureTelegramIngress(req.user.id);
       const protocol = req.headers['x-forwarded-proto'] ?? req.protocol;
       const host     = req.headers['x-forwarded-host']  ?? req.get('host');
-      const webhookUrl = `${protocol}://${host}/api/webhook/telegram/${req.user.id}`;
+      const webhookUrl = `${protocol}://${host}/api/webhook/telegram/${telegramIngress.publicId}`;
 
       const setWebhookResp = await fetch(
         `https://api.telegram.org/bot${token}/setWebhook`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: webhookUrl, drop_pending_updates: true }),
+          body: JSON.stringify({
+            url: webhookUrl,
+            drop_pending_updates: true,
+            secret_token: telegramIngress.secret,
+          }),
         }
       );
       const setWebhookData = (await setWebhookResp.json()) as any;
@@ -6920,6 +7017,45 @@ export async function registerRoutes(
   // ─── TikTok Test Lead ──────────────────────────────────────────────────────
   // Creates a mock TikTok lead for the authenticated user so they can verify
   // that lead intake is working without needing a real TikTok ad.
+  app.get("/api/integrations/telegram/webhook-url", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { getTelegramIngress } = await import("./ingressPublicTokens");
+      const ingress = await getTelegramIngress(req.user.id);
+      if (!ingress) {
+        return res.json({ webhookUrl: null, secretConfigured: false });
+      }
+      const protocol = req.headers["x-forwarded-proto"] ?? req.protocol;
+      const host = req.headers["x-forwarded-host"] ?? req.get("host");
+      res.json({
+        webhookUrl: `${protocol}://${host}/api/webhook/telegram/${ingress.publicId}`,
+        secretConfigured: ingress.secretConfigured,
+      });
+    } catch (error) {
+      console.error("Telegram webhook URL error:", error);
+      res.status(500).json({ error: "Failed to resolve webhook URL" });
+    }
+  });
+
+  app.get("/api/integrations/tiktok/lead-url", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { getTiktokLeadPublicId } = await import("./ingressPublicTokens");
+      const publicId = await getTiktokLeadPublicId(req.user.id);
+      if (!publicId) {
+        return res.status(404).json({ error: "TikTok webhook URL is not provisioned yet. Reconnect TikTok after deployment." });
+      }
+      const protocol = req.headers["x-forwarded-proto"] ?? req.protocol;
+      const host = req.headers["x-forwarded-host"] ?? req.get("host");
+      res.json({
+        webhookUrl: `${protocol}://${host}/api/webhook/tiktok/lead/${publicId}`,
+      });
+    } catch (error) {
+      console.error("TikTok lead URL error:", error);
+      res.status(500).json({ error: "Failed to resolve webhook URL" });
+    }
+  });
+
   app.post("/api/integrations/tiktok/test-lead", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -8253,13 +8389,9 @@ export async function registerRoutes(
 
   // ============= Admin Endpoints =============
   
-  // Get all users' usage summary (admin only - for now, accessible to all authenticated users)
-  app.get("/api/admin/usage", async (req, res) => {
+  // Get all users' usage summary (Sales Admin only — CRM login is not sufficient)
+  app.get("/api/admin/usage", requireSalesAdmin, async (_req, res) => {
     try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      
       const result = await db.execute(sql`
         SELECT 
           u.id as user_id,
@@ -8443,18 +8575,7 @@ export async function registerRoutes(
 
   // Admin middleware — Sales Admin session (isAdmin) OR persistent x-admin-token.
   // Does NOT accept normal WhachatCRM owner login (req.user) — that never sets isAdmin.
-  const requireAdmin = async (req: any, res: any, next: any) => {
-    const { isAdminAuthorized } = await import("@shared/adminAccess");
-    const ok = await isAdminAuthorized(
-      {
-        sessionIsAdmin: (req.session as { isAdmin?: boolean } | undefined)?.isAdmin === true,
-        adminToken: req.headers["x-admin-token"] as string | undefined,
-      },
-      verifyAdminToken,
-    );
-    if (ok) return next();
-    return res.status(401).json({ error: "Admin authentication required" });
-  };
+  const requireAdmin = requireSalesAdmin;
 
   const { registerPortalPasswordResetRoutes } = await import("./routes/portalPasswordResetRoutes");
   registerPortalPasswordResetRoutes(app, requireAdmin);
@@ -11296,16 +11417,22 @@ export async function registerRoutes(
 
       let resolvedContactId: string | null =
         typeof bodyContactId === "string" && bodyContactId.trim() ? bodyContactId.trim() : null;
-      if (!resolvedContactId && typeof chatId === "string" && chatId.trim()) {
-        try {
-          const conv = await storage.getConversation(chatId.trim());
-          resolvedContactId = conv?.contactId ?? null;
-        } catch {
-          resolvedContactId = null;
-        }
-      }
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
+
+      if (resolvedConversationId) {
+        const convOwned = await getConversationForWorkspace(userId, resolvedConversationId);
+        if (!convOwned) {
+          return res.status(404).json(FOREIGN_RESOURCE_BODY);
+        }
+        resolvedContactId = convOwned.contactId;
+      }
+      if (resolvedContactId) {
+        const contactOwned = await getContactForWorkspace(userId, resolvedContactId);
+        if (!contactOwned) {
+          return res.status(404).json(FOREIGN_RESOURCE_BODY);
+        }
+      }
 
       let buyerMatchingTraceId: string | null = null;
       let copilotTraceProfile: Awaited<
@@ -11823,7 +11950,7 @@ export async function registerRoutes(
         suggestion = await aiService.suggestReply(
           userId,
           chatId,
-          historyTurns,
+          historyTurns.map((m) => ({ role: m.role, content: m.content || "" })),
           knowledge || undefined,
           settings || undefined,
           selectedTone,
@@ -12041,6 +12168,13 @@ export async function registerRoutes(
       
       if (!conversationHistory || !Array.isArray(conversationHistory)) {
         return res.status(400).json({ error: "Conversation history required" });
+      }
+
+      if (typeof chatId === "string" && chatId.trim()) {
+        const convOwned = await getConversationForWorkspace(userId, chatId.trim());
+        if (!convOwned) {
+          return res.status(404).json(FOREIGN_RESOURCE_BODY);
+        }
       }
 
       const { aiService } = await import("./aiService");

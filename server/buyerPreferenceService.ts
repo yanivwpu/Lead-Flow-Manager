@@ -323,7 +323,7 @@ export async function persistBuyerPreferenceProfile(
   const updated = await storage.updateContactBuyerPreferenceProfile(
     contactId,
     profile as Record<string, unknown>,
-    { skipAutomationHooks: true },
+    { skipAutomationHooks: true, expectedWorkspaceUserId: options?.userId },
   );
 
   if (updated) {
@@ -870,7 +870,12 @@ Rules:
     { jsonMode: true, maxTokens: 900 },
   );
 
-  const rawText = response || "{}";
+  const rawText =
+    typeof response === "string"
+      ? response || "{}"
+      : (response && typeof response === "object" && "content" in response
+          ? String(response.content || "{}")
+          : "{}");
   let raw: unknown;
   try {
     raw = JSON.parse(rawText) as unknown;

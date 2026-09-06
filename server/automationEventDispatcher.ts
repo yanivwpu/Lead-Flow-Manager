@@ -35,11 +35,16 @@ function automationDedupeHit(key: string): boolean {
  */
 export async function resolveLegacyChatForContact(contact: Contact, userId: string): Promise<Chat | null> {
   const raw = (contact.whatsappId || contact.phone || "").replace(/\D/g, "");
-  if (!raw || raw.length < 8) {
-    return null;
+  if (raw && raw.length >= 8) {
+    try {
+      return await findOrCreateChatByPhone(userId, raw, contact.name || raw);
+    } catch {
+      return null;
+    }
   }
+  const synthetic = `webchat:${contact.id}`;
   try {
-    return await findOrCreateChatByPhone(userId, raw, contact.name || raw);
+    return await findOrCreateChatByPhone(userId, synthetic, contact.name || "Website Visitor");
   } catch {
     return null;
   }

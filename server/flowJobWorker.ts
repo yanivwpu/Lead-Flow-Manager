@@ -79,6 +79,42 @@ async function processDueJobs(): Promise<void> {
             }
           }
 
+          const { assertJobTenantBoundary } = await import("./tenantOwnership");
+          const bound = await assertJobTenantBoundary({
+            jobUserId: job.userId,
+            contactId: job.contactId,
+            conversationId: job.conversationId,
+            flowId: job.flowId,
+            payloadUserId: (job.payload as { userId?: string })?.userId || job.userId,
+          });
+          if (!bound.ok) {
+            console.warn(
+              JSON.stringify({
+                tag: "[FlowJobWorker]",
+                jobId: job.id,
+                skipped: true,
+                reason: bound.reason,
+              }),
+            );
+            await storage.markFlowJobSkipped(job.id, `tenant_mismatch:${bound.reason}`);
+            flowSkipped++;
+            return;
+          }
+
+          const { isConversationHandoffActive } = await import("@shared/handoffActivity");
+          const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+          const convForAi = job.conversationId
+            ? await storage.getConversation(job.conversationId)
+            : undefined;
+          if (convForAi) {
+            const events = await storage.getActivityEvents(bound.contact.id, 80);
+            if (isConversationHandoffActive(events, convForAi.id) || readConversationAiControl(convForAi.aiControl).paused) {
+              await storage.markFlowJobSkipped(job.id, "ai_or_handoff_paused");
+              flowSkipped++;
+              return;
+            }
+          }
+
           const flow = await storage.getChatbotFlow(job.flowId);
           if (!flow) {
             console.warn(`[FlowJobWorker] Flow ${job.flowId} not found — marking job ${job.id} as failed`);
