@@ -28,7 +28,15 @@ import {
   type ComposerDraftSource,
 } from "@/lib/composerDraftScope";
 import { captureBuyerMatchingTraceFromApi } from "@/lib/buyerMatchingTraceStore";
-import { shouldTriggerInboxAutoSend } from "@shared/inboxAutoSendTrigger";
+import {
+  fingerprintInboxAutoKey,
+  inboxAutoScopeKey,
+  isUsableInboxAutoScopeKey,
+  loadInboxAutoSession,
+  reduceInboxAutoSession,
+  saveInboxAutoSession,
+} from "@shared/inboxAutoSendTrigger";
+import { logAiReplyDecision } from "@shared/aiReplyDecisionLog";
 import {
   composerKeyboardHelperText,
   resolveComposerEnterAction,
@@ -207,9 +215,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     contactId: null,
   });
   const lastAutoReplyKeyRef = useRef<string>("");
-  const composerOpenedAtRef = useRef<number>(Date.now());
-  const hydrationInboundIdRef = useRef<string>("");
-  const hydrationCapturedRef = useRef(false);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const lastSuggestDraftKeyRef = useRef<string>("");
@@ -326,9 +331,6 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     setAutoSendBlockedMessage(null);
     lastAutoReplyKeyRef.current = "";
     lastSuggestDraftKeyRef.current = "";
-    composerOpenedAtRef.current = Date.now();
-    hydrationInboundIdRef.current = "";
-    hydrationCapturedRef.current = false;
     userLockedManualRef.current = false;
     autoReplyInFlightRef.current = false;
   }, [conversationId, contactId]);
@@ -375,8 +377,9 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   ]);
 
   // ─── Auto-reply engine ───────────────────────────────────────────────────
-  const executeAutoReply = useCallback(async (history: AIComposerMessage[]) => {
-    if (!conversationId || !aiEnabled || autoReplyInFlightRef.current) return;
+  const executeAutoReply = useCallback(async (history: AIComposerMessage[], inboundId?: string) => {
+    if (!conversationId || !aiEnabled) return;
+    if (autoReplyInFlightRef.current) return;
     const generation = autoReplyGenerationRef.current;
     autoReplyInFlightRef.current = true;
     setAutoPhase("typing");
@@ -546,6 +549,14 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       if (generation === autoReplyGenerationRef.current) {
         autoReplyInFlightRef.current = false;
       }
+      const scopeKey = inboxAutoScopeKey(conversationId, contactId);
+      if (inboundId && isUsableInboxAutoScopeKey(scopeKey)) {
+        const finished = reduceInboxAutoSession(loadInboxAutoSession(scopeKey), {
+          type: "finished",
+          inboundId,
+        });
+        saveInboxAutoSession(finished.session);
+      }
     }
   }, [
     conversationId,
@@ -595,56 +606,80 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
   useEffect(() => {
     if (aiMode !== "auto" || autoOverride) return;
-    const decision = shouldTriggerInboxAutoSend({
-      aiModeIsAuto: true,
-      lastTurnIsInbound,
+    const scopeKey = inboxAutoScopeKey(conversationId, contactId);
+    if (!isUsableInboxAutoScopeKey(scopeKey)) return;
+
+    const inboundIds = messages
+      .filter((m) => {
+        if (m.direction === "inbound") return true;
+        if (m.direction === "outbound") return false;
+        return m.role === "user";
+      })
+      .map((m) => m.id)
+      .filter((id): id is string => Boolean(id && String(id).trim()));
+
+    let session = loadInboxAutoSession(scopeKey);
+    if (messagesReady && !session.captured) {
+      const captured = reduceInboxAutoSession(session, { type: "thread_ready", inboundIds });
+      session = captured.session;
+      saveInboxAutoSession(session);
+    }
+
+    const decision = reduceInboxAutoSession(session, {
+      type: "poll",
       lastInboundId,
-      lastInboundCreatedAt: lastInboundCreatedAt || null,
-      composerOpenedAtMs: composerOpenedAtRef.current,
-      alreadyHandledKey: lastAutoReplyKeyRef.current,
-      hydratedInboundId: hydrationInboundIdRef.current,
-      hydrationCaptured: hydrationCapturedRef.current,
+      lastTurnIsInbound,
+      aiModeIsAuto: true,
       threadReady: messagesReady,
     });
-    if (decision.reason === "hydration_pending") {
-      hydrationInboundIdRef.current = decision.handleKey;
-      hydrationCapturedRef.current = true;
-      lastAutoReplyKeyRef.current = decision.handleKey;
-      console.info("[AI-AUTO-CLIENT]", {
-        mode: "auto",
-        channel: channel || null,
-        reason: "hydration_baseline",
-        autoSendAllowed: false,
+    saveInboxAutoSession(decision.session);
+
+    if (
+      decision.trigger ||
+      decision.reason === "hydration_pending" ||
+      decision.reason === "not_auto" ||
+      decision.reason === "thread_not_ready"
+    ) {
+      logAiReplyDecision({
+        source: "inbox_auto_client",
+        channel: channel || "unknown",
+        outcome: "skipped",
+        reasonCode: decision.reason,
+        eligibility: {
+          willDispatch: decision.trigger,
+          messagesReady,
+          lastTurnIsInbound,
+          hydrationCaptured: decision.session.captured,
+          supersedeInFlight: decision.supersedeInFlight,
+          baselineCount: decision.session.baselineIds.length,
+          inboundFp: lastInboundId ? fingerprintInboxAutoKey(lastInboundId) : null,
+          scopeFp: fingerprintInboxAutoKey(scopeKey),
+        },
       });
-      return;
     }
-    if (!decision.trigger) {
-      if (
-        decision.reason === "historical_inbound" ||
-        decision.reason === "hydration_baseline" ||
-        decision.reason === "missing_inbound_timestamp" ||
-        decision.reason === "missing_inbound_id" ||
-        decision.reason === "inbound_timestamp_invalid"
-      ) {
-        lastAutoReplyKeyRef.current = decision.handleKey;
-        console.info("[AI-AUTO-CLIENT]", {
-          mode: "auto",
-          channel: channel || null,
-          reason: decision.reason,
-          autoSendAllowed: false,
-        });
-      }
-      return;
+
+    if (!decision.trigger) return;
+
+    if (decision.supersedeInFlight) {
+      autoReplyGenerationRef.current += 1;
+      autoReplyInFlightRef.current = false;
     }
     lastAutoReplyKeyRef.current = decision.handleKey;
-    executeAutoReply(messagesRef.current);
+    const started = reduceInboxAutoSession(loadInboxAutoSession(scopeKey), {
+      type: "started",
+      inboundId: decision.handleKey,
+    });
+    saveInboxAutoSession(started.session);
+    executeAutoReply(messagesRef.current, decision.handleKey);
   }, [
     aiMode,
     autoOverride,
     lastInboundId,
-    lastInboundCreatedAt,
     lastTurnIsInbound,
     messagesReady,
+    messages,
+    conversationId,
+    contactId,
     executeAutoReply,
     channel,
   ]);

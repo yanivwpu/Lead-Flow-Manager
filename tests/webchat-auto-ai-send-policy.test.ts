@@ -271,10 +271,12 @@ test("Inbox refresh cannot reprocess historical inbound or toast a blocked Auto 
   const composer = read("client/src/components/AIComposer.tsx");
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const routes = read("server/routes.ts");
-  assert.match(composer, /shouldTriggerInboxAutoSend/);
-  assert.match(composer, /hydrationInboundIdRef/);
+  assert.match(composer, /reduceInboxAutoSession/);
+  assert.match(composer, /loadInboxAutoSession/);
   assert.match(composer, /lastInboundId/);
   assert.match(composer, /autoDispatch: true/);
+  assert.match(composer, /inbox_auto_client/);
+  assert.match(inbox, /conv-\$\{primaryConversation\.id\}/);
   assert.match(inbox, /id: m\.id/);
   assert.match(inbox, /createdAt: m\.createdAt/);
   assert.match(inbox, /isAutomatedInboxSendSource/);

@@ -5,7 +5,7 @@
 
 export type AiReplyOutcome = "sent" | "drafted" | "skipped" | "owned_by_other_responder";
 
-export type AiReplyDecisionSource = "inbox_suggest_reply" | "webchat_unattended";
+export type AiReplyDecisionSource = "inbox_suggest_reply" | "webchat_unattended" | "inbox_auto_client";
 
 const OWNED_BY_OTHER = new Set([
   "skip_chatbot_owns",

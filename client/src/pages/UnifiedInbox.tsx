@@ -4555,7 +4555,11 @@ export function UnifiedInbox() {
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <AIComposer
-              key={composerScopeKey ?? `contact-${selectedContactId}`}
+              key={
+                hasConversation && primaryConversation?.id
+                  ? `conv-${primaryConversation.id}`
+                  : composerScopeKey ?? `contact-${selectedContactId}`
+              }
               ref={composerRef}
               value={messageInput}
               onChange={handleComposerChange}

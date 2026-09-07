@@ -138,19 +138,18 @@ test("refreshing Auto with a held review draft still does not send", () => {
   assert.equal(outcomeForReasonCode("auto_dispatch_not_requested", { hasDraft: true }), "drafted");
 });
 
-test("an old inbound ID that was not the hydration baseline still fail-closes on timestamp", () => {
+test("an inbound ID present at conversation entry never sends later", () => {
   const historical = shouldTriggerInboxAutoSend({
     ...hydrated,
-    lastInboundId: "inbound-older-2",
-    lastInboundCreatedAt: "2026-09-07T16:00:00.000Z",
+    lastInboundId: INBOUND_ID,
     hydratedInboundId: INBOUND_ID,
-    alreadyHandledKey: INBOUND_ID,
+    alreadyHandledKey: "",
   });
   assert.equal(historical.trigger, false);
-  assert.equal(historical.reason, "historical_inbound");
+  assert.equal(historical.reason, "hydration_baseline");
 });
 
-test("missing inbound id or timestamp fail-closes instead of sending", () => {
+test("missing inbound id fail-closes; unseen IDs do not require a timestamp", () => {
   const missingId = shouldTriggerInboxAutoSend({
     ...hydrated,
     lastInboundId: "",
@@ -160,14 +159,14 @@ test("missing inbound id or timestamp fail-closes instead of sending", () => {
   assert.equal(missingId.trigger, false);
   assert.equal(missingId.reason, "missing_inbound_id");
 
-  const missingTs = shouldTriggerInboxAutoSend({
+  const liveWithoutTs = shouldTriggerInboxAutoSend({
     ...hydrated,
     lastInboundId: "inbound-live-1",
     lastInboundCreatedAt: null,
     hydratedInboundId: INBOUND_ID,
   });
-  assert.equal(missingTs.trigger, false);
-  assert.equal(missingTs.reason, "missing_inbound_timestamp");
+  assert.equal(liveWithoutTs.trigger, true);
+  assert.equal(liveWithoutTs.reason, "live_inbound");
 });
 
 test("absent unattended allowlist cannot create a user-facing send from Inbox open", () => {
@@ -197,16 +196,12 @@ test("absent unattended allowlist cannot create a user-facing send from Inbox op
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const composer = read("client/src/components/AIComposer.tsx");
   const routes = read("server/routes.ts");
-  assert.match(composer, /shouldTriggerInboxAutoSend/);
-  assert.match(composer, /hydration_pending/);
+  assert.match(composer, /reduceInboxAutoSession/);
+  assert.match(composer, /loadInboxAutoSession/);
   assert.match(composer, /lastInboundId/);
   assert.match(composer, /messagesReady/);
   assert.match(composer, /autoDispatch:\s*true/);
-  assert.match(composer, /executeAutoReply\(messagesRef\.current\)/);
-  assert.doesNotMatch(
-    composer.slice(composer.indexOf("const decision = shouldTriggerInboxAutoSend"), composer.indexOf("loadSuggestDraftForInbound")),
-    /executeAutoReply\(messages\)/,
-  );
+  assert.match(composer, /executeAutoReply\(messagesRef\.current/);
   assert.match(inbox, /messagesReady=\{Boolean\(hasConversation && !messagesLoading\)\}/);
   assert.match(routes, /auto_dispatch_not_requested/);
   assert.match(inbox, /isAutomatedInboxSendSource/);
