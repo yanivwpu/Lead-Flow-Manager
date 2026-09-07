@@ -108,11 +108,14 @@ test("Auto AI responds only when entitlement, configuration, and Auto mode all p
   assert.equal(decideWebchatAiReply({ ...aiBase, bookingOwnsReply: true }), "skip_booking");
   assert.equal(decideWebchatAiReply({ ...aiBase, crmFallbackOwnsReply: true }), "skip_crm_fallback");
   assert.equal(decideWebchatAiReply({ ...aiBase, widgetEnabled: false }), "skip_widget_disabled");
-  assert.equal(decideWebchatAiReply({ ...aiBase, rolloutEnabled: false }), "skip_flag_off");
+  assert.equal(decideWebchatAiReply({ ...aiBase, rolloutEnabled: false, allowlisted: false }), "skip_flag_off");
+  assert.equal(decideWebchatAiReply({ ...aiBase, rolloutEnabled: false, allowlisted: true }), "send_auto");
+  assert.equal(decideWebchatAiReply({ ...aiBase, rolloutEnabled: true, allowlisted: false }), "send_auto");
   const auto = read("server/webchatAiAutoReply.ts");
   assert.match(auto, /crmFallbackOwnsReply/);
   assert.match(auto, /generatedBy: "ai_brain"/);
-  assert.match(auto, /inboundMessageId ===\s*params\.inboundMessageId/);
+  assert.match(auto, /evaluateFullAutoSend/);
+  assert.match(auto, /inboundTurnAlreadyReplied/);
 });
 
 test("polling, refresh, and settings never trigger replies or contacts", () => {
@@ -146,7 +149,8 @@ test("repeated delivery of the same inbound event is idempotent", () => {
   assert.match(webhooks, /!result\.deduped/);
   const auto = read("server/webchatAiAutoReply.ts");
   assert.match(auto, /:idempotent/);
-  assert.match(auto, /webchat_ai:\$\{params\.userId\}:\$\{params\.inboundMessageId\}/);
+  assert.match(auto, /webchatAutoSendIdempotencyKey/);
+  assert.match(auto, /inboundTurnAlreadyReplied/);
 });
 
 test("visitor continuity is independent of reply generation", () => {

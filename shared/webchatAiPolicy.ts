@@ -10,6 +10,10 @@ function normalizeBusinessAiMode(raw: string | undefined | null): "off" | "sugge
   return "off";
 }
 
+export function webchatAutoSendIdempotencyKey(userId: string, inboundMessageId: string): string {
+  return `webchat_ai:${userId}:${inboundMessageId}`;
+}
+
 export type WebchatAiDecision =
   | "send_auto"
   | "suggest_only"
@@ -47,7 +51,7 @@ export type WebchatAiPolicyInput = {
 };
 
 export function decideWebchatAiReply(input: WebchatAiPolicyInput): WebchatAiDecision {
-  if (!input.rolloutEnabled || !input.allowlisted) return "skip_flag_off";
+  if (!input.rolloutEnabled && !input.allowlisted) return "skip_flag_off";
   if (!input.widgetEnabled) return "skip_widget_disabled";
   if (!input.hasAiBrainAccess || !input.planIsProOrTrial) return "skip_no_access";
   if (input.bookingOwnsReply) return "skip_booking";

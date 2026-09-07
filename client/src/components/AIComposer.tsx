@@ -68,7 +68,7 @@ export interface AIComposerProps {
   onChange: (val: string, meta?: ComposerDraftMeta) => void;
   onSend: () => void;
   /** Direct send callback for Auto mode — bypasses controlled state */
-  onAutoSend?: (message: string) => void;
+  onAutoSend?: (message: string, meta?: { idempotencyKey?: string }) => void;
   aiEnabled: boolean;
   hasFullAIBrain?: boolean;
   /** Full capability object from useAICapabilities — drives gating & credit display */
@@ -374,11 +374,11 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       const inbound = history.filter((m) => m.role === "user").map((m) => m.content || "");
       return (inbound[inbound.length - 1] || "").trim();
     })();
-    const logSafeInbound =
-      String(channel || "").toLowerCase() === "email"
-        ? { textLen: lastInboundText.length, textRedacted: true as const }
-        : { latestMessage: lastInboundText.slice(0, 500) };
-    console.info("[AI-AUTO-CLIENT]", { mode: "auto", channel: channel || null, ...logSafeInbound });
+    console.info("[AI-AUTO-CLIENT]", {
+      mode: "auto",
+      channel: channel || null,
+      inboundTextLen: lastInboundText.length,
+    });
     if (lastInboundText) {
       const routing = resolveAiRouting({
         inbound: lastInboundText,
@@ -387,11 +387,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       });
       if (routingShouldTriggerHandoff(routing)) {
         console.info("[HANDOFF_TRIGGERED]", {
-          contactId: contactId || "unknown",
           matchedKeyword: "routing_assign_agent",
           routingReason: routing.reason,
           channel: channel || null,
-          ...logSafeInbound,
+          inboundTextLen: lastInboundText.length,
         });
         setAutoPhase("waiting");
         autoReplyInFlightRef.current = false;
@@ -446,37 +445,41 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         const strongIntent = data.autoSendStrongIntent === true;
         const confidence = typeof data.confidence === "number" ? data.confidence : 0;
         const trimmed = suggestion.trim();
-        const willSend = allowed && trimmed.length > 5 && !!onAutoSend;
+        const ownedByOther = data.flowMatched === true || reason === "chatbot_flow_active";
+        const alreadySent = reason === "already_sent";
+        const idempotencyKey =
+          typeof data.autoSendIdempotencyKey === "string" && data.autoSendIdempotencyKey.trim()
+            ? data.autoSendIdempotencyKey.trim()
+            : undefined;
+        const willSend = allowed && trimmed.length > 5 && !!onAutoSend && !ownedByOther && !alreadySent;
         let clientReason = reason;
         if (willSend) clientReason = "send_ok";
+        else if (ownedByOther) clientReason = "owned_by_other_responder";
         else if (!allowed) clientReason = reason;
         else if (trimmed.length <= 5) clientReason = "suggestion_too_short";
         else if (!onAutoSend) clientReason = "missing_onAutoSend_callback";
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
           channel: channel || null,
-          ...logSafeInbound,
+          inboundTextLen: lastInboundText.length,
           autoSendAllowed: allowed,
           reason: clientReason,
           serverReason: reason,
           flowMatched: data.flowMatched === true,
           aiAutoSuppressed: data.aiAutoSuppressed === true,
-          suppressionReason:
-            typeof data.suppressionReason === "string" ? data.suppressionReason : undefined,
           suggestionLength: trimmed.length,
-          contactId: contactId || "unknown",
           confidence,
         });
 
         if (willSend && onAutoSend) {
-          onAutoSend(suggestion);
+          onAutoSend(suggestion, idempotencyKey ? { idempotencyKey } : undefined);
           setAutoPhase("replied");
           setTimeout(() => {
             if (generation === autoReplyGenerationRef.current) setAutoPhase("waiting");
           }, 5000);
         } else {
           // Stay in Auto; block only this send. Surface suggestion for manual review when available.
-          if (trimmed.length > 0) {
+          if (trimmed.length > 0 && !ownedByOther && !alreadySent) {
             setAiDraft(trimmed);
             if (generation === autoReplyGenerationRef.current) {
               applyComposerText(trimmed, "auto_ai", responseConversationId);
@@ -502,12 +505,11 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         console.info("[AI-AUTO-CLIENT]", {
           mode: "auto",
           channel: channel || null,
-          ...logSafeInbound,
+          inboundTextLen: lastInboundText.length,
           autoSendAllowed: false,
           reason: "suggest_reply_request_failed",
           httpStatus: res.status,
           suggestionLength: 0,
-          contactId: contactId || "unknown",
         });
         setAutoSkippedWithDraft(false);
         setAutoSendBlockedMessage(null);
@@ -517,11 +519,10 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
       console.info("[AI-AUTO-CLIENT]", {
         mode: "auto",
         channel: channel || null,
-        ...logSafeInbound,
+        inboundTextLen: lastInboundText.length,
         autoSendAllowed: false,
         reason: "suggest_reply_exception",
         suggestionLength: 0,
-        contactId: contactId || "unknown",
       });
       setAutoSkippedWithDraft(false);
       setAutoSendBlockedMessage(null);

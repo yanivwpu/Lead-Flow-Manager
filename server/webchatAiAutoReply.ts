@@ -20,14 +20,20 @@ import {
   generationLeaseAllowsCommit,
   readConversationAiControl,
   WEBCHAT_AI_GENERATION_TIMEOUT_MS,
+  webchatAutoSendIdempotencyKey,
 } from "@shared/webchatAiPolicy";
+import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { consumeRateLimit } from "./rateLimitMiddleware";
 import { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } from "./webchatServerAiRollout";
 import { isWidgetEnabled } from "./webchatAccess";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
 import { subscriptionService } from "./subscriptionService";
-import { contactHasDoNotContact, evaluateAutomationSendGuard } from "./automationSendGuard";
+import { contactHasDoNotContact, withAutomationSendGuard } from "./automationSendGuard";
+import {
+  businessKnowledgeFromAiRecord,
+  evaluateFullAutoSend,
+} from "./aiAutoSendGate";
 import {
   clearWebchatGenerationAbort,
   registerWebchatGenerationAbort,
@@ -39,7 +45,14 @@ export type WebchatAiGenerateFn = (input: {
   history: Array<{ role: string; content: string }>;
   inboundText: string;
   signal: AbortSignal;
-}) => Promise<{ suggestion?: string; confidence?: number; modelGenerationSucceeded?: boolean }>;
+}) => Promise<{
+  suggestion?: string;
+  confidence?: number;
+  confidenceProvided?: boolean;
+  knowledgeGrounded?: boolean;
+  modelGenerationSucceeded?: boolean;
+  groundingViolations?: string[];
+}>;
 
 export type WebchatAiAutoReplyDeps = {
   generate?: WebchatAiGenerateFn;
@@ -61,6 +74,29 @@ function joinLatestVisitorTurn(
     }
   }
   return pending.length ? pending.join("\n") : fallback;
+}
+
+function inboundTurnAlreadyReplied(
+  messages: Array<{
+    id: string;
+    direction: string;
+    generatedBy?: string | null;
+    generationMeta?: unknown;
+  }>,
+  inboundMessageId: string,
+): boolean {
+  if (
+    messages.some(
+      (m) =>
+        m.direction === "outbound" &&
+        (m.generationMeta as { inboundMessageId?: string } | null)?.inboundMessageId === inboundMessageId,
+    )
+  ) {
+    return true;
+  }
+  const idx = messages.findIndex((m) => m.id === inboundMessageId);
+  if (idx < 0) return false;
+  return messages.slice(idx + 1).some((m) => m.direction === "outbound");
 }
 
 async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
@@ -143,33 +179,37 @@ export async function maybeRunWebchatServerAi(
     });
   };
 
-  const log = (event: string, extra?: Record<string, unknown>) => {
-    console.info(
-      JSON.stringify({
-        tag: "[WebchatServerAi]",
-        event,
-        userId: params.userId,
-        conversationId: params.conversation.id,
-        inboundMessageId: params.inboundMessageId,
-        ...extra,
-      }),
-    );
+  const report = (reasonCode: string, extra?: { sent?: boolean; hasDraft?: boolean; confidenceSource?: string }) => {
+    logAiReplyDecision({
+      source: "webchat_unattended",
+      channel: "webchat",
+      outcome: extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra),
+      reasonCode,
+      workspaceUserId: params.userId,
+      eligibility: {
+        decision: reasonCode,
+        chatbotWillFire: params.chatbotWillFire,
+        bookingOwnsReply: params.bookingOwnsReply === true,
+        crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
+        confidenceSource: extra?.confidenceSource,
+      },
+    });
   };
 
   let conv = (await storage.getConversation(params.conversation.id)) || params.conversation;
   if (conv.userId !== params.userId) {
-    log("skip_foreign_conversation");
+    report("skip_tenant_isolation");
     return { decision: "skip_incomplete_safe", sent: false };
   }
   let contact = (await storage.getContact(params.contact.id)) || params.contact;
   if (contact.userId !== params.userId) {
-    log("skip_foreign_contact");
+    report("skip_tenant_isolation");
     return { decision: "skip_incomplete_safe", sent: false };
   }
 
   let decision = await evaluate(contact, conv, params.chatbotWillFire);
-  log("decision", { decision });
   if (decision === "skip_manual" || decision.startsWith("skip_")) {
+    report(decision);
     return { decision, sent: false };
   }
 
@@ -179,20 +219,19 @@ export async function maybeRunWebchatServerAi(
     inboundMessageId: params.inboundMessageId,
   });
   if (!acquired.ok) {
-    log("lease_paused");
+    report("skip_ai_paused");
     return { decision: "skip_ai_paused", sent: false };
   }
   await storage.updateConversation(conv.id, { aiControl: acquired.control });
 
   const messages = await storage.getMessages(conv.id, 40);
-  const already = messages.some(
-    (m) =>
-      m.direction === "outbound" &&
-      m.generatedBy === "ai_brain" &&
-      (m.generationMeta as { inboundMessageId?: string } | null)?.inboundMessageId ===
-        params.inboundMessageId,
-  );
-  if (already) return { decision: `${decision}:idempotent`, sent: false };
+  if (inboundTurnAlreadyReplied(messages, params.inboundMessageId)) {
+    report("skip_already_replied");
+    await storage.updateConversation(conv.id, {
+      aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
+    });
+    return { decision: `${decision}:idempotent`, sent: false };
+  }
 
   const joinedInbound = joinLatestVisitorTurn(messages, params.inboundText);
   const history = messages.map((m) => ({
@@ -204,7 +243,14 @@ export async function maybeRunWebchatServerAi(
   const controller = new AbortController();
   registerWebchatGenerationAbort(conv.id, controller);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let suggestion: { suggestion?: string; confidence?: number; modelGenerationSucceeded?: boolean } = {
+  let suggestion: {
+    suggestion?: string;
+    confidence?: number;
+    confidenceProvided?: boolean;
+    knowledgeGrounded?: boolean;
+    modelGenerationSucceeded?: boolean;
+    groundingViolations?: string[];
+  } = {
     suggestion: "",
     confidence: 0,
   };
@@ -232,7 +278,6 @@ export async function maybeRunWebchatServerAi(
     const name = err instanceof Error ? err.name : "";
     conv = (await storage.getConversation(conv.id)) || conv;
     const leaseStillValid = generationLeaseAllowsCommit(readConversationAiControl(conv.aiControl), leaseId);
-    log("generation_failed", { name, leaseStillValid });
     await storage.createActivityEvent({
       userId: params.userId,
       contactId: contact.id,
@@ -240,43 +285,46 @@ export async function maybeRunWebchatServerAi(
       eventType: "ai_generation_failed",
       eventData: {
         reason: name || "generation_failed",
-        inboundMessageId: params.inboundMessageId,
       },
       actorType: "ai",
     }).catch(() => {});
-    if (!leaseStillValid) {
-      return { decision: "skip_lease_invalid", sent: false };
-    }
-    return {
-      decision: name === "TimeoutError" || name === "AbortError" ? "skip_generation_timeout" : "generation_failed",
-      sent: false,
-    };
+    const reasonCode =
+      !leaseStillValid
+        ? "skip_lease_invalid"
+        : name === "TimeoutError" || name === "AbortError"
+          ? "skip_generation_timeout"
+          : "generation_failed";
+    report(reasonCode);
+    return { decision: reasonCode, sent: false };
   } finally {
     clearTimeout(timer);
     clearWebchatGenerationAbort(conv.id, controller);
   }
 
   const text = (suggestion.suggestion || "").trim();
-  if (!text) return { decision: `${decision}:empty`, sent: false };
+  if (!text) {
+    report(`${decision}:empty`);
+    return { decision: `${decision}:empty`, sent: false };
+  }
 
   contact = (await storage.getContact(contact.id)) || contact;
   conv = (await storage.getConversation(conv.id)) || conv;
   if (contact.userId !== params.userId || conv.userId !== params.userId) {
-    log("skip_ownership_changed");
+    report("skip_tenant_isolation");
     return { decision: "skip_incomplete_safe", sent: false };
   }
   const controlNow = readConversationAiControl(conv.aiControl);
   if (!generationLeaseAllowsCommit(controlNow, leaseId)) {
-    log("lease_invalidated");
+    report("skip_lease_invalid");
     return { decision: "skip_lease_invalid", sent: false };
   }
   decision = await evaluate(contact, conv, params.chatbotWillFire);
   if (decision === "skip_manual" || decision.startsWith("skip_")) {
-    log("post_generation_skip", { decision });
+    report(decision);
     return { decision, sent: false };
   }
 
-  if (decision === "suggest_only") {
+  const persistDraft = async (reasonCode: string) => {
     await storage.createActivityEvent({
       userId: params.userId,
       contactId: contact.id,
@@ -286,57 +334,87 @@ export async function maybeRunWebchatServerAi(
         suggestion: text.slice(0, 2000),
         confidence: suggestion.confidence ?? 0,
         channel: "webchat",
-        inboundMessageId: params.inboundMessageId,
+        holdReason: reasonCode,
       },
       actorType: "ai",
     });
     await storage.updateConversation(conv.id, {
       aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
     });
+  };
+
+  if (decision === "suggest_only") {
+    await persistDraft("suggest_only");
+    report("suggest_only", { hasDraft: true });
     return { decision, sent: false };
   }
 
-  const idempotencyKey = `webchat_ai:${params.userId}:${params.inboundMessageId}`;
-  const guard = await evaluateAutomationSendGuard({
-    userId: params.userId,
-    contactId: contact.id,
-    conversationId: conv.id,
+  const knowledge = await storage.getAiBusinessKnowledge(params.userId);
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
     channel: "webchat",
-    source: "ai_auto",
-    idempotencyKey,
+    conversationHistory: history,
+    suggestion: text,
+    confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
+    confidenceProvided: suggestion.confidenceProvided === true,
+    knowledgeGrounded: suggestion.knowledgeGrounded === true,
+    businessKnowledge: businessKnowledgeFromAiRecord(knowledge as Record<string, unknown> | undefined),
+    groundingViolations: suggestion.groundingViolations,
   });
-  if (!guard.ok) {
-    return { decision: `skip_guard:${guard.reason}`, sent: false };
+  if (!gate.allowed) {
+    const reasonCode = `send_auto:held:${gate.reason}`;
+    await persistDraft(reasonCode);
+    report(reasonCode, { hasDraft: true, confidenceSource: gate.confidenceSource });
+    return { decision: reasonCode, sent: false };
   }
 
   conv = (await storage.getConversation(conv.id)) || conv;
   if (!generationLeaseAllowsCommit(readConversationAiControl(conv.aiControl), leaseId)) {
-    log("lease_invalidated_before_send");
+    report("skip_lease_invalid");
     return { decision: "skip_lease_invalid", sent: false };
   }
 
-  const send = await channelService.sendMessage({
-    userId: params.userId,
-    contactId: contact.id,
-    content: text,
-    forceChannel: "webchat",
-    generatedBy: "ai_brain",
-    generationMeta: {
-      decision,
-      confidence: suggestion.confidence ?? 0,
-      inboundMessageId: params.inboundMessageId,
-      leaseId,
-      modelGenerationSucceeded: suggestion.modelGenerationSucceeded === true,
+  const idempotencyKey = webchatAutoSendIdempotencyKey(params.userId, params.inboundMessageId);
+  const guarded = await withAutomationSendGuard(
+    {
+      userId: params.userId,
+      contactId: contact.id,
+      conversationId: conv.id,
+      channel: "webchat",
+      source: "ai_auto",
+      idempotencyKey,
     },
-  });
-
+    async () =>
+      channelService.sendMessage({
+        userId: params.userId,
+        contactId: contact.id,
+        content: text,
+        forceChannel: "webchat",
+        generatedBy: "ai_brain",
+        generationMeta: {
+          decision,
+          reasonCode: gate.reason,
+          confidence: suggestion.confidence ?? 0,
+          inboundMessageId: params.inboundMessageId,
+          leaseId,
+          modelGenerationSucceeded: suggestion.modelGenerationSucceeded === true,
+        },
+      }),
+  );
+  if (!guarded.ok) {
+    const reasonCode = `skip_guard:${guarded.reason}`;
+    report(reasonCode);
+    return { decision: reasonCode, sent: false };
+  }
+  const send = guarded.result;
   if (!send.success) {
-    log("send_failed");
+    report("send_failed");
     return { decision: "send_failed", sent: false };
   }
   const afterSend = (await storage.getConversation(conv.id)) || conv;
   await storage.updateConversation(conv.id, {
     aiControl: completeWebchatGenerationLease(afterSend.aiControl, leaseId),
   });
+  report(gate.reason, { sent: true, confidenceSource: gate.confidenceSource });
   return { decision, sent: true };
 }

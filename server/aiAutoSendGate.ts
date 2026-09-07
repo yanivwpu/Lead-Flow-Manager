@@ -44,6 +44,33 @@ export function toConversationMessages(history: ChatTurn[]) {
 const GREETING_ONLY =
   /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)[\s!?.]*$/i;
 
+/** Web Chat only: "Hello guys." is still a greeting, not a knowledge question. */
+const WEBCHAT_CASUAL_GREETING =
+  /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)([\s,]+[a-z]{1,16}){0,3}[\s!?.]*$/i;
+
+export const AUTO_SEND_MIN_CONFIDENCE = 0.75;
+/** Web Chat send threshold when the model actually returned a score. */
+export const WEBCHAT_AUTO_SEND_MIN_CONFIDENCE = 0.7;
+
+export type AutoSendConfidenceSource = "model" | "defaulted" | "missing";
+
+export function isWebchatChannel(channel: string | null | undefined): boolean {
+  return String(channel || "").trim().toLowerCase() === "webchat";
+}
+
+export function isCasualWebchatGreeting(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return GREETING_ONLY.test(t) || WEBCHAT_CASUAL_GREETING.test(t);
+}
+
+/** Direct, answerable visitor question — not a greeting and not a media placeholder. */
+export function isClearKnowledgeQuestion(text: string): boolean {
+  const t = text.trim();
+  if (!t || isCasualWebchatGreeting(t)) return false;
+  return /\?/.test(t) || t.length >= 25;
+}
+
 const PLACEHOLDER_RE =
   /\{\{|\}\}|\[\[|\]\]|\[NAME\]|\[DATE\]|\[PRICE\]|\[PHONE\]|\[EMAIL\]|TODO\b|TBD\b|XXX\b|___+|…{3,}/i;
 
@@ -136,6 +163,7 @@ export function detectStrongAutoIntent(joinedInbound: string, lastInbound: strin
  * Controlled Full Auto gate — all checks must pass for auto-send.
  * Uses the same lead scoring / signals as Copilot (client leadScoring.ts).
  * Strong-intent override bypasses unclear intent, low confidence, short thread, and missing qualifying answers.
+ * Missing model confidence is never treated as a passing score unless Web Chat knowledge is verified.
  */
 export function evaluateFullAutoSend(params: {
   businessMode: "off" | "suggest" | "auto";
@@ -145,11 +173,31 @@ export function evaluateFullAutoSend(params: {
   businessKnowledge?: BusinessKnowledgeForScoring;
   /** Set when the draft contradicts or ignores published business facts. */
   groundingViolations?: string[];
-}): { allowed: boolean; reason: string; missingRequiredLen: number; inboundCount: number } {
-  const { businessMode, conversationHistory, suggestion, confidence, businessKnowledge } = params;
+  /** When webchat, knowledge-backed questions use the Web Chat send policy (not Copilot sales gates). */
+  channel?: string | null;
+  /** False when the model omitted confidence. Undefined treats `confidence` as model-provided. */
+  confidenceProvided?: boolean;
+  /** True only when retrieved published facts exist and the draft passed grounding. */
+  knowledgeGrounded?: boolean;
+}): {
+  allowed: boolean;
+  reason: string;
+  missingRequiredLen: number;
+  inboundCount: number;
+  confidenceSource: AutoSendConfidenceSource;
+} {
+  const { businessMode, conversationHistory, suggestion, businessKnowledge } = params;
+  const webchat = isWebchatChannel(params.channel);
+  const none = (reason: string, inboundCount = 0, missingRequiredLen = 0, confidenceSource: AutoSendConfidenceSource = "missing") => ({
+    allowed: false,
+    reason,
+    missingRequiredLen,
+    inboundCount,
+    confidenceSource,
+  });
 
   if (businessMode !== "auto") {
-    return { allowed: false, reason: "business_mode_not_auto", missingRequiredLen: 0, inboundCount: 0 };
+    return none("business_mode_not_auto");
   }
 
   const msgs = toConversationMessages(conversationHistory);
@@ -160,22 +208,17 @@ export function evaluateFullAutoSend(params: {
   const lastInbound = inboundMsgs[inboundMsgs.length - 1]?.content?.trim() || "";
 
   if (!lastInbound) {
-    return { allowed: false, reason: "empty_last_inbound", missingRequiredLen: 0, inboundCount };
+    return none("empty_last_inbound", inboundCount);
   }
 
   // Checked ahead of every override: a reply that states a price the business never
   // published, or claims not to know something it does, must reach a human first.
   if (params.groundingViolations && params.groundingViolations.length > 0) {
-    return {
-      allowed: false,
-      reason: `grounding_violation:${params.groundingViolations[0]}`,
-      missingRequiredLen: 0,
-      inboundCount,
-    };
+    return none(`grounding_violation:${params.groundingViolations[0]}`, inboundCount);
   }
 
   if (STOP_RE.test(joinedInbound) || COMPLAINT_RE.test(joinedInbound)) {
-    return { allowed: false, reason: "disqualifier_intent", missingRequiredLen: 0, inboundCount };
+    return none("disqualifier_intent", inboundCount);
   }
 
   const forceBypass = shouldBypassAutoGuardsForInbound({
@@ -183,25 +226,78 @@ export function evaluateFullAutoSend(params: {
     lastInbound,
   });
 
-  if (forceBypass) {
+  const strongIntent = detectStrongAutoIntent(joinedInbound, lastInbound);
+  const knowledgeQuestion = webchat && isClearKnowledgeQuestion(lastInbound);
+  const minConfidence = webchat ? WEBCHAT_AUTO_SEND_MIN_CONFIDENCE : AUTO_SEND_MIN_CONFIDENCE;
+  const modelProvided = params.confidenceProvided !== false && typeof params.confidence === "number";
+  const grounded = params.knowledgeGrounded === true;
+
+  const finishSuggestionChecks = (): { ok: true } | { ok: false; reason: string } => {
     const trimmedSuggestion = suggestion.trim();
     if (!trimmedSuggestion || trimmedSuggestion.length <= 5) {
-      return { allowed: false, reason: "missing_or_trivial_suggestion", missingRequiredLen: 0, inboundCount };
+      return { ok: false, reason: "missing_or_trivial_suggestion" };
     }
     if (PLACEHOLDER_RE.test(trimmedSuggestion)) {
-      return { allowed: false, reason: "suggestion_contains_placeholder", missingRequiredLen: 0, inboundCount };
+      return { ok: false, reason: "suggestion_contains_placeholder" };
     }
-    return { allowed: true, reason: "followup_force_bypass", missingRequiredLen: 0, inboundCount };
+    return { ok: true };
+  };
+
+  const scored = scoreLead(msgs, businessKnowledge);
+  const missingLen = scored.missingRequired?.length ?? 0;
+  const requiredQs = (businessKnowledge?.qualifyingQuestions || []).filter(
+    (q) => q?.question?.trim() && (q.required ?? true) && (q as { enabled?: boolean }).enabled !== false,
+  );
+  const qualifyingGuess = requiredQs.length > 0 && missingLen > 1;
+
+  const resolveConfidence = (opts?: { bypassLowModel?: boolean }):
+    | { ok: true; confidence: number; source: AutoSendConfidenceSource }
+    | { ok: false; reason: string; source: AutoSendConfidenceSource } => {
+    if (modelProvided) {
+      if (!opts?.bypassLowModel && params.confidence < minConfidence) {
+        return { ok: false, reason: "low_confidence", source: "model" };
+      }
+      return { ok: true, confidence: params.confidence, source: "model" };
+    }
+    const mayDefault =
+      webchat &&
+      knowledgeQuestion &&
+      grounded &&
+      !isCasualWebchatGreeting(lastInbound);
+    if (!mayDefault) {
+      return { ok: false, reason: "confidence_not_provided", source: "missing" };
+    }
+    return { ok: true, confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE, source: "defaulted" };
+  };
+
+  if (forceBypass) {
+    const suggestionOk = finishSuggestionChecks();
+    if (!suggestionOk.ok) {
+      return none(suggestionOk.reason, inboundCount, missingLen);
+    }
+    const conf = resolveConfidence();
+    if (!conf.ok) {
+      return none(conf.reason, inboundCount, missingLen, conf.source);
+    }
+    return {
+      allowed: true,
+      reason: "followup_force_bypass",
+      missingRequiredLen: missingLen,
+      inboundCount,
+      confidenceSource: conf.source,
+    };
   }
 
-  const strongIntent = detectStrongAutoIntent(joinedInbound, lastInbound);
+  if (!strongIntent && webchat && isCasualWebchatGreeting(lastInbound)) {
+    return none("last_message_greeting_only", inboundCount, missingLen);
+  }
 
-  if (!strongIntent && inboundCount < 2) {
-    return { allowed: false, reason: "conversation_too_short", missingRequiredLen: 0, inboundCount };
+  if (!strongIntent && inboundCount < 2 && !knowledgeQuestion) {
+    return none("conversation_too_short", inboundCount, missingLen);
   }
 
   if (!strongIntent && GREETING_ONLY.test(lastInbound)) {
-    return { allowed: false, reason: "last_message_greeting_only", missingRequiredLen: 0, inboundCount };
+    return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
   const signals = getStageSignals(msgs, businessKnowledge);
@@ -212,51 +308,57 @@ export function evaluateFullAutoSend(params: {
     /\?/.test(lastInbound);
 
   if (!strongIntent && !intentClear) {
-    return { allowed: false, reason: "intent_unclear", missingRequiredLen: 0, inboundCount };
+    return none("intent_unclear", inboundCount, missingLen);
   }
 
-  const trimmedSuggestion = suggestion.trim();
-  if (!trimmedSuggestion || trimmedSuggestion.length <= 5) {
-    return { allowed: false, reason: "missing_or_trivial_suggestion", missingRequiredLen: 0, inboundCount };
+  const suggestionOk = finishSuggestionChecks();
+  if (!suggestionOk.ok) {
+    return none(suggestionOk.reason, inboundCount, missingLen);
   }
 
-  if (PLACEHOLDER_RE.test(trimmedSuggestion)) {
-    return { allowed: false, reason: "suggestion_contains_placeholder", missingRequiredLen: 0, inboundCount };
-  }
-
-  const scored = scoreLead(msgs, businessKnowledge);
-  const missingLen = scored.missingRequired?.length ?? 0;
-  const requiredQs = (businessKnowledge?.qualifyingQuestions || []).filter(
-    (q) => q?.question?.trim() && (q.required ?? true) && (q as { enabled?: boolean }).enabled !== false,
-  );
-
-  // Strict path (no override)
   if (!strongIntent) {
-    if (confidence < 0.75) {
-      return { allowed: false, reason: "low_confidence", missingRequiredLen: missingLen, inboundCount };
+    const conf = resolveConfidence();
+    if (!conf.ok) {
+      return none(conf.reason, inboundCount, missingLen, conf.source);
     }
-    if (requiredQs.length > 0 && missingLen > 1) {
-      return { allowed: false, reason: "missing_required_gt_one", missingRequiredLen: missingLen, inboundCount };
+    if (!knowledgeQuestion && qualifyingGuess) {
+      return none("missing_required_gt_one", inboundCount, missingLen, conf.source);
     }
-    return { allowed: true, reason: "ok", missingRequiredLen: missingLen, inboundCount };
+    return {
+      allowed: true,
+      reason: knowledgeQuestion ? "ok_knowledge_question" : "ok",
+      missingRequiredLen: missingLen,
+      inboundCount,
+      confidenceSource: conf.source,
+    };
   }
 
-  // Strong intent: relax confidence & qualifying questions (usable suggestion + no placeholders already enforced)
+  const conf = resolveConfidence({ bypassLowModel: true });
+  if (!conf.ok) {
+    return none(conf.reason, inboundCount, missingLen, conf.source);
+  }
+
   const bypassed: string[] = [];
-  if (confidence < 0.75) bypassed.push("low_confidence");
-  if (requiredQs.length > 0 && missingLen > 1) bypassed.push("missing_required_gt_one");
+  if (conf.source === "model" && params.confidence < minConfidence) bypassed.push("low_confidence");
+  if (qualifyingGuess) bypassed.push("missing_required_gt_one");
   if (inboundCount < 2) bypassed.push("conversation_too_short");
   if (!intentClear) bypassed.push("intent_unclear");
 
   console.info("[AI-AUTO] override: strong intent detected", {
     bypassed: bypassed.length ? bypassed : undefined,
     inboundCount,
-    confidence,
+    confidenceSource: conf.source,
     textLen: lastInbound.length,
     textRedacted: true,
   });
 
-  return { allowed: true, reason: "strong_intent_override", missingRequiredLen: missingLen, inboundCount };
+  return {
+    allowed: true,
+    reason: "strong_intent_override",
+    missingRequiredLen: missingLen,
+    inboundCount,
+    confidenceSource: conf.source,
+  };
 }
 
 /** Map `ai_business_knowledge` row → scoring input (same shape as client Copilot). */

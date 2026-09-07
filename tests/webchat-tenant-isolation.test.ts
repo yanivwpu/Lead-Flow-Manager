@@ -148,7 +148,11 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", bookingOwnsReply: true }), "skip_booking");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", crmFallbackOwnsReply: true }), "skip_crm_fallback");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", handoffActive: true }), "skip_handoff");
-  assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", allowlisted: false }), "skip_flag_off");
+  assert.equal(
+    decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", rolloutEnabled: false, allowlisted: false }),
+    "skip_flag_off",
+  );
+  assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", allowlisted: false }), "send_auto");
 }
 
 {
@@ -161,6 +165,8 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   process.env.WEBCHAT_SERVER_AI_AUTO_ALLOWLIST = "";
   assert.equal(isWebchatServerAiRolloutEnabled(), false);
   assert.equal(isWebchatServerAiAllowlisted(ACCOUNT_B), false);
+  process.env.WEBCHAT_SERVER_AI_AUTO = "0";
+  assert.equal(isWebchatServerAiRolloutEnabled(), false);
   process.env.WEBCHAT_SERVER_AI_AUTO = "true";
   process.env.WEBCHAT_SERVER_AI_AUTO_ALLOWLIST = ACCOUNT_B;
   assert.equal(isWebchatServerAiRolloutEnabled(), true);

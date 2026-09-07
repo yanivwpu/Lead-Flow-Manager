@@ -143,11 +143,14 @@ import {
   detectStrongAutoIntent,
   evaluateFullAutoSend,
   isSubstantiveTextForAiAutoSend,
+  isWebchatChannel,
   normalizeBusinessAiMode,
   shouldBypassAutoGuardsForInbound,
   toConversationMessages,
   type ChatTurn,
 } from "./aiAutoSendGate";
+import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
+import { webchatAutoSendIdempotencyKey } from "@shared/webchatAiPolicy";
 import { getStageSignals } from "../client/src/lib/leadScoring";
 import {
   resolveAiRouting,
@@ -1578,6 +1581,8 @@ export async function registerRoutes(
         webchatServerAi: {
           rolloutEnabled: isWebchatServerAiRolloutEnabled(),
           allowlisted: isWebchatServerAiAllowlisted(req.user.id),
+          unattendedEligible:
+            isWebchatServerAiRolloutEnabled() || isWebchatServerAiAllowlisted(req.user.id),
         },
       });
     } catch (error) {
@@ -11663,6 +11668,8 @@ export async function registerRoutes(
       let suggestion: {
         suggestion?: string;
         confidence?: number;
+        confidenceProvided?: boolean;
+        knowledgeGrounded?: boolean;
         /** Populated when the draft contradicts published facts; blocks auto-send. */
         groundingViolations?: string[];
         liveCheckoutUrls?: string[];
@@ -11985,14 +11992,16 @@ export async function registerRoutes(
 
       let autoSendAllowed = false;
       let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
-      let contactIdForLog: string | null = null;
+      let autoSendIdempotencyKey: string | undefined;
+      let autoSendConfidenceSource: "model" | "defaulted" | "missing" | undefined;
+      let gateChannel: string | null = messagingChannel;
 
       if (wantsAuto && chatId) {
         try {
           const conv = await storage.getConversation(chatId);
-          contactIdForLog = conv?.contactId ?? null;
+          if (conv?.channel && !gateChannel) gateChannel = String(conv.channel);
         } catch {
-          contactIdForLog = null;
+          /* ignore */
         }
       }
 
@@ -12003,6 +12012,29 @@ export async function registerRoutes(
         const joinedInbound = inboundContents.join("\n");
         const lastInboundForIntent = inboundContents[inboundContents.length - 1]?.trim() || "";
         autoSendStrongIntent = detectStrongAutoIntent(joinedInbound, lastInboundForIntent);
+
+        let inboundMessageIdForAuto: string | null = null;
+        let alreadyReplied = false;
+        if (chatId) {
+          try {
+            const recentMessages = await storage.getMessages(chatId, 40);
+            const lastInboundRow = [...recentMessages].reverse().find((m) => m.direction === "inbound");
+            inboundMessageIdForAuto = lastInboundRow?.id ?? null;
+            if (inboundMessageIdForAuto) {
+              const idx = recentMessages.findIndex((m) => m.id === inboundMessageIdForAuto);
+              alreadyReplied =
+                recentMessages.some(
+                  (m) =>
+                    m.direction === "outbound" &&
+                    (m.generationMeta as { inboundMessageId?: string } | null)?.inboundMessageId ===
+                      inboundMessageIdForAuto,
+                ) ||
+                (idx >= 0 && recentMessages.slice(idx + 1).some((m) => m.direction === "outbound"));
+            }
+          } catch {
+            inboundMessageIdForAuto = null;
+          }
+        }
 
         if (skipAiModelForAutoNonText) {
           autoSendAllowed = false;
@@ -12019,6 +12051,9 @@ export async function registerRoutes(
         } else if (chatbotArb.flowMatched) {
           autoSendAllowed = false;
           autoSendReason = "chatbot_flow_active";
+        } else if (alreadyReplied) {
+          autoSendAllowed = false;
+          autoSendReason = "already_sent";
         } else {
           const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
           const gate = evaluateFullAutoSend({
@@ -12026,27 +12061,64 @@ export async function registerRoutes(
             conversationHistory,
             suggestion: suggestion.suggestion || "",
             confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
+            confidenceProvided: suggestion.confidenceProvided === true,
+            knowledgeGrounded: suggestion.knowledgeGrounded === true,
             businessKnowledge: scoringKnowledge,
             groundingViolations: suggestion.groundingViolations,
+            channel: gateChannel,
           });
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;
-          if (autoSendAllowed && chatId && contactIdForLog) {
+          autoSendConfidenceSource = gate.confidenceSource;
+          if (autoSendAllowed && chatId && isWebchatChannel(gateChannel) && inboundMessageIdForAuto) {
+            autoSendIdempotencyKey = webchatAutoSendIdempotencyKey(userId, inboundMessageIdForAuto);
+          }
+          if (autoSendAllowed && chatId) {
             const conv = await storage.getConversation(chatId);
-            const guard = await evaluateAutomationSendGuard({
-              userId,
-              contactId: contactIdForLog,
-              conversationId: chatId,
-              channel: conv?.channel || undefined,
-              source: "ai_auto",
-              idempotencyKey: `ai_auto:${userId}:${chatId}:${String(suggestion.suggestion || "").slice(0, 160)}`,
-            });
-            if (!guard.ok) {
-              autoSendAllowed = false;
-              autoSendReason = `automation_send_guard:${guard.reason}`;
+            const guardContactId = conv?.contactId || resolvedContactId;
+            if (guardContactId) {
+              const guard = await evaluateAutomationSendGuard({
+                userId,
+                contactId: guardContactId,
+                conversationId: chatId,
+                channel: conv?.channel || gateChannel || undefined,
+                source: "ai_auto",
+                idempotencyKey:
+                  autoSendIdempotencyKey ||
+                  `ai_auto:${userId}:${chatId}:${String(suggestion.suggestion || "").slice(0, 160)}`,
+              });
+              if (!guard.ok) {
+                autoSendAllowed = false;
+                autoSendReason = `automation_send_guard:${guard.reason}`;
+              }
             }
           }
         }
+
+        const hasDraft = !autoSendAllowed && !!(suggestion.suggestion || "").trim() && autoSendReason !== "already_sent" && autoSendReason !== "chatbot_flow_active";
+        logAiReplyDecision({
+          source: "inbox_suggest_reply",
+          channel: gateChannel || "unknown",
+          outcome: outcomeForReasonCode(autoSendReason, {
+            autoSendAllowed,
+            hasDraft,
+          }),
+          reasonCode: autoSendReason,
+          workspaceUserId: userId,
+          eligibility: {
+            requestedMode: String(requestedMode || ""),
+            businessMode,
+            flowMatched: chatbotArb.flowMatched,
+            widgetChannel: gateChannel || "",
+            confidence:
+              typeof suggestion.confidence === "number" ? Number(suggestion.confidence.toFixed(3)) : null,
+            confidenceSource: autoSendConfidenceSource || (suggestion.confidenceProvided === true ? "model" : "missing"),
+            knowledgeGrounded: suggestion.knowledgeGrounded === true,
+            suggestionLen: (suggestion.suggestion || "").trim().length,
+            strongIntent: autoSendStrongIntent,
+            alreadyReplied,
+          },
+        });
 
         console.info("[AI-AUTO-ARBITRATION]", {
           flowMatched: chatbotArb.flowMatched,
@@ -12058,24 +12130,6 @@ export async function registerRoutes(
           substantiveInbound,
           skipAiModelForAutoNonText,
         });
-
-        console.info("[AI-AUTO]", {
-          userId,
-          chatId: chatId ?? null,
-          contactId: contactIdForLog ?? "unknown",
-          requestedMode,
-          businessMode,
-          autoTriggered: autoSendAllowed,
-          reason: autoSendReason,
-          confidence: suggestion.confidence,
-          strongIntent: autoSendStrongIntent,
-          forceBypass: forceAutoBypass,
-          suggestionLen: (suggestion.suggestion || "").trim().length,
-          hasBusinessKnowledge: !!knowledgeRaw,
-          fairUseStatus: fairUse.status,
-        });
-        console.info("[AI-AUTO] triggered", autoSendAllowed);
-        console.info("[AI-AUTO] blocked", autoSendAllowed ? "(none)" : autoSendReason);
       }
 
       // Inbox AI reply generation meter: one unit only when model succeeded with usable text.
@@ -12130,6 +12184,7 @@ export async function registerRoutes(
         shouldDowngradeToSuggestOnly: fairUse.shouldDowngradeToSuggestOnly,
         autoSendAllowed,
         autoSendReason,
+        autoSendIdempotencyKey,
         requiresPaymentLinkApproval: Boolean(suggestion.requiresPaymentLinkApproval),
         paymentLinkApprovalReason: suggestion.paymentLinkApprovalReason,
         contactId: resolvedContactId,

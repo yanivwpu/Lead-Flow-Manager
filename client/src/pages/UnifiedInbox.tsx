@@ -1986,6 +1986,7 @@ export function UnifiedInbox() {
       mediaFilename?: string;
       contentType?: string;
       source?: string;
+      idempotencyKey?: string;
       emailSubject?: string;
     }) => {
       const channel = clampOutboundChannel(
@@ -2010,6 +2011,7 @@ export function UnifiedInbox() {
         channel,
         source: data.source,
       };
+      if (data.idempotencyKey) body.idempotencyKey = data.idempotencyKey;
       if (channel === "email") {
         const subject =
           (
@@ -2592,7 +2594,7 @@ export function UnifiedInbox() {
     });
   };
 
-  const handleAutoSend = useCallback((message: string) => {
+  const handleAutoSend = useCallback((message: string, meta?: { idempotencyKey?: string }) => {
     if (!message.trim() || !selectedContactId) return;
     if (contactReachableChannels.length === 0) {
       toast({
@@ -2604,12 +2606,16 @@ export function UnifiedInbox() {
     }
     if (import.meta.env.DEV) {
       console.info("[AI-AUTO-SEND]", "attempting send", {
-        contactId: selectedContactId,
         length: message.trim().length,
       });
     }
     sendMessageMutation.mutate(
-      { contactId: selectedContactId, content: message, source: "ai_auto" as any },
+      {
+        contactId: selectedContactId,
+        content: message,
+        source: "ai_auto" as any,
+        idempotencyKey: meta?.idempotencyKey,
+      },
       {
         onSuccess: () => {
           if (import.meta.env.DEV) console.info("[AI-AUTO-SEND]", "sent");

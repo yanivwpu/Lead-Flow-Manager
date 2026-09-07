@@ -85,6 +85,8 @@ export class AIService {
   ): Promise<{
     suggestion: string;
     confidence: number;
+    confidenceProvided?: boolean;
+    knowledgeGrounded?: boolean;
     groundingViolations?: string[];
     /** Exact checkout URLs retrieved from structured offers for this turn. */
     liveCheckoutUrls?: string[];
@@ -109,7 +111,7 @@ export class AIService {
     const inboundMessages = conversationHistory.filter(m => m.role === 'user');
     const allTrivial = inboundMessages.length > 0 && inboundMessages.every(m => TRIVIAL_OPENERS.test((m.content || "").trim()));
     if (allTrivial && conversationHistory.length <= 4) {
-      return { suggestion: "", confidence: 0, modelGenerationSucceeded: false };
+      return { suggestion: "", confidence: 0, confidenceProvided: false, knowledgeGrounded: false, modelGenerationSucceeded: false };
     }
 
     const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
@@ -208,14 +210,16 @@ export class AIService {
       ];
       const response = await aiProvider.complete("reply", messages, { jsonMode: true });
       const result = JSON.parse(response || "{}");
+      const modelConfidence = typeof result.confidence === "number" ? result.confidence : null;
       return {
         suggestion: sanitizeRoboticBuyerReply(result.reply || ""),
-        confidence: typeof result.confidence === "number" ? result.confidence : 0.7,
+        confidence: modelConfidence,
+        confidenceProvided: modelConfidence !== null,
       };
     };
 
     try {
-      let { suggestion, confidence } = await runCompletion(systemPrompt);
+      let { suggestion, confidence: rawConfidence, confidenceProvided } = await runCompletion(systemPrompt);
       let groundingCheck = evaluateDraft(suggestion);
 
       const incomplete =
@@ -234,7 +238,10 @@ export class AIService {
             `${systemPrompt}\n\n${FACT_COMPLETENESS_RETRY_INSTRUCTION}`,
           );
           suggestion = retry.suggestion;
-          confidence = Math.min(confidence, retry.confidence);
+          confidenceProvided = confidenceProvided && retry.confidenceProvided;
+          const a = typeof rawConfidence === "number" ? rawConfidence : 1;
+          const b = typeof retry.confidence === "number" ? retry.confidence : 1;
+          rawConfidence = Math.min(a, b);
           groundingCheck = evaluateDraft(suggestion);
         } catch (retryErr) {
           console.warn(
@@ -263,7 +270,8 @@ export class AIService {
             },
           ],
         };
-        confidence = Math.min(confidence, 0.4);
+        rawConfidence = Math.min(typeof rawConfidence === "number" ? rawConfidence : 1, 0.4);
+        confidenceProvided = true;
         console.warn("[AI] using deterministic grounded draft for human review", {
           userId,
           channel: channel ?? null,
@@ -281,9 +289,13 @@ export class AIService {
         liveCheckoutUrls,
       );
 
+      const knowledgeGrounded = grounding.retrieved.length > 0 && groundingCheck.ok;
+
       return {
         suggestion,
-        confidence,
+        confidence: typeof rawConfidence === "number" ? rawConfidence : 0.7,
+        confidenceProvided: confidenceProvided === true,
+        knowledgeGrounded,
         groundingViolations: groundingCheck.violations.map((v) => v.kind),
         liveCheckoutUrls,
         requiresPaymentLinkApproval,
@@ -298,7 +310,7 @@ export class AIService {
         "[AI] Error generating suggestion:",
         error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
       );
-      return { suggestion: "", confidence: 0, modelGenerationSucceeded: false };
+      return { suggestion: "", confidence: 0, confidenceProvided: false, knowledgeGrounded: false, modelGenerationSucceeded: false };
     }
   }
 
