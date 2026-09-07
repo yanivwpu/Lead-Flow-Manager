@@ -11,7 +11,10 @@ export function WebchatFormCard(props: {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const fields = useMemo(() => props.form.fields, [props.form.fields]);
+  const fields = useMemo(
+    () => (Array.isArray(props.form?.fields) ? props.form.fields : []),
+    [props.form?.fields],
+  );
 
   if (props.submitted) {
     return (

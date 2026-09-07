@@ -25,6 +25,7 @@ import {
 import { useSyncLanguageFromMarketingUrl } from "@/lib/marketingLocaleRouting";
 import { parseLocalizedPath } from "@shared/localeRoutes";
 import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
+import { WidgetFrameErrorBoundary } from "@/components/webchat/WidgetFrameErrorBoundary";
 
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 const CheckEmailPage = lazy(() =>
@@ -269,8 +270,16 @@ function MarketingRoutes() {
       <Route path="/partner-portal" component={PartnerPortal} />
       {localeRoutes("/realtor-growth-engine", RealtorLanding)}
       {localeRoutes("/prospect-ai", ProspectAiLanding)}
-      <Route path="/widget-frame/:widgetId" component={WidgetFrame} />
-      <Route path="/chat/:widgetId" component={WidgetChat} />
+      <Route path="/widget-frame/:widgetId">
+        <WidgetFrameErrorBoundary>
+          <WidgetFrame />
+        </WidgetFrameErrorBoundary>
+      </Route>
+      <Route path="/chat/:widgetId">
+        <WidgetFrameErrorBoundary>
+          <WidgetChat />
+        </WidgetFrameErrorBoundary>
+      </Route>
       <Route path="/help" component={HelpCenter} />
       <Route path="/user-guide" component={UserGuide} />
       <Route path="/WhachatCRM-User-Guide.html">

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
 import { WebchatWidget } from "@/pages/WidgetFrame";
+import { WidgetFrameErrorBoundary } from "@/components/webchat/WidgetFrameErrorBoundary";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 
 /**
@@ -47,7 +48,9 @@ export function WidgetChat() {
   return (
     <>
       {noindex}
-      <WebchatWidget widgetId={widgetId} resolvePageHref={pageHref} />
+      <WidgetFrameErrorBoundary>
+        <WebchatWidget widgetId={widgetId} resolvePageHref={pageHref} />
+      </WidgetFrameErrorBoundary>
     </>
   );
 }

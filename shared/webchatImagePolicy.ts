@@ -1,6 +1,9 @@
 /**
  * Phase-one Web Chat image policy: JPEG / PNG / WebP only.
  * MIME is decided from file bytes, never from the filename.
+ *
+ * This module is imported by the WidgetFrame browser bundle. Do not use Node-only
+ * globals — they throw ReferenceError in the iframe and blank it.
  */
 
 export const WEBCHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -17,20 +20,42 @@ export type WebchatSafeImageMime = (typeof WEBCHAT_SAFE_IMAGE_MIMES)[number];
 const SVG_OR_MARKUP_RE =
   /<\s*(?:svg|html|script|iframe|object|embed|link|meta|form|body|head)\b/i;
 const PHP_OR_ASPX_RE = /<\?(?:php|=)|<%|javascript:/i;
-const POLY_PDF = Buffer.from("%PDF");
-const POLY_MZ = Buffer.from("MZ");
-const POLY_ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
+const POLY_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+const POLY_MZ = new Uint8Array([0x4d, 0x5a]); // MZ
+const POLY_ELF = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
 
-export function sniffWebchatImageMime(buf: Buffer): WebchatSafeImageMime | null {
+function startsWithBytes(buf: Uint8Array, prefix: Uint8Array): boolean {
+  if (!buf || buf.length < prefix.length) return false;
+  for (let i = 0; i < prefix.length; i++) {
+    if (buf[i] !== prefix[i]) return false;
+  }
+  return true;
+}
+
+function asciiAt(buf: Uint8Array, start: number, expected: string): boolean {
+  if (!buf || buf.length < start + expected.length) return false;
+  for (let i = 0; i < expected.length; i++) {
+    if (buf[start + i] !== expected.charCodeAt(i)) return false;
+  }
+  return true;
+}
+
+function decodeHead(buf: Uint8Array, max = 512): string {
+  const n = Math.min(buf.length, max);
+  const slice = buf.subarray(0, n);
+  if (typeof TextDecoder !== "undefined") {
+    return new TextDecoder("utf-8", { fatal: false }).decode(slice);
+  }
+  let s = "";
+  for (let i = 0; i < n; i++) s += String.fromCharCode(slice[i]!);
+  return s;
+}
+
+export function sniffWebchatImageMime(buf: Uint8Array): WebchatSafeImageMime | null {
   if (!buf || buf.length < 12) return null;
   if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
-  if (
-    buf.toString("ascii", 0, 4) === "RIFF" &&
-    buf.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
+  if (asciiAt(buf, 0, "RIFF") && asciiAt(buf, 8, "WEBP")) return "image/webp";
   return null;
 }
 
@@ -44,11 +69,11 @@ export function declaredWebchatImageMime(value: unknown): WebchatSafeImageMime |
   return null;
 }
 
-function looksLikePolyglotOrUnsafe(buf: Buffer): boolean {
-  if (buf.length >= 2 && buf.subarray(0, 2).equals(POLY_MZ)) return true;
-  if (buf.length >= 4 && buf.subarray(0, 4).equals(POLY_ELF)) return true;
-  if (buf.length >= 4 && buf.subarray(0, 4).equals(POLY_PDF)) return true;
-  const head = buf.subarray(0, Math.min(buf.length, 512)).toString("utf8");
+function looksLikePolyglotOrUnsafe(buf: Uint8Array): boolean {
+  if (startsWithBytes(buf, POLY_MZ)) return true;
+  if (startsWithBytes(buf, POLY_ELF)) return true;
+  if (startsWithBytes(buf, POLY_PDF)) return true;
+  const head = decodeHead(buf, 512);
   const trimmed = head.replace(/^\uFEFF/, "").trimStart();
   if (trimmed.startsWith("<")) return true;
   if (SVG_OR_MARKUP_RE.test(head) || PHP_OR_ASPX_RE.test(head)) return true;
@@ -60,7 +85,7 @@ export type WebchatImageInspection =
   | { ok: false; reason: "empty" | "too_large" | "disguised" | "unsafe_type" | "mismatch" };
 
 export function inspectWebchatImageBuffer(
-  buf: Buffer,
+  buf: Uint8Array,
   declaredMime?: string | null,
 ): WebchatImageInspection {
   if (!buf || buf.length === 0) return { ok: false, reason: "empty" };

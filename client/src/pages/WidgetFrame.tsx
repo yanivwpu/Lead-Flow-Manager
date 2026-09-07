@@ -5,6 +5,10 @@ import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { loadOrRotateWebchatVisitorId } from "@shared/webchatVisitorId";
 import { WebchatMediaBubble } from "@/components/webchat/WebchatMediaBubble";
 import { WebchatFormCard } from "@/components/webchat/WebchatFormCard";
+import {
+  WebchatMessageErrorBoundary,
+  WidgetFrameErrorBoundary,
+} from "@/components/webchat/WidgetFrameErrorBoundary";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
 import {
@@ -206,9 +210,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       }
       setPollError(false);
       setMessages(
-        data.filter(
-          (m: ChatMessage) => m && m.id && (m.direction !== "outbound" || m.status !== "failed"),
-        ),
+        data.filter((m: unknown): m is ChatMessage => {
+          if (!m || typeof m !== "object") return false;
+          const row = m as ChatMessage;
+          if (typeof row.id !== "string" || !row.id) return false;
+          if (row.direction !== "inbound" && row.direction !== "outbound") return false;
+          return row.direction !== "outbound" || row.status !== "failed";
+        }),
       );
       return true;
     } catch {
@@ -439,16 +447,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full w-full min-w-0 items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin" style={{ color: widgetColor }} />
-      </div>
-    );
-  }
-
   const deduped = Array.from(
-    new Map(messages.map(m => [m.id.startsWith("opt_") ? m.id : m.id, m])).values()
+    new Map(
+      messages
+        .filter((m) => typeof m?.id === "string" && m.id.length > 0)
+        .map((m) => [m.id, m]),
+    ).values(),
   );
 
   return (
@@ -473,20 +477,30 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
       {/* Messages */}
       <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-3 space-y-2">
+        {isLoading && (
+          <div className="flex justify-center py-6" data-testid="webchat-loading">
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: widgetColor }} />
+          </div>
+        )}
+        {widgetUnavailable && !isLoading && (
+          <p className="text-xs text-red-600" data-testid="text-settings-error" role="alert">
+            Chat is unavailable. Please try again later.
+          </p>
+        )}
         {pollError && (
           <p className="text-xs text-amber-800" data-testid="text-poll-error" role="status">
             Couldn't refresh messages. Retrying…
           </p>
         )}
         {/* Welcome bubble */}
-        {deduped.length === 0 && (
+        {!isLoading && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
               {urlGreeting || settingsWelcome}
             </div>
           </div>
         )}
-        {deduped.length === 0 && suggestedQuestions.length > 0 && (
+        {!isLoading && !widgetUnavailable && deduped.length === 0 && suggestedQuestions.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {suggestedQuestions.map((q) => (
               <button
@@ -500,7 +514,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             ))}
           </div>
         )}
-        {deduped.length === 0 && ctaLabel && ctaUrl && (
+        {!isLoading && !widgetUnavailable && deduped.length === 0 && ctaLabel && ctaUrl && (
           <a
             href={ctaUrl}
             target="_blank"
@@ -512,19 +526,30 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           </a>
         )}
 
-        {leadForm && !submittedFormIds.has(leadForm.id) && !deduped.some((m) => m.contentType === "form" || m.contentType === "form_result") && (
+        {!isLoading && !widgetUnavailable && leadForm && !submittedFormIds.has(leadForm.id) && !deduped.some((m) => m.contentType === "form" || m.contentType === "form_result") && (
+          <WebchatMessageErrorBoundary>
           <WebchatFormCard
             form={leadForm}
             widgetColor={widgetColor}
             disabled={widgetUnavailable}
             onSubmit={(values) => submitForm(leadForm, values)}
           />
+          </WebchatMessageErrorBoundary>
         )}
 
         {deduped.map((msg) => {
           const isOutbound = msg.direction === "outbound";
           const sendFailed = !isOutbound && msg.status === "failed";
-          const buttons: ButtonOption[] = msg.templateVariables?.chatbotButtons ?? [];
+          const rawButtons = msg.templateVariables?.chatbotButtons;
+          const buttons: ButtonOption[] = Array.isArray(rawButtons)
+            ? rawButtons.filter(
+                (btn): btn is ButtonOption =>
+                  !!btn &&
+                  typeof btn === "object" &&
+                  typeof btn.label === "string" &&
+                  typeof btn.value === "string",
+              )
+            : [];
           const isButtonMessage = msg.contentType === "buttons" && buttons.length > 0;
           const formDef = sanitizeWebchatFormDefinition(msg.templateVariables?.webchatForm);
           const isFormMessage = msg.contentType === "form" && !!formDef && isOutbound;
@@ -532,8 +557,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           const formSubmitted = formDef ? submittedFormIds.has(formDef.id) || deduped.some((m) => m.contentType === "form_result") : false;
 
           return (
+            <WebchatMessageErrorBoundary key={msg.id}>
             <div
-              key={msg.id}
               className={`flex ${isOutbound ? "justify-start" : "justify-end"}`}
               data-testid={`msg-${msg.id}`}
             >
@@ -637,6 +662,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                 )}
               </div>
             </div>
+            </WebchatMessageErrorBoundary>
           );
         })}
         <div ref={messagesEndRef} />
@@ -682,7 +708,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           <button
             type="button"
             data-testid="btn-attach-image"
-            disabled={isSending || widgetUnavailable}
+            disabled={isSending || widgetUnavailable || isLoading}
             className="flex-shrink-0 w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40"
             onClick={() => fileInputRef.current?.click()}
             aria-label="Attach image"
@@ -696,14 +722,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={widgetUnavailable ? "Chat unavailable" : "Type a message…"}
-            disabled={isSending || widgetUnavailable}
+            disabled={isSending || widgetUnavailable || isLoading}
             data-testid="input-chat-message"
             className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
             style={{ "--tw-ring-color": widgetColor } as React.CSSProperties}
           />
           <button
             onClick={() => sendMessage(inputText)}
-            disabled={isSending || widgetUnavailable || (!inputText.trim() && !pendingFile)}
+            disabled={isSending || widgetUnavailable || isLoading || (!inputText.trim() && !pendingFile)}
             data-testid="btn-send-chat"
             className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity disabled:opacity-40"
             style={{ background: widgetColor }}
@@ -738,7 +764,9 @@ export function WidgetFrame() {
   return (
     <>
       {noindex}
-      <WebchatWidget widgetId={params.widgetId} />
+      <WidgetFrameErrorBoundary>
+        <WebchatWidget widgetId={params.widgetId} />
+      </WidgetFrameErrorBoundary>
     </>
   );
 }

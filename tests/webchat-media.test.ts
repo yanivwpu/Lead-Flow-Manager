@@ -226,6 +226,15 @@ test("invalid oversized and disguised files are rejected by content inspection",
   huge[1] = 0xd8;
   huge[2] = 0xff;
   assert.equal(inspectWebchatImageBuffer(huge).ok, false);
+  const pdfBytes = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
+  assert.equal(inspectWebchatImageBuffer(pdfBytes).ok, false);
+});
+
+test("webchat image policy is isomorphic and never references Node Buffer", () => {
+  const src = read("shared/webchatImagePolicy.ts");
+  assert.doesNotMatch(src, /\bBuffer\b/);
+  assert.match(src, /Uint8Array/);
+  assert.match(src, /TextDecoder/);
 });
 
 test("WidgetFrame renders captionless images and keeps text send unchanged", () => {
@@ -235,6 +244,10 @@ test("WidgetFrame renders captionless images and keeps text send unchanged", () 
   assert.doesNotMatch(frame, /\(msg\.content \|\| msg\.contentType === "buttons"\) && \(/);
   assert.match(frame, /\/api\/webchat\/\$\{userId\}/);
   assert.match(frame, /headers: \{ "Content-Type": "application\/json" \}/);
+  assert.match(frame, /WebchatMessageErrorBoundary/);
+  assert.match(frame, /WidgetFrameErrorBoundary/);
+  assert.match(frame, /Array\.isArray\(rawButtons\)/);
+  assert.match(frame, /typeof m\?\.id === "string"/);
   assert.match(frame, /btn-attach-image/);
   assert.match(frame, /accept="image\/jpeg,image\/png,image\/webp"/);
   assert.match(frame, /capture="environment"/);
