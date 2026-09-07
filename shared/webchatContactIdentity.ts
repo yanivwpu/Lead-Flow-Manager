@@ -279,6 +279,7 @@ export type WebchatContactPreflightBucket =
 export type WebchatContactPreflightInput = WebchatIdentityContact & {
   id?: string;
   userId?: string;
+  webchatId?: string | null;
 };
 
 function canonicalStaleAfterForm(contact: WebchatIdentityContact): boolean {
@@ -320,6 +321,7 @@ export function aggregateWebchatContactPreflight(
   webchatTotal: number;
   possibleDuplicateEmailPairs: number;
   possibleDuplicatePhonePairs: number;
+  duplicateWebchatVisitorPairs: number;
 } {
   const counts: Record<WebchatContactPreflightBucket, number> = {
     message_derived_webchat_names: 0,
@@ -364,11 +366,27 @@ export function aggregateWebchatContactPreflight(
   }
   counts.possible_duplicate_email = possibleDuplicateEmailPairs;
   counts.possible_duplicate_phone = possibleDuplicatePhonePairs;
+  const visitorIndex = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.userId) continue;
+    const column = typeof row.webchatId === "string" ? row.webchatId.trim() : "";
+    const cf = asRecord(row.customFields).webchatVisitorId;
+    const fromCf = typeof cf === "string" ? cf.trim() : "";
+    const visitorKey = column || fromCf;
+    if (!visitorKey) continue;
+    const key = `${row.userId}\n${visitorKey}`;
+    visitorIndex.set(key, (visitorIndex.get(key) || 0) + 1);
+  }
+  let duplicateWebchatVisitorPairs = 0;
+  for (const n of visitorIndex.values()) {
+    if (n > 1) duplicateWebchatVisitorPairs += 1;
+  }
   return {
     ...counts,
     webchatTotal: rows.filter((r) => isWebchatSourcedContact(r)).length,
     possibleDuplicateEmailPairs,
     possibleDuplicatePhonePairs,
+    duplicateWebchatVisitorPairs,
   };
 }
 

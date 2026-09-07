@@ -38,7 +38,7 @@ WHERE webchat_id IS NOT NULL
   AND webchat_id <> ''
   AND COALESCE(custom_fields->>'webchatVisitorId', '') = '';
 
-CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
+CREATE INDEX IF NOT EXISTS contacts_user_id_webchat_id_idx
   ON contacts (user_id, webchat_id)
   WHERE webchat_id IS NOT NULL AND webchat_id <> '';
 
@@ -51,3 +51,10 @@ CREATE INDEX IF NOT EXISTS contacts_user_id_webchat_visitor_source_idx
   ON contacts (user_id, (source_details->>'webchatVisitorId'))
   WHERE source_details->>'webchatVisitorId' IS NOT NULL
     AND source_details->>'webchatVisitorId' <> '';
+
+-- Apply only after a read-only duplicate check of (user_id, webchat_id).
+-- Existing duplicate visitor rows will cause this statement to fail; the
+-- non-unique indexes above remain sufficient for lookups.
+CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
+  ON contacts (user_id, webchat_id)
+  WHERE webchat_id IS NOT NULL AND webchat_id <> '';

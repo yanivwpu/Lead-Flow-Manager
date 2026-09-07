@@ -23,7 +23,7 @@ async function main(): Promise<void> {
       phone: contacts.phone,
       source: contacts.source,
       primaryChannel: contacts.primaryChannel,
-      lastIncomingChannel: contacts.lastIncomingChannel,
+      webchatId: contacts.webchatId,
       customFields: contacts.customFields,
       sourceDetails: contacts.sourceDetails,
     })

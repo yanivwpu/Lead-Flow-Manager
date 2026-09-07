@@ -254,6 +254,7 @@ test("preflight aggregates never include row payloads", () => {
   assert.equal(agg.form_submitted_canonical_stale, 1);
   assert.equal(agg.non_webchat_unchanged, 1);
   assert.equal(agg.possibleDuplicateEmailPairs, 1);
+  assert.equal(typeof agg.duplicateWebchatVisitorPairs, "number");
   assert.equal(JSON.stringify(agg).includes("@"), false);
   assert.equal(JSON.stringify(agg).toLowerCase().includes("pat"), false);
 });

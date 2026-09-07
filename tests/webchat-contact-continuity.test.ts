@@ -273,9 +273,11 @@ test("shared storage resolver, indexes, and public APIs never expose duplicate c
   const migration = read("migrations/0091_contacts_webchat_id.sql");
   assert.match(migration, /contacts_user_id_webchat_id_uidx/);
   assert.match(migration, /ON contacts \(user_id, webchat_id\)/);
+  assert.match(migration, /contacts_user_id_webchat_id_idx/);
   assert.match(migration, /contacts_user_id_webchat_visitor_jsonb_idx/);
   assert.match(migration, /contacts_user_id_webchat_visitor_source_idx/);
   assert.match(read("server/startupSchemaPatches.ts"), /0091_contacts_webchat_id/);
+  assert.match(read("server/startupSchemaPatches.ts"), /0091b_contacts_webchat_id_unique/);
   assert.match(read("shared/schema.ts"), /webchatId: text\("webchat_id"\)/);
 
   const identity = identityFromFormValues(form, values);

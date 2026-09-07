@@ -1214,7 +1214,7 @@ SET custom_fields = jsonb_set(COALESCE(custom_fields, '{}'::jsonb), '{webchatVis
 WHERE webchat_id IS NOT NULL
   AND webchat_id <> ''
   AND COALESCE(custom_fields->>'webchatVisitorId', '') = '';
-CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
+CREATE INDEX IF NOT EXISTS contacts_user_id_webchat_id_idx
   ON contacts (user_id, webchat_id)
   WHERE webchat_id IS NOT NULL AND webchat_id <> '';
 CREATE INDEX IF NOT EXISTS contacts_user_id_webchat_visitor_jsonb_idx
@@ -1225,6 +1225,14 @@ CREATE INDEX IF NOT EXISTS contacts_user_id_webchat_visitor_source_idx
   ON contacts (user_id, (source_details->>'webchatVisitorId'))
   WHERE source_details->>'webchatVisitorId' IS NOT NULL
     AND source_details->>'webchatVisitorId' <> '';
+`.trim(),
+  },
+  {
+    tag: "0091b_contacts_webchat_id_unique",
+    sql: `
+CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
+  ON contacts (user_id, webchat_id)
+  WHERE webchat_id IS NOT NULL AND webchat_id <> '';
 `.trim(),
   },
 ];
