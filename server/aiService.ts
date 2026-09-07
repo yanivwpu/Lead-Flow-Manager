@@ -28,6 +28,11 @@ import {
   type AiSettings,
 } from "@shared/schema";
 import type { AiRoutingResult } from "@shared/aiRouting";
+import { isWebchatChannel, isCasualWebchatGreeting } from "./aiAutoSendGate";
+import {
+  coerceWebchatGreetingWelcome,
+  webchatSafeGreetingWelcome,
+} from "@shared/webchatGreetingWelcome";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
@@ -101,16 +106,15 @@ export class AIService {
     modelGenerationSucceeded?: boolean;
   }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
+    const greetingTurn = isWebchatChannel(channel) && isCasualWebchatGreeting(lastMessage);
 
     // Don't suggest when there is no real conversational context yet.
-    // Trivial openers ("test", "hi", "hey", "hello") give the AI no signal —
-    // it will hallucinate qualification questions out of thin air.
-    // We suppress suggestions when ALL messages in a short conversation (≤4 messages)
-    // are trivial openers, not just when there is one message.
+    // Trivial openers on non-greeting / non-webchat turns give the AI no signal.
+    // Web Chat greetings may receive one brief welcome instead of an empty draft.
     const TRIVIAL_OPENERS = /^(test|hi|hey|hello|yo|sup|hola|ping|check|checking|ola|shalom|ahlan|مرحبا|שלום|buenos dias|good morning|good afternoon|good evening|gm|gn)[\s!?.]*$/i;
     const inboundMessages = conversationHistory.filter(m => m.role === 'user');
     const allTrivial = inboundMessages.length > 0 && inboundMessages.every(m => TRIVIAL_OPENERS.test((m.content || "").trim()));
-    if (allTrivial && conversationHistory.length <= 4) {
+    if (allTrivial && conversationHistory.length <= 4 && !greetingTurn) {
       return { suggestion: "", confidence: 0, confidenceProvided: false, knowledgeGrounded: false, modelGenerationSucceeded: false };
     }
 
@@ -130,7 +134,7 @@ export class AIService {
       block: { text: "", factCount: 0, staleFactCount: 0, coveredTypes: [] },
       conflictingKeys: [],
     };
-    if (liveDecision.needsKnowledge) {
+    if (liveDecision.needsKnowledge && !greetingTurn) {
       try {
         grounding = await buildTurnGrounding({
           userId,
@@ -149,27 +153,29 @@ export class AIService {
 
     let liveBusinessDataBlock = "";
     let liveCheckoutUrls: string[] = [];
-    try {
-      const live = await resolveLiveBusinessDataForTurn({
-        userId,
-        message: lastMessage,
-        subIntents: routing?.subIntents,
-        decision: liveDecision,
-      });
-      liveBusinessDataBlock = live.promptBlock;
-      liveCheckoutUrls = live.records
-        .filter((r) => r.providerId === "businessPackages")
-        .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
-        .filter((u) => /^https:\/\//i.test(u));
-      // Structured offers win over scanned pricing_plan knowledge rows.
-      if (live.usedBusinessPackages) {
-        grounding = excludeFactTypesFromGrounding(grounding, ["pricing_plan"]);
+    if (!greetingTurn) {
+      try {
+        const live = await resolveLiveBusinessDataForTurn({
+          userId,
+          message: lastMessage,
+          subIntents: routing?.subIntents,
+          decision: liveDecision,
+        });
+        liveBusinessDataBlock = live.promptBlock;
+        liveCheckoutUrls = live.records
+          .filter((r) => r.providerId === "businessPackages")
+          .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
+          .filter((u) => /^https:\/\//i.test(u));
+        // Structured offers win over scanned pricing_plan knowledge rows.
+        if (live.usedBusinessPackages) {
+          grounding = excludeFactTypesFromGrounding(grounding, ["pricing_plan"]);
+        }
+      } catch (err) {
+        console.warn(
+          "[AI] live business data unavailable",
+          err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
+        );
       }
-    } catch (err) {
-      console.warn(
-        "[AI] live business data unavailable",
-        err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240),
-      );
     }
 
     const systemPrompt = this.buildSystemPrompt(
@@ -183,6 +189,7 @@ export class AIService {
       channel,
       grounding.block,
       liveBusinessDataBlock,
+      greetingTurn,
     );
 
     const evaluateDraft = (draft: string): GroundingCheck =>
@@ -289,7 +296,18 @@ export class AIService {
         liveCheckoutUrls,
       );
 
-      const knowledgeGrounded = grounding.retrieved.length > 0 && groundingCheck.ok;
+      let knowledgeGrounded = grounding.retrieved.length > 0 && groundingCheck.ok;
+
+      if (greetingTurn) {
+        const coerced = coerceWebchatGreetingWelcome(
+          suggestion,
+          businessKnowledge?.businessName,
+        );
+        suggestion = coerced.text;
+        if (coerced.coerced) {
+          knowledgeGrounded = false;
+        }
+      }
 
       return {
         suggestion,
@@ -310,6 +328,15 @@ export class AIService {
         "[AI] Error generating suggestion:",
         error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
       );
+      if (greetingTurn) {
+        return {
+          suggestion: webchatSafeGreetingWelcome(businessKnowledge?.businessName),
+          confidence: 0.7,
+          confidenceProvided: false,
+          knowledgeGrounded: false,
+          modelGenerationSucceeded: false,
+        };
+      }
       return { suggestion: "", confidence: 0, confidenceProvided: false, knowledgeGrounded: false, modelGenerationSucceeded: false };
     }
   }
@@ -706,6 +733,7 @@ Return JSON only: { "summary": "..." }`;
     channel?: string | null,
     groundedFacts?: GroundedPromptBlock,
     liveBusinessDataBlock?: string,
+    greetingOnlyTurn?: boolean,
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -848,7 +876,14 @@ ${isRealEstate ? `5b. PREFERRED phrasing (real estate — use naturally, do not 
    - Clarify the single most important missing detail for the next step (only if it is relevant and not already answered)
    - Confirm next step or route them to action
 
-7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.${isFirstMessage ? `
+7. ASK ONLY ONE QUESTION — the single most useful next question. Not a list.${greetingOnlyTurn ? `
+
+WEB CHAT GREETING: The visitor only sent a greeting. Reply with one brief welcome.
+- You may use the verified business name only.
+- Do not ask for name, email, phone, consent, booking, qualification details, or other personal information.
+- Do not invent hours, pricing, offers, availability, or other business facts.
+- You may ask a single neutral question such as "How can we help?"
+- Keep it to one or two short sentences.` : isFirstMessage ? `
 
 FIRST MESSAGE RULE: This is the very start of the conversation. The lead has just made contact.
 - DO NOT jump to budget, timeline, or financing questions — there is no relationship yet.
@@ -857,7 +892,7 @@ FIRST MESSAGE RULE: This is the very start of the conversation. The lead has jus
 - Example: if they said "hi" or something vague, reply warmly and ask what brings them here today.
 - Never cold-open with qualification questions on a first message.` : ""}
 
-${routing?.promptGuidance ? `ROUTING (follow strictly — do not skip to booking unless routing allows it):
+${greetingOnlyTurn ? "" : routing?.promptGuidance ? `ROUTING (follow strictly — do not skip to booking unless routing allows it):
 ${routing.promptGuidance}` : ""}
 
 ${bookingUrl && routing?.decision === "BOOK_APPOINTMENT" && !routing.needsRoutingClarification ? `SCHEDULING LINK (Calendly — customer wants to book/schedule):

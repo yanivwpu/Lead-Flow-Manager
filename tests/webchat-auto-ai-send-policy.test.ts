@@ -179,7 +179,7 @@ test("missing confidence may default only for a verified grounded knowledge answ
   assert.equal(gate.confidenceSource, "defaulted");
 });
 
-test("greeting-only never sends", () => {
+test("Auto may send a safe Web Chat greeting welcome", () => {
   assert.equal(isCasualWebchatGreeting("Hello guys."), true);
   assert.equal(isClearKnowledgeQuestion("Hello guys."), false);
   const gate = evaluateFullAutoSend({
@@ -189,10 +189,10 @@ test("greeting-only never sends", () => {
     suggestion: "Hi — how can I help today?",
     confidence: 0.9,
     confidenceProvided: true,
-    knowledgeGrounded: true,
+    knowledgeGrounded: false,
   });
-  assert.equal(gate.allowed, false);
-  assert.equal(gate.reason, "last_message_greeting_only");
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_greeting_welcome");
 });
 
 test("another tenant cannot inherit the allowlist", () => {

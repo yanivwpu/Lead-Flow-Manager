@@ -144,6 +144,7 @@ import {
   evaluateFullAutoSend,
   isSubstantiveTextForAiAutoSend,
   isWebchatChannel,
+  isCasualWebchatGreeting,
   normalizeBusinessAiMode,
   shouldBypassAutoGuardsForInbound,
   toConversationMessages,
@@ -151,6 +152,7 @@ import {
 } from "./aiAutoSendGate";
 import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { webchatAutoSendIdempotencyKey } from "@shared/webchatAiPolicy";
+import { coerceWebchatGreetingWelcome } from "@shared/webchatGreetingWelcome";
 import { getStageSignals } from "../client/src/lib/leadScoring";
 import {
   resolveAiRouting,
@@ -11971,6 +11973,14 @@ export async function registerRoutes(
           messagingChannel,
         );
         modelGenerationSucceeded = suggestion.modelGenerationSucceeded === true;
+      }
+
+      if (isWebchatChannel(messagingChannel) && isCasualWebchatGreeting(lastInbound)) {
+        const coerced = coerceWebchatGreetingWelcome(
+          suggestion.suggestion || "",
+          (knowledge as { businessName?: string | null } | null)?.businessName,
+        );
+        suggestion.suggestion = coerced.text;
       }
 
       if (suggestion.suggestion && !routingAllowsSchedulingLink(aiRouting)) {

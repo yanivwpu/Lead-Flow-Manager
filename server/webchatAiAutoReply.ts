@@ -24,6 +24,7 @@ import {
 } from "@shared/webchatAiPolicy";
 import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { consumeRateLimit } from "./rateLimitMiddleware";
+import { isCasualWebchatGreeting, coerceWebchatGreetingWelcome } from "@shared/webchatGreetingWelcome";
 import { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } from "./webchatServerAiRollout";
 import { isWidgetEnabled } from "./webchatAccess";
 import { storage } from "./storage";
@@ -301,7 +302,10 @@ export async function maybeRunWebchatServerAi(
     clearWebchatGenerationAbort(conv.id, controller);
   }
 
-  const text = (suggestion.suggestion || "").trim();
+  let text = (suggestion.suggestion || "").trim();
+  if (isCasualWebchatGreeting(params.inboundText)) {
+    text = coerceWebchatGreetingWelcome(text).text;
+  }
   if (!text) {
     report(`${decision}:empty`);
     return { decision: `${decision}:empty`, sent: false };

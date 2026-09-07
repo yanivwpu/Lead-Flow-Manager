@@ -3,6 +3,12 @@ import {
   getStageSignals,
   type BusinessKnowledgeForScoring,
 } from "../client/src/lib/leadScoring";
+import {
+  isCasualWebchatGreeting,
+  unsafeWebchatGreetingWelcomeReason,
+} from "@shared/webchatGreetingWelcome";
+
+export { isCasualWebchatGreeting } from "@shared/webchatGreetingWelcome";
 
 export type ChatTurn = { role: string; content?: string };
 
@@ -44,10 +50,6 @@ export function toConversationMessages(history: ChatTurn[]) {
 const GREETING_ONLY =
   /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)[\s!?.]*$/i;
 
-/** Web Chat only: "Hello guys." is still a greeting, not a knowledge question. */
-const WEBCHAT_CASUAL_GREETING =
-  /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)([\s,]+[a-z]{1,16}){0,3}[\s!?.]*$/i;
-
 export const AUTO_SEND_MIN_CONFIDENCE = 0.75;
 /** Web Chat send threshold when the model actually returned a score. */
 export const WEBCHAT_AUTO_SEND_MIN_CONFIDENCE = 0.7;
@@ -56,12 +58,6 @@ export type AutoSendConfidenceSource = "model" | "defaulted" | "missing";
 
 export function isWebchatChannel(channel: string | null | undefined): boolean {
   return String(channel || "").trim().toLowerCase() === "webchat";
-}
-
-export function isCasualWebchatGreeting(text: string): boolean {
-  const t = text.trim();
-  if (!t) return false;
-  return GREETING_ONLY.test(t) || WEBCHAT_CASUAL_GREETING.test(t);
 }
 
 /** Direct, answerable visitor question — not a greeting and not a media placeholder. */
@@ -289,7 +285,21 @@ export function evaluateFullAutoSend(params: {
   }
 
   if (!strongIntent && webchat && isCasualWebchatGreeting(lastInbound)) {
-    return none("last_message_greeting_only", inboundCount, missingLen);
+    const suggestionOk = finishSuggestionChecks();
+    if (!suggestionOk.ok) {
+      return none(suggestionOk.reason, inboundCount, missingLen);
+    }
+    const unsafe = unsafeWebchatGreetingWelcomeReason(suggestion);
+    if (unsafe) {
+      return none(`greeting_welcome_unsafe:${unsafe}`, inboundCount, missingLen);
+    }
+    return {
+      allowed: true,
+      reason: "ok_greeting_welcome",
+      missingRequiredLen: missingLen,
+      inboundCount,
+      confidenceSource: modelProvided ? "model" : "defaulted",
+    };
   }
 
   if (!strongIntent && inboundCount < 2 && !knowledgeQuestion) {
