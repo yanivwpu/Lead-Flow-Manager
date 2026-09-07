@@ -94,7 +94,7 @@ function defaultPlaceholderMap(template: AutomationTemplate): Record<string, str
 interface LocalizedTemplateSelectorProps {
   /** Optional legacy hook after a campaign is created from a preset */
   onSelectTemplate?: (template: AutomationTemplate, placeholderValues: Record<string, string>) => void;
-  /** Opens the full saved-campaign editor for the new draft */
+  /** Redirects to the new draft campaign editor */
   onCampaignCreated?: (campaignId: string) => void;
   showPreviewOnly?: boolean;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 
 function RealtorMark() {
@@ -15,20 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -41,7 +32,7 @@ import {
   AlertCircle, Image, LayoutGrid,
   Users, Target,   Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
-  Pencil, Pause, Play, Copy, Trash2, MoreVertical, ChevronDown,
+  ChevronDown,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -49,8 +40,8 @@ import {
 } from "@/components/WhatsAppTemplateRichPreview";
 import { TemplateSendMediaControls } from "@/components/TemplateSendMediaControls";
 import { TemplateSendCarouselMediaControls } from "@/components/TemplateSendCarouselMediaControls";
-import { SavedPresetCampaignModals } from "@/components/SavedPresetCampaignModals";
 import { LocalizedTemplateSelector } from "@/components/LocalizedTemplateSelector";
+import { presetCampaignHref } from "@shared/appNav";
 import {
   collectRequiredLibraryTemplatePlaceholders,
   extractSortedPlaceholders,
@@ -69,8 +60,6 @@ import {
   type CarouselCardRuntimeMedia,
   type TemplateCarouselDefaultMediaMap,
 } from "@shared/metaTemplateSend";
-import { getPresetCampaignStepCount } from "@shared/campaignPlaceholders";
-import { getSavedCampaignSourceLabel } from "@shared/localizedTemplates";
 import { apiRequest } from "@/lib/queryClient";
 import {
   getRgeGalleryCtaLabel,
@@ -90,7 +79,7 @@ import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineSto
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { automationSendGuardBlockUserMessage } from "@shared/automationSendGuardMessages";
 import {
   isWhatsAppSetupIncompleteError,
@@ -232,62 +221,6 @@ interface Chat {
   whatsappPhone: string | null;
   lastMessage: string;
 }
-
-type CampaignExecutionStats = {
-  enrollmentCount: number;
-  activeEnrollments: number;
-  completedEnrollments: number;
-  sentStepEvents: number;
-  failedStepEvents: number;
-};
-
-type PresetCampaignListItem = {
-  id: string;
-  name: string;
-  sourcePresetId: string;
-  status: string;
-  statusLabel: string;
-  channel: string;
-  messages: unknown[];
-  /** Server-computed step count (robust vs jsonb shape); falls back to messages.length in UI. */
-  stepCount?: number;
-  updatedAt: string;
-  createdAt?: string;
-  executionStats?: CampaignExecutionStats;
-};
-
-type PresetCampaignDetail = PresetCampaignListItem & {
-  language?: string | null;
-  category?: string | null;
-  industry?: string | null;
-  delays?: unknown[];
-  placeholders?: unknown[];
-  placeholderDefaults?: Record<string, unknown> | null;
-  aiEnabled?: boolean | null;
-  audienceConfig?: Record<string, unknown> | null;
-  totalSteps?: number;
-  stepCount?: number;
-  executionStats?: CampaignExecutionStats;
-  enrollments?: Array<{
-    id: string;
-    status: string;
-    currentStepIndex: number;
-    nextRunAt?: string | null;
-    contactId: string;
-    contactName?: string;
-    createdAt?: string | null;
-    totalSteps?: number;
-  }>;
-  recentStepEvents?: Array<{
-    id: string;
-    stepIndex: number;
-    status: string;
-    sentAt?: string | null;
-    errorMessage?: string | null;
-    createdAt?: string | null;
-    contactId: string;
-  }>;
-};
 
 type VariableAutofillSuggestion = {
   name: string;
@@ -872,12 +805,6 @@ export function Templates() {
   const [carouselSavedDefaultsHint, setCarouselSavedDefaultsHint] = useState(false);
   const [headerMediaBroken, setHeaderMediaBroken] = useState(false);
 
-  const [savedCampaignModalId, setSavedCampaignModalId] = useState<string | null>(null);
-  const [savedCampaignModalOpen, setSavedCampaignModalOpen] = useState(false);
-  const [savedCampaignOpenInEditMode, setSavedCampaignOpenInEditMode] = useState(false);
-  const [pendingDeleteCampaignId, setPendingDeleteCampaignId] = useState<string | null>(null);
-
-
   /** Re-render relative “Sent Xm ago” labels in Re-engagement. */
   const [, setReEngagementClock] = useState(0);
   useEffect(() => {
@@ -947,124 +874,6 @@ export function Templates() {
       })}`
     );
   }, [templates, templatesApiData, templatesEnabled, whatsappLibraryTemplates.length]);
-
-  const { data: savedPresetCampaigns = [], isLoading: savedCampaignsLoading } = useQuery<
-    PresetCampaignListItem[]
-  >({
-    queryKey: ["/api/preset-campaigns"],
-    enabled: !!templatesEnabled && workflowsEnabled,
-    staleTime: 0,
-  });
-
-  const { data: savedCampaignDetail, isLoading: savedCampaignDetailLoading } = useQuery<PresetCampaignDetail>({
-    queryKey: ["/api/preset-campaigns", savedCampaignModalId],
-    queryFn: async () => {
-      const res = await fetch(`/api/preset-campaigns/${savedCampaignModalId}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to load campaign");
-      return res.json();
-    },
-    enabled: !!templatesEnabled && workflowsEnabled && !!savedCampaignModalId && savedCampaignModalOpen,
-    staleTime: 0,
-  });
-
-  const patchPresetCampaignMutation = useMutation({
-    mutationFn: async (vars: { id: string; body: Record<string, unknown> }) => {
-      const res = await apiRequest("PATCH", `/api/preset-campaigns/${vars.id}`, vars.body);
-      return res.json() as Promise<{ message?: string }>;
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
-      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
-      if (savedCampaignModalId) {
-        await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
-      }
-    },
-    onError: (e: Error) => {
-      toast({
-        title: "Update failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deletePresetCampaignMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/preset-campaigns/${id}`);
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      setSavedCampaignModalOpen(false);
-      setSavedCampaignModalId(null);
-      setPendingDeleteCampaignId(null);
-      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
-    },
-    onError: (e: Error) => {
-      toast({
-        title: "Delete failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const enrollmentActionMutation = useMutation({
-    mutationFn: async (vars: {
-      enrollmentId: string;
-      action: "pause" | "resume" | "cancel" | "retry";
-    }) => {
-      const res = await apiRequest(
-        "POST",
-        `/api/campaign-enrollments/${vars.enrollmentId}/${vars.action}`,
-        {}
-      );
-      return res.json() as Promise<{ enrollment?: unknown }>;
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] }),
-        savedCampaignModalId
-          ? queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns", savedCampaignModalId] })
-          : Promise.resolve(),
-      ]);
-    },
-    onError: (e: Error) => {
-      toast({
-        title: "Action failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const duplicatePresetCampaignMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("POST", `/api/preset-campaigns/${id}/duplicate`);
-      return res.json() as Promise<{ message?: string }>;
-    },
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/preset-campaigns"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/preset-campaigns"] });
-    },
-    onError: (e: Error) => {
-      toast({
-        title: "Duplicate failed",
-        description: e.message.replace(/^\d+:\s*/, ""),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const openSavedCampaignModal = (id: string, edit = false) => {
-    setSavedCampaignModalId(id);
-    setSavedCampaignOpenInEditMode(edit);
-    setSavedCampaignModalOpen(true);
-  };
 
   const { data: retargetableChats = [], isLoading: chatsLoading } = useQuery<RetargetableChat[]>({
     queryKey: ["/api/templates/retargetable-chats"],
@@ -1602,216 +1411,18 @@ export function Templates() {
                 </CardTitle>
                 <CardDescription className="text-sm">
                   <span className="block">
-                    These gallery templates are shared starting points. <strong>Use this template</strong> saves your
-                    own editable copy — your changes never affect the originals.
+                    These gallery templates are shared starting points. <strong>Use This Template</strong> creates
+                    a draft campaign and opens it so you can edit and activate. Your changes never affect the originals.
                   </span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-3 md:px-6">
                 <LocalizedTemplateSelector
                   showPreviewOnly={false}
-                  onCampaignCreated={(id) => openSavedCampaignModal(id, true)}
+                  onCampaignCreated={(id) => setLocation(presetCampaignHref(id, { edit: true }))}
                 />
               </CardContent>
             </Card>
-
-            <Card className="overflow-hidden border-gray-200/90">
-              <CardHeader className="pb-2 pt-4 px-4 md:px-6">
-                <CardTitle className="text-base md:text-lg">Saved Campaigns</CardTitle>
-                <CardDescription className="text-sm">
-                  Saved presets become campaigns here. Manually enroll contacts from the inbox; the scheduler sends steps on each delay. Audience auto-triggers are not enabled yet.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-3 md:px-6 pb-4">
-                {savedCampaignsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
-                  </div>
-                ) : savedPresetCampaigns.length === 0 ? (
-                  <p className="text-sm text-gray-500 py-4 text-center">
-                    No saved campaigns yet. Click &quot;Use Template&quot; on a preset to create a draft, then edit and activate when ready.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto overflow-y-visible rounded-lg border border-gray-100 touch-pan-y">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Campaign</TableHead>
-                          <TableHead className="hidden sm:table-cell">Based on</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="hidden md:table-cell">Channel</TableHead>
-                          <TableHead className="text-right">Steps</TableHead>
-                          <TableHead className="text-right hidden sm:table-cell tabular-nums">Enrolled</TableHead>
-                          <TableHead className="text-right hidden md:table-cell tabular-nums">Sent</TableHead>
-                          <TableHead className="text-right hidden md:table-cell tabular-nums">Failed</TableHead>
-                          <TableHead className="hidden lg:table-cell">Updated</TableHead>
-                          <TableHead className="text-right w-[100px]">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {savedPresetCampaigns.map((row) => {
-                          const steps =
-                            typeof row.stepCount === "number"
-                              ? row.stepCount
-                              : getPresetCampaignStepCount(row.messages);
-                          const ex = row.executionStats;
-                          const updated =
-                            row.updatedAt &&
-                            !Number.isNaN(new Date(row.updatedAt).getTime())
-                              ? format(new Date(row.updatedAt), "MMM d, yyyy p")
-                              : "—";
-                          return (
-                            <TableRow
-                              key={row.id}
-                              data-testid={`saved-campaign-${row.id}`}
-                              className="cursor-pointer hover:bg-muted/50"
-                              onClick={() => openSavedCampaignModal(row.id)}
-                            >
-                              <TableCell className="font-medium text-gray-900 max-w-[140px] truncate">
-                                {row.name}
-                              </TableCell>
-                              <TableCell className="hidden sm:table-cell text-sm text-gray-700 max-w-[200px] truncate">
-                                {getSavedCampaignSourceLabel(row.sourcePresetId)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[11px] font-normal whitespace-normal max-w-[200px] text-left h-auto py-1">
-                                  {row.statusLabel || row.status}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="hidden md:table-cell capitalize text-gray-700">
-                                {row.channel}
-                              </TableCell>
-                              <TableCell className="text-right tabular-nums">{steps}</TableCell>
-                              <TableCell className="text-right hidden sm:table-cell tabular-nums text-gray-700">
-                                {ex?.enrollmentCount ?? 0}
-                              </TableCell>
-                              <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
-                                {ex?.sentStepEvents ?? 0}
-                              </TableCell>
-                              <TableCell className="text-right hidden md:table-cell tabular-nums text-gray-700">
-                                {ex?.failedStepEvents ?? 0}
-                              </TableCell>
-                              <TableCell className="hidden lg:table-cell text-gray-500 text-sm whitespace-nowrap">
-                                {updated}
-                              </TableCell>
-                              <TableCell
-                                className="text-right p-1"
-                                onClick={(e: MouseEvent<HTMLTableCellElement>) => e.stopPropagation()}
-                              >
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 w-8 p-0"
-                                      aria-label="Campaign actions"
-                                      data-testid={`saved-campaign-actions-${row.id}`}
-                                    >
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-48">
-                                    <DropdownMenuItem
-                                      onClick={() => openSavedCampaignModal(row.id)}
-                                      className="cursor-pointer"
-                                    >
-                                      <Eye className="h-4 w-4 mr-2 shrink-0" />
-                                      View
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={() => openSavedCampaignModal(row.id, true)}
-                                      className="cursor-pointer"
-                                    >
-                                      <Pencil className="h-4 w-4 mr-2 shrink-0" />
-                                      Edit
-                                    </DropdownMenuItem>
-                                    {(row.status === "draft" || row.status === "active_pending") && (
-                                      <DropdownMenuItem
-                                        className="cursor-pointer"
-                                        onClick={() =>
-                                          patchPresetCampaignMutation.mutate({
-                                            id: row.id,
-                                            body: { status: "active" },
-                                          })
-                                        }
-                                      >
-                                        <Rocket className="h-4 w-4 mr-2 shrink-0" />
-                                        Activate
-                                      </DropdownMenuItem>
-                                    )}
-                                    {(row.status === "active_pending" || row.status === "active") && (
-                                      <DropdownMenuItem
-                                        className="cursor-pointer"
-                                        onClick={() =>
-                                          patchPresetCampaignMutation.mutate({
-                                            id: row.id,
-                                            body: { action: "pause" },
-                                          })
-                                        }
-                                      >
-                                        <Pause className="h-4 w-4 mr-2 shrink-0" />
-                                        Pause
-                                      </DropdownMenuItem>
-                                    )}
-                                    {row.status === "paused" && (
-                                      <DropdownMenuItem
-                                        className="cursor-pointer"
-                                        onClick={() =>
-                                          patchPresetCampaignMutation.mutate({
-                                            id: row.id,
-                                            body: { action: "resume" },
-                                          })
-                                        }
-                                      >
-                                        <Play className="h-4 w-4 mr-2 shrink-0" />
-                                        Resume
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      className="cursor-pointer"
-                                      onClick={() => duplicatePresetCampaignMutation.mutate(row.id)}
-                                    >
-                                      <Copy className="h-4 w-4 mr-2 shrink-0" />
-                                      Duplicate
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="cursor-pointer text-red-600 focus:text-red-600"
-                                      onClick={() => setPendingDeleteCampaignId(row.id)}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2 shrink-0" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <SavedPresetCampaignModals
-              savedCampaignModalOpen={savedCampaignModalOpen}
-              setSavedCampaignModalOpen={setSavedCampaignModalOpen}
-              savedCampaignModalId={savedCampaignModalId}
-              setSavedCampaignModalId={setSavedCampaignModalId}
-              savedCampaignOpenInEditMode={savedCampaignOpenInEditMode}
-              onConsumedOpenInEditMode={() => setSavedCampaignOpenInEditMode(false)}
-              savedCampaignDetail={savedCampaignDetail}
-              savedCampaignDetailLoading={savedCampaignDetailLoading}
-              pendingDeleteCampaignId={pendingDeleteCampaignId}
-              setPendingDeleteCampaignId={setPendingDeleteCampaignId}
-              patchPresetCampaignMutation={patchPresetCampaignMutation}
-              duplicatePresetCampaignMutation={duplicatePresetCampaignMutation}
-              deletePresetCampaignMutation={deletePresetCampaignMutation}
-              enrollmentMutation={enrollmentActionMutation}
-            />
             </>
             )}
           </TabsContent>

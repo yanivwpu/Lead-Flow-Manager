@@ -1,24 +1,10 @@
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
-  ListTodo,
-  Search,
   LogOut,
-  Settings,
-  Zap,
-  Plug,
-  FileText,
-  HelpCircle,
-  Bot,
-  Inbox,
-  Globe,
-  Brain,
   ChevronDown,
   ChevronRight,
-  BookOpen,
   PanelLeftClose,
   PanelLeftOpen,
-  Users,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -33,8 +19,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useProspectAiStatus, PROSPECT_AI_PATH } from "@/lib/prospectAi";
 import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
+import { useAppNavCategories } from "@/lib/useAppNav";
 
 function readCollapsed(): boolean {
   try {
@@ -51,12 +37,10 @@ function writeCollapsed(val: boolean) {
 }
 
 export function Sidebar() {
-  const [location] = useLocation();
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const isRTL = getDirection() === "rtl";
-  const prospectAiStatus = useProspectAiStatus();
-  const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
+  const { categories, allItems } = useAppNavCategories();
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
@@ -77,58 +61,6 @@ export function Sidebar() {
     );
   };
 
-  const navCategories = [
-    {
-      label: t("nav.main", "Main"),
-      items: [
-        { icon: Inbox, label: t("nav.inbox", "Inbox"), href: "/app/inbox", testId: "sidebar-inbox" },
-        { icon: ListTodo, label: t("nav.followups", "Follow-ups"), href: "/app/followups", testId: "sidebar-followups" },
-        { icon: Users, label: t("nav.contacts", "Contacts"), href: "/app/contacts", testId: "sidebar-contacts" },
-      ],
-    },
-    {
-      label: t("nav.automationAi", "Automation & AI"),
-      items: [
-        { icon: Bot, label: t("nav.chatbot", "Flow Builder"), href: "/app/chatbot", testId: "sidebar-chatbot" },
-        { icon: Zap, label: t("nav.automations", "Automations"), href: "/app/workflows", testId: "sidebar-automation" },
-        { icon: Brain, label: t("nav.aiBrain", "AI Features"), href: "/app/ai-brain", testId: "sidebar-ai-brain" },
-      ],
-    },
-    ...(prospectAiActivated
-      ? [
-          {
-            label: t("nav.growthEngines", "Growth Engines"),
-            items: [
-              {
-                icon: Sparkles,
-                label: t("nav.prospectAi", "Prospect AI"),
-                href: PROSPECT_AI_PATH,
-                testId: "sidebar-prospect-ai",
-              },
-            ],
-          },
-        ]
-      : []),
-    {
-      label: t("nav.toolsSetup", "Tools & Setup"),
-      items: [
-        { icon: FileText, label: t("nav.templates", "Templates"), href: "/app/templates", testId: "sidebar-templates" },
-        { icon: Globe, label: t("nav.widget", "Website Chat Widget"), href: "/app/widget", testId: "sidebar-widget" },
-        { icon: Plug, label: t("nav.integrations", "Integrations"), href: "/app/integrations", testId: "sidebar-integrations" },
-        { icon: Search, label: t("common.search", "Search"), href: "/app/search", testId: "sidebar-search" },
-      ],
-    },
-    {
-      label: t("nav.support", "Support"),
-      items: [
-        { icon: Settings, label: t("nav.settings", "Settings"), href: "/app/settings", testId: "sidebar-settings" },
-        { icon: BookOpen, label: t("nav.gettingStarted", "Getting Started"), href: "/user-guide", testId: "sidebar-getting-started", external: true },
-        { icon: HelpCircle, label: t("nav.help", "Help"), href: "/app/help", testId: "sidebar-help" },
-      ],
-    },
-  ];
-
-  const allNavItems = navCategories.flatMap((c) => c.items);
   const tooltipSide = isRTL ? "left" : "right";
   const sidebarTooltipClass =
     "border border-gray-200/90 bg-gray-100 text-gray-700 text-[11px] leading-snug shadow-none px-2.5 py-1.5 font-normal";
@@ -205,8 +137,8 @@ export function Sidebar() {
         {collapsed ? (
           /* COLLAPSED: icon-only list */
           <nav className="flex-1 flex flex-col items-center gap-1 px-2 overflow-y-auto py-2">
-            {allNavItems.map((item: any) => {
-              const isActive = !item.external && location.startsWith(item.href);
+            {allItems.map((item) => {
+              const isActive = item.active;
               const iconClasses = cn(
                 "h-5 w-5",
                 isActive ? "text-gray-900" : "text-gray-400"
@@ -228,7 +160,7 @@ export function Sidebar() {
               );
 
               return (
-                <Tooltip key={item.href}>
+                <Tooltip key={item.id}>
                   <TooltipTrigger asChild>
                     {item.external ? (
                       <a
@@ -258,13 +190,14 @@ export function Sidebar() {
         ) : (
           /* EXPANDED: categories + labels */
           <nav className="flex-1 flex flex-col gap-4 px-4 overflow-y-auto">
-            {navCategories.map((category) => {
-              const isCategoryCollapsed = collapsedCategories.includes(category.label);
+            {categories.map((category) => {
+              const isCategoryCollapsed = collapsedCategories.includes(category.id);
               return (
-                <div key={category.label} className="flex flex-col gap-1">
+                <div key={category.id} className="flex flex-col gap-1">
                   <button
-                    onClick={() => toggleCategory(category.label)}
+                    onClick={() => toggleCategory(category.id)}
                     className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors w-full"
+                    data-testid={`sidebar-section-${category.id}`}
                   >
                     {category.label}
                     {isCategoryCollapsed ? (
@@ -276,8 +209,8 @@ export function Sidebar() {
 
                   {!isCategoryCollapsed && (
                     <div className="flex flex-col gap-1">
-                      {category.items.map((item: any) => {
-                        const isActive = !item.external && location.startsWith(item.href);
+                      {category.items.map((item) => {
+                        const isActive = item.active;
                         const linkClasses = cn(
                           "flex items-center p-2 rounded-lg transition-colors group relative w-full border-s border-s-transparent",
                           isActive
@@ -294,7 +227,7 @@ export function Sidebar() {
                         if (item.external) {
                           return (
                             <a
-                              key={item.href}
+                              key={item.id}
                               href={item.href}
                               target="_blank"
                               rel="noopener noreferrer"
@@ -315,7 +248,7 @@ export function Sidebar() {
                         }
 
                         return (
-                          <Link key={item.href} href={item.href}>
+                          <Link key={item.id} href={item.href}>
                             <a data-testid={item.testId} className={linkClasses}>
                               <span className="relative inline-flex shrink-0">
                                 <item.icon className={iconClasses} />
@@ -352,7 +285,7 @@ export function Sidebar() {
         >
           {!collapsed && user && (
             <div className="mb-1 px-2">
-              <div className="text-[10px] font-medium text-gray-400">Signed in as</div>
+              <div className="text-[10px] font-medium text-gray-400">{t("common.signedInAs", "Signed in as")}</div>
               <div className="text-xs font-medium text-gray-700 truncate">{user.name}</div>
             </div>
           )}

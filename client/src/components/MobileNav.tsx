@@ -1,5 +1,5 @@
-import { Link, useLocation } from "wouter";
-import { Inbox, ListTodo, Users, Menu } from "lucide-react";
+import { Link } from "wouter";
+import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import {
@@ -12,56 +12,32 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { useTranslation } from "react-i18next";
 import { getDirection } from "@/lib/i18n";
-import { PROSPECT_AI_PATH, useProspectAiStatus } from "@/lib/prospectAi";
 import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
+import { useAppNavCategories } from "@/lib/useAppNav";
 
 export function MobileNav() {
-  const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const { logout, user } = useAuth();
   const { t } = useTranslation();
-  const isRTL = getDirection() === 'rtl';
-  const prospectAiStatus = useProspectAiStatus();
-  const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
-
-  const mainNavItems = [
-    { icon: Inbox, label: t('nav.inbox', 'Inbox'), href: "/app/inbox", testId: "mobile-nav-inbox" },
-    { icon: ListTodo, label: t('nav.followUps', 'Follow-ups'), href: "/app/followups", testId: "mobile-nav-followups" },
-    { icon: Users, label: t('nav.contacts', 'Contacts'), href: "/app/contacts", testId: "mobile-nav-contacts" },
-  ];
-
-  const moreNavItems = [
-    { label: t('nav.chatbot', 'Flow Builder'), href: "/app/chatbot", testId: "chatbot" },
-    { label: t('nav.automation', 'Automations'), href: "/app/workflows", testId: "automation" },
-    ...(prospectAiActivated
-      ? [{ label: t('nav.prospectAi', 'Prospect AI'), href: PROSPECT_AI_PATH, testId: "prospect-ai" }]
-      : []),
-    { label: t('nav.templates', 'Templates'), href: "/app/templates", testId: "templates" },
-    { label: t('nav.websiteWidget', 'Website Chat Widget'), href: "/app/widget", testId: "website-widget" },
-    { label: t('nav.integrations', 'Integrations'), href: "/app/integrations", testId: "integrations" },
-    { label: t('nav.aiFeatures', 'AI Features'), href: "/app/ai-brain", testId: "ai-features" },
-    { label: t('nav.search', 'Search'), href: "/app/search", testId: "search" },
-    { label: t('nav.gettingStarted', 'Getting Started'), href: "/user-guide", testId: "getting-started", external: true },
-    { label: t('nav.help', 'Help'), href: "/app/help", testId: "help" },
-  ];
+  const isRTL = getDirection() === "rtl";
+  const { mobilePrimaryItems, mobileMoreCategories } = useAppNavCategories();
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-bottom" dir={isRTL ? "rtl" : "ltr"}>
       <nav className="flex items-center justify-around h-14 px-2">
-        {mainNavItems.slice(0, 3).map((item) => {
-          const isActive = location.startsWith(item.href);
+        {mobilePrimaryItems.map((item) => {
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.id} href={item.href}>
               <a
-                data-testid={item.testId}
+                data-testid={`mobile-nav-${item.mobileTestId}`}
                 className={cn(
                   "flex flex-col items-center justify-center px-3 py-1 rounded-lg transition-colors",
-                  isActive ? "text-brand-green" : "text-gray-500"
+                  item.active ? "text-brand-green" : "text-gray-500"
                 )}
               >
                 <span className="relative inline-flex">
                   <item.icon className="h-5 w-5" />
-                  {item.href === "/app/inbox" ? (
+                  {item.id === "inbox" ? (
                     <InboxActivityNavBadge testId="mobile-nav-inbox-activity-badge" />
                   ) : null}
                 </span>
@@ -70,7 +46,7 @@ export function MobileNav() {
             </Link>
           );
         })}
-        
+
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
             <button
@@ -78,7 +54,7 @@ export function MobileNav() {
               className="flex flex-col items-center justify-center px-3 py-1 rounded-lg text-gray-500"
             >
               <Menu className="h-5 w-5" />
-              <span className="text-[10px] mt-0.5 font-medium">{t('nav.more', 'More')}</span>
+              <span className="text-[10px] mt-0.5 font-medium">{t("nav.more", "More")}</span>
             </button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-auto max-h-[70vh] rounded-t-2xl">
@@ -90,65 +66,61 @@ export function MobileNav() {
                 <span className="font-display text-gray-900">WhachatCRM</span>
               </SheetTitle>
             </SheetHeader>
-            <div className="grid grid-cols-2 gap-2 mt-4 pb-4">
-              {moreNavItems.map((item: any) => (
-                item.external ? (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpen(false)}
-                    data-testid={`mobile-menu-${item.testId}`}
-                    className="block p-3 rounded-lg text-center font-medium transition-colors bg-gray-50 text-gray-700 hover:bg-gray-100"
-                  >
-                    {item.label}
-                  </a>
-                ) : (
-                  <Link key={item.href} href={item.href}>
-                    <a
-                      onClick={() => setOpen(false)}
-                      data-testid={`mobile-menu-${item.testId}`}
-                      className={cn(
-                        "block p-3 rounded-lg text-center font-medium transition-colors",
-                        location.startsWith(item.href)
-                          ? "bg-brand-green/10 text-brand-green"
-                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                      )}
-                    >
-                      {item.label}
-                    </a>
-                  </Link>
-                )
+            <div className="mt-4 pb-4 space-y-4">
+              {mobileMoreCategories.map((category) => (
+                <div key={category.id} data-testid={`mobile-section-${category.id}`}>
+                  <div className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    {category.label}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {category.items.map((item) =>
+                      item.external ? (
+                        <a
+                          key={item.id}
+                          href={item.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setOpen(false)}
+                          data-testid={`mobile-menu-${item.mobileTestId}`}
+                          className="block p-3 rounded-lg text-center font-medium transition-colors bg-gray-50 text-gray-700 hover:bg-gray-100"
+                        >
+                          {item.label}
+                        </a>
+                      ) : (
+                        <Link key={item.id} href={item.href}>
+                          <a
+                            onClick={() => setOpen(false)}
+                            data-testid={`mobile-menu-${item.mobileTestId}`}
+                            className={cn(
+                              "block p-3 rounded-lg text-center font-medium transition-colors",
+                              item.active
+                                ? "bg-brand-green/10 text-brand-green"
+                                : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                            )}
+                          >
+                            {item.label}
+                          </a>
+                        </Link>
+                      )
+                    )}
+                  </div>
+                </div>
               ))}
-              <Link href="/app/settings">
-                <a
-                  onClick={() => setOpen(false)}
-                  data-testid="mobile-menu-settings"
-                  className={cn(
-                    "block p-3 rounded-lg text-center font-medium transition-colors",
-                    location.startsWith("/app/settings")
-                      ? "bg-brand-green/10 text-brand-green"
-                      : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                  )}
-                >
-                  {t('nav.settings', 'Settings')}
-                </a>
-              </Link>
               <button
                 onClick={() => {
                   setOpen(false);
                   logout();
                 }}
                 data-testid="mobile-menu-logout"
-                className="block p-3 rounded-lg text-center font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                className="block w-full p-3 rounded-lg text-center font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
               >
-                {t('common.logout', 'Logout')}
+                {t("common.logout", "Logout")}
               </button>
             </div>
             {user && (
               <div className="border-t pt-3 pb-2 text-center text-xs text-gray-500">
-                {t('common.signedInAs', 'Signed in as')} <span className="font-medium text-gray-700">{user.name}</span>
+                {t("common.signedInAs", "Signed in as")}{" "}
+                <span className="font-medium text-gray-700">{user.name}</span>
               </div>
             )}
           </SheetContent>

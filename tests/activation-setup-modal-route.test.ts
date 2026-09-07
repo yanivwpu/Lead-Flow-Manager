@@ -122,6 +122,8 @@ test("Growth Engine and other non-Inbox product areas stay unblocked", () => {
     "/app/widget",
     "/app/help",
     "/app/search",
+    "/app/campaigns",
+    "/app/campaigns/draft-id",
   ]) {
     assert.equal(isInboxActivationModalPath(pathname), false);
     assert.equal(shouldAutoOpenActivationSetupModal({ ...eligible, pathname }), false);

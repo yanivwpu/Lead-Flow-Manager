@@ -19,7 +19,7 @@ export interface HelpCategory {
 export const HELP_CATEGORIES: Record<HelpLanguage, HelpCategory[]> = {
   en: [
     { name: "Getting Started", icon: BookOpen },
-    { name: "AI Features", icon: Brain },
+    { name: "AI Brain", icon: Brain },
     { name: "Messaging", icon: MessageSquare },
     { name: "Automation", icon: Zap },
     { name: "Integrations", icon: Plug },
@@ -27,7 +27,7 @@ export const HELP_CATEGORIES: Record<HelpLanguage, HelpCategory[]> = {
   ],
   he: [
     { name: "תחילת עבודה", icon: BookOpen },
-    { name: "תכונות AI", icon: Brain },
+    { name: "AI Brain", icon: Brain },
     { name: "הודעות", icon: MessageSquare },
     { name: "אוטומציה", icon: Zap },
     { name: "אינטגרציות", icon: Plug },
@@ -35,7 +35,7 @@ export const HELP_CATEGORIES: Record<HelpLanguage, HelpCategory[]> = {
   ],
   es: [
     { name: "Primeros Pasos", icon: BookOpen },
-    { name: "Funciones de IA", icon: Brain },
+    { name: "AI Brain", icon: Brain },
     { name: "Mensajería", icon: MessageSquare },
     { name: "Automatización", icon: Zap },
     { name: "Integraciones", icon: Plug },
@@ -157,7 +157,7 @@ Create follow-ups, reminders, lead nurturing steps, and campaign flows across su
   {
     id: "ai-brain",
     title: "AI Brain - Your Business Assistant",
-    category: "AI Features",
+    category: "AI Brain",
     icon: Brain,
     keywords: ["ai", "brain", "assistant", "smart", "reply", "suggestion", "lead", "capture", "automation"],
     content: `
@@ -192,7 +192,7 @@ Upload your company's unique information—products, pricing, policies, and FAQs
 ## Getting Started
 
 1. **Upgrade to Pro** - AI Brain is included with Pro (and during the 14-day Pro trial)
-2. **Open AI Brain** - Go to Settings > AI Brain
+2. **Open AI Brain** - Open **AI Brain** from the left navigation
 3. **Add Business Knowledge** - Teach AI about your business
 4. **Choose your AI behavior** - Start with suggestions and enable advanced modes only where your plan supports them
 5. **Start Using** - Click the brain icon in any chat
@@ -233,11 +233,11 @@ We offer specialized templates for:
 
 ## How to Use Templates
 
-1. Go to **Templates** > **Presets**
+1. Go to **Templates**
 2. Filter by language, category, or industry
 3. Use the **eye** icon for a read-only preview of the sequence
-4. Click **Use Template** to create a **draft** campaign and open the full editor
-5. Edit name, status, steps, messages, delays, and placeholders — then **Save Draft** or activate from the editor
+4. Click **Use This Template** to create a **draft** campaign and open its editor
+5. After the first draft, **Campaigns** appears under Automation & AI so you can return, edit, activate, or pause it
 
 ## Placeholders
 
@@ -452,7 +452,7 @@ WhachatCRM תומך ב-7 ערוצי הודעות בתיבת דואר מאוחד�
   {
     id: "ai-brain",
     title: "AI Brain - העוזר העסקי שלך",
-    category: "תכונות AI",
+    category: "AI Brain",
     icon: Brain,
     keywords: ["ai", "בינה מלאכותית", "עוזר", "חכם", "תשובה", "הצעה", "ליד", "לכידה", "אוטומציה"],
     content: `
@@ -487,7 +487,7 @@ AI Brain מזהה ומדרג לידים אוטומטית מ-0-100 על סמך כ
 ## איך להתחיל
 
 1. **שדרג ל-Pro** - AI Brain כלול ב-Pro (וגם בניסיון Pro של 14 יום)
-2. **פתח AI Brain** - עבור להגדרות > AI Brain
+2. **פתח AI Brain** - פתח **AI Brain** מהניווט השמאלי
 3. **הוסף ידע עסקי** - למד את ה-AI על העסק שלך
 4. **הגדר מצב AI** - בחר הצעה בלבד, טיוטה אוטומטית או היברידי
 5. **התחל להשתמש** - לחץ על אייקון המוח בכל צ'אט
@@ -528,12 +528,11 @@ WhachatCRM מספקת תבניות אוטומציה מוכנות מראש כדי
 
 ## איך להשתמש בתבניות
 
-1. עבור ל**תבניות** > **תבניות מוכנות**
+1. עבור ל**תבניות**
 2. סנן לפי שפה, קטגוריה או תעשייה
 3. לחץ על **תצוגה מקדימה** לצפייה ברצף ההודעות
-4. התאם אישית מילוי מקום עם הערכים האמיתיים שלך
-5. הפעל את **השקה מיידית** אם ברצונך להפעיל מיד
-6. לחץ על **שמור תבנית** או **השק עכשיו**
+4. לחץ על **Use This Template** כדי ליצור קמפיין **טיוטה** ולפתוח את העורך
+5. אחרי הטיוטה הראשונה, **קמפיינים** מופיע תחת אוטומציה ו-AI כדי לחזור, לערוך, להפעיל או להשהות
 
 ## מילוי מקום
 
@@ -746,7 +745,7 @@ Ahorra tiempo con funciones automatizadas:
   {
     id: "ai-brain",
     title: "AI Brain - Tu Asistente de Negocios",
-    category: "Funciones de IA",
+    category: "AI Brain",
     icon: Brain,
     keywords: ["ia", "cerebro", "asistente", "inteligente", "respuesta", "sugerencia", "lead", "captura", "automatización"],
     content: `
@@ -781,7 +780,7 @@ Sube la información única de tu empresa: productos, precios, políticas y preg
 ## Cómo Empezar
 
 1. **Actualiza a Pro** - AI Brain está incluido con Pro (y durante la prueba de Pro de 14 días)
-2. **Abre AI Brain** - Ve a Configuración > AI Brain
+2. **Abre AI Brain** - Abre **AI Brain** en la navegación izquierda
 3. **Agrega Conocimiento del Negocio** - Enseña a la IA sobre tu negocio
 4. **Configura el Modo IA** - Elige Solo Sugerencia, Auto Borrador o Híbrido
 5. **Comienza a Usar** - Haz clic en el ícono del cerebro en cualquier chat
@@ -822,12 +821,11 @@ Ofrecemos plantillas especializadas para:
 
 ## Cómo Usar las Plantillas
 
-1. Ve a **Plantillas** > **Plantillas Preestablecidas**
+1. Ve a **Plantillas**
 2. Filtra por idioma, categoría o industria
 3. Haz clic en **Vista Previa** para ver la secuencia de mensajes
-4. Personaliza los marcadores de posición con tus valores reales
-5. Activa **Lanzar inmediatamente** si deseas activar de inmediato
-6. Haz clic en **Guardar Plantilla** o **Lanzar Ahora**
+4. Haz clic en **Use This Template** para crear una campaña en **borrador** y abrir el editor
+5. Tras el primer borrador, **Campañas** aparece en Automatización e IA para volver, editar, activar o pausar
 
 ## Marcadores de Posición
 

@@ -7,7 +7,7 @@ export function generateAIFeaturesPDF() {
   // Title
   doc.setFontSize(24);
   doc.setTextColor(88, 28, 135); // Purple
-  doc.text('WhachatCRM AI Features', pageWidth / 2, 25, { align: 'center' });
+  doc.text('WhachatCRM AI Brain', pageWidth / 2, 25, { align: 'center' });
   
   doc.setFontSize(12);
   doc.setTextColor(107, 114, 128); // Gray

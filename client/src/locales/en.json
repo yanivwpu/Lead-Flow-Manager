@@ -38,12 +38,15 @@
     "yes": "Yes",
     "no": "No",
     "or": "or",
-    "and": "and"
+    "and": "and",
+    "signedInAs": "Signed in as"
   },
   "nav": {
     "main": "Main",
     "automationAi": "Automation & AI",
     "toolsSetup": "Tools & Setup",
+    "settingsIntegrations": "Settings & Integrations",
+    "growthEngines": "Growth Engines",
     "support": "Support",
     "inbox": "Inbox",
     "dashboard": "Dashboard",
@@ -53,14 +56,21 @@
     "broadcasts": "Broadcasts",
     "automations": "Automations",
     "chatbot": "Chatbot",
-    "aiBrain": "AI Features",
+    "aiBrain": "AI Brain",
+    "aiFeatures": "AI Brain",
     "templates": "Templates",
-    "widget": "Website Chat Widget",
-    "websiteWidget": "Website Chat Widget",
+    "campaigns": "Campaigns",
+    "widget": "Website Widget",
+    "websiteWidget": "Website Widget",
     "contacts": "Contacts",
     "integrations": "Integrations",
     "settings": "Settings",
     "help": "Help Center",
+    "gettingStarted": "Getting Started",
+    "prospectAi": "Prospect AI",
+    "realtorGrowthEngine": "Realtor Growth Engine",
+    "search": "Search",
+    "more": "More",
     "pricing": "Pricing"
   },
   "widgetPage": {
@@ -1274,7 +1284,7 @@
       "conversationsLimits": "Capacity & Users",
       "crmInbox": "CRM & Inbox",
       "automation": "Automation",
-      "aiFeatures": "AI Features"
+      "aiFeatures": "AI Brain"
     },
     "inherit": {
       "free": "Everything in Free +",

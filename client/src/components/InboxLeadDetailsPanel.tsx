@@ -3679,7 +3679,7 @@ export function InboxLeadDetailsPanel({
                 </Select>
                 {campaignPickOptions.length === 0 && (
                   <p className="text-xs text-gray-500">
-                    No saved campaigns yet. Create one under Templates → Presets → Saved Campaigns.
+                    No saved campaigns yet. Create one under Templates, then return via Campaigns.
                   </p>
                 )}
                 {campaignPickOptions.length > 0 && compatibleCampaignOptions.length === 0 && (

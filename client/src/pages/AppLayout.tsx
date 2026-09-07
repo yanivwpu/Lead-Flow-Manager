@@ -45,6 +45,7 @@ const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain }
 const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const ProspectAI = lazy(() => import("./ProspectAI").then(m => ({ default: m.ProspectAI })));
 const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contacts })));
+const Campaigns = lazy(() => import("./Campaigns").then(m => ({ default: m.Campaigns })));
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center">
@@ -210,6 +211,7 @@ function AppContent() {
                 </ShopifyGrowthEngineRedirect>
               </Route>
               <Route path="/app/templates" component={Templates} />
+              <Route path="/app/campaigns/:id?" component={Campaigns} />
               <Route path="/app/widget" component={WebsiteWidget} />
               <Route path="/app/integrations" component={Integrations} />
               <Route path="/app/ai-brain" component={AIBrain} />
