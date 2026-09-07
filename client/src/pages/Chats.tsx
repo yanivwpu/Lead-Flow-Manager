@@ -1300,6 +1300,8 @@ export function Chats() {
                   role: m.direction === "incoming" ? "user" : "assistant",
                   direction: m.direction === "incoming" ? "inbound" : "outbound",
                   content: m.text || "",
+                  id: m.id,
+                  createdAt: m.createdAt,
                 }))}
                 demoMode={demoMode}
                 fileInputRef={fileInputRef}

@@ -267,6 +267,23 @@ test("WhatsApp keeps the Copilot confidence gate", () => {
   assert.equal(whatsapp.reason, "low_confidence");
 });
 
+test("Inbox refresh cannot reprocess historical inbound or toast a blocked Auto send", () => {
+  const composer = read("client/src/components/AIComposer.tsx");
+  const inbox = read("client/src/pages/UnifiedInbox.tsx");
+  const routes = read("server/routes.ts");
+  assert.match(composer, /shouldTriggerInboxAutoSend/);
+  assert.match(composer, /hydrationInboundIdRef/);
+  assert.match(composer, /lastInboundId/);
+  assert.match(composer, /autoDispatch: true/);
+  assert.match(inbox, /id: m\.id/);
+  assert.match(inbox, /createdAt: m\.createdAt/);
+  assert.match(inbox, /isAutomatedInboxSendSource/);
+  assert.match(routes, /auto_dispatch_not_requested/);
+  const autoError = inbox.slice(inbox.indexOf("isAutomatedAutoSend"), inbox.indexOf("if (isReplyWindow"));
+  assert.match(autoError, /automated_send_blocked/);
+  assert.doesNotMatch(autoError, /Message not sent/);
+});
+
 test("privacy-safe diagnostics log confidence source without visitor or message fields", () => {
   const cleaned = sanitizeEligibility({
     reasonCode: "ok_knowledge_question",

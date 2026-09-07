@@ -11420,7 +11420,7 @@ export async function registerRoutes(
       }
       const userId = req.user.id;
 
-      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext, contactId: bodyContactId, channel: bodyChannel } =
+      const { chatId, conversationHistory, tone, aiMode: requestedMode, contactContext, contactId: bodyContactId, channel: bodyChannel, autoDispatch } =
         req.body;
 
       let resolvedContactId: string | null =
@@ -11636,6 +11636,7 @@ export async function registerRoutes(
 
       const businessMode = normalizeBusinessAiMode((settings as any)?.aiMode);
       const wantsAuto = requestedMode === "auto";
+      const autoDispatchRequested = autoDispatch === true;
 
       const userInboundTurns = historyTurns.filter((m) => m.role === "user").length;
       const isNewConversationHeuristic = userInboundTurns <= 1;
@@ -12054,6 +12055,9 @@ export async function registerRoutes(
         } else if (alreadyReplied) {
           autoSendAllowed = false;
           autoSendReason = "already_sent";
+        } else if (!autoDispatchRequested) {
+          autoSendAllowed = false;
+          autoSendReason = "auto_dispatch_not_requested";
         } else {
           const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
           const gate = evaluateFullAutoSend({
@@ -12117,6 +12121,7 @@ export async function registerRoutes(
             suggestionLen: (suggestion.suggestion || "").trim().length,
             strongIntent: autoSendStrongIntent,
             alreadyReplied,
+            autoDispatchRequested,
           },
         });
 

@@ -28,6 +28,7 @@ import {
   type ComposerDraftSource,
 } from "@/lib/composerDraftScope";
 import { captureBuyerMatchingTraceFromApi } from "@/lib/buyerMatchingTraceStore";
+import { shouldTriggerInboxAutoSend } from "@shared/inboxAutoSendTrigger";
 import {
   composerKeyboardHelperText,
   resolveComposerEnterAction,
@@ -45,6 +46,8 @@ export interface AIComposerMessage {
   content: string;
   /** When provided, waiting-state UI uses this (aligned with `Message.direction`). */
   direction?: "inbound" | "outbound";
+  id?: string;
+  createdAt?: string;
 }
 
 export interface ContactContext {
@@ -83,6 +86,8 @@ export interface AIComposerProps {
   contactContext?: ContactContext;
   conversationId: string | null;
   messages: AIComposerMessage[];
+  /** False while the thread query is still loading. Refetch/polling must stay true. */
+  messagesReady?: boolean;
   demoMode?: boolean;
   setTyping?: (typing: boolean) => void;
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
@@ -158,6 +163,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   contactContext,
   conversationId,
   messages,
+  messagesReady = true,
   demoMode = false,
   setTyping,
   typingTimeoutRef,
@@ -201,6 +207,11 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     contactId: null,
   });
   const lastAutoReplyKeyRef = useRef<string>("");
+  const composerOpenedAtRef = useRef<number>(Date.now());
+  const hydrationInboundIdRef = useRef<string>("");
+  const hydrationCapturedRef = useRef(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const lastSuggestDraftKeyRef = useRef<string>("");
   /** User chose Manual while workspace default is suggest — don't force Suggest back on settings sync. */
   const userLockedManualRef = useRef(false);
@@ -315,6 +326,9 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     setAutoSendBlockedMessage(null);
     lastAutoReplyKeyRef.current = "";
     lastSuggestDraftKeyRef.current = "";
+    composerOpenedAtRef.current = Date.now();
+    hydrationInboundIdRef.current = "";
+    hydrationCapturedRef.current = false;
     userLockedManualRef.current = false;
     autoReplyInFlightRef.current = false;
   }, [conversationId, contactId]);
@@ -416,6 +430,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
           contactId: contactId || undefined,
           conversationHistory: history.slice(-12),
           aiMode: 'auto',
+          autoDispatch: true,
           channel: channel || undefined,
           ...(contactContext ? { contactContext } : {}),
         }),
@@ -546,6 +561,13 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   // Watch messages: when in auto mode and last message is from lead → auto-reply
   const lastMsg = messages[messages.length - 1];
   const lastMsgKey = messages.length > 0 ? `${messages.length}::${lastMsg?.content ?? ""}` : "";
+  const lastInbound = [...messages].reverse().find((m) => {
+    if (m.direction === "inbound") return true;
+    if (m.direction === "outbound") return false;
+    return m.role === "user";
+  });
+  const lastInboundId = lastInbound?.id ?? "";
+  const lastInboundCreatedAt = lastInbound?.createdAt ?? "";
   /** Recomputed every render from latest `messages` (refetches / WS / polling). */
   const lastTurnIsInbound = (() => {
     const m = messages[messages.length - 1];
@@ -573,12 +595,59 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
   useEffect(() => {
     if (aiMode !== "auto" || autoOverride) return;
-    if (!lastTurnIsInbound) return;
-    if (lastMsgKey === lastAutoReplyKeyRef.current) return; // already handled
-
-    lastAutoReplyKeyRef.current = lastMsgKey;
-    executeAutoReply(messages);
-  }, [aiMode, autoOverride, lastMsgKey, lastTurnIsInbound, messages, executeAutoReply]);
+    const decision = shouldTriggerInboxAutoSend({
+      aiModeIsAuto: true,
+      lastTurnIsInbound,
+      lastInboundId,
+      lastInboundCreatedAt: lastInboundCreatedAt || null,
+      composerOpenedAtMs: composerOpenedAtRef.current,
+      alreadyHandledKey: lastAutoReplyKeyRef.current,
+      hydratedInboundId: hydrationInboundIdRef.current,
+      hydrationCaptured: hydrationCapturedRef.current,
+      threadReady: messagesReady,
+    });
+    if (decision.reason === "hydration_pending") {
+      hydrationInboundIdRef.current = decision.handleKey;
+      hydrationCapturedRef.current = true;
+      lastAutoReplyKeyRef.current = decision.handleKey;
+      console.info("[AI-AUTO-CLIENT]", {
+        mode: "auto",
+        channel: channel || null,
+        reason: "hydration_baseline",
+        autoSendAllowed: false,
+      });
+      return;
+    }
+    if (!decision.trigger) {
+      if (
+        decision.reason === "historical_inbound" ||
+        decision.reason === "hydration_baseline" ||
+        decision.reason === "missing_inbound_timestamp" ||
+        decision.reason === "missing_inbound_id" ||
+        decision.reason === "inbound_timestamp_invalid"
+      ) {
+        lastAutoReplyKeyRef.current = decision.handleKey;
+        console.info("[AI-AUTO-CLIENT]", {
+          mode: "auto",
+          channel: channel || null,
+          reason: decision.reason,
+          autoSendAllowed: false,
+        });
+      }
+      return;
+    }
+    lastAutoReplyKeyRef.current = decision.handleKey;
+    executeAutoReply(messagesRef.current);
+  }, [
+    aiMode,
+    autoOverride,
+    lastInboundId,
+    lastInboundCreatedAt,
+    lastTurnIsInbound,
+    messagesReady,
+    executeAutoReply,
+    channel,
+  ]);
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Suggest mode: load editable AI draft when the latest turn is a new inbound message. */
@@ -747,7 +816,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
 
     if (mode === "auto") {
       setAutoPhase("idle");
-      // Reset key so the effect will fire for the current last message
+      // Reset key so the effect will re-evaluate the current last message (historical inbounds still will not send).
       lastAutoReplyKeyRef.current = "";
       autoReplyInFlightRef.current = false;
     }

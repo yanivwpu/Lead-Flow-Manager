@@ -207,6 +207,7 @@ import {
 } from "@shared/inboxChannelHealthBar";
 import { formatOutboundSendErrorDescription } from "@/lib/webchatSendError";
 import { webchatSendErrorDescription } from "@shared/webchatSendErrors";
+import { isAutomatedInboxSendSource } from "@shared/inboxAutoSendTrigger";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 
@@ -2147,6 +2148,28 @@ export function UnifiedInbox() {
       const errMsg = error.message || "";
       const isReplyWindow = isMetaReplyWindowExpiredError(errMsg);
       const isMediaValidation = isMediaChannelValidationError(errMsg);
+      const isAutomatedAutoSend = isAutomatedInboxSendSource(data.source);
+
+      if (isAutomatedAutoSend) {
+        if (context?.conversationId) {
+          const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
+          if (context.previousMessages !== undefined) {
+            queryClient.setQueryData(messagesKey, context.previousMessages);
+          }
+          if (context.previousInbox !== undefined) {
+            queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+          }
+        }
+        if (data.contactId === selectedContactId) {
+          handleComposerChange(data.content, { contactId: data.contactId, source: "auto_ai" });
+        }
+        console.info("[AI-AUTO-CLIENT]", {
+          mode: "auto",
+          reason: "automated_send_blocked",
+          autoSendAllowed: false,
+        });
+        return;
+      }
 
       if (isReplyWindow && context?.conversationId) {
         const messagesKey = ["/api/conversations", context.conversationId, "messages"] as const;
@@ -4546,6 +4569,7 @@ export function UnifiedInbox() {
               contactId={selectedContactId}
               contactContext={contactContext}
               conversationId={hasConversation ? (primaryConversation?.id ?? null) : null}
+              messagesReady={Boolean(hasConversation && !messagesLoading)}
               channel={isEmailChannel ? "email" : activeChannel}
               className={isEmailChannel ? "border-t border-gray-200 data-[composer-layout=email]:bg-white" : undefined}
               messages={
@@ -4554,6 +4578,8 @@ export function UnifiedInbox() {
                       role: m.direction === "inbound" ? "user" : "assistant",
                       direction: m.direction,
                       content: m.content || "",
+                      id: m.id,
+                      createdAt: m.createdAt,
                     }))
                   : []
               }
