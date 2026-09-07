@@ -39,7 +39,8 @@ export const WEBCHAT_FORM_MAX_OPTIONS = 12;
 export const WEBCHAT_FORM_MAX_LABEL = 120;
 export const WEBCHAT_FORM_MAX_TEXT = 500;
 
-const FIELD_ID_RE = /^[a-z][a-z0-9_]{0,39}$/;
+export const WEBCHAT_FORM_FIELD_ID_RE = /^[a-z][a-z0-9_]{0,39}$/;
+const FIELD_ID_RE = WEBCHAT_FORM_FIELD_ID_RE;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+?[0-9][0-9\s().-]{6,22}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -220,6 +221,101 @@ export function toInboxFormSubmission(
     fields,
     ...(consent ? { consent } : {}),
   };
+}
+
+export function emptyWebchatFormDraft(): WebchatFormDefinition {
+  return {
+    id: "lead_capture",
+    title: "Contact details",
+    description: "",
+    submitLabel: "Submit",
+    fields: [],
+  };
+}
+
+export function uniqueWebchatFormFieldId(
+  type: string,
+  existingIds: Iterable<string>,
+): string {
+  const raw = String(type || "field")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "");
+  const base = /^[a-z]/.test(raw) ? raw.slice(0, 40) : "field";
+  const taken = new Set(
+    [...existingIds].map((id) => String(id || "").trim().toLowerCase()).filter(Boolean),
+  );
+  if (!taken.has(base) && FIELD_ID_RE.test(base)) return base;
+  for (let n = 2; n < 1000; n++) {
+    const id = `${base}_${n}`.slice(0, 40);
+    if (FIELD_ID_RE.test(id) && !taken.has(id)) return id;
+  }
+  return "field";
+}
+
+function draftFieldId(raw: unknown): string {
+  return String((raw as { id?: unknown } | null)?.id || "")
+    .trim()
+    .toLowerCase();
+}
+
+export function webchatFormFieldDraftError(
+  raw: unknown,
+  otherIds: Iterable<string>,
+): string | null {
+  const sanitized = sanitizeWebchatFormField(raw);
+  const id = draftFieldId(raw);
+  if (!FIELD_ID_RE.test(id)) {
+    return "Use a lowercase letter, then letters, numbers, or underscores.";
+  }
+  const taken = new Set(
+    [...otherIds].map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
+  );
+  if (taken.has(id)) return "Field IDs must be unique.";
+  if (sanitized) return null;
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  if (!o) return "Field is incomplete.";
+  const type = asType(o.type);
+  if (!type) return "Choose a supported field type.";
+  if (!cleanPlain(o.label, WEBCHAT_FORM_MAX_LABEL)) return "Enter a label. HTML is not allowed.";
+  if (type === "select" || type === "radio" || type === "checkbox") {
+    if (sanitizeOptions(o.options).length < 1) return "Add at least one option.";
+  }
+  if (type === "consent" && !cleanPlain(o.consentText, WEBCHAT_FORM_MAX_TEXT)) {
+    return "Consent text is required.";
+  }
+  return "This field is incomplete.";
+}
+
+export function chatbotFormDefinitionIsPublishable(raw: unknown): boolean {
+  const form = sanitizeWebchatFormDefinition(raw);
+  if (!form) return false;
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const rawFields = Array.isArray(o?.fields) ? o!.fields : [];
+  return rawFields.length > 0 && form.fields.length === rawFields.length;
+}
+
+export function chatbotFormNodesPublishError(nodes: unknown): string | null {
+  if (!Array.isArray(nodes)) return null;
+  for (const node of nodes) {
+    const data =
+      node && typeof node === "object"
+        ? ((node as { data?: Record<string, unknown> }).data || {})
+        : {};
+    if (data.messageType !== "form") continue;
+    const label = String(data.label || "Form");
+    if (!chatbotFormDefinitionIsPublishable(data.webchatForm)) {
+      return `"${label}" needs a valid Website Chat form with at least one complete field before this flow can be published.`;
+    }
+  }
+  return null;
+}
+
+export function demoteActiveFlowIfFormIncomplete<T extends { isActive?: boolean | null; nodes?: unknown }>(
+  flow: T,
+): T {
+  if (!flow.isActive) return flow;
+  if (!chatbotFormNodesPublishError(flow.nodes)) return flow;
+  return { ...flow, isActive: false };
 }
 
 export function identityFromFormValues(

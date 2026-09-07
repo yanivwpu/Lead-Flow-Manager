@@ -41,6 +41,12 @@ import { useSubscription } from "@/lib/subscription-context";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { useShopifyShopHint } from "@/lib/shopifyBillingHint";
+import { ChatbotFormFieldsEditor } from "@/components/chatbot/ChatbotFormFieldsEditor";
+import {
+  chatbotFormNodesPublishError,
+  demoteActiveFlowIfFormIncomplete,
+  emptyWebchatFormDraft,
+} from "@shared/webchatStructuredForm";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
@@ -497,6 +503,23 @@ export function ChatbotBuilder() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const openFlow = (flow: ChatbotFlow) => {
+    const next = demoteActiveFlowIfFormIncomplete(flow);
+    setSelectedFlow(next);
+    setSelectedStepId(null);
+    setIsCreating(false);
+    setUnsavedChanges(false);
+    if (flow.isActive && !next.isActive) {
+      const formError = chatbotFormNodesPublishError(flow.nodes);
+      toggleFlowMutation.mutate({ id: flow.id, isActive: false });
+      toast({
+        title: "Moved to Draft",
+        description: formError || "This form is incomplete and cannot stay published.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const duplicateFlowMutation = useMutation({
     mutationFn: async (flow: ChatbotFlow) => {
       const payload = {
@@ -524,6 +547,17 @@ export function ChatbotBuilder() {
   /* ── Handlers ── */
   const handleSave = () => {
     if (!selectedFlow) return;
+    if (selectedFlow.isActive) {
+      const formError = chatbotFormNodesPublishError(selectedFlow.nodes);
+      if (formError) {
+        toast({
+          title: "Form is incomplete",
+          description: formError,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     updateFlowMutation.mutate({
       id: selectedFlow.id,
       name: selectedFlow.name,
@@ -755,6 +789,15 @@ export function ChatbotBuilder() {
                   });
                   return;
                 }
+                const formError = chatbotFormNodesPublishError(selectedFlow.nodes);
+                if (formError) {
+                  toast({
+                    title: "Form is incomplete",
+                    description: formError,
+                    variant: "destructive",
+                  });
+                  return;
+                }
                 toggleFlowMutation.mutate({ id: selectedFlow.id, isActive: true });
               }}
               className={cn(
@@ -886,12 +929,7 @@ export function ChatbotBuilder() {
               return (
                 <button
                   key={flow.id}
-                  onClick={() => {
-                    setSelectedFlow(flow);
-                    setSelectedStepId(null);
-                    setIsCreating(false);
-                    setUnsavedChanges(false);
-                  }}
+                  onClick={() => openFlow(flow)}
                   className={cn(
                     "w-full text-left px-3 py-2.5 rounded-xl transition-all",
                     isSelected
@@ -1340,24 +1378,7 @@ export function ChatbotBuilder() {
                               ...(mt.value === "text" ? { mediaUrl: undefined, mediaCaption: undefined, fileName: undefined, buttons: undefined } : {}),
                               ...(mt.value === "buttons" && !selectedStep.data.buttons ? { buttons: [{ label: "Option 1", value: "option_1" }] as ButtonOption[] } : {}),
                               ...(mt.value === "form" && !selectedStep.data.webchatForm ? {
-                                webchatForm: {
-                                  id: "lead_capture",
-                                  title: "Contact details",
-                                  submitLabel: "Submit",
-                                  fields: [
-                                    { id: "name", type: "name", label: "Name", required: true },
-                                    { id: "email", type: "email", label: "Email", required: true },
-                                    { id: "phone", type: "phone", label: "Phone", required: false },
-                                    {
-                                      id: "consent",
-                                      type: "consent",
-                                      label: "Consent",
-                                      required: true,
-                                      consentText:
-                                        "I agree to be contacted about my inquiry. Message and data rates may apply. This is not a claim of A2P registration or carrier approval.",
-                                    },
-                                  ],
-                                },
+                                webchatForm: emptyWebchatFormDraft(),
                               } : {}),
                             })}
                             className={cn(
@@ -1530,54 +1551,13 @@ export function ChatbotBuilder() {
                   })()}
 
                   {selectedStep.data.messageType === "form" && (
-                    <div className="space-y-3">
-                      <p className="text-[11px] text-slate-600">
-                        Safe fields only (name, email, phone, select, consent). No HTML or scripts. Website Chat only.
-                      </p>
-                      <div>
-                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Prompt</Label>
-                        <Textarea
-                          value={selectedStep.data.content || ""}
-                          onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                          placeholder="Please share your details"
-                          className="min-h-[60px] text-sm resize-none border-gray-200"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Form title</Label>
-                        <Input
-                          value={selectedStep.data.webchatForm?.title || ""}
-                          onChange={(e) =>
-                            updateStep(selectedStep.id, {
-                              webchatForm: {
-                                ...(selectedStep.data.webchatForm || { id: "lead_capture", fields: [] }),
-                                title: e.target.value,
-                              },
-                            })
-                          }
-                          className="text-sm h-8 border-gray-200"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Consent text</Label>
-                        <Textarea
-                          value={
-                            String(
-                              selectedStep.data.webchatForm?.fields?.find((f) => f.type === "consent")?.consentText ||
-                                "",
-                            )
-                          }
-                          onChange={(e) => {
-                            const current = selectedStep.data.webchatForm || { id: "lead_capture", title: "Contact details", fields: [] };
-                            const fields = (current.fields || []).map((f) =>
-                              f.type === "consent" ? { ...f, consentText: e.target.value, required: true } : f,
-                            );
-                            updateStep(selectedStep.id, { webchatForm: { ...current, fields } });
-                          }}
-                          className="min-h-[80px] text-sm resize-none border-gray-200"
-                        />
-                      </div>
-                    </div>
+                    <ChatbotFormFieldsEditor
+                      stepId={selectedStep.id}
+                      prompt={selectedStep.data.content || ""}
+                      onPromptChange={(content) => updateStep(selectedStep.id, { content })}
+                      form={selectedStep.data.webchatForm}
+                      onFormChange={(webchatForm) => updateStep(selectedStep.id, { webchatForm })}
+                    />
                   )}
                 </>
               )}

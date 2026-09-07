@@ -541,12 +541,12 @@ async function sendChatbotFormWebchat(
   ctx: TriggerContext,
   promptText: string,
   rawForm: unknown,
-): Promise<void> {
+): Promise<boolean> {
   const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
   const form = sanitizeWebchatFormDefinition(rawForm);
   if (!form) {
-    if (promptText) await sendChatbotReply(ctx, promptText);
-    return;
+    console.warn(`[Chatbot] ⚠ Incomplete webchat form skipped — contactId: ${ctx.contactId}`);
+    return false;
   }
   try {
     const { channelService } = await import("./channelService");
@@ -569,9 +569,12 @@ async function sendChatbotFormWebchat(
     );
     if (!guarded.ok) {
       console.warn(`[Chatbot] WebChat form blocked by send guard — contactId: ${ctx.contactId}, reason: ${guarded.reason}`);
+      return false;
     }
+    return true;
   } catch (err: any) {
     console.error(`[Chatbot] ❌ WebChat form exception: ${err.message}`);
+    return false;
   }
 }
 
@@ -965,12 +968,16 @@ async function executeFlow(
           return { visitorFacing: true, reason: "wait_for_input" };
         } else if (msgType === "form") {
           if (ctx.channel !== "webchat") {
-            await sendChatbotReply(ctx, content || "Please share your contact details.");
-            visitorFacing = true;
-            visitorReason = "scripted_reply";
+            if (content) await sendChatbotReply(ctx, content);
+            visitorFacing = !!content;
+            visitorReason = content ? "scripted_reply" : "skipped_incomplete_form";
             break;
           }
-          await sendChatbotFormWebchat(ctx, content, currentNode.data.webchatForm);
+          const sentForm = await sendChatbotFormWebchat(ctx, content, currentNode.data.webchatForm);
+          if (!sentForm) {
+            console.warn(`[Chatbot] ⚠ Form node "${nodeId}" has no publishable form — skipping`);
+            break;
+          }
           console.log(`[Chatbot] ⏸ Pausing flow execution after form node — awaiting user submit`);
           return { visitorFacing: true, reason: "wait_for_input" };
         } else {

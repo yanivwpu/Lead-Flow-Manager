@@ -8341,6 +8341,16 @@ export async function registerRoutes(
       }
       
       const { name, description, nodes, edges, triggerKeywords, triggerOnNewChat, triggerChannels, isActive } = req.body;
+
+      const nextNodes = nodes !== undefined ? nodes : existingFlow.nodes;
+      const nextActive = isActive !== undefined ? isActive : existingFlow.isActive;
+      if (nextActive) {
+        const { chatbotFormNodesPublishError } = await import("@shared/webchatStructuredForm");
+        const formError = chatbotFormNodesPublishError(nextNodes);
+        if (formError) {
+          return res.status(400).json({ error: formError });
+        }
+      }
       
       const flow = await storage.updateChatbotFlow(req.params.id, {
         ...(name !== undefined && { name }),
