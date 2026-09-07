@@ -152,7 +152,9 @@ test("WidgetFrame polls after send, keeps messages on error, and does not duplic
   assert.match(frame, /text-poll-error/);
   assert.match(frame, /setPollError\(true\)/);
   assert.match(frame, /Array\.isArray\(data\)/);
-  assert.match(frame, /new Map\(messages\.map/);
+  assert.match(frame, /new Map\(/);
+  assert.match(frame, /typeof m\?\.id === "string"/);
+  assert.match(frame, /\.map\(\(m\) => \[m\.id, m\]\)/);
   assert.match(frame, /wchat_visitor_\$\{userId\}/);
   assert.match(frame, /loadOrRotateWebchatVisitorId/);
   assert.doesNotMatch(frame, /Math\.random\(\)\.toString\(36\)/);
