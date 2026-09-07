@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, RotateCcw, ExternalLink } from "lucide-react";
 
 export function WebchatMediaBubble(props: {
@@ -10,8 +10,18 @@ export function WebchatMediaBubble(props: {
 }) {
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [cacheBust, setCacheBust] = useState(0);
+  const skipSrcResetRef = useRef(true);
   const src = cacheBust ? `${props.src}${props.src.includes("?") ? "&" : "?"}r=${cacheBust}` : props.src;
   const caption = (props.caption || "").trim();
+
+  useEffect(() => {
+    if (skipSrcResetRef.current) {
+      skipSrcResetRef.current = false;
+      return;
+    }
+    setCacheBust(0);
+    setPhase("loading");
+  }, [props.src]);
 
   return (
     <div

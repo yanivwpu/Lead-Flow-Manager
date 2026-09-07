@@ -162,13 +162,29 @@ export function verifyWebchatVisitorMedia(params: {
   }
 }
 
+/** Stable expiry so polls in the same window return the same signature (no 2.5s image reloads). */
+export function webchatVisitorMediaExpiresUnixSec(nowUnixSec = Math.floor(Date.now() / 1000)): number {
+  const ttl = WEBCHAT_VISITOR_MEDIA_TTL_SEC;
+  const now = Math.floor(Number(nowUnixSec));
+  if (!Number.isFinite(now)) return Math.floor(Date.now() / 1000) + ttl;
+  let expires = (Math.floor(now / ttl) + 1) * ttl;
+  if (expires - now < 60) expires += ttl;
+  return expires;
+}
+
 export function buildSignedWebchatVisitorMediaUrl(params: {
   widgetPublicId: string;
   visitorId: string;
   messageId: string;
+  nowUnixSec?: number;
 }): string | null {
-  const expiresUnixSec = Math.floor(Date.now() / 1000) + WEBCHAT_VISITOR_MEDIA_TTL_SEC;
-  const signature = signWebchatVisitorMedia({ ...params, expiresUnixSec });
+  const expiresUnixSec = webchatVisitorMediaExpiresUnixSec(params.nowUnixSec);
+  const signature = signWebchatVisitorMedia({
+    widgetPublicId: params.widgetPublicId,
+    visitorId: params.visitorId,
+    messageId: params.messageId,
+    expiresUnixSec,
+  });
   if (!signature) return null;
   const path = webchatVisitorMediaPath(params.widgetPublicId, params.visitorId, params.messageId);
   return `${path}?exp=${expiresUnixSec}&sig=${encodeURIComponent(signature)}`;

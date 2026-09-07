@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRoute, useSearch } from "wouter";
 import { Loader2, Paperclip, Send, X } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
@@ -16,6 +16,12 @@ import {
   WEBCHAT_POLL_HIDDEN_MS,
   WEBCHAT_POLL_VISIBLE_MS,
 } from "@shared/webchatPollPolicy";
+import {
+  decideWebchatScrollAction,
+  mergeWebchatPolledMessages,
+  webchatIsNearBottom,
+  webchatMessageIds,
+} from "@shared/webchatWidgetScroll";
 
 interface ButtonOption {
   label: string;
@@ -127,12 +133,18 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [pollError, setPollError] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadsRef = useRef<Map<string, File>>(new Map());
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollBackoffIndexRef = useRef(0);
+  const stickToBottomRef = useRef(true);
+  const prevMessageIdsRef = useRef<string[]>([]);
+  const revealedFormIdsRef = useRef<Set<string>>(new Set());
+  const userInitiatedScrollRef = useRef(false);
+  const expectFormConfirmationRef = useRef(false);
+  const preserveScrollTopRef = useRef<number | null>(null);
   const userId = widgetId;
 
   // Init: get/create visitorId from localStorage
@@ -209,15 +221,23 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         return false;
       }
       setPollError(false);
-      setMessages(
-        data.filter((m: unknown): m is ChatMessage => {
-          if (!m || typeof m !== "object") return false;
-          const row = m as ChatMessage;
-          if (typeof row.id !== "string" || !row.id) return false;
-          if (row.direction !== "inbound" && row.direction !== "outbound") return false;
-          return row.direction !== "outbound" || row.status !== "failed";
-        }),
-      );
+      const incoming = data.filter((m: unknown): m is ChatMessage => {
+        if (!m || typeof m !== "object") return false;
+        const row = m as ChatMessage;
+        if (typeof row.id !== "string" || !row.id) return false;
+        if (row.direction !== "inbound" && row.direction !== "outbound") return false;
+        return row.direction !== "outbound" || row.status !== "failed";
+      });
+      setMessages((prev) => {
+        const merged = mergeWebchatPolledMessages(prev, incoming);
+        if (merged !== prev) {
+          const scroller = scrollerRef.current;
+          if (scroller && webchatMessageIds(prev).join("\n") === webchatMessageIds(merged).join("\n")) {
+            preserveScrollTopRef.current = scroller.scrollTop;
+          }
+        }
+        return merged;
+      });
       return true;
     } catch {
       setPollError(true);
@@ -288,10 +308,84 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     };
   }, [visitorId, widgetUnavailable]);
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const syncStickToBottom = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    stickToBottomRef.current = webchatIsNearBottom(
+      scroller.scrollTop,
+      scroller.scrollHeight,
+      scroller.clientHeight,
+    );
+  }, []);
+
+  const applyScrollDecision = useCallback((action: ReturnType<typeof decideWebchatScrollAction>) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    if (action.action === "preserve") {
+      if (preserveScrollTopRef.current != null) {
+        scroller.scrollTop = preserveScrollTopRef.current;
+        preserveScrollTopRef.current = null;
+      }
+      return;
+    }
+    preserveScrollTopRef.current = null;
+    if (action.action === "bottom") {
+      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      stickToBottomRef.current = true;
+      return;
+    }
+    if (action.action === "form-start" && action.messageId) {
+      const target = scroller.querySelector(`[data-testid="webchat-form-msg-${action.messageId}"]`);
+      if (target) target.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
+      else scroller.scrollTop = 0;
+      stickToBottomRef.current = false;
+      revealedFormIdsRef.current.add(action.messageId);
+      return;
+    }
+    if (action.action === "confirmation" && action.messageId) {
+      const target = scroller.querySelector(`[data-testid="msg-${action.messageId}"]`);
+      target?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "auto" });
+      expectFormConfirmationRef.current = false;
+      syncStickToBottom();
+    }
+  }, [syncStickToBottom]);
+
+  const deduped = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          messages
+            .filter((m) => typeof m?.id === "string" && m.id.length > 0)
+            .map((m) => [m.id, m]),
+        ).values(),
+      ),
+    [messages],
+  );
+
+  useLayoutEffect(() => {
+    const decision = decideWebchatScrollAction({
+      prevIds: prevMessageIdsRef.current,
+      nextMessages: deduped,
+      nearBottom: stickToBottomRef.current,
+      userInitiated: userInitiatedScrollRef.current,
+      alreadyRevealedFormIds: revealedFormIdsRef.current,
+      expectConfirmation: expectFormConfirmationRef.current,
+    });
+    prevMessageIdsRef.current = webchatMessageIds(deduped);
+    userInitiatedScrollRef.current = false;
+    applyScrollDecision(decision);
+  }, [deduped, applyScrollDecision]);
+
+  useLayoutEffect(() => {
+    if (!leadForm || submittedFormIds.has(leadForm.id)) return;
+    if (deduped.some((m) => m.contentType === "form" || m.contentType === "form_result")) return;
+    if (revealedFormIdsRef.current.has("__settings_lead_form__")) return;
+    const target = scrollerRef.current?.querySelector('[data-testid="webchat-settings-lead-form"]');
+    if (!target) return;
+    target.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
+    stickToBottomRef.current = false;
+    revealedFormIdsRef.current.add("__settings_lead_form__");
+  }, [leadForm, submittedFormIds, deduped]);
 
   const markFailed = useCallback((optId: string) => {
     setMessages((prev) =>
@@ -305,6 +399,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     setIsSending(true);
     const optId = retryId || `opt_${Date.now()}`;
     if (file) pendingUploadsRef.current.set(optId, file);
+    userInitiatedScrollRef.current = true;
     if (retryId) {
       setMessages((prev) =>
         prev.map((m) => (m.id === retryId ? { ...m, status: undefined } : m)),
@@ -412,6 +507,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       throw new Error(typeof data.error === "string" ? data.error : "Could not submit the form.");
     }
     setSubmittedFormIds((prev) => new Set([...prev, form.id]));
+    expectFormConfirmationRef.current = true;
     await fetchMessages();
   }, [userId, visitorId, widgetUnavailable, parentPageHref, urlLeadSource, fetchMessages]);
 
@@ -447,14 +543,6 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     );
   }
 
-  const deduped = Array.from(
-    new Map(
-      messages
-        .filter((m) => typeof m?.id === "string" && m.id.length > 0)
-        .map((m) => [m.id, m]),
-    ).values(),
-  );
-
   return (
     <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">
       {/* Header */}
@@ -476,7 +564,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       </div>
 
       {/* Messages */}
-      <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-3 space-y-2">
+      <div
+        ref={scrollerRef}
+        className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-3 space-y-2 [overflow-anchor:none]"
+        data-testid="webchat-message-list"
+        onScroll={syncStickToBottom}
+      >
         {isLoading && (
           <div className="flex justify-center py-6" data-testid="webchat-loading">
             <Loader2 className="h-8 w-8 animate-spin" style={{ color: widgetColor }} />
@@ -528,12 +621,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
         {!isLoading && !widgetUnavailable && leadForm && !submittedFormIds.has(leadForm.id) && !deduped.some((m) => m.contentType === "form" || m.contentType === "form_result") && (
           <WebchatMessageErrorBoundary>
+          <div data-testid="webchat-settings-lead-form">
           <WebchatFormCard
             form={leadForm}
             widgetColor={widgetColor}
             disabled={widgetUnavailable}
             onSubmit={(values) => submitForm(leadForm, values)}
           />
+          </div>
           </WebchatMessageErrorBoundary>
         )}
 
@@ -587,7 +682,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                 ) : null}
 
                 {isFormMessage && formDef && (
-                  <div className="mt-1.5 min-w-0">
+                  <div className="mt-1.5 min-w-0" data-testid={`webchat-form-msg-${msg.id}`}>
                     <WebchatFormCard
                       form={formDef}
                       widgetColor={widgetColor}
@@ -665,7 +760,6 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             </WebchatMessageErrorBoundary>
           );
         })}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}

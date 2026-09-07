@@ -33,6 +33,8 @@ import {
   signWebchatVisitorMedia,
   verifyWebchatVisitorMedia,
   webchatInboundMediaErrorLog,
+  webchatVisitorMediaExpiresUnixSec,
+  WEBCHAT_VISITOR_MEDIA_TTL_SEC,
 } from "../server/webchatVisitorMedia";
 
 const root = process.cwd();
@@ -188,6 +190,48 @@ test("signed visitor media URLs are issued only for the bound widget/visitor/mes
   );
 });
 
+test("signed visitor media URLs stay stable across polls in the same expiry window", () => {
+  process.env.SESSION_SECRET = process.env.SESSION_SECRET || "webchat-media-test-secret-32chars-min";
+  const widgetA = "wgt_" + "a".repeat(48);
+  const visitorA = "11111111-1111-4111-8111-111111111111";
+  const now = 1_700_000_000;
+  const ttl = WEBCHAT_VISITOR_MEDIA_TTL_SEC;
+  assert.equal(webchatVisitorMediaExpiresUnixSec(now), webchatVisitorMediaExpiresUnixSec(now + 2));
+  assert.ok(webchatVisitorMediaExpiresUnixSec(now) - now <= ttl);
+  assert.ok(webchatVisitorMediaExpiresUnixSec(now) - now >= 60);
+  const first = buildSignedWebchatVisitorMediaUrl({
+    widgetPublicId: widgetA,
+    visitorId: visitorA,
+    messageId: outboundImage.id,
+    nowUnixSec: now,
+  });
+  const again = buildSignedWebchatVisitorMediaUrl({
+    widgetPublicId: widgetA,
+    visitorId: visitorA,
+    messageId: outboundImage.id,
+    nowUnixSec: now + 2,
+  });
+  assert.equal(first, again);
+  const rotated = buildSignedWebchatVisitorMediaUrl({
+    widgetPublicId: widgetA,
+    visitorId: visitorA,
+    messageId: outboundImage.id,
+    nowUnixSec: now + ttl,
+  });
+  assert.notEqual(rotated, first);
+  const a = buildSignedWebchatVisitorMediaUrl({
+    widgetPublicId: widgetA,
+    visitorId: visitorA,
+    messageId: outboundImage.id,
+  });
+  const b = buildSignedWebchatVisitorMediaUrl({
+    widgetPublicId: widgetA,
+    visitorId: visitorA,
+    messageId: outboundImage.id,
+  });
+  assert.equal(a, b);
+});
+
 test("invalid oversized and disguised files are rejected by content inspection", async () => {
   const jpeg = await sharp({
     create: { width: 2, height: 2, channels: 3, background: { r: 12, g: 80, b: 40 } },
@@ -257,6 +301,12 @@ test("WidgetFrame renders captionless images and keeps text send unchanged", () 
   assert.match(bubble, /webchat-image-retry/);
   assert.match(bubble, /webchat-image-open/);
   assert.match(bubble, /caption/);
+  assert.match(bubble, /\[props\.src\]/);
+  assert.match(bubble, /setCacheBust\(0\)/);
+  assert.match(bubble, /href=\{props\.src\}/);
+  const merge = read("shared/webchatWidgetScroll.ts");
+  assert.match(merge, /refreshWebchatVisitorMediaUrl/);
+  assert.match(merge, /patchWebchatPolledMessage/);
 });
 
 test("outbound webchat adapter does not mark media sent unless visitor-available", () => {
