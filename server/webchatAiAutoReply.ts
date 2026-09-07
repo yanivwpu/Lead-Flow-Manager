@@ -105,6 +105,7 @@ export async function maybeRunWebchatServerAi(
     inboundText: string;
     chatbotWillFire: boolean;
     bookingOwnsReply?: boolean;
+    crmFallbackOwnsReply?: boolean;
     widgetSettings: Record<string, unknown>;
   },
   deps: WebchatAiAutoReplyDeps = {},
@@ -133,6 +134,7 @@ export async function maybeRunWebchatServerAi(
       aiModeRaw: settings?.aiMode,
       chatbotOwnsReply: chatbotOwnsReply || aiControl.lastTurnOwner === "chatbot",
       bookingOwnsReply: params.bookingOwnsReply === true || aiControl.lastTurnOwner === "booking",
+      crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
       handoffActive: isConversationHandoffActive(events, conv.id),
       aiPaused: aiControl.paused,
       automationsPaused: contactHasAutomationsPaused(contact),

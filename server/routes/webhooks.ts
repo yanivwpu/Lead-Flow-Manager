@@ -272,18 +272,25 @@ export function registerWebhookRoutes(app: Express): void {
           chatbotWillFire: Boolean(result.chatbotWillFire),
         }).catch((err) => console.error("[WebchatWorkflows]", err instanceof Error ? err.message : err));
 
-        void import("../webchatAiAutoReply").then(({ maybeRunWebchatServerAi }) =>
-          maybeRunWebchatServerAi({
-            userId,
-            contact: result.contact!,
-            conversation: result.conversation!,
-            inboundMessageId: result.message?.id || webchatExternalId,
-            inboundText: message,
-            chatbotWillFire: Boolean(result.chatbotWillFire),
-            bookingOwnsReply: result.turnOwner === "booking",
-            widgetSettings: access.owner.widgetSettings,
-          }).catch((err) => console.error("[WebchatServerAi]", err instanceof Error ? err.message : err)),
-        );
+        if (
+          !result.chatbotWillFire &&
+          result.turnOwner !== "booking" &&
+          !result.awayMessageWillFire
+        ) {
+          void import("../webchatAiAutoReply").then(({ maybeRunWebchatServerAi }) =>
+            maybeRunWebchatServerAi({
+              userId,
+              contact: result.contact!,
+              conversation: result.conversation!,
+              inboundMessageId: result.message?.id || webchatExternalId,
+              inboundText: message,
+              chatbotWillFire: Boolean(result.chatbotWillFire),
+              bookingOwnsReply: result.turnOwner === "booking",
+              crmFallbackOwnsReply: Boolean(result.awayMessageWillFire),
+              widgetSettings: access.owner.widgetSettings,
+            }).catch((err) => console.error("[WebchatServerAi]", err instanceof Error ? err.message : err)),
+          );
+        }
       }
 
       res.json({

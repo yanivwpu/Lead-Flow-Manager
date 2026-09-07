@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WEBCHAT_IDENTITY_PROMPT } from "../shared/agent/webchatLeadContext";
 import { publicWidgetOriginGateRequired } from "../shared/webchatOriginPolicy";
 import {
   isPublicWebchatMessageVisible,
@@ -34,7 +33,7 @@ const inbound = {
 const outboundSent = {
   id: "out-1",
   direction: "outbound" as const,
-  content: WEBCHAT_IDENTITY_PROMPT,
+  content: "We can help with that.",
   contentType: "text",
   mediaUrl: null,
   createdAt: "2026-09-06T15:00:02.000Z",
@@ -86,7 +85,7 @@ test("inbound visitor message and server-generated outbound appear in the public
   assert.equal(payload[0].direction, "inbound");
   assert.equal(payload[0].content, inbound.content);
   assert.equal(payload[1].direction, "outbound");
-  assert.equal(payload[1].content, WEBCHAT_IDENTITY_PROMPT);
+  assert.equal(payload[1].content, "We can help with that.");
   assert.equal(payload[1].status, "sent");
   assert.equal("userId" in payload[1], false);
   assert.equal("errorMessage" in payload[1], false);
@@ -125,19 +124,24 @@ test("another visitor or tenant cannot be implied by the public mapper or lookup
   assert.equal("userId" in otherTenant[0], false);
 });
 
-test("identity prompt is classified as auto-reply, not AI Brain or chatbot", () => {
+test("webchat inbound never dispatches a hardcoded identity prompt", () => {
   const channel = read("server/channelService.ts");
-  assert.match(channel, /WEBCHAT_IDENTITY_PROMPT/);
-  assert.match(channel, /contactNeedsWebchatIdentity/);
+  assert.doesNotMatch(channel, /WEBCHAT_IDENTITY_PROMPT/);
+  assert.doesNotMatch(channel, /contactNeedsWebchatIdentity/);
+  assert.doesNotMatch(
+    channel,
+    /could you share your name and the best phone number or email to reach you/,
+  );
   const schedule = channel.slice(
     channel.indexOf("private async _scheduleAutoReply"),
     channel.indexOf("private getChannelIdField"),
   );
-  assert.match(schedule, /source = "auto_reply"/);
-  assert.match(schedule, /forceChannel:\s*channel/);
+  assert.match(schedule, /source = "away_message"/);
+  assert.match(schedule, /channel === "webchat"/);
+  assert.match(schedule, /resolveWebchatConfiguredAwayReply/);
   assert.doesNotMatch(schedule, /generatedBy:\s*"ai_brain"/);
   const auto = read("server/webchatAiAutoReply.ts");
-  assert.doesNotMatch(auto, /WEBCHAT_IDENTITY_PROMPT/);
+  assert.doesNotMatch(auto, /share your name and the best phone number/);
 });
 
 test("WidgetFrame polls after send, keeps messages on error, and does not duplicate by id", () => {

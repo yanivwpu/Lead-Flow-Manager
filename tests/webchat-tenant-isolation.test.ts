@@ -146,6 +146,7 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", hasAiBrainAccess: false }), "skip_no_access");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", chatbotOwnsReply: true }), "skip_chatbot_owns");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", bookingOwnsReply: true }), "skip_booking");
+  assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", crmFallbackOwnsReply: true }), "skip_crm_fallback");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", handoffActive: true }), "skip_handoff");
   assert.equal(decideWebchatAiReply({ ...base, aiModeRaw: "full_auto", allowlisted: false }), "skip_flag_off");
 }

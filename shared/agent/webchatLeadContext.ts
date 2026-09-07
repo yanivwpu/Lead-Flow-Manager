@@ -128,6 +128,3 @@ export function resolveWebchatLeadSource(input: {
   if (href && /\/agents\/[^/?#]+/i.test(href)) return "agent_page";
   return undefined;
 }
-
-export const WEBCHAT_IDENTITY_PROMPT =
-  "Thanks for reaching out! To help you best, could you share your name and the best phone number or email to reach you?";

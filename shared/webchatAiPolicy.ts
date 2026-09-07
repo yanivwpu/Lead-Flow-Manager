@@ -19,6 +19,7 @@ export type WebchatAiDecision =
   | "skip_widget_disabled"
   | "skip_chatbot_owns"
   | "skip_booking"
+  | "skip_crm_fallback"
   | "skip_handoff"
   | "skip_ai_paused"
   | "skip_automations_paused"
@@ -37,6 +38,7 @@ export type WebchatAiPolicyInput = {
   aiModeRaw: string | null | undefined;
   chatbotOwnsReply: boolean;
   bookingOwnsReply?: boolean;
+  crmFallbackOwnsReply?: boolean;
   handoffActive: boolean;
   aiPaused: boolean;
   automationsPaused: boolean;
@@ -49,6 +51,7 @@ export function decideWebchatAiReply(input: WebchatAiPolicyInput): WebchatAiDeci
   if (!input.widgetEnabled) return "skip_widget_disabled";
   if (!input.hasAiBrainAccess || !input.planIsProOrTrial) return "skip_no_access";
   if (input.bookingOwnsReply) return "skip_booking";
+  if (input.crmFallbackOwnsReply) return "skip_crm_fallback";
   if (input.chatbotOwnsReply) return "skip_chatbot_owns";
   if (input.handoffActive) return "skip_handoff";
   if (input.aiPaused) return "skip_ai_paused";

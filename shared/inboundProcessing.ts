@@ -43,6 +43,8 @@ export interface InboundProcessingResult {
   chatbotWillFire: boolean;
   /** Who owns the visitor-facing reply for this inbound turn. */
   turnOwner?: "chatbot" | "booking" | "ai_eligible" | "none";
+  /** Tenant-configured away message will send on this Web Chat turn. */
+  awayMessageWillFire?: boolean;
 }
 
 export function inboundProcessingLog(event: string, data: Record<string, unknown>): void {

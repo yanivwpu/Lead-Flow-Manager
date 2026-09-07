@@ -45,6 +45,7 @@ import {
   type InboundProcessingResult,
   type InboundProcessingSubState,
 } from "@shared/inboundProcessing";
+import { resolveWebchatConfiguredAwayReply } from "@shared/webchatReplyPolicy";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -145,6 +146,7 @@ function buildInboundResult(params: {
   isNewConversation?: boolean;
   chatbotWillFire?: boolean;
   turnOwner?: InboundProcessingResult["turnOwner"];
+  awayMessageWillFire?: boolean;
 }): InboundProcessingResult {
   const chatbotWillFire = params.chatbotWillFire ?? params.chatbotState?.willFire ?? false;
   const result: InboundProcessingResult = {
@@ -172,6 +174,7 @@ function buildInboundResult(params: {
     isNewConversation: Boolean(params.isNewConversation),
     chatbotWillFire,
     turnOwner: params.turnOwner,
+    awayMessageWillFire: Boolean(params.awayMessageWillFire),
   };
   if (!result.contact) inboundProcessingLog("missing_contact", { channel: params.channel, sourceEventId: result.sourceEventId });
   if (!result.conversation) inboundProcessingLog("missing_conversation", { channel: params.channel, sourceEventId: result.sourceEventId });
@@ -1726,9 +1729,17 @@ class ChannelService {
       );
     }
 
-    // ── Auto-Reply & Business Hours — runs for every channel ─────────────────
+    // ── Auto-Reply & Business Hours ──────────────────────────────────────────
     // Chatbot takes full priority: skip auto-reply when a flow will fire.
+    // Web Chat: only a tenant-configured away message. Never an implicit identity prompt.
+    let awayMessageWillFire = false;
     if (!chatbotWillFire) {
+      if (channel === "webchat") {
+        const webchatUser = await storage.getUser(userId);
+        awayMessageWillFire = Boolean(
+          webchatUser && resolveWebchatConfiguredAwayReply(webchatUser).send,
+        );
+      }
       this._scheduleAutoReply({
         userId,
         contact,
@@ -1776,6 +1787,7 @@ class ChannelService {
       isNewConversation,
       chatbotWillFire,
       turnOwner: turn.owner,
+      awayMessageWillFire,
     });
   }
 
@@ -1801,41 +1813,44 @@ class ChannelService {
 
       // 1. Away message (outside business hours) takes priority — unchanged copy path
       if (user.businessHoursEnabled && user.awayMessageEnabled) {
-        const now = new Date();
-        const tz = user.timezone || "America/New_York";
-        const local = new Date(now.toLocaleString("en-US", { timeZone: tz }));
-        const day = local.getDay();
-        const time = local.toTimeString().slice(0, 5); // "HH:mm"
-        const days = (user.businessDays as number[]) || [1, 2, 3, 4, 5];
-        const start = user.businessHoursStart || "09:00";
-        const end = user.businessHoursEnd || "17:00";
+        const away = resolveWebchatConfiguredAwayReply(user);
+        if (channel === "webchat") {
+          if (away.send) {
+            shouldReply = true;
+            replyText = away.text;
+            source = "away_message";
+          }
+        } else {
+          const now = new Date();
+          const tz = user.timezone || "America/New_York";
+          const local = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+          const day = local.getDay();
+          const time = local.toTimeString().slice(0, 5); // "HH:mm"
+          const days = (user.businessDays as number[]) || [1, 2, 3, 4, 5];
+          const start = user.businessHoursStart || "09:00";
+          const end = user.businessHoursEnd || "17:00";
 
-        if (!days.includes(day) || time < start || time > end) {
-          shouldReply = true;
-          replyText =
-            user.awayMessage ||
-            "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
-          source = "away_message";
+          if (!days.includes(day) || time < start || time > end) {
+            shouldReply = true;
+            replyText =
+              user.awayMessage ||
+              "Thanks for reaching out! We're currently away but will respond as soon as we're back.";
+            source = "away_message";
+          }
         }
       }
 
-      // 2. Anonymous webchat — ask for name + contact info on first message
-      if (
-        !shouldReply &&
-        channel === "webchat" &&
-        priorMessageCount === 0
-      ) {
-        const { contactNeedsWebchatIdentity, WEBCHAT_IDENTITY_PROMPT } = await import(
-          "@shared/agent/webchatLeadContext"
-        );
-        if (contactNeedsWebchatIdentity(contact)) {
-          shouldReply = true;
-          replyText = WEBCHAT_IDENTITY_PROMPT;
-          source = "auto_reply";
+      // Website Chat never sends an implicit identity prompt or greeting fallback.
+      // Remaining CRM auto-reply (greetings / legacy autoReplyMessage) is WhatsApp-oriented.
+      if (channel === "webchat") {
+        if (!shouldReply || !replyText || !source) {
+          console.log(
+            `[AutoReply] Skipped — webchat has no tenant-configured away reply userId=${userId}`,
+          );
+          return;
         }
-      }
-
-      // 3. Always-on auto-reply — greeting-aware when inbound looks like a simple greeting
+      } else {
+      // 2. Always-on auto-reply — greeting-aware when inbound looks like a simple greeting
       if (!shouldReply && user.autoReplyEnabled) {
         const trimmed = (inboundContent || "").trim();
         const gKind = classifyGreetingInbound(trimmed);
@@ -1874,6 +1889,7 @@ class ChannelService {
             user.autoReplyMessage || "Thanks for your message! We'll get back to you shortly.";
           source = "auto_reply";
         }
+      }
       }
 
       if (!shouldReply || !replyText || !source) {
