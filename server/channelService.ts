@@ -110,6 +110,13 @@ function isUniqueExternalMessageViolation(err: unknown): boolean {
   return joined.includes("messages_user_external_message_id_uq") || joined.includes("external_message_id");
 }
 
+function isWebchatVisitorIdentityViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
+  if (e?.code !== "23505") return false;
+  const joined = `${e.constraint || ""} ${e.message || ""} ${e.detail || ""}`;
+  return joined.includes("contacts_user_id_webchat_id_uidx");
+}
+
 function logInboundDuplicateIgnored(provider: string, externalMessageId: string): void {
   console.log(
     JSON.stringify({
@@ -1190,30 +1197,54 @@ class ChannelService {
             )
           : undefined;
       const webchatSourceDetails =
-        channel === "webchat" && webchatLeadSource === "agent_page"
-          ? { leadSource: "Agent Page" }
-          : channel === "webchat" && webchatLeadSource === "agent_page_embed"
-            ? { leadSource: "Embedded Agent Page" }
-            : undefined;
-      contact = await storage.createContact({
-        userId,
-        name: contactName || channelContactId,
-        ...phoneFields,
-        ...channelIdPatch,
-        primaryChannel: channel,
-        lastIncomingChannel: channel,
-        lastIncomingAt: new Date(),
-        source: channel,
-        ...(webchatCustomFields ? { customFields: webchatCustomFields } : {}),
-        ...(webchatSourceDetails ? { sourceDetails: webchatSourceDetails } : {}),
-      });
-      contactCreated = true;
-      console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);
+        channel === "webchat"
+          ? {
+              ...((await import("@shared/webchatContactLookup")).mergeWebchatVisitorSourceDetails(
+                webchatLeadSource === "agent_page"
+                  ? { leadSource: "Agent Page" }
+                  : webchatLeadSource === "agent_page_embed"
+                    ? { leadSource: "Embedded Agent Page" }
+                    : {},
+                channelContactId,
+              )),
+              webchatIdentityStatus: "anonymous",
+            }
+          : undefined;
+      const webchatDisplayName =
+        channel === "webchat"
+          ? (await import("@shared/agent/webchatLeadContext")).resolveWebchatVisitorDisplayName(
+              webchatLeadSource,
+            )
+          : contactName || channelContactId;
+      try {
+        contact = await storage.createContact({
+          userId,
+          name: webchatDisplayName,
+          ...phoneFields,
+          ...channelIdPatch,
+          primaryChannel: channel,
+          lastIncomingChannel: channel,
+          lastIncomingAt: new Date(),
+          source: channel,
+          ...(webchatCustomFields ? { customFields: webchatCustomFields } : {}),
+          ...(webchatSourceDetails ? { sourceDetails: webchatSourceDetails } : {}),
+        });
+        contactCreated = true;
+        console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);
+      } catch (err) {
+        if (channel === "webchat" && isWebchatVisitorIdentityViolation(err)) {
+          contact = await storage.getContactByChannelId(userId, channel, channelContactId);
+        }
+        if (!contact) throw err;
+        console.log(`[Inbox Worker] Contact matched after identity race — contactId: ${contact.id}`);
+      }
 
-      await this.logActivity(userId, contact.id, undefined, 'lead_created', {
-        source: channel,
-        channelContactId,
-      });
+      if (contactCreated) {
+        await this.logActivity(userId, contact.id, undefined, 'lead_created', {
+          source: channel,
+          channelContactId,
+        });
+      }
     } else {
       console.log(`[Inbox Worker] Contact matched — contactId: ${contact.id}, name: "${contact.name}"`);
       const contactUpdates: Partial<Contact> = {
@@ -1225,21 +1256,22 @@ class ChannelService {
       };
       if (channel === "webchat") {
         const { buildWebchatLeadCustomFields } = await import("@shared/agent/webchatLeadContext");
+        const { mergeWebchatVisitorSourceDetails } = await import("@shared/webchatContactLookup");
         contactUpdates.customFields = buildWebchatLeadCustomFields(
           webchatLeadSource,
           channelContactId,
           (contact.customFields as Record<string, unknown> | undefined) || {},
         );
-        if (webchatLeadSource === "agent_page") {
-          contactUpdates.sourceDetails = {
-            ...((contact.sourceDetails as Record<string, unknown> | undefined) || {}),
-            leadSource: "Agent Page",
-          };
-        } else if (webchatLeadSource === "agent_page_embed") {
-          contactUpdates.sourceDetails = {
-            ...((contact.sourceDetails as Record<string, unknown> | undefined) || {}),
-            leadSource: "Embedded Agent Page",
-          };
+        const sourceExtra: Record<string, unknown> = {};
+        if (webchatLeadSource === "agent_page") sourceExtra.leadSource = "Agent Page";
+        if (webchatLeadSource === "agent_page_embed") sourceExtra.leadSource = "Embedded Agent Page";
+        contactUpdates.sourceDetails = mergeWebchatVisitorSourceDetails(
+          (contact.sourceDetails as Record<string, unknown> | undefined) || {},
+          channelContactId,
+          sourceExtra,
+        );
+        if (!contact.webchatId) {
+          contactUpdates.webchatId = channelContactId;
         }
       }
       // If this contact was matched via the phone fallback (whatsappId was null),
@@ -1391,7 +1423,7 @@ class ChannelService {
       );
     }
 
-    if (channel === "webchat" && (content || "").trim()) {
+    if (channel === "webchat" && contentType !== "form_result") {
       const { syncWebchatContactIdentity } = await import("./webchatLeadService");
       contact = await syncWebchatContactIdentity({
         userId,
@@ -1904,6 +1936,7 @@ class ChannelService {
       case 'calendly': return 'email';
       case 'shopify': return 'email';
       case 'email': return 'email';
+      case 'webchat': return 'webchatId';
       default: return 'phone';
     }
   }

@@ -356,6 +356,7 @@ export interface IStorage {
   // Contact methods
   getContacts(userId: string, limit?: number, options?: GetContactsOptions): Promise<Contact[]>;
   getContact(id: string): Promise<Contact | undefined>;
+  getWebchatContactByVisitorId(userId: string, visitorId: string): Promise<Contact | undefined>;
   getContactByChannelId(userId: string, channel: Channel, channelId: string): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: string, updates: Partial<Contact>, options?: UpdateContactOptions): Promise<Contact | undefined>;
@@ -2393,33 +2394,73 @@ export class DbStorage implements IStorage {
           .limit(1);
         return r[0];
       }
-      case 'webchat': {
-        const byPhone = await db
-          .select()
-          .from(contacts)
-          .where(and(eq(contacts.userId, userId), eq(contacts.phone, channelId)))
-          .orderBy(asc(contacts.createdAt))
-          .limit(1);
-        if (byPhone[0]) return byPhone[0];
-
-        const byVisitor = await db
-          .select()
-          .from(contacts)
-          .where(
-            and(
-              eq(contacts.userId, userId),
-              sql`${contacts.customFields}->>'webchatVisitorId' = ${channelId}`,
-            ),
-          )
-          .orderBy(asc(contacts.createdAt))
-          .limit(1);
-        return byVisitor[0];
-      }
+      case 'webchat':
+        return this.getWebchatContactByVisitorId(userId, channelId);
       default:
         whereClause = and(eq(contacts.userId, userId), eq(contacts.phone, channelId));
     }
     const result = await db.select().from(contacts).where(whereClause);
     return result[0];
+  }
+
+  /**
+   * Tenant-scoped Website Chat identity. Canonical contacts.phone is never the visitor key
+   * after identification. Order: webchat_id column, customFields.webchatVisitorId,
+   * sourceDetails.webchatVisitorId, then legacy phone=visitor-token only.
+   */
+  async getWebchatContactByVisitorId(userId: string, visitorId: string): Promise<Contact | undefined> {
+    if (!userId || !visitorId) return undefined;
+
+    const byColumn = await db
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.userId, userId), eq(contacts.webchatId, visitorId)))
+      .orderBy(asc(contacts.createdAt))
+      .limit(1);
+    if (byColumn[0]) return byColumn[0];
+
+    const byCustom = await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.userId, userId),
+          sql`${contacts.customFields}->>'webchatVisitorId' = ${visitorId}`,
+        ),
+      )
+      .orderBy(asc(contacts.createdAt))
+      .limit(1);
+    if (byCustom[0]) return byCustom[0];
+
+    const bySource = await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.userId, userId),
+          sql`${contacts.sourceDetails}->>'webchatVisitorId' = ${visitorId}`,
+        ),
+      )
+      .orderBy(asc(contacts.createdAt))
+      .limit(1);
+    if (bySource[0]) return bySource[0];
+
+    const { isWebchatVisitorId } = await import("@shared/agent/webchatLeadContext");
+    if (!isWebchatVisitorId(visitorId)) return undefined;
+
+    const byLegacyToken = await db
+      .select()
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.userId, userId),
+          eq(contacts.phone, visitorId),
+          or(eq(contacts.source, "webchat"), eq(contacts.primaryChannel, "webchat")),
+        ),
+      )
+      .orderBy(asc(contacts.createdAt))
+      .limit(1);
+    return byLegacyToken[0];
   }
 
   async createContact(contact: InsertContact): Promise<Contact> {

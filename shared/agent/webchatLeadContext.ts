@@ -1,4 +1,6 @@
 /** Anonymous webchat visitor display names stored on CRM contacts. */
+import { isLegacyWebchatVisitorId, isPublicWebchatVisitorId } from "../webchatVisitorId";
+
 export const WEBSITE_VISITOR_NAME = "Website Visitor";
 export const AGENT_PAGE_VISITOR_NAME = "Agent Page Visitor";
 export const EMBEDDED_AGENT_PAGE_VISITOR_NAME = "Embedded Agent Page Visitor";
@@ -25,6 +27,7 @@ export function isAnonymousWebchatVisitorName(name: string | null | undefined): 
 
 export function isWebchatVisitorId(value: string | null | undefined): boolean {
   if (!value) return false;
+  if (isPublicWebchatVisitorId(value) || isLegacyWebchatVisitorId(value)) return true;
   return (
     value.startsWith("visitor_") ||
     value.startsWith("agent_page_") ||
@@ -104,6 +107,13 @@ export function buildWebchatLeadCustomFields(
   } else if (leadSource === "agent_page") {
     customFields.sourcePage = "agent_page";
     customFields.leadSource = "Agent Page";
+  }
+  const identity =
+    customFields.webchatIdentity && typeof customFields.webchatIdentity === "object"
+      ? (customFields.webchatIdentity as Record<string, unknown>)
+      : {};
+  if (identity.status !== "identified") {
+    customFields.webchatIdentity = { ...identity, status: "anonymous" };
   }
   return customFields;
 }

@@ -12,6 +12,18 @@ import {
   getContactDisplayChannel,
   getContactDisplayChannelLabel,
 } from "@shared/contactChannelDisplay";
+import {
+  classifyCrmContactListTab,
+  contactMatchesCrmSearch,
+  CRM_LIST_ALL,
+  CRM_LIST_IDENTIFIED,
+  CRM_LIST_WEBSITE_VISITORS,
+  isIdentifiedFromWebsiteChat,
+  webchatLeadSourceLabel,
+  webchatPublicPhone,
+  webchatSafeDisplayName,
+  type CrmContactListTab,
+} from "@shared/webchatContactIdentity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +72,8 @@ interface Contact {
   hasActiveCampaignEnrollment?: boolean;
   notes?: string;
   createdAt: string;
+  lastIncomingAt?: string | null;
+  sourceDetails?: Record<string, unknown> | null;
   whatsappId?: string;
   instagramId?: string;
   facebookId?: string;
@@ -110,9 +124,9 @@ function ChannelIcon({ channel, size = "w-3.5 h-3.5" }: { channel: string; size?
   return <Icon className={size} style={{ color: cfg.color }} />;
 }
 
-function Avatar({ contact }: { contact: Contact }) {
+function Avatar({ contact, displayName }: { contact: Contact; displayName: string }) {
   const ch = contactDisplayChannelKey(contact);
-  const initials = contact.name
+  const initials = (displayName || contact.name || "?")
     .split(" ")
     .slice(0, 2)
     .map((w) => w[0])
@@ -122,7 +136,7 @@ function Avatar({ contact }: { contact: Contact }) {
   return (
     <div className="relative flex-shrink-0">
       {contact.avatar ? (
-        <img src={contact.avatar} alt={contact.name} className="w-9 h-9 rounded-full object-cover" />
+        <img src={contact.avatar} alt={displayName} className="w-9 h-9 rounded-full object-cover" />
       ) : (
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-sm font-semibold">
           {initials}
@@ -213,6 +227,34 @@ function ContactRowMenu({
   );
 }
 
+function WebchatIdentityBadge({ contact }: { contact: Contact }) {
+  if (isIdentifiedFromWebsiteChat(contact)) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0 text-[10px] font-medium whitespace-nowrap"
+        data-testid={`badge-identified-webchat-${contact.id}`}
+      >
+        Identified from Website Chat
+      </span>
+    );
+  }
+  if (classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS) {
+    return (
+      <span
+        className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-1.5 py-0 text-[10px] font-medium whitespace-nowrap"
+        data-testid={`badge-website-visitor-${contact.id}`}
+      >
+        Unidentified
+      </span>
+    );
+  }
+  return null;
+}
+
+function contactRowPhone(contact: Contact): string | null {
+  return webchatPublicPhone(contact);
+}
+
 export function Contacts() {
   const { t } = useTranslation();
   const [, navigate] = useLocation();
@@ -227,6 +269,7 @@ export function Contacts() {
   const [filterTag, setFilterTag] = useState<string>("");
   const [filterChannel, setFilterChannel] = useState<string>("");
   const [filterStage, setFilterStage] = useState<string>("");
+  const [listTab, setListTab] = useState<CrmContactListTab>(CRM_LIST_IDENTIFIED);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -400,17 +443,23 @@ export function Contacts() {
     return Array.from(s).sort();
   }, [contacts]);
 
+  const identifiedCount = useMemo(
+    () => contacts.filter((c) => classifyCrmContactListTab(c) === CRM_LIST_IDENTIFIED).length,
+    [contacts],
+  );
+  const websiteVisitorCount = useMemo(
+    () => contacts.filter((c) => classifyCrmContactListTab(c) === CRM_LIST_WEBSITE_VISITORS).length,
+    [contacts],
+  );
+
   const filtered = useMemo(() => {
     let list = [...contacts];
+    if (listTab !== CRM_LIST_ALL) {
+      list = list.filter((c) => classifyCrmContactListTab(c) === listTab);
+    }
 
     if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.name.toLowerCase().includes(q) ||
-          c.phone?.includes(q) ||
-          c.email?.toLowerCase().includes(q),
-      );
+      list = list.filter((c) => contactMatchesCrmSearch(c, search));
     }
     if (filterTag) list = list.filter((c) => c.tag === filterTag);
     if (filterStage) list = list.filter((c) => c.pipelineStage === filterStage);
@@ -420,7 +469,10 @@ export function Contacts() {
 
     list.sort((a, b) => {
       let av: string, bv: string;
-      if (sortField === "name") { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+      if (sortField === "name") {
+        av = webchatSafeDisplayName(a).toLowerCase();
+        bv = webchatSafeDisplayName(b).toLowerCase();
+      }
       else if (sortField === "createdAt") { av = a.createdAt; bv = b.createdAt; }
       else if (sortField === "tag") { av = a.tag; bv = b.tag; }
       else { av = a.pipelineStage; bv = b.pipelineStage; }
@@ -429,7 +481,7 @@ export function Contacts() {
     });
 
     return list;
-  }, [contacts, search, filterTag, filterStage, filterChannel, sortField, sortDir]);
+  }, [contacts, listTab, search, filterTag, filterStage, filterChannel, sortField, sortDir]);
 
   useEffect(() => {
     const visible = new Set(filtered.map((c) => c.id));
@@ -553,7 +605,8 @@ export function Contacts() {
         const appt = nextAppointmentByContact.get(c.id);
         return [
           c.name,
-          c.phone || "",
+          webchatSafeDisplayName(c),
+          webchatPublicPhone(c) || "",
           c.email || "",
           displayCrmTag(c.tag) || "",
           appt ? formatBookedAt(appt.appointmentDate) : "",
@@ -585,7 +638,7 @@ export function Contacts() {
               {t("contacts.title", "Contacts")}
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              {t("contacts.subtitle", "All your contacts in one place")}
+              {t("contacts.subtitle", "Identified contacts by default. Anonymous Website Chat sessions stay in Website Visitors.")}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -616,13 +669,27 @@ export function Contacts() {
           {/* Stats */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard
-              label={t("contacts.totalContacts", "Total Contacts")}
+              label={t("contacts.identifiedCount", "Identified Contacts")}
+              value={identifiedCount}
+              icon={Users}
+              color="bg-emerald-50"
+              iconColor="text-emerald-600"
+            />
+            <StatCard
+              label={t("contacts.websiteVisitorsCount", "Website Visitors")}
+              value={websiteVisitorCount}
+              icon={Globe}
+              color="bg-sky-50"
+              iconColor="text-sky-600"
+            />
+            <StatCard
+              label={t("contacts.totalContacts", "All Contacts")}
               value={contacts.length}
               icon={Users}
               color="bg-gray-100"
               iconColor="text-gray-500"
             />
-            {topChannels.map(([ch, count]) => {
+            {topChannels.filter(([ch]) => ch === "webchat").slice(0, 1).map(([ch, count]) => {
               const cfg = channelUiConfig(ch);
               const Icon = cfg.icon;
               return (
@@ -647,6 +714,32 @@ export function Contacts() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2" data-testid="contacts-identity-tabs">
+            {(
+              [
+                { id: CRM_LIST_IDENTIFIED, label: "Identified Contacts", count: identifiedCount },
+                { id: CRM_LIST_WEBSITE_VISITORS, label: "Website Visitors", count: websiteVisitorCount },
+                { id: CRM_LIST_ALL, label: "All Contacts", count: contacts.length },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setListTab(tab.id)}
+                className={cn(
+                  "h-9 px-3 rounded-md border text-sm font-medium transition-colors",
+                  listTab === tab.id
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
+                )}
+                data-testid={`tab-contacts-${tab.id}`}
+              >
+                {tab.label}
+                <span className="ml-1.5 text-xs opacity-80">{tab.count.toLocaleString()}</span>
+              </button>
+            ))}
           </div>
 
           {/* Search + Filters */}
@@ -783,7 +876,11 @@ export function Contacts() {
                 <p className="text-gray-500 font-medium">
                   {contacts.length === 0
                     ? t("contacts.emptyState", "No contacts yet")
-                    : t("contacts.noResults", "No contacts match your filters")}
+                    : listTab === CRM_LIST_WEBSITE_VISITORS
+                      ? t("contacts.emptyVisitors", "No anonymous Website Chat visitors")
+                      : listTab === CRM_LIST_IDENTIFIED
+                        ? t("contacts.emptyIdentified", "No identified contacts match your filters")
+                        : t("contacts.noResults", "No contacts match your filters")}
                 </p>
                 {contacts.length === 0 && (
                   <p className="text-gray-400 text-sm mt-1">
@@ -814,6 +911,8 @@ export function Contacts() {
                   const cfg = channelUiConfig(ch);
                   const crmTag = displayCrmTag(contact.tag);
                   const bookedAppt = nextAppointmentByContact.get(contact.id);
+                  const displayName = webchatSafeDisplayName(contact);
+                  const publicPhone = contactRowPhone(contact);
                   return (
                     <div
                       key={contact.id}
@@ -834,15 +933,16 @@ export function Contacts() {
                       </div>
                       {/* Avatar */}
                       <div className="flex-shrink-0">
-                        <Avatar contact={contact} />
+                        <Avatar contact={contact} displayName={displayName} />
                       </div>
 
                       {/* Main info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <p className="font-medium text-gray-900 text-sm truncate">
-                            {contact.name}
+                            {displayName}
                           </p>
+                          <WebchatIdentityBadge contact={contact} />
                           {(notesSummary[contact.id] ?? 0) > 0 && (
                             <button
                               onClick={(e) => openNotesPopup(contact, e)}
@@ -883,15 +983,22 @@ export function Contacts() {
                           )}
                         </div>
                         {/* Phone / email */}
-                        {contact.phone ? (
+                        {publicPhone ? (
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                             <Phone className="w-3 h-3 flex-shrink-0" />
-                            {contact.phone}
+                            {publicPhone}
                           </p>
                         ) : contact.email ? (
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                             <Mail className="w-3 h-3 flex-shrink-0" />
                             {contact.email}
+                          </p>
+                        ) : classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS ? (
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {webchatLeadSourceLabel(contact)}
+                            {contact.lastIncomingAt
+                              ? ` · ${formatDistanceToNow(new Date(contact.lastIncomingAt), { addSuffix: true })}`
+                              : ""}
                           </p>
                         ) : null}
                       </div>
@@ -962,7 +1069,11 @@ export function Contacts() {
                 <p className="text-gray-500 font-medium">
                   {contacts.length === 0
                     ? t("contacts.emptyState", "No contacts yet")
-                    : t("contacts.noResults", "No contacts match your filters")}
+                    : listTab === CRM_LIST_WEBSITE_VISITORS
+                      ? t("contacts.emptyVisitors", "No anonymous Website Chat visitors")
+                      : listTab === CRM_LIST_IDENTIFIED
+                        ? t("contacts.emptyIdentified", "No identified contacts match your filters")
+                        : t("contacts.noResults", "No contacts match your filters")}
                 </p>
                 {contacts.length === 0 && (
                   <p className="text-gray-400 text-sm mt-1">
@@ -982,6 +1093,8 @@ export function Contacts() {
                   const cfg = channelUiConfig(ch);
                   const crmTag = displayCrmTag(contact.tag);
                   const bookedAppt = nextAppointmentByContact.get(contact.id);
+                  const displayName = webchatSafeDisplayName(contact);
+                  const publicPhone = contactRowPhone(contact);
                   return (
                     <div
                       key={contact.id}
@@ -1002,12 +1115,13 @@ export function Contacts() {
                       </div>
                       {/* Name + phone */}
                       <div className="flex items-center gap-3 min-w-0">
-                        <Avatar contact={contact} />
+                        <Avatar contact={contact} displayName={displayName} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
                             <p className="font-medium text-gray-900 text-sm truncate group-hover:text-gray-700 transition-colors">
-                              {contact.name}
+                              {displayName}
                             </p>
+                            <WebchatIdentityBadge contact={contact} />
                             {(notesSummary[contact.id] ?? 0) > 0 && (
                               <button
                                 onClick={(e) => openNotesPopup(contact, e)}
@@ -1027,16 +1141,24 @@ export function Contacts() {
                               <Sparkles className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          {contact.phone && (
+                          {publicPhone && (
                             <p className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 flex-shrink-0" />
-                              {contact.phone}
+                              {publicPhone}
                             </p>
                           )}
-                          {!contact.phone && contact.email && (
+                          {!publicPhone && contact.email && (
                             <p className="text-xs text-gray-400 truncate flex items-center gap-1 mt-0.5">
                               <Mail className="w-3 h-3 flex-shrink-0" />
                               {contact.email}
+                            </p>
+                          )}
+                          {!publicPhone && !contact.email && classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS && (
+                            <p className="text-xs text-gray-400 truncate mt-0.5">
+                              {webchatLeadSourceLabel(contact)}
+                              {contact.lastIncomingAt
+                                ? ` · last ${formatDistanceToNow(new Date(contact.lastIncomingAt), { addSuffix: true })}`
+                                : ""}
                             </p>
                           )}
                         </div>

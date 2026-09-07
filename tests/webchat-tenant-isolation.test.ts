@@ -242,6 +242,9 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   assert.match(migration, /widget_public_id/);
   assert.match(migration, /wgt_/);
   assert.doesNotMatch(migration, /users\.id::text/);
+  const webchatId = read("migrations/0091_contacts_webchat_id.sql");
+  assert.match(webchatId, /ON contacts \(user_id, webchat_id\)/);
+  assert.match(webchatId, /contacts_user_id_webchat_id_uidx/);
 }
 
 console.log("webchat-tenant-isolation.test.ts: all assertions passed");

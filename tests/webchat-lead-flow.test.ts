@@ -45,6 +45,7 @@ const cf = buildWebchatLeadCustomFields("agent_page", "visitor_123");
 assert(cf.sourcePage === "agent_page", "sourcePage set");
 assert(cf.leadSource === "Agent Page", "leadSource label set");
 assert(cf.webchatVisitorId === "visitor_123", "visitor id preserved");
+assert((cf.webchatIdentity as { status?: string }).status === "anonymous", "new visitor is anonymous");
 
 // Identity extraction
 const hints = extractIdentityHints("I'm Sarah Lee — sarah@example.com or 555-123-4567");

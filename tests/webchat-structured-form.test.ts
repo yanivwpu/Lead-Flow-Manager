@@ -133,10 +133,13 @@ test("form POST is tenant-scoped, validates, and dispatches workflows", () => {
   assert.match(window, /contentType: "form_result"/);
   assert.match(window, /dispatchWebchatInboundWorkflows/);
   assert.match(window, /webchatFormSubmission/);
+  assert.match(window, /visitorId,/);
+  assert.match(window, /sendWebchatPublicJson\(res, 200, \{ success: true \}\)/);
+  assert.doesNotMatch(window, /matchedContactIds|duplicateCandidates/);
   assert.doesNotMatch(window, /A2P compliant|10DLC approved/i);
   const service = read("server/webchatFormService.ts");
   assert.match(service, /contact\.userId !== params\.userId/);
-  assert.match(service, /consentAccepted/);
+  assert.match(read("shared/webchatFormContactPatch.ts"), /webchatConsent/);
   const engine = read("server/chatbotEngine.ts");
   assert.match(engine, /sendChatbotFormWebchat/);
   assert.match(engine, /contentType: "form"/);

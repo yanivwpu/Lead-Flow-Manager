@@ -326,9 +326,21 @@ export function identityFromFormValues(
   for (const field of form.fields) {
     const value = values[field.id];
     if (typeof value !== "string" || !value) continue;
-    if (field.type === "name" && !out.name) out.name = value;
-    if (field.type === "email" && !out.email) out.email = value;
-    if (field.type === "phone" && !out.phone) out.phone = value;
+    if (field.type === "name" && !out.name) out.name = value.trim();
+    if (field.type === "email" && !out.email) {
+      const email = value.trim().toLowerCase();
+      if (email.includes("@")) out.email = email;
+    }
+    if (field.type === "phone" && !out.phone) {
+      const digits = value.replace(/\D/g, "");
+      const phone =
+        digits.length === 11 && digits.startsWith("1")
+          ? digits.slice(1)
+          : digits.length >= 10
+            ? digits
+            : "";
+      if (phone) out.phone = phone;
+    }
   }
   return out;
 }

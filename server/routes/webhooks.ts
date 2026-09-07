@@ -211,7 +211,7 @@ export function registerWebhookRoutes(app: Express): void {
       }
 
       const userId = access.owner.userId;
-      const { visitorId, message, name, source, parentUrl, pageTitle, referrer } = parsed.data;
+      const { visitorId, message, source, parentUrl, pageTitle, referrer } = parsed.data;
       const existing = await storage.getContactByChannelId(userId, "webchat", visitorId);
       const newContactOk = await consumeWebchatContactCap({
         widgetPublicId: access.owner.widgetPublicId,
@@ -245,9 +245,7 @@ export function registerWebhookRoutes(app: Express): void {
         "@shared/agent/webchatLeadContext"
       );
       const webchatLeadSource = resolveWebchatLeadSource({ source, parentUrl });
-      const contactName =
-        (typeof name === "string" && name.trim()) ||
-        resolveWebchatVisitorDisplayName(webchatLeadSource);
+      const contactName = resolveWebchatVisitorDisplayName(webchatLeadSource);
 
       const { channelService } = await import("../channelService");
       const result = await channelService.processIncomingMessage({
@@ -540,7 +538,6 @@ export function registerWebhookRoutes(app: Express): void {
         const caption =
           typeof req.body?.caption === "string" ? req.body.caption.trim().slice(0, 4000) : "";
         const source = typeof req.body?.source === "string" ? req.body.source.trim().slice(0, 80) : undefined;
-        const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 120) : undefined;
         const uploadId =
           typeof req.body?.uploadId === "string"
             ? req.body.uploadId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80)
@@ -554,7 +551,7 @@ export function registerWebhookRoutes(app: Express): void {
           userId: access.owner.userId,
           channel: "webchat",
           channelContactId: visitorId,
-          contactName: name || resolveWebchatVisitorDisplayName(webchatLeadSource),
+          contactName: resolveWebchatVisitorDisplayName(webchatLeadSource),
           content: caption,
           contentType: "image",
           mediaUrl: stored.mediaUrl,
@@ -609,7 +606,7 @@ export function registerWebhookRoutes(app: Express): void {
       if (!conversation || conversation.userId !== access.owner.userId) {
         return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
       }
-      const { sanitizeWebchatFormDefinition, validateWebchatFormSubmission, toInboxFormSubmission } =
+      const { sanitizeWebchatFormDefinition, validateWebchatFormSubmission, toInboxFormSubmission, WEBCHAT_FORM_PUBLIC_SUBMITTED_CONTENT } =
         await import("@shared/webchatStructuredForm");
       const formId = typeof req.body?.formId === "string" ? req.body.formId.trim().toLowerCase() : "";
       const messageId = typeof req.body?.messageId === "string" ? req.body.messageId.trim() : "";
@@ -661,6 +658,12 @@ export function registerWebhookRoutes(app: Express): void {
         form,
         values: validated.values,
         submission,
+        context: {
+          conversationId: conversation.id,
+          widgetPublicId: access.owner.widgetPublicId,
+          formId: form.id,
+          visitorId,
+        },
       });
       const { channelService } = await import("../channelService");
       const result = await channelService.processIncomingMessage({
@@ -668,12 +671,10 @@ export function registerWebhookRoutes(app: Express): void {
         channel: "webchat",
         channelContactId: visitorId,
         contactName: contact.name,
-        content: submission.fields
-          .map((field) => `${field.label}: ${Array.isArray(field.value) ? field.value.join(", ") : String(field.value)}`)
-          .join(" / "),
+        content: WEBCHAT_FORM_PUBLIC_SUBMITTED_CONTENT,
         contentType: "form_result",
         templateVariables: { webchatFormSubmission: submission },
-        externalMessageId: `webchat_form_${visitorId}_${form.id}_${submission.submittedAt}`,
+        externalMessageId: `webchat_form_${visitorId}_${form.id}`,
       });
       if (result.success && result.contact && result.conversation && !result.deduped) {
         const { dispatchWebchatInboundWorkflows } = await import("../webchatInboundWorkflows");

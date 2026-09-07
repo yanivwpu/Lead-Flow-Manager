@@ -1183,6 +1183,8 @@ export const contacts = pgTable("contacts", {
   facebookId: text("facebook_id"), // Facebook PSID
   telegramId: text("telegram_id"), // Telegram chat ID
   ghlId: text("ghl_id"), // GoHighLevel (LeadConnector) contact ID
+  /** Immutable Website Chat visitor UUID. Never reused as contacts.phone. */
+  webchatId: text("webchat_id"),
   
   // Primary channel logic
   primaryChannel: text("primary_channel").notNull().default("whatsapp"), // Auto-detected from last incoming message
