@@ -262,7 +262,10 @@ test("preflight aggregates never include row payloads", () => {
 test("Contacts UI defaults to identified contacts and exposes Website Visitors", () => {
   const page = read("client/src/pages/Contacts.tsx");
   assert.match(page, /CRM_LIST_IDENTIFIED/);
-  assert.match(page, /tab-contacts-\$\{tab\.id\}/);
+  assert.match(page, /select-filter-contact-type/);
+  assert.doesNotMatch(page, /contacts-identity-tabs/);
+  assert.doesNotMatch(page, /tab-contacts-\$\{tab\.id\}/);
+  assert.doesNotMatch(page, /function StatCard/);
   assert.match(page, /CRM_LIST_WEBSITE_VISITORS/);
   assert.match(page, /CRM_LIST_ALL/);
   assert.match(page, /Identified from Website Chat/);

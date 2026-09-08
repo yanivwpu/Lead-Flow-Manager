@@ -37,6 +37,7 @@ import {
   selectPinCandidates,
 } from "@/lib/inboxSessionPins";
 import { inboxRowDisplayName } from "@shared/websiteFormIdentity";
+import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
@@ -74,6 +75,7 @@ import {
   Trash2,
   History,
   Edit,
+  UserPlus,
   X,
   Zap,
   PauseCircle,
@@ -749,10 +751,12 @@ export function UnifiedInbox() {
   const prevComposerScopeRef = useRef<string | null>(null);
   const isMobile = useIsMobile();
   const [showEditContact, setShowEditContact] = useState(false);
+  const [showSaveToContacts, setShowSaveToContacts] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
+  const [saveToContactsForm, setSaveToContactsForm] = useState({ name: "", email: "" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<AIComposerHandle>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -2388,6 +2392,33 @@ export function UnifiedInbox() {
     },
   });
 
+  const saveToContactsMutation = useMutation({
+    mutationFn: async (data: { contactId: string; name: string; email: string }) => {
+      const res = await fetch(`/api/contacts/${data.contactId}/save-to-contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: data.name, email: data.email }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Failed to save contact");
+      return body as Contact;
+    },
+    onSuccess: (saved, variables) => {
+      queryClient.setQueryData<{ contact: Contact; conversations: Conversation[] }>(
+        ["/api/contacts", variables.contactId],
+        (old) => (old ? { ...old, contact: saved } : old),
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
+      setShowSaveToContacts(false);
+      toast({ title: "Saved to Contacts" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Could not save contact", description: err.message, variant: "destructive" });
+    },
+  });
+
   const updateConversationMutation = useMutation({
     mutationFn: async (data: { conversationId: string; status: string }) => {
       const res = await fetch(`/api/conversations/${data.conversationId}`, {
@@ -2721,6 +2752,25 @@ export function UnifiedInbox() {
       setIsUploading(false);
     }
   }, [toast]);
+
+  const handleSaveToContacts = () => {
+    const source = matchedContact || displayContact;
+    if (!source) return;
+    setSaveToContactsForm({
+      name: source.name || "",
+      email: source.email || "",
+    });
+    setShowSaveToContacts(true);
+  };
+
+  const handleConfirmSaveToContacts = () => {
+    if (!selectedContactId) return;
+    saveToContactsMutation.mutate({
+      contactId: selectedContactId,
+      name: saveToContactsForm.name,
+      email: saveToContactsForm.email,
+    });
+  };
 
   const handleEditContact = () => {
     if (matchedContact) {
@@ -3662,6 +3712,14 @@ export function UnifiedInbox() {
                       Automation Paused
                     </span>
                   ) : null}
+                  {isEmailInboxIdentitySource(contact.source) ? (
+                    <span
+                      className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
+                      data-testid="chip-inbox-only-participant"
+                    >
+                      Inbox only
+                    </span>
+                  ) : null}
                 </div>
                 {isEmailChannel && (primaryConversation?.subject || emailSubject) ? (
                   <p className="text-xs text-gray-600 truncate" data-testid="inbox-email-subject">
@@ -3767,6 +3825,18 @@ export function UnifiedInbox() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
+                {isEmailInboxIdentitySource(contact.source) ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleSaveToContacts}
+                    data-testid="button-save-to-contacts"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1" />
+                    Save to Contacts
+                  </Button>
+                ) : null}
                 {/* Actions menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -3775,6 +3845,11 @@ export function UnifiedInbox() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {isEmailInboxIdentitySource(contact.source) ? (
+                      <DropdownMenuItem onClick={handleSaveToContacts} data-testid="menu-save-to-contacts">
+                        <UserPlus className="w-4 h-4 mr-2" /> Save to Contacts
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">
                       <Edit className="w-4 h-4 mr-2" /> Edit Contact
                     </DropdownMenuItem>
@@ -4746,6 +4821,44 @@ export function UnifiedInbox() {
               <Button variant="outline" onClick={() => setShowEditContact(false)}>Cancel</Button>
               <Button onClick={handleSaveEditContact} disabled={updateContactMutation.isPending} data-testid="button-save-edit-contact">
                 {updateContactMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showSaveToContacts} onOpenChange={setShowSaveToContacts}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Save to Contacts</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500">
+            Review the name and email, then save this Inbox participant as a CRM contact. Conversation history stays attached.
+          </p>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={saveToContactsForm.name}
+                onChange={(e) => setSaveToContactsForm({ ...saveToContactsForm, name: e.target.value })}
+                data-testid="input-save-to-contacts-name"
+              />
+            </div>
+            <div>
+              <Label>Email</Label>
+              <Input
+                value={saveToContactsForm.email}
+                onChange={(e) => setSaveToContactsForm({ ...saveToContactsForm, email: e.target.value })}
+                placeholder="email@example.com"
+                data-testid="input-save-to-contacts-email"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowSaveToContacts(false)}>Cancel</Button>
+              <Button
+                onClick={handleConfirmSaveToContacts}
+                disabled={saveToContactsMutation.isPending}
+                data-testid="button-confirm-save-to-contacts"
+              >
+                {saveToContactsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save to Contacts"}
               </Button>
             </div>
           </div>

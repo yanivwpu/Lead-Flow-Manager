@@ -2,13 +2,11 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { contacts, type Contact } from "@shared/schema";
 import { normalizeEmailAddress } from "@shared/emailChannel";
 import {
-  isServiceRoleEmailLocalPart,
-  looksLikeHumanAsk,
-  looksLikeSystemOrNotificationEmail,
-} from "@shared/aiDomainEligibility";
-import {
   EMAIL_INBOX_IDENTITY_SOURCE,
+  inboxOnlySourceDetails,
+  isCrmListedContact,
   isEmailInboxIdentitySource,
+  savedContactSourceDetails,
 } from "@shared/contactCrmVisibility";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
@@ -33,7 +31,7 @@ const SUPPRESSED_LOCAL_PARTS = new Set([
 
 /**
  * Legacy local-part suppressor (noreply / mailer-daemon).
- * New CRM creation uses `decideNewEmailContactKind` (content + From).
+ * New CRM creation uses `decideNewEmailContactKind` (website form / lead capture only).
  */
 export function shouldSuppressEmailContactCreation(email: string): string | null {
   const norm = normalizeEmailAddress(email);
@@ -49,9 +47,10 @@ export function shouldSuppressEmailContactCreation(email: string): string | null
  * Decide whether a *new* Email sender should become a CRM Contact.
  * Existing Contact match always happens first in `resolveEmailContact`.
  *
- * Visible CRM requires positive evidence: outbound, website form / lead capture,
- * or a genuine human ask from a non-service mailbox. Uncertain inbound stays
- * an internal `email_inbox` identity.
+ * Unknown Gmail/native-email senders stay Inbox-only. Visible CRM requires an
+ * explicit Save/Add Contact, a website form, or lead capture. Outbound mail
+ * alone must not silently save a Contact. Body/subject/snippet/display-name
+ * are never used as identity.
  *
  * Chat channels never call this.
  */
@@ -67,25 +66,17 @@ export function decideNewEmailContactKind(input: {
     return "drop";
   }
 
-  if (input.direction === "outbound") return "crm";
   if (input.isWebsiteForm || input.isLeadCapture) return "crm";
 
-  const system = looksLikeSystemOrNotificationEmail({
-    fromEmail,
-    inboundText: input.inboundText,
-    channel: "email",
-  });
-  if (system) return "inbox_identity";
-
-  const localSuppress = shouldSuppressEmailContactCreation(fromEmail);
-  if (localSuppress) return "inbox_identity";
-
-  if (isServiceRoleEmailLocalPart(fromEmail)) return "inbox_identity";
-
-  if (looksLikeHumanAsk(input.inboundText)) return "crm";
-
-  // Uncertain inbound Email stays an internal identity, not a visible CRM Contact.
   return "inbox_identity";
+}
+
+/** Prefer an already-saved CRM contact over an inbox-only identity for the same email. */
+export function pickPreferredEmailContact<T extends { source?: string | null; sourceDetails?: unknown }>(
+  rows: T[],
+): T | undefined {
+  if (rows.length === 0) return undefined;
+  return rows.find((row) => isCrmListedContact(row)) || rows[0];
 }
 
 export async function findContactsByEmail(
@@ -109,26 +100,22 @@ export function shouldPromoteInboxIdentityToCrm(input: {
   isLeadCapture?: boolean;
 }): boolean {
   if (!isEmailInboxIdentitySource(input.existingSource)) return false;
-  return (
-    input.kind === "crm" ||
-    input.direction === "outbound" ||
-    !!input.isWebsiteForm ||
-    !!input.isLeadCapture
-  );
+  return Boolean(input.isWebsiteForm || input.isLeadCapture);
 }
 
 export async function promoteInboxIdentityToCrm(
   contact: Contact,
   source: "email" | "website_form" | "import" | "gohighlevel",
 ): Promise<Contact> {
-  if (!isEmailInboxIdentitySource(contact.source)) return contact;
-  const prev =
-    contact.sourceDetails && typeof contact.sourceDetails === "object"
-      ? (contact.sourceDetails as Record<string, unknown>)
-      : {};
+  if (isCrmListedContact(contact)) return contact;
+  const nextSource = isEmailInboxIdentitySource(contact.source)
+    ? source
+    : contact.source || source;
   await storage.updateContact(contact.id, {
-    source,
-    sourceDetails: { ...prev, inboxIdentity: false, promotedFromInboxIdentity: true },
+    source: nextSource,
+    sourceDetails: savedContactSourceDetails(contact.sourceDetails, {
+      promotedFromInboxIdentity: true,
+    }),
   } as any);
   return (await storage.getContact(contact.id)) || contact;
 }
@@ -172,7 +159,7 @@ export async function resolveEmailContact(params: {
 
   const existing = await findContactsByEmail(params.workspaceUserId, matchEmail);
   if (existing.length > 0) {
-    let contact = existing[0];
+    let contact = pickPreferredEmailContact(existing)!;
     const kind = decideNewEmailContactKind({
       fromEmail: params.fromEmail,
       inboundText: params.inboundText,
@@ -257,10 +244,10 @@ export async function resolveEmailContact(params: {
     lastIncomingAt: params.direction === "inbound" ? new Date() : null,
     source,
     sourceDetails: crmListed
-      ? params.isWebsiteForm
-        ? { leadSource: "Website Form" }
-        : {}
-      : { inboxIdentity: true },
+      ? savedContactSourceDetails(
+          params.isWebsiteForm || params.isLeadCapture ? { leadSource: "Website Form" } : {},
+        )
+      : inboxOnlySourceDetails(),
   } as any);
 
   console.log(

@@ -17,6 +17,10 @@ import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import {
+  EMAIL_INBOX_IDENTITY_SOURCE,
+  inboxOnlySourceDetails,
+} from "@shared/contactCrmVisibility";
 import { parseConversationReEngagement } from "@shared/reEngagement";
 import {
   isAlreadyCanonicalPermanentUrl,
@@ -1269,9 +1273,13 @@ class ChannelService {
           primaryChannel: channel,
           lastIncomingChannel: channel,
           lastIncomingAt: new Date(),
-          source: channel,
+          source: channel === "email" ? EMAIL_INBOX_IDENTITY_SOURCE : channel,
           ...(webchatCustomFields ? { customFields: webchatCustomFields } : {}),
-          ...(webchatSourceDetails ? { sourceDetails: webchatSourceDetails } : {}),
+          ...(webchatSourceDetails
+            ? { sourceDetails: webchatSourceDetails }
+            : channel === "email"
+              ? { sourceDetails: inboxOnlySourceDetails() }
+              : {}),
         });
         contactCreated = true;
         console.log(`[Inbox Worker] Contact created — contactId: ${contact.id}, name: "${contact.name}"`);

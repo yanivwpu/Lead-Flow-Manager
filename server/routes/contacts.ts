@@ -1,7 +1,14 @@
 import type { Express } from "express";
-import { filterCrmListedContacts, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import {
+  filterCrmListedContacts,
+  isCrmListedContact,
+  isEmailInboxIdentitySource,
+  savedContactSourceDetails,
+} from "@shared/contactCrmVisibility";
+import { normalizeEmailAddress } from "@shared/emailChannel";
 import {
   findContactsByEmail,
+  pickPreferredEmailContact,
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
 import { sql, eq, and, inArray } from "drizzle-orm";
@@ -455,7 +462,19 @@ export function registerContactRoutes(app: Express): void {
       const email = typeof req.body?.email === "string" ? req.body.email : "";
       if (email.trim()) {
         const existing = await findContactsByEmail(req.user.id, email);
-        const inboxIdentity = existing.find((c) => isEmailInboxIdentitySource(c.source));
+        const saved = pickPreferredEmailContact(existing.filter(isCrmListedContact)) || existing.find(isCrmListedContact);
+        if (saved) {
+          let contact = saved;
+          const patch: Record<string, unknown> = {};
+          if (typeof req.body.name === "string" && req.body.name.trim()) patch.name = req.body.name.trim();
+          if (typeof req.body.phone === "string") patch.phone = req.body.phone;
+          if (Object.keys(patch).length > 0) {
+            contact = (await storage.updateContact(contact.id, patch as any)) || contact;
+          }
+          scheduleHubSpotAutoSync(req.user.id, contact.id);
+          return res.status(201).json(contact);
+        }
+        const inboxIdentity = existing.find((c) => !isCrmListedContact(c));
         if (inboxIdentity) {
           let contact = await promoteInboxIdentityToCrm(inboxIdentity, "email");
           const patch: Record<string, unknown> = {};
@@ -468,15 +487,60 @@ export function registerContactRoutes(app: Express): void {
           return res.status(201).json(contact);
         }
       }
+      const requestedSource = typeof req.body?.source === "string" ? req.body.source : "";
       const contact = await storage.createContact({
         ...req.body,
         userId: req.user.id,
+        source: isEmailInboxIdentitySource(requestedSource) ? "manual" : requestedSource || "manual",
+        sourceDetails: savedContactSourceDetails(req.body.sourceDetails),
       });
       scheduleHubSpotAutoSync(req.user.id, contact.id);
       res.status(201).json(contact);
     } catch (error) {
       console.error("Error creating contact:", error);
       res.status(500).json({ error: "Failed to create contact" });
+    }
+  });
+
+  app.post("/api/contacts/:id/save-to-contacts", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const contact = await storage.getContact(req.params.id);
+      if (!contact || contact.userId !== req.user.id) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      const requestedName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const requestedEmail = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+      const nextEmail = requestedEmail ? normalizeEmailAddress(requestedEmail) : "";
+      if (requestedEmail && !nextEmail) {
+        return res.status(400).json({ error: "Enter a valid email address" });
+      }
+
+      let saved = isCrmListedContact(contact)
+        ? contact
+        : await promoteInboxIdentityToCrm(contact, "email");
+
+      const patch: Record<string, unknown> = {};
+      if (requestedName) patch.name = requestedName;
+      if (nextEmail && nextEmail !== normalizeEmailAddress(saved.email || "")) {
+        const others = await findContactsByEmail(req.user.id, nextEmail);
+        const conflict = others.find((row) => row.id !== saved.id && isCrmListedContact(row));
+        if (conflict) {
+          return res.status(409).json({ error: "A saved contact already uses that email" });
+        }
+        patch.email = nextEmail;
+      }
+      if (Object.keys(patch).length > 0) {
+        saved = (await storage.updateContact(saved.id, patch as any)) || saved;
+      }
+      scheduleHubSpotAutoSync(req.user.id, saved.id);
+      return res.json(saved);
+    } catch (error) {
+      console.error("Error saving contact to CRM:", error);
+      return res.status(500).json({ error: "Failed to save contact" });
     }
   });
 

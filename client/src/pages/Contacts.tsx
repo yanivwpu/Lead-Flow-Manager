@@ -179,20 +179,6 @@ function SortHeader({
   );
 }
 
-function StatCard({ label, value, icon: Icon, color, iconColor = "text-gray-500" }: { label: string; value: number; icon: any; color: string; iconColor?: string }) {
-  return (
-    <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm min-w-0">
-      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", color)}>
-        <Icon className={cn("w-4 h-4", iconColor)} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xl font-bold text-gray-900 leading-none">{value.toLocaleString()}</p>
-        <p className="text-xs text-gray-500 mt-0.5 truncate">{label}</p>
-      </div>
-    </div>
-  );
-}
-
 function ContactRowMenu({
   contact,
   onDelete,
@@ -443,15 +429,6 @@ export function Contacts() {
     return Array.from(s).sort();
   }, [contacts]);
 
-  const identifiedCount = useMemo(
-    () => contacts.filter((c) => classifyCrmContactListTab(c) === CRM_LIST_IDENTIFIED).length,
-    [contacts],
-  );
-  const websiteVisitorCount = useMemo(
-    () => contacts.filter((c) => classifyCrmContactListTab(c) === CRM_LIST_WEBSITE_VISITORS).length,
-    [contacts],
-  );
-
   const filtered = useMemo(() => {
     let list = [...contacts];
     if (listTab !== CRM_LIST_ALL) {
@@ -557,15 +534,6 @@ export function Contacts() {
 
   const deletePending = deleteSingleMutation.isPending || deleteBulkMutation.isPending;
 
-  const channelCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    contacts.forEach((c) => {
-      const ch = contactDisplayChannelKey(c);
-      counts[ch] = (counts[ch] || 0) + 1;
-    });
-    return counts;
-  }, [contacts]);
-
   const activeFiltersCount = [filterTag, filterChannel, filterStage].filter(Boolean).length;
 
   async function openSnapshot(contact: Contact, e: React.MouseEvent) {
@@ -624,10 +592,6 @@ export function Contacts() {
     URL.revokeObjectURL(url);
   }
 
-  const topChannels = Object.entries(channelCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
-
   return (
     <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
       {/* Header */}
@@ -666,85 +630,9 @@ export function Contacts() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 py-4 space-y-4">
-          {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard
-              label={t("contacts.identifiedCount", "Identified Contacts")}
-              value={identifiedCount}
-              icon={Users}
-              color="bg-emerald-50"
-              iconColor="text-emerald-600"
-            />
-            <StatCard
-              label={t("contacts.websiteVisitorsCount", "Website Visitors")}
-              value={websiteVisitorCount}
-              icon={Globe}
-              color="bg-sky-50"
-              iconColor="text-sky-600"
-            />
-            <StatCard
-              label={t("contacts.totalContacts", "All Contacts")}
-              value={contacts.length}
-              icon={Users}
-              color="bg-gray-100"
-              iconColor="text-gray-500"
-            />
-            {topChannels.filter(([ch]) => ch === "webchat").slice(0, 1).map(([ch, count]) => {
-              const cfg = channelUiConfig(ch);
-              const Icon = cfg.icon;
-              return (
-                <div
-                  key={ch}
-                  onClick={() => setFilterChannel(filterChannel === ch ? "" : ch)}
-                  className={cn(
-                    "flex items-center gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm cursor-pointer transition-all",
-                    filterChannel === ch
-                      ? "border-gray-300 ring-2 ring-gray-100"
-                      : "border-gray-100 hover:border-gray-200",
-                  )}
-                  data-testid={`stat-channel-${ch}`}
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-50 border border-gray-100">
-                    <Icon className="w-4 h-4" style={{ color: cfg.color }} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xl font-bold text-gray-900 leading-none">{count}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">{cfg.label}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2" data-testid="contacts-identity-tabs">
-            {(
-              [
-                { id: CRM_LIST_IDENTIFIED, label: "Identified Contacts", count: identifiedCount },
-                { id: CRM_LIST_WEBSITE_VISITORS, label: "Website Visitors", count: websiteVisitorCount },
-                { id: CRM_LIST_ALL, label: "All Contacts", count: contacts.length },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setListTab(tab.id)}
-                className={cn(
-                  "h-9 px-3 rounded-md border text-sm font-medium transition-colors",
-                  listTab === tab.id
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
-                )}
-                data-testid={`tab-contacts-${tab.id}`}
-              >
-                {tab.label}
-                <span className="ml-1.5 text-xs opacity-80">{tab.count.toLocaleString()}</span>
-              </button>
-            ))}
-          </div>
-
           {/* Search + Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="flex flex-wrap items-center gap-2" data-testid="contacts-filter-row">
+            <div className="relative min-w-[180px] flex-1 basis-full sm:basis-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
               <Input
                 placeholder={t("contacts.searchPlaceholder", "Search by name, phone or email…")}
@@ -759,6 +647,18 @@ export function Contacts() {
                 </button>
               )}
             </div>
+
+            <select
+              value={listTab}
+              onChange={(e) => setListTab(e.target.value as CrmContactListTab)}
+              aria-label={t("contacts.contactType", "Contact type")}
+              className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              data-testid="select-filter-contact-type"
+            >
+              <option value={CRM_LIST_IDENTIFIED}>{t("contacts.identifiedContacts", "Identified Contacts")}</option>
+              <option value={CRM_LIST_WEBSITE_VISITORS}>{t("contacts.websiteVisitors", "Website Visitors")}</option>
+              <option value={CRM_LIST_ALL}>{t("contacts.allContacts", "All Contacts")}</option>
+            </select>
 
             {/* Tag filter */}
             <select
@@ -815,7 +715,7 @@ export function Contacts() {
               </Button>
             )}
 
-            <span className="text-sm text-gray-400 ml-auto">
+            <span className="text-sm text-gray-400 sm:ml-auto" data-testid="contacts-result-count">
               {filtered.length === contacts.length
                 ? t("contacts.countAll", "{{count}} contacts", { count: contacts.length })
                 : t("contacts.countFiltered", "{{filtered}} of {{total}}", { filtered: filtered.length, total: contacts.length })}

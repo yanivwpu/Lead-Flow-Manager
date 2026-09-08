@@ -126,25 +126,25 @@ run("Instagram-style feed notification → inbox identity", () => {
   );
 });
 
-run("F. Human Gmail inquiry → CRM Contact", () => {
+run("F. Human Gmail inquiry stays Inbox-only until Save to Contacts", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "alex.buyer@gmail.com",
       inboundText: HUMAN_GMAIL,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
 });
 
-run("G. Human company-domain inquiry → CRM Contact", () => {
+run("G. Human company-domain inquiry stays Inbox-only until Save", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "ops@acme.com",
       inboundText: HUMAN_COMPANY,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   assert.equal(
     decideNewEmailContactKind({
@@ -152,7 +152,7 @@ run("G. Human company-domain inquiry → CRM Contact", () => {
       inboundText: HUMAN_CONDO,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   assert.equal(
     decideNewEmailContactKind({
@@ -160,7 +160,7 @@ run("G. Human company-domain inquiry → CRM Contact", () => {
       inboundText: HUMAN_DEMO,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   // Conversational follow-up without a genuine ask is uncertain inbound —
   // hidden unless an existing visible Contact already matches.
@@ -184,14 +184,14 @@ run("H. Existing-contact match is independent of system content", () => {
   assert.ok(matchIdx > 0 && createIdx > matchIdx, "existing match must run before create");
 });
 
-run("I. User-initiated outbound → CRM Contact", () => {
+run("I. User-initiated outbound does not silently save a Contact", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "me@workspace.com",
       inboundText: CREDIT,
       direction: "outbound",
     }),
-    "crm",
+    "inbox_identity",
   );
 });
 
@@ -296,7 +296,7 @@ run("1. passive Email creates email_inbox identity, not a CRM Contact", () => {
     "utf8",
   );
   assert.ok(match.includes("EMAIL_INBOX_IDENTITY_SOURCE"));
-  assert.ok(match.includes("inboxIdentity: true"));
+  assert.ok(match.includes("inboxOnlySourceDetails()"));
   assert.ok(match.includes('? "email"'));
   assert.ok(match.includes(": EMAIL_INBOX_IDENTITY_SOURCE"));
 });
@@ -361,14 +361,14 @@ run("4. campaign / contact selectors exclude inbox identities", () => {
   assert.ok(exec.includes("isCrmListedContact"));
 });
 
-run("5. later human inquiry promotes the same row, no duplicate", () => {
+run("5. inbound human text does not auto-promote; website form does", () => {
   assert.equal(
     shouldPromoteInboxIdentityToCrm({
       existingSource: EMAIL_INBOX_IDENTITY_SOURCE,
       kind: "crm",
       direction: "inbound",
     }),
-    true,
+    false,
   );
   assert.equal(
     shouldPromoteInboxIdentityToCrm({
@@ -401,14 +401,14 @@ run("5. later human inquiry promotes the same row, no duplicate", () => {
   assert.ok(promoteFn.includes("promotedFromInboxIdentity: true"));
 });
 
-run("6. later user outbound promotes the same row, no duplicate", () => {
+run("6. outbound does not promote a hidden identity", () => {
   assert.equal(
     shouldPromoteInboxIdentityToCrm({
       existingSource: EMAIL_INBOX_IDENTITY_SOURCE,
       kind: "crm",
       direction: "outbound",
     }),
-    true,
+    false,
   );
   assert.equal(
     decideNewEmailContactKind({
@@ -416,7 +416,7 @@ run("6. later user outbound promotes the same row, no duplicate", () => {
       inboundText: CREDIT,
       direction: "outbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   const routes = readFileSync(
     join(import.meta.dirname, "..", "server/routes/contacts.ts"),
@@ -545,14 +545,14 @@ run("F. uncertain passive inbound email → hidden", () => {
   );
 });
 
-run("G. real human inquiry → visible Contact", () => {
+run("G. real human inquiry stays Inbox-only", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "alex.buyer@gmail.com",
       inboundText: HUMAN_GMAIL,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   assert.equal(
     decideNewEmailContactKind({
@@ -560,18 +560,18 @@ run("G. real human inquiry → visible Contact", () => {
       inboundText: HUMAN_COMPANY,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
 });
 
-run("H. reply from a genuine prospect → visible/promoted", () => {
+run("H. reply from a genuine prospect stays Inbox-only until Save", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "sam.prospect@outlook.com",
       inboundText: PROSPECT_REPLY,
       direction: "inbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   assert.equal(
     shouldPromoteInboxIdentityToCrm({
@@ -579,18 +579,27 @@ run("H. reply from a genuine prospect → visible/promoted", () => {
       kind: "crm",
       direction: "inbound",
     }),
+    false,
+  );
+  assert.equal(
+    shouldPromoteInboxIdentityToCrm({
+      existingSource: EMAIL_INBOX_IDENTITY_SOURCE,
+      kind: "inbox_identity",
+      direction: "inbound",
+      isWebsiteForm: true,
+    }),
     true,
   );
 });
 
-run("I. intentional outbound email → promotes hidden identity", () => {
+run("I. intentional outbound email does not promote hidden identity", () => {
   assert.equal(
     decideNewEmailContactKind({
       fromEmail: "prospect@client.com",
       inboundText: "Hello",
       direction: "outbound",
     }),
-    "crm",
+    "inbox_identity",
   );
   assert.equal(
     shouldPromoteInboxIdentityToCrm({
@@ -598,7 +607,7 @@ run("I. intentional outbound email → promotes hidden identity", () => {
       kind: "crm",
       direction: "outbound",
     }),
-    true,
+    false,
   );
 });
 
