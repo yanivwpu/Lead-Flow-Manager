@@ -8,6 +8,7 @@ import {
 import {
   assembleDeterministicGroundedDraft,
   FACT_COMPLETENESS_RETRY_INSTRUCTION,
+  isDraftAmountGrounded,
   mergeGroundingChecks,
   validateGroundedClaims,
   validateResponseCompleteness,
@@ -93,6 +94,10 @@ export class AIService {
     confidenceProvided?: boolean;
     knowledgeGrounded?: boolean;
     groundingViolations?: string[];
+    /** Published fact keys retrieved for this turn (no values or page bodies). */
+    retrievedFactKeys?: string[];
+    retrievedFactTypes?: string[];
+    retrievedFactCount?: number;
     /** Exact checkout URLs retrieved from structured offers for this turn. */
     liveCheckoutUrls?: string[];
     /** True when the draft includes a payment link that must not auto-send. */
@@ -153,6 +158,7 @@ export class AIService {
 
     let liveBusinessDataBlock = "";
     let liveCheckoutUrls: string[] = [];
+    let liveRecordSummaries: string[] = [];
     if (!greetingTurn) {
       try {
         const live = await resolveLiveBusinessDataForTurn({
@@ -162,6 +168,9 @@ export class AIService {
           decision: liveDecision,
         });
         liveBusinessDataBlock = live.promptBlock;
+        liveRecordSummaries = live.records
+          .map((r) => String(r.summary || "").trim())
+          .filter(Boolean);
         liveCheckoutUrls = live.records
           .filter((r) => r.providerId === "businessPackages")
           .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
@@ -177,6 +186,11 @@ export class AIService {
         );
       }
     }
+
+    const tenantKnowledgeTexts = [
+      String(businessKnowledge?.servicesProducts || ""),
+      extractWebsiteKnowledgeSummaryText((businessKnowledge as { websiteKnowledgeSummary?: unknown } | undefined)?.websiteKnowledgeSummary),
+    ].filter((t) => t.trim());
 
     const systemPrompt = this.buildSystemPrompt(
       businessKnowledge,
@@ -198,6 +212,9 @@ export class AIService {
           draft,
           retrieved: grounding.retrieved,
           subIntents: routing?.subIntents,
+          conflictingKeys: grounding.conflictingKeys,
+          liveRecordSummaries,
+          tenantKnowledgeTexts,
         }),
         validateResponseCompleteness({
           draft,
@@ -296,7 +313,15 @@ export class AIService {
         liveCheckoutUrls,
       );
 
-      let knowledgeGrounded = grounding.retrieved.length > 0 && groundingCheck.ok;
+      let knowledgeGrounded =
+        groundingCheck.ok &&
+        isDraftAmountGrounded({
+          draft: suggestion,
+          retrieved: grounding.retrieved,
+          conflictingKeys: grounding.conflictingKeys,
+          liveRecordSummaries,
+          tenantKnowledgeTexts,
+        });
 
       if (greetingTurn) {
         const coerced = coerceWebchatGreetingWelcome(
@@ -315,6 +340,9 @@ export class AIService {
         confidenceProvided: confidenceProvided === true,
         knowledgeGrounded,
         groundingViolations: groundingCheck.violations.map((v) => v.kind),
+        retrievedFactKeys: grounding.retrieved.map((r) => r.fact.factKey),
+        retrievedFactTypes: [...new Set(grounding.retrieved.map((r) => r.fact.factType))],
+        retrievedFactCount: grounding.retrieved.length,
         liveCheckoutUrls,
         requiresPaymentLinkApproval,
         paymentLinkApprovalReason: requiresPaymentLinkApproval

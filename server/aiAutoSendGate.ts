@@ -7,6 +7,7 @@ import {
   isCasualWebchatGreeting,
   unsafeWebchatGreetingWelcomeReason,
 } from "@shared/webchatGreetingWelcome";
+import { draftHasCurrencyAmount } from "@shared/factGrounding";
 
 export { isCasualWebchatGreeting } from "@shared/webchatGreetingWelcome";
 
@@ -331,6 +332,9 @@ export function evaluateFullAutoSend(params: {
     if (!conf.ok) {
       return none(conf.reason, inboundCount, missingLen, conf.source);
     }
+    if (knowledgeQuestion && !grounded && draftHasCurrencyAmount(suggestion)) {
+      return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
+    }
     if (!knowledgeQuestion && qualifyingGuess) {
       return none("missing_required_gt_one", inboundCount, missingLen, conf.source);
     }
@@ -346,6 +350,9 @@ export function evaluateFullAutoSend(params: {
   const conf = resolveConfidence({ bypassLowModel: true });
   if (!conf.ok) {
     return none(conf.reason, inboundCount, missingLen, conf.source);
+  }
+  if (knowledgeQuestion && !grounded && draftHasCurrencyAmount(suggestion)) {
+    return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
   }
 
   const bypassed: string[] = [];

@@ -26,9 +26,9 @@ import {
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
-const ADVERTISING_Q = "Who should I contact with regards to advertising with you?";
+const ADVERTISING_Q = "How can I advertise my business on Affordable Pompano?";
 const ADVERTISING_A =
-  "Please email ads@example.com or call the published advertising line for packages.";
+  "You can advertise with a Standard Business Listing for $29/month, a Featured Business Listing for $59/month, or a Homepage Spotlight Listing for $149/month.";
 const TENANT_A = "workspace-a";
 const TENANT_B = "workspace-b";
 
@@ -296,10 +296,12 @@ test("privacy-safe diagnostics log confidence source without visitor or message 
     suggestion: "secret reply",
     inboundMessageId: "should-drop",
     confidence: 0.7,
+    retrievedFactKeys: "faq:how-do-i-advertise",
   });
   assert.equal(cleaned.reasonCode, "ok_knowledge_question");
   assert.equal(cleaned.confidenceSource, "defaulted");
   assert.equal(cleaned.confidence, 0.7);
+  assert.equal(cleaned.retrievedFactKeys, "faq:how-do-i-advertise");
   assert.equal("contactId" in cleaned, false);
   assert.equal("visitorId" in cleaned, false);
   assert.equal("suggestion" in cleaned, false);
@@ -308,7 +310,72 @@ test("privacy-safe diagnostics log confidence source without visitor or message 
   const routes = read("server/routes.ts");
   const auto = read("server/webchatAiAutoReply.ts");
   const logSrc = read("shared/aiReplyDecisionLog.ts");
+  const aiService = read("server/aiService.ts");
   assert.match(routes, /confidenceSource/);
+  assert.match(routes, /retrievedFactKeys/);
   assert.match(auto, /confidenceSource/);
   assert.match(logSrc, /\[AiReplyDecision\]/);
+  assert.match(aiService, /tenantKnowledgeTexts/);
+  assert.match(aiService, /liveRecordSummaries/);
+});
+
+test("a clear Web Chat FAQ grounded in tenant services/pricing Auto-sends once", () => {
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [
+      { role: "user", content: "Hello" },
+      { role: "user", content: ADVERTISING_Q },
+    ],
+    suggestion: ADVERTISING_A,
+    confidence: 1,
+    confidenceProvided: true,
+    knowledgeGrounded: true,
+    businessKnowledge: knowledgeQs,
+  });
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_knowledge_question");
+  assert.equal(webchatAutoSendIdempotencyKey(TENANT_A, "in-advertise-1"), "webchat_ai:workspace-a:in-advertise-1");
+});
+
+test("the same pricing FAQ with no grounded tenant knowledge remains a draft", () => {
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: ADVERTISING_Q }],
+    suggestion: ADVERTISING_A,
+    confidence: 0.95,
+    confidenceProvided: true,
+    knowledgeGrounded: false,
+  });
+  assert.equal(gate.allowed, false);
+  assert.equal(gate.reason, "ungrounded_pricing");
+});
+
+test("Realtor qualification gaps do not block an unrelated tenant-grounded business FAQ", () => {
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: ADVERTISING_Q }],
+    suggestion: ADVERTISING_A,
+    confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+    confidenceProvided: false,
+    knowledgeGrounded: true,
+    businessKnowledge: knowledgeQs,
+  });
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_knowledge_question");
+  assert.notEqual(gate.reason, "missing_required_gt_one");
+  assert.notEqual(gate.reason, "conversation_too_short");
+});
+
+test("duplicate inbound delivery shares the tenant-scoped idempotency key", () => {
+  const first = webchatAutoSendIdempotencyKey(TENANT_A, "b872a758-a449-4d11-8874-c7b75c6b082a");
+  const dup = webchatAutoSendIdempotencyKey(TENANT_A, "b872a758-a449-4d11-8874-c7b75c6b082a");
+  assert.equal(first, dup);
+  assert.equal(first, `webchat_ai:${TENANT_A}:b872a758-a449-4d11-8874-c7b75c6b082a`);
+  assert.notEqual(
+    webchatAutoSendIdempotencyKey(TENANT_B, "b872a758-a449-4d11-8874-c7b75c6b082a"),
+    first,
+  );
 });

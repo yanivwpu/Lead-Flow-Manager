@@ -11675,6 +11675,9 @@ export async function registerRoutes(
         knowledgeGrounded?: boolean;
         /** Populated when the draft contradicts published facts; blocks auto-send. */
         groundingViolations?: string[];
+        retrievedFactKeys?: string[];
+        retrievedFactTypes?: string[];
+        retrievedFactCount?: number;
         liveCheckoutUrls?: string[];
         requiresPaymentLinkApproval?: boolean;
         paymentLinkApprovalReason?: string;
@@ -12132,6 +12135,9 @@ export async function registerRoutes(
             strongIntent: autoSendStrongIntent,
             alreadyReplied,
             autoDispatchRequested,
+            retrievedFactCount: suggestion.retrievedFactCount ?? 0,
+            retrievedFactTypes: (suggestion.retrievedFactTypes || []).join(","),
+            retrievedFactKeys: (suggestion.retrievedFactKeys || []).join(","),
           },
         });
 

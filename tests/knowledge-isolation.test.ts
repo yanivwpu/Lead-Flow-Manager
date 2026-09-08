@@ -175,6 +175,19 @@ run("the reply path logs violation kinds, not the draft or the facts", () => {
   );
 });
 
+run("suggestReply grounds amounts only from this workspace's facts, offers, and knowledge row", () => {
+  const src = read("server/aiService.ts");
+  assert.match(src, /buildTurnGrounding\(/);
+  assert.match(src, /userId,/);
+  assert.match(src, /resolveLiveBusinessDataForTurn\(/);
+  assert.match(src, /tenantKnowledgeTexts/);
+  assert.match(src, /servicesProducts/);
+  const offers = read("server/aiLiveBusinessData/providers/businessPackagesProvider.ts");
+  assert.match(offers, /listWorkspaceOffers\(ctx\.userId/);
+  assert.match(read("server/websiteKnowledge/factStore.ts"), /listPublishedFacts\(userId\)/);
+  assert.match(read("server/websiteKnowledge/factContext.ts"), /getPublishedFactsCached\(params\.userId/);
+});
+
 // --- 22. No model call on the Inbox render path -------------------------------
 
 run("assembling Workspace Intelligence makes no model call", () => {

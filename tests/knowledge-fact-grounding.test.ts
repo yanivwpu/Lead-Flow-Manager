@@ -26,6 +26,7 @@ import {
   buildGroundedPromptBlock,
   formatNextActionSentence,
   mergeGroundingChecks,
+  mergeSupportedTenantAmounts,
   validateGroundedClaims,
   validateResponseCompleteness,
 } from "../shared/factGrounding";
@@ -782,6 +783,150 @@ run("hours questions do not force an unrelated listing CTA", () => {
     now: NOW,
   });
   assert.equal(next, null);
+});
+
+const ADVERTISE_Q = "How can I advertise my business on Affordable Pompano?";
+const ADVERTISE_A =
+  "You can advertise with a Standard Business Listing for $29/month, a Featured Business Listing for $59/month, or a Homepage Spotlight Listing for $149/month.";
+const TENANT_PROSE =
+  "Standard Business Listing $29/month. Featured Business Listing $59/month. Homepage Spotlight Listing $149/month.";
+const FAQ_ONLY = fact("faq", {
+  question: "How do I advertise?",
+  answer: "Choose a listing package on the advertising page.",
+});
+
+run("tenant website/profile prices ground a listing FAQ even when retrieved facts have no amounts", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [FAQ_ONLY],
+    message: ADVERTISE_Q,
+    subIntents: ["listing_join_question"],
+    now: NOW,
+  });
+  assert.ok(retrieved.length > 0);
+  const unsupported = validateGroundedClaims({
+    draft: ADVERTISE_A,
+    retrieved,
+    subIntents: ["listing_join_question"],
+  });
+  assert.equal(unsupported.ok, false);
+  assert.ok(unsupported.violations.some((v) => v.kind === "unsupported_amount"));
+
+  const grounded = validateGroundedClaims({
+    draft: ADVERTISE_A,
+    retrieved,
+    subIntents: ["listing_join_question"],
+    tenantKnowledgeTexts: [TENANT_PROSE],
+  });
+  assert.equal(grounded.ok, true, JSON.stringify(grounded.violations));
+
+  const liveGrounded = validateGroundedClaims({
+    draft: ADVERTISE_A,
+    retrieved,
+    subIntents: ["listing_join_question"],
+    liveRecordSummaries: [
+      "Standard Business Listing | Price: $29/month",
+      "Featured Business Listing | Price: $59/month",
+      "Homepage Spotlight Listing | Price: $149/month",
+    ],
+  });
+  assert.equal(liveGrounded.ok, true, JSON.stringify(liveGrounded.violations));
+});
+
+run("invented prices stay unsupported when tenant knowledge has no matching amounts", () => {
+  const check = validateGroundedClaims({
+    draft: ADVERTISE_A,
+    retrieved: retrieveFactsForTurn({
+      facts: [FAQ_ONLY],
+      message: ADVERTISE_Q,
+      subIntents: ["listing_join_question"],
+      now: NOW,
+    }),
+    tenantKnowledgeTexts: ["We offer directory listings. Contact us for current packages."],
+  });
+  assert.equal(check.ok, false);
+  assert.equal(check.violations.filter((v) => v.kind === "unsupported_amount").length, 3);
+});
+
+run("conflicting published prices cannot support an auto-sendable amount", () => {
+  const a = fact(
+    "pricing_plan",
+    {
+      name: "Standard Business Listing",
+      description: null,
+      price: { amount: 29, currency: "USD", billingPeriod: "month" },
+      priceQualifier: "exact",
+      benefits: [],
+    },
+    { id: "fact-std-a", origin: "website_verified" },
+  );
+  const b = fact(
+    "pricing_plan",
+    {
+      name: "Standard Business Listing",
+      description: null,
+      price: { amount: 39, currency: "USD", billingPeriod: "month" },
+      priceQualifier: "exact",
+      benefits: [],
+    },
+    { id: "fact-std-b", origin: "website_verified", sourceId: "src-2" },
+  );
+  assert.equal(a.factKey, b.factKey);
+  const retrieved = retrieveFactsForTurn({
+    facts: [a, b],
+    message: ADVERTISE_Q,
+    subIntents: ["listing_join_question"],
+    now: NOW,
+  });
+  const check = validateGroundedClaims({
+    draft: "Standard Business Listing is $29/month.",
+    retrieved,
+    conflictingKeys: [a.factKey],
+  });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "unsupported_amount"));
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: ADVERTISE_Q }],
+    suggestion: "Standard Business Listing is $29/month.",
+    confidence: 0.95,
+    confidenceProvided: true,
+    knowledgeGrounded: false,
+    groundingViolations: check.violations.map((v) => v.kind),
+  });
+  assert.equal(gate.allowed, false);
+  assert.match(gate.reason, /grounding_violation:unsupported_amount/);
+});
+
+run("another workspace's prices cannot enter this workspace's supported amount set", () => {
+  const tenantA = mergeSupportedTenantAmounts({
+    retrieved: retrieveFactsForTurn({
+      facts: [FAQ_ONLY],
+      message: ADVERTISE_Q,
+      subIntents: ["listing_join_question"],
+      now: NOW,
+    }),
+    tenantKnowledgeTexts: [TENANT_PROSE],
+  });
+  const tenantBOnly = mergeSupportedTenantAmounts({
+    retrieved: [],
+    tenantKnowledgeTexts: ["Secret Plan $999/month"],
+  });
+  assert.equal(tenantA.has("29"), true);
+  assert.equal(tenantA.has("999"), false);
+  assert.equal(tenantBOnly.has("999"), true);
+  const mixed = validateGroundedClaims({
+    draft: "Secret Plan is $999/month.",
+    retrieved: retrieveFactsForTurn({
+      facts: [FAQ_ONLY],
+      message: ADVERTISE_Q,
+      subIntents: ["listing_join_question"],
+      now: NOW,
+    }),
+    tenantKnowledgeTexts: [TENANT_PROSE],
+  });
+  assert.equal(mixed.ok, false);
+  assert.ok(mixed.violations.some((v) => v.kind === "unsupported_amount"));
 });
 
 console.log("\nAll fact grounding tests passed.");

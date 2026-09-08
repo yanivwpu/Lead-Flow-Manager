@@ -146,6 +146,66 @@ function normalizeAmount(raw: string): string {
   return raw.replace(/[^\d.,]/g, "").replace(/,(?=\d{3}\b)/g, "");
 }
 
+/** Currency amounts in a string, normalized for equality (`$29` and `USD 29` → `29`). */
+export function extractNormalizedAmountsFromText(text: string): string[] {
+  if (!text) return [];
+  return [...String(text).matchAll(AMOUNT_RE)].map((m) => normalizeAmount(m[0]));
+}
+
+export function draftHasCurrencyAmount(text: string): boolean {
+  return extractNormalizedAmountsFromText(text).length > 0;
+}
+
+/**
+ * Amounts Auto may treat as tenant-owned for this turn.
+ *
+ * Published retrieved prices win. Live offers (same workspace) may add amounts because
+ * structured packages replace scanned `pricing_plan` rows in the prompt. Tenant profile /
+ * website knowledge fills in only when neither retrieved facts nor live offers supplied a
+ * price — so a second workspace's catalog cannot qualify the reply unless a caller wrongly
+ * passes it in.
+ */
+export function mergeSupportedTenantAmounts(params: {
+  retrieved: RetrievedFact[];
+  conflictingKeys?: string[];
+  liveRecordSummaries?: string[];
+  tenantKnowledgeTexts?: string[];
+}): Set<string> {
+  const blocked = new Set(params.conflictingKeys ?? []);
+  const fromFacts = new Set<string>();
+  for (const entry of params.retrieved) {
+    if (blocked.has(entry.fact.factKey)) continue;
+    for (const amount of extractNormalizedAmountsFromText(formatFactValue(entry.fact))) {
+      fromFacts.add(amount);
+    }
+  }
+  const fromLive = new Set<string>();
+  for (const summary of params.liveRecordSummaries ?? []) {
+    for (const amount of extractNormalizedAmountsFromText(summary)) fromLive.add(amount);
+  }
+  const fromProse = new Set<string>();
+  for (const text of params.tenantKnowledgeTexts ?? []) {
+    for (const amount of extractNormalizedAmountsFromText(text)) fromProse.add(amount);
+  }
+
+  if (fromLive.size > 0) return new Set([...fromFacts, ...fromLive]);
+  if (fromFacts.size > 0) return fromFacts;
+  return fromProse;
+}
+
+export function isDraftAmountGrounded(params: {
+  draft: string;
+  retrieved: RetrievedFact[];
+  conflictingKeys?: string[];
+  liveRecordSummaries?: string[];
+  tenantKnowledgeTexts?: string[];
+}): boolean {
+  const amounts = extractNormalizedAmountsFromText(params.draft);
+  const supported = mergeSupportedTenantAmounts(params);
+  if (amounts.length === 0) return params.retrieved.length > 0 || supported.size > 0;
+  return amounts.every((amount) => supported.has(amount));
+}
+
 function normalizePhrase(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -306,24 +366,34 @@ export function validateGroundedClaims(params: {
   retrieved: RetrievedFact[];
   /** Sub-intents for the turn, used to decide whether a deflection is warranted. */
   subIntents?: string[];
+  /** Conflicted published keys — their amounts must not count as supported. */
+  conflictingKeys?: string[];
+  /** Same-workspace live offer/package summaries for this turn. */
+  liveRecordSummaries?: string[];
+  /** Same-workspace AI Brain profile / website knowledge prose. */
+  tenantKnowledgeTexts?: string[];
 }): GroundingCheck {
   const draft = (params.draft || "").trim();
   const violations: GroundingViolation[] = [];
-  if (!draft || params.retrieved.length === 0) return { ok: true, violations };
+  const extraLive = (params.liveRecordSummaries ?? []).filter((s) => String(s || "").trim());
+  const extraProse = (params.tenantKnowledgeTexts ?? []).filter((s) => String(s || "").trim());
+  const hasTenantCorpus =
+    params.retrieved.length > 0 || extraLive.length > 0 || extraProse.length > 0;
+  if (!draft || !hasTenantCorpus) return { ok: true, violations };
 
-  if (DEFLECTION_RE.test(draft)) {
+  if (params.retrieved.length > 0 && DEFLECTION_RE.test(draft)) {
     violations.push({
       kind: "denies_available_fact",
       detail: "The reply defers or denies knowledge while published facts answer the question.",
     });
   }
 
-  const supported = new Set<string>();
-  for (const entry of params.retrieved) {
-    for (const match of formatFactValue(entry.fact).matchAll(AMOUNT_RE)) {
-      supported.add(normalizeAmount(match[0]));
-    }
-  }
+  const supported = mergeSupportedTenantAmounts({
+    retrieved: params.retrieved,
+    conflictingKeys: params.conflictingKeys,
+    liveRecordSummaries: extraLive,
+    tenantKnowledgeTexts: extraProse,
+  });
   for (const match of draft.matchAll(AMOUNT_RE)) {
     const amount = normalizeAmount(match[0]);
     if (!supported.has(amount)) {
