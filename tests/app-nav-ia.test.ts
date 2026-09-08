@@ -164,6 +164,19 @@ test("desktop, collapsed, and mobile consume the shared nav config", () => {
   assert.doesNotMatch(mobile, /Website Chat Widget/);
 });
 
+test("mobile More sheet keeps a fixed header and a single scrollable nav list", () => {
+  const mobile = read("client/src/components/MobileNav.tsx");
+  assert.match(mobile, /flex max-h-\[70vh\] flex-col/);
+  assert.match(mobile, /overflow-hidden rounded-t-2xl/);
+  assert.match(mobile, /data-testid="mobile-more-nav-list"/);
+  assert.match(mobile, /overflow-y-auto overscroll-contain/);
+  assert.match(mobile, /safe-area-inset-bottom/);
+  assert.match(mobile, /scrollTop = 0/);
+  assert.match(mobile, /scrollIntoView/);
+  assert.match(mobile, /SheetHeader className="shrink-0/);
+  assert.doesNotMatch(mobile, /modal=\{false\}/);
+});
+
 test("RTL/Hebrew chrome remains wired through dir and i18n", () => {
   const sidebar = read("client/src/components/Sidebar.tsx");
   const mobile = read("client/src/components/MobileNav.tsx");
