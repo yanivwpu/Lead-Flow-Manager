@@ -36,6 +36,11 @@ import {
   retrieveFactsForTurnWithNextAction,
   selectNextActionFact,
 } from "../shared/knowledgeRetrieval";
+import {
+  buildTurnEvidenceBundle,
+  evidenceDiagnostics,
+  hashPublishedFactTypes,
+} from "../shared/turnEvidence";
 import { deriveSubIntents, resolveAiRouting } from "../shared/aiRouting";
 import { evaluateFullAutoSend } from "../server/aiAutoSendGate";
 import { stripQuotedEmailReplies } from "../server/emailChannel/htmlSanitize";
@@ -927,6 +932,266 @@ run("another workspace's prices cannot enter this workspace's supported amount s
   });
   assert.equal(mixed.ok, false);
   assert.ok(mixed.violations.some((v) => v.kind === "unsupported_amount"));
+});
+
+const PHONE_A = fact("contact_method", { kind: "phone", value: "9545550101", label: "Office" }, { id: "fact-phone-a" });
+const PHONE_B = fact("contact_method", { kind: "phone", value: "9545550102", label: "Sales" }, { id: "fact-phone-b" });
+const PHONE_C = fact("contact_method", { kind: "phone", value: "9545550103", label: "Support" }, { id: "fact-phone-c" });
+const PRICING_Q = "How much does it cost to advertise with a listing package?";
+const PRICING_A =
+  "Standard Listing is $29/month, Featured Listing is $59/month, and Spotlight Listing is $149/month.";
+const PROFILE_PRICES =
+  "Standard Listing $29/month. Featured Listing $59/month. Spotlight Listing $149/month.";
+const WEBSITE_PRICES =
+  "Advertise with Standard Listing for $29/month, Featured Listing for $59/month, or Spotlight Listing for $149/month.";
+
+run("pricing retrieval does not let contact-method facts crowd out pricing evidence", () => {
+  const crowded = retrieveFactsForTurn({
+    facts: [PHONE_A, PHONE_B, PHONE_C, FAQ_ONLY, BUSINESS_LISTING],
+    message: PRICING_Q,
+    subIntents: ["pricing_question"],
+    now: NOW,
+    limit: 3,
+  });
+  assert.ok(crowded.some((r) => r.fact.factType === "pricing_plan"));
+  assert.equal(
+    crowded.filter((r) => r.fact.factType === "contact_method").length,
+    0,
+    "unrelated phones must not consume leftover slots on a pricing question",
+  );
+
+  const phonesOnly = retrieveFactsForTurn({
+    facts: [PHONE_A, PHONE_B, PHONE_C],
+    message: PRICING_Q,
+    subIntents: ["pricing_question"],
+    now: NOW,
+    limit: 10,
+  });
+  assert.equal(phonesOnly.length, 0);
+});
+
+run("generation and grounding share one tenant evidence bundle for a pricing question", () => {
+  const retrieved = retrieveFactsForTurn({
+    facts: [PHONE_A, PHONE_B, PHONE_C],
+    message: PRICING_Q,
+    subIntents: ["pricing_question"],
+    now: NOW,
+  });
+  const bundle = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    retrieved,
+    servicesProducts: PROFILE_PRICES,
+    websiteKnowledgeText: WEBSITE_PRICES,
+  });
+  assert.ok(bundle.supportedAmountSourceTypes.includes("business_profile"));
+  assert.ok(bundle.supportedAmountSourceTypes.includes("website_chunk"));
+  assert.equal(bundle.publishedFactTypes.includes("contact_method"), false);
+  assert.ok(bundle.tenantKnowledgeAmountCount >= 3);
+  const diag = evidenceDiagnostics(bundle);
+  assert.equal(diag.tenantKnowledgeChunkCount, 2);
+  assert.ok(diag.supportedAmountSourceTypes.includes("website_chunk"));
+  assert.equal(diag.conflictReason, null);
+  assert.doesNotMatch(JSON.stringify(diag), /954555|Standard Listing|\$29/);
+
+  const grounded = validateGroundedClaims({
+    draft: PRICING_A,
+    retrieved,
+    subIntents: ["pricing_question"],
+    bundle,
+  });
+  assert.equal(grounded.ok, true, JSON.stringify(grounded.violations));
+
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: PRICING_Q }],
+    suggestion: PRICING_A,
+    confidence: 0.97,
+    confidenceProvided: true,
+    knowledgeGrounded: true,
+    groundingViolations: grounded.violations.map((v) => v.kind),
+  });
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_knowledge_question");
+  assert.equal(gate.confidenceSource, "model");
+});
+
+run("generated amount absent from the selected bundle stays unsupported_amount", () => {
+  const bundle = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    retrieved: [],
+    websiteKnowledgeText: WEBSITE_PRICES,
+  });
+  const check = validateGroundedClaims({
+    draft: "Standard Listing is $88/month.",
+    retrieved: [],
+    bundle,
+  });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "unsupported_amount"));
+});
+
+run("a matching amount that was not selected for the turn cannot support Auto", () => {
+  const selected = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    retrieved: retrieveFactsForTurn({
+      facts: [PHONE_A, PHONE_B, PHONE_C],
+      message: PRICING_Q,
+      subIntents: ["pricing_question"],
+      now: NOW,
+    }),
+  });
+  const storedElsewhere = mergeSupportedTenantAmounts({
+    retrieved: [],
+    tenantKnowledgeTexts: [PROFILE_PRICES],
+  });
+  assert.equal(selected.tenantKnowledgeAmountCount, 0);
+  assert.equal(storedElsewhere.has("29"), true);
+  const check = validateGroundedClaims({
+    draft: PRICING_A,
+    retrieved: [],
+    bundle: selected,
+  });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "unsupported_amount"));
+});
+
+run("conflicting selected prices for the same package stay a draft", () => {
+  const bundle = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    liveRecords: [{ providerId: "businessPackages", summary: "Standard Listing | Price: $29/month" }],
+    websiteKnowledgeText: "Standard Listing $39/month.",
+  });
+  assert.equal(bundle.conflictReason, "conflicting_selected_prices");
+  const check = validateGroundedClaims({
+    draft: "Standard Listing is $29/month.",
+    retrieved: [],
+    bundle,
+  });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "conflicting_selected_prices"));
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: PRICING_Q }],
+    suggestion: "Standard Listing is $29/month.",
+    confidence: 0.97,
+    confidenceProvided: true,
+    knowledgeGrounded: false,
+    groundingViolations: check.violations.map((v) => v.kind),
+  });
+  assert.equal(gate.allowed, false);
+  assert.match(gate.reason, /grounding_violation:conflicting_selected_prices/);
+  assert.equal(gate.confidenceSource, "model");
+});
+
+run("a matching amount from another tenant cannot support this tenant's reply", () => {
+  const tenantB = buildTurnEvidenceBundle({
+    userId: "workspace-b",
+    websiteKnowledgeText: WEBSITE_PRICES,
+  });
+  const tenantA = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    retrieved: retrieveFactsForTurn({
+      facts: [PHONE_A],
+      message: PRICING_Q,
+      subIntents: ["pricing_question"],
+      now: NOW,
+    }),
+  });
+  assert.ok(mergeSupportedTenantAmounts({ bundle: tenantB }).has("29"));
+  const check = validateGroundedClaims({
+    draft: PRICING_A,
+    retrieved: [],
+    bundle: tenantA,
+  });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.kind === "unsupported_amount"));
+});
+
+run("live-offer amounts and selected website amounts can support claims independently", () => {
+  const liveOnly = validateGroundedClaims({
+    draft: "Standard Listing is $29/month.",
+    retrieved: [],
+    bundle: buildTurnEvidenceBundle({
+      userId: "workspace-a",
+      liveRecords: [{ providerId: "businessPackages", summary: "Standard Listing | Price: $29/month" }],
+    }),
+  });
+  assert.equal(liveOnly.ok, true, JSON.stringify(liveOnly.violations));
+
+  const websiteOnly = validateGroundedClaims({
+    draft: "Standard Listing is $29/month.",
+    retrieved: retrieveFactsForTurn({
+      facts: [PHONE_A, PHONE_B, PHONE_C],
+      message: PRICING_Q,
+      subIntents: ["pricing_question"],
+      now: NOW,
+    }),
+    bundle: buildTurnEvidenceBundle({
+      userId: "workspace-a",
+      retrieved: retrieveFactsForTurn({
+        facts: [PHONE_A, PHONE_B, PHONE_C],
+        message: PRICING_Q,
+        subIntents: ["pricing_question"],
+        now: NOW,
+      }),
+      websiteKnowledgeText: "Standard Listing $29/month.",
+    }),
+  });
+  assert.equal(websiteOnly.ok, true, JSON.stringify(websiteOnly.violations));
+  assert.ok(
+    evidenceDiagnostics(
+      buildTurnEvidenceBundle({
+        userId: "workspace-a",
+        retrieved: retrieveFactsForTurn({
+          facts: [PHONE_A, PHONE_B, PHONE_C],
+          message: PRICING_Q,
+          subIntents: ["pricing_question"],
+          now: NOW,
+        }),
+        websiteKnowledgeText: "Standard Listing $29/month.",
+      }),
+    ).supportedAmountSourceTypes.includes("website_chunk"),
+  );
+});
+
+run("a stale or inactive live offer cannot support Auto", () => {
+  const inactive = validateGroundedClaims({
+    draft: "Standard Listing is $29/month.",
+    retrieved: [],
+    bundle: buildTurnEvidenceBundle({
+      userId: "workspace-a",
+      liveRecords: [
+        {
+          providerId: "businessPackages",
+          summary: "Standard Listing | Price: $29/month",
+          data: { displayName: "Standard Listing", status: "unavailable", active: false },
+        },
+      ],
+    }),
+  });
+  assert.equal(inactive.ok, false);
+  assert.ok(inactive.violations.some((v) => v.kind === "unsupported_amount"));
+});
+
+run("privacy-safe evidence diagnostics never include raw fact keys or PII", () => {
+  const bundle = buildTurnEvidenceBundle({
+    userId: "workspace-a",
+    retrieved: retrieveFactsForTurn({
+      facts: [PHONE_A, FAQ_ONLY],
+      message: "how do I advertise?",
+      subIntents: ["listing_join_question"],
+      now: NOW,
+    }),
+    websiteKnowledgeText: WEBSITE_PRICES,
+  });
+  const diag = evidenceDiagnostics(bundle);
+  const blob = JSON.stringify(diag);
+  assert.doesNotMatch(blob, /954555|contact_method:phone|@|https?:\/\//i);
+  assert.doesNotMatch(blob, /Standard Listing|Spotlight/);
+  assert.equal(typeof hashPublishedFactTypes("workspace-a", bundle.publishedFactTypes), "string");
+  assert.equal(hashPublishedFactTypes("workspace-a", bundle.publishedFactTypes).length, 16);
 });
 
 console.log("\nAll fact grounding tests passed.");

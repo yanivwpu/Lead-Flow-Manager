@@ -17,7 +17,7 @@ const OWNED_BY_OTHER = new Set([
 ]);
 
 const FORBIDDEN_KEY =
-  /content|message|visitor|phone|email|secret|body|suggestion|contactid|chatid|conversationid|inboundmessageid|webchatid/i;
+  /content|message|visitor|phone|email|secret|body|suggestion|contactid|chatid|conversationid|inboundmessageid|webchatid|factkey|package.?name|url\b/i;
 
 export function outcomeForReasonCode(
   reasonCode: string,

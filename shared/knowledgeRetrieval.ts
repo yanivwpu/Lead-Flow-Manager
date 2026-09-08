@@ -23,12 +23,23 @@ export const DEFAULT_FACT_LIMIT = 10;
 export const SUB_INTENT_FACT_TYPES: Record<string, FactType[]> = {
   pricing_question: ["pricing_plan", "product", "service", "numeric_limit", "eligibility_rule"],
   benefits_question: ["benefit", "feature", "pricing_plan", "service"],
-  listing_join_question: ["pricing_plan", "service", "eligibility_rule", "call_to_action", "faq"],
+  listing_join_question: ["pricing_plan", "service", "product", "eligibility_rule", "call_to_action", "faq"],
+  listing_question: ["pricing_plan", "service", "product", "eligibility_rule", "call_to_action", "faq"],
   hours_question: ["business_hours", "location"],
   location_question: ["location", "service_area", "business_hours"],
   policy_question: ["policy", "eligibility_rule", "faq"],
   booking_question: ["booking_link", "business_hours", "contact_method", "call_to_action"],
 };
+
+/** Intents whose leftover retrieval slots must not be filled with unrelated contact rows. */
+const PRICING_LIKE_INTENTS = new Set([
+  "pricing_question",
+  "listing_join_question",
+  "listing_question",
+  "benefits_question",
+]);
+
+const RANK2_CROWDOUT_ON_PRICING = new Set<FactType>(["contact_method"]);
 
 /** Used when no sub-intent matched: what a business is and how to reach it. */
 const GENERAL_FACT_TYPES: FactType[] = [
@@ -127,7 +138,13 @@ export function retrieveFactsForTurn(input: RetrieveFactsInput): RetrievedFact[]
   // A general-context fact only fills space the question did not need.
   const relevant = scored.filter((s) => s.relevanceRank < 2);
   if (relevant.length >= limit) return relevant.slice(0, limit);
-  return [...relevant, ...scored.filter((s) => s.relevanceRank === 2)].slice(0, limit);
+  const pricingLike = subIntents.some((intent) => PRICING_LIKE_INTENTS.has(intent));
+  const rank2 = scored.filter((s) => {
+    if (s.relevanceRank !== 2) return false;
+    if (pricingLike && RANK2_CROWDOUT_ON_PRICING.has(s.fact.factType)) return false;
+    return true;
+  });
+  return [...relevant, ...rank2].slice(0, limit);
 }
 
 /** True when the question maps to fact types the workspace has nothing published for. */
@@ -148,6 +165,7 @@ export function turnWantsNextAction(subIntents: string[] | undefined): boolean {
   const set = new Set(subIntents ?? []);
   return (
     set.has("listing_join_question") ||
+    set.has("listing_question") ||
     set.has("booking_question") ||
     set.has("pricing_question") ||
     set.has("benefits_question")

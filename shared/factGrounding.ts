@@ -16,6 +16,12 @@ import {
   type KnowledgeFact,
 } from "./businessKnowledgeFacts";
 import type { RetrievedFact } from "./knowledgeRetrieval";
+import {
+  buildTurnEvidenceBundle,
+  evaluateBundleAmountGrounding,
+  extractSupportedAmountsFromText,
+  type TurnEvidenceBundle,
+} from "./turnEvidence";
 
 export const VERIFIED_FACTS_HEADER = "VERIFIED BUSINESS FACTS";
 
@@ -98,7 +104,8 @@ export type GroundingViolation =
   | { kind: "unsupported_amount"; detail: string }
   | { kind: "unqualified_stale_fact"; detail: string }
   | { kind: "incomplete_required_fact"; detail: string }
-  | { kind: "grounding_fallback_requires_review"; detail: string };
+  | { kind: "grounding_fallback_requires_review"; detail: string }
+  | { kind: "conflicting_selected_prices"; detail: string };
 
 export type GroundingCheck = {
   ok: boolean;
@@ -149,7 +156,7 @@ function normalizeAmount(raw: string): string {
 /** Currency amounts in a string, normalized for equality (`$29` and `USD 29` → `29`). */
 export function extractNormalizedAmountsFromText(text: string): string[] {
   if (!text) return [];
-  return [...String(text).matchAll(AMOUNT_RE)].map((m) => normalizeAmount(m[0]));
+  return extractSupportedAmountsFromText(text, "website_chunk").map((a) => a.amount);
 }
 
 export function draftHasCurrencyAmount(text: string): boolean {
@@ -157,40 +164,33 @@ export function draftHasCurrencyAmount(text: string): boolean {
 }
 
 /**
- * Amounts Auto may treat as tenant-owned for this turn.
- *
- * Published retrieved prices win. Live offers (same workspace) may add amounts because
- * structured packages replace scanned `pricing_plan` rows in the prompt. Tenant profile /
- * website knowledge fills in only when neither retrieved facts nor live offers supplied a
- * price — so a second workspace's catalog cannot qualify the reply unless a caller wrongly
- * passes it in.
+ * Amounts Auto may treat as tenant-owned for this turn — the union of every source
+ * actually selected into the prompt, not a facts-only subset.
  */
 export function mergeSupportedTenantAmounts(params: {
   retrieved: RetrievedFact[];
   conflictingKeys?: string[];
   liveRecordSummaries?: string[];
   tenantKnowledgeTexts?: string[];
+  bundle?: TurnEvidenceBundle;
 }): Set<string> {
-  const blocked = new Set(params.conflictingKeys ?? []);
-  const fromFacts = new Set<string>();
-  for (const entry of params.retrieved) {
-    if (blocked.has(entry.fact.factKey)) continue;
-    for (const amount of extractNormalizedAmountsFromText(formatFactValue(entry.fact))) {
-      fromFacts.add(amount);
+  const bundle =
+    params.bundle ??
+    buildTurnEvidenceBundle({
+      userId: "legacy",
+      retrieved: params.retrieved,
+      conflictingKeys: params.conflictingKeys,
+      liveRecords: (params.liveRecordSummaries ?? []).map((summary) => ({ summary })),
+      servicesProducts: (params.tenantKnowledgeTexts ?? [])[0] || "",
+      websiteKnowledgeText: (params.tenantKnowledgeTexts ?? []).slice(1).join("\n"),
+    });
+  const amounts = new Set<string>();
+  for (const item of bundle.items) {
+    for (const amount of item.amounts) {
+      if (amount.supportsAuto) amounts.add(amount.amount);
     }
   }
-  const fromLive = new Set<string>();
-  for (const summary of params.liveRecordSummaries ?? []) {
-    for (const amount of extractNormalizedAmountsFromText(summary)) fromLive.add(amount);
-  }
-  const fromProse = new Set<string>();
-  for (const text of params.tenantKnowledgeTexts ?? []) {
-    for (const amount of extractNormalizedAmountsFromText(text)) fromProse.add(amount);
-  }
-
-  if (fromLive.size > 0) return new Set([...fromFacts, ...fromLive]);
-  if (fromFacts.size > 0) return fromFacts;
-  return fromProse;
+  return amounts;
 }
 
 export function isDraftAmountGrounded(params: {
@@ -199,11 +199,23 @@ export function isDraftAmountGrounded(params: {
   conflictingKeys?: string[];
   liveRecordSummaries?: string[];
   tenantKnowledgeTexts?: string[];
+  bundle?: TurnEvidenceBundle;
 }): boolean {
-  const amounts = extractNormalizedAmountsFromText(params.draft);
-  const supported = mergeSupportedTenantAmounts(params);
-  if (amounts.length === 0) return params.retrieved.length > 0 || supported.size > 0;
-  return amounts.every((amount) => supported.has(amount));
+  const bundle =
+    params.bundle ??
+    buildTurnEvidenceBundle({
+      userId: "legacy",
+      retrieved: params.retrieved,
+      conflictingKeys: params.conflictingKeys,
+      liveRecords: (params.liveRecordSummaries ?? []).map((summary) => ({ summary })),
+      servicesProducts: (params.tenantKnowledgeTexts ?? []).join("\n"),
+      websiteKnowledgeText: "",
+    });
+  if (extractNormalizedAmountsFromText(params.draft).length === 0) {
+    return bundle.items.length > 0 && !bundle.conflictReason;
+  }
+  const result = evaluateBundleAmountGrounding({ draft: params.draft, bundle });
+  return result.ok && !result.conflictReason;
 }
 
 function normalizePhrase(raw: string): string {
@@ -372,36 +384,45 @@ export function validateGroundedClaims(params: {
   liveRecordSummaries?: string[];
   /** Same-workspace AI Brain profile / website knowledge prose. */
   tenantKnowledgeTexts?: string[];
+  /** Preferred: the exact bundle supplied to the model. */
+  bundle?: TurnEvidenceBundle;
 }): GroundingCheck {
   const draft = (params.draft || "").trim();
   const violations: GroundingViolation[] = [];
-  const extraLive = (params.liveRecordSummaries ?? []).filter((s) => String(s || "").trim());
-  const extraProse = (params.tenantKnowledgeTexts ?? []).filter((s) => String(s || "").trim());
-  const hasTenantCorpus =
-    params.retrieved.length > 0 || extraLive.length > 0 || extraProse.length > 0;
-  if (!draft || !hasTenantCorpus) return { ok: true, violations };
+  const bundle =
+    params.bundle ??
+    buildTurnEvidenceBundle({
+      userId: "legacy",
+      retrieved: params.retrieved,
+      conflictingKeys: params.conflictingKeys,
+      liveRecords: (params.liveRecordSummaries ?? []).map((summary) => ({ summary })),
+      servicesProducts: (params.tenantKnowledgeTexts ?? []).join("\n"),
+      websiteKnowledgeText: "",
+    });
+  if (!draft) return { ok: true, violations };
 
-  if (params.retrieved.length > 0 && DEFLECTION_RE.test(draft)) {
+  const pricedPublished = (params.retrieved ?? []).filter(
+    (e) => e.fact.factType === "pricing_plan" || e.fact.factType === "product" || e.fact.factType === "service",
+  );
+  if (pricedPublished.length > 0 && DEFLECTION_RE.test(draft)) {
     violations.push({
       kind: "denies_available_fact",
       detail: "The reply defers or denies knowledge while published facts answer the question.",
     });
   }
 
-  const supported = mergeSupportedTenantAmounts({
-    retrieved: params.retrieved,
-    conflictingKeys: params.conflictingKeys,
-    liveRecordSummaries: extraLive,
-    tenantKnowledgeTexts: extraProse,
-  });
-  for (const match of draft.matchAll(AMOUNT_RE)) {
-    const amount = normalizeAmount(match[0]);
-    if (!supported.has(amount)) {
-      violations.push({
-        kind: "unsupported_amount",
-        detail: `The reply states ${match[0].trim()}, which no published fact supports.`,
-      });
-    }
+  const amountCheck = evaluateBundleAmountGrounding({ draft, bundle });
+  if (amountCheck.conflictReason === "conflicting_selected_prices") {
+    violations.push({
+      kind: "conflicting_selected_prices",
+      detail: "Selected sources disagree on the current price for the same package.",
+    });
+  }
+  for (const amount of amountCheck.unsupportedAmounts) {
+    violations.push({
+      kind: "unsupported_amount",
+      detail: `The reply states ${amount}, which no selected tenant evidence supports.`,
+    });
   }
 
   const staleUsed = params.retrieved.filter((entry) => {

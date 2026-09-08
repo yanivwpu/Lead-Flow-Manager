@@ -167,3 +167,16 @@ export function finalizeWebsiteKnowledgeSummaryText(value: unknown): string {
   if (typeof value === "string") return value.trim();
   return "";
 }
+
+/**
+ * The website chunk that enters both the model prompt and the turn evidence bundle.
+ * Extract first so JSON-wrapped summaries are not prompt-only; fall back to raw text.
+ */
+export function selectWebsiteKnowledgeChunkForPrompt(
+  raw: unknown,
+  limit = 3500,
+): string {
+  const text = finalizeWebsiteKnowledgeSummaryText(raw);
+  if (!text) return "";
+  return text.slice(0, limit);
+}

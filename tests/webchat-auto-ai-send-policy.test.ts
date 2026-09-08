@@ -296,12 +296,23 @@ test("privacy-safe diagnostics log confidence source without visitor or message 
     suggestion: "secret reply",
     inboundMessageId: "should-drop",
     confidence: 0.7,
-    retrievedFactKeys: "faq:how-do-i-advertise",
+    retrievedFactKeys: "contact_method:phone:9545550101",
+    liveOfferRecordCount: 0,
+    tenantKnowledgeChunkCount: 1,
+    tenantKnowledgeAmountCount: 3,
+    supportedAmountSourceTypes: "website_chunk",
+    conflictReason: "",
+    groundingReasonCodes: "unsupported_amount",
   });
   assert.equal(cleaned.reasonCode, "ok_knowledge_question");
   assert.equal(cleaned.confidenceSource, "defaulted");
   assert.equal(cleaned.confidence, 0.7);
-  assert.equal(cleaned.retrievedFactKeys, "faq:how-do-i-advertise");
+  assert.equal("retrievedFactKeys" in cleaned, false);
+  assert.equal(cleaned.liveOfferRecordCount, 0);
+  assert.equal(cleaned.tenantKnowledgeChunkCount, 1);
+  assert.equal(cleaned.tenantKnowledgeAmountCount, 3);
+  assert.equal(cleaned.supportedAmountSourceTypes, "website_chunk");
+  assert.equal(cleaned.groundingReasonCodes, "unsupported_amount");
   assert.equal("contactId" in cleaned, false);
   assert.equal("visitorId" in cleaned, false);
   assert.equal("suggestion" in cleaned, false);
@@ -312,11 +323,16 @@ test("privacy-safe diagnostics log confidence source without visitor or message 
   const logSrc = read("shared/aiReplyDecisionLog.ts");
   const aiService = read("server/aiService.ts");
   assert.match(routes, /confidenceSource/);
-  assert.match(routes, /retrievedFactKeys/);
+  assert.match(routes, /liveOfferRecordCount/);
+  assert.match(routes, /tenantKnowledgeChunkCount/);
+  assert.match(routes, /tenantKnowledgeAmountCount/);
+  assert.match(routes, /supportedAmountSourceTypes/);
+  assert.match(routes, /groundingReasonCodes/);
+  assert.doesNotMatch(routes, /retrievedFactKeys/);
   assert.match(auto, /confidenceSource/);
   assert.match(logSrc, /\[AiReplyDecision\]/);
-  assert.match(aiService, /tenantKnowledgeTexts/);
-  assert.match(aiService, /liveRecordSummaries/);
+  assert.match(aiService, /buildTurnEvidenceBundle/);
+  assert.match(aiService, /liveRecordsForBundle/);
 });
 
 test("a clear Web Chat FAQ grounded in tenant services/pricing Auto-sends once", () => {
@@ -378,4 +394,20 @@ test("duplicate inbound delivery shares the tenant-scoped idempotency key", () =
     webchatAutoSendIdempotencyKey(TENANT_B, "b872a758-a449-4d11-8874-c7b75c6b082a"),
     first,
   );
+});
+
+test("grounding_violation still logs a model-provided confidence source", () => {
+  const gate = evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [{ role: "user", content: ADVERTISING_Q }],
+    suggestion: ADVERTISING_A,
+    confidence: 0.97,
+    confidenceProvided: true,
+    knowledgeGrounded: false,
+    groundingViolations: ["unsupported_amount"],
+  });
+  assert.equal(gate.allowed, false);
+  assert.equal(gate.reason, "grounding_violation:unsupported_amount");
+  assert.equal(gate.confidenceSource, "model");
 });

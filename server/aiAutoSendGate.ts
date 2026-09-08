@@ -211,7 +211,14 @@ export function evaluateFullAutoSend(params: {
   // Checked ahead of every override: a reply that states a price the business never
   // published, or claims not to know something it does, must reach a human first.
   if (params.groundingViolations && params.groundingViolations.length > 0) {
-    return none(`grounding_violation:${params.groundingViolations[0]}`, inboundCount);
+    const modelProvidedEarly =
+      params.confidenceProvided !== false && typeof params.confidence === "number";
+    return none(
+      `grounding_violation:${params.groundingViolations[0]}`,
+      inboundCount,
+      0,
+      modelProvidedEarly ? "model" : "missing",
+    );
   }
 
   if (STOP_RE.test(joinedInbound) || COMPLAINT_RE.test(joinedInbound)) {

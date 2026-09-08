@@ -11675,9 +11675,15 @@ export async function registerRoutes(
         knowledgeGrounded?: boolean;
         /** Populated when the draft contradicts published facts; blocks auto-send. */
         groundingViolations?: string[];
-        retrievedFactKeys?: string[];
         retrievedFactTypes?: string[];
         retrievedFactCount?: number;
+        retrievedFactTypeCounts?: string;
+        retrievedFactTypeHash?: string;
+        liveOfferRecordCount?: number;
+        tenantKnowledgeChunkCount?: number;
+        tenantKnowledgeAmountCount?: number;
+        supportedAmountSourceTypes?: string[];
+        conflictReason?: string | null;
         liveCheckoutUrls?: string[];
         requiresPaymentLinkApproval?: boolean;
         paymentLinkApprovalReason?: string;
@@ -12137,7 +12143,14 @@ export async function registerRoutes(
             autoDispatchRequested,
             retrievedFactCount: suggestion.retrievedFactCount ?? 0,
             retrievedFactTypes: (suggestion.retrievedFactTypes || []).join(","),
-            retrievedFactKeys: (suggestion.retrievedFactKeys || []).join(","),
+            retrievedFactTypeCounts: suggestion.retrievedFactTypeCounts || "",
+            retrievedFactTypeHash: suggestion.retrievedFactTypeHash || "",
+            liveOfferRecordCount: suggestion.liveOfferRecordCount ?? 0,
+            tenantKnowledgeChunkCount: suggestion.tenantKnowledgeChunkCount ?? 0,
+            tenantKnowledgeAmountCount: suggestion.tenantKnowledgeAmountCount ?? 0,
+            supportedAmountSourceTypes: (suggestion.supportedAmountSourceTypes || []).join(","),
+            conflictReason: suggestion.conflictReason || "",
+            groundingReasonCodes: (suggestion.groundingViolations || []).join(","),
           },
         });
 

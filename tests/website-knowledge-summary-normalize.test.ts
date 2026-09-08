@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
   extractWebsiteKnowledgeSummaryText,
   finalizeWebsiteKnowledgeSummaryText,
+  selectWebsiteKnowledgeChunkForPrompt,
 } from "../server/websiteKnowledgeSummaryNormalize";
 
 function run(name: string, fn: () => void) {
@@ -149,6 +150,15 @@ run("the stored summary is plain readable text, never a JSON envelope", () => {
   assert.ok(stored.length > 0);
   assert.ok(!stored.trimStart().startsWith("{"));
   assert.ok(!stored.includes('"'), "no JSON quoting should survive into the column");
+});
+
+run("the prompt website chunk is the extracted summary, capped, with a raw-text fallback", () => {
+  const fromObject = selectWebsiteKnowledgeChunkForPrompt({
+    summary: "Standard listing 29/month. Featured listing 59/month.",
+  });
+  assert.match(fromObject, /29\/month/);
+  assert.equal(selectWebsiteKnowledgeChunkForPrompt("Plain website prices 29/month."), "Plain website prices 29/month.");
+  assert.equal(selectWebsiteKnowledgeChunkForPrompt("x".repeat(4000)).length, 3500);
 });
 
 console.log("\nAll website knowledge summary normalization tests passed.");

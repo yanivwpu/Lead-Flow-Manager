@@ -175,16 +175,20 @@ run("the reply path logs violation kinds, not the draft or the facts", () => {
   );
 });
 
-run("suggestReply grounds amounts only from this workspace's facts, offers, and knowledge row", () => {
+run("suggestReply grounds amounts from the same turn evidence bundle supplied to the model", () => {
   const src = read("server/aiService.ts");
   assert.match(src, /buildTurnGrounding\(/);
   assert.match(src, /userId,/);
   assert.match(src, /resolveLiveBusinessDataForTurn\(/);
-  assert.match(src, /tenantKnowledgeTexts/);
+  assert.match(src, /buildTurnEvidenceBundle\(/);
+  assert.match(src, /bundle: turnEvidence/);
   assert.match(src, /servicesProducts/);
+  assert.match(src, /selectWebsiteKnowledgeChunkForPrompt/);
+  assert.doesNotMatch(src, /retrievedFactKeys/);
+  assert.doesNotMatch(src, /retrievedKeys:/);
   const offers = read("server/aiLiveBusinessData/providers/businessPackagesProvider.ts");
   assert.match(offers, /listWorkspaceOffers\(ctx\.userId/);
-  assert.match(read("server/websiteKnowledge/factStore.ts"), /listPublishedFacts\(userId\)/);
+  assert.match(read("server/websiteKnowledge/factStore.ts"), /listPublishedFacts\(userId/);
   assert.match(read("server/websiteKnowledge/factContext.ts"), /getPublishedFactsCached\(params\.userId/);
 });
 
@@ -205,8 +209,8 @@ run("the snapshot path reads facts from the database, never from an extractor", 
   assert.ok(!/extractFactsWithAi|scanSourceIntoDrafts/.test(service));
 });
 
-run("retrieval and grounding are pure shared modules with no I/O", () => {
-  for (const path of ["shared/knowledgeRetrieval.ts", "shared/factGrounding.ts"]) {
+run("retrieval, grounding, and turn evidence are pure shared modules with no I/O", () => {
+  for (const path of ["shared/knowledgeRetrieval.ts", "shared/factGrounding.ts", "shared/turnEvidence.ts"]) {
     const src = read(path);
     assert.ok(!/aiProvider|fetch\(|drizzle|from "\.\.\/server/.test(src), `${path} must stay pure`);
   }

@@ -1,5 +1,8 @@
 import { aiProvider } from "./aiProvider";
-import { extractWebsiteKnowledgeSummaryText } from "./websiteKnowledgeSummaryNormalize";
+import {
+  extractWebsiteKnowledgeSummaryText,
+  selectWebsiteKnowledgeChunkForPrompt,
+} from "./websiteKnowledgeSummaryNormalize";
 import {
   buildTurnGrounding,
   excludeFactTypesFromGrounding,
@@ -15,6 +18,13 @@ import {
   type GroundedPromptBlock,
   type GroundingCheck,
 } from "@shared/factGrounding";
+import {
+  buildTurnEvidenceBundle,
+  evidenceDiagnostics,
+  hashPublishedFactTypes,
+  WEBSITE_KNOWLEDGE_PROMPT_LIMIT,
+  type TurnEvidenceBundle,
+} from "@shared/turnEvidence";
 import { resolveLiveBusinessDataDecision } from "@shared/aiLiveBusinessData";
 import {
   draftContainsCheckoutUrl,
@@ -94,10 +104,15 @@ export class AIService {
     confidenceProvided?: boolean;
     knowledgeGrounded?: boolean;
     groundingViolations?: string[];
-    /** Published fact keys retrieved for this turn (no values or page bodies). */
-    retrievedFactKeys?: string[];
     retrievedFactTypes?: string[];
     retrievedFactCount?: number;
+    retrievedFactTypeCounts?: string;
+    retrievedFactTypeHash?: string;
+    liveOfferRecordCount?: number;
+    tenantKnowledgeChunkCount?: number;
+    tenantKnowledgeAmountCount?: number;
+    supportedAmountSourceTypes?: string[];
+    conflictReason?: string | null;
     /** Exact checkout URLs retrieved from structured offers for this turn. */
     liveCheckoutUrls?: string[];
     /** True when the draft includes a payment link that must not auto-send. */
@@ -158,7 +173,11 @@ export class AIService {
 
     let liveBusinessDataBlock = "";
     let liveCheckoutUrls: string[] = [];
-    let liveRecordSummaries: string[] = [];
+    let liveRecordsForBundle: Array<{
+      providerId?: string;
+      summary: string;
+      data?: Record<string, unknown> | null;
+    }> = [];
     if (!greetingTurn) {
       try {
         const live = await resolveLiveBusinessDataForTurn({
@@ -168,9 +187,11 @@ export class AIService {
           decision: liveDecision,
         });
         liveBusinessDataBlock = live.promptBlock;
-        liveRecordSummaries = live.records
-          .map((r) => String(r.summary || "").trim())
-          .filter(Boolean);
+        liveRecordsForBundle = live.records.map((r) => ({
+          providerId: r.providerId,
+          summary: String(r.summary || "").trim(),
+          data: r.data ?? null,
+        }));
         liveCheckoutUrls = live.records
           .filter((r) => r.providerId === "businessPackages")
           .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
@@ -187,10 +208,22 @@ export class AIService {
       }
     }
 
-    const tenantKnowledgeTexts = [
-      String(businessKnowledge?.servicesProducts || ""),
-      extractWebsiteKnowledgeSummaryText((businessKnowledge as { websiteKnowledgeSummary?: unknown } | undefined)?.websiteKnowledgeSummary),
-    ].filter((t) => t.trim());
+    const promptWebsiteText = selectWebsiteKnowledgeChunkForPrompt(
+      (businessKnowledge as { websiteKnowledgeSummary?: unknown } | undefined)?.websiteKnowledgeSummary,
+      WEBSITE_KNOWLEDGE_PROMPT_LIMIT,
+    );
+    const turnEvidence: TurnEvidenceBundle = buildTurnEvidenceBundle({
+      userId,
+      retrieved: grounding.retrieved,
+      conflictingKeys: grounding.conflictingKeys,
+      liveRecords: liveRecordsForBundle,
+      servicesProducts: businessKnowledge?.servicesProducts,
+      websiteKnowledgeText: promptWebsiteText,
+    });
+    const evidenceDiag = evidenceDiagnostics(turnEvidence);
+    const structuredPricesSelected = turnEvidence.supportedAmountSourceTypes.some(
+      (t) => t === "published_fact" || t === "live_offer",
+    );
 
     const systemPrompt = this.buildSystemPrompt(
       businessKnowledge,
@@ -204,6 +237,10 @@ export class AIService {
       grounding.block,
       liveBusinessDataBlock,
       greetingTurn,
+      {
+        websiteText: turnEvidence.promptWebsiteText,
+        structuredPricesSelected,
+      },
     );
 
     const evaluateDraft = (draft: string): GroundingCheck =>
@@ -213,8 +250,7 @@ export class AIService {
           retrieved: grounding.retrieved,
           subIntents: routing?.subIntents,
           conflictingKeys: grounding.conflictingKeys,
-          liveRecordSummaries,
-          tenantKnowledgeTexts,
+          bundle: turnEvidence,
         }),
         validateResponseCompleteness({
           draft,
@@ -255,7 +291,7 @@ export class AIService {
           userId,
           channel: channel ?? null,
           violations: groundingCheck.violations.map((v) => v.kind),
-          retrievedKeys: grounding.retrieved.map((r) => r.fact.factKey),
+          retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         });
         try {
           const retry = await runCompletion(
@@ -299,7 +335,7 @@ export class AIService {
         console.warn("[AI] using deterministic grounded draft for human review", {
           userId,
           channel: channel ?? null,
-          retrievedKeys: grounding.retrieved.map((r) => r.fact.factKey),
+          retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         });
       } else if (!groundingCheck.ok) {
         console.warn("[AI] reply failed fact grounding", {
@@ -319,8 +355,7 @@ export class AIService {
           draft: suggestion,
           retrieved: grounding.retrieved,
           conflictingKeys: grounding.conflictingKeys,
-          liveRecordSummaries,
-          tenantKnowledgeTexts,
+          bundle: turnEvidence,
         });
 
       if (greetingTurn) {
@@ -340,9 +375,15 @@ export class AIService {
         confidenceProvided: confidenceProvided === true,
         knowledgeGrounded,
         groundingViolations: groundingCheck.violations.map((v) => v.kind),
-        retrievedFactKeys: grounding.retrieved.map((r) => r.fact.factKey),
-        retrievedFactTypes: [...new Set(grounding.retrieved.map((r) => r.fact.factType))],
-        retrievedFactCount: grounding.retrieved.length,
+        retrievedFactTypes: turnEvidence.publishedFactTypes,
+        retrievedFactCount: turnEvidence.publishedFactCount,
+        retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
+        retrievedFactTypeHash: hashPublishedFactTypes(userId, turnEvidence.publishedFactTypes),
+        liveOfferRecordCount: turnEvidence.liveOfferRecordCount,
+        tenantKnowledgeChunkCount: turnEvidence.tenantKnowledgeChunkCount,
+        tenantKnowledgeAmountCount: turnEvidence.tenantKnowledgeAmountCount,
+        supportedAmountSourceTypes: turnEvidence.supportedAmountSourceTypes,
+        conflictReason: turnEvidence.conflictReason,
         liveCheckoutUrls,
         requiresPaymentLinkApproval,
         paymentLinkApprovalReason: requiresPaymentLinkApproval
@@ -762,6 +803,7 @@ Return JSON only: { "summary": "..." }`;
     groundedFacts?: GroundedPromptBlock,
     liveBusinessDataBlock?: string,
     greetingOnlyTurn?: boolean,
+    evidenceWebsite?: { text: string; structuredPricesSelected: boolean },
   ): string {
     const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
@@ -834,13 +876,11 @@ BUSINESS CONTEXT:
 ${groundedFacts && groundedFacts.text ? `\n${groundedFacts.text}\n` : ""}
 ${liveBusinessDataBlock && liveBusinessDataBlock.trim() ? `\n${liveBusinessDataBlock.trim()}\n` : ""}
 ${(() => {
-  const wk = (businessKnowledge as any)?.websiteKnowledgeSummary as string | undefined | null;
-  if (!wk || !String(wk).trim()) return "";
-  const cap = String(wk).trim().slice(0, 3500);
-  // Background only once facts exist: the facts block above is what may be stated as true.
-  const heading = groundedFacts && groundedFacts.factCount > 0
-    ? "ADDITIONAL WEBSITE BACKGROUND (unverified — never state a price, policy, or hour from this section; the verified facts above take precedence):"
-    : "WEBSITE KNOWLEDGE (from the merchant's public site — may be incomplete; verify critical facts with the customer when unsure):";
+  const cap = (evidenceWebsite?.text || "").trim();
+  if (!cap) return "";
+  const heading = evidenceWebsite?.structuredPricesSelected
+    ? "ADDITIONAL WEBSITE BACKGROUND (structured facts and live offers take precedence when they list a current price; do not contradict them. Website amounts in this section may be stated only when they match that selected evidence):"
+    : "WEBSITE KNOWLEDGE (from the merchant's public site — selected for this turn; may be incomplete; verify critical facts with the customer when unsure):";
   return `
 
 ${heading}
