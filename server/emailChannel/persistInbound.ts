@@ -116,6 +116,8 @@ export async function persistNormalizedEmailMessage(params: {
     mailboxEmail: mailbox.emailAddress,
     direction: normalized.direction,
     toEmail: primaryTo,
+    toName: normalized.to[0]?.name || null,
+    mailboxOwnerNames: [mailbox.displayName],
     identityEmail,
     identityName,
     inboundText,

@@ -40,7 +40,7 @@ function parseEmailHeader(raw: string | undefined | null): NormalizedEmailAddres
   const angle = v.match(/^(.*)<([^>]+)>$/);
   if (angle) {
     const email = angle[2].trim().toLowerCase();
-    const name = angle[1].replace(/^["']|["']$/g, "").trim() || null;
+    const name = angle[1].trim().replace(/^["']+|["']+$/g, "").trim() || null;
     if (!email.includes("@")) return null;
     return { email, name };
   }

@@ -1,5 +1,6 @@
 import { isCrmListedContact, isEmailInboxIdentitySource } from "./contactCrmVisibility";
 import { normalizeEmailAddress } from "./emailChannel";
+import { nameCollidesWithConnectedAccount } from "./emailParticipantLabel";
 
 export type EmailContactPreflightRow = {
   userId: string;
@@ -11,6 +12,9 @@ export type EmailContactPreflightRow = {
   assignedTo?: string | null;
   leadScore?: number | null;
   sourceDetails?: unknown;
+  name?: string | null;
+  workspaceOwnerName?: string | null;
+  mailboxDisplayName?: string | null;
   hasConversation?: boolean;
   hasContactNotes?: boolean;
   hasAppointment?: boolean;
@@ -51,6 +55,7 @@ export function aggregateEmailContactLifecyclePreflight(rows: EmailContactPrefli
   crossTenantDuplicateAddresses: number;
   safeInboxOnlyCandidates: number;
   ambiguousRequiresReview: number;
+  autoCreatedConnectedAccountNameCandidates: number;
 } {
   const emailRows = rows.filter(isEmailSourced);
   const inboxOnly = emailRows.filter((row) => !isCrmListedContact(row) || isEmailInboxIdentitySource(row.source));
@@ -96,6 +101,9 @@ export function aggregateEmailContactLifecyclePreflight(rows: EmailContactPrefli
   }
 
   const safeCandidates = crmEmail.filter((row) => !hasMeaningfulCrmActivity(row)).length;
+  const ownerNameCollisions = crmEmail.filter(
+    (row) => !hasMeaningfulCrmActivity(row) && nameCollidesWithConnectedAccount(row),
+  ).length;
   const ambiguous = crmEmail.filter((row) => hasMeaningfulCrmActivity(row)).length + intraGroups;
 
   return {
@@ -111,5 +119,6 @@ export function aggregateEmailContactLifecyclePreflight(rows: EmailContactPrefli
     crossTenantDuplicateAddresses: crossTenant,
     safeInboxOnlyCandidates: safeCandidates,
     ambiguousRequiresReview: ambiguous,
+    autoCreatedConnectedAccountNameCandidates: ownerNameCollisions,
   };
 }

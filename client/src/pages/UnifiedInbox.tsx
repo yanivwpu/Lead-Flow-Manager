@@ -38,6 +38,7 @@ import {
 } from "@/lib/inboxSessionPins";
 import { inboxRowDisplayName } from "@shared/websiteFormIdentity";
 import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import { inboxEmailParticipantTitle } from "@shared/emailParticipantLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   PROSPECT_OUTREACH_COMPOSE_STORAGE_KEY,
@@ -2756,8 +2757,16 @@ export function UnifiedInbox() {
   const handleSaveToContacts = () => {
     const source = matchedContact || displayContact;
     if (!source) return;
+    const inboxOnly = isEmailInboxIdentitySource(source.source);
     setSaveToContactsForm({
-      name: source.name || "",
+      name: inboxOnly
+        ? inboxEmailParticipantTitle({
+            isInboxOnly: true,
+            contactEmail: source.email,
+            inboundFromName: emailReplyDetails?.replyTarget?.name,
+            mailboxOwnerNames: [user?.name],
+          })
+        : source.name || "",
       email: source.email || "",
     });
     setShowSaveToContacts(true);
@@ -3013,19 +3022,32 @@ export function UnifiedInbox() {
   const formDisplayContact = useMemo(() => {
     if (!contact) return null;
     const identity = selectedFormIdentity;
-    if (!identity?.isWebsiteForm) return contact;
-    return {
-      ...contact,
-      name: identity.displayName || contact.name,
-      email: identity.displayEmail || contact.email,
-      source: "website_form",
-      customFields: {
-        ...(contact.customFields || {}),
-        leadSource: "Website Form",
-        notificationSenderEmail: identity.notificationFromEmail,
-      },
-    };
-  }, [contact, selectedFormIdentity]);
+    if (identity?.isWebsiteForm) {
+      return {
+        ...contact,
+        name: identity.displayName || contact.name,
+        email: identity.displayEmail || contact.email,
+        source: "website_form",
+        customFields: {
+          ...(contact.customFields || {}),
+          leadSource: "Website Form",
+          notificationSenderEmail: identity.notificationFromEmail,
+        },
+      };
+    }
+    if (isEmailInboxIdentitySource(contact.source)) {
+      return {
+        ...contact,
+        name: inboxEmailParticipantTitle({
+          isInboxOnly: true,
+          contactEmail: contact.email,
+          inboundFromName: emailReplyDetails?.replyTarget?.name,
+          mailboxOwnerNames: [user?.name],
+        }),
+      };
+    }
+    return contact;
+  }, [contact, selectedFormIdentity, emailReplyDetails?.replyTarget?.name, user?.name]);
 
   // Business knowledge (industry gate for Copilot intel; no backend logic change)
   const { data: aiBusinessKnowledge } = useQuery<{ industry?: string }>({
@@ -3489,10 +3511,16 @@ export function UnifiedInbox() {
                 isSelected && selectedFormIdentity
                   ? selectedFormIdentity
                   : item.formIdentity || null;
-              const rowDisplayName = inboxRowDisplayName(
-                rowFormIdentity,
-                item.contact.name,
-              );
+              const rowDisplayName = isEmailInboxIdentitySource(item.contact.source)
+                ? inboxEmailParticipantTitle({
+                    isInboxOnly: true,
+                    contactEmail: item.contact.email,
+                    mailboxOwnerNames: [user?.name],
+                  })
+                : inboxRowDisplayName(
+                    rowFormIdentity,
+                    item.contact.name,
+                  );
               const rowPreview =
                 (isEmailRow &&
                   (rowFormIdentity?.subjectLine ||

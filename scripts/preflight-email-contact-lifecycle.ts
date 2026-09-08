@@ -6,7 +6,7 @@
  * Usage: npx tsx scripts/preflight-email-contact-lifecycle.ts
  */
 import "dotenv/config";
-import { contacts, conversations, contactNotes, appointments, campaignEnrollments } from "../shared/schema";
+import { contacts, conversations, contactNotes, appointments, campaignEnrollments, users, emailMailboxes } from "../shared/schema";
 import { aggregateEmailContactLifecyclePreflight } from "../shared/emailContactLifecyclePreflight";
 
 async function main(): Promise<void> {
@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   }
 
   const { db } = await import("../drizzle/db");
-  const [contactRows, conversationRows, noteRows, appointmentRows, enrollmentRows] = await Promise.all([
+  const [contactRows, conversationRows, noteRows, appointmentRows, enrollmentRows, userRows, mailboxRows] = await Promise.all([
     db
       .select({
         id: contacts.id,
@@ -37,18 +37,33 @@ async function main(): Promise<void> {
         assignedTo: contacts.assignedTo,
         leadScore: contacts.leadScore,
         sourceDetails: contacts.sourceDetails,
+        name: contacts.name,
       })
       .from(contacts),
     db.select({ contactId: conversations.contactId }).from(conversations),
     db.select({ contactId: contactNotes.contactId }).from(contactNotes),
     db.select({ contactId: appointments.contactId }).from(appointments),
     db.select({ contactId: campaignEnrollments.contactId }).from(campaignEnrollments),
+    db.select({ id: users.id, name: users.name }).from(users),
+    db.select({
+      workspaceUserId: emailMailboxes.workspaceUserId,
+      displayName: emailMailboxes.displayName,
+      isPrimary: emailMailboxes.isPrimary,
+    }).from(emailMailboxes),
   ]);
 
   const conversationIds = new Set(conversationRows.map((row) => row.contactId));
   const noteIds = new Set(noteRows.map((row) => row.contactId));
   const appointmentIds = new Set(appointmentRows.map((row) => row.contactId));
   const enrollmentIds = new Set(enrollmentRows.map((row) => row.contactId));
+  const ownerNameByUserId = new Map(userRows.map((row) => [row.id, row.name]));
+  const mailboxNameByUserId = new Map<string, string>();
+  for (const row of mailboxRows) {
+    const current = mailboxNameByUserId.get(row.workspaceUserId);
+    if (!current || row.isPrimary) {
+      mailboxNameByUserId.set(row.workspaceUserId, String(row.displayName || ""));
+    }
+  }
 
   const aggregates = aggregateEmailContactLifecyclePreflight(
     contactRows.map((row) => ({
@@ -61,6 +76,9 @@ async function main(): Promise<void> {
       assignedTo: row.assignedTo,
       leadScore: row.leadScore,
       sourceDetails: row.sourceDetails,
+      name: row.name,
+      workspaceOwnerName: ownerNameByUserId.get(row.userId) || null,
+      mailboxDisplayName: mailboxNameByUserId.get(row.userId) || null,
       hasConversation: conversationIds.has(row.id),
       hasContactNotes: noteIds.has(row.id),
       hasAppointment: appointmentIds.has(row.id),

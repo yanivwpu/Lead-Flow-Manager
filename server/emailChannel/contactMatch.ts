@@ -2,6 +2,10 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { contacts, type Contact } from "@shared/schema";
 import { normalizeEmailAddress } from "@shared/emailChannel";
 import {
+  emailParticipantAddress,
+  resolveEmailParticipantDisplayName,
+} from "@shared/emailParticipantLabel";
+import {
   EMAIL_INBOX_IDENTITY_SOURCE,
   inboxOnlySourceDetails,
   isCrmListedContact,
@@ -135,6 +139,8 @@ export async function resolveEmailContact(params: {
   direction: "inbound" | "outbound";
   /** When outbound, prefer linking to To recipient. */
   toEmail?: string | null;
+  toName?: string | null;
+  mailboxOwnerNames?: Array<string | null | undefined>;
   /**
    * Optional identity override for inbound (e.g. website form visitor from Reply-To).
    * When set, contact matching uses this instead of From.
@@ -147,10 +153,12 @@ export async function resolveEmailContact(params: {
 }): Promise<EmailContactMatchResult> {
   const mailbox = normalizeEmailAddress(params.mailboxEmail);
   const identity = normalizeEmailAddress(params.identityEmail);
-  const matchEmail =
-    params.direction === "outbound"
-      ? normalizeEmailAddress(params.toEmail) || normalizeEmailAddress(params.fromEmail)
-      : identity || normalizeEmailAddress(params.fromEmail);
+  const matchEmail = emailParticipantAddress({
+    direction: params.direction,
+    fromEmail: params.fromEmail,
+    toEmail: params.toEmail,
+    identityEmail: params.identityEmail,
+  });
 
   if (!matchEmail) return { kind: "suppressed", reason: "missing_email" };
   if (mailbox && matchEmail === mailbox) {
@@ -223,10 +231,15 @@ export async function resolveEmailContact(params: {
     return { kind: "suppressed", reason: "invalid_email" };
   }
 
-  const name =
-    String(params.identityName || params.fromName || "").trim() ||
-    matchEmail.split("@")[0] ||
-    matchEmail;
+  const name = resolveEmailParticipantDisplayName({
+    direction: params.direction,
+    participantEmail: matchEmail,
+    fromName: params.fromName,
+    toName: params.toName,
+    identityName: params.identityName,
+    isWebsiteForm: Boolean(params.isWebsiteForm || params.isLeadCapture),
+    mailboxOwnerNames: params.mailboxOwnerNames,
+  });
 
   const crmListed = kind === "crm";
   const source = params.isWebsiteForm || params.isLeadCapture

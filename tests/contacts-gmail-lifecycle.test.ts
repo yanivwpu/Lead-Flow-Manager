@@ -196,6 +196,7 @@ test("preflight is read-only, count-only, and contains no PII", () => {
   assert.equal(agg.inboxOnlyIdentities, 1);
   assert.equal(agg.intraTenantDuplicateEmailGroups, 1);
   assert.equal(agg.crossTenantDuplicateAddresses, 1);
+  assert.equal(typeof agg.autoCreatedConnectedAccountNameCandidates, "number");
   const json = JSON.stringify(agg);
   assert.equal(json.includes("@"), false);
   assert.equal(json.toLowerCase().includes("example.com"), false);
