@@ -166,10 +166,11 @@ test("another tenant with the same email remains isolated", () => {
   assert.doesNotMatch(match, /eq\(contacts\.name/);
 });
 
-test("Save to Contacts appears for inbox-only and Edit Contact appears for saved", () => {
+test("Save to Contacts is a dropdown-only action for inbox-only; Edit Contact is for saved contacts", () => {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
-  assert.match(inbox, /isEmailInboxIdentitySource\(contact\.source\) \? \(/);
-  assert.match(inbox, /button-save-to-contacts/);
+  assert.match(inbox, /inboxConversationMenuActions\(contact\)/);
+  assert.match(inbox, /menu-save-to-contacts/);
+  assert.doesNotMatch(inbox, /button-save-to-contacts/);
   assert.match(inbox, /handleEditContact/);
   assert.match(inbox, /inboxEmailParticipantTitle/);
 });

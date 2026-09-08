@@ -79,3 +79,29 @@ export function filterCrmListedContacts<T extends { source?: string | null; sour
 ): T[] {
   return rows.filter(isCrmListedContact);
 }
+
+export type InboxConversationMenuAction =
+  | "save_to_contacts"
+  | "edit_contact"
+  | "pause_automations"
+  | "activity_timeline"
+  | "delete_contact";
+
+/**
+ * Inbox conversation kebab visibility from server-backed CRM lifecycle.
+ * Inbox-only identities cannot be enrolled in Contact automations (campaigns
+ * already fail closed). Pause Automations is therefore hidden until promotion.
+ * Delete Contact hard-deletes the participant row and FK-cascades Inbox
+ * history, so it is not offered until the row is a saved Contact.
+ * Activity Timeline stays: GET /api/contacts/:id/timeline is tenant-scoped
+ * to this participant’s conversation/activity history.
+ */
+export function inboxConversationMenuActions(contact: {
+  source?: string | null;
+  sourceDetails?: unknown;
+}): InboxConversationMenuAction[] {
+  if (!isCrmListedContact(contact)) {
+    return ["save_to_contacts", "activity_timeline"];
+  }
+  return ["edit_contact", "pause_automations", "activity_timeline", "delete_contact"];
+}

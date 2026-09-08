@@ -37,7 +37,10 @@ import {
   selectPinCandidates,
 } from "@/lib/inboxSessionPins";
 import { inboxRowDisplayName } from "@shared/websiteFormIdentity";
-import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
+import {
+  inboxConversationMenuActions,
+  isCrmListedContact,
+} from "@shared/contactCrmVisibility";
 import { inboxEmailParticipantTitle } from "@shared/emailParticipantLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -2406,9 +2409,24 @@ export function UnifiedInbox() {
       return body as Contact;
     },
     onSuccess: (saved, variables) => {
+      const contactId = variables.contactId;
       queryClient.setQueryData<{ contact: Contact; conversations: Conversation[] }>(
-        ["/api/contacts", variables.contactId],
+        ["/api/contacts", contactId],
         (old) => (old ? { ...old, contact: saved } : old),
+      );
+      queryClient.setQueryData<InboxItem[]>(inboxRecentKey, (old) =>
+        old?.map((item) =>
+          item.contact.id === contactId
+            ? { ...item, contact: { ...item.contact, ...saved } }
+            : item,
+        ),
+      );
+      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+        old?.map((item) =>
+          item.contact.id === contactId
+            ? { ...item, contact: { ...item.contact, ...saved } }
+            : item,
+        ),
       );
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/inbox"] });
@@ -2757,7 +2775,7 @@ export function UnifiedInbox() {
   const handleSaveToContacts = () => {
     const source = matchedContact || displayContact;
     if (!source) return;
-    const inboxOnly = isEmailInboxIdentitySource(source.source);
+    const inboxOnly = !isCrmListedContact(source);
     setSaveToContactsForm({
       name: inboxOnly
         ? inboxEmailParticipantTitle({
@@ -3017,6 +3035,8 @@ export function UnifiedInbox() {
 
   /** Matched detail contact or inbox-list fallback — never previous contact via keepPreviousData. */
   const contact = displayContact;
+  const isInboxOnlyParticipant = Boolean(contact && !isCrmListedContact(contact));
+  const conversationMenuActions = contact ? inboxConversationMenuActions(contact) : [];
 
   /** Display overlay for website-form visitor identity (shared with list/header/panel/compose). */
   const formDisplayContact = useMemo(() => {
@@ -3035,7 +3055,7 @@ export function UnifiedInbox() {
         },
       };
     }
-    if (isEmailInboxIdentitySource(contact.source)) {
+    if (!isCrmListedContact(contact)) {
       return {
         ...contact,
         name: inboxEmailParticipantTitle({
@@ -3511,7 +3531,7 @@ export function UnifiedInbox() {
                 isSelected && selectedFormIdentity
                   ? selectedFormIdentity
                   : item.formIdentity || null;
-              const rowDisplayName = isEmailInboxIdentitySource(item.contact.source)
+              const rowDisplayName = !isCrmListedContact(item.contact)
                 ? inboxEmailParticipantTitle({
                     isInboxOnly: true,
                     contactEmail: item.contact.email,
@@ -3731,7 +3751,7 @@ export function UnifiedInbox() {
                       No conversation
                     </span>
                   )}
-                  {contact.automationsPaused ? (
+                  {contact.automationsPaused && !isInboxOnlyParticipant ? (
                     <span
                       className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
                       data-testid="chip-automation-paused"
@@ -3740,7 +3760,7 @@ export function UnifiedInbox() {
                       Automation Paused
                     </span>
                   ) : null}
-                  {isEmailInboxIdentitySource(contact.source) ? (
+                  {isInboxOnlyParticipant ? (
                     <span
                       className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-medium text-gray-600"
                       data-testid="chip-inbox-only-participant"
@@ -3853,51 +3873,54 @@ export function UnifiedInbox() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {isEmailInboxIdentitySource(contact.source) ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={handleSaveToContacts}
-                    data-testid="button-save-to-contacts"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 mr-1" />
-                    Save to Contacts
-                  </Button>
-                ) : null}
                 {/* Actions menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" data-testid="button-contact-actions">
-                      <MoreVertical className="w-4 h-4" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      data-testid="button-contact-actions"
+                      aria-label="Conversation actions"
+                      title="Conversation actions"
+                    >
+                      <MoreVertical className="w-4 h-4" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {isEmailInboxIdentitySource(contact.source) ? (
+                  <DropdownMenuContent align="end" aria-label="Conversation actions">
+                    {conversationMenuActions.includes("save_to_contacts") ? (
                       <DropdownMenuItem onClick={handleSaveToContacts} data-testid="menu-save-to-contacts">
                         <UserPlus className="w-4 h-4 mr-2" /> Save to Contacts
                       </DropdownMenuItem>
                     ) : null}
-                    <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">
-                      <Edit className="w-4 h-4 mr-2" /> Edit Contact
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => updateContact({ automationsPaused: !contact.automationsPaused })}
-                      data-testid="menu-toggle-automations-pause"
-                    >
-                      {contact.automationsPaused ? (
-                        <PlayCircle className="w-4 h-4 mr-2" />
-                      ) : (
-                        <PauseCircle className="w-4 h-4 mr-2" />
-                      )}
-                      {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">
-                      <History className="w-4 h-4 mr-2" /> Activity Timeline
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">
-                      <Trash2 className="w-4 h-4 mr-2" /> Delete Contact
-                    </DropdownMenuItem>
+                    {conversationMenuActions.includes("edit_contact") ? (
+                      <DropdownMenuItem onClick={handleEditContact} data-testid="menu-edit-contact">
+                        <Edit className="w-4 h-4 mr-2" /> Edit Contact
+                      </DropdownMenuItem>
+                    ) : null}
+                    {conversationMenuActions.includes("pause_automations") ? (
+                      <DropdownMenuItem
+                        onClick={() => updateContact({ automationsPaused: !contact.automationsPaused })}
+                        data-testid="menu-toggle-automations-pause"
+                      >
+                        {contact.automationsPaused ? (
+                          <PlayCircle className="w-4 h-4 mr-2" />
+                        ) : (
+                          <PauseCircle className="w-4 h-4 mr-2" />
+                        )}
+                        {contact.automationsPaused ? "Resume Automations" : "Pause Automations"}
+                      </DropdownMenuItem>
+                    ) : null}
+                    {conversationMenuActions.includes("activity_timeline") ? (
+                      <DropdownMenuItem onClick={() => setShowTimeline(true)} data-testid="menu-view-timeline">
+                        <History className="w-4 h-4 mr-2" /> Activity Timeline
+                      </DropdownMenuItem>
+                    ) : null}
+                    {conversationMenuActions.includes("delete_contact") ? (
+                      <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="text-red-600" data-testid="menu-delete-contact">
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete Contact
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

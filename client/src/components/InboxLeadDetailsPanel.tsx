@@ -142,6 +142,7 @@ import {
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { hasPropertyShowingIntent } from "@shared/aiDomainEligibility";
 import { isQualificationDowngrade, systemTagForQualification } from "@shared/leadQualification";
+import { isCrmListedContact } from "@shared/contactCrmVisibility";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'email';
 
@@ -915,6 +916,7 @@ export function InboxLeadDetailsPanel({
     () => isProspectAiAttributedContact(contact),
     [contact],
   );
+  const isSavedCrmContact = isCrmListedContact(contact);
   const [markWonOpen, setMarkWonOpen] = useState(false);
   const markWon = useMarkProspectAiWon();
   const setOutcome = useSetProspectAiOutcome();
@@ -3062,13 +3064,15 @@ export function InboxLeadDetailsPanel({
           <div>
             <div className="flex items-center justify-between mb-1">
               <RowLabel>Contact</RowLabel>
-              <button
-                onClick={onEditContact}
-                className="p-0.5 text-gray-300 hover:text-gray-500 transition-colors rounded"
-                data-testid="button-edit-contact-panel"
-              >
-                <Edit className="w-3 h-3" />
-              </button>
+              {isSavedCrmContact ? (
+                <button
+                  onClick={onEditContact}
+                  className="p-0.5 text-gray-300 hover:text-gray-500 transition-colors rounded"
+                  data-testid="button-edit-contact-panel"
+                >
+                  <Edit className="w-3 h-3" />
+                </button>
+              ) : null}
             </div>
             <div className="space-y-1">
               {contact.name ? (
@@ -3167,6 +3171,7 @@ export function InboxLeadDetailsPanel({
           )}
 
           {/* ── AUTOMATION (durable contact pause — not Copilot snooze / Manual) ─ */}
+          {isSavedCrmContact ? (
           <div data-testid="section-contact-automation-pause">
             <RowLabel>Automation</RowLabel>
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -3195,6 +3200,7 @@ export function InboxLeadDetailsPanel({
               </button>
             </div>
           </div>
+          ) : null}
 
           {primaryConversation && (
             <>
@@ -3863,6 +3869,7 @@ export function InboxLeadDetailsPanel({
           )}
 
           {/* ── DELETE CONTACT ────────────────────────────────────────── */}
+          {isSavedCrmContact ? (
           <div className="pb-2">
             <button
               onClick={onDeleteContact}
@@ -3873,6 +3880,7 @@ export function InboxLeadDetailsPanel({
               Delete Contact
             </button>
           </div>
+          ) : null}
 
         </div>
       </div>
