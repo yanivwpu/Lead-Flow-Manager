@@ -355,11 +355,10 @@ class WebChatAdapter implements ChannelAdapter {
 
       const {
         isWebchatConfiguredForWorkspace,
-        isWebchatVisitorSessionActive,
+        evaluateWebchatStoredReplyGate,
       } = await import("./webchatSession");
       const {
         WEBCHAT_NOT_CONFIGURED_MESSAGE,
-        WEBCHAT_SESSION_INACTIVE_MESSAGE,
         WEBCHAT_DELIVERY_FAILED_MESSAGE,
       } = await import("@shared/webchatSendErrors");
 
@@ -367,8 +366,13 @@ class WebChatAdapter implements ChannelAdapter {
         return { success: false, error: WEBCHAT_NOT_CONFIGURED_MESSAGE };
       }
 
-      if (!(await isWebchatVisitorSessionActive(contact, conversation))) {
-        return { success: false, error: WEBCHAT_SESSION_INACTIVE_MESSAGE };
+      const gate = await evaluateWebchatStoredReplyGate({
+        workspaceUserId: conversation.userId,
+        contact,
+        conversation,
+      });
+      if (!gate.ok) {
+        return { success: false, error: gate.error };
       }
 
       const {

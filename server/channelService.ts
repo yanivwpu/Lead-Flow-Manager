@@ -373,12 +373,12 @@ class ChannelService {
     if (channel === 'webchat') {
       const {
         isWebchatConfiguredForWorkspace,
-        isWebchatVisitorSessionActive,
+        evaluateWebchatStoredReplyGate,
         contactHasWebchatSessionSignals,
+        readWebchatVisitorId,
       } = await import("./webchatSession");
       const {
         WEBCHAT_NOT_CONFIGURED_MESSAGE,
-        WEBCHAT_SESSION_INACTIVE_MESSAGE,
       } = await import("@shared/webchatSendErrors");
 
       const conv = await storage.getConversationByContactAndChannel(contact.id, 'webchat');
@@ -391,7 +391,7 @@ class ChannelService {
         };
       }
 
-      if (!contactHasWebchatSessionSignals(contact, conv)) {
+      if (!contactHasWebchatSessionSignals(contact, conv) && !readWebchatVisitorId(contact)) {
         return {
           ok: false,
           reason: 'This contact has no web chat session — cannot send on Web Chat',
@@ -399,11 +399,16 @@ class ChannelService {
         };
       }
 
-      if (!(await isWebchatVisitorSessionActive(contact, conv))) {
+      const gate = await evaluateWebchatStoredReplyGate({
+        workspaceUserId: userId,
+        contact,
+        conversation: conv ?? null,
+      });
+      if (!gate.ok) {
         return {
           ok: false,
-          reason: WEBCHAT_SESSION_INACTIVE_MESSAGE,
-          code: "webchat_session_inactive",
+          reason: gate.error,
+          code: gate.code,
         };
       }
     } else if (channel === 'gohighlevel' && !contact.ghlId) {
@@ -691,6 +696,38 @@ class ChannelService {
       );
     }
 
+    if (targetChannel === "webchat") {
+      const {
+        evaluateWebchatStoredReplyGate,
+        isWebchatOutboundDuplicate,
+      } = await import("./webchatSession");
+      const storeGate = await evaluateWebchatStoredReplyGate({
+        workspaceUserId: userId,
+        contact,
+        conversation,
+      });
+      if (!storeGate.ok) {
+        return {
+          success: false,
+          channel: "webchat",
+          error: storeGate.error,
+          errorCode: storeGate.code,
+        };
+      }
+      const recent = await storage.getMessages(conversation.id, 20);
+      const duplicate = recent.find((row) =>
+        isWebchatOutboundDuplicate({ candidate: row, content, mediaUrl }),
+      );
+      if (duplicate) {
+        return {
+          success: true,
+          messageId: duplicate.id,
+          channel: "webchat",
+          externalMessageId: duplicate.externalMessageId || undefined,
+        };
+      }
+    }
+
     const message = await storage.createMessage({
       conversationId: conversation.id,
       contactId,
@@ -734,6 +771,10 @@ class ChannelService {
         lastMessageAt: new Date(),
         lastMessagePreview: preview.substring(0, 100),
         lastMessageDirection: 'outbound',
+        ...((targetChannel === "webchat" &&
+          (await import("./webchatSession")).webchatConversationShouldReopenOnOutbound(conversation))
+          ? { status: "open" as const }
+          : {}),
       });
       console.log(`[Debug] Conversation summary updated after outbound — conversationId: ${conversation.id}, preview: "${preview.substring(0, 60)}"`);
 

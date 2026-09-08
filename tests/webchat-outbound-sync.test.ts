@@ -181,3 +181,56 @@ test("chatbot webchat sends pin forceChannel so replies stay on the widget threa
   assert.match(engine, /forceChannel: ctx\.channel as Channel/);
   assert.equal((engine.match(/forceChannel: ctx\.channel as Channel/g) || []).length >= 3, true);
 });
+
+test("offline stored replies remain poll-visible; idle presence is not a send gate", () => {
+  const offlineSent = {
+    ...outboundSent,
+    id: "out-offline",
+    status: "sent",
+    content: "Reply after the visitor closed the widget",
+    createdAt: "2026-09-08T01:25:00.000Z",
+  };
+  const payload = toPublicWebchatMessages([inbound, offlineSent]);
+  assert.equal(payload.some((m) => m.id === "out-offline" && m.status === "sent"), true);
+
+  const adapter = read("server/channelAdapters.ts");
+  const webchatSend = adapter.slice(adapter.indexOf("class WebChatAdapter"), adapter.indexOf("class InstagramAdapter"));
+  assert.match(webchatSend, /evaluateWebchatStoredReplyGate/);
+  assert.doesNotMatch(webchatSend, /isWebchatVisitorSessionActive/);
+
+  const session = read("server/webchatSession.ts");
+  assert.match(session, /Presence only/);
+  assert.match(session, /evaluateWebchatStoredReplyGate/);
+
+  const poll = read("server/routes/webhooks.ts");
+  const getHandler = poll.slice(
+    poll.indexOf('app.get("/api/webchat/:userId/:visitorId/messages"'),
+    poll.indexOf('app.get("/api/webchat/:userId/:visitorId/messages"') + 2800,
+  );
+  assert.match(getHandler, /toPublicWebchatMessages/);
+  assert.match(getHandler, /getContactByChannelId\(access\.owner\.userId, "webchat", visitorId\)/);
+});
+
+test("Auto rollout and automation guards do not wrap Inbox manual Send", () => {
+  const contacts = read("server/routes/contacts.ts");
+  const send = contacts.slice(contacts.indexOf('app.post("/api/contacts/:id/send"'));
+  assert.match(send, /guardedSources\.has\(sourceString\)/);
+  assert.match(send, /const result = guarded \? guarded.result : await send\(\)/);
+  const inbox = read("client/src/pages/UnifiedInbox.tsx");
+  const typed = inbox.slice(inbox.indexOf("const handleSendMessage"), inbox.indexOf("const handleAutoSend"));
+  assert.doesNotMatch(typed, /source:\s*"ai_auto"/);
+  assert.match(typed, /sendMessageMutation\.mutate\(\{/);
+  assert.match(inbox, /if \(sendMessageMutation\.isPending\) return/);
+});
+
+test("image outbound stays signed-media only after store", () => {
+  const image = {
+    ...outboundSent,
+    id: "out-img",
+    contentType: "image",
+    mediaUrl: "https://object.example/secret",
+  };
+  const payload = toPublicWebchatMessages([image], () => "/api/webchat/w_pub/visitor/media/out-img?sig=1");
+  assert.equal(payload[0].mediaUrl, "/api/webchat/w_pub/visitor/media/out-img?sig=1");
+  assert.notEqual(payload[0].mediaUrl, image.mediaUrl);
+});

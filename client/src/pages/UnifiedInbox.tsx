@@ -2549,6 +2549,7 @@ export function UnifiedInbox() {
   }, [selectedContactId, updateContactMutation]);
 
   const handleSendMessage = () => {
+    if (sendMessageMutation.isPending) return;
     if (!messageInput.trim() && !pendingFile) return;
     if (!selectedContactId) return;
     if (
