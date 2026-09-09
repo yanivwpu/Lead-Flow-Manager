@@ -15,6 +15,9 @@ import {
   runWidgetLogoUpload,
   shouldResetWidgetLogoPreview,
   validateWidgetLogoFileMeta,
+  widgetLogoEditorDisplayName,
+  widgetLogoEditorHasImage,
+  isWidgetLogoInternalPathText,
   widgetSettingsPatchLogoUrl,
   WIDGET_LOGO_ERROR_CODE,
   WIDGET_LOGO_UPLOAD_PATH,
@@ -494,18 +497,42 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
 }
 
 {
+  const stored = "/objects/uploads/tenant-a__uuid-1.jpg";
+  assert.equal(widgetLogoEditorHasImage(stored), true);
+  assert.equal(widgetLogoEditorHasImage(""), false);
+  assert.equal(widgetLogoEditorDisplayName(), "Logo uploaded");
+  assert.equal(widgetLogoEditorDisplayName(stored), "Logo uploaded");
+  assert.equal(widgetLogoEditorDisplayName("brand-mark.png"), "brand-mark.png");
+  assert.equal(isWidgetLogoInternalPathText(stored), true);
+  assert.equal(isWidgetLogoInternalPathText("Logo uploaded"), false);
+  assert.equal(isWidgetLogoInternalPathText("brand-mark.png"), false);
+  assert.equal(isWidgetLogoInternalPathText(widgetLogoEditorDisplayName(stored)), false);
+  assert.equal(widgetSettingsPatchLogoUrl("", stored), "");
+}
+
+{
   const website = read("client/src/pages/WebsiteWidget.tsx");
   assert.match(website, /runWidgetLogoUpload/);
   assert.match(website, /WIDGET_LOGO_ACCEPT/);
   assert.match(website, /coerceWidgetLogoUrl\(settings\.logoUrl\)/);
   assert.match(website, /type="button"/);
   assert.match(website, /data-testid="button-logo-upload"/);
+  assert.match(website, /data-testid="button-logo-replace"/);
+  assert.match(website, /data-testid="button-logo-remove"/);
+  assert.match(website, /data-testid="button-confirm-remove-logo"/);
+  assert.match(website, /data-testid="widget-logo-thumb"/);
+  assert.match(website, /data-testid="text-widget-logo-name"/);
   assert.match(website, /widgetLogoBoundFetch/);
   assert.match(website, /openWidgetLogoFilePicker/);
   assert.match(website, /resetWidgetLogoFileInput/);
   assert.match(website, /globalThis\.fetch/);
+  assert.match(website, /widgetLogoEditorDisplayName/);
+  assert.match(website, /Remove logo\?/);
+  assert.match(website, /updateSettings\(\{ logoUrl: "" \}\)/);
+  assert.doesNotMatch(website, /data-testid="input-logo-url"/);
+  assert.doesNotMatch(website, /value=\{coerceWidgetLogoUrl\(settings\.logoUrl\)\}/);
   const logoBlock = website.slice(
-    website.indexOf('htmlFor="logo-url"'),
+    website.indexOf('data-testid="section-widget-logo"'),
     website.indexOf("Chat icon"),
   );
   assert.match(logoBlock, /type="button"/);
@@ -515,6 +542,9 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   assert.doesNotMatch(logoBlock, /asChild/);
   assert.doesNotMatch(logoBlock, /\/api\/media\/upload/);
   assert.doesNotMatch(logoBlock, /fetchFn:\s*fetch/);
+  assert.doesNotMatch(logoBlock, /\/objects\/uploads/);
+  assert.doesNotMatch(logoBlock, /mediaStorageKey/);
+  assert.doesNotMatch(logoBlock, /htmlFor="logo-url"/);
   const fileStart = logoBlock.indexOf('type="file"');
   const fileEnd = logoBlock.indexOf("/>", fileStart);
   const fileInputMarkup = logoBlock.slice(fileStart, fileEnd + 2);

@@ -66,8 +66,12 @@ import {
 } from "@shared/webchatWidgetBranding";
 import {
   coerceWidgetLogoUrl,
+  markWidgetLogoPreviewFailed,
   runWidgetLogoUpload,
+  shouldResetWidgetLogoPreview,
   WIDGET_LOGO_ACCEPT,
+  widgetLogoEditorDisplayName,
+  widgetLogoEditorHasImage,
   widgetSettingsPatchLogoUrl,
   type WidgetLogoUploadLock,
 } from "@shared/webchatWidgetLogoUpload";
@@ -95,6 +99,38 @@ export function openWidgetLogoFilePicker(
   resetWidgetLogoFileInput(input);
   input.click();
   return true;
+}
+
+function WidgetLogoFieldThumb({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  const [current, setCurrent] = useState(src);
+  useEffect(() => {
+    if (shouldResetWidgetLogoPreview(current, src)) {
+      setFailed(false);
+      setCurrent(src);
+    }
+  }, [src, current]);
+  if (!src || failed) {
+    return (
+      <div
+        className="h-10 w-10 shrink-0 rounded-md border border-gray-200 bg-gray-100"
+        data-testid="widget-logo-thumb-fallback"
+        aria-hidden="true"
+      />
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      width={40}
+      height={40}
+      className="h-10 w-10 shrink-0 rounded-md border border-gray-200 object-cover"
+      referrerPolicy="no-referrer"
+      data-testid="widget-logo-thumb"
+      onError={() => setFailed((prev) => markWidgetLogoPreviewFailed(prev))}
+    />
+  );
 }
 
 /** Website Chat Widget settings — Inbox channel `webchat`, not WhatsApp click-to-chat. */
@@ -433,6 +469,8 @@ export function WebsiteWidget() {
   const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [logoDisplayName, setLogoDisplayName] = useState("Logo uploaded");
+  const [logoRemoveOpen, setLogoRemoveOpen] = useState(false);
   /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
   const didHydrateFromWidgetQuery = useRef(false);
   const pageRulesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -582,6 +620,7 @@ export function WebsiteWidget() {
           onBusyChange: setLogoBusy,
         });
         if (result.ok) {
+          setLogoDisplayName(widgetLogoEditorDisplayName(file && "name" in file ? file.name : undefined));
           const next = {
             ...settingsRef.current,
             logoUrl: result.logoUrl,
@@ -989,51 +1028,97 @@ export function WebsiteWidget() {
                 </p>
                 )}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="logo-url" className="text-[11px] font-semibold text-gray-600">
-                  Logo
-                </Label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    id="logo-url"
-                    value={coerceWidgetLogoUrl(settings.logoUrl)}
-                    onChange={(e) => {
-                      setLogoUploadError(null);
-                      updateBrandingText({ logoUrl: e.target.value });
-                    }}
-                    placeholder="Upload a JPEG, PNG, or WebP - remote URLs are not used"
-                    className="h-9 text-sm border-gray-200 rounded-lg"
-                    data-testid="input-logo-url"
-                  />
-                  <input
-                    id={WIDGET_LOGO_FILE_INPUT_ID}
-                    ref={logoFileRef}
-                    type="file"
-                    accept={WIDGET_LOGO_ACCEPT}
-                    className="sr-only"
-                    data-testid="input-logo-file"
-                    onChange={onLogoFileChange}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={logoBusy}
-                    data-testid="button-logo-upload"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
-                    }}
-                  >
-                    {logoBusy ? "Uploading..." : "Upload"}
-                  </Button>
-                </div>
+              <div className="space-y-1" data-testid="section-widget-logo">
+                <Label className="text-[11px] font-semibold text-gray-600">Logo</Label>
+                <input
+                  id={WIDGET_LOGO_FILE_INPUT_ID}
+                  ref={logoFileRef}
+                  type="file"
+                  accept={WIDGET_LOGO_ACCEPT}
+                  className="sr-only"
+                  data-testid="input-logo-file"
+                  onChange={onLogoFileChange}
+                />
+                {widgetLogoEditorHasImage(settings.logoUrl) ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <WidgetLogoFieldThumb src={coerceWidgetLogoUrl(settings.logoUrl)} />
+                    <p className="text-sm text-gray-800 min-w-0 flex-1" data-testid="text-widget-logo-name">
+                      {logoDisplayName}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={logoBusy}
+                      data-testid="button-logo-replace"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
+                      }}
+                    >
+                      {logoBusy ? "Uploading..." : "Replace"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={logoBusy}
+                      data-testid="button-logo-remove"
+                      onClick={() => setLogoRemoveOpen(true)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={logoBusy}
+                      data-testid="button-logo-upload"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
+                      }}
+                    >
+                      {logoBusy ? "Uploading..." : "Upload"}
+                    </Button>
+                  </div>
+                )}
+                <AlertDialog open={logoRemoveOpen} onOpenChange={setLogoRemoveOpen}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove logo?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        The logo will be removed from your widget after this change is saved.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        data-testid="button-confirm-remove-logo"
+                        onClick={() => {
+                          setLogoUploadError(null);
+                          setLogoDisplayName("Logo uploaded");
+                          setLogoRemoveOpen(false);
+                          updateSettings({ logoUrl: "" });
+                        }}
+                      >
+                        Remove
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 {brandingErrors.logo || logoUploadError ? (
                   <p className="text-[10px] text-red-600" data-testid="text-branding-error">
                     {logoUploadError || brandingErrors.logo}
                   </p>
-                ) : null}
+                ) : widgetLogoEditorHasImage(settings.logoUrl) ? null : (
+                  <p className="text-[10px] text-gray-500">JPEG, PNG, or WebP. Max 5 MB.</p>
+                )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">

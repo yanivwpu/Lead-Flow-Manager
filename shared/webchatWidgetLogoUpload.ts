@@ -223,6 +223,34 @@ export function shouldResetWidgetLogoPreview(prevSrc: string, nextSrc: string): 
   return prevSrc !== nextSrc;
 }
 
+const INTERNAL_PATH_RE =
+  /\/objects\/uploads\/|\/uploads\/|web-upload|mediastoragekey|\.r2\.|r2\.dev|cloudflarestorage/i;
+
+/** True when visible UI text would leak a storage URL, key, or tenant path. */
+export function isWidgetLogoInternalPathText(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  return INTERNAL_PATH_RE.test(value);
+}
+
+/**
+ * Visitor-facing editor label. Never the `/objects/uploads/...` path or tenant id.
+ * Uses the original file name when it is a simple basename; otherwise "Logo uploaded".
+ */
+export function widgetLogoEditorDisplayName(fileName?: unknown): string {
+  if (typeof fileName !== "string") return "Logo uploaded";
+  if (isWidgetLogoInternalPathText(fileName)) return "Logo uploaded";
+  const base = fileName.replace(/\\/g, "/").split("/").pop()?.trim() || "";
+  if (!base || isWidgetLogoInternalPathText(base)) return "Logo uploaded";
+  if (/__[\w.-]+\.(jpg|jpeg|png|webp)$/i.test(base)) return "Logo uploaded";
+  if (base.length > 42) return `${base.slice(0, 38)}…`;
+  return base;
+}
+
+export function widgetLogoEditorHasImage(logoUrl: unknown): boolean {
+  const path = coerceWidgetLogoUrl(logoUrl);
+  return Boolean(path && sanitizeWidgetLogoUrl(path));
+}
+
 type FetchLike = (
   input: string,
   init?: RequestInit,
