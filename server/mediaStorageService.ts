@@ -140,17 +140,35 @@ function r2S3Config() {
 }
 
 async function putR2Object(key: string, body: Buffer, contentType: string): Promise<string> {
-  const client = new S3Client(r2S3Config());
-  await client.send(
-    new PutObjectCommand({
-      Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    })
-  );
-  const base = process.env.CLOUDFLARE_R2_PUBLIC_URL!.replace(/\/$/, "");
-  return `${base}/${key}`;
+  const keyKind = key.startsWith("uploads/")
+    ? "uploads"
+    : key.includes("/widget-logo/")
+      ? "tenant-widget-logo"
+      : key.includes("/web-upload/")
+        ? "tenant-web-upload"
+        : "other";
+  try {
+    const client = new S3Client(r2S3Config());
+    await client.send(
+      new PutObjectCommand({
+        Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      })
+    );
+    const base = process.env.CLOUDFLARE_R2_PUBLIC_URL!.replace(/\/$/, "");
+    // #region agent log
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'B',location:'mediaStorageService.ts:putR2Object',message:'r2 put ok',data:{keyKind,bytes:body.length,mime:contentType.split(';')[0]},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return `${base}/${key}`;
+  } catch (err: unknown) {
+    const e = err as { name?: string; Code?: string; code?: string; $metadata?: { httpStatusCode?: number } };
+    // #region agent log
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'B',location:'mediaStorageService.ts:putR2Object',message:'r2 put failed',data:{keyKind,errName:e?.name||'Error',errCode:e?.Code||e?.code||null,httpStatus:e?.$metadata?.httpStatusCode||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    throw err;
+  }
 }
 
 async function putFallbackObjectOrLocal(
@@ -340,12 +358,35 @@ export async function persistInboundMedia(input: PersistInboundMediaInput): Prom
   };
 }
 
+const PUBLIC_UPLOAD_FILENAME_RE = /^[\w][\w-]*\.(jpg|jpeg|png|webp|pdf|mp3|m4a|ogg|mp4)$/i;
+
+export function isPublicUploadObjectFilename(filename: string): boolean {
+  return (
+    typeof filename === "string" &&
+    PUBLIC_UPLOAD_FILENAME_RE.test(filename) &&
+    !filename.includes("..") &&
+    !filename.includes("/") &&
+    !filename.includes("\\")
+  );
+}
+
+export const WIDGET_LOGO_ORIGIN_CHANNEL = "web-upload";
+
+function outboundObjectBasename(objectBasename: string | undefined, ext: string): string {
+  const name = String(objectBasename || "").trim();
+  if (name && isPublicUploadObjectFilename(name) && name.toLowerCase().endsWith(ext.toLowerCase())) {
+    return name;
+  }
+  return `${randomUUID()}${ext}`;
+}
+
 /** Authenticated composer / widget uploads — R2 when configured, else legacy object storage or /uploads. */
 export async function uploadOutboundUserMedia(params: {
   userId: string;
   buffer: Buffer;
   contentType: string;
   originChannel?: string;
+  objectBasename?: string;
 }): Promise<{ mediaUrl: string; mediaStorageKey: string }> {
   const { userId, buffer, contentType, originChannel = "composer-upload" } = params;
   const baseMime = contentType.split(";")[0]?.trim()?.toLowerCase() || "";
@@ -361,15 +402,22 @@ export async function uploadOutboundUserMedia(params: {
         ? "document"
         : "image";
   const ext = extFromMime(contentType, category);
-  const uuid = randomUUID();
-  const storageKey = `media/${userId}/${normalizeChannelSegment(originChannel)}/${uuid}${ext}`;
+  const objectName = outboundObjectBasename(params.objectBasename, ext);
+  const storageKey = `media/${userId}/${normalizeChannelSegment(originChannel)}/${objectName}`;
+  const keyKind = storageKey.includes("/web-upload/")
+    ? "tenant-web-upload"
+    : storageKey.startsWith("uploads/")
+      ? "uploads"
+      : "other";
+  // #region agent log
+  fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'A',location:'mediaStorageService.ts:uploadOutboundUserMedia',message:'outbound media key',data:{keyKind,originChannel:normalizeChannelSegment(originChannel),hasObjectBasename:Boolean(params.objectBasename),r2Enabled:r2Configured()},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+  // #endregion
   if (r2Configured()) {
     await putR2Object(storageKey, buffer, contentType);
     const base = process.env.CLOUDFLARE_R2_PUBLIC_URL!.replace(/\/$/, "");
     return { mediaUrl: `${base}/${storageKey}`, mediaStorageKey: storageKey };
   }
-  const flatName = `${uuid}${ext}`;
-  const fb = await putFallbackObjectOrLocal(flatName, buffer, contentType);
+  const fb = await putFallbackObjectOrLocal(objectName, buffer, contentType);
   return { mediaUrl: fb.publicUrl, mediaStorageKey: fb.storageKey };
 }
 
@@ -465,18 +513,6 @@ async function readFallbackObject(key: string): Promise<{ buffer: Buffer; mimeTy
   return { buffer: fs.readFileSync(filePath), mimeType: "application/octet-stream" };
 }
 
-const PUBLIC_UPLOAD_FILENAME_RE = /^[\w][\w-]*\.(jpg|jpeg|png|webp|pdf|mp3|m4a|ogg|mp4)$/i;
-
-export function isPublicUploadObjectFilename(filename: string): boolean {
-  return (
-    typeof filename === "string" &&
-    PUBLIC_UPLOAD_FILENAME_RE.test(filename) &&
-    !filename.includes("..") &&
-    !filename.includes("/") &&
-    !filename.includes("\\")
-  );
-}
-
 function mimeFromPublicUploadFilename(filename: string): string {
   const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
   if (ext === ".png") return "image/png";
@@ -499,26 +535,21 @@ export function ownerFromWidgetLogoFilename(filename: string): string | null {
   return m ? m[1] : null;
 }
 
-export function widgetLogoStorageKeys(userId: string, filename: string): { primary: string; tenant: string } {
+export function widgetLogoStorageKey(userId: string, filename: string): string {
   const owner = sanitizeWidgetLogoOwnerId(userId);
-  return {
-    primary: `uploads/${filename}`,
-    tenant: `media/${owner}/widget-logo/${filename}`,
-  };
+  return `media/${owner}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${filename}`;
 }
 
 export function isAllowedWidgetLogoStorageKey(key: string): boolean {
   if (!key || key.includes("..") || key.includes("\\") || key.includes("//")) return false;
-  if (/^uploads\/[\w][\w-]*\.(jpg|jpeg|png|webp)$/i.test(key)) return true;
-  if (/^media\/[\w][\w-]*\/widget-logo\/[\w][\w-]*\.(jpg|jpeg|png|webp)$/i.test(key)) return true;
-  return false;
+  return /^media\/[\w][\w-]*\/web-upload\/[\w][\w-]*\.(jpg|jpeg|png|webp)$/i.test(key);
 }
 
 export function widgetLogoReadKeys(filename: string): string[] {
-  const keys = [`uploads/${filename}`];
   const owner = ownerFromWidgetLogoFilename(filename);
-  if (owner) keys.push(`media/${owner}/widget-logo/${filename}`);
-  return keys;
+  if (!owner || !filename.startsWith(`${owner}-`)) return [];
+  const key = `media/${owner}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${filename}`;
+  return isAllowedWidgetLogoStorageKey(key) ? [key] : [];
 }
 
 export class WidgetLogoStorageUnavailableError extends Error {
@@ -529,46 +560,65 @@ export class WidgetLogoStorageUnavailableError extends Error {
   }
 }
 
-export type WidgetLogoPutR2Fn = (key: string, body: Buffer, contentType: string) => Promise<unknown>;
+export type WidgetLogoUploadFn = (params: {
+  userId: string;
+  buffer: Buffer;
+  contentType: string;
+  originChannel?: string;
+  objectBasename?: string;
+}) => Promise<{ mediaUrl: string; mediaStorageKey: string }>;
 
-/** Widget logos: try public uploads/ then the tenant media prefix that already works on Railway R2. */
+/** Widget logos reuse Inbox R2 writes at media/{tenant}/web-upload/, then advertise /objects/uploads/... */
 export async function storeWidgetLogoRaster(params: {
   buffer: Buffer;
   mimeType: string;
   filename: string;
   userId: string;
-  putR2?: WidgetLogoPutR2Fn;
+  upload?: WidgetLogoUploadFn;
   r2Enabled?: boolean;
-  putFallback?: (filename: string, buffer: Buffer, mimeType: string) => Promise<unknown>;
 }): Promise<{ logoUrl: string }> {
   const { buffer, mimeType, filename, userId } = params;
-  if (!isPublicUploadObjectFilename(filename) || !/\.(jpg|jpeg|png|webp)$/i.test(filename)) {
-    throw new WidgetLogoStorageUnavailableError();
-  }
-  const keys = widgetLogoStorageKeys(userId, filename);
-  if (!isAllowedWidgetLogoStorageKey(keys.primary) || !isAllowedWidgetLogoStorageKey(keys.tenant)) {
-    throw new WidgetLogoStorageUnavailableError();
-  }
+  const owner = sanitizeWidgetLogoOwnerId(userId);
+  const filenameOk = isPublicUploadObjectFilename(filename) && /\.(jpg|jpeg|png|webp)$/i.test(filename);
+  const ownerMatch = ownerFromWidgetLogoFilename(filename) === owner;
+  const expectedKey = widgetLogoStorageKey(userId, filename);
+  const keyOk = isAllowedWidgetLogoStorageKey(expectedKey);
   const r2Enabled = params.r2Enabled ?? r2Configured();
-  const putR2 = params.putR2 ?? putR2Object;
-  if (r2Enabled) {
-    for (const key of [keys.primary, keys.tenant]) {
-      try {
-        await putR2(key, buffer, mimeType);
-        return { logoUrl: `/objects/uploads/${filename}` };
-      } catch {
-        /* try next key / fallback */
-      }
-    }
+  // #region agent log
+  fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'C',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store start',data:{filenameOk,ownerMatch,keyOk,r2Enabled,originChannel:WIDGET_LOGO_ORIGIN_CHANNEL,filenameLen:filename.length},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+  // #endregion
+  if (!filenameOk || !ownerMatch || !keyOk) {
+    throw new WidgetLogoStorageUnavailableError();
+  }
+  if (!r2Enabled) {
+    // #region agent log
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'E',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store skipped non-r2 fallback',data:{r2Enabled:false},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    // #endregion
+    throw new WidgetLogoStorageUnavailableError();
   }
   try {
-    if (params.putFallback) {
-      await params.putFallback(filename, buffer, mimeType);
-    } else {
-      await putFallbackObjectOrLocal(filename, buffer, mimeType);
+    const upload = params.upload ?? uploadOutboundUserMedia;
+    const stored = await upload({
+      userId: owner,
+      buffer,
+      contentType: mimeType,
+      originChannel: WIDGET_LOGO_ORIGIN_CHANNEL,
+      objectBasename: filename,
+    });
+    const storedKey = String(stored.mediaStorageKey || "").replace(/^\/+/, "");
+    // #region agent log
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'A',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload returned',data:{keyKind:storedKey.includes('/web-upload/')?'tenant-web-upload':storedKey.startsWith('uploads/')?'uploads':'other',keyMatchesExpected:storedKey===expectedKey},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    // #endregion
+    if (storedKey !== expectedKey) {
+      throw new WidgetLogoStorageUnavailableError();
     }
     return { logoUrl: `/objects/uploads/${filename}` };
-  } catch {
+  } catch (err: unknown) {
+    const e = err as { name?: string; code?: string };
+    // #region agent log
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload failed',data:{errName:e?.name||'Error',code:e?.code||null},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    // #endregion
+    if (err instanceof WidgetLogoStorageUnavailableError) throw err;
     throw new WidgetLogoStorageUnavailableError();
   }
 }
@@ -577,28 +627,19 @@ export async function readPublicUploadObject(
   filename: string,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   if (!isPublicUploadObjectFilename(filename)) return null;
-  const keys = widgetLogoReadKeys(filename).filter(isAllowedWidgetLogoStorageKey);
-  if (r2Configured()) {
-    for (const key of keys) {
-      const fromR2 = await readR2Object(key);
-      if (fromR2) {
-        const mime =
-          fromR2.mimeType && fromR2.mimeType !== "application/octet-stream"
-            ? fromR2.mimeType
-            : mimeFromPublicUploadFilename(filename);
-        return { buffer: fromR2.buffer, mimeType: mime };
-      }
+  const keys = widgetLogoReadKeys(filename);
+  if (!r2Configured() || keys.length === 0) return null;
+  for (const key of keys) {
+    const fromR2 = await readR2Object(key);
+    if (fromR2) {
+      const mime =
+        fromR2.mimeType && fromR2.mimeType !== "application/octet-stream"
+          ? fromR2.mimeType
+          : mimeFromPublicUploadFilename(filename);
+      return { buffer: fromR2.buffer, mimeType: mime };
     }
   }
-  const fallback = await readFallbackObject(`uploads/${filename}`);
-  if (!fallback) return null;
-  return {
-    buffer: fallback.buffer,
-    mimeType:
-      fallback.mimeType && fallback.mimeType !== "application/octet-stream"
-        ? fallback.mimeType
-        : mimeFromPublicUploadFilename(filename),
-  };
+  return null;
 }
 
 /** Tenant-owned stored bytes only. Never follows another workspace's media/{userId}/ prefix. */

@@ -1,7 +1,7 @@
 /**
  * POST /api/widget-settings/logo
- * Authenticated first-party widget logo upload. Stores a raster under uploads/
- * (or tenant media/widget-logo when that is the writable Railway R2 prefix)
+ * Authenticated first-party widget logo upload. Stores a raster with the same
+ * Inbox R2 helper (`uploadOutboundUserMedia` → `media/{tenant}/web-upload/`)
  * and returns { logoUrl: "/objects/uploads/..." }.
  */
 
@@ -91,6 +91,9 @@ export function registerWidgetLogoRoutes(app: Express): void {
           });
         }
         const filename = buildWidgetLogoFilename(auth.userId, inspected.ext);
+        // #region agent log
+        fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'widgetLogo.ts:post',message:'logo handler after inspect',data:{mime:inspected.mime,ext:inspected.ext,bytes:req.file.size,filenameLen:filename.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const stored = await storeWidgetLogoRaster({
           buffer: req.file.buffer,
           mimeType: inspected.mime,
@@ -100,6 +103,9 @@ export function registerWidgetLogoRoutes(app: Express): void {
         return res.json({ logoUrl: stored.logoUrl });
       } catch (error: any) {
         const unavailable = error instanceof WidgetLogoStorageUnavailableError;
+        // #region agent log
+        fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'widgetLogo.ts:catch',message:'logo handler storage catch',data:{unavailable,errName:error?.name||'Error',code:error?.code||null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         console.error(
           `[WidgetLogo] Storage failure — userId=${req.user?.id}` +
             ` mime=${req.file?.mimetype}` +
