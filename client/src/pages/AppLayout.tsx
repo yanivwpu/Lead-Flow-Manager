@@ -26,6 +26,7 @@ import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { consumeUpgradedQueryParam } from "@/lib/upgradeSuccess";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { AuthenticatedAppErrorBoundary } from "@/components/AuthenticatedAppErrorBoundary";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
@@ -181,6 +182,7 @@ function AppContent() {
         )}
         <div className="flex-1 min-h-0 overflow-auto [scrollbar-gutter:stable]">
           <Suspense fallback={<PageLoader />}>
+            <AuthenticatedAppErrorBoundary>
             <Switch>
               {/* One route w/ optional param so UnifiedInbox is not remounted when opening a thread (was causing list flash / state reset). */}
               <Route path="/app/inbox/:contactId?" component={UnifiedInbox} />
@@ -212,6 +214,9 @@ function AppContent() {
               </Route>
               <Route path="/app/templates" component={Templates} />
               <Route path="/app/campaigns/:id?" component={Campaigns} />
+              <Route path="/app/website-widget">
+                <Redirect to="/app/widget" />
+              </Route>
               <Route path="/app/widget" component={WebsiteWidget} />
               <Route path="/app/integrations" component={Integrations} />
               <Route path="/app/ai-brain" component={AIBrain} />
@@ -219,6 +224,7 @@ function AppContent() {
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />
             </Switch>
+            </AuthenticatedAppErrorBoundary>
           </Suspense>
         </div>
       </main>

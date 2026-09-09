@@ -466,6 +466,75 @@ async function readFallbackObject(key: string): Promise<{ buffer: Buffer; mimeTy
   return { buffer: fs.readFileSync(filePath), mimeType: "application/octet-stream" };
 }
 
+const PUBLIC_UPLOAD_FILENAME_RE = /^[\w][\w-]*\.(jpg|jpeg|png|webp|pdf|mp3|m4a|ogg|mp4)$/i;
+
+export function isPublicUploadObjectFilename(filename: string): boolean {
+  return (
+    typeof filename === "string" &&
+    PUBLIC_UPLOAD_FILENAME_RE.test(filename) &&
+    !filename.includes("..") &&
+    !filename.includes("/") &&
+    !filename.includes("\\")
+  );
+}
+
+function mimeFromPublicUploadFilename(filename: string): string {
+  const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".pdf") return "application/pdf";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".m4a") return "audio/mp4";
+  if (ext === ".ogg") return "audio/ogg";
+  if (ext === ".mp4") return "video/mp4";
+  return "application/octet-stream";
+}
+
+/** Widget logos and other first-party /objects/uploads files — flat uploads/ key only. */
+export async function storeWidgetLogoRaster(params: {
+  buffer: Buffer;
+  mimeType: string;
+  filename: string;
+}): Promise<{ logoUrl: string }> {
+  const { buffer, mimeType, filename } = params;
+  if (!isPublicUploadObjectFilename(filename) || !/\.(jpg|jpeg|png|webp)$/i.test(filename)) {
+    throw new Error("Invalid logo filename");
+  }
+  if (r2Configured()) {
+    await putR2Object(`uploads/${filename}`, buffer, mimeType);
+  } else {
+    await putFallbackObjectOrLocal(filename, buffer, mimeType);
+  }
+  return { logoUrl: `/objects/uploads/${filename}` };
+}
+
+export async function readPublicUploadObject(
+  filename: string,
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (!isPublicUploadObjectFilename(filename)) return null;
+  const key = `uploads/${filename}`;
+  if (r2Configured()) {
+    const fromR2 = await readR2Object(key);
+    if (fromR2) {
+      const mime =
+        fromR2.mimeType && fromR2.mimeType !== "application/octet-stream"
+          ? fromR2.mimeType
+          : mimeFromPublicUploadFilename(filename);
+      return { buffer: fromR2.buffer, mimeType: mime };
+    }
+  }
+  const fallback = await readFallbackObject(key);
+  if (!fallback) return null;
+  return {
+    buffer: fallback.buffer,
+    mimeType:
+      fallback.mimeType && fallback.mimeType !== "application/octet-stream"
+        ? fallback.mimeType
+        : mimeFromPublicUploadFilename(filename),
+  };
+}
+
 /** Tenant-owned stored bytes only. Never follows another workspace's media/{userId}/ prefix. */
 export async function readOwnedStoredMedia(params: {
   userId: string;

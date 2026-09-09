@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,13 @@ import {
   type WebchatOpenBehavior,
   type WebchatPanelWidth,
 } from "@shared/webchatWidgetBranding";
+import {
+  coerceWidgetLogoUrl,
+  runWidgetLogoUpload,
+  WIDGET_LOGO_ACCEPT,
+  widgetSettingsPatchLogoUrl,
+  type WidgetLogoUploadLock,
+} from "@shared/webchatWidgetLogoUpload";
 import { WebchatChromePreview } from "@/components/webchat/WebchatChromePreview";
 import type { WebchatChromeState } from "@shared/webchatWidgetChrome";
 
@@ -149,6 +156,12 @@ function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): Widget
       : [],
     allowAnyOrigin: input.allowAnyOrigin === true,
     enabled: input.enabled === true,
+    logoUrl: coerceWidgetLogoUrl(input.logoUrl),
+    launcherLabel: typeof input.launcherLabel === "string" ? input.launcherLabel : DEFAULT_SETTINGS.launcherLabel,
+    brandName: typeof input.brandName === "string" ? input.brandName : DEFAULT_SETTINGS.brandName,
+    panelHeading: typeof input.panelHeading === "string" ? input.panelHeading : DEFAULT_SETTINGS.panelHeading,
+    panelSubtitle: typeof input.panelSubtitle === "string" ? input.panelSubtitle : DEFAULT_SETTINGS.panelSubtitle,
+    teaserGreeting: typeof input.teaserGreeting === "string" ? input.teaserGreeting : DEFAULT_SETTINGS.teaserGreeting,
   };
 }
 
@@ -195,19 +208,6 @@ function normalizePageRulesFromServer(
   }));
 }
 
-function firstPartyLogoFromUpload(mediaUrl: string): string {
-  const raw = mediaUrl.trim();
-  if (!raw) return "";
-  if (!raw.includes("://")) {
-    return sanitizeWidgetLogoUrl(raw.split("?")[0]);
-  }
-  try {
-    return sanitizeWidgetLogoUrl(new URL(raw).pathname);
-  } catch {
-    return "";
-  }
-}
-
 function brandingFieldError(
   settings: Pick<
     WidgetSettings,
@@ -241,7 +241,8 @@ function brandingFieldError(
     teaserGreeting?: string;
     welcomeMessage?: string;
   } = {};
-  if (settings.logoUrl.trim() && !sanitizeWidgetLogoUrl(settings.logoUrl)) {
+  const logoUrl = coerceWidgetLogoUrl(settings.logoUrl);
+  if (logoUrl.trim() && !sanitizeWidgetLogoUrl(logoUrl)) {
     errors.logo = "Logo must be an uploaded JPEG, PNG, or WebP (first-party /objects/uploads path). Remote URLs are not used.";
   }
   if (settings.accentColor && !sanitizeWidgetHexColor(settings.accentColor)) {
@@ -289,7 +290,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     launcherStyle: settings.launcherStyle,
     launcherLabel: settings.launcherLabel,
     brandName: settings.brandName,
-    logoUrl: settings.logoUrl,
+    logoUrl: coerceWidgetLogoUrl(settings.logoUrl),
     panelHeading: settings.panelHeading,
     panelSubtitle: settings.panelSubtitle,
     accentColor: settings.accentColor,
@@ -416,6 +417,8 @@ export function WebsiteWidget() {
   const brandingTextPendingRef = useRef(false);
   const settingsRef = useRef(settings);
   const lastSavedLogoRef = useRef("");
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const logoUploadLockRef = useRef<WidgetLogoUploadLock>({ inFlight: false });
   const savePendingRef = useRef(false);
   const persistWidgetSettingsRef = useRef<(next: WidgetSettings) => void>(() => {});
 
@@ -458,7 +461,7 @@ export function WebsiteWidget() {
     if (didHydrateFromWidgetQuery.current) return;
     const merged = mergeWidgetSettings(savedSettings);
     setSettings(merged);
-    lastSavedLogoRef.current = merged.logoUrl;
+    lastSavedLogoRef.current = coerceWidgetLogoUrl(merged.logoUrl);
     didHydrateFromWidgetQuery.current = true;
   }, [savedSettings]);
   
@@ -467,7 +470,7 @@ export function WebsiteWidget() {
       return apiRequest("PATCH", "/api/widget-settings", stripPageRuleIds(newSettings));
     },
     onSuccess: (_data, saved) => {
-      lastSavedLogoRef.current = saved.logoUrl;
+      lastSavedLogoRef.current = coerceWidgetLogoUrl(saved.logoUrl);
       queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
     },
   });
@@ -486,13 +489,13 @@ export function WebsiteWidget() {
       ) {
         return;
       }
-      const logoTypedInvalid = Boolean(next.logoUrl.trim() && !sanitizeWidgetLogoUrl(next.logoUrl));
+      const logoUrl = widgetSettingsPatchLogoUrl(next.logoUrl, lastSavedLogoRef.current);
       const accentInvalid = Boolean(next.accentColor && !sanitizeWidgetHexColor(next.accentColor));
       const headerInvalid =
         next.headerTextColor !== "auto" && !sanitizeWidgetHexColor(next.headerTextColor);
       saveMutation.mutate({
         ...next,
-        logoUrl: logoTypedInvalid ? lastSavedLogoRef.current : sanitizeWidgetLogoUrl(next.logoUrl),
+        logoUrl,
         accentColor: accentInvalid ? "" : sanitizeWidgetHexColor(next.accentColor, next.accentColor),
         headerTextColor: headerInvalid
           ? "auto"
@@ -539,6 +542,39 @@ export function WebsiteWidget() {
     });
     persistWidgetSettings(next);
   };
+
+  const onLogoFileChange = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const file = e.target.files?.[0] ?? null;
+      e.target.value = "";
+      setLogoUploadError(null);
+      const priorLogoUrl =
+        coerceWidgetLogoUrl(lastSavedLogoRef.current) || coerceWidgetLogoUrl(settingsRef.current.logoUrl);
+      const result = await runWidgetLogoUpload({
+        event: e,
+        file,
+        priorLogoUrl,
+        lock: logoUploadLockRef.current,
+        fetchFn: fetch,
+        onBusyChange: setLogoBusy,
+      });
+      if (result.ok) {
+        const next = {
+          ...settingsRef.current,
+          logoUrl: result.logoUrl,
+        };
+        setSettings(next);
+        persistWidgetSettingsRef.current(next);
+        return;
+      }
+      if (!result.skipped) {
+        setLogoUploadError(result.error);
+      }
+    },
+    [],
+  );
 
   const updateBrandingText = (updates: Partial<WidgetSettings>) => {
     setSettings((prev) => {
@@ -936,7 +972,7 @@ export function WebsiteWidget() {
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id="logo-url"
-                    value={settings.logoUrl}
+                    value={coerceWidgetLogoUrl(settings.logoUrl)}
                     onChange={(e) => {
                       setLogoUploadError(null);
                       updateBrandingText({ logoUrl: e.target.value });
@@ -945,47 +981,25 @@ export function WebsiteWidget() {
                     className="h-9 text-sm border-gray-200 rounded-lg"
                     data-testid="input-logo-url"
                   />
-                  <label className="shrink-0">
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      data-testid="input-logo-file"
-                      disabled={logoBusy}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        setLogoBusy(true);
-                        setLogoUploadError(null);
-                        try {
-                          const body = new FormData();
-                          body.append("file", file);
-                          const res = await fetch("/api/media/upload", {
-                            method: "POST",
-                            body,
-                            credentials: "include",
-                          });
-                          const data = await res.json().catch(() => ({}));
-                          if (!res.ok || typeof data.mediaUrl !== "string") {
-                            throw new Error(typeof data.error === "string" ? data.error : "Upload failed");
-                          }
-                          const logoUrl = firstPartyLogoFromUpload(data.mediaUrl);
-                          if (!logoUrl) {
-                            throw new Error("Upload did not return a first-party JPEG, PNG, or WebP path.");
-                          }
-                          updateSettings({ logoUrl });
-                        } catch (err) {
-                          setLogoUploadError(err instanceof Error ? err.message : "Upload failed");
-                        } finally {
-                          setLogoBusy(false);
-                        }
-                      }}
-                    />
-                    <Button type="button" variant="outline" size="sm" asChild disabled={logoBusy}>
-                      <span>{logoBusy ? "Uploading..." : "Upload"}</span>
-                    </Button>
-                  </label>
+                  <input
+                    ref={logoFileRef}
+                    type="file"
+                    accept={WIDGET_LOGO_ACCEPT}
+                    className="sr-only"
+                    data-testid="input-logo-file"
+                    disabled={logoBusy}
+                    onChange={onLogoFileChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={logoBusy}
+                    data-testid="button-logo-upload"
+                    onClick={() => logoFileRef.current?.click()}
+                  >
+                    {logoBusy ? "Uploading..." : "Upload"}
+                  </Button>
                 </div>
                 {brandingErrors.logo || logoUploadError ? (
                   <p className="text-[10px] text-red-600" data-testid="text-branding-error">

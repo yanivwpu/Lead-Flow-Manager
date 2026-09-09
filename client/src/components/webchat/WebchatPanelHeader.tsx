@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
 import type { PublicWebchatPresentation } from "@shared/webchatWidgetBranding";
 import { WEBCHAT_CORNER_PX } from "@shared/webchatWidgetBranding";
+import {
+  markWidgetLogoPreviewFailed,
+  shouldResetWidgetLogoPreview,
+} from "@shared/webchatWidgetLogoUpload";
 
 export function WebchatPanelHeader({ presentation }: { presentation: PublicWebchatPresentation }) {
   const initial = presentation.displayName.trim().charAt(0).toUpperCase() || "W";
   const [logoFailed, setLogoFailed] = useState(false);
+  const [logoSrc, setLogoSrc] = useState(presentation.logoUrl);
   useEffect(() => {
-    setLogoFailed(false);
-  }, [presentation.logoUrl]);
+    if (shouldResetWidgetLogoPreview(logoSrc, presentation.logoUrl)) {
+      setLogoFailed(false);
+      setLogoSrc(presentation.logoUrl);
+    }
+  }, [presentation.logoUrl, logoSrc]);
   const showLogo = Boolean(presentation.logoUrl) && !logoFailed;
   return (
     <div
@@ -25,7 +33,7 @@ export function WebchatPanelHeader({ presentation }: { presentation: PublicWebch
           style={{ borderRadius: presentation.cornerStyle === "square" ? 4 : 999 }}
           referrerPolicy="no-referrer"
           data-testid="webchat-panel-logo"
-          onError={() => setLogoFailed(true)}
+          onError={() => setLogoFailed((failed) => markWidgetLogoPreviewFailed(failed))}
         />
       ) : (
         <div

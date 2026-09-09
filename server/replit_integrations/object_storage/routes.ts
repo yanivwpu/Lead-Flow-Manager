@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { readPublicUploadObject } from "../../mediaStorageService";
 
 /**
  * Object Storage Routes
@@ -162,6 +163,21 @@ export function registerObjectStorageRoutes(app: Express): void {
       });
       stream.pipe(res);
     } catch (error: any) {
+      const fromPublic = await readPublicUploadObject(raw);
+      if (fromPublic) {
+        res.set("X-Content-Type-Options", "nosniff");
+        res.set("X-Frame-Options", "DENY");
+        res.set("Content-Type", fromPublic.mimeType);
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        if (FORCE_DOWNLOAD_MIME_PREFIXES.some((p) => fromPublic.mimeType.startsWith(p))) {
+          res.set(
+            "Content-Disposition",
+            `attachment; filename="${encodeURIComponent(raw)}"`,
+          );
+        }
+        res.set("Content-Length", String(fromPublic.buffer.length));
+        return res.end(fromPublic.buffer);
+      }
       if (error instanceof ObjectNotFoundError) {
         return res.status(404).json({ error: "Not found" });
       }

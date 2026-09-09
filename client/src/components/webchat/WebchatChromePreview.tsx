@@ -1,10 +1,14 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   buildWebchatChromeLayout,
   chromeCssForPreview,
   type WebchatChromeState,
 } from "@shared/webchatWidgetChrome";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
+import {
+  markWidgetLogoPreviewFailed,
+  shouldResetWidgetLogoPreview,
+} from "@shared/webchatWidgetLogoUpload";
 
 function CssBox({
   css,
@@ -42,6 +46,29 @@ function IconSvg({ inner, size = 22 }: { inner: string; size?: number }) {
       strokeLinejoin="round"
       aria-hidden="true"
       dangerouslySetInnerHTML={{ __html: inner }}
+    />
+  );
+}
+
+function PreviewCardLogo({ src, iconSvg }: { src: string; iconSvg: string }) {
+  const [failed, setFailed] = useState(false);
+  const [current, setCurrent] = useState(src);
+  useEffect(() => {
+    if (shouldResetWidgetLogoPreview(current, src)) {
+      setFailed(false);
+      setCurrent(src);
+    }
+  }, [src, current]);
+  if (!src || failed) return <IconSvg inner={iconSvg} />;
+  return (
+    <img
+      src={src}
+      alt=""
+      width={28}
+      height={28}
+      className="h-7 w-7 shrink-0 rounded-full object-cover"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed((prev) => markWidgetLogoPreviewFailed(prev))}
     />
   );
 }
@@ -118,17 +145,7 @@ export function WebchatChromePreview({
         ) : (
           <span className="flex min-w-0 max-w-full items-center gap-2">
             {p.logoUrl && p.launcherStyle === "card" ? (
-              <img
-                src={p.logoUrl}
-                alt=""
-                width={28}
-                height={28}
-                className="h-7 w-7 shrink-0 rounded-full object-cover"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
+              <PreviewCardLogo src={p.logoUrl} iconSvg={chrome.iconSvg} />
             ) : (
               <IconSvg inner={chrome.iconSvg} />
             )}

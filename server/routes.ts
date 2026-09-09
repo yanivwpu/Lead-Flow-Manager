@@ -246,6 +246,7 @@ import { normalizeUserLanguage } from "@shared/userLanguage";
 
 import { registerTemplateRoutes } from "./templateRoutes";
 import { registerMediaRoutes } from "./routes/media";
+import { registerWidgetLogoRoutes } from "./routes/widgetLogo";
 import { registerWhatsappIntegrationRoutes } from "./routes/whatsappIntegrationRoutes";
 
 const TWILIO_BASE_COST_PER_MESSAGE = 0.005;
@@ -12129,6 +12130,7 @@ export async function registerRoutes(
   });
 
   registerMediaRoutes(app);
+  registerWidgetLogoRoutes(app);
   registerWhatsappIntegrationRoutes(app);
   registerContactRoutes(app);
   registerSchedulingRoutes(app);
