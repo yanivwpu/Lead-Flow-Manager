@@ -1,7 +1,7 @@
 /**
  * POST /api/widget-settings/logo
  * Authenticated first-party widget logo upload. Stores a raster with the same
- * Inbox R2 helper (`uploadOutboundUserMedia` → `media/{tenant}/web-upload/`)
+ * Inbox R2 helper arguments (`uploadOutboundUserMedia` → `media/{userId}/web-upload/{uuid}`)
  * and returns { logoUrl: "/objects/uploads/..." }.
  */
 
@@ -17,7 +17,6 @@ import {
   WidgetLogoStorageUnavailableError,
 } from "../mediaStorageService";
 import {
-  buildWidgetLogoFilename,
   inspectWidgetLogoUpload,
   widgetLogoUploadAuth,
 } from "../widgetLogoUpload";
@@ -90,27 +89,27 @@ export function registerWidgetLogoRoutes(app: Express): void {
             code: inspected.code || WIDGET_LOGO_ERROR_CODE.INVALID_TYPE,
           });
         }
-        const filename = buildWidgetLogoFilename(auth.userId, inspected.ext);
-        // #region agent log
-        fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'widgetLogo.ts:post',message:'logo handler after inspect',data:{mime:inspected.mime,ext:inspected.ext,bytes:req.file.size,filenameLen:filename.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const stored = await storeWidgetLogoRaster({
           buffer: req.file.buffer,
           mimeType: inspected.mime,
-          filename,
           userId: auth.userId,
         });
         return res.json({ logoUrl: stored.logoUrl });
       } catch (error: any) {
         const unavailable = error instanceof WidgetLogoStorageUnavailableError;
+        const awsCode = error?.awsCode || error?.Code || error?.code || null;
+        const awsHttpStatus = error?.awsHttpStatus || error?.$metadata?.httpStatusCode || null;
         // #region agent log
-        fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'widgetLogo.ts:catch',message:'logo handler storage catch',data:{unavailable,errName:error?.name||'Error',code:error?.code||null},timestamp:Date.now()})}).catch(()=>{});
+        fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'B',location:'widgetLogo.ts:catch',message:'logo handler storage catch',data:{unavailable,errName:error?.name||'Error',awsCode,awsHttpStatus,gitShaSet:Boolean(process.env.RAILWAY_GIT_COMMIT_SHA||process.env.RAILWAY_GIT_COMMIT)},timestamp:Date.now(),runId:'post-fix'})}).catch(()=>{});
         // #endregion
         console.error(
           `[WidgetLogo] Storage failure — userId=${req.user?.id}` +
             ` mime=${req.file?.mimetype}` +
             ` size=${req.file?.size}B` +
-            ` name=${error?.name || "Error"}`,
+            ` name=${error?.name || "Error"}` +
+            ` awsCode=${awsCode || "none"}` +
+            ` awsHttpStatus=${awsHttpStatus || "none"}` +
+            ` gitSha=${process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || "unset"}`,
         );
         return res.status(unavailable ? 503 : 500).json({
           error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),

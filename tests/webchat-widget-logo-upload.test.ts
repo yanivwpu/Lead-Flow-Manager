@@ -256,13 +256,15 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
     originChannel?: string;
     objectBasename?: string;
     contentType: string;
+    bufferIsBuffer: boolean;
+    contentLength: number;
   }> = [];
-  const filename = "tenant-a-1710000000000-1.jpg";
-  const expectedKey = `media/tenant-a/web-upload/${filename}`;
+  const objectName = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.jpg";
+  const inboxKey = `media/tenant-a/web-upload/${objectName}`;
+  const publicName = `tenant-a__${objectName}`;
   const stored = await storeWidgetLogoRaster({
     buffer: Buffer.from(JPEG),
     mimeType: "image/jpeg",
-    filename,
     userId: "tenant-a",
     r2Enabled: true,
     upload: async (params) => {
@@ -271,39 +273,41 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
         originChannel: params.originChannel,
         objectBasename: params.objectBasename,
         contentType: params.contentType,
+        bufferIsBuffer: Buffer.isBuffer(params.buffer),
+        contentLength: params.buffer.length,
       });
       return {
-        mediaUrl: `https://cdn.example/${expectedKey}`,
-        mediaStorageKey: expectedKey,
+        mediaUrl: `https://cdn.example/${inboxKey}`,
+        mediaStorageKey: inboxKey,
       };
     },
   });
-  assert.equal(stored.logoUrl, `/objects/uploads/${filename}`);
+  assert.equal(stored.logoUrl, `/objects/uploads/${publicName}`);
   assert.equal(WIDGET_LOGO_ORIGIN_CHANNEL, "web-upload");
   assert.deepEqual(uploads, [
     {
       userId: "tenant-a",
       originChannel: "web-upload",
-      objectBasename: filename,
+      objectBasename: undefined,
       contentType: "image/jpeg",
+      bufferIsBuffer: true,
+      contentLength: JPEG.length,
     },
   ]);
-  assert.equal(widgetLogoStorageKey("tenant-a", filename), expectedKey);
-  assert.equal(isAllowedWidgetLogoStorageKey(expectedKey), true);
-  assert.equal(isAllowedWidgetLogoStorageKey(`uploads/${filename}`), false);
-  assert.equal(isAllowedWidgetLogoStorageKey(`media/tenant-a/widget-logo/${filename}`), false);
-  assert.deepEqual(widgetLogoReadKeys(filename), [expectedKey]);
+  assert.equal(widgetLogoStorageKey("tenant-a", objectName), inboxKey);
+  assert.equal(isAllowedWidgetLogoStorageKey(inboxKey), true);
+  assert.equal(isAllowedWidgetLogoStorageKey(`uploads/${objectName}`), false);
+  assert.equal(isAllowedWidgetLogoStorageKey(`media/tenant-a/widget-logo/${objectName}`), false);
+  assert.deepEqual(widgetLogoReadKeys(publicName), [inboxKey]);
   assert.equal(
-    widgetLogoReadKeys(filename).some((k) => k.includes("widget-logo") || k.includes("tenant-b") || k.startsWith("uploads/")),
+    widgetLogoReadKeys(publicName).some((k) => k.includes("widget-logo") || k.includes("tenant-b") || k.startsWith("uploads/")),
     false,
   );
-  assert.deepEqual(widgetLogoReadKeys("tenant-b-1710000000000-1.jpg"), [
-    "media/tenant-b/web-upload/tenant-b-1710000000000-1.jpg",
+  const otherPublic = `tenant-b__${objectName}`;
+  assert.deepEqual(widgetLogoReadKeys(otherPublic), [
+    `media/tenant-b/web-upload/${objectName}`,
   ]);
-  assert.equal(
-    widgetLogoReadKeys("tenant-b-1710000000000-1.jpg").includes(expectedKey),
-    false,
-  );
+  assert.equal(widgetLogoReadKeys(otherPublic).includes(inboxKey), false);
 
   let fallbackCalled = false;
   await assert.rejects(
@@ -311,31 +315,37 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
       storeWidgetLogoRaster({
         buffer: Buffer.from(JPEG),
         mimeType: "image/jpeg",
-        filename,
         userId: "tenant-a",
         r2Enabled: false,
         upload: async () => {
           fallbackCalled = true;
-          return { mediaUrl: "https://cdn.example/nope.jpg", mediaStorageKey: expectedKey };
+          return { mediaUrl: "https://cdn.example/nope.jpg", mediaStorageKey: inboxKey };
         },
       }),
     (err: unknown) => err instanceof WidgetLogoStorageUnavailableError,
   );
   assert.equal(fallbackCalled, false);
 
+  const accessDenied = Object.assign(new Error("Access Denied"), {
+    name: "InvalidRequest",
+    Code: "XAmzContentSHA256Mismatch",
+    $metadata: { httpStatusCode: 400 },
+  });
   await assert.rejects(
     () =>
       storeWidgetLogoRaster({
         buffer: Buffer.from(JPEG),
         mimeType: "image/jpeg",
-        filename,
         userId: "tenant-a",
         r2Enabled: true,
         upload: async () => {
-          throw new Error("AccessDenied");
+          throw accessDenied;
         },
       }),
-    (err: unknown) => err instanceof WidgetLogoStorageUnavailableError,
+    (err: unknown) =>
+      err instanceof WidgetLogoStorageUnavailableError &&
+      err.awsCode === "XAmzContentSHA256Mismatch" &&
+      err.awsHttpStatus === 400,
   );
 
   await assert.rejects(
@@ -343,18 +353,18 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
       storeWidgetLogoRaster({
         buffer: Buffer.from(JPEG),
         mimeType: "image/jpeg",
-        filename: "tenant-b-1710000000000-1.jpg",
         userId: "tenant-a",
         r2Enabled: true,
-        upload: async () => {
-          throw new Error("should not upload cross-tenant logo");
-        },
+        upload: async () => ({
+          mediaUrl: "https://cdn.example/media/tenant-b/web-upload/x.jpg",
+          mediaStorageKey: "media/tenant-b/web-upload/x.jpg",
+        }),
       }),
     (err: unknown) => err instanceof WidgetLogoStorageUnavailableError,
   );
 
   const persisted = widgetSettingsPatchLogoUrl(stored.logoUrl, "/objects/uploads/kept.jpg");
-  assert.equal(persisted, `/objects/uploads/${filename}`);
+  assert.equal(persisted, `/objects/uploads/${publicName}`);
 }
 
 {
@@ -452,13 +462,16 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   assert.match(logoRoute, /storeWidgetLogoRaster/);
   assert.match(logoRoute, /logoUrl: stored\.logoUrl/);
   assert.match(logoRoute, /STORAGE_UNAVAILABLE/);
+  assert.doesNotMatch(logoRoute, /buildWidgetLogoFilename/);
+  assert.match(logoRoute, /awsCode/);
   const storage = read("server/mediaStorageService.ts");
   assert.match(storage, /requestChecksumCalculation/);
   assert.match(storage, /WHEN_REQUIRED/);
   assert.match(storage, /uploadOutboundUserMedia/);
   assert.match(storage, /originChannel: WIDGET_LOGO_ORIGIN_CHANNEL/);
-  assert.match(storage, /objectBasename: filename/);
   assert.match(storage, /WIDGET_LOGO_ORIGIN_CHANNEL = "web-upload"/);
+  assert.doesNotMatch(storage, /objectBasename: filename/);
+  assert.doesNotMatch(storage, /storedKey !== expectedKey/);
   assert.doesNotMatch(storage, /media\/\$\{owner\}\/widget-logo/);
   assert.doesNotMatch(storage, /primary: `uploads\/\$\{filename\}`/);
   const storeFn = storage.slice(
@@ -466,6 +479,9 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
     storage.indexOf("export async function readPublicUploadObject"),
   );
   assert.match(storeFn, /uploadOutboundUserMedia/);
+  assert.match(storeFn, /inboxWebUploadObjectName/);
+  assert.doesNotMatch(storeFn, /objectBasename:/);
+  assert.doesNotMatch(storeFn, /objectBasename,/);
   assert.doesNotMatch(storeFn, /putFallbackObjectOrLocal/);
   assert.doesNotMatch(storeFn, /PRIVATE_OBJECT_DIR/);
   const readFn = storage.slice(
@@ -479,6 +495,17 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   const inbox = read("server/routes/media.ts");
   assert.match(inbox, /originChannel: "web-upload"/);
   assert.match(inbox, /uploadOutboundUserMedia/);
+  assert.doesNotMatch(inbox, /objectBasename/);
+  const build = read("script/build.ts");
+  assert.match(build, /process\.env\.NODE_ENV/);
+  assert.doesNotMatch(build, /RAILWAY_GIT_COMMIT_SHA/);
+  const routesSrc = read("server/routes.ts");
+  const probeStart = routesSrc.indexOf('app.get("/api/debug/production-build-probe"');
+  assert.ok(probeStart > 0);
+  const probe = routesSrc.slice(probeStart, probeStart + 800);
+  assert.match(probe, /RAILWAY_GIT_COMMIT_SHA/);
+  assert.match(probe, /gitSha/);
+  assert.ok(routesSrc.indexOf("registerMediaRoutes(app)") > probeStart);
   const header = read("client/src/components/webchat/WebchatPanelHeader.tsx");
   assert.match(header, /markWidgetLogoPreviewFailed/);
   assert.match(header, /webchat-panel-avatar/);

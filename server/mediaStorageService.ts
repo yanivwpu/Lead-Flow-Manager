@@ -530,14 +530,48 @@ export function sanitizeWidgetLogoOwnerId(userId: string): string {
   return String(userId || "").replace(/[^\w-]/g, "").slice(0, 36) || "user";
 }
 
+export const WIDGET_LOGO_PUBLIC_DELIM = "__";
+
 export function ownerFromWidgetLogoFilename(filename: string): string | null {
-  const m = filename.match(/^([\w][\w-]{0,35})-\d{10,}-\d+\.(jpg|jpeg|png|webp)$/i);
-  return m ? m[1] : null;
+  const parsed = widgetLogoObjectFromPublicFilename(filename);
+  return parsed?.owner ?? null;
 }
 
-export function widgetLogoStorageKey(userId: string, filename: string): string {
+export function widgetLogoObjectFromPublicFilename(
+  filename: string,
+): { owner: string; objectName: string } | null {
+  if (!isPublicUploadObjectFilename(filename) || !/\.(jpg|jpeg|png|webp)$/i.test(filename)) return null;
+  const delim = filename.indexOf(WIDGET_LOGO_PUBLIC_DELIM);
+  if (delim <= 0) return null;
+  const owner = filename.slice(0, delim);
+  const objectName = filename.slice(delim + WIDGET_LOGO_PUBLIC_DELIM.length);
+  if (owner !== sanitizeWidgetLogoOwnerId(owner)) return null;
+  if (!isPublicUploadObjectFilename(objectName) || objectName.includes("/") || objectName.includes("\\")) {
+    return null;
+  }
+  if (!/\.(jpg|jpeg|png|webp)$/i.test(objectName)) return null;
+  return { owner, objectName };
+}
+
+export function publicWidgetLogoFilename(userId: string, objectName: string): string {
   const owner = sanitizeWidgetLogoOwnerId(userId);
-  return `media/${owner}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${filename}`;
+  const name = String(objectName || "").replace(/^\/+/, "").split("/").pop() || "";
+  return `${owner}${WIDGET_LOGO_PUBLIC_DELIM}${name}`;
+}
+
+export function widgetLogoStorageKey(userId: string, objectName: string): string {
+  return `media/${userId}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${objectName}`;
+}
+
+export function inboxWebUploadObjectName(userId: string, mediaStorageKey: string): string | null {
+  const key = String(mediaStorageKey || "").replace(/^\/+/, "");
+  const prefix = `media/${userId}/${WIDGET_LOGO_ORIGIN_CHANNEL}/`;
+  if (!key.startsWith(prefix) || key.includes("..") || key.includes("\\") || key.includes("//")) return null;
+  const objectName = key.slice(prefix.length);
+  if (!objectName || objectName.includes("/") || !isPublicUploadObjectFilename(objectName)) return null;
+  if (!/\.(jpg|jpeg|png|webp)$/i.test(objectName)) return null;
+  if (!isAllowedWidgetLogoStorageKey(key)) return null;
+  return objectName;
 }
 
 export function isAllowedWidgetLogoStorageKey(key: string): boolean {
@@ -546,17 +580,28 @@ export function isAllowedWidgetLogoStorageKey(key: string): boolean {
 }
 
 export function widgetLogoReadKeys(filename: string): string[] {
-  const owner = ownerFromWidgetLogoFilename(filename);
-  if (!owner || !filename.startsWith(`${owner}-`)) return [];
-  const key = `media/${owner}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${filename}`;
+  const parsed = widgetLogoObjectFromPublicFilename(filename);
+  if (!parsed) return [];
+  const key = `media/${parsed.owner}/${WIDGET_LOGO_ORIGIN_CHANNEL}/${parsed.objectName}`;
   return isAllowedWidgetLogoStorageKey(key) ? [key] : [];
 }
 
 export class WidgetLogoStorageUnavailableError extends Error {
   readonly code = "LOGO_STORAGE_UNAVAILABLE";
-  constructor() {
+  readonly awsCode: string | null;
+  readonly awsHttpStatus: number | null;
+  constructor(cause?: unknown) {
     super("Logo storage is temporarily unavailable.");
     this.name = "WidgetLogoStorageUnavailableError";
+    const e = cause as {
+      name?: string;
+      Code?: string;
+      code?: string;
+      $metadata?: { httpStatusCode?: number };
+    } | undefined;
+    const wrapped = e?.name === "WidgetLogoStorageUnavailableError";
+    this.awsCode = wrapped ? null : e?.Code || e?.code || e?.name || null;
+    this.awsHttpStatus = wrapped ? null : e?.$metadata?.httpStatusCode ?? null;
   }
 }
 
@@ -568,58 +613,60 @@ export type WidgetLogoUploadFn = (params: {
   objectBasename?: string;
 }) => Promise<{ mediaUrl: string; mediaStorageKey: string }>;
 
-/** Widget logos reuse Inbox R2 writes at media/{tenant}/web-upload/, then advertise /objects/uploads/... */
+/** Widget logos call Inbox uploadOutboundUserMedia with the same args, then advertise /objects/uploads/... */
 export async function storeWidgetLogoRaster(params: {
-  buffer: Buffer;
+  buffer: Buffer | Uint8Array;
   mimeType: string;
-  filename: string;
   userId: string;
   upload?: WidgetLogoUploadFn;
   r2Enabled?: boolean;
 }): Promise<{ logoUrl: string }> {
-  const { buffer, mimeType, filename, userId } = params;
-  const owner = sanitizeWidgetLogoOwnerId(userId);
-  const filenameOk = isPublicUploadObjectFilename(filename) && /\.(jpg|jpeg|png|webp)$/i.test(filename);
-  const ownerMatch = ownerFromWidgetLogoFilename(filename) === owner;
-  const expectedKey = widgetLogoStorageKey(userId, filename);
-  const keyOk = isAllowedWidgetLogoStorageKey(expectedKey);
+  const userId = String(params.userId || "").trim();
+  const mimeType = (params.mimeType || "").split(";")[0].trim().toLowerCase();
+  const body = Buffer.isBuffer(params.buffer) ? params.buffer : Buffer.from(params.buffer);
   const r2Enabled = params.r2Enabled ?? r2Configured();
+  const mimeOk = mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
   // #region agent log
-  fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'C',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store start',data:{filenameOk,ownerMatch,keyOk,r2Enabled,originChannel:WIDGET_LOGO_ORIGIN_CHANNEL,filenameLen:filename.length},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'A',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store start',data:{mimeOk,r2Enabled,originChannel:WIDGET_LOGO_ORIGIN_CHANNEL,hasObjectBasename:false,contentLength:body.length,userIdLen:userId.length},timestamp:Date.now(),runId:'post-fix'})}).catch(()=>{});
   // #endregion
-  if (!filenameOk || !ownerMatch || !keyOk) {
+  if (!userId || !mimeOk || body.length === 0) {
     throw new WidgetLogoStorageUnavailableError();
   }
   if (!r2Enabled) {
     // #region agent log
-    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'E',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store skipped non-r2 fallback',data:{r2Enabled:false},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'E',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo store skipped non-r2 fallback',data:{r2Enabled:false},timestamp:Date.now(),runId:'post-fix'})}).catch(()=>{});
     // #endregion
     throw new WidgetLogoStorageUnavailableError();
   }
   try {
     const upload = params.upload ?? uploadOutboundUserMedia;
     const stored = await upload({
-      userId: owner,
-      buffer,
+      userId,
+      buffer: body,
       contentType: mimeType,
       originChannel: WIDGET_LOGO_ORIGIN_CHANNEL,
-      objectBasename: filename,
     });
     const storedKey = String(stored.mediaStorageKey || "").replace(/^\/+/, "");
+    const objectName = inboxWebUploadObjectName(userId, storedKey);
+    const inboxShape = Boolean(objectName);
     // #region agent log
-    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'A',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload returned',data:{keyKind:storedKey.includes('/web-upload/')?'tenant-web-upload':storedKey.startsWith('uploads/')?'uploads':'other',keyMatchesExpected:storedKey===expectedKey},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'A',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload returned',data:{keyKind:storedKey.includes('/web-upload/')?'tenant-web-upload':storedKey.startsWith('uploads/')?'uploads':'other',inboxShape,hasMediaUrl:Boolean(stored.mediaUrl),hasMediaStorageKey:Boolean(stored.mediaStorageKey)},timestamp:Date.now(),runId:'post-fix'})}).catch(()=>{});
     // #endregion
-    if (storedKey !== expectedKey) {
+    if (!objectName) {
       throw new WidgetLogoStorageUnavailableError();
     }
-    return { logoUrl: `/objects/uploads/${filename}` };
+    const publicName = publicWidgetLogoFilename(userId, objectName);
+    if (!isPublicUploadObjectFilename(publicName)) {
+      throw new WidgetLogoStorageUnavailableError();
+    }
+    return { logoUrl: `/objects/uploads/${publicName}` };
   } catch (err: unknown) {
-    const e = err as { name?: string; code?: string };
+    const e = err as { name?: string; Code?: string; code?: string; $metadata?: { httpStatusCode?: number } };
     // #region agent log
-    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'D',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload failed',data:{errName:e?.name||'Error',code:e?.code||null},timestamp:Date.now(),runId:'fix'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7388/ingest/30f90c73-9e82-48da-9aa8-296c7e653663',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5b3c3c'},body:JSON.stringify({sessionId:'5b3c3c',hypothesisId:'B',location:'mediaStorageService.ts:storeWidgetLogoRaster',message:'logo outbound upload failed',data:{errName:e?.name||'Error',errCode:e?.Code||e?.code||null,httpStatus:e?.$metadata?.httpStatusCode||null},timestamp:Date.now(),runId:'post-fix'})}).catch(()=>{});
     // #endregion
     if (err instanceof WidgetLogoStorageUnavailableError) throw err;
-    throw new WidgetLogoStorageUnavailableError();
+    throw new WidgetLogoStorageUnavailableError(err);
   }
 }
 
