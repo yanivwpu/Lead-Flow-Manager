@@ -49,6 +49,7 @@ import { getChatbotFlowForWorkspace, getContactForWorkspace, getConversationForW
 import { FOREIGN_RESOURCE_BODY } from "@shared/tenantOwnership";
 import { devLog } from "./devLog";
 import { toPublicIntegration } from "@shared/integrationPublic";
+import { toAdminUserAttributionDto } from "@shared/userClientDto";
 import {
   insertChatSchema,
   insertRegisteredPhoneSchema,
@@ -970,7 +971,11 @@ export async function registerRoutes(
       if (pushSubscription !== undefined) updates.pushSubscription = pushSubscription;
 
       const updated = await storage.updateUser(req.user.id, updates);
-      res.json(updated);
+      res.json({
+        pushEnabled: !!updated?.pushEnabled,
+        emailEnabled: !!updated?.emailEnabled,
+        pushConfigured: updated?.pushSubscription != null,
+      });
     } catch (error) {
       console.error("Error updating preferences:", error);
       res.status(500).json({ error: "Failed to update preferences" });
@@ -1072,7 +1077,7 @@ export async function registerRoutes(
       res.json({
         pushEnabled: user.pushEnabled,
         emailEnabled: user.emailEnabled,
-        pushSubscription: user.pushSubscription,
+        pushConfigured: user.pushSubscription != null,
       });
     } catch (error) {
       console.error("Error fetching preferences:", error);
@@ -2053,7 +2058,7 @@ export async function registerRoutes(
         message: "Meta WhatsApp Business API connected successfully!",
         phoneNumber: result.phoneNumber,
         webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
-        webhookVerifyToken: updatedUser?.metaWebhookVerifyToken || webhookVerifyToken,
+        webhookVerifyTokenConfigured: !!(updatedUser?.metaWebhookVerifyToken || webhookVerifyToken),
       });
     } catch (error: any) {
       console.error("Error connecting Meta:", error);
@@ -5428,8 +5433,7 @@ export async function registerRoutes(
 
   // ── End Meta OAuth flow ───────────────────────────────────────────────────
 
-  // Return webhook URL + verify token for Facebook/Instagram channels
-  // The verify token is stored in channelSettings.config.webhookVerifyToken
+  // Return webhook URL and page identity for Facebook/Instagram. Never the verify token.
   app.get("/api/integrations/meta-webhook-config", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -5455,13 +5459,13 @@ export async function registerRoutes(
         webhookUrl,
         facebook: {
           isConnected: !!fbSetting?.isConnected,
-          verifyToken: fbConfig?.webhookVerifyToken || deriveFbToken(),
+          verifyTokenConfigured: !!(fbConfig?.webhookVerifyToken || deriveFbToken()),
           pageName: fbConfig?.pageName ?? null,
           pageId: fbConfig?.pageId ?? null,
         },
         instagram: {
           isConnected: !!igSetting?.isConnected,
-          verifyToken: igConfig?.webhookVerifyToken || deriveIgToken(),
+          verifyTokenConfigured: !!(igConfig?.webhookVerifyToken || deriveIgToken()),
           pageName: igConfig?.pageName ?? null,
           pageId: igConfig?.instagramAccountId ?? igConfig?.pageId ?? null,
         },
@@ -7300,7 +7304,7 @@ export async function registerRoutes(
       // Dual-write to channelSettings for Facebook/Instagram so the messaging
       // engine (adapters + webhook handler) can find the credentials.
       // channelSettings is the single source of truth for inbound/outbound routing.
-      let metaWebhookConfig: { webhookUrl: string; verifyToken: string } | undefined;
+      let metaWebhookConfig: { webhookUrl: string; verifyTokenConfigured: boolean } | undefined;
       if (type === 'meta_facebook' || type === 'meta_instagram') {
         const channel = type === 'meta_facebook' ? 'facebook' : 'instagram';
 
@@ -7341,7 +7345,7 @@ export async function registerRoutes(
         const webhookBaseUrl = getAppOrigin();
         metaWebhookConfig = {
           webhookUrl: `${webhookBaseUrl}/api/webhook/meta`,
-          verifyToken: verifyTokenRaw,
+          verifyTokenConfigured: true,
         };
         console.log(`[Integration] ${channel} channelSettings created/updated for user ${req.user.id} — pageId: ${channelConfig.pageId}, verifyToken stored`);
       }
@@ -10394,7 +10398,7 @@ export async function registerRoutes(
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const usersWithAttribution = await storage.getUsersWithAttribution(limit);
-      res.json(usersWithAttribution);
+      res.json(usersWithAttribution.map((u) => toAdminUserAttributionDto(u)));
     } catch (error) {
       console.error("Error fetching users attribution:", error);
       res.status(500).json({ error: "Failed to fetch users attribution" });

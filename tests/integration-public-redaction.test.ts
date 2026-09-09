@@ -3,7 +3,7 @@
  * Run: npx tsx tests/integration-public-redaction.test.ts
  */
 import assert from "node:assert/strict";
-import { toPublicIntegration, redactSecretsInText } from "../shared/integrationPublic";
+import { toPublicIntegration, redactSecretsInText, toPublicChannelSetting } from "../shared/integrationPublic";
 
 {
   const pub = toPublicIntegration({
@@ -30,6 +30,16 @@ import { toPublicIntegration, redactSecretsInText } from "../shared/integrationP
   assert.ok(!redacted.includes("refXYZ"));
   assert.ok(!redacted.includes("authXYZ"));
   assert.ok(redacted.includes("[REDACTED]"));
+}
+
+{
+  const channel = toPublicChannelSetting({
+    id: "ch-1",
+    config: { pageName: "Page", accessToken: "secret", webhookVerifyToken: "vt" },
+  });
+  assert.equal((channel.config as { pageName: string }).pageName, "Page");
+  assert.equal((channel.config as { accessToken?: string }).accessToken, undefined);
+  assert.equal((channel.config as { webhookVerifyToken?: string }).webhookVerifyToken, undefined);
 }
 
 console.log("integration-public-redaction.test.ts: all assertions passed");

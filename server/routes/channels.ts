@@ -10,7 +10,7 @@ import {
 import { db } from "../../drizzle/db";
 import { channelSettings, messages as messagesTable } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
-import { getMetaGraphApiBase } from "../metaGraphVersion";
+import { toPublicChannelSetting } from "@shared/integrationPublic";
 
 export function registerChannelRoutes(app: Express): void {
   function truncateJson(v: unknown, max = 12_000): string {
@@ -424,7 +424,7 @@ export function registerChannelRoutes(app: Express): void {
           finalConnected,
         });
       }
-      res.json(settings);
+      res.json(settings.map((s) => toPublicChannelSetting(s as unknown as Record<string, unknown>)));
     } catch (error) {
       console.error("Error fetching channel settings:", error);
       res.status(500).json({ error: "Failed to fetch channel settings" });
@@ -465,7 +465,7 @@ export function registerChannelRoutes(app: Express): void {
         channel as any,
         req.body
       );
-      res.json(setting);
+      res.json(toPublicChannelSetting(setting as unknown as Record<string, unknown>));
     } catch (error) {
       console.error("Error updating channel setting:", error);
       res.status(500).json({ error: "Failed to update channel setting" });

@@ -891,10 +891,6 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           configIdLast4: configIdLast4(process.env.META_WHATSAPP_EMBEDDED_SIGNUP_V4_CONFIG_ID),
           v2ConfigIdLast4: configIdLast4(process.env.META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID),
         },
-        lastOAuthDebug:
-          user.metaLastOAuthDebug && typeof user.metaLastOAuthDebug === "object"
-            ? stripSensitiveWhatsAppFields(user.metaLastOAuthDebug as Record<string, unknown>)
-            : null,
       });
     } catch (e: any) {
       res.status(500).json({ error: e?.message || "Failed to load saved Meta WhatsApp fields" });

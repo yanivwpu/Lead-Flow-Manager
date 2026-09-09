@@ -39,11 +39,15 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }
     setError(null);
 
     try {
+      const localVerifyToken =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID().replace(/-/g, "")
+          : `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
       const response = await fetch("/api/meta/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ ...credentials, webhookVerifyToken: localVerifyToken }),
       });
 
       const data = await response.json();
@@ -54,7 +58,7 @@ export function ConnectMetaWizard({ open, onOpenChange, onSuccess, onStartTour }
       }
 
       setWebhookUrl(data.webhookUrl);
-      setVerifyToken(data.webhookVerifyToken || data.verifyToken);
+      setVerifyToken(localVerifyToken);
       setStep("webhook");
     } catch (err: any) {
       setError(err.message || "Connection could not be completed. Please try again.");

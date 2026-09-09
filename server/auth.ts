@@ -6,6 +6,7 @@ import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
+import { toClientUser } from '@shared/userClientDto';
 import { isDisposableEmail } from '@shared/disposableEmail';
 import { normalizeUserLanguage } from '@shared/userLanguage';
 import {
@@ -765,13 +766,12 @@ export function registerAuthRoutes(app: Express) {
           });
         }
         void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
-          const { password: _, ...safeUser } = user;
           return res.json({
             success: true,
             verified: true,
             alreadyVerified: result.alreadyVerified,
             trialStarted: result.trialStarted,
-            user: safeUser,
+            user: toClientUser(user),
           });
         });
       });
@@ -867,8 +867,7 @@ export function registerAuthRoutes(app: Express) {
           }
 
           void finishGhlOAuthHandoffAfterAuth(req, res, user.id).finally(() => {
-            const { password: _, ...safeUser } = user;
-            res.json(safeUser);
+            res.json(toClientUser(user));
           });
         });
       })(req, res, next);
@@ -888,9 +887,8 @@ export function registerAuthRoutes(app: Express) {
   // Check if user is authenticated
   app.get('/api/auth/me', (req, res) => {
     if (req.isAuthenticated()) {
-      const { password: _, ...safeUser } = req.user as User;
       res.set('Cache-Control', 'no-store, private');
-      res.json(safeUser);
+      res.json(toClientUser(req.user as User));
     } else {
       res.set('Cache-Control', 'no-store');
       res.status(401).json({ error: 'Not authenticated' });
@@ -1130,8 +1128,11 @@ export function registerAuthRoutes(app: Express) {
         }
 
         void finishGhlOAuthHandoffAfterAuth(req, res, updatedUser.id).finally(() => {
-          const { password: _, ...safeUser } = updatedUser;
-          res.json({ success: true, message: 'Password has been reset successfully', user: safeUser });
+          res.json({
+            success: true,
+            message: 'Password has been reset successfully',
+            user: toClientUser(updatedUser),
+          });
         });
       });
     } catch (error) {

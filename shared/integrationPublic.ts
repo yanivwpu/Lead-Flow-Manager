@@ -11,11 +11,21 @@ const SENSITIVE_CONFIG_KEYS = [
   "apiKey",
   "webhookSecret",
   "webhookSigningKey",
+  "webhookVerifyToken",
+  "verifyToken",
   "consumerKey",
   "consumerSecret",
   "pageAccessToken",
   "page_access_token",
+  "botToken",
+  "authToken",
+  "accountSid",
+  "appSecret",
+  "encryptedAccessToken",
 ] as const;
+
+/** Non-secret channel fields the Settings UI may display. */
+const CHANNEL_PUBLIC_CONFIG_KEYS = ["pageName", "pageId", "instagramAccountId"] as const;
 
 export function maskIntegrationConfig(
   config: Record<string, unknown> | null | undefined,
@@ -30,7 +40,24 @@ export function maskIntegrationConfig(
   return masked;
 }
 
-/** Public shape: never include raw accessToken / refreshToken columns. */
+/** Channel settings row for the browser — public config keys only, never tokens/secrets. */
+export function toPublicChannelSetting<T extends Record<string, unknown>>(setting: T): T {
+  const configRaw = (setting as T & { config?: unknown }).config;
+  const config =
+    configRaw && typeof configRaw === "object" ? (configRaw as Record<string, unknown>) : {};
+  const publicConfig: Record<string, unknown> = {};
+  for (const key of CHANNEL_PUBLIC_CONFIG_KEYS) {
+    if (config[key] != null && config[key] !== "") {
+      publicConfig[key] = config[key];
+    }
+  }
+  const { accessToken: _a, refreshToken: _r, ...rest } = setting as T & {
+    accessToken?: unknown;
+    refreshToken?: unknown;
+  };
+  return { ...rest, config: publicConfig } as T;
+}
+
 export function toPublicIntegration<T extends Record<string, unknown>>(integration: T): T {
   const {
     accessToken: _a,

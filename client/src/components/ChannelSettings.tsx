@@ -544,8 +544,8 @@ export function ChannelSettings() {
 
   const { data: metaWebhookConfig } = useQuery<{
     webhookUrl: string;
-    facebook: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
-    instagram: { isConnected: boolean; verifyToken: string; pageName?: string | null; pageId?: string | null };
+    facebook: { isConnected: boolean; verifyTokenConfigured?: boolean; pageName?: string | null; pageId?: string | null };
+    instagram: { isConnected: boolean; verifyTokenConfigured?: boolean; pageName?: string | null; pageId?: string | null };
   }>({
     queryKey: withUserQueryScope(["/api/integrations/meta-webhook-config"], user?.id),
     enabled: !!user?.id && sessionAligned,
