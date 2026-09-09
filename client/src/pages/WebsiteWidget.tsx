@@ -74,6 +74,29 @@ import {
 import { WebchatChromePreview } from "@/components/webchat/WebchatChromePreview";
 import type { WebchatChromeState } from "@shared/webchatWidgetChrome";
 
+export const WIDGET_LOGO_FILE_INPUT_ID = "widget-logo-file";
+
+/** Bound window.fetch so logo POST always reaches the network (unbound `fetch` can throw). */
+export function widgetLogoBoundFetch(url: string, init?: RequestInit): Promise<Response> {
+  return globalThis.fetch(url, init);
+}
+
+export function resetWidgetLogoFileInput(input: { value: string } | HTMLInputElement | null | undefined): void {
+  if (input) input.value = "";
+}
+
+/** Clear stale errors, reset the input, then open the native picker so the same file can be re-selected. */
+export function openWidgetLogoFilePicker(
+  input: HTMLInputElement | null | undefined,
+  onClearError?: () => void,
+): boolean {
+  onClearError?.();
+  if (!input) return false;
+  resetWidgetLogoFileInput(input);
+  input.click();
+  return true;
+}
+
 /** Website Chat Widget settings — Inbox channel `webchat`, not WhatsApp click-to-chat. */
 
 export type WidgetTriggerType = "always" | "delay" | "scroll" | "exit_intent";
@@ -545,32 +568,33 @@ export function WebsiteWidget() {
 
   const onLogoFileChange = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const file = e.target.files?.[0] ?? null;
-      e.target.value = "";
+      const inputEl = e.currentTarget;
+      const file = inputEl.files?.[0] ?? null;
       setLogoUploadError(null);
       const priorLogoUrl =
         coerceWidgetLogoUrl(lastSavedLogoRef.current) || coerceWidgetLogoUrl(settingsRef.current.logoUrl);
-      const result = await runWidgetLogoUpload({
-        event: e,
-        file,
-        priorLogoUrl,
-        lock: logoUploadLockRef.current,
-        fetchFn: fetch,
-        onBusyChange: setLogoBusy,
-      });
-      if (result.ok) {
-        const next = {
-          ...settingsRef.current,
-          logoUrl: result.logoUrl,
-        };
-        setSettings(next);
-        persistWidgetSettingsRef.current(next);
-        return;
-      }
-      if (!result.skipped) {
-        setLogoUploadError(result.error);
+      try {
+        const result = await runWidgetLogoUpload({
+          file,
+          priorLogoUrl,
+          lock: logoUploadLockRef.current,
+          fetchFn: widgetLogoBoundFetch,
+          onBusyChange: setLogoBusy,
+        });
+        if (result.ok) {
+          const next = {
+            ...settingsRef.current,
+            logoUrl: result.logoUrl,
+          };
+          setSettings(next);
+          persistWidgetSettingsRef.current(next);
+          return;
+        }
+        if (!result.skipped) {
+          setLogoUploadError(result.error);
+        }
+      } finally {
+        resetWidgetLogoFileInput(inputEl);
       }
     },
     [],
@@ -982,12 +1006,12 @@ export function WebsiteWidget() {
                     data-testid="input-logo-url"
                   />
                   <input
+                    id={WIDGET_LOGO_FILE_INPUT_ID}
                     ref={logoFileRef}
                     type="file"
                     accept={WIDGET_LOGO_ACCEPT}
                     className="sr-only"
                     data-testid="input-logo-file"
-                    disabled={logoBusy}
                     onChange={onLogoFileChange}
                   />
                   <Button
@@ -996,7 +1020,11 @@ export function WebsiteWidget() {
                     size="sm"
                     disabled={logoBusy}
                     data-testid="button-logo-upload"
-                    onClick={() => logoFileRef.current?.click()}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openWidgetLogoFilePicker(logoFileRef.current, () => setLogoUploadError(null));
+                    }}
                   >
                     {logoBusy ? "Uploading..." : "Upload"}
                   </Button>

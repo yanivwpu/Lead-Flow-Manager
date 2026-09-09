@@ -428,21 +428,100 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
 }
 
 {
+  const file = fakeFile("logo.jpg", "image/jpeg", JPEG);
+  const fileInput = {
+    value: "C:\\Users\\me\\logo.jpg",
+    clickCount: 0,
+    click() {
+      this.clickCount += 1;
+    },
+  };
+  let error: string | null = "Logo storage is temporarily unavailable.";
+  const lock: WidgetLogoUploadLock = { inFlight: false };
+  let fetchCalls = 0;
+  const fetchUrls: string[] = [];
+
+  function clickUpload() {
+    error = null;
+    fileInput.value = "";
+    fileInput.click();
+  }
+
+  async function selectFile(selected: File | null) {
+    error = null;
+    const result = await runWidgetLogoUpload({
+      file: selected,
+      priorLogoUrl: "/objects/uploads/kept.jpg",
+      lock,
+      fetchFn: async (url, init) => {
+        fetchCalls += 1;
+        fetchUrls.push(url);
+        assert.equal(url, WIDGET_LOGO_UPLOAD_PATH);
+        assert.equal(init?.method, "POST");
+        assert.ok(init?.body instanceof FormData);
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ code: "LOGO_STORAGE_UNAVAILABLE" }),
+        };
+      },
+    });
+    fileInput.value = "";
+    if (!result.ok && !result.skipped) error = result.error;
+    return result;
+  }
+
+  clickUpload();
+  assert.equal(fileInput.clickCount, 1);
+  assert.equal(fileInput.value, "");
+  assert.equal(error, null);
+  const first = await selectFile(file);
+  assert.equal(first.ok, false);
+  assert.equal(fetchCalls, 1);
+  assert.deepEqual(fetchUrls, [WIDGET_LOGO_UPLOAD_PATH]);
+  assert.equal(fileInput.value, "");
+  assert.match(String(error), /temporarily unavailable/);
+
+  clickUpload();
+  assert.equal(fileInput.clickCount, 2);
+  assert.equal(error, null);
+  assert.equal(fileInput.value, "");
+  const retry = await selectFile(file);
+  assert.equal(retry.ok, false);
+  assert.equal(fetchCalls, 2);
+  assert.deepEqual(fetchUrls, [WIDGET_LOGO_UPLOAD_PATH, WIDGET_LOGO_UPLOAD_PATH]);
+  assert.equal(fileInput.value, "");
+}
+
+{
   const website = read("client/src/pages/WebsiteWidget.tsx");
   assert.match(website, /runWidgetLogoUpload/);
   assert.match(website, /WIDGET_LOGO_ACCEPT/);
   assert.match(website, /coerceWidgetLogoUrl\(settings\.logoUrl\)/);
   assert.match(website, /type="button"/);
   assert.match(website, /data-testid="button-logo-upload"/);
+  assert.match(website, /widgetLogoBoundFetch/);
+  assert.match(website, /openWidgetLogoFilePicker/);
+  assert.match(website, /resetWidgetLogoFileInput/);
+  assert.match(website, /globalThis\.fetch/);
   const logoBlock = website.slice(
     website.indexOf('htmlFor="logo-url"'),
     website.indexOf("Chat icon"),
   );
   assert.match(logoBlock, /type="button"/);
+  assert.match(logoBlock, /data-testid="input-logo-file"/);
+  assert.match(logoBlock, /onChange=\{onLogoFileChange\}/);
+  assert.match(logoBlock, /openWidgetLogoFilePicker\(logoFileRef\.current/);
   assert.doesNotMatch(logoBlock, /asChild/);
   assert.doesNotMatch(logoBlock, /\/api\/media\/upload/);
-  assert.match(website, /e\.preventDefault\(\)/);
-  assert.match(website, /e\.stopPropagation\(\)/);
+  assert.doesNotMatch(logoBlock, /fetchFn:\s*fetch/);
+  const fileStart = logoBlock.indexOf('type="file"');
+  const fileEnd = logoBlock.indexOf("/>", fileStart);
+  const fileInputMarkup = logoBlock.slice(fileStart, fileEnd + 2);
+  assert.match(fileInputMarkup, /data-testid="input-logo-file"/);
+  assert.doesNotMatch(fileInputMarkup, /disabled=\{logoBusy\}/);
+  assert.match(logoBlock, /event\.preventDefault\(\)/);
+  assert.match(logoBlock, /event\.stopPropagation\(\)/);
   const sharedUpload = read("shared/webchatWidgetLogoUpload.ts");
   assert.match(sharedUpload, /\/api\/widget-settings\/logo/);
   const layout = read("client/src/pages/AppLayout.tsx");
