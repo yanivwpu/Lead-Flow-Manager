@@ -274,7 +274,11 @@ const exactLegacyStored = {
   assert.match(website, /Add a website domain before enabling the widget/);
   assert.match(website, /button-confirm-rotate-widget-id/);
   assert.match(website, /invalidates existing embed snippets/);
-  assert.match(website, /aria-label="Open website chat"/);
+  assert.match(website, /WebchatChromePreview/);
+  assert.match(website, /button-preview-desktop/);
+  assert.match(website, /button-preview-mobile/);
+  assert.match(website, /button-preview-\$\{item\.id\}/);
+  assert.doesNotMatch(website, /WhachatCRM<\/div>/);
   assert.match(website, /Manual: your team replies in the Inbox/);
   assert.match(website, /does not automatically enable Auto/);
   assert.doesNotMatch(website, /WEBCHAT_SERVER_AI/);
@@ -292,14 +296,19 @@ const exactLegacyStored = {
   assert.match(channels, /logoSrc: '\/logos\/whatsapp\.svg'/);
 
   const routes = read("server/routes.ts");
-  assert.match(routes, /Open website chat/);
-  assert.match(routes, /aria-label', 'Open website chat'/);
+  assert.match(routes, /buildWebchatPublicScript/);
   assert.match(routes, /getChatbotFlowForWorkspace/);
   assert.match(routes, /ORIGIN_REQUIRED/);
   assert.match(routes, /hasWidgetOriginPrerequisite/);
-  const widgetJsColor = routes.slice(routes.indexOf("let color ="), routes.indexOf("let color =") + 40);
-  assert.match(widgetJsColor, /#10b981/);
-  assert.doesNotMatch(routes.slice(routes.indexOf("app.get(\"/widget.js\""), routes.indexOf("app.get(\"/widget.js\"") + 2500), /whatsapp\.svg/i);
+  const widgetJs = read("server/webchatPublicScript.ts");
+  assert.match(widgetJs, /JSON\.stringify\(p\.color\)/);
+  assert.match(widgetJs, /ARIA_OPEN/);
+  assert.match(widgetJs, /Close website chat/);
+  assert.doesNotMatch(widgetJs, /whatsapp\.svg/i);
+  assert.doesNotMatch(
+    routes.slice(routes.indexOf('app.get("/widget.js"'), routes.indexOf('app.get("/widget.js"') + 2500),
+    /whatsapp\.svg/i,
+  );
 
   const snippet = buildWebchatScriptSnippet({
     baseUrl: "https://app.example.com",

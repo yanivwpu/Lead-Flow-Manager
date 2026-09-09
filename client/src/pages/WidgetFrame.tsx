@@ -11,6 +11,12 @@ import {
 } from "@/components/webchat/WidgetFrameErrorBoundary";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
+import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
+import {
+  contrastTextForBackground,
+  resolvePublicWebchatPresentation,
+  type PublicWebchatPresentation,
+} from "@shared/webchatWidgetBranding";
 import {
   WEBCHAT_POLL_BACKOFF_MS,
   WEBCHAT_POLL_HIDDEN_MS,
@@ -117,8 +123,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
-  const [widgetColor, setWidgetColor] = useState("#10b981");
-  const [widgetName, setWidgetName] = useState("Website chat");
+  const [presentation, setPresentation] = useState<PublicWebchatPresentation>(() =>
+    resolvePublicWebchatPresentation({ settings: {} }),
+  );
+  const widgetColor = presentation.color;
+  const accentColor = presentation.accentColor;
+  const accentTextColor = contrastTextForBackground(accentColor);
   const [settingsWelcome, setSettingsWelcome] = useState(
     "Hi! How can we help you today?"
   );
@@ -169,15 +179,24 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           return;
         }
         const data = await r.json();
-        if (data?.color) setWidgetColor(data.color);
-        if (data?.businessName) setWidgetName(`Chat with ${data.businessName}`);
-        const resolved =
-          typeof data?.chatGreeting === "string" && data.chatGreeting.trim()
-            ? data.chatGreeting
-            : typeof data?.welcomeMessage === "string"
-              ? data.welcomeMessage
-              : null;
-        if (resolved) setSettingsWelcome(resolved);
+        const nextPresentation = resolvePublicWebchatPresentation({
+          settings: data && typeof data === "object" ? (data as Record<string, unknown>) : {},
+          businessName:
+            typeof data?.businessName === "string"
+              ? data.businessName
+              : typeof data?.displayName === "string"
+                ? data.displayName
+                : "",
+          chatGreeting: typeof data?.chatGreeting === "string" ? data.chatGreeting : undefined,
+          chatPrefill: typeof data?.chatPrefill === "string" ? data.chatPrefill : undefined,
+          suggestedQuestions: Array.isArray(data?.suggestedQuestions)
+            ? data.suggestedQuestions
+            : undefined,
+          ctaLabel: typeof data?.ctaLabel === "string" ? data.ctaLabel : undefined,
+          ctaUrl: typeof data?.ctaUrl === "string" ? data.ctaUrl : undefined,
+        });
+        setPresentation(nextPresentation);
+        setSettingsWelcome(nextPresentation.chatGreeting || nextPresentation.welcomeMessage);
         if (typeof data?.chatPrefill === "string") setApiPrefill(data.chatPrefill);
         if (Array.isArray(data?.suggestedQuestions)) {
           setSuggestedQuestions(
@@ -546,22 +565,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   return (
     <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">
       {/* Header */}
-      <div
-        className="flex min-w-0 items-center gap-2 px-4 py-3 flex-shrink-0 shadow-sm"
-        style={{ background: widgetColor, color: "#ffffff" }}
-      >
-        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold shrink-0">
-          W
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="font-semibold text-sm leading-tight break-words [overflow-wrap:anywhere]">
-            {widgetName}
-          </h1>
-          <p className="text-xs opacity-80 mt-0.5 break-words [overflow-wrap:anywhere]">
-            We're here to help
-          </p>
-        </div>
-      </div>
+      <WebchatPanelHeader presentation={presentation} />
 
       {/* Messages */}
       <div
@@ -613,7 +617,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex text-xs font-medium underline"
-            style={{ color: widgetColor }}
+            style={{ color: accentColor }}
           >
             {ctaLabel}
           </a>
@@ -624,7 +628,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           <div data-testid="webchat-settings-lead-form">
           <WebchatFormCard
             form={leadForm}
-            widgetColor={widgetColor}
+            widgetColor={accentColor}
             disabled={widgetUnavailable}
             onSubmit={(values) => submitForm(leadForm, values)}
           />
@@ -685,7 +689,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                   <div className="mt-1.5 min-w-0" data-testid={`webchat-form-msg-${msg.id}`}>
                     <WebchatFormCard
                       form={formDef}
-                      widgetColor={widgetColor}
+                      widgetColor={accentColor}
                       disabled={widgetUnavailable}
                       submitted={formSubmitted}
                       onSubmit={(values) => submitForm(formDef, values, msg.id)}
@@ -711,22 +715,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                           style={
                             !isClicked
                               ? {
-                                  color: widgetColor,
-                                  borderColor: widgetColor,
+                                  color: accentColor,
+                                  borderColor: accentColor,
                                   borderWidth: "1.5px",
                                 }
                               : {}
                           }
                           onMouseEnter={e => {
                             if (!isClicked) {
-                              (e.target as HTMLButtonElement).style.background = widgetColor;
-                              (e.target as HTMLButtonElement).style.color = "white";
+                              (e.target as HTMLButtonElement).style.background = accentColor;
+                              (e.target as HTMLButtonElement).style.color = accentTextColor;
                             }
                           }}
                           onMouseLeave={e => {
                             if (!isClicked) {
                               (e.target as HTMLButtonElement).style.background = "white";
-                              (e.target as HTMLButtonElement).style.color = widgetColor;
+                              (e.target as HTMLButtonElement).style.color = accentColor;
                             }
                           }}
                         >
@@ -819,14 +823,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             disabled={isSending || widgetUnavailable || isLoading}
             data-testid="input-chat-message"
             className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-            style={{ "--tw-ring-color": widgetColor } as React.CSSProperties}
+            style={{ "--tw-ring-color": accentColor } as React.CSSProperties}
           />
           <button
             onClick={() => sendMessage(inputText)}
             disabled={isSending || widgetUnavailable || isLoading || (!inputText.trim() && !pendingFile)}
             data-testid="btn-send-chat"
-            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity disabled:opacity-40"
-            style={{ background: widgetColor }}
+            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-opacity disabled:opacity-40"
+            style={{ background: accentColor, color: accentTextColor }}
           >
             {isSending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

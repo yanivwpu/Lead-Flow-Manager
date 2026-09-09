@@ -27,6 +27,11 @@ import multer from "multer";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { getRequestId } from "../authSecurity";
 import { logWebchatInboundMediaError } from "../webchatVisitorMedia";
+import {
+  resolvePublicWebchatPresentation,
+  toVisitorSafePublicWebchatPayload,
+  widgetLogoAllowedHttpsHosts,
+} from "@shared/webchatWidgetBranding";
 
 const webchatVisitorUpload = multer({
   storage: multer.memoryStorage(),
@@ -317,30 +322,30 @@ export function registerWebhookRoutes(app: Express): void {
         return sendWebchatPublicJson(res, access.status, access.body);
       }
       const ws = access.owner.widgetSettings;
-      const defaults = {
-        color: "#10b981",
-        welcomeMessage: "Hi! How can we help you today?",
-      };
-      const welcomeMessage =
-        typeof ws.welcomeMessage === "string" && ws.welcomeMessage.trim()
-          ? String(ws.welcomeMessage)
-          : defaults.welcomeMessage;
       const matched = hrefParam ? matchWidgetPageRule(ws, hrefParam) : null;
-      const chatGreeting =
-        matched?.greeting && matched.greeting.trim() ? matched.greeting : welcomeMessage;
-      const chatPrefill = matched?.prefilledMessage || "";
-      const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
-      const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
-      return sendWebchatPublicJson(res, 200, {
-        color:
-          typeof ws.color === "string" && ws.color.trim() ? String(ws.color) : defaults.color,
-        welcomeMessage,
-        businessName: access.owner.businessName || "",
-        chatGreeting,
-        chatPrefill,
+      const appOrigin =
+        process.env.APP_URL ||
+        `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+      const presentation = resolvePublicWebchatPresentation({
+        settings: ws,
+        businessName: access.owner.businessName,
+        chatGreeting: matched?.greeting,
+        chatPrefill: matched?.prefilledMessage || "",
         suggestedQuestions: matched?.suggestedQuestions || [],
         ctaLabel: matched?.ctaLabel || "",
         ctaUrl: matched?.ctaUrl || "",
+        appOrigin,
+        allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
+          process.env.APP_URL,
+          process.env.CLOUDFLARE_R2_PUBLIC_URL,
+          process.env.REPLIT_DOMAINS,
+        ]),
+      });
+      const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
+      const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
+      return sendWebchatPublicJson(res, 200, {
+        ...toVisitorSafePublicWebchatPayload(presentation),
+        businessName: access.owner.businessName || "",
         ...(leadForm ? { leadForm } : {}),
       });
     } catch {

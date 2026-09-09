@@ -7,6 +7,13 @@ import {
   normalizeAllowedOriginsList,
   parseAllowAnyOrigin,
 } from "./webchatOriginPolicy";
+import {
+  NEUTRAL_WEBCHAT_BRANDING,
+  sanitizePlainWidgetText,
+  sanitizeWebchatBranding,
+  sanitizeWidgetHexColor,
+} from "./webchatWidgetBranding";
+import { sanitizeWebchatFormDefinition } from "./webchatStructuredForm";
 
 export const NEUTRAL_WIDGET_COLOR = "#10b981";
 export const NEUTRAL_WIDGET_WELCOME = "Hi! How can we help you today?";
@@ -51,7 +58,7 @@ export const NEUTRAL_WIDGET_SETTINGS: {
   pageRules: [];
   allowedOrigins: [];
   allowAnyOrigin: false;
-} = {
+} & typeof NEUTRAL_WEBCHAT_BRANDING = {
   enabled: false,
   color: NEUTRAL_WIDGET_COLOR,
   welcomeMessage: NEUTRAL_WIDGET_WELCOME,
@@ -64,6 +71,7 @@ export const NEUTRAL_WIDGET_SETTINGS: {
   pageRules: [],
   allowedOrigins: [],
   allowAnyOrigin: false,
+  ...NEUTRAL_WEBCHAT_BRANDING,
 };
 
 /** Exact untouched schema default page rules (order matters). */
@@ -240,14 +248,23 @@ export function mergeNeutralWidgetSettings(stored: unknown): Record<string, unkn
   const s = stored && typeof stored === "object" ? (stored as Record<string, unknown>) : {};
   const sanitized = applyLegacyDefaultWidgetSanitize(s);
   const pageRules = Array.isArray(sanitized.pageRules) ? sanitized.pageRules : [];
-  return {
+  const branding = sanitizeWebchatBranding(sanitized);
+  const leadForm = sanitizeWebchatFormDefinition(sanitized.leadForm);
+  const merged: Record<string, unknown> = {
     ...NEUTRAL_WIDGET_SETTINGS,
     ...sanitized,
+    ...branding,
     enabled: sanitized.enabled === true,
     allowAnyOrigin: sanitized.allowAnyOrigin === true,
+    color: sanitizeWidgetHexColor(sanitized.color, NEUTRAL_WIDGET_COLOR) || NEUTRAL_WIDGET_COLOR,
+    welcomeMessage:
+      sanitizePlainWidgetText(sanitized.welcomeMessage, 500) || NEUTRAL_WIDGET_WELCOME,
     pageRules,
     allowedOrigins: Array.isArray(sanitized.allowedOrigins) ? sanitized.allowedOrigins : [],
   };
+  if (leadForm) merged.leadForm = leadForm;
+  else delete merged.leadForm;
+  return merged;
 }
 
 export type PageRuleValidation =

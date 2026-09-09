@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { WebchatFormDefinition } from "@shared/webchatStructuredForm";
+import { contrastTextForBackground } from "@shared/webchatWidgetBranding";
 
 export function WebchatFormCard(props: {
   form: WebchatFormDefinition;
@@ -135,8 +136,11 @@ export function WebchatFormCard(props: {
       <button
         type="submit"
         disabled={props.disabled || busy}
-        className="w-full rounded-xl py-2 text-sm font-medium text-white disabled:opacity-40"
-        style={{ background: props.widgetColor }}
+        className="w-full rounded-xl py-2 text-sm font-medium disabled:opacity-40"
+        style={{
+          background: props.widgetColor,
+          color: contrastTextForBackground(props.widgetColor),
+        }}
         data-testid="webchat-form-submit"
       >
         {busy ? "Sending…" : props.form.submitLabel}

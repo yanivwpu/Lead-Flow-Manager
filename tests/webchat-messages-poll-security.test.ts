@@ -323,7 +323,7 @@ test("supplied href must match the tenant allowlist; WidgetFrame sends parent-pa
   assert.match(frame, /parentPageHref/);
   assert.match(frame, /document\.referrer/);
   assert.match(frame, /href=\$\{encodeURIComponent\(parentPageHref\)\}/);
-  const widgetJs = read("server/routes.ts");
+  const widgetJs = read("server/webchatPublicScript.ts");
   assert.match(widgetJs, /qs\.push\('parentUrl=' \+ encodeURIComponent\(window\.location\.href\)\)/);
   const hosted = read("client/src/pages/WidgetChat.tsx");
   assert.match(hosted, /resolvePageHref=\{pageHref\}/);

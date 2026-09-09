@@ -23,9 +23,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { 
-  Copy, Check, Smartphone, Monitor, MessageCircle,
+  Copy, Check, Smartphone, Monitor,
   AlertCircle, Plus, Trash2
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -46,6 +45,27 @@ import {
   resolveWidgetActivationState,
   widgetSurfaceStatus,
 } from "@shared/webchatWidgetSettings";
+import {
+  NEUTRAL_WEBCHAT_BRANDING,
+  WEBCHAT_CHAT_ICONS,
+  WEBCHAT_CORNER_STYLES,
+  WEBCHAT_DEFAULT_DISPLAY_NAME,
+  WEBCHAT_DEFAULT_LAUNCHER_LABEL,
+  WEBCHAT_DEFAULT_SUBTITLE,
+  WEBCHAT_LAUNCHER_STYLES,
+  WEBCHAT_OPEN_BEHAVIORS,
+  WEBCHAT_PANEL_WIDTHS,
+  sanitizeWidgetHexColor,
+  sanitizeWidgetLogoUrl,
+  widgetTextContainsUnsafeMarkup,
+  type WebchatChatIcon,
+  type WebchatCornerStyle,
+  type WebchatLauncherStyle,
+  type WebchatOpenBehavior,
+  type WebchatPanelWidth,
+} from "@shared/webchatWidgetBranding";
+import { WebchatChromePreview } from "@/components/webchat/WebchatChromePreview";
+import type { WebchatChromeState } from "@shared/webchatWidgetChrome";
 
 /** Website Chat Widget settings — Inbox channel `webchat`, not WhatsApp click-to-chat. */
 
@@ -77,6 +97,20 @@ interface WidgetSettings {
   widgetPublicId?: string;
   allowedOrigins?: string[];
   allowAnyOrigin?: boolean;
+  launcherStyle: WebchatLauncherStyle;
+  launcherLabel: string;
+  brandName: string;
+  logoUrl: string;
+  panelHeading: string;
+  panelSubtitle: string;
+  accentColor: string;
+  headerTextColor: "auto" | string;
+  cornerStyle: WebchatCornerStyle;
+  panelWidth: WebchatPanelWidth;
+  openBehavior: WebchatOpenBehavior;
+  teaserGreeting: string;
+  chatIcon: WebchatChatIcon;
+  businessProfileName?: string;
   originDiagnostics?: {
     canPubliclyEmbed?: boolean;
     reason?: string;
@@ -100,6 +134,7 @@ const DEFAULT_SETTINGS: WidgetSettings = {
   pageRules: [],
   allowedOrigins: [],
   allowAnyOrigin: false,
+  ...NEUTRAL_WEBCHAT_BRANDING,
 };
 
 function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): WidgetSettings {
@@ -160,7 +195,75 @@ function normalizePageRulesFromServer(
   }));
 }
 
-function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageRules" | "widgetPublicId"> & {
+function firstPartyLogoFromUpload(mediaUrl: string): string {
+  const raw = mediaUrl.trim();
+  if (!raw) return "";
+  if (!raw.includes("://")) {
+    return sanitizeWidgetLogoUrl(raw.split("?")[0]);
+  }
+  try {
+    return sanitizeWidgetLogoUrl(new URL(raw).pathname);
+  } catch {
+    return "";
+  }
+}
+
+function brandingFieldError(
+  settings: Pick<
+    WidgetSettings,
+    | "logoUrl"
+    | "accentColor"
+    | "headerTextColor"
+    | "brandName"
+    | "launcherLabel"
+    | "panelHeading"
+    | "panelSubtitle"
+    | "teaserGreeting"
+    | "welcomeMessage"
+  >,
+): {
+  logo?: string;
+  color?: string;
+  brandName?: string;
+  launcherLabel?: string;
+  panelHeading?: string;
+  panelSubtitle?: string;
+  teaserGreeting?: string;
+  welcomeMessage?: string;
+} {
+  const errors: {
+    logo?: string;
+    color?: string;
+    brandName?: string;
+    launcherLabel?: string;
+    panelHeading?: string;
+    panelSubtitle?: string;
+    teaserGreeting?: string;
+    welcomeMessage?: string;
+  } = {};
+  if (settings.logoUrl.trim() && !sanitizeWidgetLogoUrl(settings.logoUrl)) {
+    errors.logo = "Logo must be an uploaded JPEG, PNG, or WebP (first-party /objects/uploads path). Remote URLs are not used.";
+  }
+  if (settings.accentColor && !sanitizeWidgetHexColor(settings.accentColor)) {
+    errors.color = "Accent color must be a 6-digit hex value such as #10b981.";
+  }
+  if (settings.headerTextColor !== "auto" && !sanitizeWidgetHexColor(settings.headerTextColor)) {
+    errors.color = errors.color || "Header text color must be Auto or a 6-digit hex value.";
+  }
+  const markup = "HTML, scripts, and markup are not allowed.";
+  if (widgetTextContainsUnsafeMarkup(settings.brandName)) errors.brandName = markup;
+  if (widgetTextContainsUnsafeMarkup(settings.launcherLabel)) errors.launcherLabel = markup;
+  if (widgetTextContainsUnsafeMarkup(settings.panelHeading)) errors.panelHeading = markup;
+  if (widgetTextContainsUnsafeMarkup(settings.panelSubtitle)) errors.panelSubtitle = markup;
+  if (widgetTextContainsUnsafeMarkup(settings.teaserGreeting)) errors.teaserGreeting = markup;
+  if (widgetTextContainsUnsafeMarkup(settings.welcomeMessage)) errors.welcomeMessage = markup;
+  return errors;
+}
+
+function stripPageRuleIds(settings: WidgetSettings): Omit<
+  WidgetSettings,
+  "pageRules" | "widgetPublicId" | "originDiagnostics" | "webchatServerAi" | "businessProfileName"
+> & {
   pageRules: {
     urlContains: string;
     greeting: string;
@@ -183,6 +286,19 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageR
     triggerScrollPercent: settings.triggerScrollPercent,
     allowedOrigins: settings.allowedOrigins,
     allowAnyOrigin: settings.allowAnyOrigin === true,
+    launcherStyle: settings.launcherStyle,
+    launcherLabel: settings.launcherLabel,
+    brandName: settings.brandName,
+    logoUrl: settings.logoUrl,
+    panelHeading: settings.panelHeading,
+    panelSubtitle: settings.panelSubtitle,
+    accentColor: settings.accentColor,
+    headerTextColor: settings.headerTextColor,
+    cornerStyle: settings.cornerStyle,
+    panelWidth: settings.panelWidth,
+    openBehavior: settings.openBehavior,
+    teaserGreeting: settings.teaserGreeting,
+    chatIcon: settings.chatIcon,
     pageRules: settings.pageRules.map(
       ({ urlContains, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl }) => ({
         urlContains,
@@ -197,85 +313,79 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<WidgetSettings, "pageR
   };
 }
 
-function WidgetPreview({ settings }: { settings: WidgetSettings }) {
-  const [isOpen, setIsOpen] = useState(false);
-  
+const PREVIEW_STATES: { id: WebchatChromeState; label: string }[] = [
+  { id: "collapsed", label: "Collapsed" },
+  { id: "teaser", label: "Teaser" },
+  { id: "open", label: "Open Chat" },
+];
+
+function WidgetPreview({
+  settings,
+  businessName,
+  state,
+  onStateChange,
+  viewport,
+  onViewportChange,
+}: {
+  settings: WidgetSettings;
+  businessName?: string | null;
+  state: WebchatChromeState;
+  onStateChange: (state: WebchatChromeState) => void;
+  viewport: "desktop" | "mobile";
+  onViewportChange: (viewport: "desktop" | "mobile") => void;
+}) {
   return (
-    <div className="relative w-full h-[200px] sm:h-[280px] md:h-[320px] bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg overflow-hidden border border-gray-200">
-      <div className="absolute inset-2 sm:inset-3 bg-white rounded-md shadow-sm border flex flex-col">
-        <div className="h-6 sm:h-8 bg-gray-50 border-b flex items-center px-2 gap-1">
-          <div className="flex gap-1">
-            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-red-400" />
-            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-yellow-400" />
-            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-400" />
-          </div>
-          <div className="flex-1 mx-2">
-            <div className="w-16 sm:w-24 h-2 sm:h-3 bg-gray-200 rounded-full mx-auto" />
-          </div>
-        </div>
-        <div className="flex-1 p-2 space-y-1.5">
-          <div className="w-3/4 h-2 bg-gray-100 rounded" />
-          <div className="w-1/2 h-2 bg-gray-100 rounded" />
-          <div className="w-2/3 h-2 bg-gray-100 rounded" />
-        </div>
-      </div>
-      
-      <div 
-        className={`absolute bottom-3 sm:bottom-4 ${settings.position === 'right' ? 'right-3 sm:right-4' : 'left-3 sm:left-4'} transition-all duration-300`}
-      >
-        {isOpen ? (
-          <div 
-            className="w-36 sm:w-48 bg-white rounded-xl shadow-xl overflow-hidden border animate-in slide-in-from-bottom-4"
-            style={{ borderColor: settings.color }}
-          >
-            <div 
-              className="p-2 sm:p-3 text-white"
-              style={{ backgroundColor: settings.color }}
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-white/20 flex items-center justify-center">
-                  <MessageCircle className="w-3 h-3 sm:w-4 sm:h-4" />
-                </div>
-                <div>
-                  <div className="font-semibold text-[10px] sm:text-xs">WhachatCRM</div>
-                  <div className="text-[8px] sm:text-[10px] opacity-80">Replies instantly</div>
-                </div>
-              </div>
-            </div>
-            <div className="p-2">
-              <div 
-                className="p-1.5 sm:p-2 rounded text-[9px] sm:text-[11px] text-white max-w-[90%] leading-tight"
-                style={{ backgroundColor: settings.color }}
-              >
-                {settings.welcomeMessage.slice(0, 30)}...
-              </div>
-            </div>
-            <button 
-              onClick={() => setIsOpen(false)}
-              className="absolute top-1 right-1 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-white text-[10px] hover:bg-white/30"
-              aria-label="Close website chat preview"
-              data-testid="button-close-preview"
-            >
-              ×
-            </button>
-          </div>
-        ) : (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <div className="flex p-0.5 bg-gray-100 rounded-lg">
           <button
-            onClick={() => setIsOpen(true)}
-            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full shadow-lg flex items-center justify-center text-white transition-transform hover:scale-110"
-            style={{ backgroundColor: settings.color }}
-            aria-label="Open website chat"
-            data-testid="button-open-preview"
+            type="button"
+            onClick={() => onViewportChange("desktop")}
+            className={cn(
+              "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all",
+              viewport === "desktop" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+            )}
+            data-testid="button-preview-desktop"
           >
-            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+            <Monitor className="h-3.5 w-3.5" />
+            Desktop
           </button>
-        )}
+          <button
+            type="button"
+            onClick={() => onViewportChange("mobile")}
+            className={cn(
+              "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md transition-all",
+              viewport === "mobile" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+            )}
+            data-testid="button-preview-mobile"
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            Mobile
+          </button>
+        </div>
+        <div className="flex flex-wrap flex-1 gap-1 rounded-lg bg-gray-100 p-0.5">
+          {PREVIEW_STATES.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              onClick={() => onStateChange(item.id)}
+              className={cn(
+                "flex-1 min-w-[5.5rem] py-1.5 text-xs font-medium rounded-md transition-all",
+                state === item.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+              )}
+              data-testid={`button-preview-${item.id}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
-      
-      <div className="absolute top-1 right-1 sm:top-2 sm:right-2">
-        <Badge variant="secondary" className="text-[8px] sm:text-[10px] px-1.5 py-0.5">
-          Preview
-        </Badge>
+      <div className={cn(viewport === "mobile" && "max-w-[390px] overflow-x-hidden")}>
+        <WebchatChromePreview
+          settings={settings as unknown as Record<string, unknown>}
+          businessName={businessName}
+          state={state}
+        />
       </div>
     </div>
   );
@@ -295,15 +405,35 @@ export function WebsiteWidget() {
   }));
   const [enableBlockedHint, setEnableBlockedHint] = useState(false);
   const [leadSource, setLeadSource] = useState("");
+  const [previewState, setPreviewState] = useState<WebchatChromeState>("collapsed");
+  const [previewViewport, setPreviewViewport] = useState<"desktop" | "mobile">("desktop");
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
   /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
   const didHydrateFromWidgetQuery = useRef(false);
   const pageRulesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const brandingTextTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const brandingTextPendingRef = useRef(false);
+  const settingsRef = useRef(settings);
+  const lastSavedLogoRef = useRef("");
+  const savePendingRef = useRef(false);
+  const persistWidgetSettingsRef = useRef<(next: WidgetSettings) => void>(() => {});
+
+  settingsRef.current = settings;
 
   const clearPageRulesSaveDebounce = useCallback(() => {
     if (pageRulesSaveTimerRef.current !== null) {
       clearTimeout(pageRulesSaveTimerRef.current);
       pageRulesSaveTimerRef.current = null;
     }
+  }, []);
+
+  const clearBrandingTextDebounce = useCallback(() => {
+    if (brandingTextTimerRef.current !== null) {
+      clearTimeout(brandingTextTimerRef.current);
+      brandingTextTimerRef.current = null;
+    }
+    brandingTextPendingRef.current = false;
   }, []);
 
   const { data: savedSettings } = useQuery<WidgetSettings>({
@@ -326,7 +456,9 @@ export function WebsiteWidget() {
   useEffect(() => {
     if (savedSettings === undefined) return;
     if (didHydrateFromWidgetQuery.current) return;
-    setSettings(mergeWidgetSettings(savedSettings));
+    const merged = mergeWidgetSettings(savedSettings);
+    setSettings(merged);
+    lastSavedLogoRef.current = merged.logoUrl;
     didHydrateFromWidgetQuery.current = true;
   }, [savedSettings]);
   
@@ -334,17 +466,44 @@ export function WebsiteWidget() {
     mutationFn: async (newSettings: WidgetSettings) => {
       return apiRequest("PATCH", "/api/widget-settings", stripPageRuleIds(newSettings));
     },
-    onSuccess: () => {
+    onSuccess: (_data, saved) => {
+      lastSavedLogoRef.current = saved.logoUrl;
       queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
     },
   });
+  savePendingRef.current = saveMutation.isPending;
 
   const persistWidgetSettings = useCallback(
     (next: WidgetSettings) => {
-      saveMutation.mutate(next);
+      const fieldErrors = brandingFieldError(next);
+      if (
+        fieldErrors.brandName ||
+        fieldErrors.launcherLabel ||
+        fieldErrors.panelHeading ||
+        fieldErrors.panelSubtitle ||
+        fieldErrors.teaserGreeting ||
+        fieldErrors.welcomeMessage
+      ) {
+        return;
+      }
+      const logoTypedInvalid = Boolean(next.logoUrl.trim() && !sanitizeWidgetLogoUrl(next.logoUrl));
+      const accentInvalid = Boolean(next.accentColor && !sanitizeWidgetHexColor(next.accentColor));
+      const headerInvalid =
+        next.headerTextColor !== "auto" && !sanitizeWidgetHexColor(next.headerTextColor);
+      saveMutation.mutate({
+        ...next,
+        logoUrl: logoTypedInvalid ? lastSavedLogoRef.current : sanitizeWidgetLogoUrl(next.logoUrl),
+        accentColor: accentInvalid ? "" : sanitizeWidgetHexColor(next.accentColor, next.accentColor),
+        headerTextColor: headerInvalid
+          ? "auto"
+          : next.headerTextColor === "auto"
+            ? "auto"
+            : sanitizeWidgetHexColor(next.headerTextColor, "auto"),
+      });
     },
     [saveMutation]
   );
+  persistWidgetSettingsRef.current = persistWidgetSettings;
 
   const schedulePageRulesDebouncedSave = useCallback(
     (next: WidgetSettings) => {
@@ -356,9 +515,23 @@ export function WebsiteWidget() {
     },
     [clearPageRulesSaveDebounce, persistWidgetSettings]
   );
+
+  const scheduleBrandingTextDebouncedSave = useCallback(
+    (next: WidgetSettings) => {
+      clearBrandingTextDebounce();
+      brandingTextPendingRef.current = true;
+      brandingTextTimerRef.current = setTimeout(() => {
+        brandingTextTimerRef.current = null;
+        brandingTextPendingRef.current = false;
+        persistWidgetSettings(next);
+      }, 550);
+    },
+    [clearBrandingTextDebounce, persistWidgetSettings]
+  );
   
   const updateSettings = (updates: Partial<WidgetSettings>) => {
     clearPageRulesSaveDebounce();
+    clearBrandingTextDebounce();
     let next!: WidgetSettings;
     setSettings((prev) => {
       next = { ...prev, ...updates };
@@ -366,6 +539,41 @@ export function WebsiteWidget() {
     });
     persistWidgetSettings(next);
   };
+
+  const updateBrandingText = (updates: Partial<WidgetSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...updates };
+      scheduleBrandingTextDebouncedSave(next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (brandingTextPendingRef.current || savePendingRef.current) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (brandingTextTimerRef.current !== null) {
+        clearTimeout(brandingTextTimerRef.current);
+        brandingTextTimerRef.current = null;
+        brandingTextPendingRef.current = false;
+        persistWidgetSettingsRef.current(settingsRef.current);
+      }
+      if (pageRulesSaveTimerRef.current !== null) {
+        clearTimeout(pageRulesSaveTimerRef.current);
+        pageRulesSaveTimerRef.current = null;
+        persistWidgetSettingsRef.current(settingsRef.current);
+      }
+    };
+  }, []);
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   // widget.js receives ?id= so the server can inline the user's colour/position/welcome settings.
@@ -450,6 +658,7 @@ export function WebsiteWidget() {
   const surface = widgetSurfaceStatus(activation);
   const showOriginHint = Boolean(surface.originHint) || enableBlockedHint;
   const showLeftoverLegacyRules = leftoverLegacyExamplePageRules(settings);
+  const brandingErrors = brandingFieldError(settings);
 
   const focusDomainSetup = () => {
     setEnableBlockedHint(true);
@@ -524,13 +733,405 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden">
             <CardHeader className="p-3 sm:p-4 pb-2">
-              <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
-                <Monitor className="w-4 h-4 text-gray-600" />
-                Preview
-              </CardTitle>
+              <div className="flex items-start justify-between gap-2">
+                <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                  <Monitor className="w-4 h-4 text-gray-600" />
+                  Preview
+                </CardTitle>
+                <span
+                  className="text-[11px] text-gray-500"
+                  data-testid="text-widget-save-status"
+                >
+                  {saveMutation.isPending
+                    ? "Saving..."
+                    : saveMutation.isError
+                      ? "Could not save"
+                      : saveMutation.isSuccess
+                        ? "Saved"
+                        : ""}
+                </span>
+              </div>
             </CardHeader>
-            <CardContent className="p-3 sm:p-4 pt-0">
-              <WidgetPreview settings={settings} />
+            <CardContent className="p-3 sm:p-4 pt-0 space-y-2">
+              <WidgetPreview
+                settings={settings}
+                businessName={settings.businessProfileName || ""}
+                state={previewState}
+                onStateChange={setPreviewState}
+                viewport={previewViewport}
+                onViewportChange={setPreviewViewport}
+              />
+              {saveMutation.isError ? (
+                <p className="text-xs text-red-600" data-testid="text-widget-save-error">
+                  Changes were not saved. Check the fields and try again.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl" data-testid="section-launcher-branding">
+            <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base sm:text-lg font-bold">Launcher & Branding</CardTitle>
+                  <CardDescription className="text-[11px] sm:text-xs leading-snug">
+                    Visitor-facing name, launcher, and chat wrapper. Empty fields use placeholders until you save a value - they do not advertise WhachatCRM.
+                  </CardDescription>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" data-testid="button-reset-branding">
+                      Reset to default
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset launcher and branding?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This restores the circle launcher and empty brand fields. It does not change domains, page rules, widget ID, or the Powered by footer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        data-testid="button-confirm-reset-branding"
+                        onClick={() => updateSettings({ ...NEUTRAL_WEBCHAT_BRANDING })}
+                      >
+                        Reset
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold text-gray-600">Launcher style</Label>
+                <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                  {WEBCHAT_LAUNCHER_STYLES.map((style) => (
+                    <button
+                      type="button"
+                      key={style}
+                      onClick={() => updateSettings({ launcherStyle: style })}
+                      className={cn(
+                        "flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all",
+                        settings.launcherStyle === style ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                      )}
+                      data-testid={`button-launcher-${style}`}
+                    >
+                      {style === "circle" ? "Circle" : style === "pill" ? "Pill" : "Card"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="brand-name" className="text-[11px] font-semibold text-gray-600">
+                    Business name
+                  </Label>
+                  <Input
+                    id="brand-name"
+                    value={settings.brandName}
+                    onChange={(e) => updateBrandingText({ brandName: e.target.value })}
+                    placeholder={
+                      settings.businessProfileName
+                        ? settings.businessProfileName
+                        : WEBCHAT_DEFAULT_DISPLAY_NAME
+                    }
+                    className="h-9 text-sm border-gray-200 rounded-lg"
+                    data-testid="input-brand-name"
+                  />
+                  {brandingErrors.brandName ? (
+                    <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                      {brandingErrors.brandName}
+                    </p>
+                  ) : (
+                  <p className="text-[10px] text-gray-500">
+                    Placeholder is not saved. Visitors see your Business Profile name, or &quot;Website chat&quot;, until you enter one.
+                  </p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="launcher-label" className="text-[11px] font-semibold text-gray-600">
+                    Launcher label
+                  </Label>
+                  <Input
+                    id="launcher-label"
+                    value={settings.launcherLabel}
+                    onChange={(e) => updateBrandingText({ launcherLabel: e.target.value })}
+                    placeholder={WEBCHAT_DEFAULT_LAUNCHER_LABEL}
+                    className="h-9 text-sm border-gray-200 rounded-lg"
+                    data-testid="input-launcher-label"
+                    disabled={settings.launcherStyle === "circle"}
+                  />
+                  {brandingErrors.launcherLabel ? (
+                    <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                      {brandingErrors.launcherLabel}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="panel-heading" className="text-[11px] font-semibold text-gray-600">
+                    Panel heading
+                  </Label>
+                  <Input
+                    id="panel-heading"
+                    value={settings.panelHeading}
+                    onChange={(e) => updateBrandingText({ panelHeading: e.target.value })}
+                    placeholder="Same as business name"
+                    className="h-9 text-sm border-gray-200 rounded-lg"
+                    data-testid="input-panel-heading"
+                  />
+                  {brandingErrors.panelHeading ? (
+                    <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                      {brandingErrors.panelHeading}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="panel-subtitle" className="text-[11px] font-semibold text-gray-600">
+                    Subtitle
+                  </Label>
+                  <Input
+                    id="panel-subtitle"
+                    value={settings.panelSubtitle}
+                    onChange={(e) => updateBrandingText({ panelSubtitle: e.target.value })}
+                    placeholder={WEBCHAT_DEFAULT_SUBTITLE}
+                    className="h-9 text-sm border-gray-200 rounded-lg"
+                    data-testid="input-panel-subtitle"
+                  />
+                  {brandingErrors.panelSubtitle ? (
+                    <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                      {brandingErrors.panelSubtitle}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="teaser-greeting" className="text-[11px] font-semibold text-gray-600">
+                  Teaser greeting
+                </Label>
+                <Input
+                  id="teaser-greeting"
+                  value={settings.teaserGreeting}
+                  onChange={(e) => updateBrandingText({ teaserGreeting: e.target.value })}
+                  placeholder={settings.welcomeMessage || "Hi! How can we help you today?"}
+                  className="h-9 text-sm border-gray-200 rounded-lg"
+                  data-testid="input-teaser-greeting"
+                />
+                {brandingErrors.teaserGreeting ? (
+                  <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                    {brandingErrors.teaserGreeting}
+                  </p>
+                ) : (
+                <p className="text-[10px] text-gray-500">
+                  Page rules can override this greeting on matching URLs without changing your branding.
+                </p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="logo-url" className="text-[11px] font-semibold text-gray-600">
+                  Logo
+                </Label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    id="logo-url"
+                    value={settings.logoUrl}
+                    onChange={(e) => {
+                      setLogoUploadError(null);
+                      updateBrandingText({ logoUrl: e.target.value });
+                    }}
+                    placeholder="Upload a JPEG, PNG, or WebP - remote URLs are not used"
+                    className="h-9 text-sm border-gray-200 rounded-lg"
+                    data-testid="input-logo-url"
+                  />
+                  <label className="shrink-0">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      data-testid="input-logo-file"
+                      disabled={logoBusy}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        setLogoBusy(true);
+                        setLogoUploadError(null);
+                        try {
+                          const body = new FormData();
+                          body.append("file", file);
+                          const res = await fetch("/api/media/upload", {
+                            method: "POST",
+                            body,
+                            credentials: "include",
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (!res.ok || typeof data.mediaUrl !== "string") {
+                            throw new Error(typeof data.error === "string" ? data.error : "Upload failed");
+                          }
+                          const logoUrl = firstPartyLogoFromUpload(data.mediaUrl);
+                          if (!logoUrl) {
+                            throw new Error("Upload did not return a first-party JPEG, PNG, or WebP path.");
+                          }
+                          updateSettings({ logoUrl });
+                        } catch (err) {
+                          setLogoUploadError(err instanceof Error ? err.message : "Upload failed");
+                        } finally {
+                          setLogoBusy(false);
+                        }
+                      }}
+                    />
+                    <Button type="button" variant="outline" size="sm" asChild disabled={logoBusy}>
+                      <span>{logoBusy ? "Uploading..." : "Upload"}</span>
+                    </Button>
+                  </label>
+                </div>
+                {brandingErrors.logo || logoUploadError ? (
+                  <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                    {logoUploadError || brandingErrors.logo}
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Chat icon</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                    {WEBCHAT_CHAT_ICONS.map((icon) => (
+                      <button
+                        type="button"
+                        key={icon}
+                        onClick={() => updateSettings({ chatIcon: icon })}
+                        className={cn(
+                          "flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all",
+                          settings.chatIcon === icon ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                        )}
+                        data-testid={`button-icon-${icon}`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Open behavior</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                    {WEBCHAT_OPEN_BEHAVIORS.map((behavior) => (
+                      <button
+                        type="button"
+                        key={behavior}
+                        onClick={() => updateSettings({ openBehavior: behavior })}
+                        className={cn(
+                          "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                          settings.openBehavior === behavior ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                        )}
+                        data-testid={behavior === "teaser" ? "button-open-teaser" : "button-open-direct"}
+                      >
+                        {behavior === "teaser" ? "Teaser first" : "Open chat"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Corner style</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                    {WEBCHAT_CORNER_STYLES.map((corner) => (
+                      <button
+                        type="button"
+                        key={corner}
+                        onClick={() => updateSettings({ cornerStyle: corner })}
+                        className={cn(
+                          "flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all",
+                          settings.cornerStyle === corner ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                        )}
+                        data-testid={`button-corner-${corner}`}
+                      >
+                        {corner}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Panel width</Label>
+                  <div className="flex p-0.5 bg-gray-100 rounded-lg">
+                    {WEBCHAT_PANEL_WIDTHS.map((width) => (
+                      <button
+                        type="button"
+                        key={width}
+                        onClick={() => updateSettings({ panelWidth: width })}
+                        className={cn(
+                          "flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all",
+                          settings.panelWidth === width ? "bg-white text-gray-900 shadow-sm" : "text-gray-500",
+                        )}
+                        data-testid={`button-width-${width}`}
+                      >
+                        {width}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="accent-color" className="text-[11px] font-semibold text-gray-600">
+                    Accent color
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="accent-color"
+                      type="color"
+                      value={sanitizeWidgetHexColor(settings.accentColor) || settings.color}
+                      onChange={(e) => updateSettings({ accentColor: e.target.value })}
+                      className="w-8 h-8 rounded-lg cursor-pointer border-2 border-gray-200 bg-white"
+                      data-testid="input-accent-color"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={!settings.accentColor}
+                      onClick={() => updateSettings({ accentColor: "" })}
+                    >
+                      Match primary
+                    </Button>
+                  </div>
+                  {brandingErrors.color ? (
+                    <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                      {brandingErrors.color}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-gray-600">Header text</Label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ headerTextColor: "auto" })}
+                      className={cn(
+                        "px-2 py-1.5 text-xs font-medium rounded-md border",
+                        settings.headerTextColor === "auto"
+                          ? "bg-white border-emerald-500 text-gray-900"
+                          : "border-gray-200 text-gray-500",
+                      )}
+                      data-testid="button-header-auto"
+                    >
+                      Auto contrast
+                    </button>
+                    <input
+                      type="color"
+                      value={
+                        settings.headerTextColor === "auto" || !sanitizeWidgetHexColor(settings.headerTextColor)
+                          ? "#ffffff"
+                          : settings.headerTextColor
+                      }
+                      onChange={(e) => updateSettings({ headerTextColor: e.target.value })}
+                      className="w-8 h-8 rounded-lg cursor-pointer border-2 border-gray-200 bg-white"
+                      data-testid="input-header-text-color"
+                      title="Custom header text color"
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -612,6 +1213,11 @@ export function WebsiteWidget() {
                   placeholder="Hi! How can we help?"
                   data-testid="input-welcome-message"
                 />
+                {brandingErrors.welcomeMessage ? (
+                  <p className="text-[10px] text-red-600" data-testid="text-branding-error">
+                    {brandingErrors.welcomeMessage}
+                  </p>
+                ) : null}
               </div>
             </CardContent>
           </Card>

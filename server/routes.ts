@@ -87,6 +87,14 @@ import {
   waUploadTooLargeMessage,
 } from "@shared/whatsappMediaLimits";
 import { z } from "zod";
+import {
+  firstUnsafeWidgetTextField,
+  sanitizeWebchatBranding,
+  sanitizeWidgetLogoUrl,
+  widgetLogoAllowedHttpsHosts,
+} from "@shared/webchatWidgetBranding";
+import { buildWebchatChromeLayout } from "@shared/webchatWidgetChrome";
+import { buildWebchatPublicScript } from "./webchatPublicScript";
 import { getVapidPublicKey } from "./notifications";
 import {
   parseIncomingWebhook,
@@ -1189,10 +1197,6 @@ export async function registerRoutes(
     const origin = process.env.APP_URL ||
       `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
 
-    // Fetch widget settings if widgetId is known (best-effort, skip on error)
-    let color = "#10b981";
-    let position = "right";
-    let welcomeMessage = "Hi! How can we help you today?";
     let enabled = false;
     let triggerType: "always" | "delay" | "scroll" | "exit_intent" = "always";
     let triggerDelaySeconds = 5;
@@ -1200,337 +1204,67 @@ export async function registerRoutes(
     let showOnDesktop = true;
     let showOnMobile = true;
     let pageRules: { urlContains: string; greeting: string; prefilledMessage: string; suggestedQuestions?: string[] }[] = [];
+    let chrome = buildWebchatChromeLayout({});
+    let publicWidgetId = "";
 
-    if (!widgetId) {
-      enabled = false;
-    } else if (widgetId) {
+    if (widgetId) {
       try {
         const { resolvePublicWidgetAccess } = await import("./webchatAccess");
         const access = await resolvePublicWidgetAccess(req, widgetId, {
           requireEnabled: true,
           strictOrigin: false,
         });
-        if (!access.ok) {
-          enabled = false;
-        } else {
+        if (access.ok) {
           enabled = true;
-          const ws = access.owner.widgetSettings as any;
-          if (ws.color) color = ws.color;
-          if (ws.position) position = ws.position;
-          if (ws.welcomeMessage) welcomeMessage = ws.welcomeMessage;
-        const tt = ws.triggerType;
-        if (tt === "delay" || tt === "scroll" || tt === "exit_intent" || tt === "always") {
-          triggerType = tt;
-        }
-        if (typeof ws.triggerDelaySeconds === "number" && !Number.isNaN(ws.triggerDelaySeconds)) {
-          triggerDelaySeconds = Math.min(3600, Math.max(0, Math.floor(ws.triggerDelaySeconds)));
-        }
-        if (typeof ws.triggerScrollPercent === "number" && !Number.isNaN(ws.triggerScrollPercent)) {
-          triggerScrollPercent = Math.min(100, Math.max(1, Math.floor(ws.triggerScrollPercent)));
-        }
-        if (ws.showOnDesktop === false) showOnDesktop = false;
-        if (ws.showOnMobile === false) showOnMobile = false;
-        if (Array.isArray(ws.pageRules)) {
-          pageRules = ws.pageRules.map((r: any) => ({
-            urlContains: String(r?.urlContains ?? "").slice(0, 500),
-            greeting: String(r?.greeting ?? "").slice(0, 500),
-            prefilledMessage: String(r?.prefilledMessage ?? "").slice(0, 2000),
-            suggestedQuestions: Array.isArray(r?.suggestedQuestions)
-              ? r.suggestedQuestions.map((q: unknown) => String(q).slice(0, 200)).slice(0, 8)
-              : [],
-          }));
-        }
+          publicWidgetId = access.owner.widgetPublicId || widgetId;
+          const ws = access.owner.widgetSettings as Record<string, unknown>;
+          const tt = ws.triggerType;
+          if (tt === "delay" || tt === "scroll" || tt === "exit_intent" || tt === "always") {
+            triggerType = tt;
+          }
+          if (typeof ws.triggerDelaySeconds === "number" && !Number.isNaN(ws.triggerDelaySeconds)) {
+            triggerDelaySeconds = Math.min(3600, Math.max(0, Math.floor(ws.triggerDelaySeconds)));
+          }
+          if (typeof ws.triggerScrollPercent === "number" && !Number.isNaN(ws.triggerScrollPercent)) {
+            triggerScrollPercent = Math.min(100, Math.max(1, Math.floor(ws.triggerScrollPercent)));
+          }
+          if (ws.showOnDesktop === false) showOnDesktop = false;
+          if (ws.showOnMobile === false) showOnMobile = false;
+          if (Array.isArray(ws.pageRules)) {
+            pageRules = ws.pageRules.map((r: any) => ({
+              urlContains: String(r?.urlContains ?? "").slice(0, 500),
+              greeting: String(r?.greeting ?? "").slice(0, 500),
+              prefilledMessage: String(r?.prefilledMessage ?? "").slice(0, 2000),
+              suggestedQuestions: Array.isArray(r?.suggestedQuestions)
+                ? r.suggestedQuestions.map((q: unknown) => String(q).slice(0, 200)).slice(0, 8)
+                : [],
+            }));
+          }
+          chrome = buildWebchatChromeLayout(ws, {
+            businessName: access.owner.businessName,
+            appOrigin: origin,
+            allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
+              process.env.APP_URL,
+              process.env.CLOUDFLARE_R2_PUBLIC_URL,
+              process.env.REPLIT_DOMAINS,
+            ]),
+          });
         }
       } catch { /* non-fatal */ }
     }
 
-    const js = enabled ? `
-(function() {
-  'use strict';
-  var COLOR = ${JSON.stringify(color)};
-  var POSITION = ${JSON.stringify(position)};
-  var DEFAULT_WELCOME = ${JSON.stringify(welcomeMessage)};
-  var WIDGET_ID = ${JSON.stringify(widgetId || "")};
-  var ORIGIN = ${JSON.stringify(origin)};
-  var TRIGGER = ${JSON.stringify(triggerType)};
-  var DELAY_SEC = ${JSON.stringify(triggerDelaySeconds)};
-  var SCROLL_PCT = ${JSON.stringify(triggerScrollPercent)};
-  var SHOW_DESKTOP = ${JSON.stringify(showOnDesktop)};
-  var SHOW_MOBILE = ${JSON.stringify(showOnMobile)};
-  var PAGE_RULES = ${JSON.stringify(pageRules)};
-
-  if (window.__wcwInit) return;
-  window.__wcwInit = true;
-
-  var btn, bubble, iframeLoaded = false;
-  var revealed = false;
-
-  function isMobileViewport() {
-    try {
-      return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
-    } catch (e) {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
-    }
-  }
-
-  function allowDevice() {
-    var m = isMobileViewport();
-    if (m && !SHOW_MOBILE) return false;
-    if (!m && !SHOW_DESKTOP) return false;
-    return true;
-  }
-
-  function activeRule() {
-    var rules = PAGE_RULES || [];
-    for (var i = 0; i < rules.length; i++) {
-      var q = (rules[i].urlContains || '').trim();
-      if (q && window.location.href.indexOf(q) !== -1) return rules[i];
-    }
-    return null;
-  }
-
-  function welcomeText() {
-    var r = activeRule();
-    if (r && r.greeting) return r.greeting;
-    return DEFAULT_WELCOME;
-  }
-
-  function prefillText() {
-    var r = activeRule();
-    if (r && r.prefilledMessage) return String(r.prefilledMessage);
-    return '';
-  }
-
-  function iframeSrc() {
-    var base = ORIGIN + '/widget-frame/' + WIDGET_ID;
-    var qs = [];
-    var pr = prefillText();
-    if (pr) qs.push('prefill=' + encodeURIComponent(pr));
-    var gr = welcomeText();
-    if (gr) qs.push('greeting=' + encodeURIComponent(gr));
-    try {
-      if (typeof window !== 'undefined' && window.location && window.location.href) {
-        qs.push('parentUrl=' + encodeURIComponent(window.location.href));
-      }
-    } catch (e) {}
-    return qs.length ? (base + '?' + qs.join('&')) : base;
-  }
-
-  function posStyle() {
-    return POSITION === 'left'
-      ? 'left:20px;right:auto;'
-      : 'right:20px;left:auto;';
-  }
-
-  function createButton() {
-    btn = document.createElement('button');
-    btn.setAttribute('aria-label', 'Open website chat');
-    btn.setAttribute('data-wcw', 'toggle');
-    btn.style.cssText = [
-      'position:fixed;bottom:20px;' + posStyle(),
-      'width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;',
-      'background:' + COLOR + ';color:#fff;',
-      'box-shadow:0 4px 16px rgba(0,0,0,.25);',
-      'display:flex;align-items:center;justify-content:center;',
-      'z-index:2147483647;transition:transform .15s;',
-      'touch-action:manipulation;-webkit-tap-highlight-color:transparent;',
-    ].join('');
-    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-    btn.addEventListener('click', toggleChat);
-    btn.addEventListener('mouseenter', function() { btn.style.transform = 'scale(1.1)'; });
-    btn.addEventListener('mouseleave', function() { btn.style.transform = 'scale(1)'; });
-    document.body.appendChild(btn);
-  }
-
-  function createBubble() {
-    bubble = document.createElement('div');
-    bubble.style.cssText = [
-      'position:fixed;bottom:90px;' + posStyle(),
-      'background:#fff;border-radius:12px;',
-      'box-shadow:0 4px 20px rgba(0,0,0,.18);',
-      'padding:12px 16px;max-width:240px;font-size:13px;',
-      'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;',
-      'z-index:2147483646;opacity:0;pointer-events:none;',
-      'transition:opacity .2s;line-height:1.4;',
-    ].join('');
-    bubble.textContent = welcomeText();
-    document.body.appendChild(bubble);
-    setTimeout(function() {
-      bubble.style.opacity = '1';
-      bubble.style.pointerEvents = 'auto';
-      setTimeout(function() {
-        if (!iframeLoaded) {
-          bubble.style.opacity = '0';
-          bubble.style.pointerEvents = 'none';
-        }
-      }, 5000);
-    }, 2000);
-  }
-
-  function loadIframe() {
-    if (iframeLoaded) return;
-    iframeLoaded = true;
-    var container = document.createElement('div');
-    var side = POSITION === 'left' ? 'left:20px;right:auto;' : 'right:20px;left:auto;';
-    container.style.cssText = [
-      'position:fixed;bottom:90px;' + side,
-      'width:min(360px,calc(100vw - 32px));',
-      'height:min(560px,calc(100vh - 110px));',
-      'border-radius:16px;overflow:hidden;',
-      'box-shadow:0 8px 32px rgba(0,0,0,.22);',
-      'z-index:2147483646;',
-      'transform:scale(0.9) translateY(16px);opacity:0;',
-      'transition:transform .2s,opacity .2s;',
-    ].join('');
-    container.setAttribute('data-wcw', 'frame-container');
-
-    var frame = document.createElement('iframe');
-    frame.src = iframeSrc();
-    frame.style.cssText = 'width:100%;height:100%;border:none;display:block;';
-    frame.setAttribute('loading', 'lazy');
-    frame.setAttribute('title', 'Website chat');
-    frame.setAttribute('allow', 'clipboard-write');
-    container.appendChild(frame);
-    document.body.appendChild(container);
-
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() {
-        container.style.transform = 'scale(1) translateY(0)';
-        container.style.opacity = '1';
-      });
+    const js = buildWebchatPublicScript({
+      enabled,
+      widgetId: publicWidgetId || widgetId || "",
+      origin,
+      chrome,
+      triggerType,
+      triggerDelaySeconds,
+      triggerScrollPercent,
+      showOnDesktop,
+      showOnMobile,
+      pageRules,
     });
-
-    return container;
-  }
-
-  var chatOpen = false;
-  var frameContainer = null;
-
-  function toggleChat() {
-    chatOpen = !chatOpen;
-    if (chatOpen) {
-      btn.setAttribute('aria-label', 'Close website chat');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-      bubble.style.opacity = '0';
-      bubble.style.pointerEvents = 'none';
-      if (!frameContainer) {
-        frameContainer = loadIframe();
-      } else {
-        var fr = frameContainer.querySelector('iframe');
-        if (fr) fr.src = iframeSrc();
-        frameContainer.style.display = 'block';
-        requestAnimationFrame(function() {
-          requestAnimationFrame(function() {
-            frameContainer.style.transform = 'scale(1) translateY(0)';
-            frameContainer.style.opacity = '1';
-          });
-        });
-      }
-    } else {
-      btn.setAttribute('aria-label', 'Open website chat');
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-      if (frameContainer) {
-        frameContainer.style.transform = 'scale(0.9) translateY(16px)';
-        frameContainer.style.opacity = '0';
-        setTimeout(function() {
-          if (frameContainer && !chatOpen) frameContainer.style.display = 'none';
-        }, 200);
-      }
-    }
-  }
-
-  function scrollDepthPercent() {
-    var h = document.documentElement;
-    var st = window.pageYOffset != null ? window.pageYOffset : h.scrollTop;
-    var sh = h.scrollHeight - h.clientHeight;
-    if (sh <= 0) return 100;
-    return Math.round((st / sh) * 100);
-  }
-
-  function isTouchDevice() {
-    return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  }
-
-  function reveal() {
-    if (revealed) return;
-    if (!allowDevice()) return;
-    revealed = true;
-    createButton();
-    createBubble();
-  }
-
-  function scheduleReveal() {
-    if (!allowDevice()) return;
-    if (TRIGGER === 'always') {
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(function() { reveal(); }, { timeout: 3000 });
-      } else {
-        setTimeout(reveal, 0);
-      }
-      return;
-    }
-    if (TRIGGER === 'delay') {
-      var sec = Math.max(0, parseInt(String(DELAY_SEC), 10) || 0);
-      setTimeout(reveal, sec * 1000);
-      return;
-    }
-    if (TRIGGER === 'scroll') {
-      function onScroll() {
-        if (scrollDepthPercent() >= (parseInt(String(SCROLL_PCT), 10) || 50)) {
-          window.removeEventListener('scroll', onScroll, true);
-          reveal();
-        }
-      }
-      window.addEventListener('scroll', onScroll, { passive: true, capture: true });
-      setTimeout(onScroll, 0);
-      return;
-    }
-    if (TRIGGER === 'exit_intent') {
-      if (isTouchDevice()) {
-        function onScrollExit() {
-          if (scrollDepthPercent() >= (parseInt(String(SCROLL_PCT), 10) || 50)) {
-            window.removeEventListener('scroll', onScrollExit, true);
-            reveal();
-          }
-        }
-        window.addEventListener('scroll', onScrollExit, { passive: true, capture: true });
-        setTimeout(onScrollExit, 0);
-      } else {
-        function onLeave(e) {
-          if (e.clientY <= 0) {
-            document.documentElement.removeEventListener('mouseleave', onLeave);
-            reveal();
-          }
-        }
-        document.documentElement.addEventListener('mouseleave', onLeave);
-      }
-      return;
-    }
-    reveal();
-  }
-
-  function boot() {
-    if (!document.body) return;
-    scheduleReveal();
-  }
-
-  if (typeof requestIdleCallback !== 'undefined') {
-    requestIdleCallback(function() {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-      } else {
-        boot();
-      }
-    }, { timeout: 3000 });
-  } else {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', boot);
-    } else {
-      setTimeout(boot, 300);
-    }
-  }
-})();
-` : '/* widget disabled */';
 
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
@@ -1630,6 +1364,19 @@ export async function registerRoutes(
     pageRules: z.array(widgetPageRuleSchema).max(30).optional(),
     allowedOrigins: z.array(z.string().max(200)).max(50).optional(),
     allowAnyOrigin: z.boolean().optional(),
+    launcherStyle: z.enum(["circle", "pill", "card"]).optional(),
+    launcherLabel: z.string().max(40).optional(),
+    brandName: z.string().max(80).optional(),
+    logoUrl: z.string().max(500).optional(),
+    panelHeading: z.string().max(80).optional(),
+    panelSubtitle: z.string().max(80).optional(),
+    accentColor: z.union([z.literal(""), z.string().regex(/^#[0-9A-Fa-f]{6}$/)]).optional(),
+    headerTextColor: z.union([z.literal("auto"), z.string().regex(/^#[0-9A-Fa-f]{6}$/i)]).optional(),
+    cornerStyle: z.enum(["rounded", "soft", "square"]).optional(),
+    panelWidth: z.enum(["compact", "standard", "wide"]).optional(),
+    openBehavior: z.enum(["teaser", "direct"]).optional(),
+    teaserGreeting: z.string().max(200).optional(),
+    chatIcon: z.enum(["chat", "message", "support"]).optional(),
   });
   
   app.patch("/api/widget-settings", async (req, res) => {
@@ -1652,6 +1399,27 @@ export async function registerRoutes(
       const patch = Object.fromEntries(
         Object.entries(validation.data).filter(([, v]) => v !== undefined)
       ) as Record<string, unknown>;
+
+      const unsafeField = firstUnsafeWidgetTextField(patch);
+      if (unsafeField) {
+        return res.status(400).json({
+          error: "Unsafe widget text",
+          code: "UNSAFE_WIDGET_TEXT",
+          field: unsafeField,
+        });
+      }
+      const logoHosts = widgetLogoAllowedHttpsHosts([
+        process.env.APP_URL,
+        process.env.CLOUDFLARE_R2_PUBLIC_URL,
+        process.env.REPLIT_DOMAINS,
+      ]);
+      if (typeof patch.logoUrl === "string" && patch.logoUrl.trim()) {
+        const cleanedLogo = sanitizeWidgetLogoUrl(patch.logoUrl, { allowedHttpsHosts: logoHosts });
+        if (!cleanedLogo) {
+          return res.status(400).json({ error: "Invalid logo URL", code: "INVALID_LOGO_URL" });
+        }
+        patch.logoUrl = cleanedLogo;
+      }
 
       if (Array.isArray(patch.allowedOrigins)) {
         const { normalizeAllowedOriginsList } = await import("@shared/webchatOriginPolicy");
@@ -1681,6 +1449,7 @@ export async function registerRoutes(
       }
       
       const newSettings = { ...currentSettings, ...patch } as Record<string, unknown>;
+      Object.assign(newSettings, sanitizeWebchatBranding(newSettings, { allowedHttpsHosts: logoHosts }));
       newSettings.allowAnyOrigin = newSettings.allowAnyOrigin === true;
       newSettings.enabled = newSettings.enabled === true;
       if (!hasWidgetOriginPrerequisite(newSettings) && newSettings.enabled === true) {
