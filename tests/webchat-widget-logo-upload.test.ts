@@ -11,10 +11,12 @@ import {
   mapUploadedMediaUrlToLogoPath,
   markWidgetLogoPreviewFailed,
   parseWidgetLogoUploadResponse,
+  publicWidgetLogoErrorMessage,
   runWidgetLogoUpload,
   shouldResetWidgetLogoPreview,
   validateWidgetLogoFileMeta,
   widgetSettingsPatchLogoUrl,
+  WIDGET_LOGO_ERROR_CODE,
   WIDGET_LOGO_UPLOAD_PATH,
   type WidgetLogoUploadLock,
 } from "../shared/webchatWidgetLogoUpload";
@@ -23,7 +25,13 @@ import {
   inspectWidgetLogoUpload,
   widgetLogoUploadAuth,
 } from "../server/widgetLogoUpload";
-import { isPublicUploadObjectFilename } from "../server/mediaStorageService";
+import {
+  isAllowedWidgetLogoStorageKey,
+  isPublicUploadObjectFilename,
+  storeWidgetLogoRaster,
+  widgetLogoReadKeys,
+  WidgetLogoStorageUnavailableError,
+} from "../server/mediaStorageService";
 
 function read(rel: string): string {
   return readFileSync(join(process.cwd(), rel), "utf8");
@@ -41,14 +49,7 @@ const WEBP = Uint8Array.from([
 const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
 
 function fakeFile(name: string, type: string, bytes: Uint8Array) {
-  return {
-    name,
-    type,
-    size: bytes.length,
-    async arrayBuffer() {
-      return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    },
-  };
+  return new File([bytes], name, { type });
 }
 
 function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
@@ -84,8 +85,11 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
       assert.equal(init?.method, "POST");
       assert.equal(init?.credentials, "include");
       assert.ok(init?.body instanceof FormData);
-      const sent = (init!.body as FormData).get("file");
+      const sent = (init!.body as FormData).get("file") as File | Blob | null;
       assert.ok(sent);
+      if (sent && "name" in sent) {
+        assert.equal((sent as File).name, "logo.jpg");
+      }
       assert.notEqual(href, "about:blank");
       return {
         ok: true,
@@ -182,27 +186,119 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   assert.equal(isPublicUploadObjectFilename("../x.jpg"), false);
   assert.equal(isPublicUploadObjectFilename("media/user-a/web-upload/x.jpg"), false);
   assert.equal(isPublicUploadObjectFilename("171-99.jpg"), true);
-  const jpegOk = inspectWidgetLogoUpload({
-    originalname: "logo.jpg",
-    mimetype: "image/jpeg",
+  const octet = inspectWidgetLogoUpload({
+    originalname: "blob",
+    mimetype: "application/octet-stream",
     size: JPEG.length,
     buffer: JPEG,
   });
-  assert.equal(jpegOk.ok, true);
-  const pngOk = inspectWidgetLogoUpload({
-    originalname: "logo.png",
-    mimetype: "image/png",
-    size: PNG.length,
-    buffer: PNG,
+  assert.equal(octet.ok, true);
+  assert.equal(
+    inspectWidgetLogoUpload({
+      originalname: "logo.jpg",
+      mimetype: "image/jpeg",
+      size: JPEG.length,
+      buffer: JPEG,
+    }).ok,
+    true,
+  );
+  assert.equal(
+    inspectWidgetLogoUpload({
+      originalname: "logo.png",
+      mimetype: "image/png",
+      size: PNG.length,
+      buffer: PNG,
+    }).ok,
+    true,
+  );
+  assert.equal(
+    inspectWidgetLogoUpload({
+      originalname: "logo.webp",
+      mimetype: "image/webp",
+      size: WEBP.length,
+      buffer: WEBP,
+    }).ok,
+    true,
+  );
+}
+
+{
+  const prior = "/objects/uploads/kept.jpg";
+  const productionBody = parseWidgetLogoUploadResponse({ error: "Upload failed" }, 500);
+  assert.equal(productionBody.ok, false);
+  if (!productionBody.ok) {
+    assert.equal(productionBody.error, publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE));
+    assert.equal(productionBody.code, WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE);
+  }
+  const productionHandler = await runWidgetLogoUpload({
+    file: fakeFile("logo.jpg", "image/jpeg", JPEG),
+    priorLogoUrl: prior,
+    lock: { inFlight: false },
+    fetchFn: async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "Upload failed" }),
+    }),
   });
-  assert.equal(pngOk.ok, true);
-  const webpOk = inspectWidgetLogoUpload({
-    originalname: "logo.webp",
-    mimetype: "image/webp",
-    size: WEBP.length,
-    buffer: WEBP,
+  assert.equal(productionHandler.ok, false);
+  if (!productionHandler.ok) {
+    assert.equal(
+      productionHandler.error,
+      publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),
+    );
+  }
+  assert.equal(widgetSettingsPatchLogoUrl(undefined, prior), prior);
+
+  const attempted: string[] = [];
+  const filename = "tenant-a-1710000000000-1.jpg";
+  const stored = await storeWidgetLogoRaster({
+    buffer: Buffer.from(JPEG),
+    mimeType: "image/jpeg",
+    filename,
+    userId: "tenant-a",
+    r2Enabled: true,
+    putR2: async (key) => {
+      attempted.push(key);
+      if (key.startsWith("uploads/")) {
+        const err = new Error("AccessDenied");
+        err.name = "AccessDenied";
+        throw err;
+      }
+    },
   });
-  assert.equal(webpOk.ok, true);
+  assert.equal(stored.logoUrl, `/objects/uploads/${filename}`);
+  assert.deepEqual(attempted, [
+    `uploads/${filename}`,
+    `media/tenant-a/widget-logo/${filename}`,
+  ]);
+  assert.equal(isAllowedWidgetLogoStorageKey("media/tenant-a/web-upload/x.jpg"), false);
+  assert.equal(isAllowedWidgetLogoStorageKey(`media/tenant-a/widget-logo/${filename}`), true);
+  assert.deepEqual(widgetLogoReadKeys(filename), [
+    `uploads/${filename}`,
+    `media/tenant-a/widget-logo/${filename}`,
+  ]);
+  assert.equal(
+    widgetLogoReadKeys(filename).some((k) => k.includes("web-upload") || k.includes("tenant-b")),
+    false,
+  );
+
+  await assert.rejects(
+    () =>
+      storeWidgetLogoRaster({
+        buffer: Buffer.from(JPEG),
+        mimeType: "image/jpeg",
+        filename,
+        userId: "tenant-a",
+        r2Enabled: true,
+        putR2: async () => {
+          throw new Error("AccessDenied");
+        },
+        putFallback: async () => {
+          throw new Error("GCS missing");
+        },
+      }),
+    (err: unknown) => err instanceof WidgetLogoStorageUnavailableError,
+  );
 }
 
 {
@@ -293,12 +389,18 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
     routes.indexOf("Phone Registration Endpoints"),
   );
   assert.match(patchSlice, /getWidgetPublicIdForUser/);
+  assert.match(patchSlice, /registerWidgetLogoRoutes/);
   assert.doesNotMatch(patchSlice, /rotateWidgetPublicId/);
   const logoRoute = read("server/routes/widgetLogo.ts");
   assert.match(logoRoute, /widgetLogoUploadAuth/);
   assert.match(logoRoute, /storeWidgetLogoRaster/);
   assert.match(logoRoute, /logoUrl: stored\.logoUrl/);
+  assert.match(logoRoute, /STORAGE_UNAVAILABLE/);
   assert.doesNotMatch(logoRoute, /uploadOutboundUserMedia/);
+  const storage = read("server/mediaStorageService.ts");
+  assert.match(storage, /requestChecksumCalculation/);
+  assert.match(storage, /widget-logo/);
+  assert.match(storage, /WHEN_REQUIRED/);
   const objects = read("server/replit_integrations/object_storage/routes.ts");
   assert.match(objects, /readPublicUploadObject/);
   const header = read("client/src/components/webchat/WebchatPanelHeader.tsx");

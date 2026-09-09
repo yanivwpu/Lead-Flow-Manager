@@ -1472,6 +1472,8 @@ export async function registerRoutes(
     }
   });
 
+  registerWidgetLogoRoutes(app);
+
   // ============= Phone Registration Endpoints =============
   
   // Get registered phones for current user
@@ -12130,7 +12132,6 @@ export async function registerRoutes(
   });
 
   registerMediaRoutes(app);
-  registerWidgetLogoRoutes(app);
   registerWhatsappIntegrationRoutes(app);
   registerContactRoutes(app);
   registerSchedulingRoutes(app);

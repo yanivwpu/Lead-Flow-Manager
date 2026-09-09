@@ -13,6 +13,34 @@ export const WIDGET_LOGO_UPLOAD_PATH = "/api/widget-settings/logo";
 export const WIDGET_LOGO_MAX_BYTES = WEBCHAT_IMAGE_MAX_BYTES;
 export const WIDGET_LOGO_ACCEPT = "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
 
+export const WIDGET_LOGO_ERROR_CODE = {
+  UNAUTHORIZED: "LOGO_UNAUTHORIZED",
+  INVALID_TYPE: "LOGO_INVALID_TYPE",
+  TOO_LARGE: "LOGO_TOO_LARGE",
+  STORAGE_UNAVAILABLE: "LOGO_STORAGE_UNAVAILABLE",
+  NO_FILE: "LOGO_NO_FILE",
+} as const;
+
+export type WidgetLogoErrorCode =
+  (typeof WIDGET_LOGO_ERROR_CODE)[keyof typeof WIDGET_LOGO_ERROR_CODE];
+
+export function publicWidgetLogoErrorMessage(code: string | undefined, fallback?: string): string {
+  switch (code) {
+    case WIDGET_LOGO_ERROR_CODE.UNAUTHORIZED:
+      return "Please sign in again to upload a logo.";
+    case WIDGET_LOGO_ERROR_CODE.INVALID_TYPE:
+      return "Please upload a JPG, PNG, or WebP.";
+    case WIDGET_LOGO_ERROR_CODE.TOO_LARGE:
+      return "Logo must be smaller than 5 MB.";
+    case WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE:
+      return "Logo storage is temporarily unavailable.";
+    case WIDGET_LOGO_ERROR_CODE.NO_FILE:
+      return "Choose a JPEG, PNG, or WebP file.";
+    default:
+      return fallback || "Logo storage is temporarily unavailable.";
+  }
+}
+
 const FIRST_PARTY_LOGO_FILE =
   /^\/(?:objects\/uploads|uploads)\/([\w][\w-]*\.(jpg|jpeg|png|webp))$/i;
 
@@ -43,17 +71,17 @@ export function widgetLogoInspectError(
 ): string {
   switch (reason) {
     case "empty":
-      return "Choose a JPEG, PNG, or WebP file.";
+      return publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.NO_FILE);
     case "too_large":
-      return "Logo must be 5 MB or smaller.";
+      return publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.TOO_LARGE);
     case "disguised":
-      return "That file is not a safe JPEG, PNG, or WebP image.";
+      return publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE);
     case "unsafe_type":
-      return "Logo must be a JPEG, PNG, or WebP file.";
+      return publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE);
     case "mismatch":
       return "File type does not match the image contents.";
     default:
-      return "Logo upload failed.";
+      return publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE);
   }
 }
 
@@ -65,22 +93,25 @@ export function validateWidgetLogoFileMeta(file: {
   const name = typeof file.name === "string" ? file.name : "";
   const type = typeof file.type === "string" ? file.type.split(";")[0].trim().toLowerCase() : "";
   const size = typeof file.size === "number" && Number.isFinite(file.size) ? file.size : -1;
-  if (!name) return { ok: false, error: "Choose a JPEG, PNG, or WebP file." };
   const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")).toLowerCase() : "";
   if (ext === ".svg" || /svg/i.test(type)) {
     return { ok: false, error: "SVG logos are not allowed." };
   }
-  if (!ALLOWED_EXT.has(ext)) {
-    return { ok: false, error: "Logo must be a JPEG, PNG, or WebP file." };
+  const nameless = !name || name === "blob" || name === "file";
+  if (ext && !ALLOWED_EXT.has(ext)) {
+    return { ok: false, error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE) };
   }
-  if (type && !ALLOWED_MIME.has(type)) {
-    return { ok: false, error: "Logo must be a JPEG, PNG, or WebP file." };
+  if (!ext && !nameless && name.includes(".")) {
+    return { ok: false, error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE) };
+  }
+  if (type && !ALLOWED_MIME.has(type) && type !== "application/octet-stream" && type !== "binary/octet-stream") {
+    return { ok: false, error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.INVALID_TYPE) };
   }
   if (size < 0 || size > WIDGET_LOGO_MAX_BYTES) {
-    return { ok: false, error: "Logo must be 5 MB or smaller." };
+    return { ok: false, error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.TOO_LARGE) };
   }
   if (size === 0) {
-    return { ok: false, error: "Choose a JPEG, PNG, or WebP file." };
+    return { ok: false, error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.NO_FILE) };
   }
   return { ok: true };
 }
@@ -113,23 +144,67 @@ export function mapUploadedMediaUrlToLogoPath(raw: unknown): string {
   return `/objects/uploads/${match[1]}`;
 }
 
+function looksLikeStorageFailureMessage(message: string): boolean {
+  const m = message.trim().toLowerCase();
+  return (
+    m === "upload failed" ||
+    m === "upload failed." ||
+    m === "logo upload failed." ||
+    m.includes("storage") ||
+    m.includes("accessdenied") ||
+    m.includes("nosuchbucket")
+  );
+}
+
 export function parseWidgetLogoUploadResponse(
   payload: unknown,
-): { ok: true; logoUrl: string } | { ok: false; error: string } {
+  httpStatus?: number,
+): { ok: true; logoUrl: string } | { ok: false; error: string; code?: string } {
+  if (httpStatus === 401 || httpStatus === 403) {
+    return {
+      ok: false,
+      error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.UNAUTHORIZED),
+      code: WIDGET_LOGO_ERROR_CODE.UNAUTHORIZED,
+    };
+  }
+  if (httpStatus === 413) {
+    return {
+      ok: false,
+      error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.TOO_LARGE),
+      code: WIDGET_LOGO_ERROR_CODE.TOO_LARGE,
+    };
+  }
   if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Upload did not return a first-party JPEG, PNG, or WebP path." };
+    return {
+      ok: false,
+      error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),
+      code: WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE,
+    };
   }
   const rec = payload as Record<string, unknown>;
+  const code = typeof rec.code === "string" ? rec.code : "";
   const logoUrl =
     mapUploadedMediaUrlToLogoPath(rec.logoUrl) || mapUploadedMediaUrlToLogoPath(rec.mediaUrl);
-  if (!logoUrl) {
-    const message =
-      typeof rec.error === "string" && rec.error.trim()
-        ? rec.error.trim().slice(0, 200)
-        : "Upload did not return a first-party JPEG, PNG, or WebP path.";
-    return { ok: false, error: message };
+  if (logoUrl && (httpStatus === undefined || (httpStatus >= 200 && httpStatus < 300))) {
+    return { ok: true, logoUrl };
   }
-  return { ok: true, logoUrl };
+  if (code) {
+    return { ok: false, error: publicWidgetLogoErrorMessage(code, undefined), code };
+  }
+  const rawError = typeof rec.error === "string" ? rec.error.trim().slice(0, 200) : "";
+  if (rawError && looksLikeStorageFailureMessage(rawError)) {
+    return {
+      ok: false,
+      error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),
+      code: WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE,
+    };
+  }
+  if (rawError) return { ok: false, error: rawError };
+  return {
+    ok: false,
+    error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),
+    code: WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE,
+  };
 }
 
 export function widgetSettingsPatchLogoUrl(nextLogo: unknown, priorLogo: unknown): string {
@@ -199,7 +274,11 @@ export async function runWidgetLogoUpload(input: {
   input.onBusyChange?.(true);
   try {
     const body = new FormData();
-    body.append("file", input.file as Blob);
+    const filename =
+      typeof input.file.name === "string" && input.file.name && input.file.name !== "blob"
+        ? input.file.name
+        : "logo.jpg";
+    body.append("file", input.file as Blob, filename);
     const res = await input.fetchFn(WIDGET_LOGO_UPLOAD_PATH, {
       method: "POST",
       body,
@@ -211,17 +290,23 @@ export async function runWidgetLogoUpload(input: {
     } catch {
       payload = {};
     }
-    const mapped = parseWidgetLogoUploadResponse(payload);
+    const mapped = parseWidgetLogoUploadResponse(payload, res.status);
     if (!res.ok || !mapped.ok) {
       return {
         ok: false,
-        error: mapped.ok ? "Upload failed." : mapped.error,
+        error: mapped.ok
+          ? publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE)
+          : mapped.error,
         navigated: false,
       };
     }
     return { ok: true, logoUrl: mapped.logoUrl, navigated: false };
   } catch {
-    return { ok: false, error: "Upload failed.", navigated: false };
+    return {
+      ok: false,
+      error: publicWidgetLogoErrorMessage(WIDGET_LOGO_ERROR_CODE.STORAGE_UNAVAILABLE),
+      navigated: false,
+    };
   } finally {
     input.lock.inFlight = false;
     input.onBusyChange?.(false);

@@ -124,16 +124,23 @@ function r2Configured(): boolean {
   );
 }
 
-async function putR2Object(key: string, body: Buffer, contentType: string): Promise<string> {
+function r2S3Config() {
   const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID!;
-  const client = new S3Client({
-    region: "auto",
+  return {
+    region: "auto" as const,
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
       secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
     },
-  });
+    // AWS SDK v3 default CRC32 checksums are rejected by Cloudflare R2.
+    requestChecksumCalculation: "WHEN_REQUIRED" as const,
+    responseChecksumValidation: "WHEN_REQUIRED" as const,
+  };
+}
+
+async function putR2Object(key: string, body: Buffer, contentType: string): Promise<string> {
+  const client = new S3Client(r2S3Config());
   await client.send(
     new PutObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
@@ -371,15 +378,7 @@ function tenantMediaPrefix(userId: string): string {
 }
 
 function r2Client(): S3Client {
-  const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID!;
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
-    },
-  });
+  return new S3Client(r2S3Config());
 }
 
 function inferOwnedStorageKey(params: {
@@ -491,40 +490,107 @@ function mimeFromPublicUploadFilename(filename: string): string {
   return "application/octet-stream";
 }
 
-/** Widget logos and other first-party /objects/uploads files — flat uploads/ key only. */
+export function sanitizeWidgetLogoOwnerId(userId: string): string {
+  return String(userId || "").replace(/[^\w-]/g, "").slice(0, 36) || "user";
+}
+
+export function ownerFromWidgetLogoFilename(filename: string): string | null {
+  const m = filename.match(/^([\w][\w-]{0,35})-\d{10,}-\d+\.(jpg|jpeg|png|webp)$/i);
+  return m ? m[1] : null;
+}
+
+export function widgetLogoStorageKeys(userId: string, filename: string): { primary: string; tenant: string } {
+  const owner = sanitizeWidgetLogoOwnerId(userId);
+  return {
+    primary: `uploads/${filename}`,
+    tenant: `media/${owner}/widget-logo/${filename}`,
+  };
+}
+
+export function isAllowedWidgetLogoStorageKey(key: string): boolean {
+  if (!key || key.includes("..") || key.includes("\\") || key.includes("//")) return false;
+  if (/^uploads\/[\w][\w-]*\.(jpg|jpeg|png|webp)$/i.test(key)) return true;
+  if (/^media\/[\w][\w-]*\/widget-logo\/[\w][\w-]*\.(jpg|jpeg|png|webp)$/i.test(key)) return true;
+  return false;
+}
+
+export function widgetLogoReadKeys(filename: string): string[] {
+  const keys = [`uploads/${filename}`];
+  const owner = ownerFromWidgetLogoFilename(filename);
+  if (owner) keys.push(`media/${owner}/widget-logo/${filename}`);
+  return keys;
+}
+
+export class WidgetLogoStorageUnavailableError extends Error {
+  readonly code = "LOGO_STORAGE_UNAVAILABLE";
+  constructor() {
+    super("Logo storage is temporarily unavailable.");
+    this.name = "WidgetLogoStorageUnavailableError";
+  }
+}
+
+export type WidgetLogoPutR2Fn = (key: string, body: Buffer, contentType: string) => Promise<unknown>;
+
+/** Widget logos: try public uploads/ then the tenant media prefix that already works on Railway R2. */
 export async function storeWidgetLogoRaster(params: {
   buffer: Buffer;
   mimeType: string;
   filename: string;
+  userId: string;
+  putR2?: WidgetLogoPutR2Fn;
+  r2Enabled?: boolean;
+  putFallback?: (filename: string, buffer: Buffer, mimeType: string) => Promise<unknown>;
 }): Promise<{ logoUrl: string }> {
-  const { buffer, mimeType, filename } = params;
+  const { buffer, mimeType, filename, userId } = params;
   if (!isPublicUploadObjectFilename(filename) || !/\.(jpg|jpeg|png|webp)$/i.test(filename)) {
-    throw new Error("Invalid logo filename");
+    throw new WidgetLogoStorageUnavailableError();
   }
-  if (r2Configured()) {
-    await putR2Object(`uploads/${filename}`, buffer, mimeType);
-  } else {
-    await putFallbackObjectOrLocal(filename, buffer, mimeType);
+  const keys = widgetLogoStorageKeys(userId, filename);
+  if (!isAllowedWidgetLogoStorageKey(keys.primary) || !isAllowedWidgetLogoStorageKey(keys.tenant)) {
+    throw new WidgetLogoStorageUnavailableError();
   }
-  return { logoUrl: `/objects/uploads/${filename}` };
+  const r2Enabled = params.r2Enabled ?? r2Configured();
+  const putR2 = params.putR2 ?? putR2Object;
+  if (r2Enabled) {
+    for (const key of [keys.primary, keys.tenant]) {
+      try {
+        await putR2(key, buffer, mimeType);
+        return { logoUrl: `/objects/uploads/${filename}` };
+      } catch {
+        /* try next key / fallback */
+      }
+    }
+  }
+  try {
+    if (params.putFallback) {
+      await params.putFallback(filename, buffer, mimeType);
+    } else {
+      await putFallbackObjectOrLocal(filename, buffer, mimeType);
+    }
+    return { logoUrl: `/objects/uploads/${filename}` };
+  } catch {
+    throw new WidgetLogoStorageUnavailableError();
+  }
 }
 
 export async function readPublicUploadObject(
   filename: string,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   if (!isPublicUploadObjectFilename(filename)) return null;
-  const key = `uploads/${filename}`;
+  const keys = widgetLogoReadKeys(filename).filter(isAllowedWidgetLogoStorageKey);
   if (r2Configured()) {
-    const fromR2 = await readR2Object(key);
-    if (fromR2) {
-      const mime =
-        fromR2.mimeType && fromR2.mimeType !== "application/octet-stream"
-          ? fromR2.mimeType
-          : mimeFromPublicUploadFilename(filename);
-      return { buffer: fromR2.buffer, mimeType: mime };
+    for (const key of keys) {
+      const fromR2 = await readR2Object(key);
+      if (fromR2) {
+        const mime =
+          fromR2.mimeType && fromR2.mimeType !== "application/octet-stream"
+            ? fromR2.mimeType
+            : mimeFromPublicUploadFilename(filename);
+        return { buffer: fromR2.buffer, mimeType: mime };
+      }
     }
   }
-  const fallback = await readFallbackObject(key);
+  const fallback = await readFallbackObject(`uploads/${filename}`);
   if (!fallback) return null;
   return {
     buffer: fallback.buffer,
