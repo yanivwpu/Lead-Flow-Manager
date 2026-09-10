@@ -1734,7 +1734,8 @@ class ChannelService {
       isNewConversation,
       preferredFlowId: preferredChatbotFlowId,
       skipBookingIntent: bookingIntent,
-      awaitExecution: channel === "webchat",
+      awaitExecution: true,
+      sourceEventId: externalMessageId || message.id,
     };
     const chatbotArb = await evaluateChatbotInboundArbitration(chatbotCtx);
     const chatbotResult = bookingIntent

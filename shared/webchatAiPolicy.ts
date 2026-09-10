@@ -85,6 +85,8 @@ export type ConversationAiControl = {
   generationEpoch: number;
   generationLease: WebchatGenerationLease | null;
   lastTurnOwner?: string;
+  /** Durable chatbot Ask Question / consent wait. Must survive pause/resume spreads. */
+  chatbotPendingInput?: unknown;
 };
 
 function readLease(raw: unknown): WebchatGenerationLease | null {
@@ -115,6 +117,7 @@ export function readConversationAiControl(raw: unknown): ConversationAiControl {
     generationEpoch: typeof o.generationEpoch === "number" ? o.generationEpoch : 0,
     generationLease: readLease(o.generationLease),
     lastTurnOwner: typeof o.lastTurnOwner === "string" ? o.lastTurnOwner : undefined,
+    chatbotPendingInput: o.chatbotPendingInput,
   };
 }
 
@@ -147,6 +150,7 @@ export function pauseAiControl(
     generationEpoch: epoch,
     generationLease: cancelLease(current.generationLease, epoch),
     lastTurnOwner: current.lastTurnOwner,
+    chatbotPendingInput: current.chatbotPendingInput,
   };
 }
 
@@ -162,6 +166,7 @@ export function resumeAiControl(previous?: unknown): ConversationAiControl {
     generationEpoch: epoch,
     generationLease: cancelLease(current.generationLease, epoch),
     lastTurnOwner: current.lastTurnOwner,
+    chatbotPendingInput: current.chatbotPendingInput,
   };
 }
 

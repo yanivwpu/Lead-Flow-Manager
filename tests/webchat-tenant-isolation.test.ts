@@ -184,7 +184,7 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   assert.match(channel, /preferredChatbotFlowId/);
   assert.match(channel, /pauseAiControl/);
   assert.match(channel, /generatedBy/);
-  assert.match(channel, /awaitExecution: channel === "webchat"/);
+  assert.match(channel, /awaitExecution: true/);
   assert.match(channel, /skipBookingIntent: bookingIntent/);
   assert.match(channel, /abortWebchatGeneration/);
   const auto = read("server/webchatAiAutoReply.ts");

@@ -72,7 +72,21 @@ export function flowWouldOwnVisitorTurn(
     if (type === "handoff" || actionType === "handoff" || actionType === "assign" || actionType === "assign_agent") {
       return { visitorFacing: true, reason: "handoff" };
     }
-    if (type === "message" || type === "question") {
+    if (type === "question") {
+      const msgType = data.messageType || "text";
+      if (msgType === "form") {
+        if ((data.content || "").trim()) {
+          return { visitorFacing: true, reason: "scripted_reply" };
+        }
+      } else if (
+        msgType === "buttons" ||
+        (Array.isArray(data.buttons) && data.buttons.length > 0) ||
+        (data.content || "").trim()
+      ) {
+        return { visitorFacing: true, reason: "wait_for_input" };
+      }
+    }
+    if (type === "message") {
       const msgType = data.messageType || "text";
       if (msgType === "buttons" || (Array.isArray(data.buttons) && data.buttons.length > 0)) {
         return { visitorFacing: true, reason: "wait_for_input" };

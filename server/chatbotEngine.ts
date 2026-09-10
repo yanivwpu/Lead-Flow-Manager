@@ -70,6 +70,10 @@ export interface TriggerContext {
   skipBookingIntent?: boolean;
   /** When true, wait for the first visitor-facing work instead of fire-and-forget. */
   awaitExecution?: boolean;
+  /** Inbound webhook/message id — duplicate deliveries must not advance Ask Question twice. */
+  sourceEventId?: string;
+  flowRunId?: string;
+  consumedSourceEventIds?: string[];
 }
 
 // ─── Per-conversation cooldown ─────────────────────────────────────────────
@@ -189,13 +193,162 @@ export type ChatbotTriggerResult = {
   reason: string;
 };
 
+import { randomUUID } from "crypto";
 import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 import { detectSellerConsultationBookingIntent } from "@shared/sellerIntent";
 import { flowWouldOwnVisitorTurn } from "@shared/webchatTurnOwner";
+import {
+  applyChatbotAskAnswer,
+  claimChatbotPendingAsk,
+  clearChatbotPendingAsk,
+  createChatbotPendingAsk,
+  isConsentYesNoButtons,
+  markChatbotPendingConsumed,
+  mergeChatbotPendingIntoAiControl,
+  peekChatbotPendingAsk,
+  pendingAskFromAiControl,
+  rememberChatbotPendingAsk,
+  releaseChatbotPendingClaim,
+  validateChatbotAskAnswer,
+  type ChatbotPendingAsk,
+} from "@shared/chatbotAskQuestion";
 
 function inboundHasBookingIntent(ctx: TriggerContext): boolean {
   if (ctx.skipBookingIntent) return true;
   return detectHighConfidenceBookingIntent(ctx.message) || detectSellerConsultationBookingIntent(ctx.message);
+}
+
+async function loadPendingAsk(ctx: TriggerContext): Promise<ChatbotPendingAsk | null> {
+  const mem = peekChatbotPendingAsk(ctx.conversationId);
+  if (mem) {
+    return mem.userId === ctx.userId ? mem : null;
+  }
+  try {
+    const conv = await storage.getConversation(ctx.conversationId);
+    if (!conv || conv.userId !== ctx.userId) return null;
+    const pending = pendingAskFromAiControl(conv.aiControl);
+    if (!pending || pending.userId !== ctx.userId) return null;
+    rememberChatbotPendingAsk(pending);
+    return pending;
+  } catch {
+    return null;
+  }
+}
+
+async function writePendingAsk(ctx: TriggerContext, pending: ChatbotPendingAsk | null): Promise<void> {
+  if (pending) rememberChatbotPendingAsk(pending);
+  else clearChatbotPendingAsk(ctx.conversationId);
+  try {
+    const conv = await storage.getConversation(ctx.conversationId);
+    if (!conv || conv.userId !== ctx.userId) return;
+    const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+    const control = readConversationAiControl(conv.aiControl);
+    await storage.updateConversation(ctx.conversationId, {
+      aiControl: mergeChatbotPendingIntoAiControl(
+        { ...control, lastTurnOwner: pending ? "chatbot" : control.lastTurnOwner },
+        pending,
+      ),
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Chatbot] pending persist failed: ${msg}`);
+  }
+}
+
+async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTriggerResult | null> {
+  const pending = await loadPendingAsk(ctx);
+  if (!pending) return null;
+  const claim = claimChatbotPendingAsk({
+    conversationId: ctx.conversationId,
+    userId: ctx.userId,
+    sourceEventId: ctx.sourceEventId,
+    pending,
+  });
+  if (!claim.ok) {
+    if (claim.reason === "duplicate") {
+      return { triggered: true, visitorFacing: true, reason: "pending_ask_duplicate" };
+    }
+    if (claim.reason === "tenant_mismatch" || claim.reason === "missing") return null;
+    return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
+  }
+
+  const variableName = claim.pending.kind === "consent_buttons" ? "consent" : claim.pending.variableName;
+  let replyText = ctx.message;
+  if (claim.pending.kind === "consent_buttons") {
+    const pendingButtons = getPendingButtons(ctx.conversationId);
+    if (pendingButtons) {
+      const matched = matchPendingButton(ctx.message, pendingButtons.buttons);
+      if (matched) replyText = matched.label || matched.value;
+    }
+  }
+  const validated = validateChatbotAskAnswer(variableName || "answer", replyText);
+  if (!validated.ok) {
+    releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+    await sendChatbotReply(ctx, validated.retryPrompt);
+    return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
+  }
+
+  try {
+    const contact = await storage.getContact(ctx.contactId);
+    if (!contact || contact.userId !== ctx.userId || contact.id !== claim.pending.contactId) {
+      releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+      return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
+    }
+    const applied = applyChatbotAskAnswer({
+      contact,
+      expectedUserId: ctx.userId,
+      variableName,
+      validated,
+      channel: ctx.channel,
+      conversationId: ctx.conversationId,
+      flowRunId: claim.pending.flowRunId,
+    });
+    if (!applied.ok) {
+      releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+      return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
+    }
+    await storage.updateContact(contact.id, applied.patch, {
+      expectedWorkspaceUserId: ctx.userId,
+    });
+  } catch (err: unknown) {
+    releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Chatbot] Failed to save Ask Question answer: ${msg}`);
+    return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
+  }
+
+  const consumed = markChatbotPendingConsumed(claim.pending, ctx.sourceEventId);
+  clearPendingButtons(ctx.conversationId);
+  const nextNodeId = consumed.nextNodeId;
+  if (!nextNodeId) {
+    await writePendingAsk(ctx, null);
+    releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+    return { triggered: true, visitorFacing: true, reason: "pending_ask_complete" };
+  }
+
+  let targetFlow: ChatbotFlow | undefined;
+  try {
+    const loaded = await storage.getChatbotFlow(consumed.flowId);
+    if (loaded && loaded.userId === ctx.userId) targetFlow = loaded;
+  } catch {
+    targetFlow = undefined;
+  }
+  if (!targetFlow) {
+    await writePendingAsk(ctx, null);
+    releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+    return { triggered: true, visitorFacing: true, reason: "pending_ask_complete" };
+  }
+
+  await writePendingAsk(ctx, null);
+  ctx.flowRunId = consumed.flowRunId;
+  ctx.consumedSourceEventIds = consumed.consumedSourceEventIds;
+  const executed = await executeFlow(targetFlow, ctx, nextNodeId);
+  releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
+  return {
+    triggered: true,
+    visitorFacing: executed.visitorFacing,
+    reason: executed.visitorFacing ? executed.reason : "pending_ask_continue",
+  };
 }
 
 /**
@@ -219,13 +372,22 @@ export async function evaluateChatbotInboundArbitration(
     return { flowMatched: false, reason: ENTITLEMENT_BLOCKED_REASON };
   }
   try {
+    const pendingAsk = await loadPendingAsk(ctx);
+    if (pendingAsk && pendingAsk.userId === ctx.userId) {
+      const eventId = typeof ctx.sourceEventId === "string" ? ctx.sourceEventId.trim() : "";
+      if (eventId && pendingAsk.consumedSourceEventIds.includes(eventId)) {
+        return { flowMatched: true, reason: "pending_ask_duplicate" };
+      }
+      return { flowMatched: true, reason: "wait_for_input" };
+    }
+
     const dry = dryRunPendingButton(ctx);
     if (dry === "consume") {
       return { flowMatched: true, reason: "pending_button_reply" };
     }
 
     if (isCoolingDown(ctx.conversationId)) {
-      return { flowMatched: true, reason: "chatbot_post_flow_cooldown" };
+      return { flowMatched: false, reason: "chatbot_post_flow_cooldown" };
     }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
@@ -859,6 +1021,7 @@ async function executeFlow(
 ): Promise<{ visitorFacing: boolean; reason: string }> {
   const nodes = (flow.nodes as ChatbotNode[]) || [];
   const edges = (flow.edges as ChatbotEdge[]) || [];
+  if (!ctx.flowRunId) ctx.flowRunId = randomUUID();
 
   if (nodes.length === 0) {
     console.log(`[Chatbot] Flow "${flow.name}" has no nodes — skipping`);
@@ -963,7 +1126,26 @@ async function executeFlow(
           }
         } else if (msgType === "buttons") {
           const rawButtons = (currentNode.data.buttons as (string | ButtonOption)[] | undefined) || [];
+          const buttons = rawButtons.map(resolveButton);
           await sendChatbotButtons(ctx, content, rawButtons);
+          if (isConsentYesNoButtons(buttons, currentNode.data.variableName)) {
+            const pending = createChatbotPendingAsk({
+              flowRunId: ctx.flowRunId || randomUUID(),
+              flowId: flow.id,
+              nodeId,
+              variableName: "consent",
+              nextNodeId: nextNodeMap.get(nodeId) || "",
+              channel: ctx.channel,
+              userId: ctx.userId,
+              contactId: ctx.contactId,
+              conversationId: ctx.conversationId,
+              kind: "consent_buttons",
+              promptText: content,
+              consumedSourceEventIds: ctx.consumedSourceEventIds || [],
+            });
+            ctx.flowRunId = pending.flowRunId;
+            await writePendingAsk(ctx, pending);
+          }
           console.log(`[Chatbot] ⏸ Pausing flow execution after buttons node — awaiting user reply`);
           return { visitorFacing: true, reason: "wait_for_input" };
         } else if (msgType === "form") {
@@ -987,6 +1169,27 @@ async function executeFlow(
             visitorReason = "scripted_reply";
           } else {
             console.log(`[Chatbot] Node "${nodeId}" text node has no content — skipping send`);
+          }
+          if (currentNode.type === "question") {
+            const pending = createChatbotPendingAsk({
+              flowRunId: ctx.flowRunId || randomUUID(),
+              flowId: flow.id,
+              nodeId,
+              variableName: currentNode.data.variableName,
+              nextNodeId: nextNodeMap.get(nodeId) || "",
+              channel: ctx.channel,
+              userId: ctx.userId,
+              contactId: ctx.contactId,
+              conversationId: ctx.conversationId,
+              kind: "ask_question",
+              promptText: content,
+              consumedSourceEventIds: ctx.consumedSourceEventIds || [],
+            });
+            ctx.flowRunId = pending.flowRunId;
+            ctx.consumedSourceEventIds = pending.consumedSourceEventIds;
+            await writePendingAsk(ctx, pending);
+            console.log(`[Chatbot] ⏸ Pausing flow after Ask Question node "${nodeId}" — awaiting user reply`);
+            return { visitorFacing: true, reason: "wait_for_input" };
           }
         }
         break;
@@ -1145,6 +1348,12 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
       `[Chatbot] Evaluating flows — userId: ${ctx.userId}, channel: ${ctx.channel}, isNewConversation: ${ctx.isNewConversation}, message: "${ctx.message.substring(0, 80)}"`
     );
 
+    const handledAsAsk = await checkAndResolvePendingAsk(ctx);
+    if (handledAsAsk) {
+      console.log(`[Chatbot] Message handled as Ask Question reply — ${handledAsAsk.reason}`);
+      return handledAsAsk;
+    }
+
     const handledAsButton = await checkAndResolvePendingButton(ctx);
     if (handledAsButton) {
       console.log(`[Chatbot] Message handled as button reply — skipping keyword matching`);
@@ -1153,9 +1362,9 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
 
     if (isCoolingDown(ctx.conversationId)) {
       console.log(
-        `[Chatbot] ⏳ Cooldown active for conversationId: ${ctx.conversationId} — skipping`
+        `[Chatbot] ⏳ Cooldown active for conversationId: ${ctx.conversationId} — skipping retrigger`
       );
-      return { triggered: true, visitorFacing: true, reason: "chatbot_post_flow_cooldown" };
+      return { triggered: false, visitorFacing: false, reason: "chatbot_post_flow_cooldown" };
     }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);

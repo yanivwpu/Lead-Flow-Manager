@@ -116,6 +116,11 @@ if (first.ok) {
     [],
   );
   assert.equal(question.reason, "wait_for_input");
+  const askText = flowWouldOwnVisitorTurn(
+    [{ id: "start", type: "question", data: { content: "What is your name?" } }],
+    [],
+  );
+  assert.equal(askText.reason, "wait_for_input");
   const assign = flowWouldOwnVisitorTurn(
     [{ id: "start", type: "action", data: { action: { type: "assign" } } }],
     [],
