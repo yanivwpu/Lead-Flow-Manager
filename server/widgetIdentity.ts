@@ -21,7 +21,6 @@ export type WidgetOwner = {
   userId: string;
   widgetPublicId: string;
   widgetSettings: Record<string, unknown>;
-  businessName: string;
   language: string | null;
 };
 
@@ -39,7 +38,6 @@ async function rowToOwner(row: typeof users.$inferSelect): Promise<WidgetOwner |
     userId: row.id,
     widgetPublicId: publicId,
     widgetSettings: asSettings(row.widgetSettings),
-    businessName: (row as { businessName?: string }).businessName || row.name || "",
     language: row.language || null,
   };
 }

@@ -46,6 +46,8 @@ export function buildWebchatChromeLayout(
   settings: Record<string, unknown>,
   opts?: {
     businessName?: string | null;
+    companyName?: string | null;
+    agentName?: string | null;
     chatGreeting?: string;
     appOrigin?: string;
     allowedLogoHttpsHosts?: string[];
@@ -54,6 +56,8 @@ export function buildWebchatChromeLayout(
   const presentation = resolvePublicWebchatPresentation({
     settings,
     businessName: opts?.businessName,
+    companyName: opts?.companyName,
+    agentName: opts?.agentName,
     chatGreeting: opts?.chatGreeting,
     appOrigin: opts?.appOrigin,
     allowedLogoHttpsHosts: opts?.allowedLogoHttpsHosts,
@@ -112,9 +116,10 @@ export function buildWebchatChromeLayout(
 export function webchatChromeFromUnknown(
   settings: unknown,
   businessName?: string | null,
+  agentName?: string | null,
 ): WebchatChromeLayout {
   const s = settings && typeof settings === "object" ? (settings as Record<string, unknown>) : {};
-  return buildWebchatChromeLayout(s, { businessName });
+  return buildWebchatChromeLayout(s, { businessName, agentName });
 }
 
 export function defaultChromeSettings(): Record<string, unknown> {

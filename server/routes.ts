@@ -96,6 +96,7 @@ import {
 } from "@shared/webchatWidgetBranding";
 import { buildWebchatChromeLayout } from "@shared/webchatWidgetChrome";
 import { buildWebchatPublicScript } from "./webchatPublicScript";
+import { loadWebchatPublicNameFallbacks } from "./webchatPublicIdentity";
 import { getVapidPublicKey } from "./notifications";
 import {
   parseIncomingWebhook,
@@ -1246,8 +1247,10 @@ export async function registerRoutes(
                 : [],
             }));
           }
+          const names = await loadWebchatPublicNameFallbacks(access.owner.userId);
           chrome = buildWebchatChromeLayout(ws, {
-            businessName: access.owner.businessName,
+            businessName: names.companyName,
+            agentName: names.agentName,
             appOrigin: origin,
             allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
               process.env.APP_URL,
@@ -1307,8 +1310,11 @@ export async function registerRoutes(
       const { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } = await import(
         "./webchatServerAiRollout"
       );
+      const names = await loadWebchatPublicNameFallbacks(req.user.id);
       res.json({
         ...merged,
+        businessProfileName: names.companyName,
+        agentName: names.agentName,
         widgetPublicId,
         originDiagnostics: {
           canPubliclyEmbed: activation.effectivePublic,

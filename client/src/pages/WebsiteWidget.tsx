@@ -177,6 +177,7 @@ interface WidgetSettings {
   teaserGreeting: string;
   chatIcon: WebchatChatIcon;
   businessProfileName?: string;
+  agentName?: string;
   originDiagnostics?: {
     canPubliclyEmbed?: boolean;
     reason?: string;
@@ -322,7 +323,7 @@ function brandingFieldError(
 
 function stripPageRuleIds(settings: WidgetSettings): Omit<
   WidgetSettings,
-  "pageRules" | "widgetPublicId" | "originDiagnostics" | "webchatServerAi" | "businessProfileName"
+  "pageRules" | "widgetPublicId" | "originDiagnostics" | "webchatServerAi" | "businessProfileName" | "agentName"
 > & {
   pageRules: {
     urlContains: string;
@@ -382,6 +383,7 @@ const PREVIEW_STATES: { id: WebchatChromeState; label: string }[] = [
 function WidgetPreview({
   settings,
   businessName,
+  agentName,
   state,
   onStateChange,
   viewport,
@@ -389,6 +391,7 @@ function WidgetPreview({
 }: {
   settings: WidgetSettings;
   businessName?: string | null;
+  agentName?: string | null;
   state: WebchatChromeState;
   onStateChange: (state: WebchatChromeState) => void;
   viewport: "desktop" | "mobile";
@@ -444,6 +447,7 @@ function WidgetPreview({
         <WebchatChromePreview
           settings={settings as unknown as Record<string, unknown>}
           businessName={businessName}
+          agentName={agentName}
           state={state}
         />
       </div>
@@ -855,6 +859,7 @@ export function WebsiteWidget() {
               <WidgetPreview
                 settings={settings}
                 businessName={settings.businessProfileName || ""}
+                agentName={settings.agentName || ""}
                 state={previewState}
                 onStateChange={setPreviewState}
                 viewport={previewViewport}

@@ -76,13 +76,15 @@ function PreviewCardLogo({ src, iconSvg }: { src: string; iconSvg: string }) {
 export function WebchatChromePreview({
   settings,
   businessName,
+  agentName,
   state,
 }: {
   settings: Record<string, unknown>;
   businessName?: string | null;
+  agentName?: string | null;
   state: WebchatChromeState;
 }) {
-  const chrome = buildWebchatChromeLayout(settings, { businessName });
+  const chrome = buildWebchatChromeLayout(settings, { businessName, agentName });
   const p = chrome.presentation;
   const launcherCss = chromeCssForPreview(chrome.launcherCss);
   const teaserCss = chromeCssForPreview(chrome.teaserCss) + "opacity:1;pointer-events:none;";

@@ -9,6 +9,8 @@ import {
   contrastTextForBackground,
   NEUTRAL_WEBCHAT_BRANDING,
   PUBLIC_WEBCHAT_PRESENTATION_KEYS,
+  pickExplicitWebchatAgentName,
+  pickVerifiedWebchatCompanyName,
   resolvePublicWebchatPresentation,
   resolveWebchatDisplayName,
   sanitizePlainWidgetText,
@@ -32,11 +34,78 @@ function read(rel: string): string {
 {
   assert.equal(resolveWebchatDisplayName({}), WEBCHAT_DEFAULT_DISPLAY_NAME);
   assert.equal(resolveWebchatDisplayName({ businessName: "Acme HVAC" }), "Acme HVAC");
+  assert.equal(resolveWebchatDisplayName({ companyName: "Acme HVAC" }), "Acme HVAC");
   assert.equal(
     resolveWebchatDisplayName({ brandName: "Front Desk", businessName: "Acme HVAC" }),
     "Front Desk",
   );
   assert.doesNotMatch(resolveWebchatDisplayName({}), /WhachatCRM/i);
+}
+
+{
+  const ownerName = "Samantha Parezo";
+  const leakyInput = {
+    brandName: "",
+    businessName: "",
+    companyName: "",
+    ownerName,
+    userName: ownerName,
+    email: "samantha@affordablepompano.com",
+    contactName: ownerName,
+    teamMemberName: ownerName,
+  };
+  assert.equal(resolveWebchatDisplayName(leakyInput), WEBCHAT_DEFAULT_DISPLAY_NAME);
+  assert.doesNotMatch(resolveWebchatDisplayName(leakyInput), /Samantha Parezo/);
+  assert.equal(pickVerifiedWebchatCompanyName(null), "");
+  assert.equal(pickVerifiedWebchatCompanyName({ businessName: "" }), "");
+  assert.equal(
+    pickVerifiedWebchatCompanyName({ businessName: null, displayName: ownerName } as { businessName: null; displayName: string }),
+    "",
+  );
+  assert.equal(pickVerifiedWebchatCompanyName({ businessName: "Affordable Pompano HVAC" }), "Affordable Pompano HVAC");
+  assert.equal(pickExplicitWebchatAgentName({ displayName: "" }), "");
+  assert.equal(pickExplicitWebchatAgentName({ displayName: ownerName }), ownerName);
+  const knowledgeWithoutAgent = { displayName: null as string | null, businessName: "Acme" };
+  assert.equal(pickExplicitWebchatAgentName(knowledgeWithoutAgent), "");
+
+  const emptyBranding = resolvePublicWebchatPresentation({
+    settings: { brandName: "", name: ownerName, email: "samantha@affordablepompano.com" },
+    businessName: "",
+    agentName: "",
+  });
+  assert.equal(emptyBranding.displayName, WEBCHAT_DEFAULT_DISPLAY_NAME);
+  assert.equal(emptyBranding.panelHeading, WEBCHAT_DEFAULT_DISPLAY_NAME);
+  assert.equal(emptyBranding.agentName, "");
+  assert.equal(emptyBranding.brandName, "");
+  const emptyJson = JSON.stringify(emptyBranding);
+  assert.doesNotMatch(emptyJson, /Samantha Parezo/);
+  assert.doesNotMatch(emptyJson, /samantha@affordablepompano/i);
+  const payload = toVisitorSafePublicWebchatPayload(emptyBranding);
+  assert.equal(payload.displayName, WEBCHAT_DEFAULT_DISPLAY_NAME);
+  assert.equal(payload.agentName, "");
+  assert.doesNotMatch(JSON.stringify(payload), /Samantha Parezo/);
+  for (const key of ["name", "email", "userName", "ownerName", "contactName", "userId"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(payload, key), false, key);
+  }
+
+  const editor = buildWebchatChromeLayout({ brandName: "" }, { businessName: "", agentName: "" });
+  const published = buildWebchatChromeLayout({ brandName: "" }, { businessName: "", agentName: "" });
+  assert.equal(editor.presentation.displayName, published.presentation.displayName);
+  assert.equal(editor.presentation.displayName, WEBCHAT_DEFAULT_DISPLAY_NAME);
+
+  const withCompany = resolvePublicWebchatPresentation({
+    settings: { brandName: "" },
+    businessName: "Affordable Pompano HVAC",
+  });
+  assert.equal(withCompany.displayName, "Affordable Pompano HVAC");
+  const withAgent = resolvePublicWebchatPresentation({
+    settings: { brandName: "Pompano Air" },
+    businessName: "Affordable Pompano HVAC",
+    agentName: "Alex Agent",
+  });
+  assert.equal(withAgent.displayName, "Pompano Air");
+  assert.equal(withAgent.agentName, "Alex Agent");
+  assert.notEqual(withAgent.agentName, withAgent.displayName);
 }
 
 {
@@ -53,7 +122,7 @@ function read(rel: string): string {
   assert.doesNotMatch(JSON.stringify(tenantA), /Tenant B/);
   assert.doesNotMatch(JSON.stringify(tenantB), /Tenant A/);
   const payloadA = toVisitorSafePublicWebchatPayload(tenantA);
-  for (const key of ["allowedOrigins", "allowAnyOrigin", "userId", "widgetPublicId", "pageRules", "email", "chatbotFlowId"]) {
+  for (const key of ["allowedOrigins", "allowAnyOrigin", "userId", "widgetPublicId", "pageRules", "email", "name", "chatbotFlowId"]) {
     assert.equal(Object.prototype.hasOwnProperty.call(payloadA, key), false, key);
   }
   assert.deepEqual(Object.keys(payloadA).sort(), [...PUBLIC_WEBCHAT_PRESENTATION_KEYS].sort());
@@ -243,9 +312,29 @@ function read(rel: string): string {
   );
   assert.match(webhooks, /toVisitorSafePublicWebchatPayload/);
   assert.match(settingsSlice, /leadForm/);
-  assert.match(settingsSlice, /businessName/);
+  assert.match(settingsSlice, /businessName: names\.companyName/);
+  assert.match(settingsSlice, /loadWebchatPublicNameFallbacks/);
+  assert.doesNotMatch(settingsSlice, /access\.owner\.businessName/);
+  assert.doesNotMatch(settingsSlice, /owner\.name|users\.name/);
   assert.doesNotMatch(settingsSlice, /allowedOrigins/);
   assert.doesNotMatch(settingsSlice, /createContact|insert\(contacts/);
+  const identity = read("server/widgetIdentity.ts");
+  assert.doesNotMatch(identity, /row\.name/);
+  assert.doesNotMatch(identity, /businessName:/);
+  const publicIdentity = read("server/webchatPublicIdentity.ts");
+  assert.match(publicIdentity, /pickVerifiedWebchatCompanyName/);
+  assert.match(publicIdentity, /pickExplicitWebchatAgentName/);
+  assert.match(publicIdentity, /getAiBusinessKnowledge/);
+  assert.doesNotMatch(publicIdentity, /row\.name|user\.name/);
+  assert.match(routes, /loadWebchatPublicNameFallbacks/);
+  assert.doesNotMatch(routes, /access\.owner\.businessName/);
+  const getSettings = routes.slice(
+    routes.indexOf('app.get("/api/widget-settings"'),
+    routes.indexOf('app.post("/api/widget-settings/rotate-id"'),
+  );
+  assert.match(getSettings, /businessProfileName: names\.companyName/);
+  assert.match(getSettings, /agentName: names\.agentName/);
+  assert.doesNotMatch(getSettings, /user\.name|users\.name/);
 }
 
 {
@@ -269,6 +358,7 @@ function read(rel: string): string {
   assert.match(preview, /buildWebchatChromeLayout/);
   assert.match(preview, /chromeCssForPreview/);
   assert.match(preview, /WebchatPanelHeader/);
+  assert.match(preview, /agentName/);
   const script = read("server/webchatPublicScript.ts");
   assert.match(script, /prefers-reduced-motion/);
   assert.match(script, /sessionStorage/);
@@ -279,11 +369,15 @@ function read(rel: string): string {
   const header = read("client/src/components/webchat/WebchatPanelHeader.tsx");
   assert.match(header, /onError/);
   assert.match(header, /webchat-panel-avatar/);
+  assert.match(header, /webchat-panel-agent/);
+  assert.match(header, /presentation\.agentName/);
   const website = read("client/src/pages/WebsiteWidget.tsx");
   assert.match(website, /NEUTRAL_WEBCHAT_BRANDING/);
   assert.match(website, /button-confirm-reset-branding/);
   assert.match(website, /beforeunload/);
   assert.match(website, /text-branding-error/);
+  assert.match(website, /businessName=\{settings\.businessProfileName \|\| ""\}/);
+  assert.match(website, /agentName=\{settings\.agentName \|\| ""\}/);
   const brandingSection = website.slice(
     website.indexOf("section-launcher-branding"),
     website.indexOf(">Appearance<") >= 0 ? website.indexOf(">Appearance<") : website.indexOf("Appearance"),
@@ -317,6 +411,11 @@ function read(rel: string): string {
   assert.match(frame, /text-widget-unavailable/);
   assert.match(frame, /WebchatFormCard/);
   assert.match(frame, /WebchatMediaBubble/);
+  assert.match(frame, /resolvePublicWebchatPresentation/);
+  assert.doesNotMatch(frame, /data\?\.displayName/);
+  const settingsFetch = frame.slice(frame.indexOf("const nextPresentation"), frame.indexOf("setPresentation(nextPresentation)"));
+  assert.match(settingsFetch, /businessName: typeof data\?\.businessName === "string" \? data\.businessName : ""/);
+  assert.match(settingsFetch, /agentName: typeof data\?\.agentName === "string" \? data\.agentName : ""/);
   const form = read("client/src/components/webchat/WebchatFormCard.tsx");
   assert.match(form, /field\.required \? " \*" : ""/);
   assert.match(form, /webchat-form-error/);

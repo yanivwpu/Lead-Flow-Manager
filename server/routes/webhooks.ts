@@ -32,6 +32,7 @@ import {
   toVisitorSafePublicWebchatPayload,
   widgetLogoAllowedHttpsHosts,
 } from "@shared/webchatWidgetBranding";
+import { loadWebchatPublicNameFallbacks } from "../webchatPublicIdentity";
 
 const webchatVisitorUpload = multer({
   storage: multer.memoryStorage(),
@@ -326,9 +327,11 @@ export function registerWebhookRoutes(app: Express): void {
       const appOrigin =
         process.env.APP_URL ||
         `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+      const names = await loadWebchatPublicNameFallbacks(access.owner.userId);
       const presentation = resolvePublicWebchatPresentation({
         settings: ws,
-        businessName: access.owner.businessName,
+        businessName: names.companyName,
+        agentName: names.agentName,
         chatGreeting: matched?.greeting,
         chatPrefill: matched?.prefilledMessage || "",
         suggestedQuestions: matched?.suggestedQuestions || [],
@@ -345,7 +348,7 @@ export function registerWebhookRoutes(app: Express): void {
       const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
       return sendWebchatPublicJson(res, 200, {
         ...toVisitorSafePublicWebchatPayload(presentation),
-        businessName: access.owner.businessName || "",
+        businessName: names.companyName,
         ...(leadForm ? { leadForm } : {}),
       });
     } catch {

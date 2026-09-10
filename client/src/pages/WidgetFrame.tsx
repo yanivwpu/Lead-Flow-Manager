@@ -181,12 +181,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         const data = await r.json();
         const nextPresentation = resolvePublicWebchatPresentation({
           settings: data && typeof data === "object" ? (data as Record<string, unknown>) : {},
-          businessName:
-            typeof data?.businessName === "string"
-              ? data.businessName
-              : typeof data?.displayName === "string"
-                ? data.displayName
-                : "",
+          businessName: typeof data?.businessName === "string" ? data.businessName : "",
+          agentName: typeof data?.agentName === "string" ? data.agentName : "",
           chatGreeting: typeof data?.chatGreeting === "string" ? data.chatGreeting : undefined,
           chatPrefill: typeof data?.chatPrefill === "string" ? data.chatPrefill : undefined,
           suggestedQuestions: Array.isArray(data?.suggestedQuestions)

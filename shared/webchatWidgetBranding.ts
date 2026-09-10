@@ -199,15 +199,52 @@ export function contrastTextForBackground(hex: string): "#ffffff" | "#111827" {
   return L > 0.55 ? "#111827" : "#ffffff";
 }
 
-export function resolveWebchatDisplayName(input: {
-  brandName?: string;
+export type WebchatDisplayNameInput = {
+  /** Explicitly saved Website Widget Business name / brandName. */
+  brandName?: string | null;
+  /**
+   * Verified AI Brain / Business Profile company name only.
+   * Never pass users.name, login name, email profile name, contact name,
+   * or team-member identity here.
+   */
   businessName?: string | null;
-}): string {
+  /** Alias of businessName (verified company). */
+  companyName?: string | null;
+};
+
+/**
+ * Visitor-facing widget title.
+ * Priority: saved widget brandName → verified company name → "Website chat".
+ * Extra identity fields (ownerName, userName, email, contactName, teamMemberName)
+ * are ignored even if present on the input object.
+ */
+export function resolveWebchatDisplayName(input: WebchatDisplayNameInput): string {
   const brand = sanitizePlainWidgetText(input.brandName, 80);
   if (brand) return brand;
-  const biz = sanitizePlainWidgetText(input.businessName, 80);
-  if (biz) return biz;
+  const company = sanitizePlainWidgetText(input.companyName ?? input.businessName, 80);
+  if (company) return company;
   return WEBCHAT_DEFAULT_DISPLAY_NAME;
+}
+
+/** Verified company name from AI Brain / Business Profile — never users.name. */
+export function pickVerifiedWebchatCompanyName(
+  knowledge: { businessName?: string | null } | null | undefined,
+): string {
+  return sanitizePlainWidgetText(knowledge?.businessName, 80);
+}
+
+/**
+ * Representative/agent name only when explicitly saved on Business Profile.
+ * Does not fall back to users.name.
+ */
+export function pickExplicitWebchatAgentName(
+  knowledge: { displayName?: string | null } | null | undefined,
+): string {
+  return sanitizePlainWidgetText(knowledge?.displayName, 80);
+}
+
+export function resolveWebchatAgentName(agentName?: string | null): string {
+  return sanitizePlainWidgetText(agentName, 80);
 }
 
 export type PublicWebchatPresentation = {
@@ -220,6 +257,8 @@ export type PublicWebchatPresentation = {
   ctaLabel: string;
   ctaUrl: string;
   displayName: string;
+  brandName: string;
+  agentName: string;
   panelHeading: string;
   panelSubtitle: string;
   logoUrl: string;
@@ -237,6 +276,8 @@ export type PublicWebchatPresentation = {
 export function resolvePublicWebchatPresentation(input: {
   settings: Record<string, unknown>;
   businessName?: string | null;
+  companyName?: string | null;
+  agentName?: string | null;
   chatGreeting?: string;
   chatPrefill?: string;
   suggestedQuestions?: string[];
@@ -253,8 +294,10 @@ export function resolvePublicWebchatPresentation(input: {
     sanitizePlainWidgetText(input.settings.welcomeMessage, 500) || "Hi! How can we help you today?";
   const displayName = resolveWebchatDisplayName({
     brandName: branding.brandName,
+    companyName: input.companyName,
     businessName: input.businessName,
   });
+  const agentName = resolveWebchatAgentName(input.agentName);
   const heading = branding.panelHeading || displayName;
   const subtitle = branding.panelSubtitle || WEBCHAT_DEFAULT_SUBTITLE;
   const headerText =
@@ -286,6 +329,8 @@ export function resolvePublicWebchatPresentation(input: {
     ctaLabel: sanitizePlainWidgetText(input.ctaLabel, 80),
     ctaUrl: visitorCta,
     displayName,
+    brandName: branding.brandName,
+    agentName,
     panelHeading: heading,
     panelSubtitle: subtitle,
     logoUrl: input.appOrigin
@@ -327,6 +372,8 @@ export const PUBLIC_WEBCHAT_PRESENTATION_KEYS = [
   "ctaLabel",
   "ctaUrl",
   "displayName",
+  "brandName",
+  "agentName",
   "panelHeading",
   "panelSubtitle",
   "logoUrl",
@@ -354,6 +401,8 @@ export function toVisitorSafePublicWebchatPayload(
     ctaLabel: presentation.ctaLabel,
     ctaUrl: presentation.ctaUrl,
     displayName: presentation.displayName,
+    brandName: presentation.brandName,
+    agentName: presentation.agentName,
     panelHeading: presentation.panelHeading,
     panelSubtitle: presentation.panelSubtitle,
     logoUrl: presentation.logoUrl,

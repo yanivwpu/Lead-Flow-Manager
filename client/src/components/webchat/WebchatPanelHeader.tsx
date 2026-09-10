@@ -51,6 +51,14 @@ export function WebchatPanelHeader({ presentation }: { presentation: PublicWebch
         <h1 className="font-semibold text-sm leading-tight break-words [overflow-wrap:anywhere]">
           {presentation.panelHeading}
         </h1>
+        {presentation.agentName ? (
+          <p
+            className="text-xs opacity-90 mt-0.5 break-words [overflow-wrap:anywhere]"
+            data-testid="webchat-panel-agent"
+          >
+            {presentation.agentName}
+          </p>
+        ) : null}
         <p className="text-xs opacity-80 mt-0.5 break-words [overflow-wrap:anywhere]">
           {presentation.panelSubtitle}
         </p>
