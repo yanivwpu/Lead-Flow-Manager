@@ -28,8 +28,8 @@ export type MergeFactsInput = {
   /** Validated candidates extracted from this source only. */
   candidates: FactCandidate[];
   /**
-   * True when the page content hash was unchanged, so the source re-confirms its previous
-   * facts without a model call and nothing can be proposed or retired.
+   * True when the caller already decided the page and its published facts need only a
+   * verification bump. Draft recovery and extractor-version bumps must not set this.
    */
   contentUnchanged?: boolean;
   now: Date;
@@ -174,8 +174,16 @@ export function mergeFactsForSource(input: MergeFactsInput): MergeFactsResult {
     const provenance = published?.provenance || existingDraft?.provenance || [];
     const nextProvenance = mergeProvenance(provenance, provenanceEntry(candidate, verifiedAt));
 
-    // Rule 2: nothing published yet — a plain addition.
+    // Rule 2: nothing published yet — a plain addition, unless this draft is already in review.
     if (!published) {
+      if (
+        existingDraft &&
+        factValueSignature(existingDraft.factType, existingDraft.data) ===
+          factValueSignature(candidate.factType, candidate.data)
+      ) {
+        stats.unchanged += 1;
+        continue;
+      }
       operations.push({
         kind: "upsert_draft",
         factKey: candidate.factKey,

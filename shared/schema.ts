@@ -1708,7 +1708,8 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
  *
  * Named `ai_website_knowledge_sources` because `website_knowledge_sources` is already a
  * jsonb column on `ai_business_knowledge` (the V1 slot list, kept for compatibility).
- * Raw page text is never stored here — only its hash and length.
+ * Raw page text is never stored here — only its hash, length, and a structured extraction
+ * artifact for the current extractor version (not a substitute for draft or published facts).
  */
 export const aiWebsiteKnowledgeSources = pgTable("ai_website_knowledge_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

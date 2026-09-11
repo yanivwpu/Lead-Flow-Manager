@@ -64,6 +64,7 @@ import type {
   KnowledgeReviewPayload,
   KnowledgeReviewSection,
 } from "@shared/knowledgeReview";
+import { knowledgeReviewStepStatus } from "@shared/knowledgeReview";
 
 type KnowledgeSource = {
   id: string;
@@ -81,7 +82,7 @@ type KnowledgeSource = {
 type ScanJobItem = {
   url: string;
   label?: string;
-  status: "pending" | "scanned" | "unchanged" | "failed" | "empty";
+  status: "pending" | "scanned" | "unchanged" | "reanalyzed" | "failed" | "empty";
   added?: number;
   changed?: number;
   suggestions?: number;
@@ -658,8 +659,10 @@ export function BusinessKnowledgeSteps({
   });
 
   const scanMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ai/knowledge/scan", {});
+    mutationFn: async (opts?: { forceReextract?: boolean }) => {
+      const res = await apiRequest("POST", "/api/ai/knowledge/scan", {
+        ...(opts?.forceReextract ? { forceReextract: true } : {}),
+      });
       return res.json() as Promise<{ jobId: string }>;
     },
     onSuccess: (data) => {
@@ -958,6 +961,18 @@ export function BusinessKnowledgeSteps({
                 </>
               )}
             </Button>
+            {lastAnalyzed ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                disabled={sources.length === 0 || scanRunning || scanMutation.isPending}
+                onClick={() => scanMutation.mutate({ forceReextract: true })}
+                data-testid="button-force-reextract-knowledge"
+              >
+                Force re-extract
+              </Button>
+            ) : null}
             {sources.length === 0 && (
               <span className="text-sm text-slate-500">Add a page in step 1 first.</span>
             )}
@@ -982,6 +997,7 @@ export function BusinessKnowledgeSteps({
                       className={cn(
                         "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                         item.status === "scanned" && "bg-emerald-100 text-emerald-900",
+                        item.status === "reanalyzed" && "bg-violet-100 text-violet-900",
                         item.status === "unchanged" && "bg-slate-100 text-slate-700",
                         item.status === "pending" && "bg-slate-100 text-slate-500",
                         item.status === "failed" && "bg-red-100 text-red-900",
@@ -1012,13 +1028,11 @@ export function BusinessKnowledgeSteps({
           title="Review what AI learned"
           description="Check what AI learned from your pages. Remove anything incorrect, then publish when it looks right — publishing is the only action that changes what your assistant says."
           state={reviewState}
-          status={
-            pendingCount > 0
-              ? `${pendingCount} to review`
-              : publishedCount > 0
-                ? `${plural(publishedCount, "detail", "details")} published`
-                : "Nothing yet"
-          }
+          status={knowledgeReviewStepStatus({
+            pendingCount,
+            publishedCount,
+            lastScanFactsProposed: liveJob?.factsProposed,
+          })}
           isLast={!questionsStep}
         >
           {facts && (facts.notices?.length ?? 0) > 0 && (
@@ -1156,8 +1170,9 @@ export function BusinessKnowledgeSteps({
             </>
           ) : (
             <Hint>
-              Nothing to review yet. Once you analyze your pages, everything AI picked up shows up
-              here with its source, and you decide what goes live.
+              {(liveJob?.factsProposed ?? 0) > 0
+                ? "The last analysis found details to review. If they are not listed, analyze again."
+                : "Nothing to review yet. Once you analyze your pages, everything AI picked up shows up here with its source, and you decide what goes live."}
             </Hint>
           )}
         </Step>

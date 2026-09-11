@@ -17,16 +17,18 @@ import {
   listKnowledgeSources,
   markSourceScanning,
   recordSourceScanOutcome,
+  clearKnowledgeExtractionArtifacts,
   type SourceStatus,
 } from "./sourceStore";
 import { scanSourceIntoDrafts, type ScanPipelineDeps } from "./scanPipeline";
+import { parseKnowledgeExtractionArtifact } from "./extractionArtifact";
 
 const LEASE_MS = 5 * 60 * 1000;
 const STALE_LEASE_MS = 10 * 60 * 1000;
 
 export type ScanJobItemResult = {
   url: string;
-  status: "pending" | "scanned" | "unchanged" | "failed" | "empty";
+  status: "pending" | "scanned" | "unchanged" | "reanalyzed" | "failed" | "empty";
   label?: string;
   added?: number;
   changed?: number;
@@ -92,6 +94,7 @@ export async function getActiveScanJob(
 export async function createScanJob(
   userId: string,
   sourceIds?: string[],
+  opts?: { forceReextract?: boolean },
 ): Promise<AiKnowledgeScanJobRow> {
   const active = await getActiveScanJob(userId);
   if (active) return active;
@@ -101,6 +104,9 @@ export async function createScanJob(
     : await listKnowledgeSources(userId, { enabledOnly: true });
 
   const ids = sources.map((s) => s.id);
+  if (opts?.forceReextract && ids.length > 0) {
+    await clearKnowledgeExtractionArtifacts(userId, ids);
+  }
   const items: Record<string, ScanJobItemResult> = {};
   for (const source of sources) {
     items[source.id] = {
@@ -196,6 +202,7 @@ export async function claimNextScanJob(
 const SOURCE_STATUS_BY_SCAN: Record<string, SourceStatus> = {
   scanned: "scanned",
   unchanged: "scanned",
+  reanalyzed: "scanned",
   failed: "failed",
   empty: "stale",
 };
@@ -239,7 +246,12 @@ export async function processScanJob(
       const existingFacts = await listLiveFacts(userId);
 
       const result = await scanSourceIntoDrafts({
-        source: { id: source.id, url: source.url, contentHash: source.contentHash },
+        source: {
+          id: source.id,
+          url: source.url,
+          contentHash: source.contentHash,
+          extractionArtifact: parseKnowledgeExtractionArtifact(source.metadata),
+        },
         existingFacts,
         deps,
       });
@@ -256,6 +268,15 @@ export async function processScanJob(
         charCount: result.charCount ?? source.charCount,
         errorCode: result.errorCode ?? null,
         errorMessage: result.errorMessage ?? null,
+        metadata:
+          result.status === "failed"
+            ? undefined
+            : {
+                ...((source.metadata && typeof source.metadata === "object"
+                  ? (source.metadata as Record<string, unknown>)
+                  : {}) as Record<string, unknown>),
+                extractionArtifact: result.extractionArtifact ?? null,
+              },
       });
 
       factsProposed += result.stats.added + result.stats.changed + result.stats.suggestions;

@@ -511,20 +511,84 @@ await (async () => {
     assert.equal(planNamesFrom(out).length, 4, "the other sources still produced their facts");
   });
 
-  run("an unchanged page re-verifies without proposing changes", async () => {
+  run("an unchanged page with published facts and a valid artifact re-verifies without proposing changes", async () => {
+    const first = await scanSourceIntoDrafts({
+      source: { id: "src:https://example.test/advertising", url: "https://example.test/advertising", contentHash: null },
+      existingFacts: [],
+      deps: fixtureDeps(),
+    });
+    const published = first.operations
+      .filter((op): op is Extract<typeof op, { kind: "upsert_draft" }> => op.kind === "upsert_draft")
+      .map((op) => ({
+        id: `pub-${op.factKey}`,
+        userId: "user-a",
+        factType: op.candidate.factType,
+        factKey: op.factKey,
+        data: op.candidate.data,
+        state: "published" as const,
+        proposedAction: null,
+        origin: op.candidate.origin,
+        confidence: op.candidate.confidence,
+        isPinned: false,
+        userEdited: false,
+        conflictGroup: null,
+        conflictResolution: null,
+        supersededByFactId: null,
+        sourceId: op.candidate.sourceId,
+        sourceUrl: op.candidate.sourceUrl,
+        sourceTitle: op.candidate.sourceTitle,
+        excerpt: op.candidate.excerpt,
+        provenance: op.provenance,
+        firstSeenAt: "2026-08-02T00:00:00.000Z",
+        lastVerifiedAt: "2026-08-02T00:00:00.000Z",
+        publishedAt: "2026-08-02T00:00:00.000Z",
+        retiredAt: null,
+      }));
+    let aiCalls = 0;
+    const result = await scanSourceIntoDrafts({
+      source: {
+        id: "src:https://example.test/advertising",
+        url: "https://example.test/advertising",
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: first.extractionArtifact,
+      },
+      existingFacts: published,
+      deps: {
+        ...fixtureDeps(),
+        extractAi: async () => {
+          aiCalls += 1;
+          return { candidates: [], rejected: 0, attempted: false };
+        },
+      },
+    });
+    assert.equal(result.status, "unchanged");
+    assert.equal(result.stats.added, 0);
+    assert.equal(result.stats.changed, 0);
+    assert.equal(aiCalls, 0);
+  });
+
+  run("an unchanged page with no facts re-extracts instead of staying empty", async () => {
     const page = prepareHtmlPage(ADVERTISING_HTML, "https://example.test/advertising");
+    let aiCalls = 0;
     const result = await scanSourceIntoDrafts({
       source: {
         id: "src:https://example.test/advertising",
         url: "https://example.test/advertising",
         contentHash: page.contentHash,
+        extractionArtifact: null,
       },
       existingFacts: [],
-      deps: fixtureDeps(),
+      deps: {
+        ...fixtureDeps(),
+        extractAi: async () => {
+          aiCalls += 1;
+          return { candidates: [], rejected: 0, attempted: false };
+        },
+      },
     });
-    assert.equal(result.status, "unchanged");
-    assert.equal(result.stats.added, 0);
-    assert.equal(result.stats.changed, 0);
+    assert.equal(result.status, "reanalyzed");
+    assert.ok(result.stats.added > 0, "discarded drafts must be recreated from unchanged HTML");
+    assert.ok(aiCalls >= 1);
   });
 })();
 

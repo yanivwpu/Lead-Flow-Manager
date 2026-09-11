@@ -208,6 +208,28 @@ run("an unchanged content hash re-verifies without proposing anything", () => {
   assert.equal(result.stats.unchanged, 1);
 });
 
+run("an identical draft already in review is not counted as a new proposal", () => {
+  const existing = [
+    published({
+      factType: "pricing_plan",
+      data: plan("Business Listing", 29),
+      id: "draft-listing",
+      state: "draft",
+      proposedAction: "add",
+      publishedAt: null,
+    }),
+  ];
+  const result = mergeFactsForSource({
+    sourceId: PRICING_SRC,
+    existingFacts: existing,
+    candidates: [candidate("pricing_plan", plan("Business Listing", 29))],
+    now: NOW,
+  });
+  assert.equal(opsOfKind(result.operations, "upsert_draft").length, 0);
+  assert.equal(result.stats.added, 0);
+  assert.equal(result.stats.unchanged, 1);
+});
+
 // --- 13. User-edited facts are protected -------------------------------------
 
 run("a scan cannot overwrite a user-edited fact, only suggest a change", () => {

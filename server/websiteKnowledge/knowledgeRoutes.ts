@@ -170,7 +170,9 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
         ? (body.sourceIds as unknown[]).filter((v): v is string => typeof v === "string")
         : undefined;
 
-      const job = await createScanJob(req.user!.id, sourceIds);
+      const job = await createScanJob(req.user!.id, sourceIds, {
+        forceReextract: body.forceReextract === true,
+      });
       if ((job.progressTotal ?? 0) === 0) {
         return res.status(400).json({ error: "Add at least one page before scanning." });
       }

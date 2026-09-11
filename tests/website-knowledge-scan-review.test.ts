@@ -16,8 +16,14 @@ import {
   prepareHtmlPage,
 } from "../server/websiteKnowledge/extractPage";
 import { parseAiExtractionResponse } from "../server/websiteKnowledge/extractFactsAi";
-import { combineCandidates } from "../server/websiteKnowledge/scanPipeline";
+import { combineCandidates, scanSourceIntoDrafts } from "../server/websiteKnowledge/scanPipeline";
 import { mergeFactsForSource, planSourceRemovalOperations } from "../server/websiteKnowledge/mergeFacts";
+import {
+  buildKnowledgeExtractionArtifact,
+  decideKnowledgeScanReuse,
+  KNOWLEDGE_EXTRACTOR_VERSION,
+  parseKnowledgeExtractionArtifact,
+} from "../server/websiteKnowledge/extractionArtifact";
 import { partitionConflicts } from "../server/websiteKnowledge/publishFacts";
 import {
   factKey,
@@ -30,7 +36,7 @@ import {
   type FactType,
   type KnowledgeFact,
 } from "../shared/businessKnowledgeFacts";
-import { buildKnowledgeReviewPayload } from "../shared/knowledgeReview";
+import { buildKnowledgeReviewPayload, knowledgeReviewStepStatus } from "../shared/knowledgeReview";
 import {
   SOURCE_REMOVED_REVIEW_MESSAGE,
   classifyExtractedCandidate,
@@ -186,6 +192,51 @@ function candidate(partial: {
     sourceTitle: CTX.sourceTitle,
     excerpt: null,
   };
+}
+
+function factsFromScan(
+  result: { operations: Array<{ kind: string; candidate?: FactCandidate; proposedAction?: KnowledgeFact["proposedAction"]; provenance?: KnowledgeFact["provenance"] }> },
+  userId = "user-a",
+): KnowledgeFact[] {
+  const out: KnowledgeFact[] = [];
+  for (const op of result.operations) {
+    if (op.kind !== "upsert_draft" || !op.candidate) continue;
+    const scanned = op.candidate;
+    out.push(
+      fact(scanned.factType, scanned.data, {
+        id: `draft-${scanned.factKey}`,
+        userId,
+        origin: scanned.origin,
+        confidence: scanned.confidence,
+        sourceId: scanned.sourceId ?? CTX.sourceId,
+        sourceUrl: scanned.sourceUrl ?? CTX.sourceUrl,
+        sourceTitle: scanned.sourceTitle ?? CTX.sourceTitle,
+        excerpt: scanned.excerpt,
+        proposedAction: op.proposedAction ?? "add",
+        provenance: op.provenance ?? [],
+        state: "draft",
+      }),
+    );
+  }
+  return out;
+}
+
+function pricingScanDeps(aiCalls: { n: number }) {
+  return {
+    fetchPage: async () => ({
+      page: prepareHtmlPage(WHACHAT_PRICING_HTML, CTX.sourceUrl),
+      rawHtml: WHACHAT_PRICING_HTML,
+    }),
+    extractAi: async () => {
+      aiCalls.n += 1;
+      return { candidates: [] as FactCandidate[], rejected: 0, attempted: false };
+    },
+    now: () => new Date("2026-09-11T00:00:00.000Z"),
+  };
+}
+
+function reviewPending(payload: ReturnType<typeof buildKnowledgeReviewPayload>): number {
+  return payload.totals.new + payload.totals.changed + payload.totals.removing + payload.totals.suggested;
 }
 
 // --- Amount / interval defaults ---------------------------------------------
@@ -565,6 +616,257 @@ run("equal-precedence price conflicts still partition without publishing either 
   b.factKey = a.factKey;
   const { blockedKeys } = partitionConflicts([a, b]);
   assert.ok(blockedKeys.has(a.factKey));
+});
+
+// --- Discard + re-analyze recovery ------------------------------------------
+
+run("checksum, artifact version, drafts, and published knowledge are separate", () => {
+  const htmlUnchanged = decideKnowledgeScanReuse({
+    pageContentHash: "abc",
+    storedContentHash: "abc",
+    artifact: null,
+  });
+  assert.equal(htmlUnchanged.action, "extract");
+  assert.equal(htmlUnchanged.reason, "missing_artifact");
+
+  const valid = buildKnowledgeExtractionArtifact({
+    contentHash: "abc",
+    candidates: [],
+    extractedAt: "2026-09-11T00:00:00.000Z",
+  });
+  assert.equal(
+    decideKnowledgeScanReuse({
+      pageContentHash: "abc",
+      storedContentHash: "abc",
+      artifact: valid,
+    }).action,
+    "reuse_artifact",
+  );
+  assert.equal(
+    decideKnowledgeScanReuse({
+      pageContentHash: "abc",
+      storedContentHash: "abc",
+      artifact: { ...valid, extractorVersion: KNOWLEDGE_EXTRACTOR_VERSION + 1 },
+    }).reason,
+    "version_mismatch",
+  );
+  assert.equal(
+    decideKnowledgeScanReuse({
+      pageContentHash: "abc",
+      storedContentHash: "abc",
+      artifact: valid,
+      forceReextract: true,
+    }).reason,
+    "force",
+  );
+  assert.equal(parseKnowledgeExtractionArtifact({ extractionArtifact: { extractorVersion: 2 } }), null);
+});
+
+await (async () => {
+  const name = "discarding every draft then analyzing identical HTML recreates review facts";
+  try {
+    const firstAi = { n: 0 };
+    const first = await scanSourceIntoDrafts({
+      source: { id: CTX.sourceId, url: CTX.sourceUrl, contentHash: null },
+      existingFacts: [],
+      deps: pricingScanDeps(firstAi),
+    });
+    assert.equal(first.status, "scanned");
+    assert.ok(first.stats.added > 0);
+    assert.ok(first.extractionArtifact);
+
+    const free = planNamed(first.candidates, "Free");
+    const freePrices = listedPlanPrices(free);
+    assert.equal(freePrices[0]?.amount, 0);
+    assert.equal(freePrices[0]?.billingPeriod, "month");
+
+    const pro = planNamed(first.candidates, "Pro");
+    const proPrices = listedPlanPrices(pro);
+    assert.equal(proPrices.find((p) => p.billingPeriod === "month")?.amount, 49);
+    assert.equal(proPrices.find((p) => p.billingPeriod === "year")?.amount, 490);
+
+    const drafts = factsFromScan(first);
+    const firstReview = buildKnowledgeReviewPayload({
+      facts: drafts,
+      activeSourceIds: [CTX.sourceId],
+    });
+    assert.ok(firstReview.hasPendingChanges);
+    assert.notEqual(
+      knowledgeReviewStepStatus({
+        pendingCount: reviewPending(firstReview),
+        publishedCount: 0,
+        lastScanFactsProposed: first.stats.added,
+      }),
+      "Nothing yet",
+    );
+
+    const discarded: KnowledgeFact[] = [];
+    const reuseAi = { n: 0 };
+    const second = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: first.extractionArtifact,
+      },
+      existingFacts: discarded,
+      deps: pricingScanDeps(reuseAi),
+    });
+    assert.equal(second.status, "reanalyzed");
+    assert.ok(second.stats.added > 0, "unchanged HTML must recreate discarded drafts");
+    assert.equal(reuseAi.n, 0, "valid artifact for this extractor version must be reused");
+
+    const recovered = factsFromScan(second);
+    assert.ok(recovered.length > 0);
+    const recoveredReview = buildKnowledgeReviewPayload({
+      facts: recovered,
+      activeSourceIds: [CTX.sourceId],
+    });
+    assert.ok(recoveredReview.sections.some((section) => section.facts.length > 0));
+    assert.ok(recoveredReview.hasPendingChanges);
+    assert.notEqual(
+      knowledgeReviewStepStatus({
+        pendingCount: reviewPending(recoveredReview),
+        publishedCount: 0,
+        lastScanFactsProposed: second.stats.added,
+      }),
+      "Nothing yet",
+    );
+
+    const missingAi = { n: 0 };
+    const missing = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: null,
+      },
+      existingFacts: [],
+      deps: pricingScanDeps(missingAi),
+    });
+    assert.equal(missing.status, "reanalyzed");
+    assert.ok(missing.stats.added > 0);
+    assert.ok(missingAi.n >= 1);
+
+    const bumpAi = { n: 0 };
+    const bumped = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: first.extractionArtifact,
+      },
+      existingFacts: [],
+      extractorVersion: KNOWLEDGE_EXTRACTOR_VERSION + 1,
+      deps: pricingScanDeps(bumpAi),
+    });
+    assert.equal(bumped.status, "reanalyzed");
+    assert.ok(bumpAi.n >= 1, "an extractor-version bump must reprocess unchanged content");
+
+    const published = recovered.map((row, index) => ({
+      ...row,
+      id: `pub-${index}`,
+      state: "published" as const,
+      proposedAction: null,
+      publishedAt: "2026-09-11T00:00:00.000Z",
+    }));
+    const publishedSnapshot = JSON.stringify(published.map((row) => row.data));
+    const publishedAi = { n: 0 };
+    const afterPublish = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: second.extractionArtifact,
+      },
+      existingFacts: published,
+      deps: pricingScanDeps(publishedAi),
+    });
+    assert.equal(afterPublish.status, "unchanged");
+    assert.equal(publishedAi.n, 0);
+    assert.equal(
+      afterPublish.operations.some((op) => op.kind === "upsert_draft"),
+      false,
+    );
+    assert.equal(JSON.stringify(published.map((row) => row.data)), publishedSnapshot);
+
+    const foreign = fact(
+      "pricing_plan",
+      {
+        name: "Other workspace plan",
+        price: { amount: 99, currency: "USD", billingPeriod: "month" },
+        benefits: [],
+      },
+      {
+        id: "tenant-b-plan",
+        userId: "user-b",
+        sourceId: "src-other-tenant",
+        state: "published",
+        proposedAction: null,
+        publishedAt: "2026-09-01T00:00:00.000Z",
+      },
+    );
+    const isolated = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: second.extractionArtifact,
+      },
+      existingFacts: [...published, foreign],
+      deps: pricingScanDeps({ n: 0 }),
+    });
+    assert.equal(
+      isolated.operations.some((op) => "factId" in op && op.factId === "tenant-b-plan"),
+      false,
+      "tenant B facts must not be touched by tenant A scans",
+    );
+
+    const forceAi = { n: 0 };
+    const forced = await scanSourceIntoDrafts({
+      source: {
+        id: CTX.sourceId,
+        url: CTX.sourceUrl,
+        contentHash: first.contentHash ?? null,
+        extractionArtifact: first.extractionArtifact,
+        forceReextract: true,
+      },
+      existingFacts: published,
+      deps: pricingScanDeps(forceAi),
+    });
+    assert.equal(forced.status, "reanalyzed");
+    assert.ok(forceAi.n >= 1);
+    assert.equal(JSON.stringify(published.map((row) => row.data)), publishedSnapshot);
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+run("the review UI does not say Nothing yet after a scan that generated facts", () => {
+  assert.notEqual(
+    knowledgeReviewStepStatus({ pendingCount: 0, publishedCount: 0, lastScanFactsProposed: 17 }),
+    "Nothing yet",
+  );
+  assert.equal(
+    knowledgeReviewStepStatus({ pendingCount: 17, publishedCount: 0, lastScanFactsProposed: 17 }),
+    "17 to review",
+  );
+  const ui = readFileSync(join(process.cwd(), "client/src/components/aibrain/BusinessKnowledgeSteps.tsx"), "utf8");
+  assert.match(ui, /knowledgeReviewStepStatus/);
+  assert.match(ui, /reanalyzed/);
+  assert.match(ui, /button-force-reextract-knowledge/);
+  assert.match(ui, /forceReextract: true/);
+  const pipe = readFileSync(join(process.cwd(), "server/websiteKnowledge/scanPipeline.ts"), "utf8");
+  assert.match(pipe, /decideKnowledgeScanReuse/);
+  assert.match(pipe, /reanalyzed/);
+  assert.doesNotMatch(pipe, /contentUnchanged: true/);
+  const discard = readFileSync(join(process.cwd(), "server/websiteKnowledge/factStore.ts"), "utf8");
+  const discardFn = discard.slice(discard.indexOf("export async function discardDraftFacts"));
+  assert.doesNotMatch(discardFn.slice(0, 400), /contentHash|extractionArtifact/);
+  const routes = readFileSync(join(process.cwd(), "server/websiteKnowledge/knowledgeRoutes.ts"), "utf8");
+  assert.match(routes, /forceReextract: body\.forceReextract === true/);
 });
 
 // --- Tenant isolation (source-level) ----------------------------------------

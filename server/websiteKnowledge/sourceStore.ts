@@ -247,6 +247,34 @@ export async function bumpSourceScanVersion(
     );
 }
 
+/**
+ * Drop saved extraction artifacts without touching the page checksum or published facts.
+ * The next Analyze then re-extracts unchanged HTML (force re-extract).
+ */
+export async function clearKnowledgeExtractionArtifacts(
+  userId: string,
+  sourceIds: string[],
+): Promise<void> {
+  if (sourceIds.length === 0) return;
+  const sources = await getKnowledgeSourcesByIds(userId, sourceIds);
+  const now = new Date();
+  for (const source of sources) {
+    const previous =
+      source.metadata && typeof source.metadata === "object" && !Array.isArray(source.metadata)
+        ? (source.metadata as Record<string, unknown>)
+        : {};
+    await db
+      .update(aiWebsiteKnowledgeSources)
+      .set({
+        metadata: { ...previous, extractionArtifact: null },
+        updatedAt: now,
+      })
+      .where(
+        and(eq(aiWebsiteKnowledgeSources.userId, userId), eq(aiWebsiteKnowledgeSources.id, source.id)),
+      );
+  }
+}
+
 export async function deleteKnowledgeSource(
   userId: string,
   sourceId: string,

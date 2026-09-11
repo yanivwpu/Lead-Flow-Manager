@@ -1,5 +1,9 @@
 /**
- * Per-source scan pipeline: fetch -> hash gate -> deterministic -> AI -> merge -> drafts.
+ * Per-source scan pipeline: fetch -> checksum/artifact decision -> extract or reuse -> merge.
+ *
+ * The page-content checksum, the extraction artifact/version, draft-review state, and
+ * published knowledge are separate. Matching HTML is not a license to skip extraction when
+ * the artifact is missing, the extractor changed, or drafts were discarded.
  *
  * Dependencies are injected so the whole pipeline can be driven from HTML fixtures in tests
  * without network or model access. Each source is processed independently and its failure
@@ -18,12 +22,21 @@ import { fetchPublicHtmlPage } from "../websiteKnowledgeScraper";
 import { extractFactsWithAi, type AiExtractionResult } from "./extractFactsAi";
 import { mergeFactsForSource, type FactMergeOperation } from "./mergeFacts";
 import type { SourceDetectedType } from "./sourceStore";
+import {
+  buildKnowledgeExtractionArtifact,
+  decideKnowledgeScanReuse,
+  knowledgeReanalysisNote,
+  type KnowledgeExtractionArtifact,
+  KNOWLEDGE_EXTRACTOR_VERSION,
+} from "./extractionArtifact";
 
 export type ScanSourceRef = {
   id: string;
   url: string;
-  /** Hash of the last successful scan; equal hash means the page is unchanged. */
+  /** Hash of the last fetched page text — not a signal that extraction may be skipped. */
   contentHash: string | null;
+  extractionArtifact?: KnowledgeExtractionArtifact | null;
+  forceReextract?: boolean;
 };
 
 export type FetchedPage = { page: PreparedPage; rawHtml: string };
@@ -48,7 +61,7 @@ export const defaultScanPipelineDeps: ScanPipelineDeps = {
   now: () => new Date(),
 };
 
-export type SourceScanStatus = "scanned" | "unchanged" | "failed" | "empty";
+export type SourceScanStatus = "scanned" | "unchanged" | "reanalyzed" | "failed" | "empty";
 
 export type SourceScanResult = {
   sourceId: string;
@@ -57,6 +70,7 @@ export type SourceScanResult = {
   title?: string | null;
   contentHash?: string | null;
   charCount?: number;
+  extractionArtifact?: KnowledgeExtractionArtifact | null;
   candidates: FactCandidate[];
   operations: FactMergeOperation[];
   stats: { added: number; changed: number; unchanged: number; retiring: number; suggestions: number };
@@ -107,9 +121,11 @@ export async function scanSourceIntoDrafts(params: {
   existingFacts: KnowledgeFact[];
   deps?: Partial<ScanPipelineDeps>;
   signal?: AbortSignal;
+  extractorVersion?: number;
 }): Promise<SourceScanResult> {
   const deps: ScanPipelineDeps = { ...defaultScanPipelineDeps, ...params.deps };
   const { source } = params;
+  const extractorVersion = params.extractorVersion ?? KNOWLEDGE_EXTRACTOR_VERSION;
 
   let fetched: FetchedPage;
   try {
@@ -132,32 +148,8 @@ export async function scanSourceIntoDrafts(params: {
   const { page, rawHtml } = fetched;
   const now = deps.now();
 
-  // Unchanged page: re-confirm what we already know, no model call, no proposals.
-  if (source.contentHash && source.contentHash === page.contentHash) {
-    const merged = mergeFactsForSource({
-      sourceId: source.id,
-      existingFacts: params.existingFacts,
-      candidates: [],
-      contentUnchanged: true,
-      now,
-    });
-    return {
-      sourceId: source.id,
-      status: "unchanged",
-      detectedType: page.detectedType,
-      title: page.title,
-      contentHash: page.contentHash,
-      charCount: page.charCount,
-      candidates: [],
-      operations: merged.operations,
-      stats: merged.stats,
-      notes: [],
-    };
-  }
-
-  const deterministic = extractDeterministicFacts(page, rawHtml, source.id);
-
   if (page.renderedEmpty) {
+    const deterministic = extractDeterministicFacts(page, rawHtml, source.id);
     return {
       sourceId: source.id,
       status: "empty",
@@ -174,31 +166,56 @@ export async function scanSourceIntoDrafts(params: {
     };
   }
 
-  const knownFactKeys = new Set(deterministic.candidates.map((c) => c.factKey));
-  let aiCandidates: FactCandidate[] = [];
-  const notes = [...deterministic.notes];
-  try {
-    const aiResult = await deps.extractAi({
-      page,
-      sourceId: source.id,
-      knownFactKeys,
-    });
-    aiCandidates = aiResult.candidates;
-    if (aiResult.attempted && aiResult.rejected > 0) {
-      notes.push(
-        `${aiResult.rejected} extracted item${aiResult.rejected === 1 ? "" : "s"} did not match a known fact shape and ${aiResult.rejected === 1 ? "was" : "were"} dropped.`,
+  const storedArtifact = source.extractionArtifact ?? null;
+  const decision = decideKnowledgeScanReuse({
+    pageContentHash: page.contentHash,
+    storedContentHash: source.contentHash,
+    artifact: storedArtifact,
+    extractorVersion,
+    forceReextract: source.forceReextract,
+  });
+
+  let candidates: FactCandidate[] = [];
+  const notes: string[] = [];
+  let extractedFresh = false;
+
+  if (decision.action === "reuse_artifact" && storedArtifact) {
+    candidates = sanitizeExtractedCandidates(storedArtifact.candidates);
+    const reuseNote = knowledgeReanalysisNote(decision.reason);
+    if (reuseNote) notes.push(reuseNote);
+  } else {
+    extractedFresh = true;
+    const deterministic = extractDeterministicFacts(page, rawHtml, source.id);
+    notes.push(...deterministic.notes);
+    const knownFactKeys = new Set(deterministic.candidates.map((c) => c.factKey));
+    let aiCandidates: FactCandidate[] = [];
+    try {
+      const aiResult = await deps.extractAi({
+        page,
+        sourceId: source.id,
+        knownFactKeys,
+      });
+      aiCandidates = aiResult.candidates;
+      if (aiResult.attempted && aiResult.rejected > 0) {
+        notes.push(
+          `${aiResult.rejected} extracted item${aiResult.rejected === 1 ? "" : "s"} did not match a known fact shape and ${aiResult.rejected === 1 ? "was" : "were"} dropped.`,
+        );
+      }
+    } catch (err) {
+      // The deterministic pass already succeeded; a model failure must not lose it.
+      notes.push("AI extraction was unavailable for this page; only literal facts were captured.");
+      console.error(
+        "[KnowledgeScan] AI extraction failed",
+        err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
       );
     }
-  } catch (err) {
-    // The deterministic pass already succeeded; a model failure must not lose it.
-    notes.push("AI extraction was unavailable for this page; only literal facts were captured.");
-    console.error(
-      "[KnowledgeScan] AI extraction failed",
-      err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
-    );
+    candidates = combineCandidates(deterministic.candidates, aiCandidates);
+    const reanalysisNote = knowledgeReanalysisNote(decision.reason);
+    if (reanalysisNote && source.contentHash && source.contentHash === page.contentHash) {
+      notes.push(reanalysisNote);
+    }
   }
 
-  const candidates = combineCandidates(deterministic.candidates, aiCandidates);
   const merged = mergeFactsForSource({
     sourceId: source.id,
     existingFacts: params.existingFacts,
@@ -206,13 +223,28 @@ export async function scanSourceIntoDrafts(params: {
     now,
   });
 
+  const proposed =
+    merged.stats.added + merged.stats.changed + merged.stats.suggestions + merged.stats.retiring;
+  const hashUnchanged = Boolean(source.contentHash && source.contentHash === page.contentHash);
+  let status: SourceScanStatus = "scanned";
+  if (hashUnchanged && !extractedFresh && proposed === 0) status = "unchanged";
+  else if (hashUnchanged) status = "reanalyzed";
+
+  const extractionArtifact = buildKnowledgeExtractionArtifact({
+    contentHash: page.contentHash,
+    candidates,
+    extractedAt: now.toISOString(),
+    extractorVersion,
+  });
+
   return {
     sourceId: source.id,
-    status: "scanned",
+    status,
     detectedType: page.detectedType,
     title: page.title,
     contentHash: page.contentHash,
     charCount: page.charCount,
+    extractionArtifact,
     candidates,
     operations: merged.operations,
     stats: merged.stats,

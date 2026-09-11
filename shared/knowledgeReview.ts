@@ -315,3 +315,21 @@ export function buildKnowledgeReviewPayload(params: {
           : [],
   };
 }
+
+/**
+ * Review step label. A completed scan that proposed facts must never collapse to
+ * "Nothing yet" just because the review payload has not landed yet.
+ */
+export function knowledgeReviewStepStatus(input: {
+  pendingCount: number;
+  publishedCount: number;
+  lastScanFactsProposed?: number;
+}): string {
+  if (input.pendingCount > 0) return `${input.pendingCount} to review`;
+  if (input.publishedCount > 0) {
+    const n = input.publishedCount;
+    return `${n} ${n === 1 ? "detail" : "details"} published`;
+  }
+  if ((input.lastScanFactsProposed ?? 0) > 0) return "Scan found details";
+  return "Nothing yet";
+}

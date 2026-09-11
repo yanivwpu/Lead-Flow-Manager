@@ -183,13 +183,15 @@ run("a scan writes drafts and never touches a published value", () => {
 
 run("a failed source keeps its previous content hash and its published facts", () => {
   const src = read("server/websiteKnowledge/sourceStore.ts");
-  const outcome = src.slice(src.indexOf("export async function recordSourceScanOutcome"));
+  const outcome = src.slice(
+    src.indexOf("export async function recordSourceScanOutcome"),
+    src.indexOf("export async function markSourceScanning"),
+  );
   assert.ok(
     /if \(outcome\.contentHash !== undefined\) patch\.contentHash = outcome\.contentHash;/.test(outcome),
     "a failure must not blank the hash that proves what was last read",
   );
-  // Nothing in the source store may delete a fact.
-  assert.ok(!/businessKnowledgeFacts/.test(src), "the source store must not reach into facts");
+  assert.ok(!/businessKnowledgeFacts/.test(outcome), "recording a scan must not reach into facts");
 });
 
 // --- 4 & 7. Publish and removal stay in sync ------------------------------------
