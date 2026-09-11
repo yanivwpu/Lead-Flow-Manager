@@ -301,9 +301,11 @@ const exactLegacyStored = {
   assert.match(routes, /ORIGIN_REQUIRED/);
   assert.match(routes, /hasWidgetOriginPrerequisite/);
   const widgetJs = read("server/webchatPublicScript.ts");
-  assert.match(widgetJs, /JSON\.stringify\(p\.color\)/);
+  assert.match(widgetJs, /cache: 'no-store'/);
+  assert.match(widgetJs, /window\.__wcwInit/);
   assert.match(widgetJs, /ARIA_OPEN/);
   assert.match(widgetJs, /Close website chat/);
+  assert.doesNotMatch(widgetJs, /JSON\.stringify\(p\.color\)/);
   assert.doesNotMatch(widgetJs, /whatsapp\.svg/i);
   assert.doesNotMatch(
     routes.slice(routes.indexOf('app.get("/widget.js"'), routes.indexOf('app.get("/widget.js"') + 2500),

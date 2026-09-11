@@ -337,37 +337,22 @@ function read(rel: string): string {
     brandName: "</script><script>alert(1)",
     teaserGreeting: "<img src=x onerror=alert(1)>",
   });
+  assert.equal(chrome.presentation.brandName.includes("<script>"), false);
+  assert.doesNotMatch(chrome.launcherCss, /<script>/);
   const js = buildWebchatPublicScript({
-    enabled: true,
-    widgetId: "wgt_" + "a".repeat(48),
     origin: "https://app.example.com",
-    chrome,
-    triggerType: "always",
-    triggerDelaySeconds: 5,
-    triggerScrollPercent: 50,
-    showOnDesktop: true,
-    showOnMobile: true,
-    pageRules: [{ urlContains: "/x", greeting: "<b>Hi</b>", prefilledMessage: "js:alert(1)" }],
   });
   assert.match(js, /textContent/);
-  assert.doesNotMatch(js, /WhachatCRM \/ Replies instantly/);
+  assert.match(js, /cache: 'no-store'/);
+  assert.match(js, /window\.__wcwInit/);
   assert.match(js, /data-testid', 'wcw-launcher'/);
+  assert.doesNotMatch(js, /WhachatCRM \/ Replies instantly/);
   assert.equal(js.includes("<script>alert(1)"), false);
+  assert.equal(js.includes("</script><script>alert(1)"), false);
   assert.match(js, /OPEN_BEHAVIOR/);
   assert.match(js, /referrerPolicy = 'no-referrer'/);
-  const disabled = buildWebchatPublicScript({
-    enabled: false,
-    widgetId: "",
-    origin: "https://app.example.com",
-    chrome,
-    triggerType: "always",
-    triggerDelaySeconds: 5,
-    triggerScrollPercent: 50,
-    showOnDesktop: true,
-    showOnMobile: true,
-    pageRules: [],
-  });
-  assert.equal(disabled, "/* widget disabled */");
+  const again = buildWebchatPublicScript({ origin: "https://app.example.com" });
+  assert.equal(js, again);
 }
 
 {
@@ -386,6 +371,9 @@ function read(rel: string): string {
   assert.match(website, /id: "open"/);
   assert.doesNotMatch(website, /WhachatCRM<\/div>/);
   assert.doesNotMatch(website, /Replies instantly/);
+  assert.match(website, /setQueryData\(widgetSettingsQueryKey/);
+  assert.match(website, /saveQueued \|\| saveMutation\.isPending/);
+  assert.match(website, /Could not save/);
   const routes = read("server/routes.ts");
   assert.match(routes, /buildWebchatPublicScript/);
   assert.match(routes, /UNSAFE_WIDGET_TEXT/);
@@ -413,6 +401,8 @@ function read(rel: string): string {
   );
   assert.match(webhooks, /toVisitorSafePublicWebchatPayload/);
   assert.match(settingsSlice, /leadForm/);
+  assert.match(settingsSlice, /toVisitorSafeWidgetLauncher/);
+  assert.match(settingsSlice, /launcher: toVisitorSafeWidgetLauncher/);
   assert.match(settingsSlice, /businessName: names\.companyName/);
   assert.match(settingsSlice, /loadWebchatPublicNameFallbacks/);
   assert.doesNotMatch(settingsSlice, /access\.owner\.businessName/);

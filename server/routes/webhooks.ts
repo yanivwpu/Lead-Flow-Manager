@@ -32,6 +32,8 @@ import {
   toVisitorSafePublicWebchatPayload,
   widgetLogoAllowedHttpsHosts,
 } from "@shared/webchatWidgetBranding";
+import { buildWebchatChromeLayout } from "@shared/webchatWidgetChrome";
+import { toVisitorSafeWidgetLauncher } from "@shared/webchatWidgetLauncher";
 import { loadWebchatPublicNameFallbacks } from "../webchatPublicIdentity";
 
 const webchatVisitorUpload = multer({
@@ -344,10 +346,22 @@ export function registerWebhookRoutes(app: Express): void {
           process.env.REPLIT_DOMAINS,
         ]),
       });
+      const chrome = buildWebchatChromeLayout(ws, {
+        businessName: names.companyName,
+        agentName: names.agentName,
+        chatGreeting: matched?.greeting,
+        appOrigin,
+        allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
+          process.env.APP_URL,
+          process.env.CLOUDFLARE_R2_PUBLIC_URL,
+          process.env.REPLIT_DOMAINS,
+        ]),
+      });
       const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
       const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
       return sendWebchatPublicJson(res, 200, {
         ...toVisitorSafePublicWebchatPayload(presentation),
+        launcher: toVisitorSafeWidgetLauncher(ws, chrome),
         businessName: names.companyName,
         ...(leadForm ? { leadForm } : {}),
       });

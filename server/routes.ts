@@ -88,14 +88,9 @@ import {
   waUploadTooLargeMessage,
 } from "@shared/whatsappMediaLimits";
 import { z } from "zod";
-import {
-  firstUnsafeWidgetTextField,
-  sanitizeWebchatBranding,
-  sanitizeWidgetLogoUrl,
-  widgetLogoAllowedHttpsHosts,
-} from "@shared/webchatWidgetBranding";
-import { buildWebchatChromeLayout } from "@shared/webchatWidgetChrome";
+import { firstUnsafeWidgetTextField, sanitizeWebchatBranding, sanitizeWidgetLogoUrl, widgetLogoAllowedHttpsHosts } from "@shared/webchatWidgetBranding";
 import { buildWebchatPublicScript } from "./webchatPublicScript";
+import { applyWebchatPublicCacheHeaders } from "./webchatAccess";
 import { loadWebchatPublicNameFallbacks } from "./webchatPublicIdentity";
 import { getVapidPublicKey } from "./notifications";
 import {
@@ -1197,88 +1192,14 @@ export async function registerRoutes(
   });
 
   // ============= Chatbot Widget Script =============
-  // Served as JavaScript to third-party websites via the embed snippet.
-  // Mobile-optimised: deferred init, lazy iframe, touch-friendly, minimal DOM footprint.
-  app.get("/widget.js", async (req, res) => {
-    const widgetId = req.query.id as string | undefined;
-    const origin = process.env.APP_URL ||
-      `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
-
-    let enabled = false;
-    let triggerType: "always" | "delay" | "scroll" | "exit_intent" = "always";
-    let triggerDelaySeconds = 5;
-    let triggerScrollPercent = 50;
-    let showOnDesktop = true;
-    let showOnMobile = true;
-    let pageRules: { urlContains: string; greeting: string; prefilledMessage: string; suggestedQuestions?: string[] }[] = [];
-    let chrome = buildWebchatChromeLayout({});
-    let publicWidgetId = "";
-
-    if (widgetId) {
-      try {
-        const { resolvePublicWidgetAccess } = await import("./webchatAccess");
-        const access = await resolvePublicWidgetAccess(req, widgetId, {
-          requireEnabled: true,
-          strictOrigin: false,
-        });
-        if (access.ok) {
-          enabled = true;
-          publicWidgetId = access.owner.widgetPublicId || widgetId;
-          const ws = access.owner.widgetSettings as Record<string, unknown>;
-          const tt = ws.triggerType;
-          if (tt === "delay" || tt === "scroll" || tt === "exit_intent" || tt === "always") {
-            triggerType = tt;
-          }
-          if (typeof ws.triggerDelaySeconds === "number" && !Number.isNaN(ws.triggerDelaySeconds)) {
-            triggerDelaySeconds = Math.min(3600, Math.max(0, Math.floor(ws.triggerDelaySeconds)));
-          }
-          if (typeof ws.triggerScrollPercent === "number" && !Number.isNaN(ws.triggerScrollPercent)) {
-            triggerScrollPercent = Math.min(100, Math.max(1, Math.floor(ws.triggerScrollPercent)));
-          }
-          if (ws.showOnDesktop === false) showOnDesktop = false;
-          if (ws.showOnMobile === false) showOnMobile = false;
-          if (Array.isArray(ws.pageRules)) {
-            pageRules = ws.pageRules.map((r: any) => ({
-              urlContains: String(r?.urlContains ?? "").slice(0, 500),
-              greeting: String(r?.greeting ?? "").slice(0, 500),
-              prefilledMessage: String(r?.prefilledMessage ?? "").slice(0, 2000),
-              suggestedQuestions: Array.isArray(r?.suggestedQuestions)
-                ? r.suggestedQuestions.map((q: unknown) => String(q).slice(0, 200)).slice(0, 8)
-                : [],
-            }));
-          }
-          const names = await loadWebchatPublicNameFallbacks(access.owner.userId);
-          chrome = buildWebchatChromeLayout(ws, {
-            businessName: names.companyName,
-            agentName: names.agentName,
-            appOrigin: origin,
-            allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
-              process.env.APP_URL,
-              process.env.CLOUDFLARE_R2_PUBLIC_URL,
-              process.env.REPLIT_DOMAINS,
-            ]),
-          });
-        }
-      } catch { /* non-fatal */ }
-    }
-
-    const js = buildWebchatPublicScript({
-      enabled,
-      widgetId: publicWidgetId || widgetId || "",
-      origin,
-      chrome,
-      triggerType,
-      triggerDelaySeconds,
-      triggerScrollPercent,
-      showOnDesktop,
-      showOnMobile,
-      pageRules,
-    });
-
+  // Stable loader: tenant branding is fetched from public settings (no-store).
+  // Do not bake cacheable launcher text/CSS into this response.
+  app.get("/widget.js", (_req, res) => {
+    const origin =
+      process.env.APP_URL || `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
+    applyWebchatPublicCacheHeaders(res);
     res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.send(js);
+    res.send(buildWebchatPublicScript({ origin }));
   });
 
   // ============= Website Chat Widget Settings Endpoints =============
@@ -1311,6 +1232,7 @@ export async function registerRoutes(
         "./webchatServerAiRollout"
       );
       const names = await loadWebchatPublicNameFallbacks(req.user.id);
+      applyWebchatPublicCacheHeaders(res);
       res.json({
         ...merged,
         businessProfileName: names.companyName,
@@ -1345,6 +1267,7 @@ export async function registerRoutes(
         return res.status(401).json({ error: "Unauthorized" });
       }
       const widgetPublicId = await rotateWidgetPublicId(req.user.id);
+      applyWebchatPublicCacheHeaders(res);
       res.json({ widgetPublicId });
     } catch (error) {
       console.error("Error rotating widget public id:", error);
@@ -1476,6 +1399,7 @@ export async function registerRoutes(
 
       await storage.updateUser(req.user.id, { widgetSettings: newSettings });
       const widgetPublicId = await getWidgetPublicIdForUser(req.user.id);
+      applyWebchatPublicCacheHeaders(res);
       res.json({ ...newSettings, widgetPublicId });
     } catch (error) {
       console.error("Error updating widget settings:", error);

@@ -20,6 +20,7 @@ import {
   inspectWidgetLogoUpload,
   widgetLogoUploadAuth,
 } from "../widgetLogoUpload";
+import { applyWebchatPublicCacheHeaders } from "../webchatAccess";
 
 export function registerWidgetLogoRoutes(app: Express): void {
   const upload = multer({
@@ -63,6 +64,7 @@ export function registerWidgetLogoRoutes(app: Express): void {
       });
     },
     async (req: any, res) => {
+      applyWebchatPublicCacheHeaders(res);
       try {
         const auth = widgetLogoUploadAuth(req.user);
         if (!auth.ok) {

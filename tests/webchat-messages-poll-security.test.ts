@@ -217,6 +217,8 @@ test("poll 200, 404, and 429 responses all set Cache-Control no-store", () => {
     assert.equal(res.headers["Cache-Control"], WEBCHAT_PUBLIC_CACHE_CONTROL);
     assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
     assert.equal(res.headers["Surrogate-Control"], "no-store");
+    assert.equal(res.headers["CDN-Cache-Control"], "no-store");
+    assert.equal(res.headers["Cloudflare-CDN-Cache-Control"], "no-store");
     assert.equal(res.headers["Pragma"], "no-cache");
     assert.equal(res.headers["Expires"], "0");
     assert.deepEqual(res.body, payload);

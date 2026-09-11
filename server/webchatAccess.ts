@@ -37,6 +37,7 @@ const MAX_NAME = 120;
 const MAX_TITLE = 300;
 
 export const WEBCHAT_PUBLIC_CACHE_CONTROL = "private, no-store, no-cache, must-revalidate";
+export const WEBCHAT_CDN_CACHE_CONTROL = "no-store";
 export const WEBCHAT_PUBLIC_NOSNIFF = "nosniff";
 
 export function applyWebchatPublicCacheHeaders(res: {
@@ -45,7 +46,9 @@ export function applyWebchatPublicCacheHeaders(res: {
   res.setHeader("Cache-Control", WEBCHAT_PUBLIC_CACHE_CONTROL);
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-  res.setHeader("Surrogate-Control", "no-store");
+  res.setHeader("Surrogate-Control", WEBCHAT_CDN_CACHE_CONTROL);
+  res.setHeader("CDN-Cache-Control", WEBCHAT_CDN_CACHE_CONTROL);
+  res.setHeader("Cloudflare-CDN-Cache-Control", WEBCHAT_CDN_CACHE_CONTROL);
   res.setHeader("X-Content-Type-Options", WEBCHAT_PUBLIC_NOSNIFF);
 }
 

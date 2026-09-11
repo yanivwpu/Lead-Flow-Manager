@@ -475,6 +475,7 @@ export function WebsiteWidget() {
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
   const [logoDisplayName, setLogoDisplayName] = useState("Logo uploaded");
   const [logoRemoveOpen, setLogoRemoveOpen] = useState(false);
+  const [saveQueued, setSaveQueued] = useState(false);
   /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
   const didHydrateFromWidgetQuery = useRef(false);
   const pageRulesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -504,9 +505,11 @@ export function WebsiteWidget() {
     brandingTextPendingRef.current = false;
   }, []);
 
+  const widgetSettingsQueryKey = withUserQueryScope(["/api/widget-settings"], user?.id);
   const { data: savedSettings } = useQuery<WidgetSettings>({
-    queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
+    queryKey: widgetSettingsQueryKey,
     enabled: !!user?.id,
+    staleTime: 0,
   });
   const { data: chatbotFlows } = useQuery<Array<{ id: string; name: string; isActive?: boolean }>>({
     queryKey: withUserQueryScope(["/api/chatbot-flows"], user?.id),
@@ -534,8 +537,19 @@ export function WebsiteWidget() {
     mutationFn: async (newSettings: WidgetSettings) => {
       return apiRequest("PATCH", "/api/widget-settings", stripPageRuleIds(newSettings));
     },
-    onSuccess: (_data, saved) => {
+    onSuccess: async (res, saved) => {
       lastSavedLogoRef.current = coerceWidgetLogoUrl(saved.logoUrl);
+      let payload: Record<string, unknown> = { ...saved };
+      try {
+        const json = (await res.json()) as Record<string, unknown>;
+        if (json && typeof json === "object") payload = json;
+      } catch {
+        /* keep local saved snapshot */
+      }
+      queryClient.setQueryData(widgetSettingsQueryKey, (prev: WidgetSettings | undefined) => ({
+        ...(prev || {}),
+        ...payload,
+      } as WidgetSettings));
       queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
     },
   });
@@ -543,6 +557,7 @@ export function WebsiteWidget() {
 
   const persistWidgetSettings = useCallback(
     (next: WidgetSettings) => {
+      setSaveQueued(false);
       const fieldErrors = brandingFieldError(next);
       if (
         fieldErrors.brandName ||
@@ -575,6 +590,7 @@ export function WebsiteWidget() {
 
   const schedulePageRulesDebouncedSave = useCallback(
     (next: WidgetSettings) => {
+      setSaveQueued(true);
       clearPageRulesSaveDebounce();
       pageRulesSaveTimerRef.current = setTimeout(() => {
         pageRulesSaveTimerRef.current = null;
@@ -586,6 +602,7 @@ export function WebsiteWidget() {
 
   const scheduleBrandingTextDebouncedSave = useCallback(
     (next: WidgetSettings) => {
+      setSaveQueued(true);
       clearBrandingTextDebounce();
       brandingTextPendingRef.current = true;
       brandingTextTimerRef.current = setTimeout(() => {
@@ -679,7 +696,7 @@ export function WebsiteWidget() {
   }, []);
   
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  // widget.js receives ?id= so the server can inline the user's colour/position/welcome settings.
+  // widget.js is a stable loader; ?id= selects the tenant and live branding is fetched no-store.
   // fetchpriority="low" tells the browser to deprioritise this script behind page-critical assets.
   // The setTimeout(fn, 1) wrapper defers execution until after the first paint on mobile.
   const widgetPublicId = savedSettings?.widgetPublicId || "";
@@ -845,7 +862,7 @@ export function WebsiteWidget() {
                   className="text-[11px] text-gray-500"
                   data-testid="text-widget-save-status"
                 >
-                  {saveMutation.isPending
+                  {saveQueued || saveMutation.isPending
                     ? "Saving..."
                     : saveMutation.isError
                       ? "Could not save"
