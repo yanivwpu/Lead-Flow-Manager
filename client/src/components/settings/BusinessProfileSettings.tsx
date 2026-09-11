@@ -118,8 +118,10 @@ export function BusinessProfileSettings() {
       }
       return res.json() as Promise<BusinessProfileResponse>;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["/api/business-profile"], saved);
       queryClient.invalidateQueries({ queryKey: ["/api/business-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       toast({ title: "Business profile saved", description: "Your business details were updated." });
     },

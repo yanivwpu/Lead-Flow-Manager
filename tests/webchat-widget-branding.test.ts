@@ -111,6 +111,16 @@ function read(rel: string): string {
   assert.equal(withAgent.displayName, "Pompano Air");
   assert.equal(withAgent.agentName, "Alex Agent");
   assert.notEqual(withAgent.agentName, withAgent.displayName);
+
+  const clearedRepresentative = resolvePublicWebchatPresentation({
+    settings: { brandName: "", name: ownerName, email: "samantha@affordablepompano.com" },
+    businessName: "Affordable Pompano HVAC",
+    agentName: pickExplicitWebchatAgentName({ displayName: null }),
+  });
+  assert.equal(clearedRepresentative.agentName, "");
+  assert.equal(clearedRepresentative.displayName, "Affordable Pompano HVAC");
+  assert.doesNotMatch(JSON.stringify(clearedRepresentative), /Samantha Parezo/);
+  assert.equal(toVisitorSafePublicWebchatPayload(clearedRepresentative).agentName, "");
 }
 
 {

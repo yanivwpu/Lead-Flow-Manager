@@ -1,5 +1,9 @@
 import type { AiBusinessKnowledge } from "@shared/schema";
-import type { BusinessProfileResponse } from "@shared/businessProfileSchema";
+import {
+  hydrateBusinessProfileDisplayName,
+  persistBusinessProfileDisplayName,
+  type BusinessProfileResponse,
+} from "@shared/businessProfileSchema";
 import type { PublicListingFlyerAgent } from "@shared/inventory/publicListingFlyer";
 import {
   getCalendlyPrimaryEventTypeName,
@@ -18,7 +22,6 @@ function str(value: string | null | undefined): string {
 export async function loadBusinessProfileUserRow(userId: string) {
   const [row] = await db
     .select({
-      name: users.name,
       email: users.email,
       avatarUrl: users.avatarUrl,
       twilioWhatsappNumber: users.twilioWhatsappNumber,
@@ -39,7 +42,9 @@ export async function getBusinessProfileForUser(userId: string): Promise<Busines
 
   return {
     avatarUrl: str(userRow?.avatarUrl) || null,
-    displayName: str(knowledge?.displayName) || str(userRow?.name),
+    displayName: hydrateBusinessProfileDisplayName({
+      knowledgeDisplayName: knowledge?.displayName,
+    }),
     businessName: str(knowledge?.businessName),
     companyLogo: str(knowledge?.companyLogo) || null,
     publicPhone:
@@ -85,7 +90,9 @@ export function businessProfileKnowledgePatch(
   }>,
 ): Partial<AiBusinessKnowledge> {
   const out: Partial<AiBusinessKnowledge> = {};
-  if (patch.displayName !== undefined) out.displayName = patch.displayName;
+  if (patch.displayName !== undefined) {
+    out.displayName = persistBusinessProfileDisplayName(patch.displayName);
+  }
   if (patch.businessName !== undefined) out.businessName = patch.businessName;
   if (patch.companyLogo !== undefined) out.companyLogo = patch.companyLogo;
   if (patch.publicPhone !== undefined) out.publicPhone = patch.publicPhone;

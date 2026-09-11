@@ -1,5 +1,8 @@
 import type { Express, Request, Response } from "express";
-import { businessProfilePatchSchema } from "@shared/businessProfileSchema";
+import {
+  businessProfileDisplayNameFromPatch,
+  businessProfilePatchSchema,
+} from "@shared/businessProfileSchema";
 import {
   businessProfileKnowledgePatch,
   getBusinessProfileForUser,
@@ -39,7 +42,7 @@ export function registerBusinessProfileRoutes(app: Express): void {
         }
       }
       const knowledgeUpdates = businessProfileKnowledgePatch({
-        displayName: patch.displayName ?? undefined,
+        displayName: businessProfileDisplayNameFromPatch(patch),
         businessName: patch.businessName ?? undefined,
         companyLogo: patch.companyLogo ?? undefined,
         publicPhone: patch.publicPhone ?? undefined,
