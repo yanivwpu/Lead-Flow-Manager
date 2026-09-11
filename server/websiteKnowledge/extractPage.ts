@@ -18,6 +18,7 @@ import {
   type FactType,
 } from "@shared/businessKnowledgeFacts";
 import {
+  destinationKindFromUrl,
   isSignupTrialOrNavCta,
   isSocialUrl,
   sanitizeExtractedCandidates,
@@ -566,17 +567,39 @@ function extractFromJsonLd(nodes: unknown[], ctx: CandidateContext): FactCandida
       }
     }
 
-    if (types.includes("product") || types.includes("service")) {
+    if (types.includes("softwareapplication") || types.includes("product") || types.includes("service")) {
       const name = typeof o.name === "string" ? o.name : null;
-      const offer = normalizeOffer(o.offers);
-      if (name) {
+      const offerList = collectNormalizedOffers(o.offers);
+      const subscription = offerList.filter((offer) => offer.billingPeriod === "month" || offer.billingPeriod === "year");
+      const asPricingPlan =
+        Boolean(name) &&
+        (types.includes("softwareapplication") ||
+          (subscription.length > 0 && !GROWTH_ENGINE_JSONLD_RE.test(name || "")));
+
+      if (asPricingPlan && name) {
+        const candidate = buildCandidate(
+          ctx,
+          "pricing_plan",
+          {
+            name,
+            description: typeof o.description === "string" ? stripTags(o.description) : null,
+            price: subscription[0] ?? offerList[0] ?? null,
+            additionalPrices: (subscription[0] ? subscription.slice(1) : offerList.slice(1)),
+            benefits: [],
+            planUrl: typeof o.url === "string" ? o.url : null,
+          },
+          name,
+          0.95,
+        );
+        if (candidate) out.push(candidate);
+      } else if (name && (types.includes("product") || types.includes("service"))) {
         const candidate = buildCandidate(
           ctx,
           types.includes("service") ? "service" : "product",
           {
             name,
             description: typeof o.description === "string" ? stripTags(o.description) : null,
-            price: offer,
+            price: offerList.find((offer) => offer.billingPeriod === "once") ?? offerList[0] ?? null,
             url: typeof o.url === "string" ? o.url : null,
           },
           name,
@@ -646,14 +669,48 @@ function stripTags(value: string): string {
     .trim();
 }
 
-function normalizeOffer(offers: unknown): {
+const GROWTH_ENGINE_JSONLD_RE = /\bgrowth\s+engine\b/i;
+
+function collectOfferNodes(offers: unknown): Record<string, unknown>[] {
+  if (!offers) return [];
+  const items = Array.isArray(offers) ? offers : [offers];
+  const out: Record<string, unknown>[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const types = jsonLdTypes(o);
+    if (types.includes("aggregateoffer") && o.offers) {
+      out.push(...collectOfferNodes(o.offers));
+      continue;
+    }
+    out.push(o);
+  }
+  return out;
+}
+
+function collectNormalizedOffers(offers: unknown): Array<{
+  amount: number;
+  currency: string;
+  billingPeriod: string;
+}> {
+  const seen = new Set<string>();
+  const out: Array<{ amount: number; currency: string; billingPeriod: string }> = [];
+  for (const node of collectOfferNodes(offers)) {
+    const offer = normalizeOfferNode(node);
+    if (!offer) continue;
+    const key = `${offer.amount}:${offer.currency}:${offer.billingPeriod}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(offer);
+  }
+  return out;
+}
+
+function normalizeOfferNode(o: Record<string, unknown>): {
   amount: number;
   currency: string;
   billingPeriod: string;
 } | null {
-  const node = Array.isArray(offers) ? offers[0] : offers;
-  if (!node || typeof node !== "object") return null;
-  const o = node as Record<string, unknown>;
   const rawPrice = o.price ?? o.lowPrice;
   if (rawPrice == null || rawPrice === "") return null;
   const amount = typeof rawPrice === "number" ? rawPrice : parseAmount(String(rawPrice));
@@ -667,6 +724,7 @@ function normalizeOffer(offers: unknown): {
     o.eligibleDuration,
     specObj?.billingDuration,
     specObj?.unitText,
+    specObj?.unitCode,
     o.unitText,
     o.unitCode,
   ]
@@ -759,13 +817,23 @@ function extractContactsFromHtml(html: string, ctx: CandidateContext): FactCandi
     if (candidate) out.push(candidate);
   }
 
-  const href = /href=["'](https?:\/\/[^"']+)["']/gi;
-  while ((m = href.exec(html)) !== null) {
-    const url = decodeEntities(m[1]).trim();
-    if (isSocialUrl(url)) continue;
-    if (!BOOKING_HOSTS.test(url) || seen.has(url)) continue;
-    seen.add(url);
-    const candidate = buildCandidate(ctx, "booking_link", { url }, null, 0.9);
+  const anchors = html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+  for (const match of anchors) {
+    const url = absoluteUrl(match[1], ctx.sourceUrl);
+    if (!url || isSocialUrl(url) || seen.has(`booking:${url}`)) continue;
+    const label = stripHtmlToText(match[2]);
+    const hostBooking = BOOKING_HOSTS.test(url);
+    const destBooking = destinationKindFromUrl(url) === "booking";
+    if (!hostBooking && !destBooking) continue;
+    if (isSignupTrialOrNavCta(label, url)) continue;
+    seen.add(`booking:${url}`);
+    const candidate = buildCandidate(
+      ctx,
+      "booking_link",
+      { url, label: label || null },
+      label || null,
+      0.9,
+    );
     if (candidate) out.push(candidate);
     if (out.length > 40) break;
   }

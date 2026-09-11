@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildPricingCompareRows, getPlanPricingHighlights } from "../shared/pricingEntitlements";
+import { buildPricingCompareRows, formatUsdDisplay, getCanonicalCommercialCatalog, getPlanPricingHighlights, REALTOR_GROWTH_ENGINE_ONETIME_USD } from "../shared/pricingEntitlements";
 import { getLocalizedPricingPage } from "../shared/localizeMarketingContent";
 import { GROWTH_ENGINE_CARDS } from "../client/src/lib/growthEnginesCatalog";
 
@@ -115,6 +115,24 @@ test("18. RGE remains a separate one-time purchase requiring active Pro", () => 
   assert.ok(!/\$78/.test(rge!.monthlyRequirementLabel || ""));
   const highlights = getPlanPricingHighlights("pro").join(" ");
   assert.match(highlights, /AI Brain included/);
+});
+
+test("canonical commercial catalog is the single public price source", () => {
+  const catalog = getCanonicalCommercialCatalog();
+  const free = catalog.find((item) => item.id === "free");
+  const pro = catalog.find((item) => item.id === "pro");
+  const rge = catalog.find((item) => item.id === "realtor-growth-engine");
+  assert.equal(free?.offers[0]?.amount, 0);
+  assert.equal(free?.offers[0]?.billingPeriod, "month");
+  assert.equal(pro?.offers.find((o) => o.billingPeriod === "month")?.amount, 49);
+  assert.equal(pro?.offers.find((o) => o.billingPeriod === "year")?.amount, 490);
+  assert.equal(rge?.kind, "one_time_product");
+  assert.equal(rge?.offers[0]?.amount, REALTOR_GROWTH_ENGINE_ONETIME_USD);
+  assert.equal(rge?.offers[0]?.billingPeriod, "once");
+  assert.equal(
+    GROWTH_ENGINE_CARDS.find((c) => c.slug === "realtor-growth-engine")?.oneTimePrice,
+    formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD),
+  );
 });
 
 test("Prospect AI quota chips and UpgradeModal have no Starter / English-only leftover", () => {

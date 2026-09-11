@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
 import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from '@shared/shopifyBilling';
+import { REALTOR_GROWTH_ENGINE_ONETIME_USD } from '@shared/pricingEntitlements';
 import { getAppOrigin } from './urlOrigins';
 import { storage } from './storage';
 
@@ -408,8 +409,8 @@ export async function createShopifyBillingCharge(
   }
 }
 
-/** One-time Realtor Growth Engine license (USD) — align with `templateRoutes` Stripe list price. */
-export const SHOPIFY_RGE_ONETIME_USD = 199;
+/** One-time Realtor Growth Engine license (USD) — same canonical amount as public catalog / SSR. */
+export const SHOPIFY_RGE_ONETIME_USD = REALTOR_GROWTH_ENGINE_ONETIME_USD;
 
 export async function createShopifyRgeOneTimePurchase(
   shop: string,

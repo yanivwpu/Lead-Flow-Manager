@@ -31,6 +31,11 @@ import { RGE_LANDING_LOCALES } from "@shared/realtorGrowthEngineLandingLocales";
 import { formatHeadingHtmlWithLeadingLtrIsolate } from "@shared/rtlLeadingLtrIsolate";
 import { getLocalizedSiteFooter } from "@shared/siteFooterContent";
 import { WHACHAT_SOCIAL_LINK_REL } from "@shared/whachatSocialProfiles";
+import {
+  buildCanonicalOfferJsonLd,
+  buildCanonicalPricingCrawlableLines,
+  buildCanonicalRealtorGrowthEngineCrawlableLines,
+} from "@shared/pricingEntitlements";
 
 const BASE_URL = (process.env.MARKETING_URL || "https://www.whachatcrm.com").replace(/\/+$/, "");
 
@@ -47,6 +52,15 @@ function escapeHtmlText(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function offerJsonLdScript(englishPath: string, canonical: string): string {
+  const payload = buildCanonicalOfferJsonLd(englishPath, canonical, BASE_URL);
+  if (!payload) return "";
+  return `
+    <script type="application/ld+json">
+    ${JSON.stringify(payload).replace(/</g, "\\u003c")}
+    </script>`;
 }
 
 function jsonLd(value: string): string {
@@ -511,7 +525,7 @@ export function injectPageMeta(html: string, url: string): string {
       "url": ${jsonLd(canonical)},
       "isPartOf": { "@id": "${BASE_URL}/#website" }
     }
-    </script>`;
+    </script>${offerJsonLdScript(englishPath, canonical)}`;
 
   html = html.replace(/<title>.*?<\/title>/, metaTags);
   html = applyHtmlLangDir(html, locale);
@@ -779,12 +793,38 @@ function resolveMarketingSsrPage(
     return {
       h1: pricing.hero.h1,
       lead: pricing.hero.subtitle,
-      bullets: [pricing.hero.trustLine, ...pricing.ssr.bullets.filter((b) => b !== pricing.hero.trustLine)],
+      bullets: [
+        ...buildCanonicalPricingCrawlableLines(),
+        pricing.hero.trustLine,
+        ...pricing.ssr.bullets.filter((b) => b !== pricing.hero.trustLine),
+      ],
       linksHtml: [
         `<a href="${localizedInternalHref("/auth", locale)}">Start Free Trial</a>`,
         `<a href="${localizedInternalHref("/prospect-ai", locale)}">Prospect AI</a>`,
         `<a href="${localizedInternalHref("/ai-brain", locale)}">AI Brain</a>`,
       ].join(" · "),
+    };
+  }
+
+  if (englishPath === "/realtor-growth-engine") {
+    const base = MARKETING_SSR_PAGES["/realtor-growth-engine"];
+    if (!base) return null;
+    const offerLines = buildCanonicalRealtorGrowthEngineCrawlableLines();
+    if (locale !== "en") {
+      const overlay = RGE_LANDING_LOCALES[locale];
+      return {
+        h1: overlay.hero.h1,
+        lead: overlay.hero.support,
+        bullets: [
+          ...offerLines,
+          ...(overlay.hero.capabilities?.length ? overlay.hero.capabilities : base.bullets),
+        ],
+        linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
+      };
+    }
+    return {
+      ...base,
+      bullets: [...offerLines, ...base.bullets],
     };
   }
 
@@ -796,18 +836,6 @@ function resolveMarketingSsrPage(
       h1: overlay.h1,
       lead: overlay.subheadlineLines?.join(" ") || base.lead,
       bullets: base.bullets,
-      linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
-    };
-  }
-
-  if (englishPath === "/realtor-growth-engine" && locale !== "en") {
-    const overlay = RGE_LANDING_LOCALES[locale];
-    const base = MARKETING_SSR_PAGES["/realtor-growth-engine"];
-    if (!base) return null;
-    return {
-      h1: overlay.hero.h1,
-      lead: overlay.hero.support,
-      bullets: overlay.hero.capabilities?.length ? overlay.hero.capabilities : base.bullets,
       linksHtml: localizeSsrLinksHtml(base.linksHtml, locale),
     };
   }

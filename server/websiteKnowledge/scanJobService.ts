@@ -38,6 +38,8 @@ export type ScanJobItemResult = {
   notes?: string[];
   error?: string;
   finishedAt?: string;
+  /** Persisted so the worker re-extracts even if a stale artifact is still on the source. */
+  forceReextract?: boolean;
 };
 
 export type ScanJobView = {
@@ -113,6 +115,7 @@ export async function createScanJob(
       url: source.url,
       label: source.customLabel || source.title || source.url,
       status: "pending",
+      ...(opts?.forceReextract ? { forceReextract: true } : {}),
     };
   }
 
@@ -251,6 +254,7 @@ export async function processScanJob(
           url: source.url,
           contentHash: source.contentHash,
           extractionArtifact: parseKnowledgeExtractionArtifact(source.metadata),
+          forceReextract: items[sourceId]?.forceReextract === true,
         },
         existingFacts,
         deps,

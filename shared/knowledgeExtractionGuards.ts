@@ -31,13 +31,25 @@ const SOCIAL_HOST_RE =
   /(?:^|\.)(?:facebook\.com|fb\.com|instagram\.com|linkedin\.com|twitter\.com|x\.com|tiktok\.com|youtube\.com|youtu\.be|pinterest\.com|threads\.net)$/i;
 
 const SIGNUP_OR_NAV_CTA_RE =
-  /\b(?:start\s+free|start\s+your\s+free|try\s+free|free\s+trial|start\s+trial|start.{0,40}\btrial|sign\s*up|sign\s*in|log\s*in|register|see\s+plans|compare\s+plans|see\s+pricing)\b/i;
+  /\b(?:start\s+free|start\s+your\s+free|try\s+free|free\s+trial|start\s+trial|start.{0,40}\btrial|sign\s*up|sign\s*in|log\s*in|register|see\s+plans|compare\s+plans|see\s+pricing|view\s+(?:\w+\s+){0,4}plans)\b/i;
 
 const SIGNUP_PATH_RE =
-  /\/(?:auth|signup|sign-up|register|login|log-in|pricing|plans?|trial|start-free|get-started)(?:\/|$|\?)/i;
+  /\/(?:auth|signup|sign-up|register|login|log-in|trial|start-free|get-started)(?:\/|$|\?)/i;
+
+const PRICING_PATH_RE = /\/(?:pricing|plans?)(?:\/|$|\?|#)/i;
+
+const CONTACT_OR_SCHEDULING_PATH_RE =
+  /\/(?:contact|book(?:ing)?|demo|schedule|appointment)(?:\/|$|\?|#)/i;
+
+const PRODUCT_OFFER_PATH_RE = /\/realtor-growth-engine(?:\/|$|\?|#)/i;
+
+const BOOKING_HOST_RE =
+  /(?:calendly\.com|cal\.com|acuityscheduling\.com|squareup\.com\/appointments|setmore\.com|youcanbook\.me|hubspot\.com\/meetings|book(?:ing)?\.)/i;
 
 const BOOKING_OR_DEMO_RE =
   /\b(?:book|booking|schedule|calendly|demo|walkthrough|appointment|consult|reserve)\b/i;
+
+const GROWTH_ENGINE_NAME_RE = /\bgrowth\s+engine\b/i;
 
 const INDUSTRY_OR_AUDIENCE_RE =
   /\b(?:industr(?:y|ies)|use\s+cases?|who\s+it(?:'s| is)\s+for|built\s+for|for\s+(?:agenc(?:y|ies)|teams?|realtors?|brokers?|coaches?)|real estate|realtors?|agenc(?:y|ies)|saas|e-?commerce|healthcare|dentists?|law firms?)\b/i;
@@ -219,18 +231,55 @@ export function isSocialUrl(url: string): boolean {
   return socialNetworkFromUrl(url) !== null;
 }
 
+export type KnowledgeDestinationKind = "booking" | "pricing" | "product" | "signup" | "other";
+
+function destinationPath(url: string): string {
+  try {
+    if (url.startsWith("/")) return url.split(/[?#]/)[0] || url;
+    return new URL(url).pathname || url;
+  } catch {
+    return url;
+  }
+}
+
+function absoluteFactUrl(raw: string, base?: string | null): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  try {
+    return new URL(value, base || "https://www.whachatcrm.com").toString();
+  } catch {
+    return /^https?:\/\//i.test(value) ? value : null;
+  }
+}
+
+/** Classify a link by where it goes, not by the marketing label on the anchor. */
+export function destinationKindFromUrl(url?: string | null): KnowledgeDestinationKind {
+  if (!url || !url.trim()) return "other";
+  const raw = url.trim();
+  if (BOOKING_HOST_RE.test(raw)) return "booking";
+  const haystack = `${destinationPath(raw)} ${raw}`;
+  if (CONTACT_OR_SCHEDULING_PATH_RE.test(haystack)) return "booking";
+  if (PRICING_PATH_RE.test(haystack)) return "pricing";
+  if (PRODUCT_OFFER_PATH_RE.test(haystack)) return "product";
+  if (SIGNUP_PATH_RE.test(haystack)) return "signup";
+  return "other";
+}
+
 export function isSignupTrialOrNavCta(label: string, url?: string | null): boolean {
-  const text = `${label} ${url || ""}`;
-  if (BOOKING_OR_DEMO_RE.test(text) && !SIGNUP_OR_NAV_CTA_RE.test(label)) return false;
+  const dest = destinationKindFromUrl(url);
+  if (dest === "booking") return false;
+  if (dest === "pricing" || dest === "signup" || dest === "product") return true;
   if (SIGNUP_OR_NAV_CTA_RE.test(label)) return true;
-  if (url && SIGNUP_PATH_RE.test(url)) return true;
   if (NAV_ONLY_RE.test(label.trim())) return true;
   return false;
 }
 
 export function isGenuineBookingOrDemo(label: string, url?: string | null): boolean {
+  const dest = destinationKindFromUrl(url);
+  if (dest === "pricing" || dest === "signup" || dest === "product") return false;
+  if (dest === "booking") return true;
   if (isSignupTrialOrNavCta(label, url)) return false;
-  return BOOKING_OR_DEMO_RE.test(`${label} ${url || ""}`);
+  return BOOKING_OR_DEMO_RE.test(label);
 }
 
 export function locationHasPhysicalSignal(data: Record<string, unknown>): boolean {
@@ -327,6 +376,21 @@ export function classifyExtractedCandidate(
         : reasons,
     );
     if (!next) return drop(["Pricing plan did not match a known shape."]);
+    if (GROWTH_ENGINE_NAME_RE.test(name)) {
+      const once = prices.find((p) => p.billingPeriod === "once") ?? prices[0] ?? null;
+      const planUrl = typeof data.planUrl === "string" ? data.planUrl : null;
+      return keepAs(
+        "product",
+        {
+          name,
+          description: data.description ?? null,
+          price: once,
+          url: planUrl,
+        },
+        next,
+        reasons,
+      );
+    }
     return { keep: true, candidate: next };
   }
 
@@ -365,6 +429,7 @@ export function classifyExtractedCandidate(
 
   if (candidate.factType === "contact_method") {
     const value = String(data.value || "");
+    const label = String(data.label || "");
     const network = isSocialUrl(value) ? socialNetworkFromUrl(value) : null;
     if (network) {
       return keepAs(
@@ -372,6 +437,14 @@ export function classifyExtractedCandidate(
         { network, url: value, label: data.label ?? null },
         candidate,
       );
+    }
+    const resolved = absoluteFactUrl(value, candidate.sourceUrl);
+    const dest = destinationKindFromUrl(resolved || value);
+    if (dest === "pricing" || dest === "signup" || dest === "product") {
+      return drop(["Pricing, signup, and product URLs are not contact methods."]);
+    }
+    if (dest === "booking" && resolved) {
+      return keepAs("booking_link", { url: resolved, label: label || null }, candidate);
     }
     return { keep: true, candidate };
   }
@@ -382,6 +455,13 @@ export function classifyExtractedCandidate(
     const network = socialNetworkFromUrl(url);
     if (network) {
       return keepAs("social_link", { network, url, label: label || null }, candidate);
+    }
+    const dest = destinationKindFromUrl(url);
+    if (dest === "pricing" || dest === "signup") {
+      return drop(["Signup, trial, pricing, and navigation links are not booking details."]);
+    }
+    if (dest === "product") {
+      return drop(["Product pages are not booking destinations."]);
     }
     if (isSignupTrialOrNavCta(label, url)) {
       return drop(["Signup, trial, pricing, and navigation links are not booking details."]);
@@ -395,6 +475,16 @@ export function classifyExtractedCandidate(
     const network = url ? socialNetworkFromUrl(url) : null;
     if (network && url) {
       return keepAs("social_link", { network, url, label }, candidate);
+    }
+    const dest = destinationKindFromUrl(url);
+    if ((dest === "booking" || (url && isGenuineBookingOrDemo(label, url))) && url) {
+      const resolved = absoluteFactUrl(url, candidate.sourceUrl);
+      if (resolved) {
+        return keepAs("booking_link", { url: resolved, label: label || null }, candidate);
+      }
+    }
+    if (dest === "pricing" || dest === "signup" || dest === "product") {
+      return drop(["Signup, trial, pricing, product, and navigation CTAs are not booking details."]);
     }
     if (isSignupTrialOrNavCta(label, url)) {
       return drop(["Signup, trial, pricing, and navigation CTAs are not booking details."]);

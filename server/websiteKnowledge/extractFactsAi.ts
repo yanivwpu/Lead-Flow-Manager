@@ -34,16 +34,16 @@ const MAX_FACTS_PER_PAGE = 60;
 
 const TYPE_GUIDANCE: Record<SourceDetectedType, string> = {
   pricing:
-    "This is a pricing or advertising page. Capture every plan or package as a pricing_plan with its exact amount, currency, billing period, and the benefits listed under that specific plan. If both monthly and yearly prices are shown, put monthly in price and yearly in additionalPrices — never convert one into the other, never invent a missing interval. Also capture genuine book-a-demo links. Do not capture Start free, trial, signup, pricing, or navigation links as booking.",
+    "This is a pricing or advertising page. Capture every subscription plan as a pricing_plan with its exact amount, currency, billing period, and the benefits listed under that specific plan. If both monthly and yearly prices are shown, put monthly in price and yearly in additionalPrices — never convert one into the other, never invent a missing interval. Realtor Growth Engine is a one-time product requiring Pro, not a Free/Pro subscription tier — capture it as a product. Classify links by destination URL, not only the label: /contact and real scheduling URLs are booking_link; /pricing is pricing (not booking); /realtor-growth-engine is a product page, not booking. Book a Demo that points at /contact is booking. View plans / pricing CTAs are not booking. Do not capture Start free, trial, signup, or navigation links as booking.",
   services:
-    "This is a products or services page. Capture each distinct offering as a product or service fact. Industries and use cases are audience facts, not locations.",
+    "This is a products or services page. Capture each distinct offering as a product or service fact. Industries and use cases are audience facts, not locations. /realtor-growth-engine is a product page, not a booking URL.",
   about:
-    "This is an about or homepage. Capture one business_summary and any concrete offerings, service areas, or differentiators stated as fact. Industries and who it is for are audience facts. Do not file them as locations.",
+    "This is an about or homepage. Capture one business_summary and any concrete offerings, service areas, or differentiators stated as fact. Industries and who it is for are audience facts. Do not file them as locations. Book a Demo pointing at /contact is a booking_link. Pricing and signup links are not booking.",
   faq: "This is an FAQ page. Capture each question with its own answer as a faq fact.",
   policy:
     "This is a policy page. Capture each policy as a policy fact with its category, title, the details, and every stated condition as a separate conditions entry.",
   contact:
-    "This is a contact or booking page. Capture verified contact_method (phone, email, form) and genuine booking_link / demo URLs only. Social profile URLs are social_link. Signup, trial, and navigation CTAs are not booking.",
+    "This is a contact or booking page. Capture verified contact_method (phone, email, form) and genuine booking_link / demo URLs only. /contact is a genuine demo/contact destination. Social profile URLs are social_link. Signup, trial, /pricing, and navigation CTAs are not booking.",
   locations:
     "This is a locations or service-area page. Capture only physical/service locations, geographic service areas, business hours, or timezone-supported availability.",
   other: "Capture whatever is stated as concrete fact. Prefer fewer, well-supported facts. Do not invent prices or booking links.",

@@ -94,8 +94,21 @@ assert.match(pricingBody!, /Simple pricing\. Everything you need to grow\./);
 assert.match(pricingBody!, /Start free\. Upgrade when you’re ready to scale\./);
 assert.match(pricingBody!, /AI Brain included with Pro/);
 assert.match(pricingBody!, /0% WhachatCRM markup/);
-assert.doesNotMatch(pricingBody!, /\$19/);
+assert.match(pricingBody!, /Free: \$0\/month/);
+assert.match(pricingBody!, /Pro: \$49\/month/);
+assert.match(pricingBody!, /Pro: \$490\/year/);
+assert.match(pricingBody!, /Realtor Growth Engine: \$199 one-time/);
+assert.doesNotMatch(pricingBody!, /\$19(?!\d)/);
 assert.equal(generateMarketingPageSsrHtml("/contact"), null, "contact still meta-only");
+
+const pricingPage = injectPageMeta(shell, "/pricing").replace(
+  '<div id="root"></div>',
+  `<div id="root">${pricingBody}</div>`,
+);
+assert.match(pricingPage, /SoftwareApplication/);
+assert.match(pricingPage, /"price":49/);
+assert.match(pricingPage, /"price":490/);
+assert.match(pricingPage, /"price":199/);
 
 const esPricing = generateMarketingPageSsrHtml("/es/pricing");
 assert.ok(esPricing?.includes("Precios simples. Todo lo que necesitas para crecer."));

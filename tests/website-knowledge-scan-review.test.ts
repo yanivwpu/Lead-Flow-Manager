@@ -10,6 +10,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  generateHomepageHtml,
+  generateMarketingPageSsrHtml,
+  injectHomepageSeoMeta,
+  injectPageMeta,
+} from "../server/seo";
+import {
+  formatCanonicalAmountWithPeriod,
+  getFreePlanMonthlyPriceUsd,
+  getPaidPlanMonthlyPriceUsd,
+  getPaidPlanYearlyPriceUsd,
+  REALTOR_GROWTH_ENGINE_NAME,
+  REALTOR_GROWTH_ENGINE_ONETIME_USD,
+} from "../shared/pricingEntitlements";
+import {
   extractDeterministicFacts,
   extractPricingPlansFromText,
   findPricesInText,
@@ -468,6 +482,258 @@ run("low-confidence navigation text is omitted rather than published as a fact",
     candidate({ factType: "custom_fact", data: { label: "Home", value: "Home" }, confidence: 0.3 }),
   );
   assert.equal(classified.keep, false);
+});
+
+function productionShapedMarketingHtml(route: string): string {
+  const shell = `<!DOCTYPE html><html><head><title>Home</title></head><body><div id="root"></div></body></html>`;
+  const withMeta = injectPageMeta(shell, route);
+  const body = generateMarketingPageSsrHtml(route);
+  if (!body) return withMeta;
+  return withMeta.replace('<div id="root"></div>', `<div id="root">${body}</div>`);
+}
+
+function productionShapedHomepageHtml(): string {
+  const index = readFileSync(join(process.cwd(), "client/index.html"), "utf8");
+  const withMeta = injectHomepageSeoMeta(index, "en");
+  return withMeta.replace(
+    '<div id="root"></div>',
+    `<div id="root">${generateHomepageHtml("en")}</div>`,
+  );
+}
+
+const CANONICAL_FREE = formatCanonicalAmountWithPeriod(getFreePlanMonthlyPriceUsd(), "month");
+const CANONICAL_PRO_MONTH = formatCanonicalAmountWithPeriod(getPaidPlanMonthlyPriceUsd("pro"), "month");
+const CANONICAL_PRO_YEAR = formatCanonicalAmountWithPeriod(getPaidPlanYearlyPriceUsd("pro"), "year");
+const CANONICAL_RGE = formatCanonicalAmountWithPeriod(REALTOR_GROWTH_ENGINE_ONETIME_USD, "once");
+
+async function scanProductionHtml(id: string, url: string, html: string, extra?: {
+  artifact?: ReturnType<typeof buildKnowledgeExtractionArtifact> | null;
+  forceReextract?: boolean;
+  aiCandidates?: FactCandidate[];
+}) {
+  const aiCalls = { n: 0 };
+  const result = await scanSourceIntoDrafts({
+    source: {
+      id,
+      url,
+      contentHash: extra?.artifact?.contentHash ?? null,
+      extractionArtifact: extra?.artifact ?? null,
+      forceReextract: extra?.forceReextract,
+    },
+    existingFacts: [],
+    deps: {
+      fetchPage: async () => ({ page: prepareHtmlPage(html, url), rawHtml: html }),
+      extractAi: async () => {
+        aiCalls.n += 1;
+        return { candidates: extra?.aiCandidates ?? [], rejected: 0, attempted: Boolean(extra?.aiCandidates?.length) };
+      },
+      now: () => new Date("2026-09-11T00:00:00.000Z"),
+    },
+  });
+  return { result, aiCalls };
+}
+
+run("production-shaped pricing HTML contains canonical crawlable amounts and JSON-LD offers", () => {
+  const html = productionShapedMarketingHtml("/pricing");
+  assert.match(html, new RegExp(`Free: ${CANONICAL_FREE.replace(/\$/g, "\\$")}`));
+  assert.match(html, new RegExp(`Pro: ${CANONICAL_PRO_MONTH.replace(/\$/g, "\\$")}`));
+  assert.match(html, new RegExp(`Pro: ${CANONICAL_PRO_YEAR.replace(/\$/g, "\\$")}`));
+  assert.match(html, new RegExp(`${REALTOR_GROWTH_ENGINE_NAME}: ${CANONICAL_RGE.replace(/\$/g, "\\$")}`));
+  assert.match(html, /application\/ld\+json/);
+  assert.match(html, /SoftwareApplication/);
+  assert.match(html, /"price":49/);
+  assert.match(html, /"price":490/);
+  assert.match(html, /"price":0/);
+  assert.match(html, /"price":199/);
+  assert.match(html, /P1M/);
+  assert.match(html, /P1Y/);
+  assert.match(html, /one-time/);
+});
+
+await (async () => {
+  const name = "production pricing HTML feeds fetch → extraction → artifact → merge → review";
+  try {
+    const html = productionShapedMarketingHtml("/pricing");
+    const { result, aiCalls } = await scanProductionHtml("src-prod-pricing", "https://www.whachatcrm.com/pricing", html, {
+      aiCandidates: [
+        candidate({
+          factType: "booking_link",
+          data: { url: "https://www.whachatcrm.com/pricing", label: "View WhachatCRM plans" },
+        }),
+      ],
+    });
+    assert.equal(result.status, "scanned");
+    assert.ok(aiCalls.n >= 1);
+    assert.ok(result.extractionArtifact);
+    assert.equal(result.extractionArtifact?.extractorVersion, KNOWLEDGE_EXTRACTOR_VERSION);
+
+    const facts = factsFromScan(result);
+    const payload = buildKnowledgeReviewPayload({ facts });
+    const pricing = payload.sections.find((s) => s.id === "pricing");
+    const offerings = payload.sections.find((s) => s.id === "offerings");
+    const contact = payload.sections.find((s) => s.id === "contact");
+    const other = payload.sections.find((s) => s.id === "other");
+
+    const free = planNamed(result.candidates, "Free");
+    const pro = planNamed(result.candidates, "Pro");
+    const freePrices = listedPlanPrices(free);
+    const proPrices = listedPlanPrices(pro);
+    assert.equal(freePrices.find((p) => p.billingPeriod === "month")?.amount, getFreePlanMonthlyPriceUsd());
+    assert.equal(proPrices.find((p) => p.billingPeriod === "month")?.amount, getPaidPlanMonthlyPriceUsd("pro"));
+    assert.equal(proPrices.find((p) => p.billingPeriod === "year")?.amount, getPaidPlanYearlyPriceUsd("pro"));
+    assert.ok(!proPrices.some((p) => p.amount === 0 && p.billingPeriod === "once"));
+    assert.ok(!result.candidates.some((c) => c.factType === "pricing_plan" && /growth engine/i.test(JSON.stringify(c.data))));
+
+    const rge = result.candidates.find(
+      (c) => c.factType === "product" && /realtor growth engine/i.test((c.data as FactDataMap["product"]).name),
+    );
+    assert.ok(rge, "RGE must be a product, not a Free/Pro tier");
+    const rgePrice = (rge!.data as FactDataMap["product"]).price;
+    assert.equal(rgePrice?.amount, REALTOR_GROWTH_ENGINE_ONETIME_USD);
+    assert.equal(rgePrice?.billingPeriod, "once");
+
+    assert.ok(pricing?.facts.some((f) => f.factType === "pricing_plan" && /Free/.test(f.summary) && !/not listed/i.test(f.display?.headline || f.summary)));
+    assert.ok(pricing?.facts.some((f) => /Pro/.test(f.summary) && /49/.test(f.display?.headline || f.summary)));
+    assert.ok(pricing?.facts.some((f) => /Pro/.test(f.summary) && /490/.test(f.display?.headline || f.summary)));
+    assert.ok(offerings?.facts.some((f) => /Realtor Growth Engine/.test(f.summary) && /199/.test(f.summary)));
+    assert.ok(!(contact?.facts || []).some((f) => /View WhachatCRM plans/i.test(f.summary)));
+    assert.ok(!(other?.facts || []).some((f) => /View WhachatCRM plans/i.test(f.summary)));
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+await (async () => {
+  const name = "production RGE and homepage classify destinations, not anchor text";
+  try {
+    const rgeHtml = productionShapedMarketingHtml("/realtor-growth-engine");
+    assert.match(rgeHtml, /View WhachatCRM plans/);
+    assert.match(rgeHtml, new RegExp(`${REALTOR_GROWTH_ENGINE_NAME}: ${CANONICAL_RGE.replace(/\$/g, "\\$")}`));
+    const rgeScan = await scanProductionHtml(
+      "src-rge",
+      "https://www.whachatcrm.com/realtor-growth-engine",
+      rgeHtml,
+    );
+    const rgeFacts = factsFromScan(rgeScan.result);
+    const rgeReview = buildKnowledgeReviewPayload({ facts: rgeFacts });
+    const rgeContact = rgeReview.sections.find((s) => s.id === "contact");
+    assert.ok(!(rgeContact?.facts || []).some((f) => /View WhachatCRM plans/i.test(f.summary)));
+    assert.ok(
+      rgeScan.result.candidates.some(
+        (c) => c.factType === "product" && (c.data as FactDataMap["product"]).price?.amount === REALTOR_GROWTH_ENGINE_ONETIME_USD,
+      ),
+    );
+
+    const homeHtml = productionShapedHomepageHtml();
+    assert.match(homeHtml, /Book a Demo/);
+    assert.match(homeHtml, /href="\/contact"/);
+    const homeScan = await scanProductionHtml("src-home", "https://www.whachatcrm.com/", homeHtml);
+    const homeFacts = factsFromScan(homeScan.result);
+    const homeReview = buildKnowledgeReviewPayload({ facts: homeFacts });
+    const homeContact = homeReview.sections.find((s) => s.id === "contact");
+    const homeOther = homeReview.sections.find((s) => s.id === "other");
+    assert.ok(
+      (homeContact?.facts || []).some((f) => /Book a Demo/i.test(f.summary) && f.factType === "booking_link"),
+      "Book a Demo must land under Contact and Booking",
+    );
+    assert.ok(!(homeOther?.facts || []).some((f) => /Book a Demo/i.test(f.summary)));
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+await (async () => {
+  const name = "forced re-extract after an older artifact does not replay stale prices";
+  try {
+    const html = productionShapedMarketingHtml("/pricing");
+    const page = prepareHtmlPage(html, "https://www.whachatcrm.com/pricing");
+    const stale = buildKnowledgeExtractionArtifact({
+      contentHash: page.contentHash,
+      extractorVersion: 2,
+      extractedAt: "2026-08-01T00:00:00.000Z",
+      candidates: [
+        candidate({
+          factType: "pricing_plan",
+          data: { name: "Pro", price: null, additionalPrices: [], benefits: [] },
+        }),
+      ],
+    });
+    assert.equal(stale.extractorVersion, 2);
+
+    const withoutForce = await scanProductionHtml("src-stale", "https://www.whachatcrm.com/pricing", html, {
+      artifact: stale,
+    });
+    assert.equal(withoutForce.result.status, "reanalyzed");
+    assert.ok(withoutForce.aiCalls.n >= 1);
+    const pro = planNamed(withoutForce.result.candidates, "Pro");
+    assert.equal(listedPlanPrices(pro).find((p) => p.billingPeriod === "month")?.amount, getPaidPlanMonthlyPriceUsd("pro"));
+
+    const matchingStale = { ...stale, extractorVersion: KNOWLEDGE_EXTRACTOR_VERSION };
+    const forced = await scanProductionHtml("src-force", "https://www.whachatcrm.com/pricing", html, {
+      artifact: matchingStale,
+      forceReextract: true,
+    });
+    assert.equal(forced.result.status, "reanalyzed");
+    assert.ok(forced.aiCalls.n >= 1);
+    const forcedPro = planNamed(forced.result.candidates, "Pro");
+    assert.equal(listedPlanPrices(forcedPro).find((p) => p.billingPeriod === "month")?.amount, getPaidPlanMonthlyPriceUsd("pro"));
+    assert.notEqual(listedPlanPrices(forcedPro).length, 0);
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+run("extractor-version invalidation is on the deployed scan job/worker path", () => {
+  assert.equal(KNOWLEDGE_EXTRACTOR_VERSION, 3);
+  const repo = process.cwd();
+  const worker = readFileSync(join(repo, "server/websiteKnowledge/scanJobWorker.ts"), "utf8");
+  const service = readFileSync(join(repo, "server/websiteKnowledge/scanJobService.ts"), "utf8");
+  const pipeline = readFileSync(join(repo, "server/websiteKnowledge/scanPipeline.ts"), "utf8");
+  const index = readFileSync(join(repo, "server/index.ts"), "utf8");
+  assert.match(worker, /processScanJob/);
+  assert.match(worker, /from "\.\/scanJobService"/);
+  assert.match(service, /forceReextract: items\[sourceId\]\?\.forceReextract === true/);
+  assert.match(service, /parseKnowledgeExtractionArtifact/);
+  assert.match(service, /scanSourceIntoDrafts/);
+  assert.match(pipeline, /KNOWLEDGE_EXTRACTOR_VERSION/);
+  assert.match(index, /startKnowledgeScanWorker/);
+});
+
+run("destination semantics keep View plans out of booking and Book a Demo in booking", () => {
+  const kept = sanitizeExtractedCandidates([
+    candidate({
+      factType: "booking_link",
+      data: { url: "https://www.whachatcrm.com/pricing", label: "View WhachatCRM plans" },
+    }),
+    candidate({
+      factType: "call_to_action",
+      data: { url: "https://www.whachatcrm.com/pricing", label: "View WhachatCRM plans" },
+    }),
+    candidate({
+      factType: "booking_link",
+      data: { url: "https://www.whachatcrm.com/realtor-growth-engine", label: "Realtor Growth Engine" },
+    }),
+    candidate({
+      factType: "call_to_action",
+      data: { url: "https://www.whachatcrm.com/contact", label: "Book a Demo" },
+    }),
+    candidate({
+      factType: "call_to_action",
+      data: { url: "https://www.whachatcrm.com/auth", label: "Start free" },
+    }),
+  ]);
+  assert.ok(!kept.some((c) => /View WhachatCRM plans/i.test(JSON.stringify(c.data))));
+  assert.ok(!kept.some((c) => c.factType === "booking_link" && /realtor-growth-engine/i.test((c.data as FactDataMap["booking_link"]).url)));
+  const demo = kept.find((c) => c.factType === "booking_link" && /Book a Demo/i.test(JSON.stringify(c.data)));
+  assert.ok(demo);
+  assert.match((demo!.data as FactDataMap["booking_link"]).url, /\/contact/);
+  assert.ok(!kept.some((c) => c.factType === "call_to_action" && /Book a Demo/i.test(JSON.stringify(c.data))));
 });
 
 // --- Deleted source review / publish ----------------------------------------

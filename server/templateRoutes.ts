@@ -14,6 +14,7 @@ import {
   RGE_TEMPLATE_ONBOARDING_PATH,
   normalizeRgePostPurchaseRedirect,
 } from "@shared/rgePaths";
+import { REALTOR_GROWTH_ENGINE_ONETIME_USD } from "@shared/pricingEntitlements";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
@@ -38,7 +39,7 @@ import {
 import { rejectRgeForShopifyAccount } from "./shopifyBillingGuard";
 
 const TEMPLATE_ID = "realtor-growth-engine";
-const TEMPLATE_PRICE_CENTS = 19900;
+const TEMPLATE_PRICE_CENTS = REALTOR_GROWTH_ENGINE_ONETIME_USD * 100;
 
 function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowthEngineAccess>>) {
   const limits = ge.ok ? ge.limits : ge.limits;

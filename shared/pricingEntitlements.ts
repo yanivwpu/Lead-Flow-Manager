@@ -312,3 +312,184 @@ export function buildPricingCompareRows(opts?: {
 export function getProspectAiQuotaLabel(plan: SubscriptionPlan): string {
   return `${PROSPECT_AI_MONTHLY_QUOTAS[plan]} Prospect AI discoveries/month`;
 }
+
+/**
+ * Public commercial catalog used by visible cards, crawlable SSR, and Product/Offer JSON-LD.
+ * Amounts come from PLAN_LIMITS / yearly Stripe prices / the RGE one-time license — never
+ * a second hardcoded price list.
+ */
+export const REALTOR_GROWTH_ENGINE_NAME = "Realtor Growth Engine";
+export const REALTOR_GROWTH_ENGINE_PATH = "/realtor-growth-engine";
+export const REALTOR_GROWTH_ENGINE_ONETIME_USD = 199;
+export const REALTOR_GROWTH_ENGINE_REQUIRES_PRO = "Requires an active Pro plan.";
+
+export type CanonicalOfferBillingPeriod = "month" | "year" | "once";
+
+export type CanonicalCommercialOffer = {
+  id: "free" | "pro" | "realtor-growth-engine";
+  name: string;
+  kind: "subscription_plan" | "one_time_product";
+  urlPath: string;
+  description: string;
+  offers: Array<{
+    amount: number;
+    currency: "USD";
+    billingPeriod: CanonicalOfferBillingPeriod;
+  }>;
+};
+
+export function getFreePlanMonthlyPriceUsd(): number {
+  return PLAN_LIMITS.free.price;
+}
+
+export function formatCanonicalAmountWithPeriod(
+  amount: number,
+  billingPeriod: CanonicalOfferBillingPeriod,
+): string {
+  const money = formatUsdDisplay(amount);
+  return billingPeriod === "once" ? `${money} one-time` : `${money}/${billingPeriod}`;
+}
+
+export function getCanonicalCommercialCatalog(): CanonicalCommercialOffer[] {
+  return [
+    {
+      id: "free",
+      name: "Free",
+      kind: "subscription_plan",
+      urlPath: "/pricing",
+      description: "WhachatCRM Free plan billed monthly.",
+      offers: [{ amount: getFreePlanMonthlyPriceUsd(), currency: "USD", billingPeriod: "month" }],
+    },
+    {
+      id: "pro",
+      name: "Pro",
+      kind: "subscription_plan",
+      urlPath: "/pricing",
+      description: "WhachatCRM Pro plan. Includes AI Brain. 14-day trial.",
+      offers: [
+        { amount: getPaidPlanMonthlyPriceUsd("pro"), currency: "USD", billingPeriod: "month" },
+        { amount: getPaidPlanYearlyPriceUsd("pro"), currency: "USD", billingPeriod: "year" },
+      ],
+    },
+    {
+      id: "realtor-growth-engine",
+      name: REALTOR_GROWTH_ENGINE_NAME,
+      kind: "one_time_product",
+      urlPath: REALTOR_GROWTH_ENGINE_PATH,
+      description: `One-time product. ${REALTOR_GROWTH_ENGINE_REQUIRES_PRO} Not a Free or Pro subscription tier.`,
+      offers: [
+        {
+          amount: REALTOR_GROWTH_ENGINE_ONETIME_USD,
+          currency: "USD",
+          billingPeriod: "once",
+        },
+      ],
+    },
+  ];
+}
+
+export function buildCanonicalPricingCrawlableLines(): string[] {
+  return getCanonicalCommercialCatalog().flatMap((item) =>
+    item.offers.map((offer) => `${item.name}: ${formatCanonicalAmountWithPeriod(offer.amount, offer.billingPeriod)}`),
+  );
+}
+
+export function buildCanonicalRealtorGrowthEngineCrawlableLines(): string[] {
+  return buildCanonicalPricingCrawlableLines().filter((line) =>
+    line.startsWith(`${REALTOR_GROWTH_ENGINE_NAME}:`),
+  );
+}
+
+function schemaPriceSpecification(
+  offer: CanonicalCommercialOffer["offers"][number],
+): Record<string, unknown> {
+  if (offer.billingPeriod === "month") {
+    return {
+      "@type": "UnitPriceSpecification",
+      price: offer.amount,
+      priceCurrency: offer.currency,
+      billingDuration: "P1M",
+      unitCode: "MON",
+    };
+  }
+  if (offer.billingPeriod === "year") {
+    return {
+      "@type": "UnitPriceSpecification",
+      price: offer.amount,
+      priceCurrency: offer.currency,
+      billingDuration: "P1Y",
+      unitCode: "ANN",
+    };
+  }
+  return {
+    "@type": "UnitPriceSpecification",
+    price: offer.amount,
+    priceCurrency: offer.currency,
+    unitText: "one-time",
+    billingDuration: "one-time",
+  };
+}
+
+function schemaOfferNode(
+  offer: CanonicalCommercialOffer["offers"][number],
+  url: string,
+): Record<string, unknown> {
+  return {
+    "@type": "Offer",
+    price: offer.amount,
+    priceCurrency: offer.currency,
+    url,
+    priceSpecification: schemaPriceSpecification(offer),
+  };
+}
+
+/** Product / SoftwareApplication JSON-LD for the scanner and search engines. */
+export function buildCanonicalOfferJsonLd(
+  englishPath: string,
+  pageUrl: string,
+  baseUrl: string,
+): Record<string, unknown> | null {
+  const catalog = getCanonicalCommercialCatalog();
+  const origin = baseUrl.replace(/\/+$/, "");
+
+  if (englishPath === "/pricing") {
+    return {
+      "@context": "https://schema.org",
+      "@graph": catalog.map((item) => {
+        const url = `${origin}${item.urlPath}`;
+        if (item.kind === "subscription_plan") {
+          return {
+            "@type": "SoftwareApplication",
+            name: item.name,
+            applicationCategory: "BusinessApplication",
+            url,
+            description: item.description,
+            offers: item.offers.map((offer) => schemaOfferNode(offer, url)),
+          };
+        }
+        return {
+          "@type": "Product",
+          name: item.name,
+          url,
+          description: item.description,
+          offers: item.offers.map((offer) => schemaOfferNode(offer, url)),
+        };
+      }),
+    };
+  }
+
+  if (englishPath === REALTOR_GROWTH_ENGINE_PATH) {
+    const item = catalog.find((row) => row.id === "realtor-growth-engine");
+    if (!item) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: item.name,
+      url: pageUrl,
+      description: item.description,
+      offers: item.offers.map((offer) => schemaOfferNode(offer, pageUrl)),
+    };
+  }
+
+  return null;
+}

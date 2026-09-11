@@ -2,6 +2,12 @@
  * In-app Growth Engines marketplace metadata.
  * Add new rows here; wire `detailHref` when an engine ships. Backend install / gating stays on engine-specific routes + APIs.
  */
+import {
+  formatUsdDisplay,
+  REALTOR_GROWTH_ENGINE_ONETIME_USD,
+  REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
+} from "@shared/pricingEntitlements";
+
 export type GrowthEngineCardStatus = "available" | "coming_soon";
 
 /** How optional gallery pricing row behaves for coming-soon engines */
@@ -100,9 +106,9 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     status: "available",
     detailHref: "/app/templates/realtor-growth-engine",
     ctaLabel: "View & Activate",
-    oneTimePrice: "$199",
-    subscriptionRequirementShort: "Requires an active Pro plan.",
-    monthlyRequirementLabel: "Requires an active Pro plan.",
+    oneTimePrice: formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD),
+    subscriptionRequirementShort: REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
+    monthlyRequirementLabel: REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
     monthlyRequirementBreakdown: null,
     requirements: [
       "Pro plan required",

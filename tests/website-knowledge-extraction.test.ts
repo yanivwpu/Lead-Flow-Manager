@@ -285,6 +285,36 @@ run("JSON-LD FAQ, address, hours and phone are read literally", () => {
   assert.deepEqual(hours?.entries, [{ days: "Monday–Friday", opens: "09:00", closes: "17:00" }]);
 });
 
+run("JSON-LD SoftwareApplication keeps monthly and yearly offers on one plan", () => {
+  const html = `<!doctype html><html><head><title>Pricing</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+  {"@type":"SoftwareApplication","name":"Free","offers":{"@type":"Offer","price":0,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}}},
+  {"@type":"SoftwareApplication","name":"Pro","offers":[
+    {"@type":"Offer","price":49,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}},
+    {"@type":"Offer","price":490,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1Y","unitCode":"ANN"}}
+  ]},
+  {"@type":"Product","name":"Realtor Growth Engine","description":"Requires an active Pro plan.","offers":{"@type":"Offer","price":199,"priceCurrency":"USD","priceSpecification":{"unitText":"one-time","billingDuration":"one-time"}}}
+]}
+</script>
+</head><body><main><h1>Pricing</h1><p>${"Canonical public pricing with enough readable content. ".repeat(8)}</p></main></body></html>`;
+  const page = prepareHtmlPage(html, "https://example.test/pricing");
+  const { candidates } = extractDeterministicFacts(page, html, "src-jsonld");
+  const free = candidates.find((c) => c.factType === "pricing_plan" && (c.data as FactDataMap["pricing_plan"]).name === "Free");
+  const pro = candidates.find((c) => c.factType === "pricing_plan" && (c.data as FactDataMap["pricing_plan"]).name === "Pro");
+  const rge = candidates.find((c) => c.factType === "product" && (c.data as FactDataMap["product"]).name === "Realtor Growth Engine");
+  assert.ok(free && pro && rge);
+  const freePrices = (free!.data as FactDataMap["pricing_plan"]);
+  const proPrices = (pro!.data as FactDataMap["pricing_plan"]);
+  assert.equal(freePrices.price?.amount, 0);
+  assert.equal(freePrices.price?.billingPeriod, "month");
+  assert.equal(proPrices.price?.amount, 49);
+  assert.equal(proPrices.price?.billingPeriod, "month");
+  assert.equal(proPrices.additionalPrices.find((p) => p.billingPeriod === "year")?.amount, 490);
+  assert.equal((rge!.data as FactDataMap["product"]).price?.amount, 199);
+  assert.equal((rge!.data as FactDataMap["product"]).price?.billingPeriod, "once");
+});
+
 run("JSON-LD offers without a stated interval are not stored as one-time $0", () => {
   const html = `<!doctype html><html><head><title>Shop</title>
 <script type="application/ld+json">
