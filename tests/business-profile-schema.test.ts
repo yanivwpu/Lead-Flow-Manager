@@ -31,7 +31,7 @@ function read(rel: string): string {
     publicEmail: "jane@broker.com",
     publicWebsite: "https://summit.example.com",
     aboutText: "Serving Austin buyers since 2010.",
-    companyLogo: "data:image/png;base64,abc",
+    companyLogo: "/objects/uploads/tenant-a__logo.png",
   });
   assert.equal(valid.success, true, "valid business profile patch");
 
@@ -67,6 +67,12 @@ function read(rel: string): string {
   assert.equal(firstSave.success && firstSave.data.businessName, "Acme HVAC");
   assert.equal(firstSave.success && firstSave.data.aboutText, "We install and repair AC.");
   assert.equal(firstSave.success && firstSave.data.publicWebsite, null);
+
+  const dataLogo = businessProfilePatchSchema.safeParse({ companyLogo: "data:image/png;base64,abc" });
+  assert.equal(dataLogo.success, false, "data URL logos are rejected");
+
+  const blobLogo = businessProfilePatchSchema.safeParse({ companyLogo: "blob:https://evil/1" });
+  assert.equal(blobLogo.success, false, "blob URL logos are rejected");
 
   const websiteNoProtocol = businessProfilePatchSchema.safeParse({ publicWebsite: "acme-hvac.example" });
   assert.equal(websiteNoProtocol.success, true, "website without protocol is normalized");

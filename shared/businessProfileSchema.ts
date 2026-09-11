@@ -1,19 +1,19 @@
 import { z, type ZodError } from "zod";
+import { companyLogoForPatch, isFirstPartyBusinessProfileLogoPath } from "./businessProfileLogo";
 
-const imageUrlField = z
-  .string()
-  .max(5_000_000)
-  .refine(
-    (v) =>
-      !v ||
-      v.startsWith("data:image/") ||
-      v.startsWith("http") ||
-      v.startsWith("/") ||
-      v.includes("attached_assets"),
-    { message: "Invalid image URL" },
-  )
-  .optional()
-  .nullable();
+const optionalCompanyLogoField = z.preprocess((value) => {
+  if (value === undefined) return undefined;
+  if (value == null) return null;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed;
+}, z.union([
+  z.null(),
+  z.string().max(500).refine(isFirstPartyBusinessProfileLogoPath, {
+    message: "Upload a JPG, PNG, or WebP logo",
+  }),
+]).optional());
 
 /** Empty / whitespace / explicit null all persist as SQL null. Omitted stays omitted. */
 function emptyToNull(value: unknown): unknown {
@@ -40,7 +40,7 @@ const optionalWebsiteField = z.preprocess((value) => {
 export const businessProfilePatchSchema = z.object({
   displayName: z.string().max(120).optional().nullable(),
   businessName: z.string().max(200).optional().nullable(),
-  companyLogo: imageUrlField,
+  companyLogo: optionalCompanyLogoField,
   publicPhone: z.string().max(40).optional().nullable(),
   publicEmail: optionalEmailField,
   publicWebsite: optionalWebsiteField,
@@ -115,6 +115,7 @@ export function buildBusinessProfileSaveBody(input: {
   aboutText: string;
   companyLogo: string | null;
 }): BusinessProfilePatch {
+  const companyLogo = companyLogoForPatch(input.companyLogo);
   return {
     displayName: persistBusinessProfileDisplayName(input.displayName),
     businessName: persistOptionalProfileText(input.businessName),
@@ -122,7 +123,7 @@ export function buildBusinessProfileSaveBody(input: {
     publicEmail: persistOptionalProfileText(input.publicEmail),
     publicWebsite: persistOptionalProfileText(input.publicWebsite),
     aboutText: persistOptionalProfileText(input.aboutText),
-    companyLogo: input.companyLogo,
+    ...(companyLogo !== undefined ? { companyLogo } : {}),
   };
 }
 

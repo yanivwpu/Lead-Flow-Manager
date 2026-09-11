@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 import { objectStorageClient } from "./replit_integrations/object_storage/objectStorage";
@@ -667,6 +667,35 @@ export async function storeWidgetLogoRaster(params: {
     // #endregion
     if (err instanceof WidgetLogoStorageUnavailableError) throw err;
     throw new WidgetLogoStorageUnavailableError(err);
+  }
+}
+
+export function ownedPublicUploadStorageKey(userId: string, publicUrl: string): string | null {
+  const raw = String(publicUrl || "").trim();
+  const filename = raw.startsWith("/objects/uploads/")
+    ? raw.slice("/objects/uploads/".length).split("?")[0]
+    : "";
+  const parsed = widgetLogoObjectFromPublicFilename(filename);
+  if (!parsed) return null;
+  if (parsed.owner !== sanitizeWidgetLogoOwnerId(userId)) return null;
+  const key = widgetLogoStorageKey(userId, parsed.objectName);
+  return isAllowedWidgetLogoStorageKey(key) ? key : null;
+}
+
+/** Delete a tenant-owned first-party upload. Never deletes another workspace's object. */
+export async function deleteOwnedPublicUploadObject(userId: string, publicUrl: string): Promise<boolean> {
+  const key = ownedPublicUploadStorageKey(userId, publicUrl);
+  if (!key || !r2Configured()) return false;
+  try {
+    await r2Client().send(
+      new DeleteObjectCommand({
+        Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+        Key: key,
+      }),
+    );
+    return true;
+  } catch {
+    return false;
   }
 }
 

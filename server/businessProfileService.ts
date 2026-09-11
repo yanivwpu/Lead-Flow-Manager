@@ -1,5 +1,8 @@
 import type { AiBusinessKnowledge } from "@shared/schema";
 import {
+  persistBusinessProfileCompanyLogo,
+} from "@shared/businessProfileLogo";
+import {
   businessProfileDisplayNameFromPatch,
   businessProfilePatchSchema,
   formatBusinessProfilePatchError,
@@ -21,6 +24,7 @@ import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { isRgeInstalledForUser } from "./buyerPreferenceService";
+import { deleteOwnedPublicUploadObject } from "./mediaStorageService";
 
 function str(value: string | null | undefined): string {
   return (value || "").trim();
@@ -103,7 +107,9 @@ export function businessProfileKnowledgePatch(
   if (patch.businessName !== undefined) {
     out.businessName = persistOptionalProfileText(patch.businessName);
   }
-  if (patch.companyLogo !== undefined) out.companyLogo = patch.companyLogo;
+  if (patch.companyLogo !== undefined) {
+    out.companyLogo = patch.companyLogo;
+  }
   if (patch.publicPhone !== undefined) {
     out.publicPhone = persistOptionalProfileText(patch.publicPhone);
   }
@@ -122,6 +128,8 @@ export type BusinessProfileSaveDeps = {
   upsertKnowledge: (userId: string, updates: Partial<AiBusinessKnowledge>) => Promise<unknown>;
   loadProfile: (userId: string) => Promise<BusinessProfileResponse>;
   isRgeInstalled: (userId: string) => Promise<boolean>;
+  loadExistingKnowledge?: (userId: string) => Promise<{ companyLogo?: string | null } | undefined>;
+  deleteOwnedLogo?: (userId: string, publicUrl: string) => Promise<boolean>;
 };
 
 export type BusinessProfileSaveResult =
@@ -133,6 +141,8 @@ function defaultSaveDeps(): BusinessProfileSaveDeps {
     upsertKnowledge: (userId, updates) => storage.upsertAiBusinessKnowledge(userId, updates),
     loadProfile: getBusinessProfileForUser,
     isRgeInstalled: isRgeInstalledForUser,
+    loadExistingKnowledge: (userId) => storage.getAiBusinessKnowledge(userId),
+    deleteOwnedLogo: (userId, publicUrl) => deleteOwnedPublicUploadObject(userId, publicUrl),
   };
 }
 
@@ -164,9 +174,30 @@ export async function saveBusinessProfileForUser(
     }
   }
 
+  const previousLogo = (await deps.loadExistingKnowledge?.(userId))?.companyLogo ?? null;
   const knowledgeUpdates = businessProfileKnowledgePatch(knowledgePatchFromParsed(patch));
+  if (Object.prototype.hasOwnProperty.call(patch, "companyLogo")) {
+    const persisted = persistBusinessProfileCompanyLogo(patch.companyLogo, userId);
+    if (persisted === "invalid") {
+      return {
+        ok: false,
+        status: 400,
+        error: "companyLogo: Upload a JPG, PNG, or WebP logo",
+        fieldErrors: { companyLogo: "Upload a JPG, PNG, or WebP logo" },
+      };
+    }
+    knowledgeUpdates.companyLogo = persisted;
+  }
   if (Object.keys(knowledgeUpdates).length > 0) {
     await deps.upsertKnowledge(userId, knowledgeUpdates);
+  }
+  if (
+    deps.deleteOwnedLogo &&
+    previousLogo &&
+    knowledgeUpdates.companyLogo !== undefined &&
+    previousLogo !== knowledgeUpdates.companyLogo
+  ) {
+    await deps.deleteOwnedLogo(userId, previousLogo).catch(() => false);
   }
 
   const profile = await deps.loadProfile(userId);

@@ -13,6 +13,12 @@ import {
   formatBusinessProfileSaveError,
   type BusinessProfileResponse,
 } from "@shared/businessProfileSchema";
+import {
+  BUSINESS_PROFILE_LOGO_ACCEPT,
+  runBusinessProfileLogoUpload,
+  xhrUploadBusinessProfileLogo,
+  type BusinessProfileLogoUploadLock,
+} from "@shared/businessProfileLogo";
 
 async function readImageFile(file: File, maxBytes: number): Promise<string> {
   if (file.size > maxBytes) {
@@ -54,7 +60,10 @@ export function BusinessProfileSettings() {
   const [aboutText, setAboutText] = useState("");
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoProgress, setLogoProgress] = useState<number | null>(null);
   const dirtyRef = useRef(false);
+  const logoUploadLock = useRef<BusinessProfileLogoUploadLock>({ inFlight: false });
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["/api/business-profile"],
@@ -167,21 +176,28 @@ export function BusinessProfileSettings() {
 
   const handleLogoChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    try {
-      const dataUrl = await readImageFile(file, 2_000_000);
-      dirtyRef.current = true;
-      setCompanyLogo(dataUrl);
-    } catch (error) {
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Could not upload logo",
-        variant: "destructive",
-      });
-    } finally {
-      e.target.value = "";
+    const prior = companyLogo;
+    setLogoError(null);
+    setLogoProgress(0);
+    const result = await runBusinessProfileLogoUpload({
+      file,
+      priorLogoUrl: prior,
+      lock: logoUploadLock.current,
+      onProgress: (percent) => setLogoProgress(percent),
+      uploadFn: xhrUploadBusinessProfileLogo,
+    });
+    if (!result.ok) {
+      if (!result.skipped) setLogoError(result.error);
+      setCompanyLogo(prior);
+      setLogoProgress(null);
+      return;
     }
-  }, []);
+    dirtyRef.current = true;
+    setCompanyLogo(result.logoUrl);
+    setLogoProgress(null);
+  }, [companyLogo]);
 
   const displayAvatar = avatarPreview || user?.avatarUrl || null;
   const initials = profileInitials(displayName || user?.name || "W");
@@ -243,9 +259,25 @@ export function BusinessProfileSettings() {
                 ) : (
                   <div className="h-12 w-12 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 text-sm font-bold">W</div>
                 )}
-                <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                  <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  Upload logo
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoProgress !== null}
+                  data-testid="button-business-profile-logo-upload"
+                >
+                  {logoProgress !== null ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      Uploading {logoProgress}%
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5 mr-1.5" />
+                      {companyLogo ? "Replace logo" : "Upload logo"}
+                    </>
+                  )}
                 </Button>
                 {companyLogo && (
                   <Button
@@ -253,17 +285,35 @@ export function BusinessProfileSettings() {
                     variant="ghost"
                     size="sm"
                     className="text-gray-500"
+                    disabled={logoProgress !== null}
                     onClick={() => {
                       dirtyRef.current = true;
+                      setLogoError(null);
                       setCompanyLogo(null);
                     }}
+                    data-testid="button-business-profile-logo-remove"
                   >
                     Remove
                   </Button>
                 )}
-                <input ref={logoInputRef} type="file" className="hidden" accept="image/*" onChange={handleLogoChange} />
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  className="hidden"
+                  accept={BUSINESS_PROFILE_LOGO_ACCEPT}
+                  onChange={handleLogoChange}
+                  data-testid="input-business-profile-logo-file"
+                />
               </div>
-              <p className="text-xs text-gray-500">Shown on public listing page headers. W logo is used if none is uploaded.</p>
+              {logoProgress !== null && (
+                <div className="h-1.5 w-full max-w-xs rounded-full bg-slate-100 overflow-hidden" data-testid="business-profile-logo-progress">
+                  <div className="h-full bg-indigo-500 transition-all" style={{ width: `${logoProgress}%` }} />
+                </div>
+              )}
+              {logoError && (
+                <p className="text-xs text-destructive" data-testid="business-profile-logo-error">{logoError}</p>
+              )}
+              <p className="text-xs text-gray-500">Shown on public listing page headers. JPG, PNG, or WebP up to 5 MB. W logo is used if none is uploaded.</p>
             </div>
           </div>
 
@@ -379,7 +429,7 @@ export function BusinessProfileSettings() {
               type="button"
               className="bg-brand-green hover:bg-brand-dark"
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || logoProgress !== null}
               data-testid="button-save-business-profile"
             >
               {saveMutation.isPending ? (
