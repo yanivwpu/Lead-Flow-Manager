@@ -87,6 +87,13 @@
     min-width: 0;
     overflow: hidden;
   }
+  /* Official marketing-site widget: hide chrome on excluded SPA routes without a second UI. */
+  html.wcs-marketing-chat-suppressed [data-wcw],
+  html.wcs-marketing-chat-suppressed iframe[src*="/widget-frame/"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
   /* While the static marketing shell is visible, do not force #root to a full viewport
      height (that reserved empty space below the shell and inflated CLS on swap). */
   html:not(.wcs-hide-static-marketing):not(.wcs-shopify-preboot):not(.wcs-shopify-bootstrap):not(.wcs-homepage-shell-live) #root {

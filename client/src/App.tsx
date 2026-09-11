@@ -143,6 +143,7 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { CookieConsentRoot } from "@/components/CookieConsentRoot";
 import { GoogleAnalyticsRouteTracker } from "@/components/GoogleAnalyticsRouteTracker";
+import { MarketingWebsiteChatWidget } from "@/components/MarketingWebsiteChatWidget";
 import { Welcome } from "@/pages/Welcome";
 
 // Wrapper for protected routes
@@ -567,6 +568,7 @@ function App() {
       <AuthProvider>
         <CookieConsentRoot>
           <GoogleAnalyticsRouteTracker />
+          <MarketingWebsiteChatWidget />
           <ReferralCapture />
           <Toaster />
           <Suspense fallback={<PageLoader />}>
