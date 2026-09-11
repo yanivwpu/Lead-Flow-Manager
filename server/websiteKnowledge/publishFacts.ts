@@ -8,14 +8,20 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { aiBusinessKnowledge, businessKnowledgeFacts } from "@shared/schema";
+import { aiBusinessKnowledge, aiWebsiteKnowledgeSources, businessKnowledgeFacts } from "@shared/schema";
 import {
   buildFactNarrativeSummary,
   detectFactConflicts,
   factPrecedence,
+  formatFactValue,
   type FactConflict,
   type KnowledgeFact,
 } from "@shared/businessKnowledgeFacts";
+import {
+  isDraftFromRemovedSource,
+  validateFactForPublish,
+  type PublishItemError,
+} from "@shared/knowledgeExtractionGuards";
 import { invalidateWorkspaceIntelligenceCache } from "../workspaceIntelligenceCache";
 import { invalidatePublishedFactsCache } from "./factContext";
 import { listFacts, rowToKnowledgeFact } from "./factStore";
@@ -29,6 +35,8 @@ export type PublishResult = {
   blockedConflicts: Array<{ factKey: string; reason: string }>;
   skippedSuggestions: number;
   summaryChars: number;
+  /** Drafts that were not published, with a reason the reviewer can act on. */
+  itemErrors: PublishItemError[];
 };
 
 /**
@@ -107,6 +115,7 @@ export async function publishKnowledgeFacts(
     blockedConflicts: [],
     skippedSuggestions: 0,
     summaryChars: 0,
+    itemErrors: [],
   };
 
   await db.transaction(async (tx) => {
@@ -123,6 +132,12 @@ export async function publishKnowledgeFacts(
       .map(rowToKnowledgeFact)
       .filter((f): f is KnowledgeFact => f !== null);
 
+    const sourceRows = await tx
+      .select({ id: aiWebsiteKnowledgeSources.id })
+      .from(aiWebsiteKnowledgeSources)
+      .where(eq(aiWebsiteKnowledgeSources.userId, userId));
+    const activeSourceIds = new Set(sourceRows.map((s) => s.id));
+
     const drafts = live.filter((f) => f.state === "draft");
     const publishedByKey = new Map(
       live.filter((f) => f.state === "published").map((f) => [f.factKey, f]),
@@ -138,6 +153,27 @@ export async function publishKnowledgeFacts(
 
     for (const draft of drafts) {
       if (blockedKeys.has(draft.factKey)) continue;
+
+      if (isDraftFromRemovedSource(draft, activeSourceIds) || draft.proposedAction === "source_removed") {
+        result.itemErrors.push({
+          factId: draft.id,
+          factKey: draft.factKey,
+          summary: formatFactValue(draft),
+          reasons: ["Source removed — analyze again to refresh"],
+        });
+        continue;
+      }
+
+      const invalid = validateFactForPublish(draft);
+      if (!invalid.ok) {
+        result.itemErrors.push({
+          factId: draft.id,
+          factKey: draft.factKey,
+          summary: formatFactValue(draft),
+          reasons: invalid.reasons,
+        });
+        continue;
+      }
 
       // A suggestion against a fact the user controls is never applied by publish.
       if (draft.proposedAction === "suggest") {

@@ -60,6 +60,9 @@ function parseProvenance(raw: unknown): FactProvenanceEntry[] {
       url: typeof o.url === "string" ? o.url : null,
       title: typeof o.title === "string" ? o.title : null,
       verifiedAt: typeof o.verifiedAt === "string" ? o.verifiedAt : null,
+      reviewReasons: Array.isArray(o.reviewReasons)
+        ? o.reviewReasons.filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+        : undefined,
     });
   }
   return out;
@@ -81,7 +84,8 @@ export function rowToKnowledgeFact(row: BusinessKnowledgeFactRow): KnowledgeFact
     row.proposedAction === "add" ||
     row.proposedAction === "update" ||
     row.proposedAction === "retire" ||
-    row.proposedAction === "suggest"
+    row.proposedAction === "suggest" ||
+    row.proposedAction === "source_removed"
       ? (row.proposedAction as FactProposedAction)
       : null;
 
@@ -108,6 +112,15 @@ export function rowToKnowledgeFact(row: BusinessKnowledgeFactRow): KnowledgeFact
     sourceTitle: row.sourceTitle ?? null,
     excerpt: row.excerpt ?? null,
     provenance: parseProvenance(row.provenance),
+    reviewReasons: (() => {
+      const reasons: string[] = [];
+      for (const entry of parseProvenance(row.provenance)) {
+        for (const reason of entry.reviewReasons || []) {
+          if (!reasons.includes(reason)) reasons.push(reason);
+        }
+      }
+      return reasons.length ? reasons : undefined;
+    })(),
     firstSeenAt: iso(row.firstSeenAt, epoch),
     lastVerifiedAt: iso(row.lastVerifiedAt, epoch),
     publishedAt: isoOrNull(row.publishedAt),
@@ -190,9 +203,10 @@ export async function applyMergeOperations(
   userId: string,
   operations: FactMergeOperation[],
   now = new Date(),
+  client: DbLike = db,
 ): Promise<void> {
   if (operations.length === 0) return;
-  await db.transaction(async (tx) => {
+  const run = async (tx: DbLike) => {
     for (const op of operations) {
       switch (op.kind) {
         case "upsert_draft": {
@@ -300,7 +314,14 @@ export async function applyMergeOperations(
         }
       }
     }
-  });
+  };
+  if (client === db) {
+    await db.transaction(async (tx) => {
+      await run(tx);
+    });
+    return;
+  }
+  await run(client);
 }
 
 export type ManualFactInput = {

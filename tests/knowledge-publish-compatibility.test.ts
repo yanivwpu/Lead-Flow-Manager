@@ -198,6 +198,8 @@ run("publishing invalidates both intelligence caches", () => {
   const src = readFileSync(join(REPO, "server/websiteKnowledge/publishFacts.ts"), "utf8");
   assert.ok(src.includes("invalidateWorkspaceIntelligenceCache(userId)"));
   assert.ok(src.includes("invalidatePublishedFactsCache(userId)"));
+  assert.ok(/itemErrors/.test(src));
+  assert.ok(/validateFactForPublish/.test(src));
 });
 
 run("offerings come from published facts rather than the prose blob", () => {

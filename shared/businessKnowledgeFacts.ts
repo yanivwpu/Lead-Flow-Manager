@@ -49,11 +49,26 @@ export const factSchemas = {
   pricing_plan: z.object({
     name: shortText(120),
     description: shortText(600).nullish(),
-    price: moneySchema,
+    /**
+     * Optional on purpose: a missing/unparsed price stays unknown. Callers must never
+     * fill amount 0 or billingPeriod "once" just to satisfy the shape.
+     */
+    price: moneySchema.nullish(),
+    /** Extra stated intervals (e.g. yearly next to monthly) — never a conversion of the primary. */
+    additionalPrices: z.array(moneySchema).max(5).default([]),
     priceQualifier: z.enum(["from", "up_to", "exact"]).default("exact"),
     /** Benefits live inside the plan so one can never detach or attach to the wrong plan. */
     benefits: z.array(shortText(200)).max(30).default([]),
     planUrl: z.string().trim().url().nullish(),
+  }),
+  audience: z.object({
+    label: shortText(160),
+    description: shortText(400).nullish(),
+  }),
+  social_link: z.object({
+    network: shortText(40),
+    url: z.string().trim().url(),
+    label: shortText(120).nullish(),
   }),
   benefit: z.object({
     statement: shortText(240),
@@ -186,14 +201,18 @@ export type FactConflictResolution = "precedence" | "user";
  * What a draft is asking for.
  * `suggest` is a proposed change to a fact the user controls (pinned or edited, or any
  * higher-precedence origin) — publish never applies it silently.
+ * `source_removed` marks an unpublished draft whose page was deleted; it is hidden from
+ * the active review and never published.
  */
-export type FactProposedAction = "add" | "update" | "retire" | "suggest";
+export type FactProposedAction = "add" | "update" | "retire" | "suggest" | "source_removed";
 
 export type FactProvenanceEntry = {
   sourceId: string | null;
   url?: string | null;
   title?: string | null;
   verifiedAt?: string | null;
+  /** Extraction/publish flags that belong with this source, e.g. "price left unknown". */
+  reviewReasons?: string[];
 };
 
 type FactBase = {
@@ -215,6 +234,8 @@ type FactBase = {
   sourceTitle: string | null;
   excerpt: string | null;
   provenance: FactProvenanceEntry[];
+  /** Why this draft needs a human look. Empty/undefined means the value is publishable as-is. */
+  reviewReasons?: string[];
   firstSeenAt: string;
   /** Drives freshness. Bumped whenever a scan re-confirms the same value. */
   lastVerifiedAt: string;
@@ -241,6 +262,7 @@ export type FactCandidate = {
   sourceUrl: string | null;
   sourceTitle: string | null;
   excerpt: string | null;
+  reviewReasons?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -368,6 +390,14 @@ export function factKey(factType: FactType, data: AnyFactData): string {
     case "custom_fact": {
       const d = data as FactDataMap["custom_fact"];
       return `custom_fact:${slugifyFactPart(d.label)}`;
+    }
+    case "audience": {
+      const d = data as FactDataMap["audience"];
+      return `audience:${slugifyFactPart(d.label)}`;
+    }
+    case "social_link": {
+      const d = data as FactDataMap["social_link"];
+      return `social_link:${slugifyFactPart(d.network, 20)}:${slugifyFactPart(normalizeUrlForKey(d.url), 80)}`;
     }
     default: {
       const exhaustive: never = factType;
@@ -498,6 +528,8 @@ export const FACT_TTL_DAYS: Record<FactType, number> = {
   feature: 90,
   call_to_action: 90,
   custom_fact: 90,
+  audience: 180,
+  social_link: 90,
   faq: 120,
   business_summary: 180,
 };
@@ -719,6 +751,28 @@ export function formatFactMoney(money: FactMoney, qualifier?: string): string {
   return `${prefix}${money.currency} ${amount} ${period}`;
 }
 
+export function listedPlanPrices(data: FactDataMap["pricing_plan"]): FactMoney[] {
+  const extra = data.additionalPrices || [];
+  const out: FactMoney[] = [];
+  const seen = new Set<string>();
+  for (const item of [data.price, ...extra]) {
+    if (!item) continue;
+    const key = `${item.currency}:${item.amount}:${item.billingPeriod}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  const rank = (p: BillingPeriod) => (p === "month" ? 0 : p === "year" ? 1 : p === "once" ? 9 : 5);
+  out.sort((a, b) => rank(a.billingPeriod) - rank(b.billingPeriod) || a.amount - b.amount);
+  return out;
+}
+
+function formatPlanPrices(data: FactDataMap["pricing_plan"]): string | null {
+  const prices = listedPlanPrices(data);
+  if (prices.length === 0) return null;
+  return prices.map((p) => formatFactMoney(p, data.priceQualifier)).join(" · ");
+}
+
 /** Single-line rendering used by both the prompt block and the review UI. */
 export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">): string {
   switch (fact.factType) {
@@ -728,9 +782,9 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
     }
     case "pricing_plan": {
       const d = fact.data as FactDataMap["pricing_plan"];
-      const price = formatFactMoney(d.price, d.priceQualifier);
+      const price = formatPlanPrices(d);
       const benefits = d.benefits.length ? ` — includes: ${d.benefits.join("; ")}` : "";
-      return `${d.name}: ${price}${benefits}`;
+      return price ? `${d.name}: ${price}${benefits}` : `${d.name}${benefits}`;
     }
     case "product":
     case "service": {
@@ -799,6 +853,14 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
       const d = fact.data as FactDataMap["custom_fact"];
       return `${d.label}: ${d.value}`;
     }
+    case "audience": {
+      const d = fact.data as FactDataMap["audience"];
+      return d.description ? `${d.label} — ${d.description}` : d.label;
+    }
+    case "social_link": {
+      const d = fact.data as FactDataMap["social_link"];
+      return d.label ? `${d.label}: ${d.url}` : `${d.network}: ${d.url}`;
+    }
     default: {
       const exhaustive: never = fact.factType;
       return String(exhaustive);
@@ -824,6 +886,8 @@ export const FACT_TYPE_LABELS: Record<FactType, string> = {
   eligibility_rule: "Eligibility rule",
   numeric_limit: "Limit",
   custom_fact: "Other detail",
+  audience: "Audience",
+  social_link: "Social profile",
 };
 
 /** Review UI grouping. Order is the display order. */
@@ -832,7 +896,7 @@ export const FACT_REVIEW_SECTIONS: ReadonlyArray<{
   title: string;
   factTypes: readonly FactType[];
 }> = [
-  { id: "overview", title: "Business Overview", factTypes: ["business_summary"] },
+  { id: "overview", title: "Business Overview", factTypes: ["business_summary", "audience"] },
   { id: "offerings", title: "Products and Services", factTypes: ["product", "service"] },
   { id: "pricing", title: "Pricing and Plans", factTypes: ["pricing_plan"] },
   { id: "benefits", title: "Benefits and Features", factTypes: ["benefit", "feature"] },
@@ -850,12 +914,22 @@ export const FACT_REVIEW_SECTIONS: ReadonlyArray<{
   {
     id: "contact",
     title: "Contact and Booking",
-    factTypes: ["contact_method", "booking_link", "call_to_action", "custom_fact"],
+    factTypes: ["contact_method", "booking_link"],
+  },
+  {
+    id: "social",
+    title: "Social profiles",
+    factTypes: ["social_link"],
+  },
+  {
+    id: "other",
+    title: "Other details",
+    factTypes: ["call_to_action", "custom_fact"],
   },
 ] as const;
 
 export function factReviewSectionId(factType: FactType): string {
-  return FACT_REVIEW_SECTIONS.find((s) => s.factTypes.includes(factType))?.id || "contact";
+  return FACT_REVIEW_SECTIONS.find((s) => s.factTypes.includes(factType))?.id || "other";
 }
 
 /**

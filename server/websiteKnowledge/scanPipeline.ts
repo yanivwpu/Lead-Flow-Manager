@@ -12,6 +12,7 @@ import {
   type FactCandidate,
   type KnowledgeFact,
 } from "@shared/businessKnowledgeFacts";
+import { mergePricingPlanCandidates, sanitizeExtractedCandidates } from "@shared/knowledgeExtractionGuards";
 import { extractDeterministicFacts, prepareHtmlPage, type PreparedPage } from "./extractPage";
 import { fetchPublicHtmlPage } from "../websiteKnowledgeScraper";
 import { extractFactsWithAi, type AiExtractionResult } from "./extractFactsAi";
@@ -82,6 +83,10 @@ export function combineCandidates(
       byKey.set(candidate.factKey, candidate);
       continue;
     }
+    if (existing.factType === "pricing_plan" && candidate.factType === "pricing_plan") {
+      byKey.set(candidate.factKey, mergePricingPlanCandidates(existing, candidate));
+      continue;
+    }
     const existingRank = factPrecedence({
       origin: existing.origin,
       isPinned: false,
@@ -94,7 +99,7 @@ export function combineCandidates(
     });
     if (incomingRank > existingRank) byKey.set(candidate.factKey, candidate);
   }
-  return [...byKey.values()];
+  return sanitizeExtractedCandidates([...byKey.values()]);
 }
 
 export async function scanSourceIntoDrafts(params: {

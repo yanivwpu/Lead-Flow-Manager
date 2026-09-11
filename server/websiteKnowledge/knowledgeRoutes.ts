@@ -148,10 +148,14 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
   app.delete("/api/ai/knowledge/sources/:id", async (req, res) => {
     try {
       if (!(await guard(req, res))) return;
-      // Facts keep their provenance and stay published; source_id is set null by the FK.
-      const removed = await deleteKnowledgeSource(req.user!.id, req.params.id);
-      if (!removed) return res.status(404).json({ error: "Source not found" });
-      res.json({ ok: true });
+      const outcome = await deleteKnowledgeSource(req.user!.id, req.params.id);
+      if (!outcome.removed) return res.status(404).json({ error: "Source not found" });
+      res.json({
+        ok: true,
+        discardedDrafts: outcome.discardedDrafts,
+        publishedUnchanged: outcome.publishedUnchanged,
+        notice: "Source removed — analyze again to refresh",
+      });
     } catch (error) {
       console.error("[Knowledge] delete source failed:", error);
       res.status(500).json({ error: "Failed to remove source" });
@@ -195,7 +199,12 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
       const userId = req.user!.id;
       const { knowledge, policy } = await loadFreshnessPolicy(userId);
       const facts = await listFacts(userId, { states: ["draft", "published", "retired"] });
-      const payload = buildKnowledgeReviewPayload({ facts, policy });
+      const sources = await listKnowledgeSources(userId);
+      const payload = buildKnowledgeReviewPayload({
+        facts,
+        policy,
+        activeSourceIds: sources.map((s) => s.id),
+      });
       res.json({
         ...payload,
         knowledgeV2Enabled: knowledge?.knowledgeV2Enabled === true,

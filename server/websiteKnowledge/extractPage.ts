@@ -17,6 +17,11 @@ import {
   type FactCandidate,
   type FactType,
 } from "@shared/businessKnowledgeFacts";
+import {
+  isSignupTrialOrNavCta,
+  isSocialUrl,
+  sanitizeExtractedCandidates,
+} from "@shared/knowledgeExtractionGuards";
 import { fetchPublicHtmlPage } from "../websiteKnowledgeScraper";
 import type { SourceDetectedType } from "./sourceStore";
 
@@ -113,7 +118,7 @@ export function cleanHtmlToStructuredText(html: string, maxLen = MAX_PAGE_TEXT):
     .replace(/<li[^>]*>/gi, "\n- ")
     .replace(/<\/li>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|section|article|h1|h2|h3|h4|h5|h6|tr|ul|ol|dl|dd|dt|blockquote|figcaption|label|button|span)>/gi, "\n")
+    .replace(/<\/(p|div|section|article|h1|h2|h3|h4|h5|h6|tr|ul|ol|dl|dd|dt|blockquote|figcaption|label|button)>/gi, "\n")
     .replace(/<(h1|h2|h3|h4|h5|h6|p|section|article|tr|dt)[^>]*>/gi, "\n")
     .replace(/<\/t[dh]>/gi, " | ")
     .replace(/<[^>]+>/g, " ");
@@ -283,11 +288,11 @@ const ISO_CODES = new Set([
 ]);
 
 const PERIOD_WORDS: Array<{ re: RegExp; period: "day" | "week" | "month" | "quarter" | "year" | "once" }> = [
-  { re: /\b(?:per\s+month|\/\s*month|\/\s*mo\b|a\s+month|monthly|p\/m\b|each\s+month)\b/i, period: "month" },
-  { re: /\b(?:per\s+year|\/\s*year|\/\s*yr\b|a\s+year|yearly|annually|annual|p\/a\b)\b/i, period: "year" },
-  { re: /\b(?:per\s+week|\/\s*week|\/\s*wk\b|a\s+week|weekly)\b/i, period: "week" },
-  { re: /\b(?:per\s+day|\/\s*day|a\s+day|daily)\b/i, period: "day" },
-  { re: /\b(?:per\s+quarter|\/\s*quarter|quarterly)\b/i, period: "quarter" },
+  { re: /(?:\b(?:per\s+month|a\s+month|monthly|p\/m\b|each\s+month)\b|\/\s*mo(?:nth)?\b)/i, period: "month" },
+  { re: /(?:\b(?:per\s+year|a\s+year|yearly|annually|annual|p\/a\b)\b|\/\s*yr\b|\/\s*year\b)/i, period: "year" },
+  { re: /(?:\b(?:per\s+week|a\s+week|weekly)\b|\/\s*wk\b|\/\s*week\b)/i, period: "week" },
+  { re: /(?:\b(?:per\s+day|a\s+day|daily)\b|\/\s*day\b)/i, period: "day" },
+  { re: /(?:\b(?:per\s+quarter|quarterly)\b|\/\s*quarter\b)/i, period: "quarter" },
   { re: /\b(?:one[-\s]?time|once\s+off|single\s+payment|lifetime|flat\s+fee)\b/i, period: "once" },
 ];
 
@@ -305,6 +310,8 @@ const AMOUNT_RE =
 
 function parseAmount(raw: string): number | null {
   const cleaned = raw.replace(/\s/g, "");
+  // Number("") === 0 in JavaScript — an unparsed price must stay unknown, never become $0.
+  if (!cleaned || !/\d/.test(cleaned)) return null;
   // Decide whether the last separator is a decimal point or a thousands separator.
   const lastComma = cleaned.lastIndexOf(",");
   const lastDot = cleaned.lastIndexOf(".");
@@ -348,7 +355,8 @@ export function findPricesInText(text: string, periodWindow = 60): ParsedPrice[]
     const amount = parseAmount(amountRaw);
     if (amount === null) continue;
 
-    const windowText = text.slice(match.index, match.index + full.length + periodWindow);
+    const windowStart = Math.max(0, match.index - periodWindow);
+    const windowText = text.slice(windowStart, match.index + full.length + periodWindow);
     const period = PERIOD_WORDS.find((p) => p.re.test(windowText));
     if (!period) continue;
 
@@ -398,34 +406,50 @@ function buildCandidate(
 const PRICE_LINE_RE = /(US\$|R\$|C\$|A\$|[$€£₪¥₹₩₺])\s*\d|(?:\b[A-Z]{3}\s*\d)|(?:\b\d[\d.,]*\s*[A-Z]{3}\b)/;
 const PLAN_NAME_MAX = 60;
 const BULLET_RE = /^[-•*\u2022]\s*/;
+const PERIOD_ONLY_LINE_RE =
+  /^(?:\/\s*(?:mo(?:nth)?|yr|year)|per\s+(?:month|year|week|day)|monthly|yearly|annually|one[-\s]?time)$/i;
 
 function looksLikePlanName(line: string): boolean {
   if (line.length < 2 || line.length > PLAN_NAME_MAX) return false;
   if (BULLET_RE.test(line)) return false;
   if (PRICE_LINE_RE.test(line)) return false;
+  if (PERIOD_ONLY_LINE_RE.test(line)) return false;
+  if (/^(billed|invoiced|charged|only|just|save)$/i.test(line)) return false;
   if (/[.!?]$/.test(line) && line.split(" ").length > 6) return false;
   return true;
+}
+
+function priceSearchText(lines: string[], index: number): string {
+  const around = [lines[index]];
+  if (index + 1 < lines.length && PERIOD_ONLY_LINE_RE.test(lines[index + 1].trim())) {
+    around.push(lines[index + 1]);
+  }
+  if (index > 0 && PERIOD_ONLY_LINE_RE.test(lines[index].trim())) {
+    around.unshift(lines[index - 1]);
+  }
+  return around.join(" ");
 }
 
 /**
  * Pricing cards render as: plan name, then a price, then a bullet list of what's included.
  * Walking that block keeps each benefit attached to the plan it was printed under, which
- * a flat regex sweep cannot do.
+ * a flat regex sweep cannot do. Monthly and yearly prices for the same plan are kept as
+ * distinct amounts on one fact — never collapsed or converted into each other.
  */
 export function extractPricingPlansFromText(
   text: string,
   ctx: CandidateContext,
 ): FactCandidate[] {
   const lines = text.split("\n");
-  const candidates: FactCandidate[] = [];
-  const usedNames = new Set<string>();
+  const byName = new Map<string, FactCandidate>();
 
   for (let i = 0; i < lines.length; i++) {
-    const priceHits = findPricesInText(lines[i]);
-    if (priceHits.length !== 1) continue;
-    const price = priceHits[0];
+    const search = priceSearchText(lines, i);
+    const priceHits = findPricesInText(search);
+    if (priceHits.length === 0) continue;
+    // Skip the period-only follow-up line so "$49" + "/mo" is not processed twice.
+    if (PERIOD_ONLY_LINE_RE.test(lines[i].trim()) && i > 0) continue;
 
-    // The plan name is the nearest preceding non-bullet, non-price line.
     let name: string | null = null;
     for (let back = i - 1; back >= 0 && back >= i - 4; back--) {
       const candidateName = lines[back].trim();
@@ -436,54 +460,86 @@ export function extractPricingPlansFromText(
       }
       if (PRICE_LINE_RE.test(candidateName)) break;
     }
-    // Some cards put the name on the same line as the price ("Starter — $49/month").
     if (!name) {
-      const inline = lines[i].slice(0, price.index).replace(/[—–:-]\s*$/, "").trim();
+      const inline = lines[i].slice(0, Math.max(0, priceHits[0]?.index ?? 0)).replace(/[—–:-]\s*$/, "").trim();
       if (looksLikePlanName(inline)) name = inline;
     }
-    if (!name || usedNames.has(name.toLowerCase())) continue;
+    // "Billed $490/year" is a second interval for the plan above, not a plan named "Billed".
+    if (!name || /^(billed|invoiced|charged)$/i.test(name)) {
+      const previous = [...byName.values()].at(-1);
+      if (previous) name = (previous.data as { name: string }).name;
+    }
+    if (!name) continue;
 
+    const existing = byName.get(name.toLowerCase());
     const benefits: string[] = [];
-    let description: string | null = null;
-    for (let fwd = i + 1; fwd < lines.length && fwd <= i + 25; fwd++) {
-      const line = lines[fwd].trim();
-      if (!line) continue;
-      // Stop at the next card so benefits never bleed across plans.
-      if (PRICE_LINE_RE.test(line) && findPricesInText(line).length > 0) break;
-      if (BULLET_RE.test(line)) {
-        const benefit = line.replace(BULLET_RE, "").trim();
-        if (benefit.length >= 2 && benefit.length <= 200) benefits.push(benefit);
-        continue;
+    let description: string | null = existing
+      ? ((existing.data as { description?: string | null }).description ?? null)
+      : null;
+    if (!existing) {
+      for (let fwd = i + 1; fwd < lines.length && fwd <= i + 25; fwd++) {
+        const line = lines[fwd].trim();
+        if (!line) continue;
+        if (PERIOD_ONLY_LINE_RE.test(line)) continue;
+        if (PRICE_LINE_RE.test(line) && findPricesInText(priceSearchText(lines, fwd)).length > 0) break;
+        if (BULLET_RE.test(line)) {
+          const benefit = line.replace(BULLET_RE, "").trim();
+          if (benefit.length >= 2 && benefit.length <= 200) benefits.push(benefit);
+          continue;
+        }
+        if (benefits.length > 0) break;
+        if (!description && line.length >= 12 && line.length <= 600) description = line;
+        if (looksLikePlanName(line) && !description) break;
       }
-      if (benefits.length > 0) break;
-      if (!description && line.length >= 12 && line.length <= 600) description = line;
-      if (looksLikePlanName(line) && !description) break;
     }
 
+    const additionalPrices = existing
+      ? [
+          (existing.data as { price?: { amount: number; currency: string; billingPeriod: string } }).price,
+          ...(((existing.data as { additionalPrices?: Array<{ amount: number; currency: string; billingPeriod: string }> })
+            .additionalPrices) || []),
+        ].filter(Boolean)
+      : [];
+
+    const seenPeriods = new Set(
+      additionalPrices.map((p) => (p as { billingPeriod: string }).billingPeriod),
+    );
+    const freshPrices = priceHits.filter((p) => !seenPeriods.has(p.billingPeriod));
+    if (freshPrices.length === 0 && existing) continue;
+
+    const allPrices = [
+      ...additionalPrices,
+      ...freshPrices.map((price) => ({
+        amount: price.amount,
+        currency: price.currency,
+        billingPeriod: price.billingPeriod,
+      })),
+    ];
+    const primary = allPrices[0];
+    const rest = allPrices.slice(1);
+    if (!primary) continue;
+
+    const existingBenefits = existing
+      ? (((existing.data as { benefits?: string[] }).benefits) || [])
+      : [];
     const candidate = buildCandidate(
       ctx,
       "pricing_plan",
       {
         name,
         description,
-        price: {
-          amount: price.amount,
-          currency: price.currency,
-          billingPeriod: price.billingPeriod,
-        },
-        priceQualifier: /\bfrom\b/i.test(lines[i]) ? "from" : /\bup\s+to\b/i.test(lines[i]) ? "up_to" : "exact",
-        benefits: benefits.slice(0, 30),
+        price: primary,
+        additionalPrices: rest,
+        priceQualifier: /\bfrom\b/i.test(search) ? "from" : /\bup\s+to\b/i.test(search) ? "up_to" : "exact",
+        benefits: (existingBenefits.length ? existingBenefits : benefits).slice(0, 30),
       },
-      `${name} ${lines[i].trim()}`,
+      `${name} ${search.trim()}`,
       0.9,
     );
-    if (candidate) {
-      candidates.push(candidate);
-      usedNames.add(name.toLowerCase());
-    }
+    if (candidate) byName.set(name.toLowerCase(), candidate);
   }
 
-  return candidates;
+  return [...byName.values()];
 }
 
 function extractFromJsonLd(nodes: unknown[], ctx: CandidateContext): FactCandidate[] {
@@ -599,11 +655,36 @@ function normalizeOffer(offers: unknown): {
   if (!node || typeof node !== "object") return null;
   const o = node as Record<string, unknown>;
   const rawPrice = o.price ?? o.lowPrice;
-  const amount = typeof rawPrice === "number" ? rawPrice : parseAmount(String(rawPrice ?? ""));
+  if (rawPrice == null || rawPrice === "") return null;
+  const amount = typeof rawPrice === "number" ? rawPrice : parseAmount(String(rawPrice));
   const currency = typeof o.priceCurrency === "string" ? o.priceCurrency.toUpperCase() : null;
   if (amount === null || !currency || !ISO_CODES.has(currency)) return null;
-  const duration = typeof o.billingDuration === "string" ? o.billingDuration : "";
-  const period = /P1M|month/i.test(duration) ? "month" : /P1Y|year/i.test(duration) ? "year" : "once";
+  const spec = o.priceSpecification;
+  const specNode = Array.isArray(spec) ? spec[0] : spec;
+  const specObj = specNode && typeof specNode === "object" ? (specNode as Record<string, unknown>) : null;
+  const duration = [
+    o.billingDuration,
+    o.eligibleDuration,
+    specObj?.billingDuration,
+    specObj?.unitText,
+    o.unitText,
+    o.unitCode,
+  ]
+    .filter((v): v is string => typeof v === "string")
+    .join(" ");
+  const period = /P1M|month|MO/i.test(duration)
+    ? "month"
+    : /P1Y|year|ANN/i.test(duration)
+      ? "year"
+      : /P1W|week/i.test(duration)
+        ? "week"
+        : /P1D|day/i.test(duration)
+          ? "day"
+          : /\b(?:one[-\s]?time|once|lifetime)\b/i.test(duration)
+            ? "once"
+            : null;
+  // Never invent "one-time" when the offer did not state an interval.
+  if (!period) return null;
   return { amount, currency, billingPeriod: period };
 }
 
@@ -681,6 +762,7 @@ function extractContactsFromHtml(html: string, ctx: CandidateContext): FactCandi
   const href = /href=["'](https?:\/\/[^"']+)["']/gi;
   while ((m = href.exec(html)) !== null) {
     const url = decodeEntities(m[1]).trim();
+    if (isSocialUrl(url)) continue;
     if (!BOOKING_HOSTS.test(url) || seen.has(url)) continue;
     seen.add(url);
     const candidate = buildCandidate(ctx, "booking_link", { url }, null, 0.9);
@@ -815,7 +897,9 @@ export function extractCallToActionsFromHtml(html: string, ctx: CandidateContext
     const label = stripHtmlToText(match[2]);
     if (!label || label.length > 120 || !ACTION_CTA_RE.test(label)) continue;
     if (NEWSLETTER_FORM_RE.test(label)) continue;
+    if (isSignupTrialOrNavCta(label, href)) continue;
     const url = absoluteUrl(href, ctx.sourceUrl);
+    if (!url || isSocialUrl(url)) continue;
     if (!url) continue;
     const candidate = buildCandidate(
       ctx,
@@ -906,5 +990,5 @@ export function extractDeterministicFacts(
     }
   }
 
-  return { candidates: [...byKey.values()], notes };
+  return { candidates: sanitizeExtractedCandidates([...byKey.values()]), notes };
 }

@@ -14,6 +14,7 @@ import {
   factFreshness,
   factPrecedence,
   formatFactValue,
+  listedPlanPrices,
   resolveStaleFactBehavior,
   summarizeKnowledgeFreshness,
   formatFactMoney,
@@ -26,6 +27,14 @@ import {
   type KnowledgeFreshnessSummary,
   type StaleFactBehavior,
 } from "./businessKnowledgeFacts";
+import {
+  SOURCE_REMOVED_REVIEW_MESSAGE,
+  collectReviewReasons,
+  factNeedsReview,
+  isDraftFromRemovedSource,
+  workspaceHasRemovedSourceNotice,
+  type ReviewNotice,
+} from "./knowledgeExtractionGuards";
 
 export type FactChangeType = "unchanged" | "new" | "changed" | "removing" | "suggested";
 
@@ -43,9 +52,12 @@ export type FactDisplay = {
 function factDisplay(fact: KnowledgeFact): FactDisplay | null {
   if (fact.factType !== "pricing_plan") return null;
   const d = fact.data as FactDataMap["pricing_plan"];
+  const prices = listedPlanPrices(d);
   return {
     title: d.name,
-    headline: formatFactMoney(d.price, d.priceQualifier),
+    headline: prices.length
+      ? prices.map((p) => formatFactMoney(p, d.priceQualifier)).join(" · ")
+      : "Price not listed",
     bullets: [...d.benefits],
   };
 }
@@ -78,6 +90,9 @@ export type KnowledgeFactView = {
   /** Set when this fact lost a same-key disagreement to a higher-priority source. */
   supersededBy: { factId: string; summary: string } | null;
   conflictBlocked: boolean;
+  needsReview: boolean;
+  reviewReasons: string[];
+  sourceRemoved: boolean;
 };
 
 export type KnowledgeReviewSection = {
@@ -110,6 +125,7 @@ export type KnowledgeReviewPayload = {
   };
   freshness: KnowledgeFreshnessSummary;
   hasPendingChanges: boolean;
+  notices: ReviewNotice[];
 };
 
 function changeTypeFor(fact: KnowledgeFact): FactChangeType {
@@ -123,6 +139,8 @@ function changeTypeFor(fact: KnowledgeFact): FactChangeType {
       return "removing";
     case "suggest":
       return "suggested";
+    case "source_removed":
+      return "removing";
     default:
       return "new";
   }
@@ -176,6 +194,9 @@ export function toKnowledgeFactView(
       ? { factId: superseding.id, summary: formatFactValue(superseding) }
       : null,
     conflictBlocked: context.blockedKeys.has(fact.factKey),
+    needsReview: factNeedsReview(fact),
+    reviewReasons: collectReviewReasons(fact),
+    sourceRemoved: fact.proposedAction === "source_removed",
   };
 }
 
@@ -187,9 +208,17 @@ export function buildKnowledgeReviewPayload(params: {
   facts: KnowledgeFact[];
   now?: Date;
   policy?: KnowledgeFreshnessPolicy;
+  activeSourceIds?: Iterable<string>;
 }): KnowledgeReviewPayload {
   const now = params.now ?? new Date();
-  const live = params.facts.filter((f) => f.state !== "retired");
+  const activeSourceIds = new Set(params.activeSourceIds ?? []);
+  const hasSourceFilter = params.activeSourceIds !== undefined;
+  const live = params.facts.filter((f) => {
+    if (f.state === "retired") return false;
+    if (!hasSourceFilter) return f.proposedAction !== "source_removed";
+    if (isDraftFromRemovedSource(f, activeSourceIds)) return false;
+    return f.proposedAction !== "source_removed";
+  });
   const factsById = new Map(params.facts.map((f) => [f.id, f]));
   const publishedByKey = new Map(
     live.filter((f) => f.state === "published").map((f) => [f.factKey, f]),
@@ -278,5 +307,11 @@ export function buildKnowledgeReviewPayload(params: {
     totals,
     freshness: summarizeKnowledgeFreshness(live, now, params.policy),
     hasPendingChanges: totals.drafts > 0,
+    notices:
+      hasSourceFilter && workspaceHasRemovedSourceNotice(params.facts, activeSourceIds)
+        ? [{ kind: "source_removed" as const, message: SOURCE_REMOVED_REVIEW_MESSAGE }]
+        : params.facts.some((f) => f.proposedAction === "source_removed")
+          ? [{ kind: "source_removed" as const, message: SOURCE_REMOVED_REVIEW_MESSAGE }]
+          : [],
   };
 }

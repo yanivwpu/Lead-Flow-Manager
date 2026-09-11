@@ -326,7 +326,21 @@ function FactRow({
             Needs your decision
           </span>
         )}
+        {fact.needsReview && !fact.conflictBlocked && (
+          <span className="inline-flex items-center gap-1 font-medium text-amber-800">
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            Needs review
+          </span>
+        )}
       </div>
+
+      {(fact.reviewReasons?.length ?? 0) > 0 && (
+        <ul className="space-y-0.5 text-[11px] text-amber-900/90">
+          {fact.reviewReasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      )}
 
       {fact.excerpt && (
         <p className="rounded border border-slate-100 bg-slate-50/70 px-2 py-1 text-[11px] italic text-slate-600">
@@ -633,6 +647,10 @@ export function BusinessKnowledgeSteps({
       setPendingRemoval(null);
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
       void queryClient.invalidateQueries({ queryKey: FACTS_KEY });
+      toast({
+        title: "Page removed",
+        description: "Source removed — analyze again to refresh. Published knowledge is unchanged.",
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Could not remove page", description: err.message, variant: "destructive" });
@@ -677,6 +695,7 @@ export function BusinessKnowledgeSteps({
         retired: number;
         blockedConflicts: Array<{ factKey: string }>;
         skippedSuggestions: number;
+        itemErrors?: Array<{ factId: string; summary: string; reasons: string[] }>;
       }>;
     },
     onSuccess: (data) => {
@@ -684,13 +703,23 @@ export function BusinessKnowledgeSteps({
       void queryClient.invalidateQueries({ queryKey: ["/api/ai/business-knowledge"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/ai/workspace-intelligence"] });
       const applied = data.published + data.updated + data.retired;
-      const held = data.blockedConflicts.length + data.skippedSuggestions;
+      const itemErrors = data.itemErrors ?? [];
+      const held = data.blockedConflicts.length + data.skippedSuggestions + itemErrors.length;
       toast({
-        title: "Published",
+        title: itemErrors.length && applied === 0 ? "Nothing published" : "Published",
         description:
-          held > 0
-            ? `${plural(applied, "change is", "changes are")} now in use by AI. ${plural(held, "still needs", "still need")} your decision.`
-            : `${plural(applied, "change is", "changes are")} now in use by AI.`,
+          itemErrors.length > 0
+            ? [
+                applied > 0 ? `${plural(applied, "change is", "changes are")} now in use by AI.` : null,
+                itemErrors[0]?.reasons[0] || "Some items need review before they can be published.",
+                itemErrors.length > 1 ? `${itemErrors.length - 1} more item(s) were held back.` : null,
+              ]
+                .filter(Boolean)
+                .join(" ")
+            : held > 0
+              ? `${plural(applied, "change is", "changes are")} now in use by AI. ${plural(held, "still needs", "still need")} your decision.`
+              : `${plural(applied, "change is", "changes are")} now in use by AI.`,
+        variant: itemErrors.length && applied === 0 ? "destructive" : "default",
       });
     },
     onError: (err: Error) => {
@@ -741,7 +770,7 @@ export function BusinessKnowledgeSteps({
     for (const section of facts.sections) {
       for (const fact of section.facts) {
         if (fact.state !== "draft") continue;
-        if (fact.changeType === "suggested" || fact.conflictBlocked) continue;
+        if (fact.changeType === "suggested" || fact.conflictBlocked || fact.sourceRemoved) continue;
         n += 1;
       }
     }
@@ -992,6 +1021,14 @@ export function BusinessKnowledgeSteps({
           }
           isLast={!questionsStep}
         >
+          {facts && (facts.notices?.length ?? 0) > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-sm text-amber-950">
+              {facts.notices.map((notice) => (
+                <p key={notice.kind}>{notice.message}</p>
+              ))}
+            </div>
+          )}
+
           {blockedConflicts.length > 0 && (
             <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/60 px-3 py-2.5">
               <p className="flex items-center gap-2 text-sm font-medium text-red-900">

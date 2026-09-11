@@ -285,6 +285,23 @@ run("JSON-LD FAQ, address, hours and phone are read literally", () => {
   assert.deepEqual(hours?.entries, [{ days: "Monday–Friday", opens: "09:00", closes: "17:00" }]);
 });
 
+run("JSON-LD offers without a stated interval are not stored as one-time $0", () => {
+  const html = `<!doctype html><html><head><title>Shop</title>
+<script type="application/ld+json">
+{"@type":"Product","name":"Pro","offers":{"@type":"Offer","priceCurrency":"USD"}}
+</script>
+</head><body><main><h1>Shop</h1><p>${"Welcome to the shop with enough readable content. ".repeat(8)}</p></main></body></html>`;
+  const page = prepareHtmlPage(html, "https://example.test/shop");
+  const { candidates } = extractDeterministicFacts(page, html, "src-shop");
+  const products = candidates.filter((c) => c.factType === "product");
+  for (const product of products) {
+    const data = product.data as FactDataMap["product"];
+    assert.equal(data.price, null);
+  }
+  assert.ok(!JSON.stringify(candidates).includes("one-time"));
+  assert.ok(!JSON.stringify(candidates).includes('"amount":0'));
+});
+
 // --- Contact + booking ------------------------------------------------------
 
 run("mailto, tel and booking links become contact facts", () => {

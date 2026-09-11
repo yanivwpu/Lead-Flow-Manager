@@ -22,6 +22,7 @@ import {
   analyzeSourceRemoval,
   mergeFactsForSource,
   mergeProvenance,
+  planSourceRemovalOperations,
   type FactMergeOperation,
 } from "../server/websiteKnowledge/mergeFacts";
 
@@ -379,6 +380,38 @@ run("removing a source orphans only the facts it alone supported", () => {
   const impact = analyzeSourceRemoval([soleSupport, twoSources, unrelated], PRICING_SRC);
   assert.deepEqual(impact.orphanedFacts.map((f) => f.id), ["fact-sole"]);
   assert.deepEqual(impact.retainedFacts.map((f) => f.id), ["fact-shared"]);
+});
+
+run("deleting a source immediately discards its unpublished drafts and leaves published values untouched", () => {
+  const publishedPlan = published({
+    factType: "pricing_plan",
+    data: plan("Pro", 49),
+    id: "pub-pro",
+  });
+  const draftPlan = published({
+    factType: "pricing_plan",
+    data: plan("Pro", 0),
+    id: "draft-pro",
+    state: "draft",
+    proposedAction: "add",
+  });
+  const editedDraft = published({
+    factType: "faq",
+    data: { question: "Do you offer a trial?", answer: "Yes, 14 days." },
+    id: "draft-edit",
+    state: "draft",
+    proposedAction: "add",
+    userEdited: true,
+  });
+
+  const ops = planSourceRemovalOperations([publishedPlan, draftPlan, editedDraft], PRICING_SRC);
+  assert.ok(ops.some((op) => op.kind === "discard_draft" && op.factId === "draft-pro"));
+  assert.ok(!ops.some((op) => op.kind === "discard_draft" && op.factId === "draft-edit"));
+  const publishedTouch = ops.find((op) => op.kind === "touch_verified" && op.factId === "pub-pro");
+  assert.ok(publishedTouch);
+  assert.equal((publishedPlan.data as { price: { amount: number } }).price.amount, 49);
+  assert.ok(!ops.some((op) => op.kind === "upsert_draft"));
+  assert.ok(!ops.some((op) => op.kind === "propose_retire"));
 });
 
 run("a fact backed by two sources survives one of them dropping it", () => {

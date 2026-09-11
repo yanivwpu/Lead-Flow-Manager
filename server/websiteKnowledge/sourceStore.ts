@@ -7,9 +7,12 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import {
   aiWebsiteKnowledgeSources,
+  businessKnowledgeFacts,
   type AiWebsiteKnowledgeSourceRow,
 } from "@shared/schema";
 import { normalizeWebsiteKnowledgeUrl } from "@shared/websiteKnowledgeSources";
+import { planSourceRemovalOperations } from "./mergeFacts";
+import { applyMergeOperations, rowToKnowledgeFact } from "./factStore";
 
 export type SourceDetectedType =
   | "pricing"
@@ -244,14 +247,39 @@ export async function bumpSourceScanVersion(
     );
 }
 
-export async function deleteKnowledgeSource(userId: string, sourceId: string): Promise<boolean> {
-  const deleted = await db
-    .delete(aiWebsiteKnowledgeSources)
-    .where(
-      and(eq(aiWebsiteKnowledgeSources.userId, userId), eq(aiWebsiteKnowledgeSources.id, sourceId)),
-    )
-    .returning();
-  return deleted.length > 0;
+export async function deleteKnowledgeSource(
+  userId: string,
+  sourceId: string,
+): Promise<{ removed: boolean; discardedDrafts: number; publishedUnchanged: number }> {
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select({ id: aiWebsiteKnowledgeSources.id })
+      .from(aiWebsiteKnowledgeSources)
+      .where(
+        and(eq(aiWebsiteKnowledgeSources.userId, userId), eq(aiWebsiteKnowledgeSources.id, sourceId)),
+      );
+    if (!existing[0]) return { removed: false, discardedDrafts: 0, publishedUnchanged: 0 };
+
+    const rows = await tx
+      .select()
+      .from(businessKnowledgeFacts)
+      .where(eq(businessKnowledgeFacts.userId, userId));
+    const facts = rows.map(rowToKnowledgeFact).filter((f): f is NonNullable<typeof f> => f !== null);
+    const operations = planSourceRemovalOperations(facts, sourceId);
+    await applyMergeOperations(userId, operations, new Date(), tx);
+
+    await tx
+      .delete(aiWebsiteKnowledgeSources)
+      .where(
+        and(eq(aiWebsiteKnowledgeSources.userId, userId), eq(aiWebsiteKnowledgeSources.id, sourceId)),
+      );
+
+    return {
+      removed: true,
+      discardedDrafts: operations.filter((op) => op.kind === "discard_draft").length,
+      publishedUnchanged: operations.filter((op) => op.kind === "touch_verified").length,
+    };
+  });
 }
 
 export function sourceDisplayLabel(row: AiWebsiteKnowledgeSourceRow): string {

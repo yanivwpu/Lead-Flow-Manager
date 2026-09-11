@@ -80,6 +80,7 @@ function provenanceEntry(candidate: FactCandidate, verifiedAt: string): FactProv
     url: candidate.sourceUrl,
     title: candidate.sourceTitle,
     verifiedAt,
+    reviewReasons: candidate.reviewReasons?.length ? [...candidate.reviewReasons] : undefined,
   };
 }
 
@@ -305,4 +306,46 @@ export function analyzeSourceRemoval(
     else retainedFacts.push(fact);
   }
   return { orphanedFacts, retainedFacts };
+}
+
+/**
+ * Immediate cleanup when a source is deleted: unpublished drafts from that page leave
+ * the review, user edits stay, published knowledge is not rewritten.
+ */
+export function planSourceRemovalOperations(
+  facts: KnowledgeFact[],
+  sourceId: string,
+): FactMergeOperation[] {
+  const operations: FactMergeOperation[] = [];
+  for (const fact of facts) {
+    if (fact.state === "retired") continue;
+    if (!factBelongsToSource(fact, sourceId)) continue;
+
+    if (fact.state === "draft") {
+      if (fact.userEdited || fact.isPinned) {
+        const remaining = (fact.provenance || []).filter(
+          (p) => (p.sourceId ?? null) !== sourceId,
+        );
+        operations.push({
+          kind: "touch_verified",
+          factId: fact.id,
+          verifiedAt: fact.lastVerifiedAt,
+          provenance: remaining,
+        });
+        continue;
+      }
+      operations.push({ kind: "discard_draft", factId: fact.id });
+      continue;
+    }
+
+    // Published: drop this source from provenance only. Values stay live until Publish.
+    const remaining = (fact.provenance || []).filter((p) => (p.sourceId ?? null) !== sourceId);
+    operations.push({
+      kind: "touch_verified",
+      factId: fact.id,
+      verifiedAt: fact.lastVerifiedAt,
+      provenance: remaining,
+    });
+  }
+  return operations;
 }
