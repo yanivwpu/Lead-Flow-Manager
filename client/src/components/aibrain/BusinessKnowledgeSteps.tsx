@@ -817,7 +817,7 @@ export function BusinessKnowledgeSteps({
   const reviewState: StepState = pendingCount > 0 ? "ready" : publishedCount > 0 ? "done" : "todo";
 
   return (
-    <section aria-labelledby="business-knowledge-heading" className="space-y-4">
+    <section aria-labelledby="business-knowledge-heading" className="w-full min-w-0 space-y-4">
       <div className="space-y-1">
         <h2 id="business-knowledge-heading" className="text-lg font-semibold tracking-tight text-slate-900">
           Business knowledge
@@ -828,7 +828,7 @@ export function BusinessKnowledgeSteps({
         </p>
       </div>
 
-      <ol className="space-y-5">
+      <ol className="w-full min-w-0 space-y-5">
         <Step
           index={1}
           title="Teach AI"
