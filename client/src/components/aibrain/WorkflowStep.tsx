@@ -5,9 +5,10 @@
  * the same marker, connector, spacing and status. The workflow reads as one list because it
  * is one list: each step renders an <li> into the same <ol>.
  *
- * The step shell is full-column width (same edges as the AI behavior card). The timeline
- * rail and numbered/completed circles sit in an internal start-side gutter so they never
- * steal width from the page column.
+ * The card is in-flow and full column width (same left/right edges as the AI behavior card).
+ * The numbered circle and rail are absolutely positioned outside the card on the start side
+ * (`end-full` + inline-end margin) so they never indent or shrink the card. Do not wrap the
+ * card and timeline in a width-sharing row — that would steal column width again.
  */
 
 import type { ReactNode } from "react";
@@ -50,49 +51,49 @@ export function Step({
   return (
     <li className="relative w-full min-w-0" data-testid={`knowledge-step-${index}`}>
       <div
-        className="flex w-full min-w-0 items-start gap-2 rounded-2xl border-0 bg-white/95 ps-2.5 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50 sm:gap-3.5 sm:ps-4"
+        className="pointer-events-none absolute inset-y-0 end-full z-10 w-5 me-1 sm:w-8 sm:me-2 lg:w-10 lg:me-4"
+        data-testid={`knowledge-step-gutter-${index}`}
+        aria-hidden
+      >
+        {!isLast && (
+          <span
+            className="absolute inset-x-0 top-6 mx-auto w-px bg-gradient-to-b from-violet-200/80 to-slate-200/70 sm:top-9 lg:top-11"
+            style={{ bottom: "-1.25rem" }}
+            data-testid={`knowledge-step-rail-${index}`}
+          />
+        )}
+        <span
+          className={cn(
+            "absolute start-0 top-1 flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold shadow-sm sm:h-8 sm:w-8 sm:text-sm lg:h-10 lg:w-10",
+            STEP_MARKER_STYLES[state],
+          )}
+          data-testid={`knowledge-step-marker-${index}`}
+        >
+          {state === "busy" ? (
+            <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+          ) : state === "done" ? (
+            <Check className="h-3 w-3 sm:h-4 sm:w-4" strokeWidth={2.5} />
+          ) : (
+            index
+          )}
+        </span>
+      </div>
+
+      <div
+        className="w-full min-w-0 rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.03] ring-1 ring-violet-100/50"
         data-testid={`knowledge-step-card-${index}`}
       >
-        <div
-          className="relative w-8 shrink-0 self-stretch sm:w-10"
-          data-testid={`knowledge-step-gutter-${index}`}
-          aria-hidden
-        >
-          {!isLast && (
-            <span
-              className="pointer-events-none absolute inset-x-0 top-9 z-0 mx-auto w-px bg-gradient-to-b from-violet-200/80 to-slate-200/70 sm:top-11"
-              style={{ bottom: "-1.25rem" }}
-            />
-          )}
-          <span
-            className={cn(
-              "relative z-10 mt-1 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold shadow-sm sm:h-10 sm:w-10",
-              STEP_MARKER_STYLES[state],
-            )}
-          >
-            {state === "busy" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : state === "done" ? (
-              <Check className="h-4 w-4" strokeWidth={2.5} />
-            ) : (
-              index
-            )}
-          </span>
-        </div>
-
-        <div className="min-w-0 flex-1 pe-4 pt-4 sm:pe-5 sm:pt-5">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h3 className="text-base font-semibold tracking-tight text-slate-900">
-                <span className="sr-only">{`Step ${index}: `}</span>
-                {title}
-              </h3>
-              <span className={cn("text-xs font-medium", STEP_STATUS_STYLES[state])}>{status}</span>
-            </div>
-            <p className="text-sm leading-relaxed text-slate-600">{description}</p>
+        <div className="space-y-1 px-4 pt-4 sm:px-5 sm:pt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">
+              <span className="sr-only">{`Step ${index}: `}</span>
+              {title}
+            </h3>
+            <span className={cn("text-xs font-medium", STEP_STATUS_STYLES[state])}>{status}</span>
           </div>
-          <div className="space-y-4 pb-5 pt-4">{children}</div>
+          <p className="text-sm leading-relaxed text-slate-600">{description}</p>
         </div>
+        <div className="space-y-4 px-4 pb-5 pt-4 sm:px-5">{children}</div>
       </div>
     </li>
   );
