@@ -68,6 +68,7 @@ import {
   type ConversationReEngagement,
 } from "@shared/reEngagement";
 import { EMAIL_INBOX_IDENTITY_SOURCE, type GetContactsOptions } from "@shared/contactCrmVisibility";
+import { sanitizeAiBusinessKnowledgeUpdates } from "@shared/businessProfileSchema";
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
 import { resolveLastEmailMessageIdForInboxRow } from "@shared/inboxEmailTrash";
@@ -3754,17 +3755,41 @@ export class DbStorage implements IStorage {
   }
 
   async upsertAiBusinessKnowledge(userId: string, updates: Partial<AiBusinessKnowledge>): Promise<AiBusinessKnowledge> {
+    const safeUpdates = sanitizeAiBusinessKnowledgeUpdates(
+      (updates ?? {}) as Record<string, unknown>,
+    ) as Partial<AiBusinessKnowledge>;
     const existing = await this.getAiBusinessKnowledge(userId);
-    let row: AiBusinessKnowledge;
+    let row: AiBusinessKnowledge | undefined;
     if (existing) {
       const result = await db.update(aiBusinessKnowledge)
-        .set({ ...updates, updatedAt: new Date() })
+        .set({ ...safeUpdates, updatedAt: new Date() })
         .where(eq(aiBusinessKnowledge.userId, userId))
         .returning();
       row = result[0];
+      if (!row) {
+        throw new Error("Failed to update AI business knowledge for this workspace");
+      }
     } else {
-      const result = await db.insert(aiBusinessKnowledge).values({ ...updates, userId }).returning();
+      const result = await db.insert(aiBusinessKnowledge).values({
+        ...safeUpdates,
+        userId,
+        faqs: safeUpdates.faqs ?? [],
+        qualifyingQuestions: safeUpdates.qualifyingQuestions ?? [],
+        websiteKnowledgeSourceUrls: safeUpdates.websiteKnowledgeSourceUrls ?? [],
+        websiteKnowledgeSources: safeUpdates.websiteKnowledgeSources ?? [],
+        knowledgeV2Enabled: safeUpdates.knowledgeV2Enabled ?? false,
+        knowledgeFreshnessPolicy: safeUpdates.knowledgeFreshnessPolicy ?? {},
+        publishListingsPublicly: safeUpdates.publishListingsPublicly ?? false,
+        agentPageEnabled: safeUpdates.agentPageEnabled ?? false,
+        agentPageUseCustomBio: safeUpdates.agentPageUseCustomBio ?? false,
+        agentPagePreferredLeadCapture: safeUpdates.agentPagePreferredLeadCapture ?? "webchat",
+        agentPageShowHomeValueCta: safeUpdates.agentPageShowHomeValueCta ?? true,
+        agentPageAnalytics: safeUpdates.agentPageAnalytics ?? {},
+      }).returning();
       row = result[0];
+      if (!row) {
+        throw new Error("Failed to create AI business knowledge for this workspace");
+      }
     }
     // Workspace Intelligence Snapshot depends on AI Brain / Business Profile columns.
     const { invalidateWorkspaceIntelligenceCache } = await import("./workspaceIntelligenceCache");

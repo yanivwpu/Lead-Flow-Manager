@@ -37,6 +37,11 @@ function read(rel: string): string {
 
   const emptyEmail = businessProfilePatchSchema.safeParse({ publicEmail: "" });
   assert.equal(emptyEmail.success, true, "empty email allowed");
+  assert.equal(emptyEmail.success && emptyEmail.data.publicEmail, null);
+
+  const nullEmail = businessProfilePatchSchema.safeParse({ publicEmail: null });
+  assert.equal(nullEmail.success, true, "null email allowed");
+  assert.equal(nullEmail.success && nullEmail.data.publicEmail, null);
 
   const badEmail = businessProfilePatchSchema.safeParse({ publicEmail: "not-an-email" });
   assert.equal(badEmail.success, false, "invalid email rejected");
@@ -47,6 +52,25 @@ function read(rel: string): string {
 
   const emptyName = businessProfilePatchSchema.safeParse({ displayName: "" });
   assert.equal(emptyName.success, true, "empty displayName allowed");
+
+  const firstSave = businessProfilePatchSchema.safeParse({
+    displayName: null,
+    businessName: "Acme HVAC",
+    publicPhone: null,
+    publicEmail: null,
+    publicWebsite: null,
+    aboutText: "We install and repair AC.",
+    companyLogo: null,
+  });
+  assert.equal(firstSave.success, true, "brand-new workspace first save payload");
+  assert.equal(firstSave.success && firstSave.data.displayName, null);
+  assert.equal(firstSave.success && firstSave.data.businessName, "Acme HVAC");
+  assert.equal(firstSave.success && firstSave.data.aboutText, "We install and repair AC.");
+  assert.equal(firstSave.success && firstSave.data.publicWebsite, null);
+
+  const websiteNoProtocol = businessProfilePatchSchema.safeParse({ publicWebsite: "acme-hvac.example" });
+  assert.equal(websiteNoProtocol.success, true, "website without protocol is normalized");
+  assert.equal(websiteNoProtocol.success && websiteNoProtocol.data.publicWebsite, "https://acme-hvac.example");
 }
 
 {
@@ -153,19 +177,32 @@ function read(rel: string): string {
   const service = read("server/businessProfileService.ts");
   assert.match(service, /hydrateBusinessProfileDisplayName/);
   assert.match(service, /persistBusinessProfileDisplayName/);
+  assert.match(service, /saveBusinessProfileForUser/);
+  assert.match(service, /businessProfileDisplayNameFromPatch\(patch\)/);
   assert.doesNotMatch(service, /userRow\?\.name/);
   assert.doesNotMatch(service, /users\.name/);
   assert.doesNotMatch(service, /knowledge\?\.displayName\) \|\| /);
+  assert.doesNotMatch(service, /getUserLimits|effectiveHasAIBrain/);
 
   const route = read("server/routes/businessProfile.ts");
-  assert.match(route, /businessProfileDisplayNameFromPatch\(patch\)/);
+  assert.match(route, /saveBusinessProfileForUser\(req\.user\.id/);
   assert.doesNotMatch(route, /displayName: patch\.displayName \?\? undefined/);
+  assert.doesNotMatch(route, /getUserLimits|effectiveHasAIBrain/);
+  assert.doesNotMatch(route, /flatten\(\)\.fieldErrors/);
+
+  const storage = read("server/storage.ts");
+  assert.match(storage, /sanitizeAiBusinessKnowledgeUpdates/);
+  assert.match(storage, /Failed to create AI business knowledge for this workspace/);
+  const shared = read("shared/businessProfileSchema.ts");
+  assert.match(shared, /key === "id" \|\| key === "userId"/);
 
   const settings = read("client/src/components/settings/BusinessProfileSettings.tsx");
   assert.match(settings, /setQueryData\(\["\/api\/business-profile"\], saved\)/);
   assert.match(settings, /invalidateQueries\(\{ queryKey: \["\/api\/widget-settings"\] \}\)/);
-  assert.match(settings, /displayName: displayName\.trim\(\) \|\| null/);
-  assert.match(settings, /setDisplayName\(profile\.displayName \|\| ""\)/);
+  assert.match(settings, /buildBusinessProfileSaveBody/);
+  assert.match(settings, /formatBusinessProfileSaveError/);
+  assert.match(settings, /dirtyRef\.current/);
+  assert.match(settings, /setDisplayName\(next\.displayName \|\| ""\)/);
   assert.doesNotMatch(settings, /setDisplayName\(profile\.displayName \|\| user/);
   assert.doesNotMatch(settings, /value=\{displayName \|\| user/);
   assert.doesNotMatch(settings, /beforeunload|autosave/);

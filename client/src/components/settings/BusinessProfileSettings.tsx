@@ -8,7 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
-import type { BusinessProfileResponse } from "@shared/businessProfileSchema";
+import {
+  buildBusinessProfileSaveBody,
+  formatBusinessProfileSaveError,
+  type BusinessProfileResponse,
+} from "@shared/businessProfileSchema";
 
 async function readImageFile(file: File, maxBytes: number): Promise<string> {
   if (file.size > maxBytes) {
@@ -50,6 +54,7 @@ export function BusinessProfileSettings() {
   const [aboutText, setAboutText] = useState("");
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const dirtyRef = useRef(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["/api/business-profile"],
@@ -60,17 +65,22 @@ export function BusinessProfileSettings() {
     },
   });
 
+  const hydrateFromProfile = useCallback((next: BusinessProfileResponse) => {
+    setDisplayName(next.displayName || "");
+    setBusinessName(next.businessName || "");
+    setPublicPhone(next.publicPhone || "");
+    setPublicEmail(next.publicEmail || "");
+    setPublicWebsite(next.publicWebsite || "");
+    setAboutText(next.aboutText || "");
+    setCompanyLogo(next.companyLogo);
+    setAvatarPreview(next.avatarUrl);
+  }, []);
+
   useEffect(() => {
     if (!profile) return;
-    setDisplayName(profile.displayName || "");
-    setBusinessName(profile.businessName || "");
-    setPublicPhone(profile.publicPhone || "");
-    setPublicEmail(profile.publicEmail || "");
-    setPublicWebsite(profile.publicWebsite || "");
-    setAboutText(profile.aboutText || "");
-    setCompanyLogo(profile.companyLogo);
-    setAvatarPreview(profile.avatarUrl);
-  }, [profile]);
+    if (dirtyRef.current) return;
+    hydrateFromProfile(profile);
+  }, [profile, hydrateFromProfile]);
 
   const updateAvatarMutation = useMutation({
     mutationFn: async (avatarUrl: string) => {
@@ -102,23 +112,27 @@ export function BusinessProfileSettings() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          displayName: displayName.trim() || null,
-          businessName: businessName.trim() || null,
-          publicPhone: publicPhone.trim() || null,
-          publicEmail: publicEmail.trim() || null,
-          publicWebsite: publicWebsite.trim() || null,
-          aboutText: aboutText.trim() || null,
-          companyLogo,
-        }),
+        body: JSON.stringify(
+          buildBusinessProfileSaveBody({
+            displayName,
+            businessName,
+            publicPhone,
+            publicEmail,
+            publicWebsite,
+            aboutText,
+            companyLogo,
+          }),
+        ),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.error === "string" ? err.error : "Failed to save business profile");
+        throw new Error(formatBusinessProfileSaveError(err));
       }
       return res.json() as Promise<BusinessProfileResponse>;
     },
     onSuccess: (saved) => {
+      dirtyRef.current = false;
+      hydrateFromProfile(saved);
       queryClient.setQueryData(["/api/business-profile"], saved);
       queryClient.invalidateQueries({ queryKey: ["/api/business-profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/widget-settings"] });
@@ -156,6 +170,7 @@ export function BusinessProfileSettings() {
     if (!file) return;
     try {
       const dataUrl = await readImageFile(file, 2_000_000);
+      dirtyRef.current = true;
       setCompanyLogo(dataUrl);
     } catch (error) {
       toast({
@@ -233,7 +248,16 @@ export function BusinessProfileSettings() {
                   Upload logo
                 </Button>
                 {companyLogo && (
-                  <Button type="button" variant="ghost" size="sm" className="text-gray-500" onClick={() => setCompanyLogo(null)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-500"
+                    onClick={() => {
+                      dirtyRef.current = true;
+                      setCompanyLogo(null);
+                    }}
+                  >
                     Remove
                   </Button>
                 )}
@@ -246,30 +270,74 @@ export function BusinessProfileSettings() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="bp-display-name">Display name</Label>
-              <Input id="bp-display-name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={user?.name || "Your name"} />
+              <Input
+                id="bp-display-name"
+                value={displayName}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setDisplayName(e.target.value);
+                }}
+                placeholder={user?.name || "Your name"}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="bp-business-name">Company / Brokerage / Agency</Label>
-              <Input id="bp-business-name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} placeholder="Summit Realty" />
+              <Input
+                id="bp-business-name"
+                value={businessName}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setBusinessName(e.target.value);
+                }}
+                placeholder="Summit Realty"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="bp-phone">Phone</Label>
-              <Input id="bp-phone" value={publicPhone} onChange={(e) => setPublicPhone(e.target.value)} placeholder="+1 555-0100" />
+              <Input
+                id="bp-phone"
+                value={publicPhone}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setPublicPhone(e.target.value);
+                }}
+                placeholder="+1 555-0100"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="bp-email">Email</Label>
-              <Input id="bp-email" type="email" value={publicEmail} onChange={(e) => setPublicEmail(e.target.value)} placeholder={user?.email || "you@agency.com"} />
+              <Input
+                id="bp-email"
+                type="email"
+                value={publicEmail}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setPublicEmail(e.target.value);
+                }}
+                placeholder={user?.email || "you@agency.com"}
+              />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="bp-website">Website</Label>
-              <Input id="bp-website" value={publicWebsite} onChange={(e) => setPublicWebsite(e.target.value)} placeholder="https://yourcompany.com" />
+              <Input
+                id="bp-website"
+                value={publicWebsite}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setPublicWebsite(e.target.value);
+                }}
+                placeholder="https://yourcompany.com"
+              />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="bp-about">About</Label>
               <Textarea
                 id="bp-about"
                 value={aboutText}
-                onChange={(e) => setAboutText(e.target.value)}
+                onChange={(e) => {
+                  dirtyRef.current = true;
+                  setAboutText(e.target.value);
+                }}
                 placeholder="Optional about me / about us blurb"
                 rows={3}
               />
