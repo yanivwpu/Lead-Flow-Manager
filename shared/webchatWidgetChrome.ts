@@ -6,7 +6,7 @@
 import {
   NEUTRAL_WEBCHAT_BRANDING,
   contrastTextForBackground,
-  resolvePublicWebchatPresentation,
+  resolveWebchatPanelHeaderPaint,
   WEBCHAT_CORNER_PX,
   WEBCHAT_PANEL_WIDTH_PX,
   type PublicWebchatPresentation,
@@ -54,7 +54,8 @@ export function buildWebchatChromeLayout(
     allowedLogoHttpsHosts?: string[];
   },
 ): WebchatChromeLayout {
-  const presentation = resolvePublicWebchatPresentation({
+  const painted = resolveWebchatPanelHeaderPaint({
+    settingsStatus: "ready",
     settings,
     businessName: opts?.businessName,
     companyName: opts?.companyName,
@@ -63,6 +64,7 @@ export function buildWebchatChromeLayout(
     appOrigin: opts?.appOrigin,
     allowedLogoHttpsHosts: opts?.allowedLogoHttpsHosts,
   });
+  const presentation = painted.presentation;
   const side = presentation.position;
   const inset = side === "left" ? "left:20px;right:auto;" : "right:20px;left:auto;";
   const corner = WEBCHAT_CORNER_PX[presentation.cornerStyle];

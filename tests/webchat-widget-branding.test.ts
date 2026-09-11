@@ -13,6 +13,10 @@ import {
   pickExplicitWebchatAgentName,
   pickVerifiedWebchatCompanyName,
   resolvePublicWebchatPresentation,
+  resolveWebchatPanelHeaderPaint,
+  webchatBrandingReadyMessage,
+  isWebchatBrandingReadyMessage,
+  WEBCHAT_BRANDING_READY_MESSAGE_TYPE,
   resolveWebchatAccentColor,
   resolveWebchatDisplayName,
   sanitizePlainWidgetText,
@@ -333,6 +337,74 @@ function read(rel: string): string {
 }
 
 {
+  const whiteSettings = { color: "#ffffff", brandName: "Pompano Air" };
+  function visibleHeaderColors(
+    steps: Array<{
+      settingsStatus: "loading" | "ready" | "failed";
+      settings?: Record<string, unknown> | null;
+    }>,
+  ): string[] {
+    const colors: string[] = [];
+    for (const step of steps) {
+      const paint = resolveWebchatPanelHeaderPaint(step);
+      if (paint.visible) colors.push(paint.color);
+    }
+    return colors;
+  }
+
+  const loading = resolveWebchatPanelHeaderPaint({
+    settingsStatus: "loading",
+    settings: whiteSettings,
+  });
+  assert.equal(loading.visible, false);
+  assert.equal(loading.color, null);
+  assert.notEqual(loading.color, NEUTRAL_WIDGET_COLOR);
+  assert.notEqual(loading.color, "#10b981");
+
+  const whiteOpen = visibleHeaderColors([
+    { settingsStatus: "loading", settings: whiteSettings },
+    { settingsStatus: "ready", settings: whiteSettings },
+  ]);
+  assert.deepEqual(whiteOpen, ["#ffffff"]);
+  assert.equal(
+    whiteOpen.some((color) => color.toLowerCase() === NEUTRAL_WIDGET_COLOR),
+    false,
+    "a white header must never paint default green during initial open",
+  );
+
+  const custom = "#2563eb";
+  const customOpen = visibleHeaderColors([
+    { settingsStatus: "loading", settings: { color: custom } },
+    { settingsStatus: "ready", settings: { color: custom } },
+  ]);
+  assert.deepEqual(customOpen, [custom], "custom colors must apply on the first visible frame");
+
+  const failedOpen = visibleHeaderColors([
+    { settingsStatus: "loading" },
+    { settingsStatus: "failed" },
+  ]);
+  assert.deepEqual(failedOpen, [NEUTRAL_WIDGET_COLOR]);
+  const failed = resolveWebchatPanelHeaderPaint({ settingsStatus: "failed" });
+  assert.equal(failed.visible, true);
+  assert.equal(failed.color, NEUTRAL_WIDGET_COLOR);
+
+  const ready = resolveWebchatPanelHeaderPaint({
+    settingsStatus: "ready",
+    settings: whiteSettings,
+  });
+  const editor = buildWebchatChromeLayout(whiteSettings);
+  assert.equal(editor.presentation.color, ready.color);
+  assert.equal(editor.presentation.headerTextColor, ready.headerTextColor);
+  assert.equal(editor.presentation.brandName, ready.presentation.brandName);
+
+  const readyMsg = webchatBrandingReadyMessage("wgt_abc");
+  assert.equal(readyMsg.type, WEBCHAT_BRANDING_READY_MESSAGE_TYPE);
+  assert.equal(isWebchatBrandingReadyMessage(readyMsg, "wgt_abc"), true);
+  assert.equal(isWebchatBrandingReadyMessage(readyMsg, "wgt_other"), false);
+  assert.equal(isWebchatBrandingReadyMessage({ type: WEBCHAT_BRANDING_READY_MESSAGE_TYPE }, "wgt_abc"), false);
+}
+
+{
   const chrome = buildWebchatChromeLayout({
     brandName: "</script><script>alert(1)",
     teaserGreeting: "<img src=x onerror=alert(1)>",
@@ -351,6 +423,17 @@ function read(rel: string): string {
   assert.equal(js.includes("</script><script>alert(1)"), false);
   assert.match(js, /OPEN_BEHAVIOR/);
   assert.match(js, /referrerPolicy = 'no-referrer'/);
+  assert.match(js, /wcw-branding-ready/);
+  assert.match(js, /e.origin !== ORIGIN/);
+  assert.match(js, /brandingReady/);
+  assert.match(js, /revealPanelIfOpen/);
+  const loadIframe = js.slice(js.indexOf("function loadIframe()"), js.indexOf("function toggleChat()"));
+  assert.doesNotMatch(loadIframe, /requestAnimationFrame/);
+  assert.match(loadIframe, /visibility:hidden/);
+  assert.match(loadIframe, /loading', 'eager'/);
+  const reveal = js.slice(js.indexOf("function revealPanelIfOpen()"), js.indexOf("function onHostMessage"));
+  assert.match(reveal, /brandingReady/);
+  assert.match(reveal, /requestAnimationFrame/);
   const again = buildWebchatPublicScript({ origin: "https://app.example.com" });
   assert.equal(js, again);
 }
@@ -449,6 +532,9 @@ function read(rel: string): string {
   assert.match(preview, /buildWebchatChromeLayout/);
   assert.match(preview, /chromeCssForPreview/);
   assert.match(preview, /WebchatPanelHeader/);
+  const chromeSrc = read("shared/webchatWidgetChrome.ts");
+  assert.match(chromeSrc, /resolveWebchatPanelHeaderPaint/);
+  assert.match(chromeSrc, /settingsStatus: "ready"/);
   assert.match(preview, /agentName/);
   assert.match(preview, /wcw-preview-visitor-bubble/);
   assert.match(preview, /p\.accentForeground/);
@@ -504,10 +590,20 @@ function read(rel: string): string {
   assert.match(frame, /text-widget-unavailable/);
   assert.match(frame, /WebchatFormCard/);
   assert.match(frame, /WebchatMediaBubble/);
-  assert.match(frame, /resolvePublicWebchatPresentation/);
+  assert.match(frame, /resolveWebchatPanelHeaderPaint/);
+  assert.match(frame, /webchat-branding-pending/);
+  assert.match(frame, /webchatBrandingReadyMessage/);
+  assert.match(frame, /postMessage/);
+  assert.match(frame, /settingsStatus: "failed"/);
+  assert.doesNotMatch(frame, /useState<PublicWebchatPresentation>\(\(\) =>/);
+  assert.doesNotMatch(frame, /resolvePublicWebchatPresentation\(\{\s*settings: \{\}\s*\}\)/);
   assert.doesNotMatch(frame, /data\?\.displayName/);
   assert.match(frame, /cache: "no-store"/);
-  const settingsFetch = frame.slice(frame.indexOf("const nextPresentation"), frame.indexOf("setPresentation(nextPresentation)"));
+  const settingsFetch = frame.slice(
+    frame.indexOf("const painted = resolveWebchatPanelHeaderPaint"),
+    frame.indexOf("setPresentation(nextPresentation)"),
+  );
+  assert.match(settingsFetch, /settingsStatus: "ready"/);
   assert.match(settingsFetch, /businessName: typeof data\?\.businessName === "string" \? data\.businessName : ""/);
   assert.match(settingsFetch, /agentName: typeof data\?\.agentName === "string" \? data\.agentName : ""/);
   assert.match(settingsFetch, /appOrigin:/);

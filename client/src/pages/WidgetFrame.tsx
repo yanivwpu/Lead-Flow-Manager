@@ -13,7 +13,8 @@ import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
 import {
-  resolvePublicWebchatPresentation,
+  resolveWebchatPanelHeaderPaint,
+  webchatBrandingReadyMessage,
   widgetLogoAllowedHttpsHosts,
   type PublicWebchatPresentation,
 } from "@shared/webchatWidgetBranding";
@@ -123,12 +124,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
-  const [presentation, setPresentation] = useState<PublicWebchatPresentation>(() =>
-    resolvePublicWebchatPresentation({ settings: {} }),
-  );
-  const widgetColor = presentation.color;
-  const accentColor = presentation.accentColor;
-  const accentTextColor = presentation.accentForeground;
+  const [presentation, setPresentation] = useState<PublicWebchatPresentation | null>(null);
   const [settingsWelcome, setSettingsWelcome] = useState(
     "Hi! How can we help you today?"
   );
@@ -174,13 +170,16 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     fetch(settingsUrl, { cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) {
+          const fallback = resolveWebchatPanelHeaderPaint({ settingsStatus: "failed" });
+          setPresentation(fallback.presentation);
           setWidgetUnavailable(true);
           setIsLoading(false);
           return;
         }
         const data = await r.json();
         const settings = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
-        const nextPresentation = resolvePublicWebchatPresentation({
+        const painted = resolveWebchatPanelHeaderPaint({
+          settingsStatus: "ready",
           settings,
           businessName: typeof data?.businessName === "string" ? data.businessName : "",
           agentName: typeof data?.agentName === "string" ? data.agentName : "",
@@ -197,6 +196,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             typeof settings.logoUrl === "string" ? settings.logoUrl : "",
           ]),
         });
+        const nextPresentation = painted.presentation;
         setPresentation(nextPresentation);
         setSettingsWelcome(nextPresentation.chatGreeting || nextPresentation.welcomeMessage);
         if (typeof data?.chatPrefill === "string") setApiPrefill(data.chatPrefill);
@@ -212,10 +212,34 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         setIsLoading(false);
       })
       .catch(() => {
+        const fallback = resolveWebchatPanelHeaderPaint({ settingsStatus: "failed" });
+        setPresentation(fallback.presentation);
         setWidgetUnavailable(true);
         setIsLoading(false);
       });
   }, [userId, parentPageHref]);
+
+  useLayoutEffect(() => {
+    if (!presentation || !userId) return;
+    const payload = webchatBrandingReadyMessage(userId);
+    let target = "*";
+    if (parentPageHref) {
+      try {
+        target = new URL(parentPageHref).origin;
+      } catch {
+        target = "*";
+      }
+    }
+    try {
+      window.parent.postMessage(payload, target);
+    } catch {
+      try {
+        window.parent.postMessage(payload, "*");
+      } catch {
+        /* parent may be inaccessible */
+      }
+    }
+  }, [presentation, userId, parentPageHref]);
 
   useEffect(() => {
     const fromUrl = urlPrefill || "";
@@ -563,6 +587,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       </div>
     );
   }
+
+  if (!presentation) {
+    return (
+      <div
+        className="h-full w-full min-w-0 bg-transparent"
+        data-testid="webchat-branding-pending"
+        aria-busy="true"
+        aria-hidden="true"
+        style={{ visibility: "hidden" }}
+      />
+    );
+  }
+
+  const widgetColor = presentation.color;
+  const accentColor = presentation.accentColor;
+  const accentTextColor = presentation.accentForeground;
 
   return (
     <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">

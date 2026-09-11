@@ -240,38 +240,84 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       }, teaserDelay);
     }
 
+    var brandingReady = false;
+    var chatOpen = false;
+    var frameContainer = null;
+
+    function hidePanelFrame(immediate) {
+      if (!frameContainer) return;
+      frameContainer.style.pointerEvents = 'none';
+      frameContainer.style.visibility = 'hidden';
+      frameContainer.style.opacity = '0';
+      if (!prefersReducedMotion()) {
+        frameContainer.style.transform = 'scale(0.9) translateY(16px)';
+      }
+      if (immediate) frameContainer.style.display = 'none';
+    }
+
+    function revealPanelIfOpen() {
+      if (!chatOpen || !frameContainer || !brandingReady) return;
+      frameContainer.style.display = 'block';
+      frameContainer.style.visibility = 'visible';
+      frameContainer.style.pointerEvents = 'auto';
+      if (prefersReducedMotion()) {
+        frameContainer.style.opacity = '1';
+        frameContainer.style.transform = 'none';
+        return;
+      }
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          if (!chatOpen || !frameContainer || !brandingReady) return;
+          frameContainer.style.transform = 'scale(1) translateY(0)';
+          frameContainer.style.opacity = '1';
+        });
+      });
+    }
+
+    function onHostMessage(e) {
+      try {
+        if (e.origin !== ORIGIN) return;
+        var data = e.data;
+        if (!data || data.source !== 'wcw' || data.type !== 'wcw-branding-ready') return;
+        if (String(data.widgetId || '') !== String(WIDGET_ID)) return;
+        brandingReady = true;
+        revealPanelIfOpen();
+      } catch (err) {}
+    }
+    window.addEventListener('message', onHostMessage);
+
+    function syncFrameSrc() {
+      var fr = frameContainer && frameContainer.querySelector('iframe');
+      if (!fr) return;
+      var next = iframeSrc();
+      if (fr.src === next) return;
+      brandingReady = false;
+      hidePanelFrame(false);
+      fr.src = next;
+    }
+
     function loadIframe() {
       if (iframeLoaded) return;
       iframeLoaded = true;
       var container = document.createElement('div');
       container.style.cssText = PANEL_CSS + (prefersReducedMotion()
-        ? 'opacity:1;'
-        : 'transform:scale(0.9) translateY(16px);opacity:0;transition:transform .2s,opacity .2s;');
+        ? 'opacity:0;visibility:hidden;pointer-events:none;'
+        : 'transform:scale(0.9) translateY(16px);opacity:0;visibility:hidden;pointer-events:none;transition:transform .2s,opacity .2s;');
       container.setAttribute('data-wcw', 'frame-container');
       container.setAttribute('role', 'dialog');
       container.setAttribute('aria-label', DISPLAY_NAME);
 
       var frame = document.createElement('iframe');
       frame.src = iframeSrc();
-      frame.style.cssText = 'width:100%;height:100%;border:none;display:block;max-width:100%;';
-      frame.setAttribute('loading', 'lazy');
+      frame.style.cssText = 'width:100%;height:100%;border:none;display:block;max-width:100%;background:transparent;';
+      frame.setAttribute('loading', 'eager');
       frame.setAttribute('title', DISPLAY_NAME);
       frame.setAttribute('allow', 'clipboard-write');
       container.appendChild(frame);
       document.body.appendChild(container);
 
-      requestAnimationFrame(function() {
-        requestAnimationFrame(function() {
-          container.style.transform = 'scale(1) translateY(0)';
-          container.style.opacity = '1';
-        });
-      });
-
       return container;
     }
-
-    var chatOpen = false;
-    var frameContainer = null;
 
     function toggleChat() {
       chatOpen = !chatOpen;
@@ -284,26 +330,20 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         if (!frameContainer) {
           frameContainer = loadIframe();
         } else {
-          var fr = frameContainer.querySelector('iframe');
-          if (fr) fr.src = iframeSrc();
           frameContainer.style.display = 'block';
-          requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-              frameContainer.style.transform = 'scale(1) translateY(0)';
-              frameContainer.style.opacity = '1';
-            });
-          });
+          syncFrameSrc();
         }
+        revealPanelIfOpen();
       } else {
         if (frameContainer) {
+          frameContainer.style.pointerEvents = 'none';
           if (prefersReducedMotion()) {
-            frameContainer.style.display = 'none';
-            frameContainer.style.opacity = '0';
+            hidePanelFrame(true);
           } else {
             frameContainer.style.transform = 'scale(0.9) translateY(16px)';
             frameContainer.style.opacity = '0';
             setTimeout(function() {
-              if (frameContainer && !chatOpen) frameContainer.style.display = 'none';
+              if (frameContainer && !chatOpen) hidePanelFrame(true);
             }, 200);
           }
         }

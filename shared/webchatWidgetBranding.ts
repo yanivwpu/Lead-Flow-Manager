@@ -415,6 +415,96 @@ export function resolvePublicWebchatPresentation(input: {
   };
 }
 
+export const WEBCHAT_BRANDING_READY_MESSAGE_TYPE = "wcw-branding-ready";
+export const WEBCHAT_BRANDING_MESSAGE_SOURCE = "wcw";
+
+export type WebchatBrandingReadyMessage = {
+  source: typeof WEBCHAT_BRANDING_MESSAGE_SOURCE;
+  type: typeof WEBCHAT_BRANDING_READY_MESSAGE_TYPE;
+  widgetId: string;
+};
+
+export function webchatBrandingReadyMessage(widgetId: string): WebchatBrandingReadyMessage {
+  return {
+    source: WEBCHAT_BRANDING_MESSAGE_SOURCE,
+    type: WEBCHAT_BRANDING_READY_MESSAGE_TYPE,
+    widgetId: String(widgetId || ""),
+  };
+}
+
+export function isWebchatBrandingReadyMessage(data: unknown, widgetId: string): boolean {
+  if (!data || typeof data !== "object") return false;
+  const payload = data as Record<string, unknown>;
+  return (
+    payload.source === WEBCHAT_BRANDING_MESSAGE_SOURCE &&
+    payload.type === WEBCHAT_BRANDING_READY_MESSAGE_TYPE &&
+    String(payload.widgetId || "") === String(widgetId || "")
+  );
+}
+
+export type WebchatSettingsLoadStatus = "loading" | "ready" | "failed";
+
+export type WebchatPanelHeaderPaint =
+  | { visible: false; color: null; headerTextColor: null; presentation: null }
+  | {
+      visible: true;
+      color: string;
+      headerTextColor: string;
+      presentation: PublicWebchatPresentation;
+    };
+
+type WebchatPanelHeaderPaintInput = {
+  settingsStatus: WebchatSettingsLoadStatus;
+  settings?: Record<string, unknown> | null;
+  businessName?: string | null;
+  companyName?: string | null;
+  agentName?: string | null;
+  chatGreeting?: string;
+  chatPrefill?: string;
+  suggestedQuestions?: string[];
+  ctaLabel?: string;
+  ctaUrl?: string;
+  allowedLogoHttpsHosts?: string[];
+  appOrigin?: string;
+};
+
+/**
+ * Header paint for the public widget and editor preview.
+ * While settings are still loading the panel must not use the default brand color.
+ * The existing empty-settings fallback applies only after the request succeeds empty or fails.
+ */
+export function resolveWebchatPanelHeaderPaint(
+  input: WebchatPanelHeaderPaintInput & { settingsStatus: "loading" },
+): Extract<WebchatPanelHeaderPaint, { visible: false }>;
+export function resolveWebchatPanelHeaderPaint(
+  input: WebchatPanelHeaderPaintInput & { settingsStatus: "ready" | "failed" },
+): Extract<WebchatPanelHeaderPaint, { visible: true }>;
+export function resolveWebchatPanelHeaderPaint(input: WebchatPanelHeaderPaintInput): WebchatPanelHeaderPaint;
+export function resolveWebchatPanelHeaderPaint(input: WebchatPanelHeaderPaintInput): WebchatPanelHeaderPaint {
+  if (input.settingsStatus === "loading") {
+    return { visible: false, color: null, headerTextColor: null, presentation: null };
+  }
+  const presentation = resolvePublicWebchatPresentation({
+    settings: input.settingsStatus === "failed" || !input.settings ? {} : input.settings,
+    businessName: input.businessName,
+    companyName: input.companyName,
+    agentName: input.agentName,
+    chatGreeting: input.chatGreeting,
+    chatPrefill: input.chatPrefill,
+    suggestedQuestions: input.suggestedQuestions,
+    ctaLabel: input.ctaLabel,
+    ctaUrl: input.ctaUrl,
+    allowedLogoHttpsHosts: input.allowedLogoHttpsHosts,
+    appOrigin: input.appOrigin,
+  });
+  return {
+    visible: true,
+    color: presentation.color,
+    headerTextColor: presentation.headerTextColor,
+    presentation,
+  };
+}
+
 export const WEBCHAT_PANEL_WIDTH_PX: Record<WebchatPanelWidth, number> = {
   compact: 300,
   standard: 360,
