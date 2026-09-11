@@ -109,7 +109,11 @@ test("E–H: first install Day 0 once, owner email recipient, Connect WhatsApp C
   );
   assert.match(welcomeHtml, /Your Shopify store is now connected/);
   assert.match(welcomeHtml, />Connect WhatsApp</);
-  assert.ok(welcomeHtml.includes(`${appUrl}${settingsChannelsHref({ provider: "whatsapp" })}`));
+  assert.ok(
+    welcomeHtml.includes(
+      `${appUrl}${settingsChannelsHref({ provider: "whatsapp" })}`.replaceAll("&", "&amp;"),
+    ),
+  );
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_INBOX_PATH}`));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_PROSPECT_AI_PATH}`));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_TEMPLATES_PATH}`));

@@ -19,6 +19,7 @@ import {
   emailSignatureBlock,
   emailSupportFooter,
   emailActivationFooter,
+  emailFounderWelcomeClose,
   renderSalespersonAssignedResponsibilitiesSection,
 } from "./emailTemplates";
 import { activationEmailAssets } from "@shared/activationEmailAssets";
@@ -64,6 +65,7 @@ interface EmailOptions {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   replyTo?: string;
 }
 
@@ -96,12 +98,12 @@ export function demoScheduledEmailSubject(visitorName: string): string {
   return `Demo Scheduled: ${visitorName}`;
 }
 
-export async function sendEmail({ to, subject, html, replyTo }: EmailOptions): Promise<boolean> {
-  const result = await sendEmailDetailed({ to, subject, html, replyTo });
+export async function sendEmail({ to, subject, html, text, replyTo }: EmailOptions): Promise<boolean> {
+  const result = await sendEmailDetailed({ to, subject, html, text, replyTo });
   return result.ok;
 }
 
-export async function sendEmailDetailed({ to, subject, html, replyTo }: EmailOptions): Promise<EmailDispatchResult> {
+export async function sendEmailDetailed({ to, subject, html, text, replyTo }: EmailOptions): Promise<EmailDispatchResult> {
   if (isShopifySyntheticMerchantEmail(to)) {
     console.warn(
       `[Email] Refusing to send to synthetic Shopify identity address. Subject: "${subject}"`,
@@ -130,6 +132,7 @@ export async function sendEmailDetailed({ to, subject, html, replyTo }: EmailOpt
         to,
         subject,
         html,
+        ...(text ? { text } : {}),
         ...(replyTo ? { reply_to: replyTo } : {}),
       }),
     });
@@ -245,15 +248,89 @@ export function renderWelcomeEmailHtml(
     emailParagraph(
       "Your new account also includes a 14-day Pro trial with AI Brain, so you can experience the advanced AI and automation features before deciding whether you need them. When the trial ends, you keep the Free features above unless you choose a paid plan. AI Brain is included with Pro and is not included on Free after the trial.",
     ),
-    emailButton(prospectAiUrl, "Try Prospect AI"),
+    emailButton(prospectAiUrl, "Explore Prospect AI"),
     emailNavLinks(appUrl, channelsUrl),
+    emailFounderWelcomeClose(),
   ].join("");
 
   return renderBrandedEmail({
     title: "Your WhachatCRM account is ready",
+    preheader: "Your WhachatCRM account is ready — here's what you can do now.",
+    browserViewHref: appUrl.replace(/\/+$/, ""),
     bodyHtml: body,
-    footerHtml: `<p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${new Date().getFullYear()} WhachatCRM. All rights reserved.</p>`,
+    footerHtml: emailActivationFooter(appUrl),
   });
+}
+
+export function renderWelcomeEmailText(
+  name: string,
+  options?: ActivationEmailRenderOptions,
+): string {
+  const { appUrl } = activationEmailContext(options);
+  const first = firstNameFrom(name);
+  const base = appUrl.replace(/\/+$/, "");
+  const prospectAiUrl = `${base}${APP_PROSPECT_AI_PATH}`;
+  const channelsUrl = settingsChannelsAbsoluteHref(appUrl);
+  const year = new Date().getFullYear();
+
+  return [
+    "View in browser:",
+    base,
+    "",
+    `Hi ${first},`,
+    "",
+    "Your WhachatCRM account is ready.",
+    "",
+    "Here's what you can already use on the Free plan — no paid upgrade required for these:",
+    "",
+    "1. Prospect AI",
+    "Find and qualify potential customers that match the businesses you want to sell to. Prospect AI is included on Free, within your current Free limits.",
+    "Location: Growth Engines → Prospect AI",
+    "",
+    "2. Unified Inbox",
+    "Manage customer conversations from connected messaging channels in one place.",
+    "Location: Inbox",
+    "",
+    "3. Integrations",
+    "Connect tools your business already uses.",
+    "Location: Integrations",
+    "",
+    "4. WhatsApp Templates",
+    "Manage approved WhatsApp templates and use the Free-supported 1:1 template messaging experience. Bulk template campaigns and workflow automation are not included on Free.",
+    "Location: Templates",
+    "",
+    "5. Messaging Channels",
+    "Connect WhatsApp, Instagram, Facebook Messenger, Gmail/Email, and other supported channels (subject to each channel's provider requirements).",
+    "Location: Settings → Channels",
+    "",
+    "6. WhatsApp Coexistence",
+    "Already using the WhatsApp Business App?",
+    "With WhatsApp Coexistence, you can keep using the WhatsApp Business App with your existing number while also connecting it to WhachatCRM. The WhatsApp Business App stays your mobile app — it does not become the WhachatCRM inbox. WhachatCRM gives your team a shared inbox for that same number.",
+    "",
+    "Your new account also includes a 14-day Pro trial with AI Brain, so you can experience the advanced AI and automation features before deciding whether you need them. When the trial ends, you keep the Free features above unless you choose a paid plan. AI Brain is included with Pro and is not included on Free after the trial.",
+    "",
+    "Explore Prospect AI:",
+    prospectAiUrl,
+    "",
+    `Inbox: ${base}${APP_INBOX_PATH}`,
+    `Integrations: ${base}${APP_INTEGRATIONS_PATH}`,
+    `Templates: ${base}${APP_TEMPLATES_PATH}`,
+    `Channels: ${channelsUrl}`,
+    "",
+    "Thank you for signing up for WhachatCRM. We hope you'll find it a powerful and practical tool for growing your business and managing customer conversations.",
+    "",
+    "If you have any questions or need help getting started, please don't hesitate to reach out. We're here to help.",
+    "",
+    "Sincerely,",
+    "Yaniv Haramaty",
+    "Founder, WhachatCRM",
+    "",
+    `Questions? ${WHACHATCRM_SUPPORT_EMAIL}`,
+    "You're receiving this because you signed up for WhachatCRM.",
+    `Unsubscribe: ${base}/unsubscribe`,
+    `Privacy Policy: ${base}/privacy-policy`,
+    `© ${year} WhachatCRM. All rights reserved.`,
+  ].join("\n");
 }
 
 export async function sendWelcomeEmail(name: string, email: string): Promise<boolean> {
@@ -261,6 +338,7 @@ export async function sendWelcomeEmail(name: string, email: string): Promise<boo
     to: email,
     subject: WELCOME_EMAIL_SUBJECT,
     html: renderWelcomeEmailHtml(name),
+    text: renderWelcomeEmailText(name),
   });
 }
 

@@ -1,5 +1,11 @@
 const EMAIL_FONT = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 
+/** WhachatCRM brand green used for primary email CTAs (white text for contrast). */
+export const EMAIL_BRAND_GREEN = "#059669";
+export const EMAIL_CONTAINER_MAX_WIDTH_PX = 600;
+export const EMAIL_CONTENT_PADDING_DESKTOP_PX = 32;
+export const EMAIL_CONTENT_PADDING_MOBILE_PX = 16;
+
 export function escapeHtml(text: string): string {
   return String(text)
     .replace(/&/g, "&amp;")
@@ -12,43 +18,121 @@ export interface BrandedEmailOptions {
   title: string;
   bodyHtml: string;
   footerHtml?: string;
+  /** Optional top-of-email "View in browser" href. Omit to hide the link. */
+  browserViewHref?: string;
+  /** Hidden preview text for inbox snippets. */
+  preheader?: string;
 }
 
-export function renderBrandedEmail({ title, bodyHtml, footerHtml }: BrandedEmailOptions): string {
+export function emailBrowserViewLink(href: string, label = "View in browser"): string {
+  const safeHref = escapeHtml(href);
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-browser-view">
+    <tr>
+      <td align="center" style="padding: 0 0 16px; font-family: ${EMAIL_FONT}; font-size: 12px; line-height: 1.5; color: #94a3b8;">
+        <a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="color: #64748b; text-decoration: underline;">${escapeHtml(label)}</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
+export function renderBrandedEmail({
+  title,
+  bodyHtml,
+  footerHtml,
+  browserViewHref,
+  preheader,
+}: BrandedEmailOptions): string {
   const year = new Date().getFullYear();
-  const defaultFooter = `<p style="margin: 0; color: #94a3b8; font-size: 12px;">&copy; ${year} WhaChatCRM. All rights reserved.</p>`;
+  const defaultFooter = `<p style="margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.5;">&copy; ${year} WhaChatCRM. All rights reserved.</p>`;
+  const preview = preheader
+    ? `<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #f8fafc; opacity: 0;">${escapeHtml(preheader)}</div>`
+    : "";
+  const browserRow = browserViewHref ? emailBrowserViewLink(browserViewHref) : "";
 
   return `<!DOCTYPE html>
-<html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+  <title>${escapeHtml(title)}</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:AllowPNG/>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style type="text/css">
+    html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; }
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    a { word-break: break-word; overflow-wrap: break-word; }
+    p, h1, h2, h3, li { overflow-wrap: break-word; word-wrap: break-word; }
+    .email-body, .email-body a, .email-body p { overflow-wrap: break-word; word-break: break-word; }
+    @media only screen and (max-width: 620px) {
+      .email-outer { padding: 16px 12px !important; }
+      .email-container { width: 100% !important; max-width: 100% !important; }
+      .email-header, .email-body, .email-footer { padding-left: ${EMAIL_CONTENT_PADDING_MOBILE_PX}px !important; padding-right: ${EMAIL_CONTENT_PADDING_MOBILE_PX}px !important; }
+      .email-cta { width: 100% !important; }
+      .email-cta td { width: 100% !important; }
+      .email-cta a { display: block !important; width: auto !important; box-sizing: border-box !important; }
+    }
+  </style>
 </head>
-<body style="font-family: ${EMAIL_FONT}; line-height: 1.6; color: #334155; margin: 0; padding: 0; background-color: #f8fafc;">
-  <div style="padding: 32px 16px;">
-    <div style="max-width: 600px; margin: 0 auto;">
-      <div style="text-align: center; padding: 0 0 20px;">
-        <div style="width: 36px; height: 36px; background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 10px; display: inline-block; font-size: 18px; font-weight: 700; color: #059669; line-height: 36px;">W</div>
-      </div>
-      <div style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
-        <div style="padding: 28px 28px 8px; border-bottom: 1px solid #f1f5f9;">
-          <h1 style="margin: 0; font-size: 20px; font-weight: 600; color: #0f172a; letter-spacing: -0.02em;">${escapeHtml(title)}</h1>
-        </div>
-        <div style="padding: 24px 28px 32px;">
-          ${bodyHtml}
-        </div>
-        <div style="text-align: center; padding: 18px 28px; background: #f8fafc; border-top: 1px solid #f1f5f9;">
-          ${footerHtml ?? defaultFooter}
-        </div>
-      </div>
-    </div>
-  </div>
+<body style="margin: 0; padding: 0; width: 100%; background-color: #f8fafc; font-family: ${EMAIL_FONT}; line-height: 1.65; color: #334155;">
+  ${preview}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; background-color: #f8fafc;">
+    <tr>
+      <td align="center" class="email-outer" style="padding: 24px 16px;">
+        ${browserRow}
+        <table role="presentation" class="email-container" width="${EMAIL_CONTAINER_MAX_WIDTH_PX}" cellpadding="0" cellspacing="0" border="0" align="center" style="width: 100%; max-width: ${EMAIL_CONTAINER_MAX_WIDTH_PX}px; margin: 0 auto;">
+          <tr>
+            <td align="center" style="padding: 0 0 20px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td align="center" valign="middle" width="36" height="36" style="width: 36px; height: 36px; background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 10px; font-size: 18px; font-weight: 700; color: ${EMAIL_BRAND_GREEN}; line-height: 36px; font-family: ${EMAIL_FONT};">W</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%;">
+                <tr>
+                  <td class="email-header" style="padding: 28px ${EMAIL_CONTENT_PADDING_DESKTOP_PX}px 12px; border-bottom: 1px solid #f1f5f9;">
+                    <h1 style="margin: 0; font-size: 20px; line-height: 1.4; font-weight: 600; color: #0f172a; letter-spacing: -0.02em; font-family: ${EMAIL_FONT};">${escapeHtml(title)}</h1>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="email-body" style="padding: 24px ${EMAIL_CONTENT_PADDING_DESKTOP_PX}px 32px; font-size: 15px; line-height: 1.65; color: #475569; overflow-wrap: break-word; word-break: break-word;">
+                    ${bodyHtml}
+                  </td>
+                </tr>
+                <tr>
+                  <td class="email-footer" align="center" style="text-align: center; padding: 18px ${EMAIL_CONTENT_PADDING_DESKTOP_PX}px; background: #f8fafc; border-top: 1px solid #f1f5f9; border-radius: 0 0 12px 12px; overflow-wrap: break-word; word-break: break-word;">
+                    ${footerHtml ?? defaultFooter}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }
 
 export function emailParagraph(html: string): string {
-  return `<p style="color: #475569; font-size: 15px; margin: 0 0 16px; line-height: 1.65;">${html}</p>`;
+  return `<p style="color: #475569; font-size: 15px; margin: 0 0 16px; line-height: 1.7; overflow-wrap: break-word; word-break: break-word;">${html}</p>`;
 }
 
 export function emailSectionHeading(text: string): string {
@@ -60,9 +144,21 @@ export function emailSubheading(text: string): string {
 }
 
 export function emailButton(href: string, label: string): string {
-  return `<div style="text-align: center; margin: 28px 0 4px;">
-    <a href="${href}" style="display: inline-block; background: #059669; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">${escapeHtml(label)}</a>
-  </div>`;
+  const safeHref = escapeHtml(href);
+  const safeLabel = escapeHtml(label);
+  return `<table role="presentation" class="email-cta" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 28px auto 8px;">
+    <tr>
+      <td align="center" bgcolor="${EMAIL_BRAND_GREEN}" style="background-color: ${EMAIL_BRAND_GREEN}; border-radius: 8px; mso-padding-alt: 14px 32px;">
+        <!--[if mso]>
+        <i style="mso-font-width: 150%; mso-text-raise: 21pt;">&nbsp;</i>
+        <![endif]-->
+        <a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: ${EMAIL_BRAND_GREEN}; color: #ffffff; font-family: ${EMAIL_FONT}; font-size: 16px; font-weight: 700; line-height: 1.25; letter-spacing: 0.01em; text-decoration: none; padding: 14px 32px; border-radius: 8px; min-height: 44px; min-width: 160px; text-align: center; box-sizing: border-box; mso-padding-alt: 0;">${safeLabel}</a>
+        <!--[if mso]>
+        <i style="mso-font-width: 150%;">&nbsp;</i>
+        <![endif]-->
+      </td>
+    </tr>
+  </table>`;
 }
 
 export function emailSecondaryButton(href: string, label: string, bg = "#25D366"): string {
@@ -150,6 +246,25 @@ export function emailSignatureBlock(): string {
     ${emailParagraph("Good luck and welcome to the team!")}
     <p style="color: #0f172a; font-size: 15px; font-weight: 600; margin: 0 0 2px;">Yaniv Haramaty</p>
     <p style="color: #64748b; font-size: 14px; margin: 0;">Founder, WhaChatCRM</p>`;
+}
+
+/** Closing welcome + founder signature for the Day 0 customer welcome email. */
+export function emailFounderWelcomeClose(): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-welcome-close" style="width: 100%; border-top: 1px solid #e2e8f0; margin: 28px 0 0;">
+    <tr>
+      <td style="padding: 24px 0 0;">
+        ${emailParagraph(
+          "Thank you for signing up for WhachatCRM. We hope you'll find it a powerful and practical tool for growing your business and managing customer conversations.",
+        )}
+        ${emailParagraph(
+          "If you have any questions or need help getting started, please don't hesitate to reach out. We're here to help.",
+        )}
+        <p style="color: #475569; font-size: 15px; margin: 0 0 4px; line-height: 1.7;">Sincerely,</p>
+        <p style="color: #0f172a; font-size: 15px; font-weight: 600; margin: 0 0 2px; line-height: 1.5;">Yaniv Haramaty</p>
+        <p style="color: #64748b; font-size: 14px; margin: 0; line-height: 1.5;">Founder, WhachatCRM</p>
+      </td>
+    </tr>
+  </table>`;
 }
 
 export function emailSupportFooter(): string {

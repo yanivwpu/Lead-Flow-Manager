@@ -78,7 +78,8 @@ test("H: primary CTA is the real Prospect AI app route", () => {
   const layout = readFileSync(join(root, "client/src/pages/AppLayout.tsx"), "utf8");
   assert.ok(layout.includes('path="/app/prospect-ai"'));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_PROSPECT_AI_PATH}`));
-  assert.match(welcomeHtml, />Try Prospect AI</);
+  assert.match(welcomeHtml, /Explore Prospect AI/);
+  assert.doesNotMatch(welcomeHtml, /Try Prospect AI/);
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_INBOX_PATH}`));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_INTEGRATIONS_PATH}`));
   assert.ok(welcomeHtml.includes(`${appUrl}${APP_TEMPLATES_PATH}`));
