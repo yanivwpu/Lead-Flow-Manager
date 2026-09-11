@@ -814,6 +814,8 @@
     "verifyNetworkError": "לא הצלחנו לאמת את האימייל. נסו שוב.",
     "verifyTrialStarted": "האימייל אומת. תקופת הניסיון של 14 יום ל-Pro עם AI Brain התחילה.",
     "verifyContinue": "האימייל אומת. אפשר להמשיך ל-WhachatCRM.",
+    "verifyCloseThisTab": "אפשר לסגור את הלשונית הזו ולחזור ל-WhachatCRM.",
+    "continueToWhachat": "המשך ל-WhachatCRM",
     "verifyNeedNewLink": "צריכים קישור חדש? חזרו למסך בדיקת האימייל כדי לשלוח שוב."
   },
   "integrations": {

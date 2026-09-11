@@ -735,10 +735,12 @@ export function registerAuthRoutes(app: Express) {
       const result = await consumeEmailVerificationToken(token);
       if (!result.ok) {
         const message =
-          result.reason === 'expired'
-            ? 'This verification link has expired. Please request a new one.'
-            : 'This verification link is invalid or has already been used.';
-        return res.status(400).json({ error: message, code: 'VERIFY_FAILED' });
+          result.reason === "expired"
+            ? "This verification link has expired. Please request a new one."
+            : result.reason === "used"
+              ? "This verification link is invalid or has already been used."
+              : "This verification link is invalid or has already been used.";
+        return res.status(400).json({ error: message, code: "VERIFY_FAILED", reason: result.reason });
       }
 
       await logAuthSecurityEvent({

@@ -812,6 +812,8 @@
     "verifyNetworkError": "We couldn’t verify your email. Please try again.",
     "verifyTrialStarted": "Your email is verified. Your 14-day Pro trial with AI Brain has started.",
     "verifyContinue": "Your email is verified. You can continue to WhachatCRM.",
+    "verifyCloseThisTab": "You can close this tab and return to WhachatCRM.",
+    "continueToWhachat": "Continue to WhachatCRM",
     "verifyNeedNewLink": "Need a new link? Return to Check your email to resend verification."
   },
   "integrations": {

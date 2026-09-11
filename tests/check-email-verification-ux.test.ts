@@ -55,6 +55,13 @@ section("signup routes to /check-email and establishes a pending session");
   assert.ok(page.includes("auth.changeEmail"));
   assert.ok(page.includes("auth.returnToLogin"));
   assert.ok(page.includes("/api/auth/change-pending-email"));
+  assert.ok(page.includes("startEmailVerificationWaiter"));
+  assert.ok(page.includes("CHECK_EMAIL_SESSION_POLL_MS"));
+  assert.ok(page.includes('navigateAfterAuth("/app/inbox")'));
+
+  const verifyPage = src("client/src/pages/VerifyEmail.tsx");
+  assert.ok(verifyPage.includes("announceVerifiedAndAwaitOriginalTab"));
+  assert.ok(!verifyPage.includes('setLocation("/app/inbox")'));
 }
 
 section("email copy and i18n");
@@ -76,6 +83,8 @@ section("email copy and i18n");
     assert.ok(loc.auth.returnToLogin);
     assert.ok(loc.auth.verificationSendFailed);
     assert.ok(loc.auth.verificationResendSuccess);
+    assert.ok(loc.auth.verifyCloseThisTab);
+    assert.ok(loc.auth.continueToWhachat);
   }
 }
 

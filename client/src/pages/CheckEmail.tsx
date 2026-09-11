@@ -16,6 +16,10 @@ import {
 } from "@/lib/pendingVerification";
 import { getDirection } from "@/lib/i18n";
 import { navigateAfterAuth } from "@/lib/postAuthRedirect";
+import {
+  CHECK_EMAIL_SESSION_POLL_MS,
+  startEmailVerificationWaiter,
+} from "@/lib/emailVerificationTabSync";
 
 export function CheckEmailPage() {
   const { t } = useTranslation();
@@ -55,6 +59,21 @@ export function CheckEmailPage() {
     setDisplayEmail(stored);
     setCanChangeEmail(false);
   }, [user, isLoading, sessionAligned]);
+
+  useEffect(() => {
+    if (!user || user.emailVerifiedAt !== null) return;
+    return startEmailVerificationWaiter(() => {
+      void refreshSession();
+    });
+  }, [user?.id, user?.emailVerifiedAt, refreshSession]);
+
+  useEffect(() => {
+    if (!user || user.emailVerifiedAt !== null) return;
+    const id = window.setInterval(() => {
+      void refreshSession();
+    }, CHECK_EMAIL_SESSION_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [user?.id, user?.emailVerifiedAt, refreshSession]);
 
   const handleResend = useCallback(async () => {
     setResendBusy(true);

@@ -556,6 +556,8 @@
     "verifyNetworkError": "No pudimos verificar tu correo. Inténtalo de nuevo.",
     "verifyTrialStarted": "Tu correo está verificado. Tu prueba de 14 días de Pro con AI Brain ha comenzado.",
     "verifyContinue": "Tu correo está verificado. Puedes continuar en WhachatCRM.",
+    "verifyCloseThisTab": "Puedes cerrar esta pestaña y volver a WhachatCRM.",
+    "continueToWhachat": "Continuar a WhachatCRM",
     "verifyNeedNewLink": "¿Necesitas un enlace nuevo? Vuelve a Revisa tu correo para reenviar la verificación."
   },
   "integrations": {

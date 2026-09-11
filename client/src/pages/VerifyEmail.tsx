@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,23 @@ import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { useAuth } from "@/lib/auth-context";
 import { trackSignUp } from "@/lib/ga4Events";
 import { CHECK_EMAIL_PATH, clearPendingVerificationEmail } from "@/lib/pendingVerification";
+import { navigateAfterAuth, sanitizeClientRedirectPath } from "@/lib/postAuthRedirect";
+import {
+  announceVerifiedAndAwaitOriginalTab,
+  decideVerificationLinkFollowUp,
+  shouldAutoCloseVerificationTab,
+  tryCloseScriptOpenedTab,
+  verificationContinuePath,
+} from "@/lib/emailVerificationTabSync";
+import type { EmailVerificationLinkFollowUp } from "@shared/emailVerificationTabs";
 
 export function VerifyEmailPage() {
   const { t } = useTranslation();
-  const [, setLocation] = useLocation();
   const { refreshSession } = useAuth();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState(t("auth.verifyingMessage"));
+  const [followUp, setFollowUp] = useState<EmailVerificationLinkFollowUp | null>(null);
+  const [continueHref, setContinueHref] = useState("/auth");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -55,11 +65,23 @@ export function VerifyEmailPage() {
             userId,
           });
         }
+        const originalTabPresent = await announceVerifiedAndAwaitOriginalTab();
+        if (cancelled) return;
+        const nextFollowUp = decideVerificationLinkFollowUp(originalTabPresent);
+        const sessionReady = Boolean(userId);
+        setContinueHref(sanitizeClientRedirectPath(verificationContinuePath(sessionReady)));
+        setFollowUp(nextFollowUp);
         setStatus("success");
         setMessage(
-          data.trialStarted ? t("auth.verifyTrialStarted") : t("auth.verifyContinue"),
+          nextFollowUp === "close-hint"
+            ? t("auth.verifyCloseThisTab")
+            : data.trialStarted
+              ? t("auth.verifyTrialStarted")
+              : t("auth.verifyContinue"),
         );
-        window.setTimeout(() => setLocation("/app/inbox"), 1500);
+        if (nextFollowUp === "close-hint" && shouldAutoCloseVerificationTab(Boolean(window.opener))) {
+          tryCloseScriptOpenedTab(window);
+        }
       } catch {
         if (!cancelled) {
           setStatus("error");
@@ -71,7 +93,11 @@ export function VerifyEmailPage() {
     return () => {
       cancelled = true;
     };
-  }, [refreshSession, setLocation, t]);
+  }, [refreshSession, t]);
+
+  const handleContinue = () => {
+    navigateAfterAuth(continueHref);
+  };
 
   return (
     <>
@@ -95,6 +121,16 @@ export function VerifyEmailPage() {
                 : t("auth.verifyingTitle")}
           </h1>
           <p className="text-sm text-gray-600 mb-6">{message}</p>
+          {status === "success" && followUp === "continue" && (
+            <Button
+              type="button"
+              className="w-full bg-brand-green hover:bg-emerald-700"
+              data-testid="button-continue-whachat"
+              onClick={handleContinue}
+            >
+              {t("auth.continueToWhachat")}
+            </Button>
+          )}
           {status === "error" && (
             <div className="space-y-3">
               <Link href={CHECK_EMAIL_PATH}>
