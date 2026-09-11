@@ -158,6 +158,50 @@ function read(rel: string): string {
   assert.equal(sanitizeWidgetLogoUrl("/objects/uploads/123-456.png"), "/objects/uploads/123-456.png");
   assert.equal(sanitizeWidgetLogoUrl("/objects/secret.png"), "");
   assert.equal(sanitizeWidgetLogoUrl("/objects/uploads/../x.png"), "");
+  const publishedLogo = "/objects/uploads/tenant-a__aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.jpg";
+  assert.equal(
+    sanitizeWidgetLogoUrl(`https://whachatcrm.com${publishedLogo}`),
+    publishedLogo,
+  );
+  assert.equal(
+    sanitizeWidgetLogoUrl(`https://evil.example${publishedLogo}`),
+    publishedLogo,
+  );
+  const published = resolvePublicWebchatPresentation({
+    settings: { logoUrl: publishedLogo, brandName: "Affordable Pompano HVAC" },
+    appOrigin: "https://whachatcrm.com",
+  });
+  assert.equal(published.logoUrl, `https://whachatcrm.com${publishedLogo}`);
+  assert.equal(published.displayName, "Affordable Pompano HVAC");
+  const payload = toVisitorSafePublicWebchatPayload(published);
+  assert.equal(payload.logoUrl, published.logoUrl);
+  const openPanel = resolvePublicWebchatPresentation({
+    settings: payload,
+  });
+  assert.equal(openPanel.logoUrl, publishedLogo);
+  assert.match(openPanel.logoUrl, /^\/objects\/uploads\//);
+  const openPanelAbs = resolvePublicWebchatPresentation({
+    settings: payload,
+    appOrigin: "https://app.whachatcrm.com",
+    allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
+      "https://app.whachatcrm.com",
+      typeof payload.logoUrl === "string" ? payload.logoUrl : "",
+    ]),
+  });
+  assert.equal(openPanelAbs.logoUrl, `https://app.whachatcrm.com${publishedLogo}`);
+  const replaced = resolvePublicWebchatPresentation({
+    settings: { logoUrl: "/objects/uploads/tenant-a__replaced.webp", brandName: "Affordable Pompano HVAC" },
+    appOrigin: "https://whachatcrm.com",
+  });
+  const replacedPanel = resolvePublicWebchatPresentation({
+    settings: toVisitorSafePublicWebchatPayload(replaced),
+  });
+  assert.equal(replacedPanel.logoUrl, "/objects/uploads/tenant-a__replaced.webp");
+  const emptyLogo = resolvePublicWebchatPresentation({
+    settings: { brandName: "Affordable Pompano HVAC" },
+  });
+  assert.equal(emptyLogo.logoUrl, "");
+  assert.equal(emptyLogo.displayName.charAt(0).toUpperCase(), "A");
   assert.equal(sanitizeWidgetLogoUrl("https://127.0.0.1/logo.png", { allowedHttpsHosts: ["127.0.0.1"] }), "");
   assert.equal(widgetTextContainsUnsafeMarkup("<b>Hi</b>"), true);
   assert.equal(widgetTextContainsUnsafeMarkup("javascript:alert(1)"), true);
@@ -472,9 +516,13 @@ function read(rel: string): string {
   assert.match(frame, /WebchatMediaBubble/);
   assert.match(frame, /resolvePublicWebchatPresentation/);
   assert.doesNotMatch(frame, /data\?\.displayName/);
+  assert.match(frame, /cache: "no-store"/);
   const settingsFetch = frame.slice(frame.indexOf("const nextPresentation"), frame.indexOf("setPresentation(nextPresentation)"));
   assert.match(settingsFetch, /businessName: typeof data\?\.businessName === "string" \? data\.businessName : ""/);
   assert.match(settingsFetch, /agentName: typeof data\?\.agentName === "string" \? data\.agentName : ""/);
+  assert.match(settingsFetch, /appOrigin:/);
+  assert.match(settingsFetch, /allowedLogoHttpsHosts:/);
+  assert.match(settingsFetch, /settings\.logoUrl/);
   assert.match(frame, /accentForeground/);
   assert.match(frame, /background: accentColor, color: accentTextColor/);
   assert.doesNotMatch(frame, /text-white rounded-br-none/);

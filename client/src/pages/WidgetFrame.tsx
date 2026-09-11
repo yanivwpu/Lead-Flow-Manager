@@ -14,6 +14,7 @@ import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shar
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
 import {
   resolvePublicWebchatPresentation,
+  widgetLogoAllowedHttpsHosts,
   type PublicWebchatPresentation,
 } from "@shared/webchatWidgetBranding";
 import {
@@ -170,7 +171,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         ? `/api/webchat/${userId}/settings?href=${encodeURIComponent(parentPageHref)}`
         : `/api/webchat/${userId}/settings`;
 
-    fetch(settingsUrl)
+    fetch(settingsUrl, { cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) {
           setWidgetUnavailable(true);
@@ -178,8 +179,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           return;
         }
         const data = await r.json();
+        const settings = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
         const nextPresentation = resolvePublicWebchatPresentation({
-          settings: data && typeof data === "object" ? (data as Record<string, unknown>) : {},
+          settings,
           businessName: typeof data?.businessName === "string" ? data.businessName : "",
           agentName: typeof data?.agentName === "string" ? data.agentName : "",
           chatGreeting: typeof data?.chatGreeting === "string" ? data.chatGreeting : undefined,
@@ -189,6 +191,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             : undefined,
           ctaLabel: typeof data?.ctaLabel === "string" ? data.ctaLabel : undefined,
           ctaUrl: typeof data?.ctaUrl === "string" ? data.ctaUrl : undefined,
+          appOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
+          allowedLogoHttpsHosts: widgetLogoAllowedHttpsHosts([
+            typeof window !== "undefined" ? window.location.origin : "",
+            typeof settings.logoUrl === "string" ? settings.logoUrl : "",
+          ]),
         });
         setPresentation(nextPresentation);
         setSettingsWelcome(nextPresentation.chatGreeting || nextPresentation.welcomeMessage);

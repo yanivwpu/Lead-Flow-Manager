@@ -618,6 +618,25 @@ function editorStateFromUnknown(saved: unknown): { logoUrl: string } {
   const header = read("client/src/components/webchat/WebchatPanelHeader.tsx");
   assert.match(header, /markWidgetLogoPreviewFailed/);
   assert.match(header, /webchat-panel-avatar/);
+  assert.match(header, /src=\{logoSrc\}/);
+  assert.match(header, /Boolean\(logoSrc\) && !logoFailed/);
+  assert.match(header, /shouldResetWidgetLogoPreview/);
+  const serve = objects.slice(
+    objects.indexOf('app.get("/objects/uploads/:filename"'),
+    objects.indexOf('app.get("/objects/*"'),
+  );
+  assert.doesNotMatch(serve, /req\.user/);
+  assert.doesNotMatch(serve, /Unauthorized/);
+  assert.doesNotMatch(serve, /status\(401\)/);
+  assert.match(serve, /readPublicUploadObject/);
+  const webhooks = read("server/routes/webhooks.ts");
+  const publicSettings = webhooks.slice(
+    webhooks.indexOf('app.get("/api/webchat/:userId/settings"'),
+    webhooks.indexOf('app.get("/api/webchat/:userId/:visitorId/messages"'),
+  );
+  assert.match(publicSettings, /toVisitorSafePublicWebchatPayload/);
+  assert.match(publicSettings, /appOrigin/);
+  assert.match(publicSettings, /resolvePublicWebchatPresentation/);
 }
 
 console.log("webchat-widget-logo-upload.test.ts: all assertions passed");

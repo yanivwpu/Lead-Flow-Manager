@@ -16,7 +16,7 @@ export function WebchatPanelHeader({ presentation }: { presentation: PublicWebch
       setLogoSrc(presentation.logoUrl);
     }
   }, [presentation.logoUrl, logoSrc]);
-  const showLogo = Boolean(presentation.logoUrl) && !logoFailed;
+  const showLogo = Boolean(logoSrc) && !logoFailed;
   return (
     <div
       className="flex min-w-0 items-center gap-2 px-4 py-3 flex-shrink-0 shadow-sm"
@@ -25,7 +25,7 @@ export function WebchatPanelHeader({ presentation }: { presentation: PublicWebch
     >
       {showLogo ? (
         <img
-          src={presentation.logoUrl}
+          src={logoSrc}
           alt=""
           width={32}
           height={32}

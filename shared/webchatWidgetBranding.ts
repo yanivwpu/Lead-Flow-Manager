@@ -106,13 +106,19 @@ export function sanitizeWidgetLogoUrl(
   }
   try {
     const u = new URL(s);
-    if (u.protocol !== "https:" || u.username || u.password) return "";
+    if (u.username || u.password) return "";
+    // Public widget settings re-absolutize /objects/uploads with APP_URL. The open
+    // panel re-sanitizes that payload without allowedHttpsHosts — keep the path.
+    if (
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      FIRST_PARTY_RASTER_PATH.test(u.pathname)
+    ) {
+      return u.pathname;
+    }
+    if (u.protocol !== "https:") return "";
     if (hostnameIsBlocked(u.hostname)) return "";
     const allowed = (opts?.allowedHttpsHosts || []).map((h) => h.toLowerCase()).filter(Boolean);
     if (!allowed.includes(u.hostname.toLowerCase())) return "";
-    if (FIRST_PARTY_RASTER_PATH.test(u.pathname)) {
-      return u.pathname;
-    }
     if (!/\.(jpg|jpeg|png|webp)$/i.test(u.pathname)) return "";
     if (u.pathname.includes("..") || u.pathname.includes("//")) return "";
     return u.href.slice(0, 500);
