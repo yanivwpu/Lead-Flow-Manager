@@ -99,9 +99,16 @@ export function WebchatChromePreview({
       {state === "open" ? (
         <CssBox css={panelCss} testId="wcw-preview-panel" className="flex min-w-0 flex-col overflow-hidden bg-white">
           <WebchatPanelHeader presentation={p} />
-          <div className="min-w-0 flex-1 overflow-hidden bg-gray-50 p-3">
+          <div className="min-w-0 flex-1 overflow-hidden bg-gray-50 p-3 space-y-2">
             <div className="max-w-[75%] break-words rounded-2xl rounded-bl-none border border-gray-100 bg-white px-3 py-2 text-xs text-gray-800 [overflow-wrap:anywhere]">
               {p.chatGreeting || p.welcomeMessage}
+            </div>
+            <div
+              className="ml-auto max-w-[75%] break-words rounded-2xl rounded-br-none px-3 py-2 text-xs [overflow-wrap:anywhere]"
+              style={{ background: p.accentColor, color: p.accentForeground }}
+              data-testid="wcw-preview-visitor-bubble"
+            >
+              Thanks
             </div>
           </div>
           <div className="min-w-0 border-t border-gray-100 p-2">
@@ -111,8 +118,9 @@ export function WebchatChromePreview({
               </div>
               <div
                 className="h-8 w-8 shrink-0 rounded-xl"
-                style={{ background: p.accentColor }}
+                style={{ background: p.accentColor, color: p.accentForeground }}
                 aria-hidden="true"
+                data-testid="wcw-preview-send"
               />
             </div>
             <p className="mt-1 text-center text-[10px] text-gray-300">Powered by WhaChat</p>

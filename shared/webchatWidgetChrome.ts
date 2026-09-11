@@ -5,6 +5,7 @@
 
 import {
   NEUTRAL_WEBCHAT_BRANDING,
+  contrastTextForBackground,
   resolvePublicWebchatPresentation,
   WEBCHAT_CORNER_PX,
   WEBCHAT_PANEL_WIDTH_PX,
@@ -70,7 +71,7 @@ export function buildWebchatChromeLayout(
     presentation.launcherStyle === "circle" ? 999 : Math.max(8, corner);
   let launcherCss =
     `position:fixed;bottom:20px;${inset}z-index:2147483647;border:none;cursor:pointer;` +
-    `background:${presentation.color};color:${presentation.headerTextColor};` +
+    `background:${presentation.color};color:${contrastTextForBackground(presentation.color)};` +
     `box-shadow:0 4px 16px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;` +
     `font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;` +
     `touch-action:manipulation;-webkit-tap-highlight-color:transparent;max-width:min(240px,calc(100vw - 40px));`;

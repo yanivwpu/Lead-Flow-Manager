@@ -13,7 +13,6 @@ import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
 import {
-  contrastTextForBackground,
   resolvePublicWebchatPresentation,
   type PublicWebchatPresentation,
 } from "@shared/webchatWidgetBranding";
@@ -128,7 +127,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   );
   const widgetColor = presentation.color;
   const accentColor = presentation.accentColor;
-  const accentTextColor = contrastTextForBackground(accentColor);
+  const accentTextColor = presentation.accentForeground;
   const [settingsWelcome, setSettingsWelcome] = useState(
     "Hi! How can we help you today?"
   );
@@ -625,6 +624,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           <WebchatFormCard
             form={leadForm}
             widgetColor={accentColor}
+            accentForeground={accentTextColor}
             disabled={widgetUnavailable}
             onSubmit={(values) => submitForm(leadForm, values)}
           />
@@ -664,7 +664,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     caption={msg.content}
                     isOutbound={isOutbound}
                     sendFailed={sendFailed}
-                    widgetColor={widgetColor}
+                    widgetColor={accentColor}
+                    accentForeground={accentTextColor}
                   />
                 ) : (msg.content || msg.contentType === "buttons") ? (
                   <div
@@ -673,9 +674,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                         ? "bg-white text-gray-800 rounded-bl-none border border-gray-100"
                         : sendFailed
                           ? "bg-red-50 text-gray-800 rounded-br-none border border-red-200"
-                          : "text-white rounded-br-none"
+                          : "rounded-br-none"
                     }`}
-                    style={!isOutbound && !sendFailed ? { background: widgetColor } : {}}
+                    style={
+                      !isOutbound && !sendFailed
+                        ? { background: accentColor, color: accentTextColor }
+                        : {}
+                    }
                   >
                     <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>
                   </div>
@@ -686,6 +691,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                     <WebchatFormCard
                       form={formDef}
                       widgetColor={accentColor}
+                      accentForeground={accentTextColor}
                       disabled={widgetUnavailable}
                       submitted={formSubmitted}
                       onSubmit={(values) => submitForm(formDef, values, msg.id)}
@@ -706,7 +712,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                           className={`w-full text-sm font-medium py-2 px-4 rounded-xl border transition-all ${
                             isClicked
                               ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                              : "bg-white border-gray-200 hover:border-opacity-80 hover:text-white"
+                              : "bg-white border-gray-200 hover:border-opacity-80"
                           }`}
                           style={
                             !isClicked

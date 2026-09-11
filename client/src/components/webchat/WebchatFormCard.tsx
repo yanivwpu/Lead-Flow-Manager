@@ -5,6 +5,7 @@ import { contrastTextForBackground } from "@shared/webchatWidgetBranding";
 export function WebchatFormCard(props: {
   form: WebchatFormDefinition;
   widgetColor: string;
+  accentForeground?: string;
   disabled?: boolean;
   submitted?: boolean;
   onSubmit: (values: Record<string, unknown>) => Promise<void>;
@@ -139,7 +140,7 @@ export function WebchatFormCard(props: {
         className="w-full rounded-xl py-2 text-sm font-medium disabled:opacity-40"
         style={{
           background: props.widgetColor,
-          color: contrastTextForBackground(props.widgetColor),
+          color: props.accentForeground || contrastTextForBackground(props.widgetColor),
         }}
         data-testid="webchat-form-submit"
       >

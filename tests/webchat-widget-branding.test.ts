@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  contrastRatio,
   contrastTextForBackground,
   NEUTRAL_WEBCHAT_BRANDING,
   PUBLIC_WEBCHAT_PRESENTATION_KEYS,
   pickExplicitWebchatAgentName,
   pickVerifiedWebchatCompanyName,
   resolvePublicWebchatPresentation,
+  resolveWebchatAccentColor,
   resolveWebchatDisplayName,
   sanitizePlainWidgetText,
   sanitizeWebchatBranding,
@@ -19,7 +21,10 @@ import {
   sanitizeWidgetLogoUrl,
   firstUnsafeWidgetTextField,
   toVisitorSafePublicWebchatPayload,
+  WEBCHAT_AA_CONTRAST_RATIO,
   WEBCHAT_DEFAULT_DISPLAY_NAME,
+  WEBCHAT_FOREGROUND_ON_DARK,
+  WEBCHAT_FOREGROUND_ON_LIGHT,
   widgetLogoAllowedHttpsHosts,
   widgetTextContainsUnsafeMarkup,
 } from "../shared/webchatWidgetBranding";
@@ -227,8 +232,50 @@ function read(rel: string): string {
   const previewCss = chromeCssForPreview(wide.panelCss, { panelFill: true });
   assert.match(previewCss, /position:absolute/);
   assert.doesNotMatch(previewCss, /position:fixed/);
-  assert.equal(contrastTextForBackground("#ffffff"), "#111827");
-  assert.equal(contrastTextForBackground("#111111"), "#ffffff");
+}
+
+{
+  const pompLightBlue = "#e0f0ff";
+  assert.equal(contrastTextForBackground("#ffffff"), WEBCHAT_FOREGROUND_ON_LIGHT);
+  assert.equal(contrastTextForBackground("#111111"), WEBCHAT_FOREGROUND_ON_DARK);
+  assert.equal(contrastTextForBackground(pompLightBlue), WEBCHAT_FOREGROUND_ON_LIGHT);
+  assert.ok(contrastRatio(WEBCHAT_FOREGROUND_ON_LIGHT, pompLightBlue) >= WEBCHAT_AA_CONTRAST_RATIO);
+  assert.ok(contrastRatio(WEBCHAT_FOREGROUND_ON_DARK, pompLightBlue) < WEBCHAT_AA_CONTRAST_RATIO);
+  assert.equal(contrastTextForBackground("#10b981"), WEBCHAT_FOREGROUND_ON_LIGHT);
+  assert.ok(contrastRatio(contrastTextForBackground("#10b981"), "#10b981") >= WEBCHAT_AA_CONTRAST_RATIO);
+  assert.equal(contrastTextForBackground("#111827"), WEBCHAT_FOREGROUND_ON_DARK);
+  assert.ok(contrastRatio(WEBCHAT_FOREGROUND_ON_DARK, "#111827") >= WEBCHAT_AA_CONTRAST_RATIO);
+  assert.equal(contrastTextForBackground("#ffff00"), WEBCHAT_FOREGROUND_ON_LIGHT);
+  assert.ok(contrastRatio(WEBCHAT_FOREGROUND_ON_LIGHT, "#ffff00") >= WEBCHAT_AA_CONTRAST_RATIO);
+
+  assert.equal(resolveWebchatAccentColor({ color: "#10b981" }), "#10b981");
+  assert.equal(resolveWebchatAccentColor({ color: "#10b981", accentColor: "" }), "#10b981");
+  assert.equal(resolveWebchatAccentColor({ color: "#10b981", accentColor: pompLightBlue }), pompLightBlue);
+
+  const pomp = resolvePublicWebchatPresentation({
+    settings: { color: pompLightBlue, brandName: "", headerTextColor: "#ffffff" },
+  });
+  assert.equal(pomp.accentColor, pompLightBlue);
+  assert.equal(pomp.accentForeground, WEBCHAT_FOREGROUND_ON_LIGHT);
+  assert.equal(pomp.headerTextColor, "#ffffff");
+  assert.ok(contrastRatio(pomp.accentForeground, pomp.accentColor) >= WEBCHAT_AA_CONTRAST_RATIO);
+  const pompChrome = buildWebchatChromeLayout({ color: pompLightBlue, headerTextColor: "#ffffff" });
+  assert.match(pompChrome.launcherCss, new RegExp(`background:${pompLightBlue}`));
+  assert.match(pompChrome.launcherCss, new RegExp(`color:${WEBCHAT_FOREGROUND_ON_LIGHT}`));
+  assert.match(pompChrome.headerCss, /color:#ffffff/);
+  assert.equal(pompChrome.presentation.accentForeground, pomp.accentForeground);
+
+  const split = resolvePublicWebchatPresentation({
+    settings: { color: "#111827", accentColor: pompLightBlue },
+  });
+  assert.equal(split.color, "#111827");
+  assert.equal(split.accentColor, pompLightBlue);
+  assert.equal(split.accentForeground, WEBCHAT_FOREGROUND_ON_LIGHT);
+
+  const editor = buildWebchatChromeLayout({ color: pompLightBlue });
+  const published = resolvePublicWebchatPresentation({ settings: { color: pompLightBlue } });
+  assert.equal(editor.presentation.accentColor, published.accentColor);
+  assert.equal(editor.presentation.accentForeground, published.accentForeground);
 }
 
 {
@@ -359,6 +406,8 @@ function read(rel: string): string {
   assert.match(preview, /chromeCssForPreview/);
   assert.match(preview, /WebchatPanelHeader/);
   assert.match(preview, /agentName/);
+  assert.match(preview, /wcw-preview-visitor-bubble/);
+  assert.match(preview, /p\.accentForeground/);
   const script = read("server/webchatPublicScript.ts");
   assert.match(script, /prefers-reduced-motion/);
   assert.match(script, /sessionStorage/);
@@ -416,10 +465,18 @@ function read(rel: string): string {
   const settingsFetch = frame.slice(frame.indexOf("const nextPresentation"), frame.indexOf("setPresentation(nextPresentation)"));
   assert.match(settingsFetch, /businessName: typeof data\?\.businessName === "string" \? data\.businessName : ""/);
   assert.match(settingsFetch, /agentName: typeof data\?\.agentName === "string" \? data\.agentName : ""/);
+  assert.match(frame, /accentForeground/);
+  assert.match(frame, /background: accentColor, color: accentTextColor/);
+  assert.doesNotMatch(frame, /text-white rounded-br-none/);
+  assert.match(frame, /presentation\.accentForeground/);
   const form = read("client/src/components/webchat/WebchatFormCard.tsx");
   assert.match(form, /field\.required \? " \*" : ""/);
   assert.match(form, /webchat-form-error/);
   assert.match(form, /consent/);
+  assert.match(form, /contrastTextForBackground/);
+  const media = read("client/src/components/webchat/WebchatMediaBubble.tsx");
+  assert.doesNotMatch(media, /text-white rounded-br-none/);
+  assert.match(media, /contrastTextForBackground/);
 }
 
 {

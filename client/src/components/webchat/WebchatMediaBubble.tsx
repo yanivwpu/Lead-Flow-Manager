@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, RotateCcw, ExternalLink } from "lucide-react";
+import { contrastTextForBackground } from "@shared/webchatWidgetBranding";
 
 export function WebchatMediaBubble(props: {
   src: string;
@@ -7,12 +8,20 @@ export function WebchatMediaBubble(props: {
   isOutbound: boolean;
   sendFailed?: boolean;
   widgetColor: string;
+  accentForeground?: string;
 }) {
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [cacheBust, setCacheBust] = useState(0);
   const skipSrcResetRef = useRef(true);
   const src = cacheBust ? `${props.src}${props.src.includes("?") ? "&" : "?"}r=${cacheBust}` : props.src;
   const caption = (props.caption || "").trim();
+  const filledStyle =
+    !props.isOutbound && !props.sendFailed
+      ? {
+          background: props.widgetColor,
+          color: props.accentForeground || contrastTextForBackground(props.widgetColor),
+        }
+      : undefined;
 
   useEffect(() => {
     if (skipSrcResetRef.current) {
@@ -30,9 +39,9 @@ export function WebchatMediaBubble(props: {
           ? "bg-white text-gray-800 rounded-bl-none border border-gray-100"
           : props.sendFailed
             ? "bg-red-50 text-gray-800 rounded-br-none border border-red-200"
-            : "text-white rounded-br-none"
+            : "rounded-br-none"
       }`}
-      style={!props.isOutbound && !props.sendFailed ? { background: props.widgetColor } : {}}
+      style={filledStyle}
       data-testid="webchat-image-bubble"
     >
       <div className="relative min-w-0 max-w-full overflow-hidden">

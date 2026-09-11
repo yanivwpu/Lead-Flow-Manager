@@ -179,6 +179,10 @@ export function sanitizeWebchatBranding(
   };
 }
 
+export const WEBCHAT_FOREGROUND_ON_LIGHT = "#111827";
+export const WEBCHAT_FOREGROUND_ON_DARK = "#ffffff";
+export const WEBCHAT_AA_CONTRAST_RATIO = 4.5;
+
 export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const v = sanitizeWidgetHexColor(hex, "");
   if (!v) return null;
@@ -189,14 +193,62 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } | nul
   };
 }
 
-export function contrastTextForBackground(hex: string): "#ffffff" | "#111827" {
+function srgbChannelToLinear(channel: number): number {
+  const s = channel / 255;
+  return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+
+export function relativeLuminance(hex: string): number {
   const rgb = hexToRgb(hex) || { r: 16, g: 185, b: 129 };
-  const lin = [rgb.r, rgb.g, rgb.b].map((c) => {
-    const x = c / 255;
-    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-  });
-  const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
-  return L > 0.55 ? "#111827" : "#ffffff";
+  const r = srgbChannelToLinear(rgb.r);
+  const g = srgbChannelToLinear(rgb.g);
+  const b = srgbChannelToLinear(rgb.b);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(foregroundHex: string, backgroundHex: string): number {
+  const a = relativeLuminance(foregroundHex);
+  const b = relativeLuminance(backgroundHex);
+  const lighter = Math.max(a, b);
+  const darker = Math.min(a, b);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * Dark or white foreground for an accent-colored surface so normal text meets WCAG AA (4.5:1).
+ * Does not use headerTextColor — that control applies only to the header.
+ */
+export function contrastTextForBackground(hex: string): typeof WEBCHAT_FOREGROUND_ON_LIGHT | typeof WEBCHAT_FOREGROUND_ON_DARK {
+  const bg = sanitizeWidgetHexColor(hex, "#10b981") || "#10b981";
+  const dark = contrastRatio(WEBCHAT_FOREGROUND_ON_LIGHT, bg);
+  const light = contrastRatio(WEBCHAT_FOREGROUND_ON_DARK, bg);
+  if (dark >= WEBCHAT_AA_CONTRAST_RATIO && light >= WEBCHAT_AA_CONTRAST_RATIO) {
+    return dark >= light ? WEBCHAT_FOREGROUND_ON_LIGHT : WEBCHAT_FOREGROUND_ON_DARK;
+  }
+  if (dark >= WEBCHAT_AA_CONTRAST_RATIO) return WEBCHAT_FOREGROUND_ON_LIGHT;
+  if (light >= WEBCHAT_AA_CONTRAST_RATIO) return WEBCHAT_FOREGROUND_ON_DARK;
+  return dark >= light ? WEBCHAT_FOREGROUND_ON_LIGHT : WEBCHAT_FOREGROUND_ON_DARK;
+}
+
+export function webchatFilledAccentStyle(backgroundHex: string): {
+  background: string;
+  color: typeof WEBCHAT_FOREGROUND_ON_LIGHT | typeof WEBCHAT_FOREGROUND_ON_DARK;
+} {
+  const background = sanitizeWidgetHexColor(backgroundHex, "#10b981") || "#10b981";
+  return { background, color: contrastTextForBackground(background) };
+}
+
+/**
+ * Canonical visitor accent: saved Branding accentColor, else legacy Appearance color.
+ * Editor preview and the public widget must resolve this the same way.
+ */
+export function resolveWebchatAccentColor(input: {
+  color?: unknown;
+  accentColor?: unknown;
+}): string {
+  const primary = sanitizeWidgetHexColor(input.color, "#10b981") || "#10b981";
+  const accent = sanitizeWidgetHexColor(input.accentColor, "");
+  return accent || primary;
 }
 
 export type WebchatDisplayNameInput = {
@@ -250,6 +302,7 @@ export function resolveWebchatAgentName(agentName?: string | null): string {
 export type PublicWebchatPresentation = {
   color: string;
   accentColor: string;
+  accentForeground: string;
   welcomeMessage: string;
   chatGreeting: string;
   chatPrefill: string;
@@ -304,6 +357,11 @@ export function resolvePublicWebchatPresentation(input: {
     branding.headerTextColor === "auto"
       ? contrastTextForBackground(color)
       : branding.headerTextColor;
+  const accentColor = resolveWebchatAccentColor({
+    color,
+    accentColor: branding.accentColor,
+  });
+  const accentForeground = contrastTextForBackground(accentColor);
   const position = input.settings.position === "left" ? "left" : "right";
   let visitorCta = "";
   const rawCta = typeof input.ctaUrl === "string" ? input.ctaUrl.trim() : "";
@@ -317,7 +375,8 @@ export function resolvePublicWebchatPresentation(input: {
   }
   return {
     color,
-    accentColor: branding.accentColor || color,
+    accentColor,
+    accentForeground,
     welcomeMessage: welcome,
     chatGreeting: sanitizePlainWidgetText(input.chatGreeting, 500) || welcome,
     chatPrefill: sanitizePlainWidgetText(input.chatPrefill, 2000),
@@ -365,6 +424,7 @@ export const WEBCHAT_CORNER_PX: Record<WebchatCornerStyle, number> = {
 export const PUBLIC_WEBCHAT_PRESENTATION_KEYS = [
   "color",
   "accentColor",
+  "accentForeground",
   "welcomeMessage",
   "chatGreeting",
   "chatPrefill",
@@ -394,6 +454,7 @@ export function toVisitorSafePublicWebchatPayload(
   return {
     color: presentation.color,
     accentColor: presentation.accentColor,
+    accentForeground: presentation.accentForeground,
     welcomeMessage: presentation.welcomeMessage,
     chatGreeting: presentation.chatGreeting,
     chatPrefill: presentation.chatPrefill,

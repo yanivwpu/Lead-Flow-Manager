@@ -1224,9 +1224,12 @@ export function WebsiteWidget() {
                       disabled={!settings.accentColor}
                       onClick={() => updateSettings({ accentColor: "" })}
                     >
-                      Match primary
+                      Match Color
                     </Button>
                   </div>
+                  <p className="text-[10px] text-gray-500">
+                    Visitor bubbles, send, and form buttons. Empty follows Color. Text contrast is automatic.
+                  </p>
                   {brandingErrors.color ? (
                     <p className="text-[10px] text-red-600" data-testid="text-branding-error">
                       {brandingErrors.color}
@@ -1262,6 +1265,9 @@ export function WebsiteWidget() {
                       title="Custom header text color"
                     />
                   </div>
+                  <p className="text-[10px] text-gray-500">
+                    Applies only to the chat header. Visitor messages use automatic contrast.
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -1304,6 +1310,9 @@ export function WebsiteWidget() {
                       data-testid="input-custom-color"
                     />
                   </div>
+                  <p className="text-[10px] text-gray-500">
+                    Header and launcher background. Visitor bubbles follow Accent, or this Color when Accent is empty.
+                  </p>
                 </div>
                 <div className="space-y-1 w-full md:w-auto md:min-w-[148px] shrink-0">
                   <Label className="text-[11px] font-semibold text-gray-600">Position</Label>
