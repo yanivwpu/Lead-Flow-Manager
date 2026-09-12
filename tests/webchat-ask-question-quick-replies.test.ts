@@ -196,9 +196,13 @@ resetChatbotAskQuestionMemoryForTests();
 
 {
   const widget = read("client/src/pages/WidgetFrame.tsx");
-  assert.match(widget, /min-h-\[44px\]/);
+  assert.match(widget, /WebchatQuickReplyButtons/);
   assert.match(widget, /laterInbound/);
   assert.match(widget, /chatbotButtons/);
+  assert.match(widget, /onSelect=\{\(btn\) => handleButtonClick\(msg\.id, btn\)\}/);
+  const chips = read("client/src/components/webchat/WebchatQuickReplyButtons.tsx");
+  assert.match(chips, /min-h-\[44px\]/);
+  assert.match(chips, /chat-btn/);
 }
 
 console.log("webchat-ask-question-quick-replies.test.ts: all assertions passed");

@@ -12,6 +12,7 @@ import {
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
+import { WebchatQuickReplyButtons } from "@/components/webchat/WebchatQuickReplyButtons";
 import {
   resolveWebchatPanelHeaderPaint,
   webchatBrandingReadyMessage,
@@ -791,51 +792,21 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                   </div>
                 )}
                 {isButtonMessage && isOutbound && (
-                  <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-col">
-                    {buttons.map((btn, i) => {
-                      const btnKey = `${msg.id}_${btn.value}`;
-                      const isClicked = clickedButtons.has(btnKey) || messageResponded;
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => handleButtonClick(msg.id, btn)}
-                          disabled={isClicked}
-                          data-testid={`chat-btn-${msg.id}-${i}`}
-                          className={`w-full min-h-[44px] text-sm font-medium py-2 px-4 rounded-xl border transition-all touch-manipulation ${
-                            isClicked
-                              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                              : "bg-white border-gray-200 hover:border-opacity-80"
-                          }`}
-                          style={
-                            !isClicked
-                              ? {
-                                  color: accentColor,
-                                  borderColor: accentColor,
-                                  borderWidth: "1.5px",
-                                }
-                              : {}
-                          }
-                          onMouseEnter={e => {
-                            if (!isClicked) {
-                              (e.target as HTMLButtonElement).style.background = accentColor;
-                              (e.target as HTMLButtonElement).style.color = accentTextColor;
-                            }
-                          }}
-                          onMouseLeave={e => {
-                            if (!isClicked) {
-                              (e.target as HTMLButtonElement).style.background = "white";
-                              (e.target as HTMLButtonElement).style.color = accentColor;
-                            }
-                          }}
-                        >
-                          {btn.label}
-                        </button>
-                      );
-                    })}
+                  <>
+                    <WebchatQuickReplyButtons
+                      buttons={buttons}
+                      accentColor={accentColor}
+                      messageId={msg.id}
+                      disabled={widgetUnavailable || messageResponded}
+                      selectedValue={
+                        buttons.find((btn) => clickedButtons.has(`${msg.id}_${btn.value}`))?.value
+                      }
+                      onSelect={(btn) => handleButtonClick(msg.id, btn)}
+                    />
                     {messageResponded && (
                       <p className="text-xs text-gray-400 text-center">{chromeCopy.optionSelected}</p>
                     )}
-                  </div>
+                  </>
                 )}
                 {sendFailed && (
                   <div className="mt-1 flex items-center justify-end gap-2">

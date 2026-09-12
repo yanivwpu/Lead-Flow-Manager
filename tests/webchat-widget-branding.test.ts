@@ -540,6 +540,8 @@ function read(rel: string): string {
   assert.match(preview, /agentName/);
   assert.match(preview, /wcw-preview-visitor-bubble/);
   assert.match(preview, /p\.accentForeground/);
+  assert.match(preview, /WebchatQuickReplyButtons/);
+  assert.match(preview, /wcw-preview-qr/);
   const script = read("server/webchatPublicScript.ts");
   assert.match(script, /prefers-reduced-motion/);
   assert.match(script, /sessionStorage/);

@@ -5,6 +5,7 @@ import {
   type WebchatChromeState,
 } from "@shared/webchatWidgetChrome";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
+import { WebchatQuickReplyButtons } from "@/components/webchat/WebchatQuickReplyButtons";
 import {
   markWidgetLogoPreviewFailed,
   shouldResetWidgetLogoPreview,
@@ -99,9 +100,21 @@ export function WebchatChromePreview({
       {state === "open" ? (
         <CssBox css={panelCss} testId="wcw-preview-panel" className="flex min-w-0 flex-col overflow-hidden bg-white">
           <WebchatPanelHeader presentation={p} />
-          <div className="min-w-0 flex-1 overflow-hidden bg-gray-50 p-3 space-y-2">
-            <div className="max-w-[75%] break-words rounded-2xl rounded-bl-none border border-gray-100 bg-white px-3 py-2 text-xs text-gray-800 [overflow-wrap:anywhere]">
-              {p.chatGreeting || p.welcomeMessage}
+          <div className="min-w-0 flex-1 overflow-y-auto bg-gray-50 p-3 space-y-2">
+            <div className="max-w-[85%] min-w-0">
+              <div className="break-words rounded-2xl rounded-bl-none border border-gray-100 bg-white px-3 py-2 text-xs text-gray-800 [overflow-wrap:anywhere]">
+                {p.chatGreeting || p.welcomeMessage}
+              </div>
+              <WebchatQuickReplyButtons
+                buttons={[
+                  { label: "Features & pricing", value: "Features & pricing" },
+                  { label: "Find my solution", value: "Find my solution" },
+                  { label: "Book a demo", value: "Book a demo" },
+                ]}
+                accentColor={p.accentColor}
+                messageId="preview"
+                testIdPrefix="wcw-preview-qr"
+              />
             </div>
             <div
               className="ml-auto max-w-[75%] break-words rounded-2xl rounded-br-none px-3 py-2 text-xs [overflow-wrap:anywhere]"
