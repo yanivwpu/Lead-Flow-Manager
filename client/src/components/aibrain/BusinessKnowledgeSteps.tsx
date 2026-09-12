@@ -828,7 +828,18 @@ export function BusinessKnowledgeSteps({
         </p>
       </div>
 
-      <ol className="w-full min-w-0 space-y-5">
+      {/*
+        Global `ul, ol { padding-inline-start: 1.5rem }` and the more specific
+        `[dir="rtl"] ol { padding-inline-end: 1.5rem }` would indent these cards
+        ~24px on the start/end side. Inline paddingInline: 0 beats both so the
+        bordered cards share the AI behavior card's edges. The timeline is
+        positioned outside each <li> (`end-full`) and uses the page padding.
+      */}
+      <ol
+        className="m-0 w-full min-w-0 list-none space-y-5 p-0"
+        style={{ paddingInline: 0 }}
+        data-testid="business-knowledge-list"
+      >
         <Step
           index={1}
           title="Teach AI"

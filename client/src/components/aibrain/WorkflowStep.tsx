@@ -9,6 +9,8 @@
  * The numbered circle and rail are absolutely positioned outside the card on the start side
  * (`end-full` + inline-end margin) so they never indent or shrink the card. Do not wrap the
  * card and timeline in a width-sharing row — that would steal column width again.
+ * The parent <ol> must also zero list padding; global `ul, ol` rules would otherwise
+ * indent the visible bordered card ~24px on the start side.
  */
 
 import type { ReactNode } from "react";

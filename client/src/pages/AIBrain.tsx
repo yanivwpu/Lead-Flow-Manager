@@ -727,7 +727,10 @@ function AIBrainContent() {
         )}
 
         {/* How the assistant acts — applies to AI Assist too, so it sits outside the Brain gate */}
-        <Card className="overflow-hidden rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.04] ring-1 ring-violet-100/35">
+        <Card
+          data-testid="ai-behavior-card"
+          className="overflow-hidden rounded-2xl border-0 bg-white/95 shadow-md shadow-slate-900/[0.04] ring-1 ring-violet-100/35"
+        >
           <div className="h-0.5 bg-gradient-to-r from-violet-300/40 via-brand-green/35 to-emerald-400/35" aria-hidden />
           <CardHeader className="pb-4 space-y-1 pt-5">
             <CardTitle className="text-lg font-semibold text-slate-900 tracking-tight">AI behavior</CardTitle>
