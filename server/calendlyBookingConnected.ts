@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { resolveCalendlyCustomerSchedulingUrlFromConfig } from "@shared/calendlyEventSelection";
 
 /** Native Calendly integration is active and webhook registration succeeded (`connectionStatus` in config). */
 export async function isUserCalendlyBookingConnected(userId: string): Promise<boolean> {
@@ -13,16 +14,14 @@ export async function getCalendlyPublicSchedulingUrl(userId: string): Promise<st
   const row = await storage.getIntegrationByUserAndType(userId, "calendly");
   if (!row?.isActive) return "";
   const cfg = (row.config || {}) as Record<string, unknown>;
-  const raw = cfg.calendlyPrimarySchedulingUrl;
-  if (typeof raw !== "string") return "";
-  const u = raw.trim();
-  return u.startsWith("http://") || u.startsWith("https://") ? u : "";
+  return resolveCalendlyCustomerSchedulingUrlFromConfig(cfg);
 }
 
-/** Append UTM params so Calendly webhooks can resolve the originating CRM contact. */
 /**
- * Knowledge passed into AI prompts: scheduling URL comes **only** from the connected Calendly integration
- * (`calendlyPrimarySchedulingUrl`). Stale `ai_business_knowledge.booking_link` is never used for AI output.
+ * Knowledge passed into AI prompts: scheduling URL comes **only** from the connected Calendly
+ * integration's workspace-selected event URL (`calendlySelectedEventSchedulingUrl` /
+ * `calendlyPrimarySchedulingUrl` after selection). Stale `ai_business_knowledge.booking_link`
+ * is never used for AI output.
  */
 export async function applyCalendlyBookingLinkForAi<T extends { bookingLink?: string | null }>(
   userId: string,
@@ -64,6 +63,8 @@ export async function getCalendlyPrimaryEventTypeName(userId: string): Promise<s
   const row = await storage.getIntegrationByUserAndType(userId, "calendly");
   if (!row?.isActive) return "";
   const cfg = (row.config || {}) as Record<string, unknown>;
+  const selected = cfg.calendlySelectedEventTypeName;
+  if (typeof selected === "string" && selected.trim()) return selected.trim();
   const name = cfg.calendlyPrimaryEventTypeName;
   return typeof name === "string" ? name.trim() : "";
 }

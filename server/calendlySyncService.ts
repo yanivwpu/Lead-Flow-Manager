@@ -15,6 +15,12 @@ import {
   normalizeCalendlyStatus,
 } from "@shared/calendlyAppointmentDedup";
 import {
+  calendlyBookingSyncEnabled,
+  filterScheduledEventsBySelectedType,
+  selectedCalendlyEventTypeUri,
+} from "@shared/calendlyEventSelection";
+import { applyCalendlyEventSelection, loadActiveCalendlyEventTypes } from "./calendlyEventTypeSync";
+import {
   calendlySyncModeConfigPatch,
   resolveCalendlySyncModeFromConfig,
   type CalendlySyncMode,
@@ -35,6 +41,7 @@ export type CalendlyPollResult = {
   inviteesScanned: number;
   error?: string;
   lastPollAt: string;
+  selectionRequired?: boolean;
 };
 
 function logPoll(event: string, payload: Record<string, unknown>): void {
@@ -83,6 +90,7 @@ function buildPollIngestBody(
         start_time: scheduledEvent.start_time,
         end_time: scheduledEvent.end_time,
         location: scheduledEvent.location,
+        event_type: scheduledEvent.event_type,
       },
       tracking: invitee.tracking,
       reschedule_url: invitee.reschedule_url,
@@ -258,10 +266,35 @@ export async function pollCalendlyBookingsForUser(
   }
 
   try {
-    const events = await fetchAllScheduledEvents(token, scope, minStart, maxStart);
-    result.eventsScanned = events.length;
+    if (!calendlyBookingSyncEnabled(cfg)) {
+      const listed = await loadActiveCalendlyEventTypes(token, {
+        ...(userUri ? { user: userUri } : {}),
+        ...(orgUri ? { organization: orgUri } : {}),
+      });
+      const applied = applyCalendlyEventSelection(cfg, listed.types, selectedCalendlyEventTypeUri(cfg));
+      Object.assign(cfg, applied.cfg);
+      await storage.updateIntegration(integration.id, {
+        config: encryptIntegrationConfig({
+          ...applied.cfg,
+          ...(userUri ? { calendlyUserUri: userUri } : {}),
+          ...(orgUri ? { calendlyOrganizationUri: orgUri } : {}),
+        }),
+      });
+      if (!calendlyBookingSyncEnabled(cfg)) {
+        result.ok = true;
+        result.selectionRequired = true;
+        result.error = "Select an event type to enable sync";
+        logPoll("poll_selection_required", { userId, activeEventTypes: listed.types.length });
+        return result;
+      }
+    }
 
-    for (const event of events) {
+    const events = await fetchAllScheduledEvents(token, scope, minStart, maxStart);
+    const matchedEvents = filterScheduledEventsBySelectedType(events, cfg);
+    result.eventsScanned = events.length;
+    result.skipped += events.length - matchedEvents.length;
+
+    for (const event of matchedEvents) {
       if (!event.uri) continue;
       const invitees = await fetchAllInvitees(token, event.uri);
       result.inviteesScanned += invitees.length;

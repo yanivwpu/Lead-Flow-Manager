@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { 
   Plug, Plus, Trash2, Copy, Check, ExternalLink,
   ShoppingCart, FileSpreadsheet, Users, CreditCard, Building2, Home,
@@ -167,9 +168,70 @@ function CalendlyTokenInstructions() {
         </ul>
       </div>
       <p className="mt-3 text-xs leading-relaxed text-blue-900/90">
-        WhachatCRM will validate the token, read your organization and event types, then set up booking sync automatically.
+        WhachatCRM will validate the token, load your event types, and sync only the event you select for this workspace.
       </p>
     </div>
+  );
+}
+
+type CalendlyEventTypeOption = {
+  uri: string;
+  name: string;
+  slug: string;
+  schedulingUrl: string;
+  durationMinutes: number | null;
+  locationType: string;
+};
+
+function calendlyEventTypeMeta(option: CalendlyEventTypeOption): string {
+  const parts: string[] = [];
+  if (option.durationMinutes) parts.push(`${option.durationMinutes} min`);
+  if (option.locationType) parts.push(option.locationType);
+  return parts.join(" · ");
+}
+
+function CalendlyEventTypePicker({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: CalendlyEventTypeOption[];
+  value: string;
+  onChange: (uri: string) => void;
+  disabled?: boolean;
+}) {
+  if (options.length === 0) {
+    return (
+      <p className="text-sm text-amber-800">
+        No active Calendly event types were found for this account.
+      </p>
+    );
+  }
+  return (
+    <RadioGroup value={value} onValueChange={onChange} className="grid gap-2" disabled={disabled}>
+      {options.map((option) => {
+        const selected = option.uri === value;
+        return (
+          <label
+            key={option.uri}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 rounded-lg border p-3",
+              selected ? "border-blue-300 bg-blue-50/80" : "border-gray-200 bg-white",
+              disabled && "cursor-not-allowed opacity-70",
+            )}
+            data-testid={`calendly-event-type-${option.slug || option.uri}`}
+          >
+            <RadioGroupItem value={option.uri} id={`calendly-event-${option.uri}`} className="mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900">{option.name}</p>
+              <p className="text-xs text-gray-600">{calendlyEventTypeMeta(option) || "Event type"}</p>
+              <p className="mt-1 break-all text-xs text-gray-500">{option.schedulingUrl}</p>
+            </div>
+          </label>
+        );
+      })}
+    </RadioGroup>
   );
 }
 
@@ -628,6 +690,12 @@ export function Integrations() {
   const [ghlOAuthDebugOpen, setGhlOAuthDebugOpen] = useState(false);
   const [ghlOAuthDebug, setGhlOAuthDebug] = useState<GhlOAuthAuthorizeDebugSnapshot | null>(null);
   const [ghlOAuthDebugLoading, setGhlOAuthDebugLoading] = useState(false);
+  const [calendlyEventTypes, setCalendlyEventTypes] = useState<CalendlyEventTypeOption[]>([]);
+  const [calendlySelectedEventTypeUri, setCalendlySelectedEventTypeUri] = useState("");
+  const [calendlyEventTypesLoading, setCalendlyEventTypesLoading] = useState(false);
+  const [calendlyEventTypesError, setCalendlyEventTypesError] = useState<string | null>(null);
+  const [calendlyEventTypesLoaded, setCalendlyEventTypesLoaded] = useState(false);
+  const [manageCalendlyEventTypeUri, setManageCalendlyEventTypeUri] = useState("");
 
   const integrationsEnabled = subscription?.limits?.integrationsEnabled;
   const maxWebhooks = (subscription?.limits as any)?.maxWebhooks || 0;
@@ -641,6 +709,24 @@ export function Integrations() {
     queryKey: withUserQueryScope(["/api/integrations"], user?.id),
     enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
   });
+  const calendlyRowForManage = integrations.find((i) => i.type === "calendly");
+  const calendlyManageTypesQuery = useQuery({
+    queryKey: withUserQueryScope(["/api/integrations", calendlyRowForManage?.id, "calendly-event-types"], user?.id),
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/integrations/${calendlyRowForManage!.id}/calendly-event-types`);
+      return res.json() as Promise<{
+        eventTypes: CalendlyEventTypeOption[];
+        selectedEventTypeUri: string;
+        selectionRequired: boolean;
+      }>;
+    },
+    enabled: manageIntegrationId === "calendly" && !!calendlyRowForManage?.id && !!user?.id && sessionAligned,
+  });
+
+  useEffect(() => {
+    const uri = calendlyManageTypesQuery.data?.selectedEventTypeUri;
+    if (typeof uri === "string") setManageCalendlyEventTypeUri(uri);
+  }, [calendlyManageTypesQuery.data?.selectedEventTypeUri]);
 
   const lcLocationId = integrations.find((i) => i.type === "gohighlevel")?.config?.locationId as
     | string
@@ -890,8 +976,17 @@ export function Integrations() {
       setConnectingIntegration(null);
       setIntegrationForm({});
       setSelectedSyncOptions([]);
+      setCalendlyEventTypes([]);
+      setCalendlySelectedEventTypeUri("");
+      setCalendlyEventTypesLoaded(false);
+      setCalendlyEventTypesError(null);
       const types = data?.calendlyEventTypes as string[] | undefined;
-      if (data?.type === "calendly" && data?.message === "Existing Calendly webhook found and linked.") {
+      if (data?.type === "calendly" && data?.calendlyEventSelectionRequired) {
+        toast({
+          title: "Select a Calendly event type",
+          description: "Your account is connected. Choose which event belongs to this workspace before bookings can sync.",
+        });
+      } else if (data?.type === "calendly" && data?.message === "Existing Calendly webhook found and linked.") {
         toast({
           title: "Existing Calendly webhook linked",
           description: "Existing Calendly webhook found and linked.",
@@ -956,6 +1051,29 @@ export function Integrations() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/shopify/connection-status"] });
+    },
+  });
+
+  const saveCalendlyEventTypeMutation = useMutation({
+    mutationFn: async ({ id, eventTypeUri }: { id: string; eventTypeUri: string }) => {
+      const res = await apiRequest("POST", `/api/integrations/${id}/calendly-event-type`, { eventTypeUri });
+      return res.json() as Promise<{ selectedEventTypeName?: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      toast({
+        title: "Calendly event selected",
+        description: data.selectedEventTypeName
+          ? `${data.selectedEventTypeName} is now the booking event for this workspace.`
+          : "This workspace will sync only the selected Calendly event.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not save event type",
+        description: err.message.replace(/^\d+:\s*/, "") || "Select a valid event type and try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -1120,12 +1238,61 @@ export function Integrations() {
     );
   };
 
-  const handleConnectIntegration = () => {
+  const handleConnectIntegration = async () => {
     if (!connectingIntegration) return;
     const syncOptions =
       connectingIntegration.id === "hubspot"
         ? ["sync_contacts"]
         : selectedSyncOptions;
+    if (connectingIntegration.id === "calendly") {
+      const token = String(integrationForm.accessToken || "").trim();
+      let selectedUri = calendlySelectedEventTypeUri;
+      if (!calendlyEventTypesLoaded) {
+        setCalendlyEventTypesLoading(true);
+        setCalendlyEventTypesError(null);
+        try {
+          const res = await apiRequest("POST", "/api/integrations/calendly/preview-event-types", {
+            accessToken: token,
+          });
+          const data = (await res.json()) as {
+            eventTypes?: CalendlyEventTypeOption[];
+            selectedEventTypeUri?: string;
+            selectionRequired?: boolean;
+          };
+          const options = Array.isArray(data.eventTypes) ? data.eventTypes : [];
+          setCalendlyEventTypes(options);
+          setCalendlyEventTypesLoaded(true);
+          selectedUri = data.selectedEventTypeUri || (options.length === 1 ? options[0].uri : "");
+          setCalendlySelectedEventTypeUri(selectedUri);
+          if (options.length > 1 && !selectedUri) {
+            toast({
+              title: "Select an event type",
+              description: "Choose which Calendly event belongs to this workspace before connecting.",
+            });
+            return;
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message.replace(/^\d+:\s*/, "") : "Could not load Calendly event types.";
+          setCalendlyEventTypesError(message);
+          toast({ title: "Could not load event types", description: message, variant: "destructive" });
+          return;
+        } finally {
+          setCalendlyEventTypesLoading(false);
+        }
+      } else if (calendlyEventTypes.length > 1 && !selectedUri) {
+        toast({
+          title: "Select an event type",
+          description: "Choose which Calendly event belongs to this workspace before connecting.",
+        });
+        return;
+      }
+      createIntegrationMutation.mutate({
+        type: connectingIntegration.id,
+        name: connectingIntegration.name,
+        config: { ...integrationForm, syncOptions, selectedEventTypeUri: selectedUri },
+      });
+      return;
+    }
     createIntegrationMutation.mutate({
       type: connectingIntegration.id,
       name: connectingIntegration.name,
@@ -1236,6 +1403,17 @@ export function Integrations() {
                       const canAccessCrmDiagnostics = !!lcStatus?.canAccessCrmDiagnostics;
                       const wooConnected = integration.id === "woocommerce" && !!connected;
                       const calendlyConnected = integration.id === "calendly" && !!connected;
+                      const calendlyCfg = calendlyConnected
+                        ? (connected?.config as Record<string, unknown>)
+                        : undefined;
+                      const calendlyNeedsEvent =
+                        calendlyCfg?.calendlyEventSelectionRequired === true ||
+                        (calendlyConnected &&
+                          !String(calendlyCfg?.calendlySelectedEventTypeUri || "").trim());
+                      const calendlyEventName =
+                        typeof calendlyCfg?.calendlySelectedEventTypeName === "string"
+                          ? calendlyCfg.calendlySelectedEventTypeName.trim()
+                          : "";
                       const shopifyManageConnected = integration.id === "shopify" && shopifyConnected;
                       const hubspotValidated =
                         integration.id === "hubspot" &&
@@ -1248,6 +1426,10 @@ export function Integrations() {
                         setConnectingIntegration(integration);
                         setIntegrationForm({});
                         setSelectedSyncOptions(integration.id === "hubspot" ? ["sync_contacts"] : []);
+                        setCalendlyEventTypes([]);
+                        setCalendlySelectedEventTypeUri("");
+                        setCalendlyEventTypesLoaded(false);
+                        setCalendlyEventTypesError(null);
                       };
                       let primaryTestId = `button-connect-${integration.id}`;
 
@@ -1313,7 +1495,7 @@ export function Integrations() {
                                 {isLeadConnector ? crmCard.label : integration.name}
                               </h3>
                               {(wooConnected ||
-                                calendlyConnected ||
+                                (calendlyConnected && !calendlyNeedsEvent) ||
                                 shopifyManageConnected ||
                                 hubspotValidated ||
                                 (isLeadConnector && lcConnected)) && (
@@ -1322,6 +1504,14 @@ export function Integrations() {
                                   className="shrink-0 border-emerald-200 bg-emerald-50 text-[10px] font-semibold uppercase tracking-wide text-emerald-800"
                                 >
                                   {isLeadConnector ? crmCard.statusLabel : "Connected"}
+                                </Badge>
+                              )}
+                              {calendlyNeedsEvent && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 border-amber-200 bg-amber-50 text-[10px] font-semibold uppercase tracking-wide text-amber-900"
+                                >
+                                  Select event type
                                 </Badge>
                               )}
                               {isLeadConnector && crmCard.state === "installed_incomplete" && (
@@ -1351,7 +1541,11 @@ export function Integrations() {
                             </div>
                           </div>
                           <p className="mt-3 flex-1 text-sm leading-snug text-gray-500 line-clamp-2">
-                            {isLeadConnector ? crmCard.description : integration.tagline}
+                            {isLeadConnector
+                              ? crmCard.description
+                              : calendlyNeedsEvent
+                                ? "Select an event type to enable sync"
+                                : calendlyEventName || integration.tagline}
                           </p>
                           <div className="mt-5 space-y-2">
                             <Button
@@ -2261,8 +2455,17 @@ export function Integrations() {
                   {managingIntegration.id === "calendly" &&
                     (() => {
                       const cfg = managingConnected.config as Record<string, unknown>;
+                      const selectedName =
+                        typeof cfg.calendlySelectedEventTypeName === "string"
+                          ? cfg.calendlySelectedEventTypeName.trim()
+                          : "";
                       const bookingLink =
-                        typeof cfg.calendlyPrimarySchedulingUrl === "string" ? cfg.calendlyPrimarySchedulingUrl : "";
+                        typeof cfg.calendlySelectedEventSchedulingUrl === "string" &&
+                        cfg.calendlySelectedEventSchedulingUrl.trim()
+                          ? cfg.calendlySelectedEventSchedulingUrl.trim()
+                          : typeof cfg.calendlyPrimarySchedulingUrl === "string"
+                            ? cfg.calendlyPrimarySchedulingUrl
+                            : "";
                       const webhookStatus = String(cfg.calendlyWebhookStatus || "unknown");
                       const syncMode = String(cfg.calendlySyncMode || (webhookStatus === "failed" ? "polling" : "webhook"));
                       const pollingActive = syncMode === "polling";
@@ -2281,32 +2484,47 @@ export function Integrations() {
                         typeof cfg.calendlyUserUri === "string" && cfg.calendlyUserUri.trim()
                           ? cfg.calendlyUserUri.trim()
                           : "";
+                      const selectionRequired =
+                        cfg.calendlyEventSelectionRequired === true ||
+                        !String(cfg.calendlySelectedEventTypeUri || "").trim();
+                      const manageTypes = calendlyManageTypesQuery.data?.eventTypes || [];
                       return (
+                        <div className="space-y-3">
                         <div
                           className={cn(
                             "rounded-lg border p-4 text-sm",
-                            pollingActive
+                            selectionRequired
+                              ? "border-amber-200 bg-amber-50 text-amber-950"
+                              : pollingActive
                               ? "border-sky-200 bg-sky-50 text-sky-950"
                               : "border-emerald-100 bg-emerald-50/80 text-emerald-900",
                           )}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="font-semibold">Calendly connected</p>
+                            <p className="font-semibold">
+                              {selectionRequired ? "Select an event type to enable sync" : "Calendly connected"}
+                            </p>
                             <Badge
                               variant="default"
                               className={cn(
                                 "text-[10px]",
-                                pollingActive
+                                selectionRequired
+                                  ? "bg-amber-600 text-white"
+                                  : pollingActive
                                   ? "bg-sky-600 text-white"
                                   : "bg-emerald-600 text-white",
                               )}
                             >
-                              {pollingActive ? "Polling sync active" : "Real-time sync active"}
+                              {selectionRequired
+                                ? "Sync paused"
+                                : pollingActive
+                                  ? "Polling sync active"
+                                  : "Real-time sync active"}
                             </Badge>
                           </div>
                           <div className="mt-3 space-y-2 text-xs sm:text-sm">
                             <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
-                              <span className={pollingActive ? "text-sky-800" : "text-emerald-800"}>
+                              <span className={pollingActive || selectionRequired ? "text-sky-800" : "text-emerald-800"}>
                                 Calendly account
                               </span>
                               <span className="min-w-0 break-words font-medium sm:text-right">
@@ -2314,18 +2532,28 @@ export function Integrations() {
                               </span>
                             </div>
                             <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
-                              <span className={pollingActive ? "text-sky-800" : "text-emerald-800"}>
+                              <span className={pollingActive || selectionRequired ? "text-sky-800" : "text-emerald-800"}>
+                                Workspace event
+                              </span>
+                              <span className="min-w-0 break-words font-medium sm:text-right">
+                                {selectedName || "Not selected"}
+                              </span>
+                            </div>
+                            <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
+                              <span className={pollingActive || selectionRequired ? "text-sky-800" : "text-emerald-800"}>
                                 Booking sync
                               </span>
                               <span className="font-medium sm:text-right">
-                                {pollingActive
+                                {selectionRequired
+                                  ? "Waiting for event selection"
+                                  : pollingActive
                                   ? "Polling (Calendly Free / no webhooks)"
                                   : webhookActive
                                     ? "Webhooks"
                                     : webhookStatus.replace(/_/g, " ")}
                               </span>
                             </div>
-                            {lastPollAt && pollingActive && (
+                            {lastPollAt && pollingActive && !selectionRequired && (
                               <div className="grid gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
                                 <span className="text-sky-800">Last sync</span>
                                 <span className="font-medium sm:text-right">
@@ -2334,7 +2562,7 @@ export function Integrations() {
                               </div>
                             )}
                           </div>
-                          {bookingLink ? (
+                          {bookingLink && !selectionRequired ? (
                             <a
                               href={bookingLink}
                               target="_blank"
@@ -2346,15 +2574,57 @@ export function Integrations() {
                             >
                               {bookingLink}
                             </a>
+                          ) : selectionRequired ? (
+                            <p className="mt-2 text-xs sm:text-sm">
+                              This Calendly account has multiple events. Choose the one that belongs to this workspace.
+                            </p>
                           ) : (
                             <p className="mt-1">Calendly is connected, but no public booking link was detected.</p>
                           )}
-                          {pollingActive && (
+                          {pollingActive && !selectionRequired && (
                             <p className="mt-2 text-xs sm:text-sm text-sky-900">
                               Booking confirmations may sync by polling every few minutes, or immediately when you use
                               Sync bookings now.
                             </p>
                           )}
+                        </div>
+                        <div className="rounded-lg border border-gray-200 p-4 space-y-3">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Event type for this workspace</p>
+                            <p className="text-xs text-gray-500">
+                              Only bookings for the selected event are imported. Other events on this Calendly account stay out of this workspace.
+                            </p>
+                          </div>
+                          {calendlyManageTypesQuery.isFetching ? (
+                            <p className="text-sm text-gray-500">Loading event types…</p>
+                          ) : (
+                            <CalendlyEventTypePicker
+                              options={manageTypes}
+                              value={manageCalendlyEventTypeUri}
+                              onChange={setManageCalendlyEventTypeUri}
+                              disabled={saveCalendlyEventTypeMutation.isPending}
+                            />
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-brand-green hover:bg-brand-green/90"
+                            disabled={
+                              !manageCalendlyEventTypeUri ||
+                              saveCalendlyEventTypeMutation.isPending ||
+                              manageCalendlyEventTypeUri === String(cfg.calendlySelectedEventTypeUri || "")
+                            }
+                            onClick={() =>
+                              saveCalendlyEventTypeMutation.mutate({
+                                id: managingConnected.id,
+                                eventTypeUri: manageCalendlyEventTypeUri,
+                              })
+                            }
+                            data-testid="button-save-calendly-event-type"
+                          >
+                            {saveCalendlyEventTypeMutation.isPending ? "Saving…" : "Save event type"}
+                          </Button>
+                        </div>
                         </div>
                       );
                     })()}
@@ -2372,7 +2642,16 @@ export function Integrations() {
                       size="sm"
                       className="flex-1 border-gray-200"
                       onClick={() => syncIntegrationMutation.mutate(managingConnected.id)}
-                      disabled={syncIntegrationMutation.isPending}
+                      disabled={
+                        syncIntegrationMutation.isPending ||
+                        (managingIntegration.id === "calendly" &&
+                          ((managingConnected.config as Record<string, unknown>)?.calendlyEventSelectionRequired ===
+                            true ||
+                            !String(
+                              (managingConnected.config as Record<string, unknown>)?.calendlySelectedEventTypeUri ||
+                                "",
+                            ).trim()))
+                      }
                       data-testid={`button-sync-${managingIntegration.id}`}
                     >
                       <RefreshCw
@@ -2409,7 +2688,18 @@ export function Integrations() {
         </Dialog>
 
         {/* Integration Connection Dialog */}
-        <Dialog open={!!connectingIntegration} onOpenChange={(open) => !open && setConnectingIntegration(null)}>
+        <Dialog
+          open={!!connectingIntegration}
+          onOpenChange={(open) => {
+            if (!open) {
+              setConnectingIntegration(null);
+              setCalendlyEventTypes([]);
+              setCalendlySelectedEventTypeUri("");
+              setCalendlyEventTypesLoaded(false);
+              setCalendlyEventTypesError(null);
+            }
+          }}
+        >
           <DialogContent className="max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 overflow-hidden">
             {connectingIntegration && (
               <>
@@ -2445,7 +2735,15 @@ export function Integrations() {
                         type={field.type || "text"}
                         placeholder={field.placeholder}
                         value={integrationForm[field.key] || ""}
-                        onChange={(e) => setIntegrationForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        onChange={(e) => {
+                          setIntegrationForm((prev) => ({ ...prev, [field.key]: e.target.value }));
+                          if (connectingIntegration.id === "calendly" && field.key === "accessToken") {
+                            setCalendlyEventTypes([]);
+                            setCalendlySelectedEventTypeUri("");
+                            setCalendlyEventTypesLoaded(false);
+                            setCalendlyEventTypesError(null);
+                          }
+                        }}
                         data-testid={`input-${connectingIntegration.id}-${field.key}`}
                       />
                       {field.helpText && (
@@ -2453,6 +2751,32 @@ export function Integrations() {
                       )}
                     </div>
                   ))}
+
+                  {connectingIntegration.id === "calendly" && (
+                    <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Event type for this workspace</p>
+                        <p className="text-xs text-gray-500">
+                          If this Calendly account has more than one event, choose the one customers should book for this workspace.
+                        </p>
+                      </div>
+                      {calendlyEventTypesError && (
+                        <p className="text-xs text-red-700" role="alert">{calendlyEventTypesError}</p>
+                      )}
+                      {calendlyEventTypesLoaded ? (
+                        <CalendlyEventTypePicker
+                          options={calendlyEventTypes}
+                          value={calendlySelectedEventTypeUri}
+                          onChange={setCalendlySelectedEventTypeUri}
+                          disabled={createIntegrationMutation.isPending}
+                        />
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          Click Connect to load your event types. If more than one is active, you will choose before sync starts.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {connectingIntegration.id === "hubspot" ? (
                     <>
@@ -2528,12 +2852,21 @@ export function Integrations() {
                     onClick={handleConnectIntegration}
                     disabled={
                       connectingIntegration.fields.some(f => !integrationForm[f.key]) ||
-                      createIntegrationMutation.isPending
+                      createIntegrationMutation.isPending ||
+                      calendlyEventTypesLoading ||
+                      (connectingIntegration.id === "calendly" &&
+                        calendlyEventTypesLoaded &&
+                        calendlyEventTypes.length > 1 &&
+                        !calendlySelectedEventTypeUri)
                     }
                     className="bg-brand-green hover:bg-brand-green/90"
                     data-testid="button-save-integration"
                   >
-                    {createIntegrationMutation.isPending ? "Connecting..." : "Connect"}
+                    {createIntegrationMutation.isPending || calendlyEventTypesLoading
+                      ? connectingIntegration.id === "calendly" && calendlyEventTypesLoading
+                        ? "Loading events..."
+                        : "Connecting..."
+                      : "Connect"}
                   </Button>
                 </DialogFooter>
               </>

@@ -146,11 +146,33 @@ export async function calendlyListWebhookSubscriptions(token: string, organizati
   }>(`/webhook_subscriptions?organization=${q}&scope=organization`, token);
 }
 
-export async function calendlyListEventTypes(token: string, organizationUri: string) {
-  const q = encodeURIComponent(organizationUri);
+export type CalendlyEventTypeResource = {
+  name?: string;
+  slug?: string;
+  uri?: string;
+  scheduling_url?: string;
+  duration?: number;
+  active?: boolean;
+  locations?: Array<{ kind?: string; location?: string }>;
+};
+
+export async function calendlyListEventTypes(
+  token: string,
+  params: { user?: string; organization?: string } | string,
+) {
+  const search = new URLSearchParams({ active: "true" });
+  if (typeof params === "string") {
+    search.set("organization", params);
+  } else if (params.user) {
+    search.set("user", params.user);
+  } else if (params.organization) {
+    search.set("organization", params.organization);
+  }
   return calendlyJson<{
-    collection?: Array<{ name?: string; slug?: string; uri?: string; scheduling_url?: string }>;
-  }>(`/event_types?organization=${q}&active=true`, token);
+    collection?: CalendlyEventTypeResource[];
+    message?: string;
+    title?: string;
+  }>(`/event_types?${search.toString()}`, token);
 }
 
 export type CalendlyScheduledEventResource = {

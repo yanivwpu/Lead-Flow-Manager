@@ -227,7 +227,6 @@ import {
   calendlyGetCurrentUser,
   calendlyGetWebhookSubscription,
   calendlyGetOrganization,
-  calendlyListEventTypes,
   calendlyListWebhookSubscriptions,
 } from "./calendlyApi";
 import {
@@ -237,6 +236,18 @@ import {
   resolveCalendlySyncModeFromConfig,
 } from "./calendlyBookingConnected";
 import { pollCalendlyBookingsForUser } from "./calendlySyncService";
+import {
+  applyCalendlyEventSelection,
+  loadActiveCalendlyEventTypes,
+  loadCalendlyEventTypesForIntegration,
+  previewCalendlyEventTypes,
+  publicCalendlyEventTypePayload,
+} from "./calendlyEventTypeSync";
+import {
+  calendlyBookingSyncEnabled,
+  publicCalendlyEventTypes,
+  selectedCalendlyEventTypeUri,
+} from "@shared/calendlyEventSelection";
 import { hubspotValidatePrivateAppToken } from "./hubspotApi";
 import { pushLeadsToHubSpot } from "./hubspotSync";
 import { SALESPERSON_AGREEMENT_VERSION } from "@shared/salespersonAgreement";
@@ -4976,6 +4987,44 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/integrations/calendly/preview-event-types", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const token = String(req.body?.accessToken || "").trim();
+      if (!token) {
+        return res.status(400).json({ error: "Enter a Calendly personal access token.", errorCode: "invalid_token" });
+      }
+      console.log(
+        JSON.stringify({
+          tag: "[CalendlyConnect]",
+          event: "preview_event_types",
+          userId: req.user.id,
+          tokenPresent: true,
+        }),
+      );
+      const previewed = await previewCalendlyEventTypes(token);
+      if (!previewed.ok) {
+        return res.status(400).json({
+          error: previewed.error,
+          errorCode: previewed.errorCode,
+        });
+      }
+      const payload = publicCalendlyEventTypePayload({}, previewed.types);
+      return res.json({
+        ok: true,
+        eventTypes: payload.eventTypes,
+        selectedEventTypeUri: payload.selectedEventTypeUri,
+        selectionRequired: payload.selectionRequired,
+        bookingSyncEnabled: payload.bookingSyncEnabled,
+      });
+    } catch (error) {
+      console.error("Error previewing Calendly event types:", error);
+      return res.status(500).json({ error: "Failed to load Calendly event types" });
+    }
+  });
+
   // ── Meta OAuth flow ──────────────────────────────────────────────────────
 
   // GET /api/integrations/meta/auth-url?channel=facebook|instagram
@@ -6972,6 +7021,9 @@ export async function registerRoutes(
       let finalConfig: Record<string, any> = { ...config };
       let calendlyExtra: {
         calendlyEventTypes?: string[];
+        calendlyEventTypeOptions?: ReturnType<typeof publicCalendlyEventTypes>;
+        calendlyEventSelectionRequired?: boolean;
+        calendlySelectedEventTypeUri?: string;
         calendlyWebhookStatus?: string;
         calendlyWebhookError?: string;
         calendlySyncMode?: string;
@@ -7057,46 +7109,33 @@ export async function registerRoutes(
         }
 
         let eventNames: string[] | undefined;
-        let calendlyPrimaryEventTypeName = "";
-        const userScheduling = meResource?.scheduling_url;
-        let calendlyPrimarySchedulingUrl =
-          typeof userScheduling === "string" && /^https?:\/\//i.test(userScheduling) ? userScheduling.trim() : "";
-
-        logCalendlyConnect("endpoint_test", { endpoint: "GET /event_types", organizationUri: orgUri });
-        const et = await calendlyListEventTypes(token, orgUri);
-        const coll = (et.data as { collection?: { name?: string; scheduling_url?: string }[] })?.collection;
-        const schedulingUrls = Array.isArray(coll)
-          ? coll.map((x) => x.scheduling_url).filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))
-          : [];
-        logCalendlyConnect("event_types_result", {
-          ok: et.ok,
-          status: et.status,
-          detectedSchedulingUrlCount: schedulingUrls.length,
-          calendlyResponseBody: et.ok
-            ? { eventTypeCount: Array.isArray(coll) ? coll.length : 0 }
-            : et.data,
+        logCalendlyConnect("endpoint_test", {
+          endpoint: "GET /event_types",
+          organizationUri: orgUri,
+          userUri: meResource?.uri || null,
         });
-        if (et.status === 403) {
+        const listed = await loadActiveCalendlyEventTypes(token, {
+          user: meResource?.uri,
+          organization: orgUri,
+        });
+        if (listed.status === 403) {
           return res.status(400).json({
             error: "Calendly token is missing event type access. Create a new personal access token with event type access.",
             errorCode: "missing_scopes",
           });
         }
-        if (et.ok && Array.isArray(coll)) {
-          eventNames = coll.map((x) => x.name).filter(Boolean).slice(0, 20) as string[];
-          if (!calendlyPrimarySchedulingUrl && schedulingUrls[0]) {
-            calendlyPrimarySchedulingUrl = schedulingUrls[0].trim();
-          }
-          const primaryMatch = coll.find(
-            (x) =>
-              typeof x.scheduling_url === "string" &&
-              x.scheduling_url.trim() === calendlyPrimarySchedulingUrl,
-          );
-          calendlyPrimaryEventTypeName =
-            (typeof primaryMatch?.name === "string" && primaryMatch.name.trim()) ||
-            (typeof coll[0]?.name === "string" && coll[0].name.trim()) ||
-            "";
-        }
+        const eventTypes = listed.types;
+        const requestedEventTypeUri =
+          typeof config.selectedEventTypeUri === "string" ? config.selectedEventTypeUri : "";
+        const appliedSelection = applyCalendlyEventSelection({}, eventTypes, requestedEventTypeUri);
+        eventNames = eventTypes.map((x) => x.name).slice(0, 20);
+        logCalendlyConnect("event_types_result", {
+          ok: listed.ok,
+          status: listed.status,
+          detectedEventTypeCount: eventTypes.length,
+          selectionRequired: appliedSelection.selectionRequired,
+          selectedEventTypeUri: selectedCalendlyEventTypeUri(appliedSelection.cfg) || null,
+        });
 
         const webhookUrl = `https://app.whachatcrm.com/api/webhooks/calendly/${req.user.id}`;
         const calendlyWebhookEvents = ["invitee.created", "invitee.canceled"];
@@ -7175,12 +7214,15 @@ export async function registerRoutes(
           calendlyWebhookStatus: webhookRegistrationError ? "failed" : "connected",
           ...(webhookRegistrationError ? { calendlyWebhookError: webhookRegistrationError } : { calendlyWebhookError: null }),
           connectionStatus: "connected",
-          calendlyPrimarySchedulingUrl,
-          calendlyPrimaryEventTypeName,
+          ...appliedSelection.cfg,
           ...calendlySyncModeConfigPatch(!webhookRegistrationError, !!webhookRegistrationError),
         };
+        delete finalConfig.selectedEventTypeUri;
         calendlyExtra = {
           calendlyEventTypes: eventNames,
+          calendlyEventTypeOptions: publicCalendlyEventTypes(eventTypes),
+          calendlyEventSelectionRequired: appliedSelection.selectionRequired,
+          calendlySelectedEventTypeUri: selectedCalendlyEventTypeUri(appliedSelection.cfg) || "",
           ...(webhookLinkedMessage ? { message: webhookLinkedMessage } : {}),
           ...(webhookRegistrationError
             ? {
@@ -7223,7 +7265,7 @@ export async function registerRoutes(
         isActive: true,
       });
 
-      if (type === "calendly" && calendlyExtra?.calendlySyncMode === "polling") {
+      if (type === "calendly" && calendlyExtra?.calendlySyncMode === "polling" && calendlyBookingSyncEnabled(finalConfig)) {
         const connectUserId = req.user.id;
         setImmediate(() => {
           pollCalendlyBookingsForUser(connectUserId, { manual: true, backfillDays: 7 }).catch((err) =>
@@ -7514,6 +7556,76 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/integrations/:id/calendly-event-types", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id || integration.type !== "calendly") {
+        return res.status(404).json({ error: "Calendly integration not found" });
+      }
+      const config = decryptIntegrationConfig((integration.config || {}) as Record<string, any>);
+      const token = typeof config.accessToken === "string" ? config.accessToken.trim() : "";
+      if (!token) {
+        return res.status(400).json({ error: "Calendly token is missing. Reconnect Calendly." });
+      }
+      const listed = await loadCalendlyEventTypesForIntegration(token, config);
+      if (!listed.ok) {
+        return res.status(502).json({
+          error: "Could not load Calendly event types.",
+        });
+      }
+      return res.json(publicCalendlyEventTypePayload(config, listed.types));
+    } catch (error) {
+      console.error("Error listing Calendly event types:", error);
+      return res.status(500).json({ error: "Failed to load Calendly event types" });
+    }
+  });
+
+  app.post("/api/integrations/:id/calendly-event-type", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const integration = await storage.getIntegration(req.params.id);
+      if (!integration || integration.userId !== req.user.id || integration.type !== "calendly") {
+        return res.status(404).json({ error: "Calendly integration not found" });
+      }
+      const requestedUri = String(req.body?.eventTypeUri || "").trim();
+      if (!requestedUri) {
+        return res.status(400).json({ error: "Select a Calendly event type." });
+      }
+      const config = decryptIntegrationConfig((integration.config || {}) as Record<string, any>);
+      const token = typeof config.accessToken === "string" ? config.accessToken.trim() : "";
+      if (!token) {
+        return res.status(400).json({ error: "Calendly token is missing. Reconnect Calendly." });
+      }
+      const listed = await loadCalendlyEventTypesForIntegration(token, config);
+      if (!listed.ok) {
+        return res.status(502).json({ error: "Could not load Calendly event types." });
+      }
+      const applied = applyCalendlyEventSelection(config, listed.types, requestedUri);
+      if (applied.selectionRequired || !calendlyBookingSyncEnabled(applied.cfg)) {
+        return res.status(400).json({
+          error: "That event type is not available for this Calendly account.",
+          eventTypes: publicCalendlyEventTypes(listed.types),
+          selectionRequired: true,
+        });
+      }
+      const updated = await storage.updateIntegration(req.params.id, {
+        config: encryptIntegrationConfig(applied.cfg),
+      });
+      return res.json({
+        ...toPublicIntegration((updated || integration) as unknown as Record<string, unknown>),
+        ...publicCalendlyEventTypePayload(applied.cfg, listed.types),
+      });
+    } catch (error) {
+      console.error("Error saving Calendly event type:", error);
+      return res.status(500).json({ error: "Failed to save Calendly event type" });
+    }
+  });
+
   // Delete an integration
   app.delete("/api/integrations/:id", async (req, res) => {
     try {
@@ -7656,28 +7768,22 @@ export async function registerRoutes(
           });
         }
 
-        let refreshedBookingUrl =
-          typeof meResource?.scheduling_url === "string" && /^https?:\/\//i.test(meResource.scheduling_url)
-            ? meResource.scheduling_url.trim()
-            : String(config.calendlyPrimarySchedulingUrl || "").trim();
-        const eventTypes = await calendlyListEventTypes(token, orgUri);
-        const eventTypeRows = eventTypes.data?.collection;
-        if (eventTypes.ok && Array.isArray(eventTypeRows)) {
-          const fromEventType = eventTypeRows
-            .map((x) => x.scheduling_url)
-            .find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
-          if (!refreshedBookingUrl && fromEventType) {
-            refreshedBookingUrl = fromEventType.trim();
-          }
-        }
+        const listed = await loadActiveCalendlyEventTypes(token, {
+          user: meResource?.uri || String(config.calendlyUserUri || ""),
+          organization: orgUri,
+        });
+        const appliedSelection = applyCalendlyEventSelection(
+          config,
+          listed.types,
+          selectedCalendlyEventTypeUri(config),
+        );
 
         const refreshCalendlyConfigPatch = () => ({
-          ...config,
+          ...appliedSelection.cfg,
           calendlyOrganizationUri: orgUri,
           calendlyUserUri: meResource?.uri || config.calendlyUserUri,
           calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
           calendlyUserName: meResource?.name || config.calendlyUserName || "",
-          calendlyPrimarySchedulingUrl: refreshedBookingUrl,
           connectionStatus: "connected",
         });
 
@@ -7692,8 +7798,10 @@ export async function registerRoutes(
           const pollResult = await pollCalendlyBookingsForUser(req.user.id, { manual: true });
           return res.json({
             success: true,
-            message: "Calendly polling sync active",
-            details: pollResult.ok
+            message: pollResult.selectionRequired ? "Select an event type to enable sync" : "Calendly polling sync active",
+            details: pollResult.selectionRequired
+              ? "Your Calendly account is connected. Choose which event type belongs to this workspace before bookings can sync."
+              : pollResult.ok
               ? `Imported ${pollResult.imported} booking(s)${pollResult.canceled ? `, ${pollResult.canceled} cancellation(s)` : ""} from Calendly. Booking confirmations will continue syncing by polling.`
               : `Polling sync is active but the latest import did not complete: ${pollResult.error || "unknown error"}. Your booking link remains connected.`,
             calendlySyncMode: "polling",
@@ -7776,18 +7884,12 @@ export async function registerRoutes(
               await storage.updateIntegration(req.params.id, {
                 lastSyncAt: new Date(),
                 config: encryptIntegrationConfig({
-                  ...config,
-                  calendlyOrganizationUri: orgUri,
-                  calendlyUserUri: meResource?.uri || config.calendlyUserUri,
-                  calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
-                  calendlyUserName: meResource?.name || config.calendlyUserName || "",
-                  calendlyPrimarySchedulingUrl: refreshedBookingUrl,
+                  ...refreshCalendlyConfigPatch(),
                   webhookSigningKey: resolved.signingKey,
                   calendlyWebhookSubscriptionUri: resolved.uri,
                   calendlyWebhookCallbackUrl: webhookUrl,
                   calendlyWebhookStatus: "connected",
                   calendlyWebhookError: null,
-                  connectionStatus: "connected",
                   ...calendlySyncModeConfigPatch(true, false),
                 }),
               });
@@ -7809,24 +7911,20 @@ export async function registerRoutes(
           await storage.updateIntegration(req.params.id, {
             lastSyncAt: new Date(),
             config: encryptIntegrationConfig({
-              ...config,
-              calendlyOrganizationUri: orgUri,
-              calendlyUserUri: meResource?.uri || config.calendlyUserUri,
-              calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
-              calendlyUserName: meResource?.name || config.calendlyUserName || "",
-              calendlyPrimarySchedulingUrl: refreshedBookingUrl,
+              ...refreshCalendlyConfigPatch(),
               calendlyWebhookStatus: "failed",
               calendlyWebhookError: errMsg,
               calendlyWebhookCallbackUrl: webhookUrl,
-              connectionStatus: "connected",
               ...calendlySyncModeConfigPatch(false, true),
             }),
           });
           const pollResult = await pollCalendlyBookingsForUser(req.user.id, { manual: true });
           return res.json({
             success: true,
-            message: "Calendly polling sync active",
-            details: pollResult.ok
+            message: pollResult.selectionRequired ? "Select an event type to enable sync" : "Calendly polling sync active",
+            details: pollResult.selectionRequired
+              ? "Your Calendly account is connected. Choose which event type belongs to this workspace before bookings can sync."
+              : pollResult.ok
               ? `Imported ${pollResult.imported} booking(s)${pollResult.canceled ? `, ${pollResult.canceled} cancellation(s)` : ""} from Calendly. Booking confirmations will continue syncing by polling.`
               : `Polling sync is active but the latest import did not complete: ${pollResult.error || "unknown error"}. Your booking link remains connected.`,
             calendlySyncMode: "polling",
@@ -7837,18 +7935,12 @@ export async function registerRoutes(
         await storage.updateIntegration(req.params.id, {
           lastSyncAt: new Date(),
           config: encryptIntegrationConfig({
-            ...config,
-            calendlyOrganizationUri: orgUri,
-            calendlyUserUri: meResource?.uri || config.calendlyUserUri,
-            calendlyUserEmail: meResource?.email || config.calendlyUserEmail || "",
-            calendlyUserName: meResource?.name || config.calendlyUserName || "",
-            calendlyPrimarySchedulingUrl: refreshedBookingUrl,
+            ...refreshCalendlyConfigPatch(),
             webhookSigningKey: resource.signing_key || requestedSigningKey,
             calendlyWebhookSubscriptionUri: resource.uri,
             calendlyWebhookCallbackUrl: webhookUrl,
             calendlyWebhookStatus: "connected",
             calendlyWebhookError: null,
-            connectionStatus: "connected",
             ...calendlySyncModeConfigPatch(true, false),
           }),
         });

@@ -21,6 +21,7 @@ import { calendlyGetWebhookSubscription } from "./calendlyApi";
 import { encryptIntegrationConfig } from "./integrationConfigCrypto";
 import { ACTIVE_APPOINTMENT_STATUSES } from "@shared/activeAppointment";
 import { buildCalendlyBookingMessageExternalId, isCalendlyBookingCanceledPayload } from "@shared/calendlyAppointmentDedup";
+import { shouldIngestCalendlyPayloadForWorkspace, extractCalendlyEventTypeUri } from "@shared/calendlyEventSelection";
 import {
   evaluateCalendlyBookingIngest,
   findExistingCalendlyAppointment,
@@ -253,6 +254,7 @@ export function extractCalendlyBookingPayload(body: Record<string, unknown>): {
   email: string;
   name: string;
   eventTypeName: string;
+  eventTypeUri?: string;
   startTime?: string;
   endTime?: string;
   inviteeUri?: string;
@@ -354,6 +356,7 @@ export function extractCalendlyBookingPayload(body: Record<string, unknown>): {
     email,
     name,
     eventTypeName,
+    eventTypeUri: extractCalendlyEventTypeUri(body, scheduled) || undefined,
     startTime,
     endTime,
     inviteeUri,
@@ -1811,6 +1814,19 @@ async function processCalendlyPayload(
 ): Promise<void> {
   const event = String(body.event || "");
   const ingestSource = opts?.source || "calendly_webhook";
+  const integration = await storage.getIntegrationByUserAndType(userId, "calendly");
+  const cfg = decryptIntegrationConfigLocal((integration?.config || {}) as Record<string, unknown>);
+  const allow = shouldIngestCalendlyPayloadForWorkspace(cfg, body);
+  if (!allow.ok) {
+    logCalendlyWebhook("event_type_filtered", {
+      userId,
+      calendlyEvent: event,
+      ingestSource,
+      reason: allow.reason,
+      eventTypeUri: allow.eventTypeUri || null,
+    });
+    return;
+  }
   logCalendlyWebhook("processing_started", { userId, calendlyEvent: event, ingestSource });
   switch (event) {
     case "invitee.created":
