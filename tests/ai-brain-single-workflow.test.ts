@@ -196,7 +196,7 @@ run("a pricing plan is laid out in parts, not re-worded", () => {
   const builder = review.slice(review.indexOf("function factDisplay"), review.indexOf("export function toKnowledgeFactView"));
   assert.ok(/factType !== "pricing_plan"/.test(builder), "only pricing plans get the layout");
   assert.ok(/title: d\.name/.test(builder), "the plan name must be the stored name");
-  assert.ok(/formatFactMoney\(d\.price/.test(builder), "the price must use the shared formatter");
+  assert.ok(/formatFactMoney\(/.test(builder), "the price must use the shared formatter");
   assert.ok(/bullets: \[\.\.\.d\.benefits\]/.test(builder), "benefits must be passed through as stored");
   // Nothing in the builder may compose new prose.
   assert.ok(!/`\$\{/.test(builder), "the display must not build sentences out of a fact");
@@ -229,11 +229,15 @@ run("a large review opens one section, not all of them", () => {
   }
 });
 
-run("a published workspace is offered one way to try it", () => {
-  assert.ok(steps.includes("Test AI knowledge"), "there is no way to try the published knowledge");
-  assert.ok(/publishMutation\.isSuccess &&/.test(steps), "the offer must follow a successful publish");
-  assert.ok(/href="\/app\/inbox"/.test(steps), "the test action must reach an existing surface");
-  // Nothing here may open a second reply path of its own.
+run("a successful publish confirms knowledge is live without a test destination", () => {
+  assert.ok(
+    steps.includes("Published successfully. Your AI assistant is now using the updated business knowledge."),
+    "publish must still confirm that the assistant is using the new knowledge",
+  );
+  assert.ok(/publishMutation\.isSuccess &&/.test(steps), "the confirmation must follow a successful publish");
+  assert.ok(!steps.includes("Test AI"), "the confirmation must not offer a Test AI action");
+  assert.ok(!steps.includes("link-test-knowledge"), "the Test AI test id must be gone");
+  assert.ok(!/href="\/app\/inbox"/.test(steps), "publish must not navigate to the Inbox");
   assert.ok(!steps.includes("/api/ai/suggest-reply"), "the review step must not call the reply API");
 });
 

@@ -13,7 +13,6 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
 import {
   AlertTriangle,
   Boxes,
@@ -1159,16 +1158,8 @@ export function BusinessKnowledgeSteps({
               </div>
 
               {publishMutation.isSuccess && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2 text-sm">
-                  <span className="text-emerald-900">Your assistant is using this now.</span>
-                  <Link
-                    href="/app/inbox"
-                    className="inline-flex items-center gap-1 font-medium text-emerald-900 underline underline-offset-2 hover:text-emerald-700"
-                    data-testid="link-test-knowledge"
-                  >
-                    Test AI knowledge
-                    <ExternalLink className="h-3 w-3" aria-hidden />
-                  </Link>
+                <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/50 px-3 py-2 text-sm text-emerald-900">
+                  Published successfully. Your AI assistant is now using the updated business knowledge.
                 </div>
               )}
 
