@@ -6,6 +6,7 @@
 import { sanitizePlainWidgetText } from "./webchatWidgetBranding";
 import type { WebchatChromeLayout } from "./webchatWidgetChrome";
 import { toVisitorSafePublicWebchatPayload } from "./webchatWidgetBranding";
+import { resolveLocalizedPageRuleGreeting } from "./webchatWidgetCopyI18n";
 
 export type VisitorSafeWidgetPageRule = {
   urlContains: string;
@@ -56,7 +57,10 @@ export function widgetTriggerConfig(settings: Record<string, unknown>): {
   };
 }
 
-export function visitorSafeWidgetPageRules(settings: Record<string, unknown>): VisitorSafeWidgetPageRule[] {
+export function visitorSafeWidgetPageRules(
+  settings: Record<string, unknown>,
+  locale?: string | null,
+): VisitorSafeWidgetPageRule[] {
   const rules = Array.isArray(settings.pageRules) ? settings.pageRules : [];
   const out: VisitorSafeWidgetPageRule[] = [];
   for (const raw of rules) {
@@ -72,7 +76,12 @@ export function visitorSafeWidgetPageRules(settings: Record<string, unknown>): V
       : [];
     out.push({
       urlContains,
-      greeting: sanitizePlainWidgetText(r.greeting, 500),
+      greeting: resolveLocalizedPageRuleGreeting({
+        locale,
+        greeting: r.greeting,
+        localized: r.localized,
+        fallback: "",
+      }),
       prefilledMessage: sanitizePlainWidgetText(r.prefilledMessage, 2000),
       suggestedQuestions: questions,
     });
@@ -84,11 +93,12 @@ export function visitorSafeWidgetPageRules(settings: Record<string, unknown>): V
 export function toVisitorSafeWidgetLauncher(
   settings: Record<string, unknown>,
   chrome: WebchatChromeLayout,
+  locale?: string | null,
 ): VisitorSafeWidgetLauncher {
   const trigger = widgetTriggerConfig(settings);
   return {
     ...trigger,
-    pageRules: visitorSafeWidgetPageRules(settings),
+    pageRules: visitorSafeWidgetPageRules(settings, locale),
     launcherCss: chrome.launcherCss,
     teaserCss: chrome.teaserCss,
     panelCss: chrome.panelCss,

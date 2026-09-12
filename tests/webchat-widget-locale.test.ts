@@ -16,6 +16,7 @@ import {
 } from "../shared/webchatWidgetLocale";
 import { resolveChatbotNodeCopy } from "../shared/chatbotNodeI18n";
 import { detectConversationLanguage, languageInstructionForConversation, mergeConversationLanguage } from "../shared/conversationLanguage";
+import { applyTenantWidgetCopyI18n, resolveTenantWidgetCopy } from "../shared/webchatWidgetCopyI18n";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -45,6 +46,57 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
     "he",
   );
   assert.equal(localized.welcomeMessage, he.welcomeMessage);
+}
+
+{
+  const custom = {
+    welcomeMessage: "Meet Your AI Sales Team",
+    chatGreeting: "Meet Your AI Sales Team",
+    launcherLabel: "Let's Chat",
+    panelSubtitle: "We're here to help",
+    teaserGreeting: "Meet Your AI Sales Team",
+    panelHeading: "Meet Your AI Sales Team",
+    brandName: "WhachatCRM",
+    displayName: "WhachatCRM",
+  };
+  const heBuiltin = widgetChromeCopyForLocale("he");
+  const withoutVariants = applyTenantWidgetCopyI18n(custom, "he", {});
+  assert.equal(withoutVariants.panelHeading, "Meet Your AI Sales Team");
+  assert.equal(withoutVariants.brandName, "WhachatCRM");
+  assert.equal(withoutVariants.welcomeMessage, "Meet Your AI Sales Team");
+  assert.equal(withoutVariants.panelSubtitle, heBuiltin.panelSubtitle);
+  const withHe = applyTenantWidgetCopyI18n(custom, "he", {
+    he: {
+      welcomeMessage: "הכירו את צוות המכירות שלנו",
+      panelHeading: "הכירו את צוות המכירות שלנו",
+      teaserGreeting: "הכירו את צוות המכירות שלנו",
+    },
+  });
+  assert.match(withHe.welcomeMessage, /הכירו/);
+  assert.match(withHe.panelHeading, /הכירו/);
+  assert.equal(withHe.brandName, "WhachatCRM");
+  const esFallback = applyTenantWidgetCopyI18n(custom, "es", {
+    he: { welcomeMessage: "הכירו את צוות המכירות שלנו" },
+  });
+  assert.equal(esFallback.welcomeMessage, "Meet Your AI Sales Team");
+  const zh = applyTenantWidgetCopyI18n(custom, "zh", {
+    he: { welcomeMessage: "הכירו את צוות המכירות שלנו" },
+  });
+  assert.equal(zh.welcomeMessage, "Meet Your AI Sales Team");
+  assert.equal(
+    resolveTenantWidgetCopy({
+      locale: "he",
+      variant: "",
+      customDefault: "Meet Your AI Sales Team",
+      builtin: heBuiltin.welcomeMessage,
+    }),
+    "Meet Your AI Sales Team",
+  );
+  const website = read("client/src/pages/WebsiteWidget.tsx");
+  assert.match(website, /card-widget-translations/);
+  assert.match(website, /input-i18n-heading-\$\{loc\}/);
+  const webhooks = read("server/routes/webhooks.ts");
+  assert.match(webhooks, /applyTenantWidgetCopyI18n/);
 }
 
 {

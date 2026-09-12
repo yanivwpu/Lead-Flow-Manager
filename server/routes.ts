@@ -1288,6 +1288,18 @@ export async function registerRoutes(
   });
 
   // Update widget settings
+  const widgetCopyLocaleSchema = z.object({
+    brandName: z.string().max(80).optional(),
+    panelHeading: z.string().max(80).optional(),
+    panelSubtitle: z.string().max(80).optional(),
+    launcherLabel: z.string().max(40).optional(),
+    teaserGreeting: z.string().max(200).optional(),
+    welcomeMessage: z.string().max(500).optional(),
+    inputPlaceholder: z.string().max(80).optional(),
+    offlineMessage: z.string().max(200).optional(),
+    ctaLabel: z.string().max(80).optional(),
+  });
+
   const widgetPageRuleSchema = z.object({
     urlContains: z.string().max(500),
     greeting: z.string().max(500),
@@ -1296,6 +1308,11 @@ export async function registerRoutes(
     chatbotFlowId: z.string().max(64).optional().or(z.literal("")),
     ctaLabel: z.string().max(80).optional(),
     ctaUrl: z.string().max(2000).optional(),
+    localized: z.object({
+      en: z.object({ greeting: z.string().max(500).optional() }).optional(),
+      es: z.object({ greeting: z.string().max(500).optional() }).optional(),
+      he: z.object({ greeting: z.string().max(500).optional() }).optional(),
+    }).optional(),
   });
 
   const widgetSettingsSchema = z.object({
@@ -1324,6 +1341,13 @@ export async function registerRoutes(
     openBehavior: z.enum(["teaser", "direct"]).optional(),
     teaserGreeting: z.string().max(200).optional(),
     chatIcon: z.enum(["chat", "message", "support"]).optional(),
+    inputPlaceholder: z.string().max(80).optional(),
+    offlineMessage: z.string().max(200).optional(),
+    localized: z.object({
+      en: widgetCopyLocaleSchema.optional(),
+      es: widgetCopyLocaleSchema.optional(),
+      he: widgetCopyLocaleSchema.optional(),
+    }).optional(),
   });
   
   app.patch("/api/widget-settings", async (req, res) => {

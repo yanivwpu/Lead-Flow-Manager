@@ -25,6 +25,7 @@ import {
 } from "../shared/webchatContactIdentity";
 import { identityFromFormValues, toInboxFormSubmission } from "../shared/webchatStructuredForm";
 import { buildWebchatFormContactPatch } from "../shared/webchatFormContactPatch";
+import { filterCrmListedContacts, isCrmListedContact } from "../shared/contactCrmVisibility";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -177,6 +178,28 @@ test("identified webchat contacts leave the visitor list without a second record
   assert.equal(isIdentifiedFromWebsiteChat(identified), true);
   assert.equal(webchatSafeDisplayName(identified), "Ada Lovelace");
   assert.equal(contactMatchesCrmSearch(identified, "ada"), true);
+});
+
+test("legacy webchat rows without lifecycle metadata stay out of CRM until two identity fields", () => {
+  const legacy = {
+    name: WEBSITE_VISITOR_NAME,
+    source: "webchat",
+    customFields: { webchatVisitorId: "pre-lifecycle" },
+    sourceDetails: {},
+  };
+  assert.equal(isCrmListedContact(legacy), false);
+  assert.equal(filterCrmListedContacts([legacy]).length, 0);
+  assert.equal(
+    isCrmListedContact({
+      ...legacy,
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+    }),
+    true,
+  );
+  const routes = read("server/routes/contacts.ts");
+  assert.match(routes, /filterCrmListedContacts/);
+  assert.doesNotMatch(routes, /delete from contacts/i);
 });
 
 test("Contacts tabs use lifecycle status, not merely the Website Visitor name", () => {

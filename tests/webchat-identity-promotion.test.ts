@@ -16,9 +16,10 @@ import {
   meetsWebchatPromotionThreshold,
   resolveIdentityContactConflict,
   shouldPromoteWebchatVisitor,
+  lazyInboxOnlyDetailsForLegacyWebchat,
 } from "../shared/webchatIdentityPromotion";
 import { extractIdentityHints } from "../shared/agent/webchatLeadContext";
-import { isCrmListedContact, inboxOnlySourceDetails, savedContactSourceDetails } from "../shared/contactCrmVisibility";
+import { isCrmListedContact, inboxOnlySourceDetails, savedContactSourceDetails, filterCrmListedContacts } from "../shared/contactCrmVisibility";
 import { buildWebchatFormContactPatch } from "../shared/webchatFormContactPatch";
 import { identityFromFormValues, toInboxFormSubmission } from "../shared/webchatStructuredForm";
 
@@ -85,6 +86,61 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(isInboxOnlyWebchatContact(hidden), true);
   const listed = { source: "webchat", sourceDetails: savedContactSourceDetails(hidden.sourceDetails) };
   assert.equal(isCrmListedContact(listed), true);
+}
+
+{
+  const legacyAnon = {
+    source: "webchat",
+    name: "Website Visitor",
+    customFields: { webchatVisitorId: "legacy-1" },
+    sourceDetails: {},
+  };
+  const legacyHi = {
+    source: "webchat",
+    name: "Hi",
+    email: null,
+    phone: null,
+    customFields: { webchatVisitorId: "legacy-2" },
+  };
+  const nameOnly = {
+    source: "webchat",
+    name: "Ada Lovelace",
+    customFields: { webchatVisitorId: "legacy-3" },
+    sourceDetails: {},
+  };
+  const twoOfThree = {
+    source: "webchat",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    customFields: { webchatVisitorId: "legacy-4" },
+    sourceDetails: {},
+  };
+  const identified = {
+    source: "webchat",
+    name: "Website Visitor",
+    customFields: { webchatVisitorId: "legacy-5", webchatIdentity: { status: "identified" } },
+    sourceDetails: {},
+  };
+  const manual = { source: "manual", name: "Pat Manual" };
+  const whatsapp = { source: "whatsapp", name: "Jordan", phone: "5551112222" };
+  assert.equal(isCrmListedContact(legacyAnon), false);
+  assert.equal(isCrmListedContact(legacyHi), false);
+  assert.equal(isCrmListedContact(nameOnly), false);
+  assert.equal(isCrmListedContact(twoOfThree), true);
+  assert.equal(isCrmListedContact(identified), true);
+  assert.equal(isCrmListedContact(manual), true);
+  assert.equal(isCrmListedContact(whatsapp), true);
+  assert.deepEqual(
+    filterCrmListedContacts([legacyAnon, legacyHi, nameOnly, twoOfThree, identified, manual, whatsapp]).map((r) => r.name),
+    ["Ada Lovelace", "Website Visitor", "Pat Manual", "Jordan"],
+  );
+  const lazy = lazyInboxOnlyDetailsForLegacyWebchat(legacyAnon);
+  assert.equal(lazy?.contactLifecycle, "inbox_only");
+  assert.equal(lazyInboxOnlyDetailsForLegacyWebchat(twoOfThree), null);
+  assert.equal(lazyInboxOnlyDetailsForLegacyWebchat(whatsapp), null);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /lazyInboxOnlyDetailsForLegacyWebchat/);
+  assert.doesNotMatch(channel, /deleteContact\(/);
 }
 
 {

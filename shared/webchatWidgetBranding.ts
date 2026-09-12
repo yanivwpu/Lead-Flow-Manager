@@ -590,6 +590,17 @@ export function firstUnsafeWidgetTextField(patch: Record<string, unknown>): stri
       return key;
     }
   }
+  if (widgetTextContainsUnsafeMarkup(patch.inputPlaceholder)) return "inputPlaceholder";
+  if (widgetTextContainsUnsafeMarkup(patch.offlineMessage)) return "offlineMessage";
+  if (patch.localized && typeof patch.localized === "object") {
+    for (const loc of ["en", "es", "he"]) {
+      const fields = (patch.localized as Record<string, unknown>)[loc];
+      if (!fields || typeof fields !== "object") continue;
+      for (const value of Object.values(fields as Record<string, unknown>)) {
+        if (widgetTextContainsUnsafeMarkup(value)) return "localized";
+      }
+    }
+  }
   return null;
 }
 

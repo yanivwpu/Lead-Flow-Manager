@@ -14,6 +14,7 @@ import {
   sanitizeWidgetHexColor,
 } from "./webchatWidgetBranding";
 import { sanitizeWebchatFormDefinition } from "./webchatStructuredForm";
+import { sanitizeWidgetCopyI18nMap } from "./webchatWidgetCopyI18n";
 
 export const NEUTRAL_WIDGET_COLOR = "#10b981";
 export const NEUTRAL_WIDGET_WELCOME = "Hi! How can we help you today?";
@@ -28,6 +29,7 @@ export type WidgetPageRuleShape = {
   chatbotFlowId?: unknown;
   ctaLabel?: unknown;
   ctaUrl?: unknown;
+  localized?: unknown;
 };
 
 export type WidgetSettingsShape = {
@@ -264,6 +266,15 @@ export function mergeNeutralWidgetSettings(stored: unknown): Record<string, unkn
   };
   if (leadForm) merged.leadForm = leadForm;
   else delete merged.leadForm;
+  const localized = sanitizeWidgetCopyI18nMap(sanitized.localized);
+  if (Object.keys(localized).length) merged.localized = localized;
+  else delete merged.localized;
+  if (typeof sanitized.inputPlaceholder === "string") {
+    merged.inputPlaceholder = sanitizePlainWidgetText(sanitized.inputPlaceholder, 80);
+  }
+  if (typeof sanitized.offlineMessage === "string") {
+    merged.offlineMessage = sanitizePlainWidgetText(sanitized.offlineMessage, 200);
+  }
   return merged;
 }
 

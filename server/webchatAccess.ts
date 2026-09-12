@@ -148,6 +148,7 @@ export type MatchedWidgetPageRule = {
   chatbotFlowId?: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  localized?: unknown;
 };
 
 export function matchWidgetPageRule(
@@ -178,6 +179,7 @@ export function matchWidgetPageRule(
         chatbotFlowId: flowId || undefined,
         ctaLabel: ctaLabel || undefined,
         ctaUrl: ctaUrl || undefined,
+        localized: r.localized && typeof r.localized === "object" ? r.localized : undefined,
       };
     }
   }

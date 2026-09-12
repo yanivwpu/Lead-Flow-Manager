@@ -1323,6 +1323,13 @@ class ChannelService {
           channelContactId,
           sourceExtra,
         );
+        const { lazyInboxOnlyDetailsForLegacyWebchat } = await import("@shared/webchatIdentityPromotion");
+        const lazyInboxOnly = lazyInboxOnlyDetailsForLegacyWebchat({
+          ...contact,
+          sourceDetails: contactUpdates.sourceDetails,
+          customFields: contactUpdates.customFields || contact.customFields,
+        });
+        if (lazyInboxOnly) contactUpdates.sourceDetails = lazyInboxOnly;
         if (!contact.webchatId) {
           contactUpdates.webchatId = channelContactId;
         }

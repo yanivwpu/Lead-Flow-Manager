@@ -77,6 +77,7 @@ import {
 } from "@shared/webchatWidgetLogoUpload";
 import { WebchatChromePreview } from "@/components/webchat/WebchatChromePreview";
 import type { WebchatChromeState } from "@shared/webchatWidgetChrome";
+import type { WidgetCopyI18nFields, WidgetCopyI18nMap } from "@shared/webchatWidgetCopyI18n";
 
 export const WIDGET_LOGO_FILE_INPUT_ID = "widget-logo-file";
 
@@ -147,6 +148,7 @@ export interface WidgetPageRule {
   chatbotFlowId?: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  localized?: { es?: { greeting?: string }; he?: { greeting?: string } };
 }
 
 interface WidgetSettings {
@@ -176,6 +178,9 @@ interface WidgetSettings {
   openBehavior: WebchatOpenBehavior;
   teaserGreeting: string;
   chatIcon: WebchatChatIcon;
+  inputPlaceholder?: string;
+  offlineMessage?: string;
+  localized?: WidgetCopyI18nMap;
   businessProfileName?: string;
   agentName?: string;
   originDiagnostics?: {
@@ -222,6 +227,9 @@ function mergeWidgetSettings(input: Partial<WidgetSettings> | undefined): Widget
     panelHeading: typeof input.panelHeading === "string" ? input.panelHeading : DEFAULT_SETTINGS.panelHeading,
     panelSubtitle: typeof input.panelSubtitle === "string" ? input.panelSubtitle : DEFAULT_SETTINGS.panelSubtitle,
     teaserGreeting: typeof input.teaserGreeting === "string" ? input.teaserGreeting : DEFAULT_SETTINGS.teaserGreeting,
+    inputPlaceholder: typeof input.inputPlaceholder === "string" ? input.inputPlaceholder : "",
+    offlineMessage: typeof input.offlineMessage === "string" ? input.offlineMessage : "",
+    localized: input.localized && typeof input.localized === "object" ? input.localized : {},
   };
 }
 
@@ -251,6 +259,7 @@ function normalizePageRulesFromServer(
     chatbotFlowId?: string;
     ctaLabel?: string;
     ctaUrl?: string;
+    localized?: WidgetPageRule["localized"];
     id?: string;
   }>
 ): WidgetPageRule[] {
@@ -264,6 +273,13 @@ function normalizePageRulesFromServer(
     chatbotFlowId: typeof r.chatbotFlowId === "string" ? r.chatbotFlowId : "",
     ctaLabel: typeof r.ctaLabel === "string" ? r.ctaLabel : "",
     ctaUrl: typeof r.ctaUrl === "string" ? r.ctaUrl : "",
+    localized:
+      r.localized && typeof r.localized === "object"
+        ? {
+            es: { greeting: String((r.localized as { es?: { greeting?: string } }).es?.greeting || "") },
+            he: { greeting: String((r.localized as { he?: { greeting?: string } }).he?.greeting || "") },
+          }
+        : undefined,
     id: typeof r.id === "string" && r.id.length > 0 ? r.id : newRuleId(),
   }));
 }
@@ -333,6 +349,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     chatbotFlowId?: string;
     ctaLabel?: string;
     ctaUrl?: string;
+    localized?: WidgetPageRule["localized"];
   }[];
 } {
   return {
@@ -360,8 +377,11 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     openBehavior: settings.openBehavior,
     teaserGreeting: settings.teaserGreeting,
     chatIcon: settings.chatIcon,
+    inputPlaceholder: settings.inputPlaceholder || "",
+    offlineMessage: settings.offlineMessage || "",
+    localized: settings.localized || {},
     pageRules: settings.pageRules.map(
-      ({ urlContains, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl }) => ({
+      ({ urlContains, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
         urlContains,
         greeting,
         prefilledMessage,
@@ -369,6 +389,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
         chatbotFlowId: chatbotFlowId || "",
         ctaLabel: ctaLabel || "",
         ctaUrl: ctaUrl || "",
+        localized,
       }),
     ),
   };
@@ -665,6 +686,15 @@ export function WebsiteWidget() {
       const next = { ...prev, ...updates };
       scheduleBrandingTextDebouncedSave(next);
       return next;
+    });
+  };
+
+  const updateLocalizedCopy = (loc: "es" | "he", patch: WidgetCopyI18nFields) => {
+    updateBrandingText({
+      localized: {
+        ...(settings.localized || {}),
+        [loc]: { ...(settings.localized?.[loc] || {}), ...patch },
+      },
     });
   };
 
@@ -1290,6 +1320,85 @@ export function WebsiteWidget() {
             </CardContent>
           </Card>
 
+          <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl" data-testid="card-widget-translations">
+            <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
+              <CardTitle className="text-base sm:text-lg font-bold">Visitor languages</CardTitle>
+              <CardDescription className="text-[11px] sm:text-xs leading-snug">
+                Optional Spanish and Hebrew copy. The fields above stay as the default. Empty translations use that default, then the built-in phrase for that language. Product and personal names are never translated automatically.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
+              {(["es", "he"] as const).map((loc) => {
+                const variant = settings.localized?.[loc] || {};
+                return (
+                  <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2" data-testid={`widget-copy-${loc}`}>
+                    <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        value={variant.panelHeading || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { panelHeading: e.target.value })}
+                        placeholder={loc === "es" ? "Título del panel" : "כותרת הפאנל"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-heading-${loc}`}
+                      />
+                      <Input
+                        value={variant.panelSubtitle || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { panelSubtitle: e.target.value })}
+                        placeholder={loc === "es" ? "Subtítulo" : "כותרת משנה"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-subtitle-${loc}`}
+                      />
+                      <Input
+                        value={variant.launcherLabel || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { launcherLabel: e.target.value })}
+                        placeholder={loc === "es" ? "Etiqueta del botón" : "תווית הכפתור"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-launcher-${loc}`}
+                      />
+                      <Input
+                        value={variant.brandName || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { brandName: e.target.value })}
+                        placeholder={loc === "es" ? "Nombre comercial (opcional)" : "שם מותג (אופציונלי)"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-brand-${loc}`}
+                      />
+                    </div>
+                    <Input
+                      value={variant.welcomeMessage || ""}
+                      onChange={(e) => updateLocalizedCopy(loc, { welcomeMessage: e.target.value })}
+                      placeholder={loc === "es" ? "Saludo" : "ברכת פתיחה"}
+                      className="h-9 text-sm border-gray-200"
+                      data-testid={`input-i18n-welcome-${loc}`}
+                    />
+                    <Input
+                      value={variant.teaserGreeting || ""}
+                      onChange={(e) => updateLocalizedCopy(loc, { teaserGreeting: e.target.value })}
+                      placeholder={loc === "es" ? "Texto del teaser" : "טקסט הטיזר"}
+                      className="h-9 text-sm border-gray-200"
+                      data-testid={`input-i18n-teaser-${loc}`}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        value={variant.inputPlaceholder || settings.inputPlaceholder || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { inputPlaceholder: e.target.value })}
+                        placeholder={loc === "es" ? "Escribe un mensaje…" : "כתבו הודעה…"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-placeholder-${loc}`}
+                      />
+                      <Input
+                        value={variant.offlineMessage || settings.offlineMessage || ""}
+                        onChange={(e) => updateLocalizedCopy(loc, { offlineMessage: e.target.value })}
+                        placeholder={loc === "es" ? "Chat no disponible" : "הצ׳אט אינו זמין"}
+                        className="h-9 text-sm border-gray-200"
+                        data-testid={`input-i18n-offline-${loc}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl">
             <CardHeader className="px-3 py-2 sm:px-4 sm:py-2.5 pb-0">
               <CardTitle className="text-base sm:text-lg font-bold">Appearance</CardTitle>
@@ -1564,6 +1673,36 @@ export function WebsiteWidget() {
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-greeting-${index}`}
                     />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        value={rule.localized?.es?.greeting || ""}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              es: { greeting: e.target.value },
+                            },
+                          })
+                        }
+                        placeholder="Spanish greeting (optional)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-greeting-es-${index}`}
+                      />
+                      <Input
+                        value={rule.localized?.he?.greeting || ""}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              he: { greeting: e.target.value },
+                            },
+                          })
+                        }
+                        placeholder="Hebrew greeting (optional)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-greeting-he-${index}`}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs text-gray-600">Prefilled message</Label>

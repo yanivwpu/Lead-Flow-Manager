@@ -363,18 +363,33 @@ export function registerWebhookRoutes(app: Express): void {
       const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
       const {
         resolveWidgetStaticLocale,
-        localizeWebchatPresentationStrings,
         widgetChromeCopyForLocale,
         widgetChromeDir,
         sanitizeWidgetLocaleParam,
       } = await import("@shared/webchatWidgetLocale");
+      const { applyTenantWidgetCopyI18n, resolveLocalizedPageRuleGreeting } = await import(
+        "@shared/webchatWidgetCopyI18n"
+      );
       const locale = resolveWidgetStaticLocale({
         explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
         pathname: hrefParam,
       });
-      const localizedPresentation = localizeWebchatPresentationStrings(presentation, locale);
+      const localizedPresentation = applyTenantWidgetCopyI18n(presentation, locale, ws.localized, {
+        inputPlaceholder: typeof ws.inputPlaceholder === "string" ? ws.inputPlaceholder : "",
+        offlineMessage: typeof ws.offlineMessage === "string" ? ws.offlineMessage : "",
+      });
+      if (matched?.greeting || matched?.localized) {
+        localizedPresentation.chatGreeting = resolveLocalizedPageRuleGreeting({
+          locale,
+          greeting: matched.greeting,
+          localized: matched.localized,
+          fallback: localizedPresentation.welcomeMessage,
+        });
+      }
       const chromeCopy = widgetChromeCopyForLocale(locale);
-      const localizedLauncher = toVisitorSafeWidgetLauncher(ws, chrome);
+      chromeCopy.inputPlaceholder = localizedPresentation.inputPlaceholder;
+      chromeCopy.chatUnavailable = localizedPresentation.offlineMessage;
+      const localizedLauncher = toVisitorSafeWidgetLauncher(ws, chrome, locale);
       if (localizedLauncher.launcherAriaLabel === "Open website chat" || !localizedLauncher.launcherAriaLabel) {
         localizedLauncher.launcherAriaLabel = chromeCopy.launcherAriaLabel;
       }

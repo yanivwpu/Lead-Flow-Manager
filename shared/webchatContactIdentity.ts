@@ -13,6 +13,7 @@ import {
   type WebchatLeadSource,
 } from "./agent/webchatLeadContext";
 import { normalizeEmailAddress } from "./emailChannel";
+import { collectValidatedIdentity, meetsWebchatPromotionThreshold } from "./webchatIdentityFields";
 
 export const WEBCHAT_IDENTITY_ANONYMOUS = "anonymous" as const;
 export const WEBCHAT_IDENTITY_IDENTIFIED = "identified" as const;
@@ -230,6 +231,23 @@ export function contactMatchesCrmSearch(contact: WebchatIdentityContact, query: 
 
 export function isIdentifiedFromWebsiteChat(contact: WebchatIdentityContact): boolean {
   return isWebchatSourcedContact(contact) && webchatFormIdentifiedContact(contact);
+}
+
+/**
+ * Query-time CRM eligibility for Website Chat rows, including legacy records
+ * created before contactLifecycle existed. Does not write or delete.
+ */
+export function webchatContactQualifiesForCrmListing(contact: WebchatIdentityContact): boolean {
+  if (storedWebchatIdentityStatus(contact) === WEBCHAT_IDENTITY_IDENTIFIED) return true;
+  if (webchatFormIdentifiedContact(contact)) return true;
+  const fromForm = identityFromWebchatFormSnapshot(contact);
+  return meetsWebchatPromotionThreshold(
+    collectValidatedIdentity({
+      name: contact.name || fromForm.name,
+      email: contact.email || fromForm.email,
+      phone: webchatPublicPhone(contact) || fromForm.phone,
+    }),
+  );
 }
 
 export function stampAnonymousWebchatIdentity(

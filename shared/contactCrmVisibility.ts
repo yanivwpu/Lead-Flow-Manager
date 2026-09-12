@@ -1,3 +1,5 @@
+import { webchatContactQualifiesForCrmListing } from "./webchatContactIdentity";
+
 /**
  * CRM Contacts vs Inbox-only email identities.
  *
@@ -9,6 +11,10 @@
  * - inbox_only — usable in Inbox, hidden from Contacts
  * - saved — intentionally visible in Contacts
  * Website Chat anonymous/identified states stay on customFields.webchatIdentity.
+ *
+ * Legacy source:"webchat" rows created before lifecycle metadata are classified
+ * at query time: anonymous visitors stay out of CRM Contacts; identified or
+ * two-of-three identity rows remain listed. No backfill delete.
  */
 export const EMAIL_INBOX_IDENTITY_SOURCE = "email_inbox";
 export const CONTACT_LIFECYCLE_INBOX_ONLY = "inbox_only";
@@ -63,6 +69,10 @@ export function savedContactSourceDetails(
 export function isCrmListedContact(contact: {
   source?: string | null;
   sourceDetails?: unknown;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  customFields?: unknown;
 }): boolean {
   if (isEmailInboxIdentitySource(contact.source)) return false;
   const details = contact.sourceDetails as
@@ -71,6 +81,11 @@ export function isCrmListedContact(contact: {
     | undefined;
   if (details && details.inboxIdentity === true) return false;
   if (details && details.contactLifecycle === CONTACT_LIFECYCLE_INBOX_ONLY) return false;
+  if (details && details.contactLifecycle === CONTACT_LIFECYCLE_SAVED) return true;
+  // Query-time derivation for pre-lifecycle Website Chat rows. Other sources stay listed.
+  if (contact.source === "webchat") {
+    return webchatContactQualifiesForCrmListing(contact);
+  }
   return true;
 }
 

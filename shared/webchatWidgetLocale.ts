@@ -175,7 +175,7 @@ export function localizeDefaultChromeText(
 }
 
 export function widgetChromeCopyForLocale(locale: string | null | undefined): WidgetChromeCopy {
-  return WIDGET_CHROME_COPY[normalizeWidgetStaticLocale(locale)];
+  return { ...WIDGET_CHROME_COPY[normalizeWidgetStaticLocale(locale)] };
 }
 
 /** Safe token for iframe / API query — never a secret. */
