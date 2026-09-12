@@ -21,7 +21,12 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 export const SHOPIFY_SCOPES = ['read_customers', 'read_orders'] as const;
 export const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
-/** Amounts must match public pricing / App Store listing (Pro $49/mo). Starter and AI Brain add-on remain for historical Shopify subscriptions. */
+/**
+ * Historical Shopify Billing API plan table (appSubscriptionCreate).
+ * New merchant purchases use Shopify App Pricing (Managed Pricing): Free and Pro only.
+ * Starter ($19) and AI Brain Add-on ($29) stay here so existing subscriptions can still
+ * be recognized by name; they are not offered for new Billing API charges.
+ */
 export const SHOPIFY_BILLING_PLANS = {
   'Starter': {
     amount: 19.0,
@@ -42,6 +47,15 @@ export const SHOPIFY_BILLING_PLANS = {
     interval: BillingInterval.Every30Days,
   },
 } as const;
+
+/** Billing API plans that may still be created. Managed Pricing is the live purchase UI. */
+export const SHOPIFY_BILLING_API_NEW_PURCHASE_PLANS = ["Pro"] as const;
+
+export function isShopifyBillingApiPlanForSale(
+  plan: keyof typeof SHOPIFY_BILLING_PLANS,
+): boolean {
+  return (SHOPIFY_BILLING_API_NEW_PURCHASE_PLANS as readonly string[]).includes(plan);
+}
 
 let shopifyInstance: ReturnType<typeof shopifyApi> | null = null;
 
@@ -251,6 +265,15 @@ export async function createShopifyBillingCharge(
   returnUrl: string,
   isTest?: boolean,
 ): Promise<ShopifyBillingChargeResult> {
+  if (!isShopifyBillingApiPlanForSale(plan)) {
+    return {
+      ok: false,
+      code: "SHOPIFY_LEGACY_PLAN_NOT_FOR_SALE",
+      message:
+        "Starter and AI Brain Add-on are not available for new Shopify purchases. Choose Free or Pro in Shopify Managed Pricing.",
+    };
+  }
+
   const shopify = getShopifyApi();
   if (!shopify) {
     return {

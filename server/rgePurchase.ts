@@ -62,7 +62,7 @@ export function shouldAutoGrantGrowthEngineViaAdminOverride(
   );
 }
 
-/** Admin "Force Growth Engine access" — skip $199 checkout and unlock template entitlement. */
+/** Admin "Force Growth Engine access" — skip one-time RGE checkout and unlock template entitlement. */
 export async function ensureAdminOverrideGrowthEngineEntitlement(
   userId: string,
   limits: Pick<

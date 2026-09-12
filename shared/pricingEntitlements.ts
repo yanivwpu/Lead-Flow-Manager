@@ -321,6 +321,7 @@ export function getProspectAiQuotaLabel(plan: SubscriptionPlan): string {
 export const REALTOR_GROWTH_ENGINE_NAME = "Realtor Growth Engine";
 export const REALTOR_GROWTH_ENGINE_PATH = "/realtor-growth-engine";
 export const REALTOR_GROWTH_ENGINE_ONETIME_USD = 199;
+export const REALTOR_GROWTH_ENGINE_ONETIME_CENTS = REALTOR_GROWTH_ENGINE_ONETIME_USD * 100;
 export const REALTOR_GROWTH_ENGINE_REQUIRES_PRO = "Requires an active Pro plan.";
 
 export type CanonicalOfferBillingPeriod = "month" | "year" | "once";

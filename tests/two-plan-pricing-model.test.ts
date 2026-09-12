@@ -109,7 +109,7 @@ test("14. Trial emails describe AI Brain as included with Pro", () => {
 test("18. RGE remains a separate one-time purchase requiring active Pro", () => {
   const rge = GROWTH_ENGINE_CARDS.find((c) => c.slug === "realtor-growth-engine");
   assert.ok(rge);
-  assert.equal(rge!.oneTimePrice, "$199");
+  assert.equal(rge!.oneTimePrice, formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD));
   assert.match(rge!.subscriptionRequirementShort || "", /active Pro plan/i);
   assert.ok(!/AI Brain required/.test(rge!.requirements?.join(" ") || ""));
   assert.ok(!/\$78/.test(rge!.monthlyRequirementLabel || ""));

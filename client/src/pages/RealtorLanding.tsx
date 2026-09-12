@@ -38,6 +38,10 @@ import {
   normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
 import { cn } from "@/lib/utils";
+import {
+  REALTOR_GROWTH_ENGINE_ONETIME_USD,
+  REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
+} from "@shared/pricingEntitlements";
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
@@ -162,9 +166,9 @@ export function RealtorLanding() {
             description: RGE_LANDING_SEO.description,
             offers: {
               "@type": "Offer",
-              price: "199",
+              price: String(REALTOR_GROWTH_ENGINE_ONETIME_USD),
               priceCurrency: "USD",
-              description: "One-time Realtor Growth Engine license. Requires WhachatCRM Pro and AI Brain.",
+              description: `One-time Realtor Growth Engine license. ${REALTOR_GROWTH_ENGINE_REQUIRES_PRO}`,
             },
             provider: {
               "@type": "Organization",

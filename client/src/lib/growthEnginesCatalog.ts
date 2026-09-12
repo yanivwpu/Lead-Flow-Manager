@@ -43,7 +43,7 @@ export interface GrowthEngineCardModel {
    * When `status === "coming_soon"` and no `image`, picks gradient + icon for the media area.
    */
   placeholderKey?: "wellness" | "capital" | "trades" | "property";
-  /** Displayed on gallery as “$199 one-time license” when set */
+  /** Displayed on gallery as the canonical one-time license amount when set */
   oneTimePrice?: string | null;
   /** Shown on the RGE detail “Pricing & access” block (not on the gallery pricing strip). */
   subscriptionRequirementShort?: string | null;
