@@ -1175,7 +1175,20 @@ async function executeFlow(
         } else if (msgType === "buttons") {
           const rawButtons = (currentNode.data.buttons as (string | ButtonOption)[] | undefined) || [];
           const buttons = rawButtons.map(resolveButton);
-          await sendChatbotButtons(ctx, content, rawButtons);
+          const resolvedButtons = resolveChatbotNodeCopy(
+            {
+              content: currentNode.data.content,
+              options: buttons.map((b) => ({ label: b.label })),
+              localized: currentNode.data.localized,
+            },
+            ctx.locale,
+            ctx.channel,
+          );
+          const localizedButtons = buttons.map((b, i) => ({
+            ...b,
+            label: resolvedButtons.options[i]?.label || b.label,
+          }));
+          await sendChatbotButtons(ctx, resolvedButtons.content || content, localizedButtons);
           if (isConsentYesNoButtons(buttons, currentNode.data.variableName)) {
             const pending = createChatbotPendingAsk({
               flowRunId: ctx.flowRunId || randomUUID(),

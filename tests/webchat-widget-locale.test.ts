@@ -13,6 +13,7 @@ import {
   sanitizeWidgetLocaleParam,
   widgetChromeCopyForLocale,
   widgetChromeDir,
+  builderLocalizedFieldDir,
 } from "../shared/webchatWidgetLocale";
 import { resolveChatbotNodeCopy } from "../shared/chatbotNodeI18n";
 import { detectConversationLanguage, languageInstructionForConversation, mergeConversationLanguage } from "../shared/conversationLanguage";
@@ -39,6 +40,8 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.match(es.welcomeMessage, /Hola/);
   assert.equal(widgetChromeDir("he"), "rtl");
   assert.equal(widgetChromeDir("es"), "ltr");
+  assert.equal(builderLocalizedFieldDir("he"), "rtl");
+  assert.equal(builderLocalizedFieldDir("es"), "ltr");
   assert.equal(localizeDefaultChromeText("Hi! How can we help you today?", "he", "welcomeMessage"), he.welcomeMessage);
   assert.equal(localizeDefaultChromeText("Talk to sales", "he", "launcherLabel"), "Talk to sales");
   const localized = localizeWebchatPresentationStrings(

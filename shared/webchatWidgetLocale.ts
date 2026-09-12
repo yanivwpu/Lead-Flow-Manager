@@ -151,6 +151,34 @@ export function widgetChromeDir(locale: string | null | undefined): "rtl" | "ltr
   return base === "he" || base === "ar" ? "rtl" : "ltr";
 }
 
+/**
+ * Dashboard editor fields for static node/widget variants.
+ * Hebrew-only RTL so empty Hebrew fields still caret on the right.
+ * English and Spanish stay LTR. Does not change visitor widget message dir.
+ */
+export function builderLocalizedFieldDir(locale: string | null | undefined): "rtl" | "ltr" {
+  const base = String(locale || "").trim().toLowerCase().split("-")[0];
+  return base === "he" ? "rtl" : "ltr";
+}
+
+export function builderLocalizedFieldAlign(locale: string | null | undefined): "right" | "left" {
+  return builderLocalizedFieldDir(locale) === "rtl" ? "right" : "left";
+}
+
+export function builderLocalizedInputProps(locale: string | null | undefined): {
+  dir: "rtl" | "ltr";
+  lang: string;
+  style: { textAlign: "right" | "left" };
+} {
+  const base = String(locale || "en").trim().toLowerCase().split("-")[0];
+  const dir = builderLocalizedFieldDir(locale);
+  return {
+    dir,
+    lang: base === "he" || base === "es" ? base : "en",
+    style: { textAlign: builderLocalizedFieldAlign(locale) },
+  };
+}
+
 export function messageTextDir(text: string | null | undefined): "rtl" | "ltr" | "auto" {
   const s = String(text || "");
   if (/[\u0590-\u05FF\u0600-\u06FF]/.test(s)) return "rtl";

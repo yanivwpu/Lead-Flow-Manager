@@ -48,6 +48,7 @@ import {
   emptyWebchatFormDraft,
 } from "@shared/webchatStructuredForm";
 import { chatbotAskQuestionPublishError, WEBCHAT_ASK_QUICK_REPLY_MAX, WHATSAPP_ASK_QUICK_REPLY_MAX } from "@shared/chatbotAskQuestionOptions";
+import { builderLocalizedInputProps } from "@shared/webchatWidgetLocale";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
@@ -62,6 +63,75 @@ export interface ButtonOption {
 function resolveButton(btn: string | ButtonOption): ButtonOption {
   if (typeof btn === "string") return { label: btn, value: btn };
   return { label: btn.label || btn.value, value: btn.value || btn.label, nextNodeId: btn.nextNodeId };
+}
+
+function NodeLocaleVariantsEditor({
+  nodeId,
+  localized,
+  optionSlots,
+  onChange,
+  contentPlaceholder,
+}: {
+  nodeId: string;
+  localized?: {
+    en?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+    es?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+    he?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+  };
+  optionSlots: { label: string }[];
+  onChange: (localized: NonNullable<typeof localized>) => void;
+  contentPlaceholder?: { es: string; he: string };
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Optional translations</Label>
+      <p className="text-[11px] text-gray-400">
+        Spanish and Hebrew variants are optional. English/default copy is the fallback. Nothing is machine-translated unless you write it.
+      </p>
+      {(["es", "he"] as const).map((loc) => {
+        const variant = localized?.[loc] || {};
+        const locOptions = variant.options || [];
+        const fieldProps = builderLocalizedInputProps(loc);
+        return (
+          <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2">
+            <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
+            <Textarea
+              {...fieldProps}
+              value={variant.content || ""}
+              onChange={(e) => {
+                onChange({
+                  ...(localized || {}),
+                  [loc]: { ...variant, content: e.target.value, options: locOptions },
+                });
+              }}
+              placeholder={loc === "es" ? contentPlaceholder?.es || "Mensaje en español…" : contentPlaceholder?.he || "הודעה בעברית…"}
+              className="min-h-[60px] text-sm resize-none border-gray-200"
+              data-testid={`input-question-${loc}-${nodeId}`}
+            />
+            {optionSlots.map((_opt, oi) => (
+              <Input
+                key={`${loc}-${oi}`}
+                {...fieldProps}
+                value={locOptions[oi]?.label || ""}
+                onChange={(e) => {
+                  const nextOpts = [...locOptions];
+                  while (nextOpts.length <= oi) nextOpts.push({ label: "", nextNodeId: "" });
+                  nextOpts[oi] = { ...nextOpts[oi], label: e.target.value };
+                  onChange({
+                    ...(localized || {}),
+                    [loc]: { ...variant, options: nextOpts },
+                  });
+                }}
+                placeholder={`${loc === "es" ? "Opción" : "אפשרות"} ${oi + 1}`}
+                className="text-sm border-gray-200"
+                data-testid={`input-option-${loc}-${nodeId}-${oi}`}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 interface ChatbotNode {
@@ -1433,6 +1503,14 @@ export function ChatbotBuilder() {
                         className="min-h-[110px] text-sm resize-none border-gray-200 focus:ring-brand-green/20"
                         data-testid={`input-message-${selectedStep.id}`}
                       />
+                      <div className="mt-3">
+                        <NodeLocaleVariantsEditor
+                          nodeId={selectedStep.id}
+                          localized={selectedStep.data.localized}
+                          optionSlots={[]}
+                          onChange={(localized) => updateStep(selectedStep.id, { localized })}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -1574,6 +1652,12 @@ export function ChatbotBuilder() {
                             )}
                           </div>
                         </div>
+                        <NodeLocaleVariantsEditor
+                          nodeId={selectedStep.id}
+                          localized={selectedStep.data.localized}
+                          optionSlots={buttons}
+                          onChange={(localized) => updateStep(selectedStep.id, { localized })}
+                        />
                       </div>
                     );
                   })()}
@@ -1727,49 +1811,13 @@ export function ChatbotBuilder() {
                       </button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Optional translations</Label>
-                    <p className="text-[11px] text-gray-400">
-                      Spanish and Hebrew variants are optional. English/default copy is the fallback. Nothing is machine-translated unless you write it.
-                    </p>
-                    {(["es", "he"] as const).map((loc) => {
-                      const variant = selectedStep.data.localized?.[loc] || {};
-                      const locOptions = variant.options || [];
-                      return (
-                        <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2">
-                          <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
-                          <Textarea
-                            value={variant.content || ""}
-                            onChange={(e) => {
-                              const localized = { ...(selectedStep.data.localized || {}) };
-                              localized[loc] = { ...variant, content: e.target.value, options: locOptions };
-                              updateStep(selectedStep.id, { localized });
-                            }}
-                            placeholder={loc === "es" ? "Pregunta en español…" : "שאלה בעברית…"}
-                            className="min-h-[60px] text-sm resize-none border-gray-200"
-                            data-testid={`input-question-${loc}-${selectedStep.id}`}
-                          />
-                          {(selectedStep.data.options || []).map((opt, oi) => (
-                            <Input
-                              key={`${loc}-${oi}`}
-                              value={locOptions[oi]?.label || ""}
-                              onChange={(e) => {
-                                const nextOpts = [...locOptions];
-                                while (nextOpts.length <= oi) nextOpts.push({ label: "", nextNodeId: "" });
-                                nextOpts[oi] = { ...nextOpts[oi], label: e.target.value };
-                                const localized = { ...(selectedStep.data.localized || {}) };
-                                localized[loc] = { ...variant, options: nextOpts };
-                                updateStep(selectedStep.id, { localized });
-                              }}
-                              placeholder={`${loc === "es" ? "Opción" : "אפשרות"} ${oi + 1}`}
-                              className="text-sm border-gray-200"
-                              data-testid={`input-option-${loc}-${selectedStep.id}-${oi}`}
-                            />
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <NodeLocaleVariantsEditor
+                    nodeId={selectedStep.id}
+                    localized={selectedStep.data.localized}
+                    optionSlots={selectedStep.data.options || []}
+                    contentPlaceholder={{ es: "Pregunta en español…", he: "שאלה בעברית…" }}
+                    onChange={(localized) => updateStep(selectedStep.id, { localized })}
+                  />
                 </>
               )}
 

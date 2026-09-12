@@ -78,6 +78,7 @@ import {
 import { WebchatChromePreview } from "@/components/webchat/WebchatChromePreview";
 import type { WebchatChromeState } from "@shared/webchatWidgetChrome";
 import type { WidgetCopyI18nFields, WidgetCopyI18nMap } from "@shared/webchatWidgetCopyI18n";
+import { builderLocalizedInputProps } from "@shared/webchatWidgetLocale";
 
 export const WIDGET_LOGO_FILE_INPUT_ID = "widget-logo-file";
 
@@ -1330,11 +1331,13 @@ export function WebsiteWidget() {
             <CardContent className="px-3 py-2 sm:px-4 sm:pb-3 pt-2 space-y-3">
               {(["es", "he"] as const).map((loc) => {
                 const variant = settings.localized?.[loc] || {};
+                const fieldProps = builderLocalizedInputProps(loc);
                 return (
                   <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2" data-testid={`widget-copy-${loc}`}>
                     <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Input
+                        {...fieldProps}
                         value={variant.panelHeading || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { panelHeading: e.target.value })}
                         placeholder={loc === "es" ? "Título del panel" : "כותרת הפאנל"}
@@ -1342,6 +1345,7 @@ export function WebsiteWidget() {
                         data-testid={`input-i18n-heading-${loc}`}
                       />
                       <Input
+                        {...fieldProps}
                         value={variant.panelSubtitle || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { panelSubtitle: e.target.value })}
                         placeholder={loc === "es" ? "Subtítulo" : "כותרת משנה"}
@@ -1349,6 +1353,7 @@ export function WebsiteWidget() {
                         data-testid={`input-i18n-subtitle-${loc}`}
                       />
                       <Input
+                        {...fieldProps}
                         value={variant.launcherLabel || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { launcherLabel: e.target.value })}
                         placeholder={loc === "es" ? "Etiqueta del botón" : "תווית הכפתור"}
@@ -1356,6 +1361,7 @@ export function WebsiteWidget() {
                         data-testid={`input-i18n-launcher-${loc}`}
                       />
                       <Input
+                        {...fieldProps}
                         value={variant.brandName || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { brandName: e.target.value })}
                         placeholder={loc === "es" ? "Nombre comercial (opcional)" : "שם מותג (אופציונלי)"}
@@ -1364,6 +1370,7 @@ export function WebsiteWidget() {
                       />
                     </div>
                     <Input
+                      {...fieldProps}
                       value={variant.welcomeMessage || ""}
                       onChange={(e) => updateLocalizedCopy(loc, { welcomeMessage: e.target.value })}
                       placeholder={loc === "es" ? "Saludo" : "ברכת פתיחה"}
@@ -1371,6 +1378,7 @@ export function WebsiteWidget() {
                       data-testid={`input-i18n-welcome-${loc}`}
                     />
                     <Input
+                      {...fieldProps}
                       value={variant.teaserGreeting || ""}
                       onChange={(e) => updateLocalizedCopy(loc, { teaserGreeting: e.target.value })}
                       placeholder={loc === "es" ? "Texto del teaser" : "טקסט הטיזר"}
@@ -1379,6 +1387,7 @@ export function WebsiteWidget() {
                     />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Input
+                        {...fieldProps}
                         value={variant.inputPlaceholder || settings.inputPlaceholder || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { inputPlaceholder: e.target.value })}
                         placeholder={loc === "es" ? "Escribe un mensaje…" : "כתבו הודעה…"}
@@ -1386,6 +1395,7 @@ export function WebsiteWidget() {
                         data-testid={`input-i18n-placeholder-${loc}`}
                       />
                       <Input
+                        {...fieldProps}
                         value={variant.offlineMessage || settings.offlineMessage || ""}
                         onChange={(e) => updateLocalizedCopy(loc, { offlineMessage: e.target.value })}
                         placeholder={loc === "es" ? "Chat no disponible" : "הצ׳אט אינו זמין"}
@@ -1675,6 +1685,7 @@ export function WebsiteWidget() {
                     />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <Input
+                        {...builderLocalizedInputProps("es")}
                         value={rule.localized?.es?.greeting || ""}
                         onChange={(e) =>
                           updatePageRule(index, {
@@ -1689,6 +1700,7 @@ export function WebsiteWidget() {
                         data-testid={`input-rule-greeting-es-${index}`}
                       />
                       <Input
+                        {...builderLocalizedInputProps("he")}
                         value={rule.localized?.he?.greeting || ""}
                         onChange={(e) =>
                           updatePageRule(index, {
