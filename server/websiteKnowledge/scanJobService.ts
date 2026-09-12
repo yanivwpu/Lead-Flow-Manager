@@ -211,9 +211,9 @@ const SOURCE_STATUS_BY_SCAN: Record<string, SourceStatus> = {
 };
 
 /**
- * Sources are processed one at a time, each with its own budget and its own error
- * handling, so page order cannot change the outcome and a 90k-character page cannot
- * prevent the pricing page from being processed.
+ * Sources are processed one at a time so a 90k-character page cannot prevent the
+ * pricing page from being processed. Each source reloads live drafts before merge,
+ * so a later incomplete page must not overwrite a complete pricing plan.
  *
  * Safe to call twice on the same job: a source that already recorded a result is skipped,
  * so a job recovered after a restart resumes instead of re-paying for every model call.

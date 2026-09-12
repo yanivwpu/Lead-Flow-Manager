@@ -14,7 +14,7 @@ import {
 import { sanitizeExtractedCandidates } from "@shared/knowledgeExtractionGuards";
 
 /** Bump when the extractor, schema, or normalizer changes so unchanged HTML is read again. */
-export const KNOWLEDGE_EXTRACTOR_VERSION = 4;
+export const KNOWLEDGE_EXTRACTOR_VERSION = 5;
 
 const FACT_ORIGINS = new Set<string>([
   "user_edited",

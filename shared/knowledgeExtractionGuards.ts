@@ -54,7 +54,6 @@ const GROWTH_ENGINE_PATH_RE = /\/realtor-growth-engine(?:\/|$|\?|#)/i;
 const ENTITLEMENT_DEPENDENCY_RE = /\brequires(?:\s+an)?(?:\s+active)?\s+pro\b/i;
 const BILLING_NAME_SUFFIX_RE =
   /(?:\s*[—–:-]\s*|\s+)(?:monthly|yearly|annual(?:ly)?|one[-\s]?time|subscription)(?:\s+(?:plan|tier|offer))?$/i;
-const UMBRELLA_BRAND_RE = /^(?:whachat\s*crm|whachatcrm)$/i;
 const MISSING_PRICE_REASON_RE =
   /price could not be read|price was not stated|left unknown|billing frequency was not stated|currency was not stated|price amount could not be read|price and billing frequency could not be read/i;
 export const MISSING_PRICE_REVIEW_REASON = "Price could not be read from the page and was left unknown.";
@@ -62,8 +61,11 @@ export const MISSING_PRICE_REVIEW_REASON = "Price could not be read from the pag
 const INDUSTRY_OR_AUDIENCE_RE =
   /\b(?:industr(?:y|ies)|use\s+cases?|who\s+it(?:'s| is)\s+for|built\s+for|for\s+(?:agenc(?:y|ies)|teams?|realtors?|brokers?|coaches?)|real estate|realtors?|agenc(?:y|ies)|saas|e-?commerce|healthcare|dentists?|law firms?)\b/i;
 
-const GEO_AREA_RE =
-  /\b(?:city|county|metro|nationwide|statewide|region|area|km|miles?|greater|serving|nearby|local|remote|worldwide|timezone)\b/i;
+const AFFIRMATIVE_PLACE_RE =
+  /\b(?:city|county|metro|nationwide|statewide|region|\d+\s*(?:km|miles?)|greater\s+[a-z]|serving\s+[a-z]|timezone)\b/i;
+
+const AUDIENCE_OR_CAPABILITY_RE =
+  /\b(?:prospects?|customers?|clients?|audience|segments?|verticals?|industr(?:y|ies)|wellness|spas?|agenc(?:y|ies)|businesses|use\s+cases?)\b/i;
 
 const NAV_ONLY_RE =
   /^(?:home|about|pricing|features?|blog|contact|login|sign\s*up|get\s+started|docs|support|privacy|terms)$/i;
@@ -140,25 +142,33 @@ export function stripBillingDecorationsFromOfferName(name: string): string {
   return name.replace(BILLING_NAME_SUFFIX_RE, "").replace(/\s+/g, " ").trim() || name.trim();
 }
 
-function titleBrand(sourceTitle?: string | null): string {
-  if (!sourceTitle) return "";
+function pageIdentityNames(sourceTitle?: string | null): string[] {
+  if (!sourceTitle) return [];
   return sourceTitle
-    .split(/[|–—]/)[0]
-    .replace(/\bpricing\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .split(/[|–—]/)
+    .map((part) => part.replace(/\bpricing\b/gi, "").replace(/\s+/g, " ").trim())
+    .filter((part) => part.length >= 2);
 }
 
 /**
- * Company / page-title wrappers are not purchasable plans when named offers exist
- * underneath them. “WhachatCRM” is the umbrella product name, not a tier.
+ * Company / page-title wrappers are not purchasable plans. A name that matches the
+ * page or business identity, without a stated amount and interval, is the umbrella
+ * product — not a tier.
  */
 export function isUmbrellaCommercialName(name: string, sourceTitle?: string | null): boolean {
   const trimmed = name.trim();
   if (!trimmed) return false;
-  if (UMBRELLA_BRAND_RE.test(trimmed)) return true;
-  const brand = titleBrand(sourceTitle);
-  return Boolean(brand) && brand.toLowerCase() === trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase();
+  return pageIdentityNames(sourceTitle).some((id) => id.toLowerCase() === lower);
+}
+
+export function looksLikeAudienceOrCapability(text: string): boolean {
+  return looksLikeIndustryOrUseCase(text) || AUDIENCE_OR_CAPABILITY_RE.test(text);
+}
+
+export function hasAffirmativePlaceEvidence(text: string, data?: Record<string, unknown>): boolean {
+  if (data && locationHasPhysicalSignal(data)) return true;
+  return AFFIRMATIVE_PLACE_RE.test(text);
 }
 
 export function listedCandidatePrices(data: Record<string, unknown>): FactMoney[] {
@@ -223,16 +233,11 @@ function reasonsForPricingPlan(reasons: string[], prices: FactMoney[]): string[]
 }
 
 function dropUmbrellaPricingPlans(candidates: FactCandidate[]): FactCandidate[] {
-  const specific = candidates.filter((candidate) => {
-    if (candidate.factType !== "pricing_plan" && candidate.factType !== "product") return false;
-    const name = String((candidate.data as { name?: string }).name || "");
-    return name.length > 0 && !isUmbrellaCommercialName(name, candidate.sourceTitle);
-  });
-  if (specific.length === 0) return candidates;
   return candidates.filter((candidate) => {
     if (candidate.factType !== "pricing_plan") return true;
     const name = String((candidate.data as { name?: string }).name || "");
-    return !isUmbrellaCommercialName(name, candidate.sourceTitle);
+    const prices = listedCandidatePrices(candidate.data as Record<string, unknown>);
+    return !(isUmbrellaCommercialName(name, candidate.sourceTitle) && prices.length === 0);
   });
 }
 
@@ -524,14 +529,16 @@ export function classifyExtractedCandidate(
 
   if (candidate.factType === "location") {
     const blob = [data.name, data.addressLine, data.city, data.url].filter(Boolean).join(" ");
-    if (looksLikeIndustryOrUseCase(blob) || (!locationHasPhysicalSignal(data) && looksLikeIndustryOrUseCase(String(data.name || "")))) {
+    const industry = looksLikeAudienceOrCapability(blob) || looksLikeAudienceOrCapability(String(data.name || ""));
+    const physical = locationHasPhysicalSignal(data);
+    if (industry && !physical) {
       return keepAs(
         "audience",
         { label: String(data.name || blob || "Audience"), description: null },
         candidate,
       );
     }
-    if (!locationHasPhysicalSignal(data)) {
+    if (!physical) {
       return drop(["Skipped a location that had no address, city, or service area."]);
     }
     return { keep: true, candidate };
@@ -540,14 +547,14 @@ export function classifyExtractedCandidate(
   if (candidate.factType === "service_area") {
     const area = String(data.area || "");
     const notes = String(data.notes || "");
-    if (
-      looksLikeIndustryOrUseCase(area) ||
-      looksLikeIndustryOrUseCase(notes) ||
-      (looksLikeIndustryOrUseCase(area) === false &&
-        INDUSTRY_OR_AUDIENCE_RE.test(area) &&
-        !GEO_AREA_RE.test(`${area} ${notes}`))
-    ) {
+    const blob = `${area} ${notes}`;
+    const industry = looksLikeAudienceOrCapability(blob);
+    const geo = hasAffirmativePlaceEvidence(blob);
+    if (industry && !geo) {
       return keepAs("audience", { label: area, description: data.notes ?? null }, candidate);
+    }
+    if (!geo) {
+      return drop(["Skipped a service area that had no city, region, or service geography."]);
     }
     if (NAV_ONLY_RE.test(area.trim()) || area.trim().length < 3) {
       return drop(["Skipped a service area that was only navigation text."]);

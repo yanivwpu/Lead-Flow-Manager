@@ -602,7 +602,9 @@ function extractFromJsonLd(nodes: unknown[], ctx: CandidateContext): FactCandida
         const asPricingPlan =
           Boolean(name) &&
           !growth &&
-          (types.includes("softwareapplication") || subscription.length > 0);
+          offerList.length > 0 &&
+          (types.includes("softwareapplication") || subscription.length > 0) &&
+          !(isUmbrellaCommercialName(name, ctx.sourceTitle) && subscription.length === 0);
 
         if (asPricingPlan) {
           const candidate = buildCandidate(

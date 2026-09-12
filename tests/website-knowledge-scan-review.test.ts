@@ -693,7 +693,7 @@ await (async () => {
 })();
 
 run("extractor-version invalidation is on the deployed scan job/worker path", () => {
-  assert.equal(KNOWLEDGE_EXTRACTOR_VERSION, 4);
+  assert.equal(KNOWLEDGE_EXTRACTOR_VERSION, 5);
   const repo = process.cwd();
   const worker = readFileSync(join(repo, "server/websiteKnowledge/scanJobWorker.ts"), "utf8");
   const service = readFileSync(join(repo, "server/websiteKnowledge/scanJobService.ts"), "utf8");
@@ -1479,6 +1479,135 @@ await (async () => {
     assert.match(rgeView!.summary, /USD 199 one-time/);
     assert.match(rgeView!.summary, /Requires an active Pro plan/i);
     assert.ok(!(pricing?.facts || []).some((f) => /whachatcrm/i.test(f.display?.title || f.summary)));
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+function applyScanOperations(
+  facts: KnowledgeFact[],
+  result: Awaited<ReturnType<typeof scanSourceIntoDrafts>>,
+  sourceId: string,
+): KnowledgeFact[] {
+  let next = [...facts];
+  for (const op of result.operations) {
+    if (op.kind === "upsert_draft") {
+      next = next.filter((fact) => !(fact.state === "draft" && fact.factKey === op.factKey));
+      next.push(
+        fact(op.candidate.factType, op.candidate.data, {
+          id: `draft-${op.factKey}-${sourceId}`,
+          origin: op.candidate.origin,
+          confidence: op.candidate.confidence,
+          sourceId,
+          sourceUrl: op.candidate.sourceUrl ?? null,
+          sourceTitle: op.candidate.sourceTitle ?? null,
+          excerpt: op.candidate.excerpt,
+          proposedAction: op.proposedAction ?? "add",
+          provenance: op.provenance ?? [],
+          reviewReasons: op.candidate.reviewReasons,
+          state: "draft",
+        }),
+      );
+    } else if (op.kind === "discard_draft") {
+      next = next.filter((row) => row.id !== op.factId);
+    }
+  }
+  return next;
+}
+
+const ABOUT_CONTAMINATING_AI = JSON.stringify({
+  facts: [
+    { factType: "pricing_plan", data: { name: "WhachatCRM", benefits: [] }, excerpt: "WhachatCRM", confidence: 0.7 },
+    { factType: "pricing_plan", data: { name: "Pro", benefits: ["Campaigns", "Broadcasts"] }, excerpt: "Pro", confidence: 0.6 },
+    { factType: "location", data: { name: "Local & Service Businesses" }, excerpt: "Local & Service Businesses", confidence: 0.7 },
+    { factType: "service_area", data: { area: "Local & Service Businesses" }, excerpt: "Local & Service Businesses", confidence: 0.7 },
+    { factType: "service_area", data: { area: "local business prospects" }, excerpt: "discover local business prospects", confidence: 0.7 },
+    { factType: "location", data: { name: "Med Spas & Wellness" }, excerpt: "Med Spas & Wellness", confidence: 0.7 },
+    { factType: "service_area", data: { area: "Med Spas & Wellness" }, excerpt: "Med Spas & Wellness", confidence: 0.7 },
+    { factType: "call_to_action", data: { label: "Book a Demo", url: "https://www.whachatcrm.com/contact" }, excerpt: "Book a Demo", confidence: 0.9 },
+  ],
+});
+
+async function scanWorkspaceSource(
+  id: string,
+  url: string,
+  html: string,
+  existingFacts: KnowledgeFact[],
+  aiJson: string,
+) {
+  return scanSourceIntoDrafts({
+    source: { id, url, contentHash: null, forceReextract: true },
+    existingFacts,
+    deps: {
+      fetchPage: async () => ({ page: prepareHtmlPage(html, url), rawHtml: html }),
+      extractAi: async ({ knownFactKeys }) => {
+        const parsed = parseAiExtractionResponse(
+          aiJson,
+          { sourceId: id, sourceUrl: url, sourceTitle: prepareHtmlPage(html, url).title },
+          knownFactKeys,
+        );
+        return { candidates: parsed.candidates, rejected: parsed.rejected, attempted: true };
+      },
+      now: () => new Date("2026-09-12T00:00:00.000Z"),
+    },
+  });
+}
+
+async function assertCrossSourceWorkspace(order: "about-first" | "pricing-first") {
+  const aboutHtml = productionShapedHomepageHtml();
+  const pricingHtml = productionShapedMarketingHtml("/pricing");
+  const about = { id: "src-about", url: "https://www.whachatcrm.com/", html: aboutHtml, ai: ABOUT_CONTAMINATING_AI };
+  const pricing = {
+    id: "src-pricing",
+    url: "https://www.whachatcrm.com/pricing",
+    html: pricingHtml,
+    ai: JSON.stringify({
+      facts: [
+        {
+          factType: "pricing_plan",
+          data: { name: "Pro", benefits: ["Campaigns", "Broadcasts", "Templates"] },
+          excerpt: "Pro features",
+          confidence: 0.85,
+        },
+      ],
+    }),
+  };
+  const sequence = order === "about-first" ? [about, pricing] : [pricing, about];
+  let facts: KnowledgeFact[] = [];
+  for (const source of sequence) {
+    const result = await scanWorkspaceSource(source.id, source.url, source.html, facts, source.ai);
+    assert.equal(result.extractionArtifact?.extractorVersion, KNOWLEDGE_EXTRACTOR_VERSION);
+    facts = applyScanOperations(facts, result, source.id);
+  }
+  const payload = buildKnowledgeReviewPayload({ facts });
+  const pricingSection = payload.sections.find((s) => s.id === "pricing");
+  const offerings = payload.sections.find((s) => s.id === "offerings");
+  const locations = payload.sections.find((s) => s.id === "locations");
+  const contact = payload.sections.find((s) => s.id === "contact");
+  const freeView = pricingSection?.facts.find((f) => f.display?.title === "Free");
+  const proView = pricingSection?.facts.find((f) => f.display?.title === "Pro");
+  assert.equal(freeView?.display?.headline, "USD 0 per month");
+  assert.equal(freeView?.needsReview, false);
+  assert.equal(proView?.display?.headline, "USD 49 per month · USD 490 per year");
+  assert.equal(proView?.needsReview, false);
+  assert.ok(!(proView?.display?.bullets || []).some((b) => /mls matching|realtor growth/i.test(b)));
+  assert.ok(!(pricingSection?.facts || []).some((f) => /whachatcrm/i.test(f.display?.title || f.summary)));
+  const rgeView = offerings?.facts.find((f) => /Realtor Growth Engine/i.test(f.summary));
+  assert.ok(rgeView);
+  assert.match(rgeView!.summary, /USD 199 one-time/);
+  assert.match(rgeView!.summary, /Requires an active Pro plan/i);
+  assert.ok(!(locations?.facts || []).some((f) => /Local & Service|local business prospects|Med Spas/i.test(f.summary)));
+  assert.ok((contact?.facts || []).some((f) => /Book a Demo/i.test(f.summary) && f.factType === "booking_link"));
+  assert.ok(!(contact?.facts || []).some((f) => /\/pricing|realtor-growth-engine/i.test(f.summary)));
+}
+
+await (async () => {
+  const name = "workspace-wide merge keeps Pro prices and rejects About-page umbrella/location facts";
+  try {
+    await assertCrossSourceWorkspace("about-first");
+    await assertCrossSourceWorkspace("pricing-first");
     console.log(`✓ ${name}`);
   } catch (err) {
     console.error(`✗ ${name}`);

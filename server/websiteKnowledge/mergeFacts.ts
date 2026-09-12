@@ -19,6 +19,7 @@ import {
   type FactProvenanceEntry,
   type KnowledgeFact,
 } from "@shared/businessKnowledgeFacts";
+import { mergePricingPlanCandidates } from "@shared/knowledgeExtractionGuards";
 
 export type MergeFactsInput = {
   /** The source that was just scanned. Null when merging manually entered facts. */
@@ -73,6 +74,21 @@ export type MergeFactsResult = {
     suggestions: number;
   };
 };
+
+function asCandidate(fact: KnowledgeFact): FactCandidate {
+  return {
+    factType: fact.factType,
+    factKey: fact.factKey,
+    data: fact.data,
+    origin: fact.origin,
+    confidence: fact.confidence,
+    sourceId: fact.sourceId,
+    sourceUrl: fact.sourceUrl,
+    sourceTitle: fact.sourceTitle,
+    excerpt: fact.excerpt,
+    reviewReasons: fact.reviewReasons,
+  };
+}
 
 function provenanceEntry(candidate: FactCandidate, verifiedAt: string): FactProvenanceEntry {
   return {
@@ -181,6 +197,30 @@ export function mergeFactsForSource(input: MergeFactsInput): MergeFactsResult {
         factValueSignature(existingDraft.factType, existingDraft.data) ===
           factValueSignature(candidate.factType, candidate.data)
       ) {
+        stats.unchanged += 1;
+        continue;
+      }
+      if (existingDraft && existingDraft.factType === "pricing_plan" && candidate.factType === "pricing_plan") {
+        const merged = mergePricingPlanCandidates(asCandidate(existingDraft), candidate);
+        if (
+          factValueSignature(existingDraft.factType, existingDraft.data) ===
+          factValueSignature(merged.factType, merged.data)
+        ) {
+          stats.unchanged += 1;
+          continue;
+        }
+        operations.push({
+          kind: "upsert_draft",
+          factKey: merged.factKey,
+          proposedAction: "add",
+          candidate: { ...merged, origin: merged.origin },
+          targetFactId: null,
+          provenance: nextProvenance,
+        });
+        stats.changed += 1;
+        continue;
+      }
+      if (existingDraft && candidatePrecedence(candidate) < factPrecedence(existingDraft)) {
         stats.unchanged += 1;
         continue;
       }
