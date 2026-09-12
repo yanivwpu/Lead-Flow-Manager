@@ -46,27 +46,14 @@ import {
 } from "@shared/webchatGreetingWelcome";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
-export type SupportedAiLanguage = "en" | "he" | "es" | "ar";
-
-const LANGUAGE_PROMPTS: Record<SupportedAiLanguage, { instruction: string; name: string }> = {
-  en: { instruction: "Respond in English.", name: "English" },
-  he: { instruction: "השב בעברית. Respond in Hebrew using natural, conversational Hebrew.", name: "Hebrew" },
-  es: { instruction: "Responde en español. Respond in Spanish using neutral, Latin American Spanish.", name: "Spanish" },
-  ar: { instruction: "الرد باللغة العربية. Respond in Arabic using Modern Standard Arabic.", name: "Arabic" },
-};
+import { detectConversationLanguage, languageInstructionForConversation } from "@shared/conversationLanguage";
+import { chatbotCompletionPromptRules } from "@shared/chatbotCompletionContext";
+export type SupportedAiLanguage = "en" | "he" | "es" | "ar" | "zh";
 
 export class AIService {
   
-  async detectMessageLanguage(message: string): Promise<SupportedAiLanguage> {
-    const hebrewPattern = /[\u0590-\u05FF]/;
-    const arabicPattern = /[\u0600-\u06FF]/;
-    const spanishPattern = /[áéíóúüñ¿¡]/i;
-    
-    if (hebrewPattern.test(message)) return "he";
-    if (arabicPattern.test(message)) return "ar";
-    if (spanishPattern.test(message)) return "es";
-    
-    return "en";
+  async detectMessageLanguage(message: string): Promise<string> {
+    return detectConversationLanguage(message).code;
   }
   
   async suggestReply(
@@ -76,7 +63,7 @@ export class AIService {
     businessKnowledge?: AiBusinessKnowledge,
     settings?: AiSettings,
     tone?: "neutral" | "friendly" | "professional" | "sales",
-    language?: SupportedAiLanguage,
+    language?: string,
     contactContext?: {
       name?: string;
       tag?: string;
@@ -95,6 +82,9 @@ export class AIService {
       aiConversationDomain?: string;
       websiteFormInquiry?: string;
       leadSource?: string;
+      visitorIntent?: string;
+      chatbotVariables?: string;
+      conversationLanguage?: string;
     },
     routing?: AiRoutingResult,
     channel?: string | null,
@@ -138,7 +128,10 @@ export class AIService {
       return { suggestion: "", confidence: 0, confidenceProvided: false, knowledgeGrounded: false, modelGenerationSucceeded: false };
     }
 
-    const detectedLanguage = language || await this.detectMessageLanguage(lastMessage);
+    const detectedLanguage =
+      language ||
+      contactContext?.conversationLanguage ||
+      (await this.detectMessageLanguage(lastMessage));
     const isFirstMessage = conversationHistory.length <= 2;
 
     // AI Brain source decision: Knowledge Sources and/or Live Business Data connectors.
@@ -777,7 +770,7 @@ Return JSON only: { "summary": "..." }`;
     businessKnowledge?: AiBusinessKnowledge, 
     settings?: AiSettings,
     tone?: "neutral" | "friendly" | "professional" | "sales",
-    language?: SupportedAiLanguage,
+    language?: string,
     contactContext?: {
       name?: string;
       tag?: string;
@@ -796,6 +789,9 @@ Return JSON only: { "summary": "..." }`;
       aiConversationDomain?: string;
       websiteFormInquiry?: string;
       leadSource?: string;
+      visitorIntent?: string;
+      chatbotVariables?: string;
+      conversationLanguage?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -805,7 +801,9 @@ Return JSON only: { "summary": "..." }`;
     greetingOnlyTurn?: boolean,
     evidenceWebsite?: { text: string; structuredPricesSelected: boolean },
   ): string {
-    const langInstruction = language ? LANGUAGE_PROMPTS[language].instruction : LANGUAGE_PROMPTS.en.instruction;
+    const langInstruction = languageInstructionForConversation(
+      language || contactContext?.conversationLanguage || "en",
+    );
     const industry = (businessKnowledge?.industry || "general").toLowerCase();
     // Domain eligibility from suggest-reply — never inherit RE persona from workspace industry alone.
     const isRealEstate =
@@ -892,6 +890,9 @@ ${contactContext.leadSource ? `- Lead source: ${contactContext.leadSource}` : ''
 ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}
 ${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
 ${contactContext.intent ? `- Detected intent: ${contactContext.intent}` : ''}
+${contactContext.visitorIntent ? `- Visitor chatbot answer (visitor_intent): ${contactContext.visitorIntent}` : ''}
+${contactContext.chatbotVariables ? `- Chatbot variables: ${contactContext.chatbotVariables}` : ''}
+${contactContext.conversationLanguage ? `- Conversation language: ${contactContext.conversationLanguage}` : ''}
 ${contactContext.budget ? `- Budget (already mentioned): ${contactContext.budget} — DO NOT ask for budget again` : ''}
 ${contactContext.timeline ? `- Timeline (already mentioned): ${contactContext.timeline} — DO NOT ask for timeline again` : ''}
 ${contactContext.financing ? `- Financing (already mentioned): ${contactContext.financing} — DO NOT ask about financing again` : ''}
@@ -910,7 +911,7 @@ ${contactContext.listingFollowUp ? `\n${contactContext.listingFollowUp}\nThe cus
 3. WRITE ONE USEFUL REPLY — not a template, not a form, not a generic opener.
    Structure: [brief acknowledgment of what they said] + [one smart next-step question or action]
    
-4. KEEP IT SHORT: 1–2 sentences unless the context demands more. Never exceed 3 sentences.
+4. KEEP IT SHORT: 2–4 short sentences unless the visitor asked for detail. Answer the current request only. Use natural price formatting for the reply language ($49/month, $490/year) — never "USD 49 per month". Do not dump unrelated fact bullets, source labels, or internal extraction text.
 
 5. FORBIDDEN phrases — do not use any of these:
    - "Thank you for your inquiry"
@@ -1036,6 +1037,14 @@ When replying, work through these qualification questions in order. Ask only ONE
 
     if (businessKnowledge?.customInstructions) {
       prompt += `\n\nADDITIONAL INSTRUCTIONS: ${businessKnowledge.customInstructions}`;
+    }
+
+    if (contactContext?.visitorIntent || contactContext?.chatbotVariables) {
+      prompt += `\n\n${chatbotCompletionPromptRules({
+        visitorIntent: contactContext.visitorIntent || contactContext.intent,
+        conversationLanguage: contactContext.conversationLanguage || language,
+        bookingUrl: bookingUrl || null,
+      })}`;
     }
 
     prompt += `\n\nRespond with valid JSON only: { "reply": "your reply in the correct language", "confidence": 0.0-1.0 }`;

@@ -8156,6 +8156,14 @@ export async function registerRoutes(
         if (formError) {
           return res.status(400).json({ error: formError });
         }
+        const { chatbotAskQuestionPublishError } = await import("@shared/chatbotAskQuestionOptions");
+        const nextChannels = triggerChannels !== undefined ? triggerChannels : existingFlow.triggerChannels;
+        const askError = chatbotAskQuestionPublishError(nextNodes, {
+          channels: Array.isArray(nextChannels) ? nextChannels : [],
+        });
+        if (askError) {
+          return res.status(400).json({ error: askError });
+        }
       }
       
       const flow = await storage.updateChatbotFlow(req.params.id, {

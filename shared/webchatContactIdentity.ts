@@ -159,7 +159,11 @@ export function identityFromWebchatFormSnapshot(contact: WebchatIdentityContact)
 export function webchatFormIdentifiedContact(contact: WebchatIdentityContact): boolean {
   if (storedWebchatIdentityStatus(contact) === WEBCHAT_IDENTITY_IDENTIFIED) return true;
   const fromForm = identityFromWebchatFormSnapshot(contact);
-  return Boolean(fromForm.name || fromForm.email || fromForm.phone);
+  const name = fromForm.name || "";
+  const email = fromForm.email || normalizeEmailAddress(contact.email) || "";
+  const phone = fromForm.phone || "";
+  const count = Number(Boolean(name)) + Number(Boolean(email)) + Number(Boolean(phone));
+  return count >= 2 && Boolean(email || phone);
 }
 
 export function isAnonymousWebsiteVisitor(contact: WebchatIdentityContact): boolean {

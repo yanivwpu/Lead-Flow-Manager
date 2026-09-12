@@ -564,6 +564,17 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
   if (isEmailInboxIdentitySource(contact.source)) {
     contact = await promoteInboxIdentityToCrm(contact, "email");
   }
+  try {
+    const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+    const promoted = await maybePromoteWebchatVisitorIdentity({
+      userId,
+      contactId: contact.id,
+      identifiedFrom: "calendly",
+    });
+    if (promoted) contact = promoted;
+  } catch {
+    /* keep booking path even if promotion is unavailable */
+  }
 
   const prevCf = ((contact.customFields as Record<string, unknown> | null) || {}) as Record<string, unknown>;
   const lastBooking = prevCf.calendlyLastBooking as Record<string, unknown> | undefined;

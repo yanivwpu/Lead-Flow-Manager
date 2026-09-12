@@ -102,14 +102,26 @@ function inboundTurnAlreadyReplied(
 
 async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
   const { aiService } = await import("./aiService");
+  const { applyCalendlyBookingLinkForAi } = await import("./calendlyBookingConnected");
+  const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+  const { buildChatbotCompletionContactContext, resolveChatbotCompletionRouting } = await import(
+    "@shared/chatbotCompletionContext"
+  );
   const settings = await storage.getAiSettings(input.userId);
-  const knowledge = await storage.getAiBusinessKnowledge(input.userId);
-  const contact = await storage.getConversation(input.conversationId);
-  void contact;
-  const { resolveAiRouting } = await import("@shared/aiRouting");
-  const routing = resolveAiRouting({
+  const knowledgeRaw = await storage.getAiBusinessKnowledge(input.userId);
+  const knowledge = await applyCalendlyBookingLinkForAi(input.userId, knowledgeRaw || undefined);
+  const conversation = await storage.getConversation(input.conversationId);
+  const contact = conversation?.contactId ? await storage.getContact(conversation.contactId) : null;
+  const control = readConversationAiControl(conversation?.aiControl);
+  const completion = buildChatbotCompletionContactContext({
+    customFields: contact?.customFields,
+    name: contact?.name,
+    leadSource: "webchat",
+    conversationLanguage: control.conversationLanguage,
+  });
+  const routing = resolveChatbotCompletionRouting({
     inbound: input.inboundText,
-    joinedInbound: input.inboundText,
+    visitorIntent: completion.visitorIntent,
     history: input.history,
     handoffKeywords: settings?.handoffKeywords ?? undefined,
     industry: knowledge?.industry ?? undefined,
@@ -126,8 +138,12 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     knowledge || undefined,
     settings || undefined,
     undefined,
-    undefined,
-    { websiteFormInquiry: undefined, leadSource: "webchat" },
+    control.conversationLanguage,
+    {
+      websiteFormInquiry: undefined,
+      leadSource: "webchat",
+      ...completion,
+    },
     routing,
     "webchat",
   );

@@ -41,7 +41,8 @@ interface ChatbotNode {
     fileName?: string;
     buttons?: (string | ButtonOption)[];
     webchatForm?: unknown;
-    options?: { label: string; nextNodeId: string }[];
+    options?: { label: string; nextNodeId?: string; value?: string }[];
+    localized?: unknown;
     condition?: { type: string; value: string };
     action?: { type: string; value: string };
     delayMinutes?: number;
@@ -74,6 +75,8 @@ export interface TriggerContext {
   sourceEventId?: string;
   flowRunId?: string;
   consumedSourceEventIds?: string[];
+  /** Visitor conversation / widget locale for static node variants. */
+  locale?: string;
 }
 
 // ─── Per-conversation cooldown ─────────────────────────────────────────────
@@ -212,6 +215,8 @@ import {
   validateChatbotAskAnswer,
   type ChatbotPendingAsk,
 } from "@shared/chatbotAskQuestion";
+import { matchAskQuestionQuickReply, sanitizeAskQuestionQuickReplies } from "@shared/chatbotAskQuestionOptions";
+import { resolveChatbotNodeCopy } from "@shared/chatbotNodeI18n";
 
 function inboundHasBookingIntent(ctx: TriggerContext): boolean {
   if (ctx.skipBookingIntent) return true;
@@ -280,6 +285,9 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
       const matched = matchPendingButton(ctx.message, pendingButtons.buttons);
       if (matched) replyText = matched.label || matched.value;
     }
+  } else if (claim.pending.quickReplies?.length) {
+    const matched = matchAskQuestionQuickReply(ctx.message, claim.pending.quickReplies);
+    if (matched) replyText = matched.value || matched.label;
   }
   const validated = validateChatbotAskAnswer(variableName || "answer", replyText);
   if (!validated.ok) {
@@ -310,6 +318,17 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
     await storage.updateContact(contact.id, applied.patch, {
       expectedWorkspaceUserId: ctx.userId,
     });
+    try {
+      const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+      await maybePromoteWebchatVisitorIdentity({
+        userId: ctx.userId,
+        contactId: contact.id,
+        identifiedFrom: "ask_question",
+      });
+    } catch (promoErr: unknown) {
+      const promoMsg = promoErr instanceof Error ? promoErr.message : String(promoErr);
+      console.warn(`[Chatbot] identity promotion skipped: ${promoMsg}`);
+    }
   } catch (err: unknown) {
     releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
     const msg = err instanceof Error ? err.message : String(err);
@@ -323,7 +342,7 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
   if (!nextNodeId) {
     await writePendingAsk(ctx, null);
     releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
-    return { triggered: true, visitorFacing: true, reason: "pending_ask_complete" };
+    return { triggered: true, visitorFacing: false, reason: "pending_ask_complete" };
   }
 
   let targetFlow: ChatbotFlow | undefined;
@@ -336,7 +355,7 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
   if (!targetFlow) {
     await writePendingAsk(ctx, null);
     releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
-    return { triggered: true, visitorFacing: true, reason: "pending_ask_complete" };
+    return { triggered: true, visitorFacing: false, reason: "pending_ask_complete" };
   }
 
   await writePendingAsk(ctx, null);
@@ -765,6 +784,24 @@ async function sendChatbotButtonsFallback(
 }
 
 /**
+ * Ask Question chips: render options and wait. Do NOT store pending button
+ * branches — resume is owned by ChatbotPendingAsk.
+ */
+async function sendAskQuestionPrompt(
+  ctx: TriggerContext,
+  promptText: string,
+  options: Array<{ label: string; value: string }>,
+): Promise<void> {
+  if (ctx.channel === "webchat") {
+    await sendChatbotButtonsWebchat(ctx, promptText || "Please choose an option:", options);
+    return;
+  }
+  const { formatAskQuestionOptionsFallback } = await import("@shared/chatbotAskQuestionOptions");
+  const text = formatAskQuestionOptionsFallback(promptText, options);
+  await sendChatbotReply(ctx, text);
+}
+
+/**
  * Channel-aware button sender. Returns the resolved button list for pending state storage.
  */
 async function sendChatbotButtons(
@@ -1084,7 +1121,18 @@ async function executeFlow(
         const hasText = content.length > 0;
         const hasMedia = mediaUrl.length > 0;
 
-        if (!hasText && !hasMedia && msgType !== "buttons" && msgType !== "form") {
+        const hasAskOptions =
+          currentNode.type === "question" &&
+          resolveChatbotNodeCopy(
+            {
+              content: currentNode.data.content,
+              options: currentNode.data.options,
+              localized: currentNode.data.localized,
+            },
+            ctx.locale,
+            ctx.channel,
+          ).options.length > 0;
+        if (!hasText && !hasMedia && msgType !== "buttons" && msgType !== "form" && !hasAskOptions) {
           console.log(
             `[Chatbot] Node "${nodeId}" (type: ${msgType}) has no content or mediaUrl — skipping send`
           );
@@ -1163,10 +1211,29 @@ async function executeFlow(
           console.log(`[Chatbot] ⏸ Pausing flow execution after form node — awaiting user submit`);
           return { visitorFacing: true, reason: "wait_for_input" };
         } else {
-          if (hasText) {
-            await sendChatbotReply(ctx, content);
+          const resolvedCopy = resolveChatbotNodeCopy(
+            {
+              content: currentNode.data.content,
+              options: currentNode.data.options,
+              localized: currentNode.data.localized,
+            },
+            ctx.locale,
+            ctx.channel,
+          );
+          const promptText = resolvedCopy.content || content;
+          const askOptions = currentNode.type === "question"
+            ? (resolvedCopy.options.length
+                ? resolvedCopy.options
+                : sanitizeAskQuestionQuickReplies(currentNode.data.options, { channel: ctx.channel }))
+            : [];
+          if (currentNode.type === "question" && askOptions.length > 0) {
+            await sendAskQuestionPrompt(ctx, promptText, askOptions);
             visitorFacing = true;
-            visitorReason = "scripted_reply";
+            visitorReason = "wait_for_input";
+          } else if (promptText) {
+            await sendChatbotReply(ctx, promptText);
+            visitorFacing = true;
+            visitorReason = currentNode.type === "question" ? "wait_for_input" : "scripted_reply";
           } else {
             console.log(`[Chatbot] Node "${nodeId}" text node has no content — skipping send`);
           }
@@ -1182,7 +1249,8 @@ async function executeFlow(
               contactId: ctx.contactId,
               conversationId: ctx.conversationId,
               kind: "ask_question",
-              promptText: content,
+              promptText,
+              quickReplies: askOptions,
               consumedSourceEventIds: ctx.consumedSourceEventIds || [],
             });
             ctx.flowRunId = pending.flowRunId;

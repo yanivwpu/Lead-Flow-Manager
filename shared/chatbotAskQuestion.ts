@@ -25,6 +25,11 @@ const NO_RE = /^(no|n|nope|nah|decline|i decline|disagree|i disagree|reject)$/i;
 
 export type ChatbotPendingKind = "ask_question" | "consent_buttons";
 
+export type ChatbotAskQuickReplyStored = {
+  label: string;
+  value: string;
+};
+
 export type ChatbotPendingAsk = {
   flowRunId: string;
   flowId: string;
@@ -37,6 +42,7 @@ export type ChatbotPendingAsk = {
   conversationId: string;
   kind: ChatbotPendingKind;
   promptText: string;
+  quickReplies: ChatbotAskQuickReplyStored[];
   consumedSourceEventIds: string[];
   expiresAt: number;
 };
@@ -163,6 +169,10 @@ export function validateChatbotAskAnswer(
 
   if (kind === "name") {
     if (text.length < 2 || EMAIL_RE.test(text) || PHONE_RE.test(text)) return retryFor("name");
+    const blockedName =
+      /^(hi|hello|hey|hola|shalom|thanks|thank you|ok|okay|yes|no|please|help|got it|sure|yo|sup)$/i.test(text) ||
+      /^(features?\s*(&|and)?\s*pricing|find my solution|book a demo)$/i.test(text);
+    if (blockedName) return retryFor("name");
     return { ok: true, kind, value: text.slice(0, 120) };
   }
   if (kind === "email") {
@@ -310,10 +320,26 @@ export function parseChatbotPendingAsk(raw: unknown): ChatbotPendingAsk | null {
     contactId,
     conversationId,
     kind,
-    promptText: typeof o.promptText === "string" ? o.promptText.slice(0, 500) : "",
+    promptText: typeof o.promptText === "string" ? o.promptText.slice(0, 2000) : "",
+    quickReplies: parseStoredQuickReplies(o.quickReplies),
     consumedSourceEventIds: consumed,
     expiresAt: expiresAt || Date.now() + CHATBOT_ASK_TTL_MS,
   };
+}
+
+function parseStoredQuickReplies(raw: unknown): ChatbotAskQuickReplyStored[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatbotAskQuickReplyStored[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const label = typeof o.label === "string" ? o.label.trim().slice(0, 40) : "";
+    const value = typeof o.value === "string" ? o.value.trim().slice(0, 40) : label;
+    if (!label || !value) continue;
+    out.push({ label, value });
+    if (out.length >= 8) break;
+  }
+  return out;
 }
 
 export function createChatbotPendingAsk(input: {
@@ -328,6 +354,7 @@ export function createChatbotPendingAsk(input: {
   conversationId: string;
   kind?: ChatbotPendingKind;
   promptText?: string;
+  quickReplies?: ChatbotAskQuickReplyStored[];
   consumedSourceEventIds?: string[];
   now?: number;
 }): ChatbotPendingAsk {
@@ -343,7 +370,8 @@ export function createChatbotPendingAsk(input: {
     contactId: input.contactId,
     conversationId: input.conversationId,
     kind: input.kind || "ask_question",
-    promptText: String(input.promptText || "").slice(0, 500),
+    promptText: String(input.promptText || "").slice(0, 2000),
+    quickReplies: parseStoredQuickReplies(input.quickReplies),
     consumedSourceEventIds: (input.consumedSourceEventIds || []).slice(-40),
     expiresAt: now + CHATBOT_ASK_TTL_MS,
   };

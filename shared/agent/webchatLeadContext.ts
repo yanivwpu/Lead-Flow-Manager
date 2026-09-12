@@ -61,15 +61,21 @@ export function extractIdentityHints(text: string): {
   }
 
   const nameMatch = trimmed.match(NAME_RE);
-  if (nameMatch?.[1]) {
-    hints.name = nameMatch[1].trim();
-  } else if (
-    !hints.email &&
-    !hints.phone &&
-    trimmed.length <= 40 &&
-    /^[A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2}$/.test(trimmed)
-  ) {
-    hints.name = trimmed;
+  const candidate = nameMatch?.[1]?.trim()
+    || (
+      !hints.email &&
+      !hints.phone &&
+      trimmed.length <= 40 &&
+      /^[A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2}$/.test(trimmed)
+        ? trimmed
+        : ""
+    );
+  if (candidate) {
+    const blocked =
+      /^(hi|hello|hey|hola|shalom|thanks|thank you|ok|okay|yes|no|please|help|got it|sure|yo|sup)$/i.test(candidate) ||
+      /^(features?\s*(&|and)?\s*pricing|find my solution|book a demo)$/i.test(candidate) ||
+      isAnonymousWebchatVisitorName(candidate);
+    if (!blocked) hints.name = candidate;
   }
 
   return hints;

@@ -442,7 +442,9 @@ function read(rel: string): string {
   const frame = read("client/src/pages/WidgetFrame.tsx");
   assert.match(frame, /WebchatPanelHeader/);
   assert.doesNotMatch(frame, /Chat with \$\{/);
-  assert.match(frame, /Powered by WhaChat/);
+  assert.match(frame, /chromeCopy\.poweredBy/);
+  const locale = read("shared/webchatWidgetLocale.ts");
+  assert.match(locale, /Powered by WhaChat/);
   assert.match(frame, /\[overflow-wrap:anywhere\]/);
   const website = read("client/src/pages/WebsiteWidget.tsx");
   assert.match(website, /Launcher & Branding/);
@@ -485,7 +487,7 @@ function read(rel: string): string {
   assert.match(webhooks, /toVisitorSafePublicWebchatPayload/);
   assert.match(settingsSlice, /leadForm/);
   assert.match(settingsSlice, /toVisitorSafeWidgetLauncher/);
-  assert.match(settingsSlice, /launcher: toVisitorSafeWidgetLauncher/);
+  assert.match(settingsSlice, /localizedLauncher/);
   assert.match(settingsSlice, /businessName: names\.companyName/);
   assert.match(settingsSlice, /loadWebchatPublicNameFallbacks/);
   assert.doesNotMatch(settingsSlice, /access\.owner\.businessName/);

@@ -137,6 +137,7 @@ export type WebchatInboundBody = {
   parentUrl?: string;
   pageTitle?: string;
   referrer?: string;
+  locale?: string;
 };
 
 export type MatchedWidgetPageRule = {
@@ -197,9 +198,11 @@ export function parseWebchatInboundBody(body: unknown): { ok: true; data: Webcha
   const pageTitle = typeof b.pageTitle === "string" ? b.pageTitle.trim().slice(0, MAX_TITLE) : undefined;
   const referrer = typeof b.referrer === "string" ? b.referrer.trim().slice(0, 2000) : undefined;
   if (referrer && !parseHttpUrl(referrer)) return { ok: false };
+  const localeRaw = typeof b.locale === "string" ? b.locale.trim().toLowerCase().split("-")[0] : "";
+  const locale = localeRaw && /^[a-z]{2,8}$/.test(localeRaw) ? localeRaw.slice(0, 8) : undefined;
   return {
     ok: true,
-    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer },
+    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer, locale },
   };
 }
 

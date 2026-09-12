@@ -1138,6 +1138,7 @@ class ChannelService {
     webchatLeadSource?: "agent_page" | "agent_page_embed" | "website";
     webchatPageContext?: import("@shared/webchatPageContext").WebchatPageContext;
     preferredChatbotFlowId?: string;
+    visitorLocale?: string;
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -1158,6 +1159,7 @@ class ChannelService {
       webchatLeadSource,
       webchatPageContext,
       preferredChatbotFlowId,
+      visitorLocale,
     } = params;
     const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
@@ -1246,7 +1248,7 @@ class ChannelService {
           : undefined;
       const webchatSourceDetails =
         channel === "webchat"
-          ? {
+          ? (await import("@shared/webchatIdentityPromotion")).inboxOnlyWebchatSourceDetails({
               ...((await import("@shared/webchatContactLookup")).mergeWebchatVisitorSourceDetails(
                 webchatLeadSource === "agent_page"
                   ? { leadSource: "Agent Page" }
@@ -1255,8 +1257,7 @@ class ChannelService {
                     : {},
                 channelContactId,
               )),
-              webchatIdentityStatus: "anonymous",
-            }
+            })
           : undefined;
       const webchatDisplayName =
         channel === "webchat"
@@ -1333,6 +1334,36 @@ class ChannelService {
         console.log(`[Inbox Worker] Backfilling whatsappId=${channelContactId} on contact ${contact.id} (matched via phone fallback)`);
       }
       await storage.updateContact(contact.id, contactUpdates);
+    }
+
+    if (channel === "webchat" && contact) {
+      try {
+        const { extractIdentityHints } = await import("@shared/agent/webchatLeadContext");
+        const { acceptExtractedIdentity, collectValidatedIdentity } = await import(
+          "@shared/webchatIdentityPromotion"
+        );
+        const hints = acceptExtractedIdentity(extractIdentityHints(content), { confidence: 0.8 });
+        const incoming = collectValidatedIdentity(hints);
+        if (incoming.email || incoming.phone || incoming.name) {
+          const patch: Record<string, string> = {};
+          if (incoming.email && !collectValidatedIdentity({ email: contact.email }).email) patch.email = incoming.email;
+          if (incoming.phone && !collectValidatedIdentity({ phone: contact.phone }).phone) patch.phone = incoming.phone;
+          if (incoming.name && !collectValidatedIdentity({ name: contact.name }).name) patch.name = incoming.name;
+          if (Object.keys(patch).length) {
+            const updated = await storage.updateContact(contact.id, patch, { expectedWorkspaceUserId: userId });
+            if (updated) contact = updated;
+          }
+          const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+          const promoted = await maybePromoteWebchatVisitorIdentity({
+            userId,
+            contactId: contact.id,
+            identifiedFrom: "conversation_extraction",
+          });
+          if (promoted) contact = promoted;
+        }
+      } catch {
+        /* extraction is best-effort and must not block inbound */
+      }
     }
 
     if (!contact) {
@@ -1725,6 +1756,13 @@ class ChannelService {
     const { evaluateChatbotInboundArbitration, triggerChatbotFlows } = await import('./chatbotEngine');
     const bookingIntent =
       detectHighConfidenceBookingIntent(content) || detectSellerConsultationBookingIntent(content);
+    const priorControl = (await import("@shared/webchatAiPolicy")).readConversationAiControl(conversation.aiControl);
+    const { mergeConversationLanguage } = await import("@shared/conversationLanguage");
+    const conversationLanguage = mergeConversationLanguage(
+      priorControl.conversationLanguage,
+      content,
+      visitorLocale,
+    );
     const chatbotCtx = {
       userId,
       contactId: contact.id,
@@ -1736,6 +1774,7 @@ class ChannelService {
       skipBookingIntent: bookingIntent,
       awaitExecution: true,
       sourceEventId: externalMessageId || message.id,
+      locale: conversationLanguage,
     };
     const chatbotArb = await evaluateChatbotInboundArbitration(chatbotCtx);
     const chatbotResult = bookingIntent
@@ -1751,7 +1790,7 @@ class ChannelService {
     const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
     const turnControl = readConversationAiControl(latestForTurn.aiControl);
     await storage.updateConversation(conversation.id, {
-      aiControl: { ...turnControl, lastTurnOwner: turn.owner },
+      aiControl: { ...turnControl, lastTurnOwner: turn.owner, conversationLanguage },
     });
     console.info("[INBOUND_AUTOMATION]", {
       tag: "channel_inbound",

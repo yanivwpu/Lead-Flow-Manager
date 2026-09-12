@@ -219,7 +219,7 @@ export function registerWebhookRoutes(app: Express): void {
       }
 
       const userId = access.owner.userId;
-      const { visitorId, message, source, parentUrl, pageTitle, referrer } = parsed.data;
+      const { visitorId, message, source, parentUrl, pageTitle, referrer, locale } = parsed.data;
       const existing = await storage.getContactByChannelId(userId, "webchat", visitorId);
       const newContactOk = await consumeWebchatContactCap({
         widgetPublicId: access.owner.widgetPublicId,
@@ -267,6 +267,7 @@ export function registerWebhookRoutes(app: Express): void {
         webchatLeadSource,
         webchatPageContext,
         preferredChatbotFlowId,
+        visitorLocale: locale,
       });
 
       if (result.success && result.contact && result.conversation && !result.deduped) {
@@ -316,6 +317,8 @@ export function registerWebhookRoutes(app: Express): void {
     try {
       const hrefParam =
         typeof req.query.href === "string" ? req.query.href.slice(0, 4000) : "";
+      const localeParam =
+        typeof req.query.locale === "string" ? req.query.locale.trim().slice(0, 8) : "";
       const access = await resolvePublicWidgetAccess(req, req.params.userId, {
         parentUrl: hrefParam || undefined,
         requireEnabled: true,
@@ -358,11 +361,31 @@ export function registerWebhookRoutes(app: Express): void {
         ]),
       });
       const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
+      const {
+        resolveWidgetStaticLocale,
+        localizeWebchatPresentationStrings,
+        widgetChromeCopyForLocale,
+        widgetChromeDir,
+        sanitizeWidgetLocaleParam,
+      } = await import("@shared/webchatWidgetLocale");
+      const locale = resolveWidgetStaticLocale({
+        explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
+        pathname: hrefParam,
+      });
+      const localizedPresentation = localizeWebchatPresentationStrings(presentation, locale);
+      const chromeCopy = widgetChromeCopyForLocale(locale);
+      const localizedLauncher = toVisitorSafeWidgetLauncher(ws, chrome);
+      if (localizedLauncher.launcherAriaLabel === "Open website chat" || !localizedLauncher.launcherAriaLabel) {
+        localizedLauncher.launcherAriaLabel = chromeCopy.launcherAriaLabel;
+      }
       const leadForm = sanitizeWebchatFormDefinition(ws.leadForm);
       return sendWebchatPublicJson(res, 200, {
-        ...toVisitorSafePublicWebchatPayload(presentation),
-        launcher: toVisitorSafeWidgetLauncher(ws, chrome),
+        ...toVisitorSafePublicWebchatPayload(localizedPresentation),
+        launcher: localizedLauncher,
         businessName: names.companyName,
+        locale,
+        dir: widgetChromeDir(locale),
+        chromeCopy,
         ...(leadForm ? { leadForm } : {}),
       });
     } catch {

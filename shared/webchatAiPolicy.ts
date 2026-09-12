@@ -87,6 +87,8 @@ export type ConversationAiControl = {
   lastTurnOwner?: string;
   /** Durable chatbot Ask Question / consent wait. Must survive pause/resume spreads. */
   chatbotPendingInput?: unknown;
+  /** Visitor conversation language — not the dashboard user's locale. */
+  conversationLanguage?: string;
 };
 
 function readLease(raw: unknown): WebchatGenerationLease | null {
@@ -118,6 +120,10 @@ export function readConversationAiControl(raw: unknown): ConversationAiControl {
     generationLease: readLease(o.generationLease),
     lastTurnOwner: typeof o.lastTurnOwner === "string" ? o.lastTurnOwner : undefined,
     chatbotPendingInput: o.chatbotPendingInput,
+    conversationLanguage:
+      typeof o.conversationLanguage === "string" && /^[a-z]{2,8}$/.test(o.conversationLanguage)
+        ? o.conversationLanguage
+        : undefined,
   };
 }
 
@@ -151,6 +157,7 @@ export function pauseAiControl(
     generationLease: cancelLease(current.generationLease, epoch),
     lastTurnOwner: current.lastTurnOwner,
     chatbotPendingInput: current.chatbotPendingInput,
+    conversationLanguage: current.conversationLanguage,
   };
 }
 
@@ -167,6 +174,7 @@ export function resumeAiControl(previous?: unknown): ConversationAiControl {
     generationLease: cancelLease(current.generationLease, epoch),
     lastTurnOwner: current.lastTurnOwner,
     chatbotPendingInput: current.chatbotPendingInput,
+    conversationLanguage: current.conversationLanguage,
   };
 }
 

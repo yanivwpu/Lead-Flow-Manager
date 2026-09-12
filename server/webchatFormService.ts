@@ -83,5 +83,15 @@ export async function applyWebchatFormToContact(params: {
     customFields,
   });
   const updated = await storage.updateContact(params.contact.id, updates);
-  return updated || params.contact;
+  try {
+    const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+    const promoted = await maybePromoteWebchatVisitorIdentity({
+      userId: params.userId,
+      contactId: params.contact.id,
+      identifiedFrom: "webchat_form",
+    });
+    return promoted || updated || params.contact;
+  } catch {
+    return updated || params.contact;
+  }
 }

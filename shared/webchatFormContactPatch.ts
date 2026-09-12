@@ -8,9 +8,14 @@ import { normalizeEmailAddress } from "./emailChannel";
 import {
   isPlaceholderWebchatDisplayName,
   stampIdentifiedWebchatIdentity,
-  WEBCHAT_IDENTITY_IDENTIFIED,
   webchatFormIdentifiedContact,
 } from "./webchatContactIdentity";
+import {
+  collectValidatedIdentity,
+  meetsWebchatPromotionThreshold,
+  inboxOnlyWebchatSourceDetails,
+  promotedWebchatSourceDetails,
+} from "./webchatIdentityPromotion";
 import {
   mergeWebchatVisitorSourceDetails,
   preserveWebchatVisitorIdentity,
@@ -86,6 +91,12 @@ export function buildWebchatFormContactPatch(params: {
     ? preserveWebchatVisitorIdentity(existingCf, visitorId)
     : { ...existingCf };
   const alreadyIdentified = webchatFormIdentifiedContact(params.contact);
+  const mergedIdentity = collectValidatedIdentity({
+    name: identity.name || params.contact.name,
+    email: identity.email || params.contact.email,
+    phone: identity.phone || params.contact.phone,
+  });
+  const promote = meetsWebchatPromotionThreshold(mergedIdentity);
   const updates: {
     name?: string;
     email?: string;
@@ -95,14 +106,22 @@ export function buildWebchatFormContactPatch(params: {
     sourceDetails: Record<string, unknown>;
   } = {
     customFields,
-    sourceDetails: mergeWebchatVisitorSourceDetails(
-      (params.contact.sourceDetails as Record<string, unknown> | undefined) || {},
-      visitorId,
-      {
-        webchatIdentityStatus: WEBCHAT_IDENTITY_IDENTIFIED,
-        identifiedFrom: "webchat_form",
-      },
-    ),
+    sourceDetails: promote
+      ? promotedWebchatSourceDetails(
+          mergeWebchatVisitorSourceDetails(
+            (params.contact.sourceDetails as Record<string, unknown> | undefined) || {},
+            visitorId,
+            { identifiedFrom: "webchat_form" },
+          ),
+          { identifiedFrom: "webchat_form" },
+        )
+      : inboxOnlyWebchatSourceDetails(
+          mergeWebchatVisitorSourceDetails(
+            (params.contact.sourceDetails as Record<string, unknown> | undefined) || {},
+            visitorId,
+            { webchatIdentityStatus: "anonymous" },
+          ),
+        ),
   };
 
   if (identity.email && shouldWriteWebchatCanonicalEmail(params.contact, alreadyIdentified)) {
@@ -150,10 +169,13 @@ export function buildWebchatFormContactPatch(params: {
     };
   }
 
-  customFields = stampIdentifiedWebchatIdentity(customFields, {
-    identifiedAt: params.submission.submittedAt,
-    canonicalLocked: true,
-  });
+  if (promote) {
+    customFields = stampIdentifiedWebchatIdentity(customFields, {
+      identifiedAt: params.submission.submittedAt,
+      identifiedFrom: "webchat_form",
+      canonicalLocked: true,
+    });
+  }
   updates.customFields = customFields;
   return updates;
 }

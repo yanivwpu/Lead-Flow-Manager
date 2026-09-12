@@ -29,6 +29,14 @@ import {
   webchatIsNearBottom,
   webchatMessageIds,
 } from "@shared/webchatWidgetScroll";
+import {
+  messageTextDir,
+  resolveWidgetStaticLocale,
+  sanitizeWidgetLocaleParam,
+  widgetChromeCopyForLocale,
+  widgetChromeDir,
+  type WidgetChromeCopy,
+} from "@shared/webchatWidgetLocale";
 
 interface ButtonOption {
   label: string;
@@ -87,6 +95,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       return null;
     }
   }, [searchString]);
+  const urlLocale = useMemo(() => {
+    try {
+      return sanitizeWidgetLocaleParam(new URLSearchParams(searchString).get("locale"));
+    } catch {
+      return "";
+    }
+  }, [searchString]);
 
   /** Parent page URL passed by script embed so page rules can match the host site, not the iframe path. */
   const parentUrlForRules = useMemo(() => {
@@ -132,6 +147,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
+  const [chromeCopy, setChromeCopy] = useState<WidgetChromeCopy>(() =>
+    widgetChromeCopyForLocale(resolveWidgetStaticLocale({ explicit: urlLocale })),
+  );
+  const [widgetLocale, setWidgetLocale] = useState(() => resolveWidgetStaticLocale({ explicit: urlLocale }));
   const [leadForm, setLeadForm] = useState<WebchatFormDefinition | null>(null);
   const [submittedFormIds, setSubmittedFormIds] = useState<Set<string>>(new Set());
   const [clickedButtons, setClickedButtons] = useState<Set<string>>(new Set());
@@ -162,10 +181,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     localStorage.setItem(storageKey, vid);
     setVisitorId(vid);
 
-    const settingsUrl =
-      parentPageHref != null && parentPageHref !== ""
-        ? `/api/webchat/${userId}/settings?href=${encodeURIComponent(parentPageHref)}`
-        : `/api/webchat/${userId}/settings`;
+    const settingsQs = new URLSearchParams();
+    if (parentPageHref) settingsQs.set("href", parentPageHref);
+    if (urlLocale) settingsQs.set("locale", urlLocale);
+    const settingsUrl = settingsQs.toString()
+      ? `/api/webchat/${userId}/settings?${settingsQs.toString()}`
+      : `/api/webchat/${userId}/settings`;
 
     fetch(settingsUrl, { cache: "no-store" })
       .then(async (r) => {
@@ -208,6 +229,17 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
         setLeadForm(sanitizeWebchatFormDefinition(data?.leadForm));
+        const resolvedLocale = resolveWidgetStaticLocale({
+          explicit: typeof data?.locale === "string" ? data.locale : urlLocale,
+          pathname: parentPageHref,
+        });
+        setWidgetLocale(resolvedLocale);
+        const fromApi = data?.chromeCopy && typeof data.chromeCopy === "object" ? data.chromeCopy as Partial<WidgetChromeCopy> : null;
+        setChromeCopy({ ...widgetChromeCopyForLocale(resolvedLocale), ...fromApi });
+        if (typeof document !== "undefined") {
+          document.documentElement.lang = resolvedLocale;
+          document.documentElement.dir = widgetChromeDir(resolvedLocale);
+        }
         setWidgetUnavailable(false);
         setIsLoading(false);
       })
@@ -482,6 +514,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           form.append("pageTitle", document.title);
           if (document.referrer) form.append("referrer", document.referrer);
         }
+        if (widgetLocale) form.append("locale", widgetLocale);
         res = await fetch(`/api/webchat/${userId}/${visitorId}/media`, {
           method: "POST",
           body: form,
@@ -498,6 +531,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             parentUrl,
             pageTitle: typeof document !== "undefined" ? document.title : undefined,
             referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+            locale: widgetLocale,
           }),
         });
       }
@@ -515,7 +549,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed, pendingFile]);
+  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed, pendingFile, widgetLocale]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks
@@ -562,11 +596,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     if (!file) return;
     const mime = (file.type || "").toLowerCase();
     if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime)) {
-      setAttachError("Use a JPEG, PNG, or WebP image.");
+      setAttachError(chromeCopy.attachTypeError);
       return;
     }
     if (file.size > WEBCHAT_IMAGE_MAX_BYTES) {
-      setAttachError("That image is too large.");
+      setAttachError(chromeCopy.attachSizeError);
       return;
     }
     setAttachError(null);
@@ -605,7 +639,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const accentTextColor = presentation.accentForeground;
 
   return (
-    <div className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white">
+    <div
+      className="flex h-full w-full min-w-0 max-w-full flex-col overflow-hidden bg-white"
+      dir={widgetChromeDir(widgetLocale)}
+      lang={widgetLocale}
+    >
       {/* Header */}
       <WebchatPanelHeader presentation={presentation} />
 
@@ -623,19 +661,19 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         )}
         {widgetUnavailable && !isLoading && (
           <p className="text-xs text-red-600" data-testid="text-settings-error" role="alert">
-            Chat is unavailable. Please try again later.
+            {chromeCopy.chatUnavailable}
           </p>
         )}
         {pollError && (
           <p className="text-xs text-amber-800" data-testid="text-poll-error" role="status">
-            Couldn't refresh messages. Retrying…
+            {chromeCopy.pollError}
           </p>
         )}
         {/* Welcome bubble */}
         {!isLoading && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
-              {urlGreeting || settingsWelcome}
+              <span dir={messageTextDir(urlGreeting || settingsWelcome)}>{urlGreeting || settingsWelcome}</span>
             </div>
           </div>
         )}
@@ -695,7 +733,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           const isButtonMessage = msg.contentType === "buttons" && buttons.length > 0;
           const formDef = sanitizeWebchatFormDefinition(msg.templateVariables?.webchatForm);
           const isFormMessage = msg.contentType === "form" && !!formDef && isOutbound;
-          const messageResponded = clickedButtons.has(msg.id);
+          const laterInbound = deduped.some(
+            (other) =>
+              other.direction === "inbound" &&
+              String(other.createdAt || "") > String(msg.createdAt || ""),
+          );
+          const messageResponded = clickedButtons.has(msg.id) || laterInbound;
           const formSubmitted = formDef ? submittedFormIds.has(formDef.id) || deduped.some((m) => m.contentType === "form_result") : false;
 
           return (
@@ -729,7 +772,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                         : {}
                     }
                   >
-                    <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</span>
+                    <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]" dir={messageTextDir(msg.content)}>
+                      {msg.content}
+                    </span>
                   </div>
                 ) : null}
 
@@ -746,7 +791,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                   </div>
                 )}
                 {isButtonMessage && isOutbound && (
-                  <div className="mt-1.5 flex flex-col gap-1.5">
+                  <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-col">
                     {buttons.map((btn, i) => {
                       const btnKey = `${msg.id}_${btn.value}`;
                       const isClicked = clickedButtons.has(btnKey) || messageResponded;
@@ -756,7 +801,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                           onClick={() => handleButtonClick(msg.id, btn)}
                           disabled={isClicked}
                           data-testid={`chat-btn-${msg.id}-${i}`}
-                          className={`w-full text-sm font-medium py-2 px-4 rounded-xl border transition-all ${
+                          className={`w-full min-h-[44px] text-sm font-medium py-2 px-4 rounded-xl border transition-all touch-manipulation ${
                             isClicked
                               ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
                               : "bg-white border-gray-200 hover:border-opacity-80"
@@ -788,7 +833,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                       );
                     })}
                     {messageResponded && (
-                      <p className="text-xs text-gray-400 text-center">Option selected</p>
+                      <p className="text-xs text-gray-400 text-center">{chromeCopy.optionSelected}</p>
                     )}
                   </div>
                 )}
@@ -819,7 +864,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       <div className="min-w-0 border-t border-gray-100 p-3 bg-white flex-shrink-0">
         {widgetUnavailable && (
           <p className="text-xs text-red-600 mb-2" data-testid="text-widget-unavailable">
-            Chat is unavailable.
+            {chromeCopy.chatUnavailable}
           </p>
         )}
         {attachError && (
@@ -858,7 +903,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             disabled={isSending || widgetUnavailable || isLoading}
             className="flex-shrink-0 w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 disabled:opacity-40"
             onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach image"
+            aria-label={chromeCopy.attachAriaLabel}
           >
             <Paperclip className="h-4 w-4" />
           </button>
@@ -868,7 +913,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={widgetUnavailable ? "Chat unavailable" : "Type a message…"}
+            placeholder={widgetUnavailable ? chromeCopy.chatUnavailable : chromeCopy.inputPlaceholder}
+            dir="auto"
             disabled={isSending || widgetUnavailable || isLoading}
             data-testid="input-chat-message"
             className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
@@ -888,7 +934,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             )}
           </button>
         </div>
-        <p className="text-center text-xs text-gray-300 mt-2">Powered by WhaChat</p>
+        <p className="text-center text-xs text-gray-300 mt-2">{chromeCopy.poweredBy}</p>
       </div>
     </div>
   );

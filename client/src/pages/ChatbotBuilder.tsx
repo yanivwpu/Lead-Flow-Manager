@@ -47,6 +47,7 @@ import {
   demoteActiveFlowIfFormIncomplete,
   emptyWebchatFormDraft,
 } from "@shared/webchatStructuredForm";
+import { chatbotAskQuestionPublishError, WEBCHAT_ASK_QUICK_REPLY_MAX, WHATSAPP_ASK_QUICK_REPLY_MAX } from "@shared/chatbotAskQuestionOptions";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
@@ -89,6 +90,11 @@ interface ChatbotNode {
     delayMinutes?: number;
     delayUnit?: "minutes" | "hours" | "days";
     variableName?: string;
+    localized?: {
+      en?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+      es?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+      he?: { content?: string; options?: { label: string; nextNodeId?: string }[] };
+    };
     templateId?: string;
     templateName?: string;
     templateLanguage?: string;
@@ -150,7 +156,7 @@ const STEP_TYPES = [
   {
     type: "question", label: "Ask Question", icon: GitBranch,
     color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-100",
-    description: "Ask a question and optionally save the reply",
+    description: "Ask, wait for one reply, save it, then continue",
   },
   {
     type: "delay", label: "Wait", icon: Clock,
@@ -557,6 +563,17 @@ export function ChatbotBuilder() {
         });
         return;
       }
+      const askError = chatbotAskQuestionPublishError(selectedFlow.nodes, {
+        channels: selectedFlow.triggerChannels,
+      });
+      if (askError) {
+        toast({
+          title: "Ask Question options need a review",
+          description: askError,
+          variant: "destructive",
+        });
+        return;
+      }
     }
     updateFlowMutation.mutate({
       id: selectedFlow.id,
@@ -794,6 +811,17 @@ export function ChatbotBuilder() {
                   toast({
                     title: "Form is incomplete",
                     description: formError,
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                const askError = chatbotAskQuestionPublishError(selectedFlow.nodes, {
+                  channels: selectedFlow.triggerChannels,
+                });
+                if (askError) {
+                  toast({
+                    title: "Ask Question options need a review",
+                    description: askError,
                     variant: "destructive",
                   });
                   return;
@@ -1653,20 +1681,27 @@ export function ChatbotBuilder() {
               {/* ── ASK QUESTION ── */}
               {selectedStep.type === "question" && (
                 <>
+                  <p className="text-[11px] text-gray-500 leading-relaxed rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+                    Ask Question sends one message, waits for the visitor, saves the answer, then continues once.
+                    You can put the greeting and the question in this same message. Quick replies are visitor-facing buttons — they are not Send Message “Buttons” branches.
+                  </p>
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Question</Label>
                     <Textarea value={selectedStep.data.content || ""} onChange={(e) => updateStep(selectedStep.id, { content: e.target.value })}
-                      placeholder="Enter your question…" className="min-h-[90px] text-sm resize-none border-gray-200" data-testid={`input-question-${selectedStep.id}`} />
+                      placeholder="Hi! 👋 Welcome to our team. I can help you explore features, find the right solution, or book a live demo. What would you like help with today?" className="min-h-[110px] text-sm resize-none border-gray-200" data-testid={`input-question-${selectedStep.id}`} />
                   </div>
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
                       Save answer as <span className="normal-case font-normal text-gray-300">(optional)</span>
                     </Label>
                     <Input value={selectedStep.data.variableName || ""} onChange={(e) => updateStep(selectedStep.id, { variableName: e.target.value })}
-                      placeholder="e.g., customer_name" className="text-sm border-gray-200" data-testid={`input-variable-${selectedStep.id}`} />
+                      placeholder="e.g., visitor_intent" className="text-sm border-gray-200" data-testid={`input-variable-${selectedStep.id}`} />
                   </div>
                   <div>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Quick reply options</Label>
+                    <p className="text-[11px] text-gray-400 mb-2">
+                      Visitor-facing buttons. Website Chat supports up to {WEBCHAT_ASK_QUICK_REPLY_MAX}. WhatsApp supports {WHATSAPP_ASK_QUICK_REPLY_MAX} (extra options are omitted there). Visitors can still type a free-text answer.
+                    </p>
                     <div className="space-y-2">
                       {(selectedStep.data.options || []).map((opt, oi) => (
                         <div key={oi} className="flex items-center gap-2">
@@ -1691,6 +1726,49 @@ export function ChatbotBuilder() {
                         <Plus className="h-3 w-3" />Add option
                       </button>
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Optional translations</Label>
+                    <p className="text-[11px] text-gray-400">
+                      Spanish and Hebrew variants are optional. English/default copy is the fallback. Nothing is machine-translated unless you write it.
+                    </p>
+                    {(["es", "he"] as const).map((loc) => {
+                      const variant = selectedStep.data.localized?.[loc] || {};
+                      const locOptions = variant.options || [];
+                      return (
+                        <div key={loc} className="rounded-lg border border-gray-100 p-2 space-y-2">
+                          <p className="text-[11px] font-semibold text-gray-500">{loc === "es" ? "Spanish" : "Hebrew"}</p>
+                          <Textarea
+                            value={variant.content || ""}
+                            onChange={(e) => {
+                              const localized = { ...(selectedStep.data.localized || {}) };
+                              localized[loc] = { ...variant, content: e.target.value, options: locOptions };
+                              updateStep(selectedStep.id, { localized });
+                            }}
+                            placeholder={loc === "es" ? "Pregunta en español…" : "שאלה בעברית…"}
+                            className="min-h-[60px] text-sm resize-none border-gray-200"
+                            data-testid={`input-question-${loc}-${selectedStep.id}`}
+                          />
+                          {(selectedStep.data.options || []).map((opt, oi) => (
+                            <Input
+                              key={`${loc}-${oi}`}
+                              value={locOptions[oi]?.label || ""}
+                              onChange={(e) => {
+                                const nextOpts = [...locOptions];
+                                while (nextOpts.length <= oi) nextOpts.push({ label: "", nextNodeId: "" });
+                                nextOpts[oi] = { ...nextOpts[oi], label: e.target.value };
+                                const localized = { ...(selectedStep.data.localized || {}) };
+                                localized[loc] = { ...variant, options: nextOpts };
+                                updateStep(selectedStep.id, { localized });
+                              }}
+                              placeholder={`${loc === "es" ? "Opción" : "אפשרות"} ${oi + 1}`}
+                              className="text-sm border-gray-200"
+                              data-testid={`input-option-${loc}-${selectedStep.id}-${oi}`}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}

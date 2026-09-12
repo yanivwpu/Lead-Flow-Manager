@@ -19,6 +19,9 @@ export function decideWebchatTurnOwner(input: {
   if (input.bookingIntent) {
     return { owner: "booking", chatbotOwnsReply: false };
   }
+  if (input.chatbot.reason === "pending_ask_complete") {
+    return { owner: "ai_eligible", chatbotOwnsReply: false };
+  }
   if (input.chatbot.visitorFacing) {
     return { owner: "chatbot", chatbotOwnsReply: true };
   }
@@ -36,6 +39,7 @@ export type ChatbotNodeLike = {
     mediaUrl?: string;
     messageType?: string;
     buttons?: unknown[];
+    options?: unknown[];
     delayMinutes?: number;
     actionType?: string;
     action?: { type?: string };
@@ -81,6 +85,7 @@ export function flowWouldOwnVisitorTurn(
       } else if (
         msgType === "buttons" ||
         (Array.isArray(data.buttons) && data.buttons.length > 0) ||
+        (Array.isArray(data.options) && data.options.length > 0) ||
         (data.content || "").trim()
       ) {
         return { visitorFacing: true, reason: "wait_for_input" };

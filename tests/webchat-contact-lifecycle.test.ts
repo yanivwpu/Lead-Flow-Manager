@@ -85,7 +85,7 @@ test("first message uses Website Visitor and never chat text as the name", () =>
   assert.equal(looksLikeMessageDerivedWebchatName("Hi"), true);
   assert.equal(looksLikeMessageDerivedWebchatName("Got it"), true);
   assert.equal(looksLikeMessageDerivedWebchatName("photo.jpg"), true);
-  assert.equal(extractIdentityHints("Hi").name, "Hi");
+  assert.equal(extractIdentityHints("Hi").name, undefined);
   const lead = read("server/webchatLeadService.ts");
   assert.doesNotMatch(lead, /updates\.name/);
   assert.doesNotMatch(lead, /mergeContacts/);

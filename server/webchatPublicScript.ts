@@ -65,13 +65,15 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     var TEASER_CSS = cfg.teaserCss;
     var PANEL_CSS = cfg.panelCss;
     var ARIA_OPEN = cfg.launcherAriaLabel;
-    var ARIA_CLOSE = 'Close website chat';
+    var ARIA_CLOSE = cfg.closeAriaLabel || 'Close website chat';
     var LAUNCHER_LABEL = cfg.launcherLabel;
     var DISPLAY_NAME = cfg.displayName;
     var TEASER_TEXT = cfg.teaserGreeting;
     var LOGO_URL = cfg.logoUrl;
     var ICON_SVG = cfg.iconSvg;
     var CLOSE_SVG = cfg.closeIconSvg;
+    var LOCALE = cfg.locale || '';
+    var DIR = (LOCALE === 'he' || LOCALE === 'ar') ? 'rtl' : 'ltr';
 
     if (!LAUNCHER_CSS || !WIDGET_ID) return;
 
@@ -153,6 +155,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
           qs.push('parentUrl=' + encodeURIComponent(window.location.href));
         }
       } catch (e) {}
+      if (cfg.locale) qs.push('locale=' + encodeURIComponent(cfg.locale));
       return qs.length ? (base + '?' + qs.join('&')) : base;
     }
 
@@ -199,6 +202,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       btn.setAttribute('data-testid', 'wcw-launcher');
       btn.style.cssText = LAUNCHER_CSS;
       setLauncherOpen(false);
+      btn.setAttribute('dir', DIR);
       btn.addEventListener('click', toggleChat);
       document.body.appendChild(btn);
     }
@@ -219,6 +223,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       body.textContent = teaserText();
       bubble.appendChild(kicker);
       bubble.appendChild(body);
+      bubble.setAttribute('dir', DIR);
       bubble.addEventListener('click', function() {
         if (!chatOpen) toggleChat();
       });
@@ -477,8 +482,32 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       teaserGreeting: data.teaserGreeting,
       logoUrl: data.logoUrl || '',
       iconSvg: L.iconSvg || '',
-      closeIconSvg: L.closeIconSvg || ''
+      closeIconSvg: L.closeIconSvg || '',
+      locale: data.locale || '',
+      closeAriaLabel: data.chromeCopy && data.chromeCopy.closeAriaLabel ? data.chromeCopy.closeAriaLabel : ''
     };
+  }
+
+  function resolveParentLocale() {
+    var explicit = '';
+    try {
+      var el = document.documentElement;
+      if (el && el.getAttribute && el.getAttribute('data-webchat-locale')) {
+        explicit = String(el.getAttribute('data-webchat-locale') || '');
+      }
+    } catch (e) {}
+    var htmlLang = '';
+    try { htmlLang = document.documentElement && document.documentElement.lang ? String(document.documentElement.lang) : ''; } catch (e2) {}
+    var path = '';
+    try { path = window.location && window.location.pathname ? String(window.location.pathname) : ''; } catch (e3) {}
+    var browser = '';
+    try { browser = navigator && navigator.language ? String(navigator.language) : ''; } catch (e4) {}
+    var fromPath = path.match(/\\/(es|he)(?:\\/|$)/i);
+    if (explicit) return explicit.split('-')[0].toLowerCase();
+    if (htmlLang) return htmlLang.split('-')[0].toLowerCase();
+    if (fromPath) return fromPath[1].toLowerCase();
+    if (browser) return browser.split('-')[0].toLowerCase();
+    return 'en';
   }
 
   var install = parseInstall();
@@ -486,8 +515,12 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
 
   var href = '';
   try { href = window.location.href || ''; } catch (e) {}
+  var parentLocale = resolveParentLocale();
   var settingsUrl = install.origin + '/api/webchat/' + encodeURIComponent(install.widgetId) + '/settings';
-  if (href) settingsUrl += '?href=' + encodeURIComponent(href);
+  var qs = [];
+  if (href) qs.push('href=' + encodeURIComponent(href));
+  if (parentLocale) qs.push('locale=' + encodeURIComponent(parentLocale));
+  if (qs.length) settingsUrl += '?' + qs.join('&');
 
   fetch(settingsUrl, { cache: 'no-store', credentials: 'omit' })
     .then(function(res) { return res.ok ? res.json() : null; })
