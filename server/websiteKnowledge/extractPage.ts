@@ -19,9 +19,13 @@ import {
 } from "@shared/businessKnowledgeFacts";
 import {
   destinationKindFromUrl,
+  isEntitlementDependencyText,
   isSignupTrialOrNavCta,
   isSocialUrl,
+  isUmbrellaCommercialName,
+  mergePricingPlanCandidates,
   sanitizeExtractedCandidates,
+  stripBillingDecorationsFromOfferName,
 } from "@shared/knowledgeExtractionGuards";
 import { fetchPublicHtmlPage } from "../websiteKnowledgeScraper";
 import type { SourceDetectedType } from "./sourceStore";
@@ -416,6 +420,7 @@ function looksLikePlanName(line: string): boolean {
   if (PRICE_LINE_RE.test(line)) return false;
   if (PERIOD_ONLY_LINE_RE.test(line)) return false;
   if (/^(billed|invoiced|charged|only|just|save)$/i.test(line)) return false;
+  if (isEntitlementDependencyText(line)) return false;
   if (/[.!?]$/.test(line) && line.split(" ").length > 6) return false;
   return true;
 }
@@ -462,8 +467,15 @@ export function extractPricingPlansFromText(
       if (PRICE_LINE_RE.test(candidateName)) break;
     }
     if (!name) {
-      const inline = lines[i].slice(0, Math.max(0, priceHits[0]?.index ?? 0)).replace(/[—–:-]\s*$/, "").trim();
-      if (looksLikePlanName(inline)) name = inline;
+      const unbulleted = lines[i].replace(BULLET_RE, "");
+      const bulletPrefixLen = Math.max(0, lines[i].length - unbulleted.length);
+      const inline = unbulleted
+        .slice(0, Math.max(0, (priceHits[0]?.index ?? 0) - bulletPrefixLen))
+        .replace(/[—–:-]\s*$/, "")
+        .trim();
+      if (looksLikePlanName(inline) || (inline.length >= 2 && inline.length <= PLAN_NAME_MAX && !PRICE_LINE_RE.test(inline) && !isEntitlementDependencyText(inline))) {
+        name = inline;
+      }
     }
     // "Billed $490/year" is a second interval for the plan above, not a plan named "Billed".
     if (!name || /^(billed|invoiced|charged)$/i.test(name)) {
@@ -485,6 +497,11 @@ export function extractPricingPlansFromText(
         if (PRICE_LINE_RE.test(line) && findPricesInText(priceSearchText(lines, fwd)).length > 0) break;
         if (BULLET_RE.test(line)) {
           const benefit = line.replace(BULLET_RE, "").trim();
+          if (isEntitlementDependencyText(benefit)) {
+            if (!description) description = benefit;
+            continue;
+          }
+          if (/\bgrowth\s+engine\b/i.test(benefit) && name && !/\bgrowth\s+engine\b/i.test(name)) break;
           if (benefit.length >= 2 && benefit.length <= 200) benefits.push(benefit);
           continue;
         }
@@ -568,44 +585,56 @@ function extractFromJsonLd(nodes: unknown[], ctx: CandidateContext): FactCandida
     }
 
     if (types.includes("softwareapplication") || types.includes("product") || types.includes("service")) {
-      const name = typeof o.name === "string" ? o.name : null;
-      const offerList = collectNormalizedOffers(o.offers);
-      const subscription = offerList.filter((offer) => offer.billingPeriod === "month" || offer.billingPeriod === "year");
-      const asPricingPlan =
-        Boolean(name) &&
-        (types.includes("softwareapplication") ||
-          (subscription.length > 0 && !GROWTH_ENGINE_JSONLD_RE.test(name || "")));
+      const parentName = typeof o.name === "string" ? o.name.trim() : "";
+      const parentUrl = typeof o.url === "string" ? o.url : null;
+      const parentDescription = typeof o.description === "string" ? stripTags(o.description) : null;
+      const groups = groupJsonLdCommercialOffers(parentName, o.offers);
 
-      if (asPricingPlan && name) {
-        const candidate = buildCandidate(
-          ctx,
-          "pricing_plan",
-          {
+      for (const group of groups) {
+        const name = group.name;
+        if (!name) continue;
+        const offerList = group.offers;
+        const subscription = offerList.filter((offer) => offer.billingPeriod === "month" || offer.billingPeriod === "year");
+        const growth =
+          GROWTH_ENGINE_JSONLD_RE.test(name) ||
+          GROWTH_ENGINE_JSONLD_RE.test(parentDescription || "") ||
+          offerList.some((offer) => GROWTH_ENGINE_JSONLD_RE.test(offer.name || ""));
+        const asPricingPlan =
+          Boolean(name) &&
+          !growth &&
+          (types.includes("softwareapplication") || subscription.length > 0);
+
+        if (asPricingPlan) {
+          const candidate = buildCandidate(
+            ctx,
+            "pricing_plan",
+            {
+              name,
+              description: parentDescription && !isUmbrellaCommercialName(parentName, ctx.sourceTitle) ? parentDescription : null,
+              price: subscription[0] ?? offerList[0] ?? null,
+              additionalPrices: subscription[0] ? subscription.slice(1) : offerList.slice(1),
+              benefits: [],
+              planUrl: group.url || parentUrl,
+            },
             name,
-            description: typeof o.description === "string" ? stripTags(o.description) : null,
-            price: subscription[0] ?? offerList[0] ?? null,
-            additionalPrices: (subscription[0] ? subscription.slice(1) : offerList.slice(1)),
-            benefits: [],
-            planUrl: typeof o.url === "string" ? o.url : null,
-          },
-          name,
-          0.95,
-        );
-        if (candidate) out.push(candidate);
-      } else if (name && (types.includes("product") || types.includes("service"))) {
-        const candidate = buildCandidate(
-          ctx,
-          types.includes("service") ? "service" : "product",
-          {
+            0.95,
+          );
+          if (candidate) out.push(candidate);
+        } else if (name && (types.includes("product") || types.includes("service") || growth)) {
+          const candidate = buildCandidate(
+            ctx,
+            types.includes("service") && !growth ? "service" : "product",
+            {
+              name,
+              description: group.description || parentDescription,
+              price: offerList.find((offer) => offer.billingPeriod === "once") ?? offerList[0] ?? null,
+              url: group.url || parentUrl,
+            },
             name,
-            description: typeof o.description === "string" ? stripTags(o.description) : null,
-            price: offerList.find((offer) => offer.billingPeriod === "once") ?? offerList[0] ?? null,
-            url: typeof o.url === "string" ? o.url : null,
-          },
-          name,
-          0.95,
-        );
-        if (candidate) out.push(candidate);
+            0.95,
+          );
+          if (candidate) out.push(candidate);
+        }
       }
     }
 
@@ -670,6 +699,78 @@ function stripTags(value: string): string {
 }
 
 const GROWTH_ENGINE_JSONLD_RE = /\bgrowth\s+engine\b/i;
+
+type NamedJsonLdOffer = {
+  name: string | null;
+  amount: number;
+  currency: string;
+  billingPeriod: string;
+  url: string | null;
+  description: string | null;
+};
+
+function collectNamedJsonLdOffers(offers: unknown): NamedJsonLdOffer[] {
+  const seen = new Set<string>();
+  const out: NamedJsonLdOffer[] = [];
+  for (const node of collectOfferNodes(offers)) {
+    const offer = normalizeOfferNode(node);
+    if (!offer) continue;
+    const name = typeof node.name === "string" && node.name.trim() ? node.name.trim() : null;
+    const url = typeof node.url === "string" ? node.url : null;
+    const description = typeof node.description === "string" ? stripTags(node.description) : null;
+    const key = `${name ?? ""}:${offer.amount}:${offer.currency}:${offer.billingPeriod}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...offer, name, url, description });
+  }
+  return out;
+}
+
+function groupJsonLdCommercialOffers(
+  parentName: string,
+  offers: unknown,
+): Array<{ name: string; offers: NamedJsonLdOffer[]; url: string | null; description: string | null }> {
+  const namedOffers = collectNamedJsonLdOffers(offers);
+  if (namedOffers.length === 0) {
+    return parentName ? [{ name: parentName, offers: [], url: null, description: null }] : [];
+  }
+
+  const offerIdentities = namedOffers
+    .map((offer) => (offer.name && !isEntitlementDependencyText(offer.name) ? stripBillingDecorationsFromOfferName(offer.name) : null))
+    .filter((name): name is string => Boolean(name));
+  const parentIdentity = parentName ? stripBillingDecorationsFromOfferName(parentName) : "";
+  const parentIsUmbrella =
+    Boolean(parentIdentity) &&
+    offerIdentities.length > 0 &&
+    !offerIdentities.some((name) => name.toLowerCase() === parentIdentity.toLowerCase()) &&
+    (isUmbrellaCommercialName(parentIdentity, null) || offerIdentities.length > 0);
+
+  const groups = new Map<string, NamedJsonLdOffer[]>();
+  for (const offer of namedOffers) {
+    const fromOffer =
+      offer.name && !isEntitlementDependencyText(offer.name)
+        ? stripBillingDecorationsFromOfferName(offer.name)
+        : null;
+    const groupName = parentIsUmbrella ? fromOffer : fromOffer && fromOffer.toLowerCase() === parentIdentity.toLowerCase()
+      ? parentIdentity || fromOffer
+      : parentIdentity || fromOffer;
+    if (!groupName) continue;
+    const key = groupName.toLowerCase();
+    const list = groups.get(key) ?? [];
+    list.push(offer);
+    groups.set(key, list);
+  }
+
+  return [...groups.entries()].map(([, list]) => {
+    const named = list.find((offer) => offer.name)?.name;
+    return {
+      name: named ? stripBillingDecorationsFromOfferName(named) : parentIdentity,
+      offers: list,
+      url: list.find((offer) => offer.url)?.url ?? null,
+      description: list.find((offer) => offer.description)?.description ?? null,
+    };
+  });
+}
 
 function collectOfferNodes(offers: unknown): Record<string, unknown>[] {
   if (!offers) return [];
@@ -1053,7 +1154,15 @@ export function extractDeterministicFacts(
   const byKey = new Map<string, FactCandidate>();
   for (const candidate of all) {
     const existing = byKey.get(candidate.factKey);
-    if (!existing || candidate.confidence > existing.confidence) {
+    if (!existing) {
+      byKey.set(candidate.factKey, candidate);
+      continue;
+    }
+    if (existing.factType === "pricing_plan" && candidate.factType === "pricing_plan") {
+      byKey.set(candidate.factKey, mergePricingPlanCandidates(existing, candidate));
+      continue;
+    }
+    if (candidate.confidence > existing.confidence) {
       byKey.set(candidate.factKey, candidate);
     }
   }

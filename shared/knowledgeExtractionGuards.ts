@@ -50,6 +50,14 @@ const BOOKING_OR_DEMO_RE =
   /\b(?:book|booking|schedule|calendly|demo|walkthrough|appointment|consult|reserve)\b/i;
 
 const GROWTH_ENGINE_NAME_RE = /\bgrowth\s+engine\b/i;
+const GROWTH_ENGINE_PATH_RE = /\/realtor-growth-engine(?:\/|$|\?|#)/i;
+const ENTITLEMENT_DEPENDENCY_RE = /\brequires(?:\s+an)?(?:\s+active)?\s+pro\b/i;
+const BILLING_NAME_SUFFIX_RE =
+  /(?:\s*[—–:-]\s*|\s+)(?:monthly|yearly|annual(?:ly)?|one[-\s]?time|subscription)(?:\s+(?:plan|tier|offer))?$/i;
+const UMBRELLA_BRAND_RE = /^(?:whachat\s*crm|whachatcrm)$/i;
+const MISSING_PRICE_REASON_RE =
+  /price could not be read|price was not stated|left unknown|billing frequency was not stated|currency was not stated|price amount could not be read|price and billing frequency could not be read/i;
+export const MISSING_PRICE_REVIEW_REASON = "Price could not be read from the page and was left unknown.";
 
 const INDUSTRY_OR_AUDIENCE_RE =
   /\b(?:industr(?:y|ies)|use\s+cases?|who\s+it(?:'s| is)\s+for|built\s+for|for\s+(?:agenc(?:y|ies)|teams?|realtors?|brokers?|coaches?)|real estate|realtors?|agenc(?:y|ies)|saas|e-?commerce|healthcare|dentists?|law firms?)\b/i;
@@ -121,6 +129,111 @@ export function planLooksPaid(name: string): boolean {
 
 export function planLooksFree(name: string): boolean {
   return FREE_PLAN_NAME_RE.test(name) && !/\bpro\b/i.test(name);
+}
+
+/** “Requires Pro” is an entitlement dependency, never a purchasable plan name. */
+export function isEntitlementDependencyText(text: string): boolean {
+  return ENTITLEMENT_DEPENDENCY_RE.test(text);
+}
+
+export function stripBillingDecorationsFromOfferName(name: string): string {
+  return name.replace(BILLING_NAME_SUFFIX_RE, "").replace(/\s+/g, " ").trim() || name.trim();
+}
+
+function titleBrand(sourceTitle?: string | null): string {
+  if (!sourceTitle) return "";
+  return sourceTitle
+    .split(/[|–—]/)[0]
+    .replace(/\bpricing\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Company / page-title wrappers are not purchasable plans when named offers exist
+ * underneath them. “WhachatCRM” is the umbrella product name, not a tier.
+ */
+export function isUmbrellaCommercialName(name: string, sourceTitle?: string | null): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return false;
+  if (UMBRELLA_BRAND_RE.test(trimmed)) return true;
+  const brand = titleBrand(sourceTitle);
+  return Boolean(brand) && brand.toLowerCase() === trimmed.toLowerCase();
+}
+
+export function listedCandidatePrices(data: Record<string, unknown>): FactMoney[] {
+  return uniquePlanPrices(
+    (data.price as FactMoney | null | undefined) ?? null,
+    Array.isArray(data.additionalPrices) ? (data.additionalPrices as FactMoney[]) : [],
+  );
+}
+
+function subscriptionPrices(prices: FactMoney[]): FactMoney[] {
+  return prices.filter((p) => p.billingPeriod === "month" || p.billingPeriod === "year");
+}
+
+function oncePrices(prices: FactMoney[]): FactMoney[] {
+  return prices.filter((p) => p.billingPeriod === "once");
+}
+
+function candidateBlob(data: Record<string, unknown>): string {
+  const benefits = Array.isArray(data.benefits) ? data.benefits.join(" ") : "";
+  return `${data.name || ""} ${data.description || ""} ${benefits} ${data.planUrl || ""} ${data.url || ""}`;
+}
+
+function growthEnginePath(data: Record<string, unknown>): boolean {
+  return GROWTH_ENGINE_PATH_RE.test(String(data.planUrl || data.url || ""));
+}
+
+/**
+ * Growth Engine is a distinct one-time product. Name, URL, and description may say so;
+ * “requires Pro” and feature bullets that merely mention Pro must not rename it to Pro.
+ */
+export function looksLikeGrowthEngineOffer(data: Record<string, unknown>, prices?: FactMoney[]): boolean {
+  const name = String(data.name || "");
+  if (GROWTH_ENGINE_NAME_RE.test(name)) return true;
+  const blob = candidateBlob(data);
+  const listed = prices ?? listedCandidatePrices(data);
+  if (subscriptionPrices(listed).length > 0) return false;
+  if (GROWTH_ENGINE_NAME_RE.test(blob)) return true;
+  if (growthEnginePath(data) && oncePrices(listed).length > 0) return true;
+  return false;
+}
+
+export function recoveredGrowthEngineName(data: Record<string, unknown>): string {
+  const name = String(data.name || "").trim();
+  if (GROWTH_ENGINE_NAME_RE.test(name) && !isEntitlementDependencyText(name)) {
+    return stripBillingDecorationsFromOfferName(name);
+  }
+  const blob = `${data.description || ""} ${Array.isArray(data.benefits) ? data.benefits.join(" ") : ""}`;
+  const match = blob.match(/([A-Za-z][\w]*(?:\s+[A-Za-z][\w]*)*\s+Growth\s+Engine)/i);
+  if (match?.[1]) return match[1].replace(/\s+/g, " ").trim();
+  return "Growth Engine";
+}
+
+function isStaleMissingPriceReason(reason: string): boolean {
+  return MISSING_PRICE_REASON_RE.test(reason);
+}
+
+function reasonsForPricingPlan(reasons: string[], prices: FactMoney[]): string[] {
+  if (prices.length === 0) {
+    return reasons.length ? reasons : [MISSING_PRICE_REVIEW_REASON];
+  }
+  return reasons.filter((reason) => !isStaleMissingPriceReason(reason));
+}
+
+function dropUmbrellaPricingPlans(candidates: FactCandidate[]): FactCandidate[] {
+  const specific = candidates.filter((candidate) => {
+    if (candidate.factType !== "pricing_plan" && candidate.factType !== "product") return false;
+    const name = String((candidate.data as { name?: string }).name || "");
+    return name.length > 0 && !isUmbrellaCommercialName(name, candidate.sourceTitle);
+  });
+  if (specific.length === 0) return candidates;
+  return candidates.filter((candidate) => {
+    if (candidate.factType !== "pricing_plan") return true;
+    const name = String((candidate.data as { name?: string }).name || "");
+    return !isUmbrellaCommercialName(name, candidate.sourceTitle);
+  });
 }
 
 function moneyKey(money: FactMoney): string {
@@ -349,46 +462,61 @@ export function classifyExtractedCandidate(
   const data = candidate.data as Record<string, unknown>;
 
   if (candidate.factType === "pricing_plan") {
-    const name = String(data.name || "");
+    const rawName = String(data.name || "");
     const extras = Array.isArray(data.additionalPrices) ? data.additionalPrices : [];
     const normalized: FactMoney[] = [];
     const reasons: string[] = [...(candidate.reviewReasons || [])];
 
     for (const raw of [data.price, ...extras]) {
       if (raw == null) continue;
-      const result = normalizeExtractedMoney(raw, { planName: name });
+      const result = normalizeExtractedMoney(raw, { planName: rawName });
       if ("money" in result && result.money) normalized.push(result.money);
       else if ("reason" in result && result.reason) reasons.push(result.reason);
     }
 
-    const prices = uniquePlanPrices(normalized[0], normalized.slice(1));
+    const allPrices = uniquePlanPrices(normalized[0], normalized.slice(1));
+    const growth = looksLikeGrowthEngineOffer(data, allPrices);
+    const subs = subscriptionPrices(allPrices);
+    const prices = growth && subs.length > 0 ? uniquePlanPrices(subs[0], subs.slice(1)) : allPrices;
+    const rawBenefits = Array.isArray(data.benefits)
+      ? (data.benefits as unknown[]).map((item) => String(item).trim()).filter(Boolean)
+      : [];
+    const benefits =
+      growth && subs.length > 0
+        ? rawBenefits.filter((item) => !GROWTH_ENGINE_NAME_RE.test(item) && !isEntitlementDependencyText(item))
+        : rawBenefits;
+
+    if (isEntitlementDependencyText(rawName) && !GROWTH_ENGINE_NAME_RE.test(rawName) && !subs.length && !growth) {
+      return drop(["“Requires Pro” describes a dependency, not a plan name."]);
+    }
+
+    const name = stripBillingDecorationsFromOfferName(rawName);
     const next = rebuildCandidate(
       candidate,
       {
         ...data,
+        name,
         price: prices[0] ?? null,
         additionalPrices: prices.slice(1),
+        benefits,
       },
-      prices.length === 0
-        ? reasons.length
-          ? reasons
-          : ["Price could not be read from the page and was left unknown."]
-        : reasons,
+      reasonsForPricingPlan(reasons, prices),
     );
     if (!next) return drop(["Pricing plan did not match a known shape."]);
-    if (GROWTH_ENGINE_NAME_RE.test(name)) {
-      const once = prices.find((p) => p.billingPeriod === "once") ?? prices[0] ?? null;
+    if (growth && subs.length === 0) {
+      const once = oncePrices(allPrices)[0] ?? allPrices[0] ?? null;
       const planUrl = typeof data.planUrl === "string" ? data.planUrl : null;
+      const recovered = recoveredGrowthEngineName({ ...data, name });
       return keepAs(
         "product",
         {
-          name,
+          name: recovered,
           description: data.description ?? null,
           price: once,
-          url: planUrl,
+          url: planUrl && /^https?:\/\//i.test(planUrl) ? planUrl : null,
         },
         next,
-        reasons,
+        reasons.filter((reason) => !isStaleMissingPriceReason(reason)),
       );
     }
     return { keep: true, candidate: next };
@@ -548,44 +676,113 @@ export function sanitizeExtractedCandidates(candidates: FactCandidate[]): FactCa
     }
   }
 
-  return kept;
+  return dropUmbrellaPricingPlans(kept);
+}
+
+function candidateIsCompletePricingPlan(candidate: FactCandidate): boolean {
+  if (candidate.factType !== "pricing_plan") return false;
+  return listedCandidatePrices(candidate.data as Record<string, unknown>).length > 0;
+}
+
+function incomingPricingPlanContaminates(existing: FactCandidate, incoming: FactCandidate): boolean {
+  const da = existing.data as Record<string, unknown>;
+  const db = incoming.data as Record<string, unknown>;
+  const existingPrices = listedCandidatePrices(da);
+  const incomingPrices = listedCandidatePrices(db);
+  const existingSubs = subscriptionPrices(existingPrices);
+  const incomingGrowth = looksLikeGrowthEngineOffer(db, incomingPrices);
+  if (incomingGrowth && existingSubs.length > 0 && subscriptionPrices(incomingPrices).length === 0) {
+    return true;
+  }
+  if (existingSubs.length > 0 && oncePrices(incomingPrices).length > 0 && subscriptionPrices(incomingPrices).length === 0) {
+    return true;
+  }
+  if (isUmbrellaCommercialName(String(db.name || ""), incoming.sourceTitle) && candidateIsCompletePricingPlan(existing)) {
+    return true;
+  }
+  if (incomingPrices.length === 0 && existingPrices.length > 0) {
+    return true;
+  }
+  return false;
 }
 
 export function mergePricingPlanCandidates(a: FactCandidate, b: FactCandidate): FactCandidate {
+  const complete = candidateIsCompletePricingPlan(a)
+    ? a
+    : candidateIsCompletePricingPlan(b)
+      ? b
+      : (a.confidence || 0) >= (b.confidence || 0)
+        ? a
+        : b;
+  const incoming = complete === a ? b : a;
+  if (incomingPricingPlanContaminates(complete, incoming)) {
+    const prices = listedCandidatePrices(complete.data as Record<string, unknown>);
+    const rebuilt = rebuildCandidate(
+      complete,
+      complete.data,
+      reasonsForPricingPlan(complete.reviewReasons || [], prices),
+    );
+    return rebuilt || complete;
+  }
+
   const da = a.data as Record<string, unknown>;
   const db = b.data as Record<string, unknown>;
-  const prices = uniquePlanPrices(
-    (da.price as FactMoney | undefined) ?? null,
-    [
-      ...(((da.additionalPrices as FactMoney[]) || [])),
-      (db.price as FactMoney | undefined) ?? null,
-      ...(((db.additionalPrices as FactMoney[]) || [])),
-    ].filter((p): p is FactMoney => Boolean(p)),
-  );
-  const benefits = [
-    ...new Set(
-      [...((da.benefits as string[]) || []), ...((db.benefits as string[]) || [])].map((s) => s.trim()).filter(Boolean),
-    ),
-  ].slice(0, 30);
-  const preferred = (a.confidence || 0) >= (b.confidence || 0) ? a : b;
+  const aPrices = listedCandidatePrices(da);
+  const bPrices = listedCandidatePrices(db);
+  const aGrowth = looksLikeGrowthEngineOffer(da, aPrices);
+  const bGrowth = looksLikeGrowthEngineOffer(db, bPrices);
+  const mixedGrowthOntoSubscription =
+    aGrowth !== bGrowth &&
+    (subscriptionPrices(aPrices).length > 0 || subscriptionPrices(bPrices).length > 0);
+
+  const pricePool = mixedGrowthOntoSubscription
+    ? [...subscriptionPrices(aPrices), ...subscriptionPrices(bPrices)]
+    : [...aPrices, ...bPrices];
+  const prices = uniquePlanPrices(pricePool[0] ?? null, pricePool.slice(1));
+
+  const incomingBenefits = ((incoming.data as { benefits?: string[] }).benefits || [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const completeBenefits = ((complete.data as { benefits?: string[] }).benefits || [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const takeIncomingBenefits =
+    !mixedGrowthOntoSubscription && !looksLikeGrowthEngineOffer(incoming.data as Record<string, unknown>);
+  const benefits = [...new Set([...completeBenefits, ...(takeIncomingBenefits ? incomingBenefits : [])])].slice(0, 30);
+
+  const preferred = a.origin === "website_verified" ? a : b.origin === "website_verified" ? b : complete;
   const origin =
     a.origin === "website_verified" || b.origin === "website_verified"
       ? "website_verified"
       : preferred.origin;
+  const completeData = complete.data as Record<string, unknown>;
+  const incomingData = incoming.data as Record<string, unknown>;
+  const incomingUrl = typeof incomingData.planUrl === "string" ? incomingData.planUrl : null;
+  const completeUrl = typeof completeData.planUrl === "string" ? completeData.planUrl : null;
+  const planUrl =
+    completeUrl || (incomingUrl && !GROWTH_ENGINE_PATH_RE.test(incomingUrl) ? incomingUrl : completeUrl);
+
   const rebuilt = rebuildCandidate(
     { ...preferred, origin },
     {
-      ...da,
-      ...db,
-      name: da.name || db.name,
-      description: da.description || db.description,
+      ...completeData,
+      name: completeData.name || incomingData.name,
+      description: completeData.description || incomingData.description,
       price: prices[0] ?? null,
       additionalPrices: prices.slice(1),
       benefits,
+      planUrl,
     },
-    [...(a.reviewReasons || []), ...(b.reviewReasons || [])],
+    reasonsForPricingPlan(
+      [...(complete.reviewReasons || []), ...(incomingPricesComplete(incoming) ? incoming.reviewReasons || [] : [])],
+      prices,
+    ),
   );
-  return rebuilt || preferred;
+  return rebuilt || complete;
+}
+
+function incomingPricesComplete(candidate: FactCandidate): boolean {
+  return listedCandidatePrices(candidate.data as Record<string, unknown>).length > 0;
 }
 
 export function collectReviewReasons(fact: Pick<KnowledgeFact, "factType" | "data" | "reviewReasons" | "provenance" | "confidence">): string[] {
@@ -600,10 +797,16 @@ export function collectReviewReasons(fact: Pick<KnowledgeFact, "factType" | "dat
   if (fact.factType === "pricing_plan") {
     const d = fact.data as { name?: string; price?: FactMoney | null; additionalPrices?: FactMoney[] };
     const prices = uniquePlanPrices(d.price, d.additionalPrices || []);
-    if (prices.length === 0) add("Price could not be read from the page and was left unknown.");
-    for (const price of prices) {
-      if (price.amount === 0 && d.name && planLooksPaid(d.name) && !planLooksFree(d.name)) {
-        add(`“${d.name}” looks like a paid plan, so an inferred $0 price must not be published.`);
+    if (prices.length === 0) {
+      add(MISSING_PRICE_REVIEW_REASON);
+    } else {
+      const kept = reasons.filter((reason) => !isStaleMissingPriceReason(reason));
+      reasons.length = 0;
+      for (const reason of kept) reasons.push(reason);
+      for (const price of prices) {
+        if (price.amount === 0 && d.name && planLooksPaid(d.name) && !planLooksFree(d.name)) {
+          add(`“${d.name}” looks like a paid plan, so an inferred $0 price must not be published.`);
+        }
       }
     }
   }

@@ -54,7 +54,9 @@ import { buildKnowledgeReviewPayload, knowledgeReviewStepStatus } from "../share
 import {
   SOURCE_REMOVED_REVIEW_MESSAGE,
   classifyExtractedCandidate,
+  collectReviewReasons,
   isDraftFromRemovedSource,
+  mergePricingPlanCandidates,
   normalizeExtractedMoney,
   parseBillingPeriod,
   parseExplicitAmount,
@@ -228,6 +230,7 @@ function factsFromScan(
         excerpt: scanned.excerpt,
         proposedAction: op.proposedAction ?? "add",
         provenance: op.provenance ?? [],
+        reviewReasons: scanned.reviewReasons,
         state: "draft",
       }),
     );
@@ -690,7 +693,7 @@ await (async () => {
 })();
 
 run("extractor-version invalidation is on the deployed scan job/worker path", () => {
-  assert.equal(KNOWLEDGE_EXTRACTOR_VERSION, 3);
+  assert.equal(KNOWLEDGE_EXTRACTOR_VERSION, 4);
   const repo = process.cwd();
   const worker = readFileSync(join(repo, "server/websiteKnowledge/scanJobWorker.ts"), "utf8");
   const service = readFileSync(join(repo, "server/websiteKnowledge/scanJobService.ts"), "utf8");
@@ -1162,5 +1165,325 @@ run("knowledge stores and publish stay tenant-scoped", () => {
   assert.match(pub, /isDraftFromRemovedSource/);
   assert.match(pub, /itemErrors/);
 });
+
+function parentWhachatProductHtml(): string {
+  return `<!doctype html>
+<html>
+<head>
+<title>WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"WhachatCRM","url":"https://www.whachatcrm.com/pricing","offers":[
+  {"@type":"Offer","name":"Free","price":0,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}},
+  {"@type":"Offer","name":"Pro","price":49,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}},
+  {"@type":"Offer","name":"Pro","price":490,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1Y","unitCode":"ANN"}},
+  {"@type":"Offer","name":"Realtor Growth Engine","price":199,"priceCurrency":"USD","description":"Requires an active Pro plan.","url":"https://www.whachatcrm.com/realtor-growth-engine","priceSpecification":{"unitText":"one-time","billingDuration":"one-time"}}
+]}
+</script>
+</head>
+<body>
+<main>
+  <h1>Simple pricing. Everything you need to grow.</h1>
+  <p>${"Canonical public pricing with enough readable content. ".repeat(8)}</p>
+  <ul>
+    <li>Free: $0/month</li>
+    <li>Pro: $49/month</li>
+    <li>Pro: $490/year</li>
+    <li>Realtor Growth Engine: $199 one-time</li>
+    <li>Requires an active Pro plan.</li>
+    <li>MLS matching for Pro workspaces</li>
+  </ul>
+  <p><a href="/pricing">View WhachatCRM plans</a></p>
+  <p><a href="/realtor-growth-engine">Realtor Growth Engine</a></p>
+  <p><a href="/contact">Book a Demo</a></p>
+</main>
+</body>
+</html>`;
+}
+
+function contaminatingAiJson(): string {
+  return JSON.stringify({
+    facts: [
+      {
+        factType: "pricing_plan",
+        data: { name: "WhachatCRM", benefits: [] },
+        excerpt: "WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM",
+        confidence: 0.7,
+      },
+      {
+        factType: "pricing_plan",
+        data: { name: "Free", benefits: ["50 Prospect AI discoveries/month"] },
+        excerpt: "Free",
+        confidence: 0.65,
+      },
+      {
+        factType: "pricing_plan",
+        data: {
+          name: "Pro",
+          price: { amount: REALTOR_GROWTH_ENGINE_ONETIME_USD, currency: "USD", billingPeriod: "once" },
+          benefits: ["MLS matching for Pro workspaces", "Requires Pro"],
+          description: "Realtor Growth Engine. Requires an active Pro plan.",
+          planUrl: "https://www.whachatcrm.com/realtor-growth-engine",
+        },
+        excerpt: "Realtor Growth Engine $199 one-time Requires Pro",
+        confidence: 0.9,
+      },
+      {
+        factType: "booking_link",
+        data: { url: "https://www.whachatcrm.com/pricing", label: "View WhachatCRM plans" },
+        excerpt: "View WhachatCRM plans",
+        confidence: 0.8,
+      },
+      {
+        factType: "booking_link",
+        data: { url: "https://www.whachatcrm.com/realtor-growth-engine", label: "Realtor Growth Engine" },
+        excerpt: "Realtor Growth Engine",
+        confidence: 0.8,
+      },
+      {
+        factType: "call_to_action",
+        data: { url: "https://www.whachatcrm.com/contact", label: "Book a Demo" },
+        excerpt: "Book a Demo",
+        confidence: 0.9,
+      },
+    ],
+  });
+}
+
+function assertCanonicalCommercialIdentities(candidates: FactCandidate[]) {
+  const planNames = plansFrom(candidates).map((plan) => plan.name);
+  assert.ok(planNames.includes("Free"), `Free missing from ${planNames.join(", ")}`);
+  assert.ok(planNames.includes("Pro"), `Pro missing from ${planNames.join(", ")}`);
+  assert.ok(!planNames.some((name) => /whachatcrm/i.test(name)), `umbrella plan leaked: ${planNames.join(", ")}`);
+
+  const free = planNamed(candidates, "Free");
+  const freePrices = listedPlanPrices(free);
+  assert.equal(freePrices.length, 1);
+  assert.equal(freePrices[0]?.amount, getFreePlanMonthlyPriceUsd());
+  assert.equal(freePrices[0]?.billingPeriod, "month");
+  const freeFact = candidates.find((c) => c.factType === "pricing_plan" && (c.data as FactDataMap["pricing_plan"]).name === "Free")!;
+  assert.ok(!collectReviewReasons(freeFact as unknown as KnowledgeFact).some((reason) => /could not be read|unknown|not listed/i.test(reason)));
+
+  const pro = planNamed(candidates, "Pro");
+  const proPrices = listedPlanPrices(pro);
+  assert.equal(proPrices.find((p) => p.billingPeriod === "month")?.amount, getPaidPlanMonthlyPriceUsd("pro"));
+  assert.equal(proPrices.find((p) => p.billingPeriod === "year")?.amount, getPaidPlanYearlyPriceUsd("pro"));
+  assert.ok(!proPrices.some((p) => p.amount === REALTOR_GROWTH_ENGINE_ONETIME_USD || p.billingPeriod === "once"));
+  assert.ok(!pro.benefits.some((b) => /mls matching|requires pro|growth engine/i.test(b)));
+
+  const rge = candidates.find(
+    (c) => c.factType === "product" && /realtor growth engine/i.test((c.data as FactDataMap["product"]).name),
+  );
+  assert.ok(rge, "RGE must remain a distinct product");
+  const rgeData = rge!.data as FactDataMap["product"];
+  assert.equal(rgeData.price?.amount, REALTOR_GROWTH_ENGINE_ONETIME_USD);
+  assert.equal(rgeData.price?.billingPeriod, "once");
+  assert.match(String(rgeData.description || ""), /requires/i);
+}
+
+function assertExpectedPricingReview(facts: KnowledgeFact[]) {
+  const payload = buildKnowledgeReviewPayload({ facts });
+  const pricing = payload.sections.find((s) => s.id === "pricing");
+  const offerings = payload.sections.find((s) => s.id === "offerings");
+  const contact = payload.sections.find((s) => s.id === "contact");
+
+  const freeView = pricing?.facts.find((f) => f.display?.title === "Free");
+  assert.ok(freeView, "Free must appear in pricing review");
+  assert.match(freeView!.display?.headline || "", /0/);
+  assert.ok(!/not listed/i.test(freeView!.display?.headline || ""));
+  assert.equal(freeView!.needsReview, false);
+  assert.ok(!freeView!.reviewReasons.some((r) => /could not be read|unknown/i.test(r)));
+
+  const proView = pricing?.facts.find((f) => f.display?.title === "Pro");
+  assert.ok(proView, "Pro must appear in pricing review");
+  assert.match(proView!.display?.headline || "", /49/);
+  assert.match(proView!.display?.headline || "", /490/);
+  assert.ok(!/199/.test(proView!.display?.headline || ""));
+  assert.ok(!(proView!.display?.bullets || []).some((b) => /mls matching for pro/i.test(b)));
+  assert.equal(proView!.needsReview, false);
+
+  assert.ok(!(pricing?.facts || []).some((f) => /whachatcrm/i.test(f.display?.title || f.summary)));
+
+  const rgeView = offerings?.facts.find((f) => /Realtor Growth Engine/i.test(f.summary));
+  assert.ok(rgeView, "RGE must appear under products");
+  assert.match(rgeView!.summary, /199/);
+  assert.match(rgeView!.summary, /requires/i);
+
+  assert.ok(!(contact?.facts || []).some((f) => /\/pricing|realtor-growth-engine/i.test(f.summary)));
+  assert.ok(
+    (contact?.facts || []).some((f) => /Book a Demo/i.test(f.summary) && f.factType === "booking_link"),
+    "Book a Demo must remain under Contact and Booking",
+  );
+}
+
+run("parent Product named WhachatCRM with named Offers keeps Free, Pro, and RGE identities", () => {
+  const html = parentWhachatProductHtml();
+  const page = prepareHtmlPage(html, CTX.sourceUrl);
+  const { candidates } = extractDeterministicFacts(page, html, CTX.sourceId);
+  assertCanonicalCommercialIdentities(candidates);
+});
+
+run("explicit Free $0/month is a real price and does not warn", () => {
+  const money = normalizeExtractedMoney(
+    { amount: 0, currency: "USD", billingPeriod: "month" },
+    { planName: "Free" },
+  );
+  assert.equal("money" in money && money.money?.amount, 0);
+  assert.equal("money" in money && money.money?.billingPeriod, "month");
+  const factRow = fact("pricing_plan", {
+    name: "Free",
+    price: { amount: 0, currency: "USD", billingPeriod: "month" },
+    benefits: [],
+  }, { reviewReasons: ["Price could not be read from the page and was left unknown."] });
+  const reasons = collectReviewReasons(factRow);
+  assert.ok(!reasons.some((r) => /could not be read|unknown/i.test(r)));
+});
+
+run("Pro monthly and yearly merge into one plan with both billing options", () => {
+  const monthly = candidate({
+    factType: "pricing_plan",
+    data: { name: "Pro", price: { amount: 49, currency: "USD", billingPeriod: "month" }, benefits: ["AI Brain included"] },
+  });
+  const yearly = candidate({
+    factType: "pricing_plan",
+    data: { name: "Pro", price: { amount: 490, currency: "USD", billingPeriod: "year" }, benefits: [] },
+  });
+  const merged = mergePricingPlanCandidates(monthly, yearly);
+  const prices = listedPlanPrices(merged.data as FactDataMap["pricing_plan"]);
+  assert.deepEqual(
+    prices.map((p) => [p.amount, p.billingPeriod]),
+    [
+      [49, "month"],
+      [490, "year"],
+    ],
+  );
+});
+
+run("RGE stays a separate one-time product when it requires Pro", () => {
+  const classified = classifyExtractedCandidate(
+    candidate({
+      factType: "pricing_plan",
+      data: {
+        name: "Realtor Growth Engine",
+        description: "Requires an active Pro plan.",
+        price: { amount: 199, currency: "USD", billingPeriod: "once" },
+        benefits: ["MLS matching for Pro workspaces"],
+      },
+    }),
+  );
+  assert.equal(classified.keep, true);
+  if (!classified.keep) throw new Error("expected keep");
+  assert.equal(classified.candidate.factType, "product");
+  const data = classified.candidate.data as FactDataMap["product"];
+  assert.equal(data.name, "Realtor Growth Engine");
+  assert.equal(data.price?.amount, 199);
+  assert.equal(data.price?.billingPeriod, "once");
+  assert.match(String(data.description || ""), /requires/i);
+});
+
+run("incomplete AI WhachatCRM fact cannot contaminate complete deterministic offers", () => {
+  const html = parentWhachatProductHtml();
+  const page = prepareHtmlPage(html, CTX.sourceUrl);
+  const { candidates: deterministic } = extractDeterministicFacts(page, html, CTX.sourceId);
+  const { candidates: ai } = parseAiExtractionResponse(contaminatingAiJson(), CTX, new Set(deterministic.map((c) => c.factKey)));
+  const combined = combineCandidates(deterministic, ai);
+  assertCanonicalCommercialIdentities(combined);
+});
+
+run("RGE features that mention Pro are not assigned to Pro", () => {
+  const html = parentWhachatProductHtml();
+  const page = prepareHtmlPage(html, CTX.sourceUrl);
+  const { candidates } = extractDeterministicFacts(page, html, CTX.sourceId);
+  const pro = planNamed(candidates, "Pro");
+  assert.ok(!pro.benefits.some((b) => /mls matching for pro/i.test(b)));
+  const rge = candidates.find((c) => c.factType === "product")!;
+  assert.match((rge.data as FactDataMap["product"]).name, /Realtor Growth Engine/i);
+});
+
+run("destination URLs keep pricing and RGE links out of Contact and Booking", () => {
+  const html = parentWhachatProductHtml();
+  const page = prepareHtmlPage(html, CTX.sourceUrl);
+  const { candidates } = extractDeterministicFacts(page, html, CTX.sourceId);
+  const { candidates: ai } = parseAiExtractionResponse(contaminatingAiJson(), CTX);
+  const combined = combineCandidates(candidates, ai);
+  assert.ok(!combined.some((c) => c.factType === "booking_link" && /\/pricing|realtor-growth-engine/i.test((c.data as FactDataMap["booking_link"]).url)));
+  assert.ok(combined.some((c) => c.factType === "booking_link" && /Book a Demo/i.test(JSON.stringify(c.data))));
+});
+
+await (async () => {
+  const name = "force re-extract through the worker path preserves canonical identities";
+  try {
+    const html = parentWhachatProductHtml();
+    const page = prepareHtmlPage(html, "https://www.whachatcrm.com/pricing");
+    const stale = buildKnowledgeExtractionArtifact({
+      contentHash: page.contentHash,
+      extractorVersion: KNOWLEDGE_EXTRACTOR_VERSION,
+      extractedAt: "2026-08-01T00:00:00.000Z",
+      candidates: [
+        candidate({ factType: "pricing_plan", data: { name: "WhachatCRM", benefits: [] } }),
+        candidate({
+          factType: "pricing_plan",
+          data: {
+            name: "Pro",
+            price: { amount: 199, currency: "USD", billingPeriod: "once" },
+            benefits: ["MLS matching for Pro workspaces"],
+          },
+        }),
+      ],
+    });
+    const { result, aiCalls } = await scanProductionHtml("src-parent-force", "https://www.whachatcrm.com/pricing", html, {
+      artifact: stale,
+      forceReextract: true,
+      aiCandidates: parseAiExtractionResponse(contaminatingAiJson(), {
+        sourceId: "src-parent-force",
+        sourceUrl: "https://www.whachatcrm.com/pricing",
+        sourceTitle: "WhachatCRM Pricing",
+      }).candidates,
+    });
+    assert.equal(result.status, "reanalyzed");
+    assert.ok(aiCalls.n >= 1);
+    assertCanonicalCommercialIdentities(result.candidates);
+    const facts = factsFromScan(result);
+    assertExpectedPricingReview(facts);
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
+
+await (async () => {
+  const name = "review serialization of production pricing plus contaminating AI is exact";
+  try {
+    const html = productionShapedMarketingHtml("/pricing");
+    const { result } = await scanProductionHtml("src-prod-ai", "https://www.whachatcrm.com/pricing", html, {
+      forceReextract: true,
+      aiCandidates: parseAiExtractionResponse(contaminatingAiJson(), {
+        sourceId: "src-prod-ai",
+        sourceUrl: "https://www.whachatcrm.com/pricing",
+        sourceTitle: "WhachatCRM Pricing | Prospect AI, Unified Inbox & WhatsApp CRM",
+      }).candidates,
+    });
+    assertCanonicalCommercialIdentities(result.candidates);
+    const facts = factsFromScan(result);
+    const payload = buildKnowledgeReviewPayload({ facts });
+    const pricing = payload.sections.find((s) => s.id === "pricing");
+    const offerings = payload.sections.find((s) => s.id === "offerings");
+    const freeView = pricing?.facts.find((f) => f.display?.title === "Free");
+    const proView = pricing?.facts.find((f) => f.display?.title === "Pro");
+    const rgeView = offerings?.facts.find((f) => /Realtor Growth Engine/i.test(f.summary));
+    assert.equal(freeView?.display?.headline, "USD 0 per month");
+    assert.equal(freeView?.needsReview, false);
+    assert.equal(proView?.display?.headline, "USD 49 per month · USD 490 per year");
+    assert.equal(proView?.needsReview, false);
+    assert.ok(rgeView);
+    assert.match(rgeView!.summary, /USD 199 one-time/);
+    assert.match(rgeView!.summary, /Requires an active Pro plan/i);
+    assert.ok(!(pricing?.facts || []).some((f) => /whachatcrm/i.test(f.display?.title || f.summary)));
+    console.log(`✓ ${name}`);
+  } catch (err) {
+    console.error(`✗ ${name}`);
+    throw err;
+  }
+})();
 
 console.log("\nAll website knowledge scan/review tests passed.");

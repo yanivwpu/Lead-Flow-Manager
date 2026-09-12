@@ -16,7 +16,7 @@ import {
   type FactCandidate,
   type KnowledgeFact,
 } from "@shared/businessKnowledgeFacts";
-import { mergePricingPlanCandidates, sanitizeExtractedCandidates } from "@shared/knowledgeExtractionGuards";
+import { isUmbrellaCommercialName, mergePricingPlanCandidates, sanitizeExtractedCandidates } from "@shared/knowledgeExtractionGuards";
 import { extractDeterministicFacts, prepareHtmlPage, type PreparedPage } from "./extractPage";
 import { fetchPublicHtmlPage } from "../websiteKnowledgeScraper";
 import { extractFactsWithAi, type AiExtractionResult } from "./extractFactsAi";
@@ -94,6 +94,13 @@ export function combineCandidates(
   for (const candidate of ai) {
     const existing = byKey.get(candidate.factKey);
     if (!existing) {
+      if (
+        candidate.factType === "pricing_plan" &&
+        candidate.origin !== "website_verified" &&
+        isUmbrellaCommercialName(String((candidate.data as { name?: string }).name || ""), candidate.sourceTitle)
+      ) {
+        continue;
+      }
       byKey.set(candidate.factKey, candidate);
       continue;
     }

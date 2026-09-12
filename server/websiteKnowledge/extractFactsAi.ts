@@ -156,7 +156,12 @@ export function parseAiExtractionResponse(
       continue;
     }
     const key = factKey(validated.factType, validated.data);
-    if (known.has(key) && validated.factType !== "pricing_plan") continue;
+    if (known.has(key)) {
+      if (validated.factType !== "pricing_plan") continue;
+      const plan = validated.data as { price?: { amount: number } | null; additionalPrices?: unknown[] };
+      const hasPrice = Boolean(plan.price) || (Array.isArray(plan.additionalPrices) && plan.additionalPrices.length > 0);
+      if (!hasPrice) continue;
+    }
 
     const rawConfidence = Number(o.confidence);
     const confidence = Number.isFinite(rawConfidence)

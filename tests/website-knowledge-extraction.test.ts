@@ -315,6 +315,34 @@ run("JSON-LD SoftwareApplication keeps monthly and yearly offers on one plan", (
   assert.equal((rge!.data as FactDataMap["product"]).price?.billingPeriod, "once");
 });
 
+run("parent Product named WhachatCRM splits named Offers into Free, Pro, and RGE", () => {
+  const html = `<!doctype html><html><head><title>WhachatCRM Pricing</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Product","name":"WhachatCRM","offers":[
+  {"@type":"Offer","name":"Free","price":0,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}},
+  {"@type":"Offer","name":"Pro","price":49,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1M","unitCode":"MON"}},
+  {"@type":"Offer","name":"Pro","price":490,"priceCurrency":"USD","priceSpecification":{"billingDuration":"P1Y","unitCode":"ANN"}},
+  {"@type":"Offer","name":"Realtor Growth Engine","price":199,"priceCurrency":"USD","description":"Requires an active Pro plan.","priceSpecification":{"unitText":"one-time","billingDuration":"one-time"}}
+]}
+</script>
+</head><body><main><h1>Pricing</h1><p>${"Canonical public pricing with enough readable content. ".repeat(8)}</p>
+<ul><li>Free: $0/month</li><li>Pro: $49/month</li><li>Pro: $490/year</li><li>Realtor Growth Engine: $199 one-time</li></ul>
+</main></body></html>`;
+  const page = prepareHtmlPage(html, "https://www.whachatcrm.com/pricing");
+  const { candidates } = extractDeterministicFacts(page, html, "src-parent");
+  assert.ok(!plans(candidates).some((p) => /whachatcrm/i.test(p.name)));
+  const free = planNamed(candidates, "Free");
+  const pro = planNamed(candidates, "Pro");
+  assert.equal(free.price?.amount, 0);
+  assert.equal(free.price?.billingPeriod, "month");
+  assert.equal(pro.price?.amount, 49);
+  assert.equal(pro.additionalPrices.find((p) => p.billingPeriod === "year")?.amount, 490);
+  const rge = candidates.find((c) => c.factType === "product" && /realtor growth engine/i.test((c.data as FactDataMap["product"]).name));
+  assert.ok(rge);
+  assert.equal((rge!.data as FactDataMap["product"]).price?.amount, 199);
+  assert.equal((rge!.data as FactDataMap["product"]).price?.billingPeriod, "once");
+});
+
 run("JSON-LD offers without a stated interval are not stored as one-time $0", () => {
   const html = `<!doctype html><html><head><title>Shop</title>
 <script type="application/ld+json">
