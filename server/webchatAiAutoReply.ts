@@ -26,7 +26,7 @@ import { pendingAskFromAiControl } from "@shared/chatbotAskQuestion";
 import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { consumeRateLimit } from "./rateLimitMiddleware";
 import { isCasualWebchatGreeting, coerceWebchatGreetingWelcome } from "@shared/webchatGreetingWelcome";
-import { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } from "./webchatServerAiRollout";
+import { readWebchatServerAiRollout } from "./webchatServerAiRollout";
 import { isWidgetEnabled } from "./webchatAccess";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
@@ -188,16 +188,22 @@ export async function maybeRunWebchatServerAi(
         : rawMode === "suggest_only" || rawMode === "suggest"
           ? "suggest"
           : "manual";
+    const rollout = readWebchatServerAiRollout(params.userId);
     console.info("[AIAutoReply]", {
       evaluate: true,
       effectiveMode,
       chatbotOwns: chatbotOwnsReply || pendingStillActive,
       awayConfigured: params.awayConfigured === true,
       awayWillSend: params.crmFallbackOwnsReply === true,
+      flagName: rollout.flagName,
+      flagSource: "env_rollout",
+      rolloutEnabled: rollout.rolloutEnabled,
+      allowlisted: rollout.allowlisted,
+      unattendedEligible: rollout.unattendedEligible,
     });
     return decideWebchatAiReply({
-      rolloutEnabled: isWebchatServerAiRolloutEnabled(),
-      allowlisted: isWebchatServerAiAllowlisted(params.userId),
+      rolloutEnabled: rollout.rolloutEnabled,
+      allowlisted: rollout.allowlisted,
       widgetEnabled: isWidgetEnabled(params.widgetSettings),
       hasAiBrainAccess: !!limits?.effectiveHasAIBrain,
       planIsProOrTrial: (limits?.plan || "free") === "pro" || !!limits?.effectiveHasAIBrain,
@@ -215,6 +221,7 @@ export async function maybeRunWebchatServerAi(
 
   const report = (reasonCode: string, extra?: { sent?: boolean; hasDraft?: boolean; confidenceSource?: string }) => {
     const outcome = extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra);
+    const rollout = readWebchatServerAiRollout(params.userId);
     logAiReplyDecision({
       source: "webchat_unattended",
       channel: "webchat",
@@ -227,6 +234,11 @@ export async function maybeRunWebchatServerAi(
         bookingOwnsReply: params.bookingOwnsReply === true,
         crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
         awayConfigured: params.awayConfigured === true,
+        flagName: rollout.flagName,
+        flagSource: "env_rollout",
+        rolloutEnabled: rollout.rolloutEnabled,
+        allowlisted: rollout.allowlisted,
+        unattendedEligible: rollout.unattendedEligible,
         confidenceSource: extra?.confidenceSource,
       },
     });
@@ -239,6 +251,11 @@ export async function maybeRunWebchatServerAi(
       awayWillSend: params.crmFallbackOwnsReply === true,
       sent: extra?.sent === true,
       hasDraft: extra?.hasDraft === true,
+      flagName: rollout.flagName,
+      flagSource: "env_rollout",
+      rolloutEnabled: rollout.rolloutEnabled,
+      allowlisted: rollout.allowlisted,
+      unattendedEligible: rollout.unattendedEligible,
     });
   };
 

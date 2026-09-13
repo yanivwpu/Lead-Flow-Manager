@@ -191,6 +191,7 @@ interface WidgetSettings {
   webchatServerAi?: {
     rolloutEnabled?: boolean;
     allowlisted?: boolean;
+    unattendedEligible?: boolean;
   };
 }
 
@@ -1902,14 +1903,10 @@ export function WebsiteWidget() {
                   , plus server rollout eligibility for this workspace. AI Brain availability does not automatically enable Auto.
                   {aiSettings?.aiMode ? ` Current mode: ${aiSettings.aiMode.replace("_", " ")}.` : ""}
                 </p>
-                {savedSettings?.webchatServerAi && !savedSettings.webchatServerAi.rolloutEnabled && (
+                {savedSettings?.webchatServerAi &&
+                  savedSettings.webchatServerAi.unattendedEligible !== true && (
                   <p className="text-xs text-amber-800" data-testid="text-auto-rollout-off">
-                    Unattended Auto replies are currently off for this workspace.
-                  </p>
-                )}
-                {savedSettings?.webchatServerAi?.rolloutEnabled && !savedSettings.webchatServerAi.allowlisted && (
-                  <p className="text-xs text-amber-800" data-testid="text-auto-not-allowlisted">
-                    Auto is available in this rollout, but this workspace is not included yet.
+                    Unattended Auto replies are currently paused for this workspace. Inbox Auto is unchanged.
                   </p>
                 )}
               </div>

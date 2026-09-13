@@ -1240,9 +1240,7 @@ export async function registerRoutes(
       const activation = resolveWidgetActivationState(merged);
       const { normalizeAllowedOriginsList } = await import("@shared/webchatOriginPolicy");
       const originCount = normalizeAllowedOriginsList(merged.allowedOrigins).length;
-      const { isWebchatServerAiAllowlisted, isWebchatServerAiRolloutEnabled } = await import(
-        "./webchatServerAiRollout"
-      );
+      const { publicWebchatServerAiRollout } = await import("./webchatServerAiRollout");
       const names = await loadWebchatPublicNameFallbacks(req.user.id);
       applyWebchatPublicCacheHeaders(res);
       res.json({
@@ -1260,12 +1258,7 @@ export async function registerRoutes(
           apexAndWwwArePaired: true,
           subdomainsAreExactMatchOnly: true,
         },
-        webchatServerAi: {
-          rolloutEnabled: isWebchatServerAiRolloutEnabled(),
-          allowlisted: isWebchatServerAiAllowlisted(req.user.id),
-          unattendedEligible:
-            isWebchatServerAiRolloutEnabled() || isWebchatServerAiAllowlisted(req.user.id),
-        },
+        webchatServerAi: publicWebchatServerAiRollout(req.user.id),
       });
     } catch (error) {
       console.error("Error fetching widget settings:", error);
@@ -10746,14 +10739,19 @@ export async function registerRoutes(
       }
       
       const settings = await storage.getAiSettings(userId);
-      res.json(settings || {
-        aiMode: "suggest_only",
-        businessHoursOnly: false,
-        confidenceLevel: "balanced",
-        leadQualificationEnabled: true,
-        autoTaggingEnabled: true,
-        handoffKeywords: ["call me", "human", "agent", "speak to someone"],
-        aiPersona: "professional",
+      const { publicWebchatServerAiRollout } = await import("./webchatServerAiRollout");
+      const webchatServerAi = publicWebchatServerAiRollout(userId);
+      res.json({
+        ...(settings || {
+          aiMode: "suggest_only",
+          businessHoursOnly: false,
+          confidenceLevel: "balanced",
+          leadQualificationEnabled: true,
+          autoTaggingEnabled: true,
+          handoffKeywords: ["call me", "human", "agent", "speak to someone"],
+          aiPersona: "professional",
+        }),
+        webchatServerAi,
       });
     } catch (error) {
       console.error("AI settings fetch error:", error);

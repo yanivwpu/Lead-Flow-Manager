@@ -19,9 +19,11 @@ import {
   sanitizeEligibility,
 } from "../shared/aiReplyDecisionLog";
 import {
+  WEBCHAT_SERVER_AI_AUTO_FLAG,
   isWebchatServerAiAllowlisted,
   isWebchatServerAiRolloutEnabled,
   isWebchatServerAiUnattendedEligible,
+  readWebchatServerAiRollout,
 } from "../server/webchatServerAiRollout";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
@@ -74,11 +76,14 @@ test("unset global flag + tenant absent from allowlist never unattended-sends", 
     assert.equal(isWebchatServerAiRolloutEnabled(), false);
     assert.equal(isWebchatServerAiAllowlisted(TENANT_A), false);
     assert.equal(isWebchatServerAiUnattendedEligible(TENANT_A), false);
+    assert.equal(readWebchatServerAiRollout(TENANT_A).flagName, WEBCHAT_SERVER_AI_AUTO_FLAG);
     assert.equal(
       decideWebchatAiReply({ ...aiBase, rolloutEnabled: false, allowlisted: false }),
       "skip_flag_off",
     );
   });
+  const auto = read("server/webchatAiAutoReply.ts");
+  assert.match(auto, /flagName: rollout\.flagName/);
 });
 
 test("allowlisted tenant can unattended-send a clear grounded question once", () => {

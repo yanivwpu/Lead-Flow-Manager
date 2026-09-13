@@ -41,6 +41,11 @@ interface AISettings {
   aiMode: string;
   handoffKeywords: string[];
   aiPersona: string;
+  webchatServerAi?: {
+    rolloutEnabled?: boolean;
+    allowlisted?: boolean;
+    unattendedEligible?: boolean;
+  };
 }
 
 interface BusinessKnowledge {
@@ -740,6 +745,13 @@ function AIBrainContent() {
             <div className="flex flex-col gap-8 sm:flex-row sm:gap-0">
               <div className="flex-1 space-y-2.5 min-w-0">
                 <Label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Mode</Label>
+                {(settings.aiMode === "full_auto" || settings.aiMode === "auto") &&
+                  (aiSettings as AISettings | undefined)?.webchatServerAi &&
+                  (aiSettings as AISettings).webchatServerAi?.unattendedEligible !== true && (
+                    <p className="text-xs text-amber-800" data-testid="text-unattended-auto-paused">
+                      Auto is selected. Web Chat replies while Inbox is closed are paused until unattended Auto is enabled for this workspace.
+                    </p>
+                  )}
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="AI mode">
                   {AI_MODE_SEGMENTS.map((mode) => {
                     const selected = settings.aiMode === mode.value;

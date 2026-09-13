@@ -15,6 +15,7 @@ function read(rel: string): string {
   assert.match(website, /select-rule-flow/);
   assert.match(website, /effectiveHasAIBrain/);
   assert.match(website, /text-auto-rollout-off/);
+  assert.match(website, /unattendedEligible/);
   assert.match(website, /checkbox-allow-any-origin/);
   assert.match(website, /text-origin-required/);
   assert.match(website, /buildWebchatScriptSnippet/);
@@ -49,6 +50,7 @@ function read(rel: string): string {
   const brain = read("client/src/pages/AIBrain.tsx");
   assert.match(brain, /autoModeLocked = !effectiveHasAIBrain/);
   assert.doesNotMatch(brain, /autoModeLocked = starterOnly/);
+  assert.match(brain, /text-unattended-auto-paused/);
 }
 
 {
