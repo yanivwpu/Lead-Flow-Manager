@@ -32,15 +32,18 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     /\b(?:book(?:ing)?\s+(?:a\s+)?demo|book\s+a\s+live\s+demo|schedule\s+(?:a\s+)?demo|demo\s+call)\b/.test(t) ||
     t === "book a demo" ||
     /קביעת\s*הדגמה|לקבוע\s*הדגמה|הזמן(?:ת)?\s*הדגמה|קבע(?:ו)?\s*הדגמה/.test(t) ||
-    /reservar\s+(?:una\s+)?demo|agendar\s+(?:una\s+)?demo|reservar\s+(?:una\s+)?demostraci[oó]n/.test(t)
+    /reservar\s+(?:una\s+)?demo|agendar\s+(?:una\s+)?demo|reservar\s+(?:una\s+)?demostraci[oó]n/.test(t) ||
+    /أريد\s+حجز|حجز\s+(?:موعد|عرض)|موعد\s+تجريب/.test(t) ||
+    /预约|预约演示|我想预约|安排演示/.test(t)
   ) {
     return "book_demo";
   }
   if (
-    /\b(?:find(?:ing)?\s+my\s+solution|find\s+the\s+right\s+solution|which\s+plan|what\s+plan)\b/.test(t) ||
+    /\b(?:find(?:ing)?\s+my\s+solution|find\s+the\s+right\s+solution|which\s+plan|what\s+plan|help me choose|choose the right|right setup|right plan)\b/.test(t) ||
     t === "find my solution" ||
     /למצוא\s+את\s+הפתרון|הפתרון\s+שלי/.test(t) ||
-    /encontrar\s+mi\s+soluci[oó]n|encontrar\s+la\s+soluci[oó]n/.test(t)
+    /encontrar\s+mi\s+soluci[oó]n|encontrar\s+la\s+soluci[oó]n/.test(t) ||
+    /帮我选|哪个方案|适合我/.test(t)
   ) {
     return "find_solution";
   }

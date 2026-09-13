@@ -5,16 +5,22 @@
  */
 
 const GREETING_ONLY =
-  /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)[\s!?.]*$/i;
+  /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day|שלום|היי|הי|مرحبا|你好)[\s!?.]*$/i;
 
 /** "Hello guys." is still a greeting, not a knowledge question. */
 const WEBCHAT_CASUAL_GREETING =
   /^(hi|hello|hey|yo|sup|hola|good morning|good afternoon|good evening|gm|gn|howdy|greetings|good day)([\s,]+[a-z]{1,16}){0,3}[\s!?.]*$/i;
 
+function isEmojiOnlyGreeting(text: string): boolean {
+  const stripped = text.replace(/[\s!?.]+/g, "");
+  if (!stripped) return false;
+  return /^[\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]+$/u.test(stripped);
+}
+
 export function isCasualWebchatGreeting(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
-  return GREETING_ONLY.test(t) || WEBCHAT_CASUAL_GREETING.test(t);
+  return GREETING_ONLY.test(t) || WEBCHAT_CASUAL_GREETING.test(t) || isEmojiOnlyGreeting(t);
 }
 
 export type UnsafeWebchatGreetingWelcomeReason =

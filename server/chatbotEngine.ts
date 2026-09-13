@@ -215,6 +215,7 @@ import {
   releaseChatbotPendingClaim,
   validateChatbotAskAnswer,
   wouldPendingAskComplete,
+  type ChatbotAskValidateOk,
   type ChatbotPendingAsk,
 } from "@shared/chatbotAskQuestion";
 import {
@@ -222,7 +223,42 @@ import {
   sanitizeAskQuestionQuickReplies,
   visitorFacingAskQuestionChips,
 } from "@shared/chatbotAskQuestionOptions";
+import { firstAskQuestionFromFlow, matchAskQuestionOpeningMessage } from "@shared/chatbotAskOpeningMatch";
 import { parseChatbotNodeLocalized, resolveChatbotNodeCopy } from "@shared/chatbotNodeI18n";
+
+function collectAskOptionContext(
+  data: { content?: unknown; options?: unknown; localized?: unknown },
+  locale: string | null | undefined,
+  channel: string | null | undefined,
+) {
+  const resolvedCopy = resolveChatbotNodeCopy(data, locale, channel);
+  const canonical = sanitizeAskQuestionQuickReplies(data.options, { channel });
+  const localizedVariants = parseChatbotNodeLocalized(data.localized, channel);
+  const localeOptionSets: Record<string, { label: string; value: string }[]> = {};
+  for (const loc of ["en", "es", "he"] as const) {
+    if (localizedVariants[loc]?.options?.length) {
+      localeOptionSets[loc] = localizedVariants[loc]!.options!;
+    }
+  }
+  return {
+    promptText: resolvedCopy.content,
+    canonical,
+    localeOptionSets,
+    chips: visitorFacingAskQuestionChips(canonical, resolvedCopy.options),
+    localizedSets: Object.values(localeOptionSets),
+  };
+}
+
+function flowOpeningAskAlreadyAnswered(flow: ChatbotFlow, ctx: TriggerContext): boolean {
+  const firstAsk = firstAskQuestionFromFlow(
+    (flow.nodes as { id: string; type?: string; data?: Record<string, unknown> }[]) || [],
+    (flow.edges as { source?: string; target?: string }[]) || [],
+  );
+  if (!firstAsk) return false;
+  const askCtx = collectAskOptionContext(firstAsk.data, ctx.locale, ctx.channel);
+  if (!askCtx.canonical.length) return false;
+  return matchAskQuestionOpeningMessage(ctx.message, askCtx.canonical, askCtx.localizedSets).matched;
+}
 
 function inboundHasBookingIntent(ctx: TriggerContext): boolean {
   if (ctx.skipBookingIntent) return true;
@@ -266,6 +302,49 @@ async function writePendingAsk(ctx: TriggerContext, pending: ChatbotPendingAsk |
   }
 }
 
+async function persistAskQuestionAnswer(
+  ctx: TriggerContext,
+  pending: ChatbotPendingAsk,
+  validated: ChatbotAskValidateOk,
+  variableName: string,
+): Promise<boolean> {
+  try {
+    const contact = await storage.getContact(ctx.contactId);
+    if (!contact || contact.userId !== ctx.userId || contact.id !== pending.contactId) {
+      return false;
+    }
+    const applied = applyChatbotAskAnswer({
+      contact,
+      expectedUserId: ctx.userId,
+      variableName,
+      validated,
+      channel: ctx.channel,
+      conversationId: ctx.conversationId,
+      flowRunId: pending.flowRunId,
+    });
+    if (!applied.ok) return false;
+    await storage.updateContact(contact.id, applied.patch, {
+      expectedWorkspaceUserId: ctx.userId,
+    });
+    try {
+      const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+      await maybePromoteWebchatVisitorIdentity({
+        userId: ctx.userId,
+        contactId: contact.id,
+        identifiedFrom: "ask_question",
+      });
+    } catch (promoErr: unknown) {
+      const promoMsg = promoErr instanceof Error ? promoErr.message : String(promoErr);
+      console.warn(`[Chatbot] identity promotion skipped: ${promoMsg}`);
+    }
+    return true;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Chatbot] Failed to save Ask Question answer: ${msg}`);
+    return false;
+  }
+}
+
 async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTriggerResult | null> {
   const pending = await loadPendingAsk(ctx);
   if (!pending) return null;
@@ -306,43 +385,9 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
     return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
   }
 
-  try {
-    const contact = await storage.getContact(ctx.contactId);
-    if (!contact || contact.userId !== ctx.userId || contact.id !== claim.pending.contactId) {
-      releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
-      return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
-    }
-    const applied = applyChatbotAskAnswer({
-      contact,
-      expectedUserId: ctx.userId,
-      variableName,
-      validated,
-      channel: ctx.channel,
-      conversationId: ctx.conversationId,
-      flowRunId: claim.pending.flowRunId,
-    });
-    if (!applied.ok) {
-      releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
-      return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
-    }
-    await storage.updateContact(contact.id, applied.patch, {
-      expectedWorkspaceUserId: ctx.userId,
-    });
-    try {
-      const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
-      await maybePromoteWebchatVisitorIdentity({
-        userId: ctx.userId,
-        contactId: contact.id,
-        identifiedFrom: "ask_question",
-      });
-    } catch (promoErr: unknown) {
-      const promoMsg = promoErr instanceof Error ? promoErr.message : String(promoErr);
-      console.warn(`[Chatbot] identity promotion skipped: ${promoMsg}`);
-    }
-  } catch (err: unknown) {
+  const saved = await persistAskQuestionAnswer(ctx, claim.pending, validated, variableName);
+  if (!saved) {
     releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[Chatbot] Failed to save Ask Question answer: ${msg}`);
     return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
   }
 
@@ -426,6 +471,9 @@ export async function evaluateChatbotInboundArbitration(
     if (ctx.preferredFlowId) {
       const preferred = activeFlows.find((f) => f.id === ctx.preferredFlowId);
       if (preferred) {
+        if (flowOpeningAskAlreadyAnswered(preferred, ctx)) {
+          return { flowMatched: false, reason: "pending_ask_complete" };
+        }
         return { flowMatched: true, reason: `page_rule_flow:${preferred.id}` };
       }
     }
@@ -451,6 +499,9 @@ export async function evaluateChatbotInboundArbitration(
       }
 
       if (shouldTrigger) {
+        if (flowOpeningAskAlreadyAnswered(flow, ctx)) {
+          return { flowMatched: false, reason: "pending_ask_complete" };
+        }
         return { flowMatched: true, reason: triggerReason };
       }
     }
@@ -1237,7 +1288,7 @@ async function executeFlow(
           console.log(`[Chatbot] ⏸ Pausing flow execution after form node — awaiting user submit`);
           return { visitorFacing: true, reason: "wait_for_input" };
         } else {
-          const resolvedCopy = resolveChatbotNodeCopy(
+          const askCtx = collectAskOptionContext(
             {
               content: currentNode.data.content,
               options: currentNode.data.options,
@@ -1246,20 +1297,47 @@ async function executeFlow(
             ctx.locale,
             ctx.channel,
           );
-          const promptText = resolvedCopy.content || content;
-          const canonicalAskOptions = currentNode.type === "question"
-            ? sanitizeAskQuestionQuickReplies(currentNode.data.options, { channel: ctx.channel })
-            : [];
-          const localizedVariants = parseChatbotNodeLocalized(currentNode.data.localized, ctx.channel);
-          const localeOptionSets: Record<string, { label: string; value: string }[]> = {};
-          for (const loc of ["en", "es", "he"] as const) {
-            if (localizedVariants[loc]?.options?.length) {
-              localeOptionSets[loc] = localizedVariants[loc]!.options!;
+          const promptText = askCtx.promptText || content;
+          const askOptions = currentNode.type === "question" ? askCtx.chips : [];
+          if (currentNode.type === "question" && askOptions.length > 0 && !startFromNodeId) {
+            const opening = matchAskQuestionOpeningMessage(ctx.message, askCtx.canonical, askCtx.localizedSets);
+            if (opening.matched) {
+              const pending = createChatbotPendingAsk({
+                flowRunId: ctx.flowRunId || randomUUID(),
+                flowId: flow.id,
+                nodeId,
+                variableName: currentNode.data.variableName,
+                nextNodeId: nextNodeMap.get(nodeId) || "",
+                channel: ctx.channel,
+                userId: ctx.userId,
+                contactId: ctx.contactId,
+                conversationId: ctx.conversationId,
+                kind: "ask_question",
+                promptText,
+                quickReplies: askCtx.canonical,
+                localeOptionSets: askCtx.localeOptionSets,
+                consumedSourceEventIds: ctx.consumedSourceEventIds || [],
+              });
+              const validated = validateChatbotAskAnswer(pending.variableName || "answer", opening.option.value);
+              if (validated.ok) {
+                const saved = await persistAskQuestionAnswer(ctx, pending, validated, pending.variableName || "answer");
+                if (saved) {
+                  markChatbotPendingConsumed(pending, ctx.sourceEventId);
+                  await writePendingAsk(ctx, null);
+                  console.log(
+                    `[Chatbot] Opening inbound already answered Ask Question "${nodeId}" — ${opening.reason} → ${opening.option.value}`,
+                  );
+                  const nextId = pending.nextNodeId;
+                  if (nextId) {
+                    ctx.flowRunId = pending.flowRunId;
+                    currentNode = nodeMap.get(nextId);
+                    continue;
+                  }
+                  return { visitorFacing: false, reason: "pending_ask_complete" };
+                }
+              }
             }
           }
-          const askOptions = currentNode.type === "question"
-            ? visitorFacingAskQuestionChips(canonicalAskOptions, resolvedCopy.options)
-            : [];
           if (currentNode.type === "question" && askOptions.length > 0) {
             await sendAskQuestionPrompt(ctx, promptText, askOptions);
             visitorFacing = true;
@@ -1284,8 +1362,8 @@ async function executeFlow(
               conversationId: ctx.conversationId,
               kind: "ask_question",
               promptText,
-              quickReplies: canonicalAskOptions,
-              localeOptionSets,
+              quickReplies: askCtx.canonical,
+              localeOptionSets: askCtx.localeOptionSets,
               consumedSourceEventIds: ctx.consumedSourceEventIds || [],
             });
             ctx.flowRunId = pending.flowRunId;
@@ -1493,12 +1571,16 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
       `[Chatbot] ✅ Flow "${chosen.flow.name}" (id: ${chosen.flow.id}) TRIGGERED — ${chosen.reason}`
     );
     markFired(ctx.conversationId);
+    const openingAnswered = flowOpeningAskAlreadyAnswered(chosen.flow, ctx);
     const predicted = flowWouldOwnVisitorTurn(
       (chosen.flow.nodes as { id: string; type?: string; data?: Record<string, unknown> }[]) || [],
       (chosen.flow.edges as { source?: string; target?: string }[]) || [],
     );
     if (ctx.awaitExecution) {
       const executed = await executeFlow(chosen.flow, ctx);
+      if (executed.reason === "pending_ask_complete") {
+        return { triggered: true, visitorFacing: false, reason: "pending_ask_complete" };
+      }
       return {
         triggered: true,
         visitorFacing: executed.visitorFacing || predicted.visitorFacing,
@@ -1508,6 +1590,9 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
     executeFlow(chosen.flow, ctx).catch((err) =>
       console.error(`[Chatbot] Flow execution error for flow "${chosen.flow.name}": ${err.message}`, err.stack),
     );
+    if (openingAnswered) {
+      return { triggered: true, visitorFacing: false, reason: "pending_ask_complete" };
+    }
     return {
       triggered: true,
       visitorFacing: predicted.visitorFacing,
