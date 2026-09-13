@@ -22,6 +22,7 @@ import {
   WEBCHAT_AI_GENERATION_TIMEOUT_MS,
   webchatAutoSendIdempotencyKey,
 } from "@shared/webchatAiPolicy";
+import { pendingAskFromAiControl } from "@shared/chatbotAskQuestion";
 import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { consumeRateLimit } from "./rateLimitMiddleware";
 import { isCasualWebchatGreeting, coerceWebchatGreetingWelcome } from "@shared/webchatGreetingWelcome";
@@ -176,6 +177,7 @@ export async function maybeRunWebchatServerAi(
     const settings = await storage.getAiSettings(params.userId);
     const events = await storage.getActivityEvents(contact.id, 80);
     const aiControl = readConversationAiControl(conv.aiControl);
+    const pendingStillActive = Boolean(pendingAskFromAiControl(conv.aiControl));
     const dnc = contactHasDoNotContact(contact);
     const rate = await consumeRateLimit(`webchat-ai:${params.userId}:${conv.id}`, 20, 15 * 60 * 1000);
     return decideWebchatAiReply({
@@ -185,7 +187,7 @@ export async function maybeRunWebchatServerAi(
       hasAiBrainAccess: !!limits?.effectiveHasAIBrain,
       planIsProOrTrial: (limits?.plan || "free") === "pro" || !!limits?.effectiveHasAIBrain,
       aiModeRaw: settings?.aiMode,
-      chatbotOwnsReply: chatbotOwnsReply || aiControl.lastTurnOwner === "chatbot",
+      chatbotOwnsReply: chatbotOwnsReply || pendingStillActive,
       bookingOwnsReply: params.bookingOwnsReply === true || aiControl.lastTurnOwner === "booking",
       crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
       handoffActive: isConversationHandoffActive(events, conv.id),
@@ -295,6 +297,12 @@ export async function maybeRunWebchatServerAi(
     const name = err instanceof Error ? err.name : "";
     conv = (await storage.getConversation(conv.id)) || conv;
     const leaseStillValid = generationLeaseAllowsCommit(readConversationAiControl(conv.aiControl), leaseId);
+    const reasonCode =
+      !leaseStillValid
+        ? "skip_lease_invalid"
+        : name === "TimeoutError" || name === "AbortError"
+          ? "skip_generation_timeout"
+          : "generation_failed";
     await storage.createActivityEvent({
       userId: params.userId,
       contactId: contact.id,
@@ -302,16 +310,25 @@ export async function maybeRunWebchatServerAi(
       eventType: "ai_generation_failed",
       eventData: {
         reason: name || "generation_failed",
+        reasonCode,
       },
       actorType: "ai",
     }).catch(() => {});
-    const reasonCode =
-      !leaseStillValid
-        ? "skip_lease_invalid"
-        : name === "TimeoutError" || name === "AbortError"
-          ? "skip_generation_timeout"
-          : "generation_failed";
-    report(reasonCode);
+    await storage.createActivityEvent({
+      userId: params.userId,
+      contactId: contact.id,
+      conversationId: conv.id,
+      eventType: "ai_suggestion",
+      eventData: {
+        suggestion: "AI could not generate a reply. Review this conversation.",
+        confidence: 0,
+        channel: "webchat",
+        holdReason: reasonCode,
+        generationFailed: true,
+      },
+      actorType: "ai",
+    }).catch(() => {});
+    report(reasonCode, { hasDraft: true });
     return { decision: reasonCode, sent: false };
   } finally {
     clearTimeout(timer);

@@ -62,20 +62,47 @@ export function sanitizeAskQuestionQuickReplies(
   return out;
 }
 
+function sameToken(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Map a visitor click or typed answer onto the canonical (default-language) option.
+ * Localized Hebrew/Spanish labels match by stable index — never English-label-only compare.
+ */
 export function matchAskQuestionQuickReply(
   message: unknown,
-  options: ChatbotAskQuickReply[],
+  canonical: ChatbotAskQuickReply[],
+  localizedSets?: ChatbotAskQuickReply[][],
 ): ChatbotAskQuickReply | null {
   const text = typeof message === "string" ? message.trim() : "";
-  if (!text || !options.length) return null;
+  if (!text || !canonical.length) return null;
   const norm = text.toLowerCase();
-  const byValue = options.find((o) => o.value.trim().toLowerCase() === norm);
+  const byValue = canonical.find((o) => sameToken(o.value, text));
   if (byValue) return byValue;
-  const byLabel = options.find((o) => o.label.trim().toLowerCase() === norm);
+  const byLabel = canonical.find((o) => sameToken(o.label, text));
   if (byLabel) return byLabel;
   const num = Number.parseInt(norm, 10);
-  if (!Number.isNaN(num) && num >= 1 && num <= options.length) return options[num - 1];
+  if (!Number.isNaN(num) && num >= 1 && num <= canonical.length) return canonical[num - 1];
+  for (const set of localizedSets || []) {
+    if (!set.length) continue;
+    const idx = set.findIndex((o) => sameToken(o.value, text) || sameToken(o.label, text));
+    if (idx >= 0 && canonical[idx]) return canonical[idx];
+  }
   return null;
+}
+
+/** Visitor-facing chips: localized label is what they see and send. Canonical value is resolved later by index. */
+export function visitorFacingAskQuestionChips(
+  canonical: ChatbotAskQuickReply[],
+  localized: ChatbotAskQuickReply[],
+): ChatbotAskQuickReply[] {
+  if (!localized.length) return canonical.map((o) => ({ label: o.label, value: o.label }));
+  return canonical.map((o, i) => {
+    const loc = localized[i];
+    const label = (loc?.label || o.label).trim();
+    return { label, value: label };
+  });
 }
 
 export function formatAskQuestionOptionsFallback(prompt: string, options: ChatbotAskQuickReply[]): string {

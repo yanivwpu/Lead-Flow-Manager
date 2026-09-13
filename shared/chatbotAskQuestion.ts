@@ -3,6 +3,8 @@
  * Persist wait_for_input, validate replies, and map answers onto tenant-scoped contacts.
  */
 
+import { matchAskQuestionQuickReply } from "./chatbotAskQuestionOptions";
+
 export const CHATBOT_ASK_CHANNELS = [
   "facebook",
   "whatsapp",
@@ -43,6 +45,8 @@ export type ChatbotPendingAsk = {
   kind: ChatbotPendingKind;
   promptText: string;
   quickReplies: ChatbotAskQuickReplyStored[];
+  /** Localized labels aligned by index with `quickReplies` (en/es/he). */
+  localeOptionSets: Record<string, ChatbotAskQuickReplyStored[]>;
   consumedSourceEventIds: string[];
   expiresAt: number;
 };
@@ -322,6 +326,7 @@ export function parseChatbotPendingAsk(raw: unknown): ChatbotPendingAsk | null {
     kind,
     promptText: typeof o.promptText === "string" ? o.promptText.slice(0, 2000) : "",
     quickReplies: parseStoredQuickReplies(o.quickReplies),
+    localeOptionSets: parseStoredLocaleOptionSets(o.localeOptionSets),
     consumedSourceEventIds: consumed,
     expiresAt: expiresAt || Date.now() + CHATBOT_ASK_TTL_MS,
   };
@@ -342,6 +347,32 @@ function parseStoredQuickReplies(raw: unknown): ChatbotAskQuickReplyStored[] {
   return out;
 }
 
+function parseStoredLocaleOptionSets(raw: unknown): Record<string, ChatbotAskQuickReplyStored[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, ChatbotAskQuickReplyStored[]> = {};
+  for (const [locale, set] of Object.entries(raw as Record<string, unknown>)) {
+    const parsed = parseStoredQuickReplies(set);
+    if (parsed.length) out[locale] = parsed;
+  }
+  return out;
+}
+
+export function localeOptionSetsFromPending(pending: Pick<ChatbotPendingAsk, "localeOptionSets">): ChatbotAskQuickReplyStored[][] {
+  return Object.values(pending.localeOptionSets || {}).filter((set) => set.length > 0);
+}
+
+/** True when this inbound would save the answer and release chatbot turn ownership. */
+export function wouldPendingAskComplete(pending: ChatbotPendingAsk, message: unknown): boolean {
+  const matched = matchAskQuestionQuickReply(
+    message,
+    pending.quickReplies,
+    localeOptionSetsFromPending(pending),
+  );
+  const replyText = matched ? matched.value : typeof message === "string" ? message : "";
+  const variableName = pending.kind === "consent_buttons" ? "consent" : pending.variableName || "answer";
+  return validateChatbotAskAnswer(variableName, replyText).ok;
+}
+
 export function createChatbotPendingAsk(input: {
   flowRunId: string;
   flowId: string;
@@ -355,6 +386,7 @@ export function createChatbotPendingAsk(input: {
   kind?: ChatbotPendingKind;
   promptText?: string;
   quickReplies?: ChatbotAskQuickReplyStored[];
+  localeOptionSets?: Record<string, ChatbotAskQuickReplyStored[]>;
   consumedSourceEventIds?: string[];
   now?: number;
 }): ChatbotPendingAsk {
@@ -372,6 +404,7 @@ export function createChatbotPendingAsk(input: {
     kind: input.kind || "ask_question",
     promptText: String(input.promptText || "").slice(0, 2000),
     quickReplies: parseStoredQuickReplies(input.quickReplies),
+    localeOptionSets: parseStoredLocaleOptionSets(input.localeOptionSets),
     consumedSourceEventIds: (input.consumedSourceEventIds || []).slice(-40),
     expiresAt: now + CHATBOT_ASK_TTL_MS,
   };

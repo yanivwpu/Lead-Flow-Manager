@@ -206,6 +206,7 @@ import {
   clearChatbotPendingAsk,
   createChatbotPendingAsk,
   isConsentYesNoButtons,
+  localeOptionSetsFromPending,
   markChatbotPendingConsumed,
   mergeChatbotPendingIntoAiControl,
   peekChatbotPendingAsk,
@@ -213,10 +214,15 @@ import {
   rememberChatbotPendingAsk,
   releaseChatbotPendingClaim,
   validateChatbotAskAnswer,
+  wouldPendingAskComplete,
   type ChatbotPendingAsk,
 } from "@shared/chatbotAskQuestion";
-import { matchAskQuestionQuickReply, sanitizeAskQuestionQuickReplies } from "@shared/chatbotAskQuestionOptions";
-import { resolveChatbotNodeCopy } from "@shared/chatbotNodeI18n";
+import {
+  matchAskQuestionQuickReply,
+  sanitizeAskQuestionQuickReplies,
+  visitorFacingAskQuestionChips,
+} from "@shared/chatbotAskQuestionOptions";
+import { parseChatbotNodeLocalized, resolveChatbotNodeCopy } from "@shared/chatbotNodeI18n";
 
 function inboundHasBookingIntent(ctx: TriggerContext): boolean {
   if (ctx.skipBookingIntent) return true;
@@ -250,7 +256,7 @@ async function writePendingAsk(ctx: TriggerContext, pending: ChatbotPendingAsk |
     const control = readConversationAiControl(conv.aiControl);
     await storage.updateConversation(ctx.conversationId, {
       aiControl: mergeChatbotPendingIntoAiControl(
-        { ...control, lastTurnOwner: pending ? "chatbot" : control.lastTurnOwner },
+        { ...control, lastTurnOwner: pending ? "chatbot" : "ai_eligible" },
         pending,
       ),
     });
@@ -285,8 +291,12 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
       const matched = matchPendingButton(ctx.message, pendingButtons.buttons);
       if (matched) replyText = matched.label || matched.value;
     }
-  } else if (claim.pending.quickReplies?.length) {
-    const matched = matchAskQuestionQuickReply(ctx.message, claim.pending.quickReplies);
+  } else if (claim.pending.quickReplies?.length || Object.keys(claim.pending.localeOptionSets || {}).length) {
+    const matched = matchAskQuestionQuickReply(
+      ctx.message,
+      claim.pending.quickReplies,
+      localeOptionSetsFromPending(claim.pending),
+    );
     if (matched) replyText = matched.value || matched.label;
   }
   const validated = validateChatbotAskAnswer(variableName || "answer", replyText);
@@ -396,6 +406,9 @@ export async function evaluateChatbotInboundArbitration(
       const eventId = typeof ctx.sourceEventId === "string" ? ctx.sourceEventId.trim() : "";
       if (eventId && pendingAsk.consumedSourceEventIds.includes(eventId)) {
         return { flowMatched: true, reason: "pending_ask_duplicate" };
+      }
+      if (wouldPendingAskComplete(pendingAsk, ctx.message)) {
+        return { flowMatched: false, reason: "pending_ask_complete" };
       }
       return { flowMatched: true, reason: "wait_for_input" };
     }
@@ -1234,10 +1247,18 @@ async function executeFlow(
             ctx.channel,
           );
           const promptText = resolvedCopy.content || content;
+          const canonicalAskOptions = currentNode.type === "question"
+            ? sanitizeAskQuestionQuickReplies(currentNode.data.options, { channel: ctx.channel })
+            : [];
+          const localizedVariants = parseChatbotNodeLocalized(currentNode.data.localized, ctx.channel);
+          const localeOptionSets: Record<string, { label: string; value: string }[]> = {};
+          for (const loc of ["en", "es", "he"] as const) {
+            if (localizedVariants[loc]?.options?.length) {
+              localeOptionSets[loc] = localizedVariants[loc]!.options!;
+            }
+          }
           const askOptions = currentNode.type === "question"
-            ? (resolvedCopy.options.length
-                ? resolvedCopy.options
-                : sanitizeAskQuestionQuickReplies(currentNode.data.options, { channel: ctx.channel }))
+            ? visitorFacingAskQuestionChips(canonicalAskOptions, resolvedCopy.options)
             : [];
           if (currentNode.type === "question" && askOptions.length > 0) {
             await sendAskQuestionPrompt(ctx, promptText, askOptions);
@@ -1263,7 +1284,8 @@ async function executeFlow(
               conversationId: ctx.conversationId,
               kind: "ask_question",
               promptText,
-              quickReplies: askOptions,
+              quickReplies: canonicalAskOptions,
+              localeOptionSets,
               consumedSourceEventIds: ctx.consumedSourceEventIds || [],
             });
             ctx.flowRunId = pending.flowRunId;

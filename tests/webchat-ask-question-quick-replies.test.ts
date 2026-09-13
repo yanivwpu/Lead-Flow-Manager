@@ -46,7 +46,9 @@ resetChatbotAskQuestionMemoryForTests();
 {
   const engine = read("server/chatbotEngine.ts");
   assert.match(engine, /sendAskQuestionPrompt/);
-  assert.match(engine, /quickReplies: askOptions/);
+  assert.match(engine, /quickReplies: canonicalAskOptions/);
+  assert.match(engine, /localeOptionSets/);
+  assert.match(engine, /visitorFacingAskQuestionChips/);
   assert.match(engine, /Do NOT store pending button/);
   assert.match(engine, /sendChatbotButtonsWebchat/);
   assert.doesNotMatch(

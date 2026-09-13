@@ -21,6 +21,8 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(classifyChatbotVisitorIntent("Features & pricing"), "features_pricing");
   assert.equal(classifyChatbotVisitorIntent("Find my solution"), "find_solution");
   assert.equal(classifyChatbotVisitorIntent("Book a demo"), "book_demo");
+  assert.equal(classifyChatbotVisitorIntent("קביעת הדגמה"), "book_demo");
+  assert.equal(classifyChatbotVisitorIntent("Reservar una demo"), "book_demo");
   assert.equal(visitorIntentAllowsBookingCta("features_pricing"), false);
   assert.equal(visitorIntentAllowsBookingCta("find_solution"), false);
   assert.equal(visitorIntentAllowsBookingCta("book_demo"), true);

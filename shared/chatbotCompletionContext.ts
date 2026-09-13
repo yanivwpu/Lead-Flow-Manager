@@ -30,20 +30,26 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
   if (!t) return "other";
   if (
     /\b(?:book(?:ing)?\s+(?:a\s+)?demo|book\s+a\s+live\s+demo|schedule\s+(?:a\s+)?demo|demo\s+call)\b/.test(t) ||
-    t === "book a demo"
+    t === "book a demo" ||
+    /קביעת\s*הדגמה|לקבוע\s*הדגמה|הזמן(?:ת)?\s*הדגמה|קבע(?:ו)?\s*הדגמה/.test(t) ||
+    /reservar\s+(?:una\s+)?demo|agendar\s+(?:una\s+)?demo|reservar\s+(?:una\s+)?demostraci[oó]n/.test(t)
   ) {
     return "book_demo";
   }
   if (
     /\b(?:find(?:ing)?\s+my\s+solution|find\s+the\s+right\s+solution|which\s+plan|what\s+plan)\b/.test(t) ||
-    t === "find my solution"
+    t === "find my solution" ||
+    /למצוא\s+את\s+הפתרון|הפתרון\s+שלי/.test(t) ||
+    /encontrar\s+mi\s+soluci[oó]n|encontrar\s+la\s+soluci[oó]n/.test(t)
   ) {
     return "find_solution";
   }
   if (
     /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much)\b/.test(t) ||
     t === "features & pricing" ||
-    t === "features and pricing"
+    t === "features and pricing" ||
+    /פיצ['׳]רים\s+ומחירים|תכונות\s+ומחירים/.test(t) ||
+    /caracter[ií]sticas\s+y\s+precios|funciones\s+y\s+precios/.test(t)
   ) {
     return "features_pricing";
   }
