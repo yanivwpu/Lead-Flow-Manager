@@ -118,6 +118,8 @@ export interface AIComposerProps {
   onTemplate?: () => void;
   /** Messaging channel for AI tone/context (e.g. email vs WhatsApp). */
   channel?: string | null;
+  /** Server Auto hold — surface the persisted review draft instead of "Ready to respond." */
+  serverHeldDraft?: { text: string; reason?: string } | null;
 }
 
 /**
@@ -187,6 +189,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   hasPendingAttachment = false,
   channel = null,
   forceManualMode = false,
+  serverHeldDraft = null,
 }, ref) {
   const isMobile = useIsMobile();
   // Resolve effective access from capabilities (falls back to legacy aiEnabled prop)
@@ -243,6 +246,28 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     },
     [contactId, conversationId, onChange],
   );
+
+  useEffect(() => {
+    const text = serverHeldDraft?.text?.trim();
+    if (!text || autoOverride || forceManualMode) return;
+    setAiDraft(text);
+    applyComposerText(text, "auto_ai", conversationId);
+    setAutoSkippedWithDraft(true);
+    if (
+      serverHeldDraft?.reason?.includes("grounding") ||
+      serverHeldDraft?.reason?.startsWith("send_auto:held")
+    ) {
+      setAutoSendBlockedMessage("Review this draft before sending.");
+    }
+    setAutoPhase("waiting");
+  }, [
+    applyComposerText,
+    autoOverride,
+    conversationId,
+    forceManualMode,
+    serverHeldDraft?.reason,
+    serverHeldDraft?.text,
+  ]);
 
   useEffect(() => {
     abortControllerRef.current?.abort();

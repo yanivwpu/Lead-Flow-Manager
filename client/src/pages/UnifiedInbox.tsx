@@ -1748,6 +1748,27 @@ export function UnifiedInbox() {
     return last.id;
   }, [messages]);
 
+  const serverHeldDraft = useMemo(() => {
+    const convId = primaryConversation?.id;
+    if (!convId || !tailInboundMessageId) return null;
+    const match = [...handoffTimeline].reverse().find((event) => {
+      if (event.eventType !== "ai_suggestion") return false;
+      const data = event.eventData || {};
+      const eventConv =
+        typeof data.conversationId === "string"
+          ? data.conversationId
+          : event.conversationId;
+      if (eventConv && eventConv !== convId) return false;
+      return typeof data.suggestion === "string" && data.suggestion.trim().length > 0;
+    });
+    if (!match) return null;
+    const data = match.eventData || {};
+    return {
+      text: String(data.suggestion),
+      reason: typeof data.holdReason === "string" ? data.holdReason : undefined,
+    };
+  }, [handoffTimeline, primaryConversation?.id, tailInboundMessageId]);
+
   // When a new inbound arrives, refetch timeline immediately so Copilot flips to Snoozed right away.
   useEffect(() => {
     if (!selectedContactId) return;
@@ -4721,6 +4742,7 @@ export function UnifiedInbox() {
               hasPendingAttachment={!!pendingFile && !isEmailChannel}
               onAttachPendingMedia={isEmailChannel ? undefined : attachComposerPendingMedia}
               forceManualMode={forceNewEmailCompose}
+              serverHeldDraft={serverHeldDraft}
             />
           </>
         ) : selectedContactId ? (

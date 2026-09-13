@@ -111,7 +111,7 @@ export function isMeaningfulTimelineEvent(event: TimelineEventLike): boolean {
     );
   }
 
-  if (type === "ai_handoff") return true;
+  if (type === "ai_handoff" || type === "ai_suggestion") return true;
 
   if (
     type === "calendly_booking" ||

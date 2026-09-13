@@ -22,6 +22,7 @@ import {
   extractSupportedAmountsFromText,
   type TurnEvidenceBundle,
 } from "./turnEvidence";
+import { draftContainsVerifiedBookingUrl, normalizeSchedulingUrlForCompare } from "./verifiedBookingUrl";
 
 export const VERIFIED_FACTS_HEADER = "VERIFIED BUSINESS FACTS";
 
@@ -325,7 +326,13 @@ function draftMentionsNextAction(draft: string, actions: RetrievedFact[]): boole
     }
     if (entry.fact.factType === "booking_link") {
       const d = entry.fact.data as { url: string; label?: string | null };
-      if (d.url && raw.includes(d.url.toLowerCase())) return true;
+      if (d.url && (raw.includes(d.url.toLowerCase()) || draftContainsVerifiedBookingUrl(draft, d.url))) {
+        return true;
+      }
+      if (d.url) {
+        const expected = normalizeSchedulingUrlForCompare(d.url);
+        if (expected && raw.includes(expected)) return true;
+      }
       if (d.label && lower.includes(normalizePhrase(d.label))) return true;
     }
   }
@@ -534,6 +541,19 @@ export function validateResponseCompleteness(params: {
   });
 
   return { ok: unique.length === 0, violations: unique };
+}
+
+/** Safe codes for logs — no visitor text, URLs, or fact values. */
+export function incompleteRequiredFactCodes(check: GroundingCheck): string[] {
+  return check.violations
+    .filter((v) => v.kind === "incomplete_required_fact")
+    .map((v) => {
+      if (v.detail.includes("next step")) return "next_action_omitted";
+      if (v.detail.includes("published price") || v.detail.includes("pricing hedge")) return "pricing_amount_omitted";
+      if (v.detail.includes("benefits")) return "benefits_omitted";
+      if (v.detail.includes("listing/join")) return "listing_plan_omitted";
+      return "required_fact_omitted";
+    });
 }
 
 export function mergeGroundingChecks(...checks: GroundingCheck[]): GroundingCheck {

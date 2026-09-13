@@ -20,6 +20,7 @@ import {
   type RetrievedFact,
 } from "@shared/knowledgeRetrieval";
 import { detectFactConflicts } from "@shared/businessKnowledgeFacts";
+import { replaceRetrievedBookingWithVerifiedUrl } from "@shared/verifiedBookingUrl";
 import { listPublishedFacts } from "./factStore";
 import { knowledgeFactsActiveForWorkspace } from "./knowledgeFlags";
 
@@ -115,6 +116,21 @@ export function excludeFactTypesFromGrounding(
   const drop = new Set(factTypes);
   const retrieved = grounding.retrieved.filter((r) => !drop.has(r.fact.factType));
   if (retrieved.length === grounding.retrieved.length) return grounding;
+  return {
+    retrieved,
+    block: buildGroundedPromptBlock(retrieved, {
+      conflictingKeys: grounding.conflictingKeys,
+    }),
+    conflictingKeys: grounding.conflictingKeys,
+  };
+}
+
+/** Book a demo: require only the workspace-selected Calendly URL, never scanned /contact links. */
+export function applyBookDemoVerifiedBookingGrounding(
+  grounding: TurnGrounding,
+  verifiedUrl: string,
+): TurnGrounding {
+  const retrieved = replaceRetrievedBookingWithVerifiedUrl(grounding.retrieved, verifiedUrl);
   return {
     retrieved,
     block: buildGroundedPromptBlock(retrieved, {

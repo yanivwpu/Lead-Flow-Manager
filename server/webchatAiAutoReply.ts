@@ -379,6 +379,8 @@ export async function maybeRunWebchatServerAi(
         channel: "webchat",
         holdReason: reasonCode,
         generationFailed: true,
+        inboundMessageId: params.inboundMessageId,
+        conversationId: conv.id,
       },
       actorType: "ai",
     }).catch(() => {});
@@ -416,19 +418,30 @@ export async function maybeRunWebchatServerAi(
   }
 
   const persistDraft = async (reasonCode: string) => {
-    await storage.createActivityEvent({
-      userId: params.userId,
-      contactId: contact.id,
-      conversationId: conv.id,
-      eventType: "ai_suggestion",
-      eventData: {
-        suggestion: text.slice(0, 2000),
-        confidence: suggestion.confidence ?? 0,
-        channel: "webchat",
-        holdReason: reasonCode,
-      },
-      actorType: "ai",
-    });
+    const prior = await storage.getActivityEvents(contact.id, 40);
+    const already = prior.some(
+      (event) =>
+        event.eventType === "ai_suggestion" &&
+        (event.eventData as { inboundMessageId?: string } | null)?.inboundMessageId ===
+          params.inboundMessageId,
+    );
+    if (!already) {
+      await storage.createActivityEvent({
+        userId: params.userId,
+        contactId: contact.id,
+        conversationId: conv.id,
+        eventType: "ai_suggestion",
+        eventData: {
+          suggestion: text.slice(0, 2000),
+          confidence: suggestion.confidence ?? 0,
+          channel: "webchat",
+          holdReason: reasonCode,
+          inboundMessageId: params.inboundMessageId,
+          conversationId: conv.id,
+        },
+        actorType: "ai",
+      });
+    }
     await storage.updateConversation(conv.id, {
       aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
     });
@@ -455,7 +468,18 @@ export async function maybeRunWebchatServerAi(
   if (!gate.allowed) {
     const reasonCode = `send_auto:held:${gate.reason}`;
     await persistDraft(reasonCode);
-    report(reasonCode, { hasDraft: true, confidenceSource: gate.confidenceSource });
+    report(reasonCode, {
+      hasDraft: true,
+      confidenceSource: gate.confidenceSource,
+    });
+    console.info("[AIAutoReply]", {
+      evaluated: true,
+      decision: reasonCode,
+      outcome: "drafted",
+      holdReason: gate.reason,
+      widgetProperty: "widgetSettings.enabled",
+      widgetSource: "users.widget_settings",
+    });
     return { decision: reasonCode, sent: false };
   }
 

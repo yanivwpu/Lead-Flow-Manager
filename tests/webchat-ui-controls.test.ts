@@ -34,6 +34,9 @@ function read(rel: string): string {
   assert.match(panel, /section-conversation-ai-control/);
   assert.match(panel, /section-ai-suggestion/);
   assert.match(panel, /inbox-use-ai-suggestion/);
+  const composer = read("client/src/components/AIComposer.tsx");
+  assert.match(composer, /serverHeldDraft/);
+  assert.match(inbox, /serverHeldDraft=\{serverHeldDraft\}/);
 }
 
 {

@@ -4,6 +4,7 @@ import {
   selectWebsiteKnowledgeChunkForPrompt,
 } from "./websiteKnowledgeSummaryNormalize";
 import {
+  applyBookDemoVerifiedBookingGrounding,
   buildTurnGrounding,
   excludeFactTypesFromGrounding,
   type TurnGrounding,
@@ -11,6 +12,7 @@ import {
 import {
   assembleDeterministicGroundedDraft,
   FACT_COMPLETENESS_RETRY_INSTRUCTION,
+  incompleteRequiredFactCodes,
   isDraftAmountGrounded,
   mergeGroundingChecks,
   validateGroundedClaims,
@@ -18,6 +20,11 @@ import {
   type GroundedPromptBlock,
   type GroundingCheck,
 } from "@shared/factGrounding";
+import { chatbotCompletionPromptRules, classifyChatbotVisitorIntent } from "@shared/chatbotCompletionContext";
+import {
+  ensureVerifiedBookingUrlInDraft,
+  isTrustedCalendlySchedulingUrl,
+} from "@shared/verifiedBookingUrl";
 import {
   buildTurnEvidenceBundle,
   evidenceDiagnostics,
@@ -47,7 +54,6 @@ import {
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
 import { detectConversationLanguage, languageInstructionForConversation } from "@shared/conversationLanguage";
-import { chatbotCompletionPromptRules } from "@shared/chatbotCompletionContext";
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar" | "zh";
 
 export class AIService {
@@ -164,6 +170,16 @@ export class AIService {
       }
     }
 
+    const visitorKind = classifyChatbotVisitorIntent(
+      contactContext?.visitorIntent || contactContext?.intent || lastMessage,
+    );
+    const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
+    if (visitorKind === "book_demo") {
+      grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
+    } else if (visitorKind === "features_pricing" || visitorKind === "find_solution") {
+      grounding = excludeFactTypesFromGrounding(grounding, ["booking_link"]);
+    }
+
     let liveBusinessDataBlock = "";
     let liveCheckoutUrls: string[] = [];
     let liveRecordsForBundle: Array<{
@@ -273,6 +289,9 @@ export class AIService {
 
     try {
       let { suggestion, confidence: rawConfidence, confidenceProvided } = await runCompletion(systemPrompt);
+      if (visitorKind === "book_demo") {
+        suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
+      }
       let groundingCheck = evaluateDraft(suggestion);
 
       const incomplete =
@@ -284,13 +303,18 @@ export class AIService {
           userId,
           channel: channel ?? null,
           violations: groundingCheck.violations.map((v) => v.kind),
+          incompleteFactCodes: incompleteRequiredFactCodes(groundingCheck),
+          bookDemoIntent: visitorKind === "book_demo",
+          verifiedBookingUrlTrusted: isTrustedCalendlySchedulingUrl(verifiedBookingUrl),
           retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         });
         try {
           const retry = await runCompletion(
             `${systemPrompt}\n\n${FACT_COMPLETENESS_RETRY_INSTRUCTION}`,
           );
-          suggestion = retry.suggestion;
+          suggestion = visitorKind === "book_demo"
+            ? ensureVerifiedBookingUrlInDraft(retry.suggestion, verifiedBookingUrl)
+            : retry.suggestion;
           confidenceProvided = confidenceProvided && retry.confidenceProvided;
           const a = typeof rawConfidence === "number" ? rawConfidence : 1;
           const b = typeof retry.confidence === "number" ? retry.confidence : 1;
@@ -313,28 +337,53 @@ export class AIService {
           subIntents: routing?.subIntents,
           conflictingKeys: grounding.conflictingKeys,
         });
+        if (visitorKind === "book_demo") {
+          suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
+        }
+        groundingCheck = evaluateDraft(suggestion);
+        if (!groundingCheck.ok) {
+          groundingCheck = {
+            ok: false,
+            violations: [
+              ...groundingCheck.violations,
+              {
+                kind: "grounding_fallback_requires_review",
+                detail: "Model omitted required published facts twice; deterministic draft requires human review.",
+              },
+            ],
+          };
+          rawConfidence = Math.min(typeof rawConfidence === "number" ? rawConfidence : 1, 0.4);
+          confidenceProvided = true;
+          console.warn("[AI] using deterministic grounded draft for human review", {
+            userId,
+            channel: channel ?? null,
+            incompleteFactCodes: incompleteRequiredFactCodes(groundingCheck),
+            retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
+          });
+        }
+      } else if (!groundingCheck.ok) {
+        console.warn("[AI] reply failed fact grounding", {
+          userId,
+          violations: groundingCheck.violations.map((v) => v.kind),
+          incompleteFactCodes: incompleteRequiredFactCodes(groundingCheck),
+        });
+      }
+
+      if (
+        visitorKind === "book_demo" &&
+        verifiedBookingUrl &&
+        !isTrustedCalendlySchedulingUrl(verifiedBookingUrl)
+      ) {
         groundingCheck = {
           ok: false,
           violations: [
             ...groundingCheck.violations,
             {
-              kind: "grounding_fallback_requires_review",
-              detail: "Model omitted required published facts twice; deterministic draft requires human review.",
+              kind: "incomplete_required_fact",
+              detail: "A published next step (application CTA, form, or booking link) was retrieved, but the reply omitted it.",
             },
           ],
         };
-        rawConfidence = Math.min(typeof rawConfidence === "number" ? rawConfidence : 1, 0.4);
-        confidenceProvided = true;
-        console.warn("[AI] using deterministic grounded draft for human review", {
-          userId,
-          channel: channel ?? null,
-          retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
-        });
-      } else if (!groundingCheck.ok) {
-        console.warn("[AI] reply failed fact grounding", {
-          userId,
-          violations: groundingCheck.violations.map((v) => v.kind),
-        });
       }
 
       const requiresPaymentLinkApproval = draftContainsCheckoutUrl(

@@ -121,6 +121,18 @@ export function resolveChatbotCompletionRouting(input: {
     industry: input.industry,
     handoffKeywords: input.handoffKeywords,
   });
+  if (kind === "book_demo" && !routing.subIntents.includes("booking_question")) {
+    return { ...routing, subIntents: [...routing.subIntents, "booking_question"] };
+  }
+  if (
+    (kind === "features_pricing" || kind === "find_solution") &&
+    routing.subIntents.includes("booking_question")
+  ) {
+    return {
+      ...routing,
+      subIntents: routing.subIntents.filter((intent) => intent !== "booking_question"),
+    };
+  }
   return routing;
 }
 

@@ -104,6 +104,8 @@ const POLICY_QUESTION_RE =
   /\b(?:refund|return\s+policy|returns?\b|cancellation|cancel\s+(?:my|the)\s+(?:order|plan|subscription)|shipping\s+policy|delivery\s+time|warranty|guarantee|terms\s+(?:and|&)\s+conditions|privacy\s+policy)\b/i;
 const BOOKING_QUESTION_RE =
   /\b(?:book\s+(?:a|an|my)|how\s+(?:do|can)\s+i\s+book|schedule\s+(?:a|an)|make\s+an?\s+appointment|available\s+times?|calendar\s+link|booking\s+link)\b/i;
+const LOCALIZED_BOOKING_RE =
+  /קביעת\s*הדגמה|לקבוע\s*הדגמה|הזמן(?:ת)?\s*הדגמה|קבע(?:ו)?\s*הדגמה|reservar\s+(?:una\s+)?demo|agendar\s+(?:una\s+)?demo|reservar\s+(?:una\s+)?demostraci[oó]n|أريد\s+حجز|حجز\s+(?:موعد|عرض)|预约演示|我想预约|安排演示/i;
 
 const NURTURE_RE =
   /\b(just\s+browsing|not\s+ready|maybe\s+later|not\s+now|no\s+rush|in\s+the\s+future|(?:still\s+)?researching|looking\s+around|exploring\s+options|not\s+yet|sometime\s+next|few\s+months\s+out)\b/i;
@@ -283,7 +285,9 @@ export function deriveSubIntents(latestNorm: string): string[] {
   if (HOURS_QUESTION_RE.test(latestNorm)) out.push("hours_question");
   if (LOCATION_QUESTION_RE.test(latestNorm)) out.push("location_question");
   if (POLICY_QUESTION_RE.test(latestNorm)) out.push("policy_question");
-  if (BOOKING_QUESTION_RE.test(latestNorm)) out.push("booking_question");
+  if (BOOKING_QUESTION_RE.test(latestNorm) || LOCALIZED_BOOKING_RE.test(latestNorm)) {
+    out.push("booking_question");
+  }
   return out;
 }
 
