@@ -169,9 +169,14 @@ function persistCanonical(click: string) {
   assert.match(engine, /askOptions = currentNode\.type === "question" \? askCtx\.chips : \[\]/);
   const auto = read("server/webchatAiAutoReply.ts");
   assert.match(auto, /maybeRunWebchatServerAi|pendingAskFromAiControl/);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /dispatchWebchatInboundAi/);
   const webhooks = read("server/routes/webhooks.ts");
-  assert.match(webhooks, /!result\.chatbotWillFire/);
-  assert.match(webhooks, /maybeRunWebchatServerAi/);
+  assert.match(webhooks, /processIncomingMessage/);
+  assert.doesNotMatch(
+    webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId"'), webhooks.indexOf('app.get("/api/webchat/:userId/settings"')),
+    /maybeRunWebchatServerAi/,
+  );
 }
 
 console.log("webchat-ask-question-opening-match.test.ts: all assertions passed");

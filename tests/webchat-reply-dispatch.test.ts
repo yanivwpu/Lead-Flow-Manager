@@ -84,8 +84,9 @@ test("a matching keyword flow responds exactly once and suppresses Auto AI", () 
   const webhooks = read("server/routes/webhooks.ts");
   const post = webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId"'));
   const window = post.slice(0, post.indexOf('app.get("/api/webchat/:userId/settings"'));
-  assert.match(window, /!result\.chatbotWillFire/);
-  assert.match(window, /maybeRunWebchatServerAi/);
+  assert.match(window, /processIncomingMessage/);
+  assert.doesNotMatch(window, /maybeRunWebchatServerAi/);
+  assert.match(channel, /dispatchWebchatInboundAi/);
   assert.equal(
     decideWebchatAiReply({ ...aiBase, chatbotOwnsReply: true }),
     "skip_chatbot_owns",

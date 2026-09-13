@@ -160,6 +160,7 @@ export async function maybeRunWebchatServerAi(
     chatbotWillFire: boolean;
     bookingOwnsReply?: boolean;
     crmFallbackOwnsReply?: boolean;
+    awayConfigured?: boolean;
     widgetSettings: Record<string, unknown>;
   },
   deps: WebchatAiAutoReplyDeps = {},
@@ -180,6 +181,20 @@ export async function maybeRunWebchatServerAi(
     const pendingStillActive = Boolean(pendingAskFromAiControl(conv.aiControl));
     const dnc = contactHasDoNotContact(contact);
     const rate = await consumeRateLimit(`webchat-ai:${params.userId}:${conv.id}`, 20, 15 * 60 * 1000);
+    const rawMode = String(settings?.aiMode || "off").toLowerCase();
+    const effectiveMode =
+      rawMode === "full_auto" || rawMode === "auto"
+        ? "auto"
+        : rawMode === "suggest_only" || rawMode === "suggest"
+          ? "suggest"
+          : "manual";
+    console.info("[AIAutoReply]", {
+      evaluate: true,
+      effectiveMode,
+      chatbotOwns: chatbotOwnsReply || pendingStillActive,
+      awayConfigured: params.awayConfigured === true,
+      awayWillSend: params.crmFallbackOwnsReply === true,
+    });
     return decideWebchatAiReply({
       rolloutEnabled: isWebchatServerAiRolloutEnabled(),
       allowlisted: isWebchatServerAiAllowlisted(params.userId),
@@ -199,10 +214,11 @@ export async function maybeRunWebchatServerAi(
   };
 
   const report = (reasonCode: string, extra?: { sent?: boolean; hasDraft?: boolean; confidenceSource?: string }) => {
+    const outcome = extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra);
     logAiReplyDecision({
       source: "webchat_unattended",
       channel: "webchat",
-      outcome: extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra),
+      outcome,
       reasonCode,
       workspaceUserId: params.userId,
       eligibility: {
@@ -210,8 +226,19 @@ export async function maybeRunWebchatServerAi(
         chatbotWillFire: params.chatbotWillFire,
         bookingOwnsReply: params.bookingOwnsReply === true,
         crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
+        awayConfigured: params.awayConfigured === true,
         confidenceSource: extra?.confidenceSource,
       },
+    });
+    console.info("[AIAutoReply]", {
+      evaluated: true,
+      decision: reasonCode,
+      outcome,
+      chatbotOwns: params.chatbotWillFire === true,
+      awayConfigured: params.awayConfigured === true,
+      awayWillSend: params.crmFallbackOwnsReply === true,
+      sent: extra?.sent === true,
+      hasDraft: extra?.hasDraft === true,
     });
   };
 

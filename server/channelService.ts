@@ -1825,16 +1825,24 @@ class ChannelService {
       );
     }
 
-    // ── Auto-Reply & Business Hours ──────────────────────────────────────────
-    // Chatbot takes full priority: skip auto-reply when a flow will fire.
-    // Web Chat: only a tenant-configured away message. Never an implicit identity prompt.
+    // ── Away reply (optional) and AI Brain are independent ───────────────────
+    // Chatbot ownership still suppresses both. "No away reply configured" only
+    // means do not send a static away message — it must not skip AI Auto.
     let awayMessageWillFire = false;
+    let awayConfigured = false;
     if (!chatbotWillFire) {
+      let webchatUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
       if (channel === "webchat") {
-        const webchatUser = await storage.getUser(userId);
+        webchatUser = await storage.getUser(userId);
+        awayConfigured = Boolean(webchatUser?.businessHoursEnabled && webchatUser?.awayMessageEnabled);
         awayMessageWillFire = Boolean(
           webchatUser && resolveWebchatConfiguredAwayReply(webchatUser).send,
         );
+        console.info("[AwayReply]", {
+          configured: awayConfigured,
+          willSend: awayMessageWillFire,
+          chatbotOwns: false,
+        });
       }
       this._scheduleAutoReply({
         userId,
@@ -1843,9 +1851,42 @@ class ChannelService {
         channel,
         inboundContent: content,
         priorMessageCount,
-      }).catch((err: Error) => console.error("[AutoReply] Scheduling error:", err.message));
+      }).catch((err: Error) => console.error("[AwayReply] Scheduling error:", err.message));
+      if (channel === "webchat") {
+        const widgetSettings =
+          webchatUser?.widgetSettings && typeof webchatUser.widgetSettings === "object"
+            ? (webchatUser.widgetSettings as Record<string, unknown>)
+            : {};
+        try {
+          const { dispatchWebchatInboundAi } = await import("./webchatInboundReplyDispatch");
+          await dispatchWebchatInboundAi({
+            userId,
+            contact,
+            conversation,
+            inboundMessageId: message.id,
+            inboundText: content,
+            contentType,
+            channel,
+            chatbotOwnsReply: chatbotWillFire,
+            turnOwner: turn.owner,
+            awayConfigured,
+            awayReplyWillSend: awayMessageWillFire,
+            widgetSettings,
+          });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "unknown";
+          console.error("[AIAutoReply]", { evaluated: true, outcome: "failure", error: msg });
+        }
+      }
     } else {
-      console.log(`[AutoReply] Suppressed — chatbot will fire for userId: ${userId}, channel: ${channel}`);
+      console.info("[AwayReply]", { configured: false, willSend: false, chatbotOwns: true });
+      console.info("[AIAutoReply]", {
+        evaluate: false,
+        reason: "chatbot_owns",
+        chatbotOwns: true,
+        awayConfigured: false,
+        awayWillSend: false,
+      });
     }
 
     void import("./automationNoReply").then(({ onInboundMessageForNoReplyTimers }) =>
@@ -1940,9 +1981,12 @@ class ChannelService {
       // Remaining CRM auto-reply (greetings / legacy autoReplyMessage) is WhatsApp-oriented.
       if (channel === "webchat") {
         if (!shouldReply || !replyText || !source) {
-          console.log(
-            `[AutoReply] Skipped — webchat has no tenant-configured away reply userId=${userId}`,
-          );
+          console.info("[AwayReply]", {
+            configured: Boolean(user.businessHoursEnabled && user.awayMessageEnabled),
+            willSend: false,
+            sent: false,
+            reason: "not_configured",
+          });
           return;
         }
       } else {
@@ -2009,8 +2053,9 @@ class ChannelService {
 
       setTimeout(async () => {
         try {
+          const replyLog = source === "away_message" ? "[AwayReply]" : "[AutoReply]";
           console.log(
-            `[AutoReply] Sending (${source}) — userId=${userId} channel=${channel} contactId=${contact.id} conversationId=${conversation.id}`
+            `${replyLog} Sending (${source}) — userId=${userId} channel=${channel} contactId=${contact.id} conversationId=${conversation.id}`
           );
           const result = await self.sendMessage({
             userId,
@@ -2020,7 +2065,7 @@ class ChannelService {
           });
           if (result.success) {
             console.log(
-              `[AutoReply] ✓ Sent (${source}) via ${channel} to "${contact.name}" (conversationId: ${conversation.id})`
+              `${replyLog} Sent (${source}) via ${channel} conversationId=${conversation.id}`
             );
             if (activityAfterSend) {
               await self.logActivity(userId, contact.id, conversation.id, activityAfterSend, {
@@ -2028,14 +2073,14 @@ class ChannelService {
               });
             }
           } else {
-            console.error(`[AutoReply] ✗ Send failed (${source}) via ${channel}: ${result.error}`);
+            console.error(`${replyLog} Send failed (${source}) via ${channel}: ${result.error}`);
           }
         } catch (err) {
-          console.error("[AutoReply] Send error:", err);
+          console.error(`${source === "away_message" ? "[AwayReply]" : "[AutoReply]"} Send error:`, err);
         }
       }, delayMs);
     } catch (err) {
-      console.error("[AutoReply] _scheduleAutoReply error:", err);
+      console.error("[AwayReply] _scheduleAutoReply error:", err);
     }
   }
 

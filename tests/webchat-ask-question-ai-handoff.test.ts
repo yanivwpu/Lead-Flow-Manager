@@ -231,9 +231,14 @@ function completeAsk(clickText: string, localeSets: Record<string, typeof HE>) {
   assert.doesNotMatch(auto, /lastTurnOwner === "chatbot"/);
   assert.match(auto, /generationFailed: true/);
   assert.match(auto, /AI could not generate a reply/);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /dispatchWebchatInboundAi/);
   const webhooks = read("server/routes/webhooks.ts");
-  assert.match(webhooks, /!result\.chatbotWillFire/);
-  assert.match(webhooks, /maybeRunWebchatServerAi/);
+  assert.match(webhooks, /processIncomingMessage/);
+  assert.doesNotMatch(
+    webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId"'), webhooks.indexOf('app.get("/api/webchat/:userId/settings"')),
+    /maybeRunWebchatServerAi/,
+  );
 }
 
 resetChatbotAskQuestionMemoryForTests();

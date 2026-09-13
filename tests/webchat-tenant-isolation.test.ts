@@ -67,7 +67,9 @@ const ACCOUNT_C = "33333333-3333-4333-8333-333333333333";
   assert.match(webhooks, /resolvePublicWidgetAccess/);
   assert.match(webhooks, /parseWebchatInboundBody/);
   assert.match(webhooks, /dispatchWebchatInboundWorkflows/);
-  assert.match(webhooks, /maybeRunWebchatServerAi/);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /dispatchWebchatInboundAi/);
+  assert.doesNotMatch(webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId"'), webhooks.indexOf('app.get("/api/webchat/:userId/settings"')), /maybeRunWebchatServerAi/);
   assert.doesNotMatch(webhooks.slice(webhooks.indexOf('app.post("/api/webchat'), webhooks.indexOf('app.post("/api/webchat') + 2500), /storage\.getUser\(userId\)/);
 }
 
