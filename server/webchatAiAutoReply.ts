@@ -189,6 +189,7 @@ export async function maybeRunWebchatServerAi(
           ? "suggest"
           : "manual";
     const rollout = readWebchatServerAiRollout(params.userId);
+    const widgetEnabled = isWidgetEnabled(params.widgetSettings);
     console.info("[AIAutoReply]", {
       evaluate: true,
       effectiveMode,
@@ -200,11 +201,14 @@ export async function maybeRunWebchatServerAi(
       rolloutEnabled: rollout.rolloutEnabled,
       allowlisted: rollout.allowlisted,
       unattendedEligible: rollout.unattendedEligible,
+      widgetProperty: "widgetSettings.enabled",
+      widgetSource: "users.widget_settings",
+      widgetEnabled,
     });
     return decideWebchatAiReply({
       rolloutEnabled: rollout.rolloutEnabled,
       allowlisted: rollout.allowlisted,
-      widgetEnabled: isWidgetEnabled(params.widgetSettings),
+      widgetEnabled,
       hasAiBrainAccess: !!limits?.effectiveHasAIBrain,
       planIsProOrTrial: (limits?.plan || "free") === "pro" || !!limits?.effectiveHasAIBrain,
       aiModeRaw: settings?.aiMode,
@@ -239,6 +243,9 @@ export async function maybeRunWebchatServerAi(
         rolloutEnabled: rollout.rolloutEnabled,
         allowlisted: rollout.allowlisted,
         unattendedEligible: rollout.unattendedEligible,
+        widgetProperty: "widgetSettings.enabled",
+        widgetSource: "users.widget_settings",
+        widgetEnabled: isWidgetEnabled(params.widgetSettings),
         confidenceSource: extra?.confidenceSource,
       },
     });
@@ -256,6 +263,9 @@ export async function maybeRunWebchatServerAi(
       rolloutEnabled: rollout.rolloutEnabled,
       allowlisted: rollout.allowlisted,
       unattendedEligible: rollout.unattendedEligible,
+      widgetProperty: "widgetSettings.enabled",
+      widgetSource: "users.widget_settings",
+      widgetEnabled: isWidgetEnabled(params.widgetSettings),
     });
   };
 

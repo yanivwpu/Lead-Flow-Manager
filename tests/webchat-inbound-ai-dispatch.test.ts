@@ -277,3 +277,20 @@ test("production inbound path awaits AI after away skip, webhook does not re-dis
   assert.doesNotMatch(post, /dispatchWebchatInboundAi/);
   assert.match(channel, /An unconfigured away reply must not skip|must not skip AI Auto/);
 });
+
+test("production inbound path loads persisted widget enabled via the narrow accessor", () => {
+  const channel = read("server/channelService.ts");
+  const accessor = read("server/webchatInboundUserSettings.ts");
+  const inboundWindow = channel.slice(
+    channel.indexOf("Away reply (optional)"),
+    channel.indexOf('reason: "chatbot_owns"'),
+  );
+  assert.match(inboundWindow, /getWebchatInboundReplySettings\(userId\)/);
+  assert.match(inboundWindow, /widgetSettingsForAiDispatch\(inboundSettings\?\.widgetSettings\)/);
+  assert.doesNotMatch(inboundWindow, /getUserForSession/);
+  assert.doesNotMatch(inboundWindow, /storage\.getUser\(/);
+  const select = accessor.slice(accessor.indexOf(".select({"), accessor.indexOf(".from(users)"));
+  assert.match(select, /widgetSettings: users\.widgetSettings/);
+  assert.match(accessor, /enabled: extractWidgetSettingsRecord\(raw\)\.enabled === true/);
+  assert.doesNotMatch(select, /password|twilioAuthToken|metaAccessToken|shopifyAccessToken/);
+});

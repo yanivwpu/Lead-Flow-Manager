@@ -18,6 +18,20 @@ import {
   readWebchatServerAiRollout,
 } from "../server/webchatServerAiRollout";
 import { chatbotCompletionPromptRules } from "@shared/chatbotCompletionContext";
+import { isWidgetEnabled } from "../server/webchatAccess";
+import {
+  PRODUCTION_SHORT_LEGACY_WIDGET_SETTINGS,
+  resolveWidgetActivationState,
+  widgetSurfaceStatus,
+} from "../shared/webchatWidgetSettings";
+import {
+  parseUsersAuthCoreRow,
+  userFromAuthCoreRow,
+} from "../server/storage";
+import {
+  mapWebchatInboundReplySettings,
+  widgetSettingsForAiDispatch,
+} from "../server/webchatInboundUserSettings";
 import type { Contact, Conversation } from "@shared/schema";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
@@ -183,4 +197,112 @@ test("Hebrew Book a demo still uses the selected Calendly URL", () => {
 test("duplicate inbound shares one unattended send key", () => {
   const policy = read("shared/webchatAiPolicy.ts");
   assert.match(policy, /webchat_ai:\$\{userId\}:\$\{inboundMessageId\}/);
+});
+
+test("skip_widget_disabled is users.widget_settings.enabled from the narrow inbound accessor", () => {
+  const access = read("server/webchatAccess.ts");
+  assert.match(access, /return settings\?\.enabled === true/);
+  const channel = read("server/channelService.ts");
+  const inboundWindow = channel.slice(
+    channel.indexOf("Away reply (optional)"),
+    channel.indexOf('reason: "chatbot_owns"'),
+  );
+  assert.match(inboundWindow, /getWebchatInboundReplySettings/);
+  assert.match(inboundWindow, /widgetSettingsForAiDispatch/);
+  assert.doesNotMatch(inboundWindow, /getUserForSession/);
+  assert.doesNotMatch(inboundWindow, /storage\.getUser\(/);
+  const storageSrc = read("server/storage.ts");
+  const getUser = storageSrc.slice(storageSrc.indexOf("async getUser(id"), storageSrc.indexOf("async getUserForSession"));
+  assert.doesNotMatch(getUser, /widget_settings|widgetSettings/);
+  const accessor = read("server/webchatInboundUserSettings.ts");
+  const select = accessor.slice(accessor.indexOf(".select({"), accessor.indexOf(".from(users)"));
+  assert.match(select, /widgetSettings: users\.widgetSettings/);
+  assert.doesNotMatch(select, /password|twilioAuthToken|metaAccessToken|shopifyAccessToken/);
+  const auto = read("server/webchatAiAutoReply.ts");
+  assert.match(auto, /widgetProperty: "widgetSettings.enabled"/);
+  assert.match(auto, /widgetSource: "users.widget_settings"/);
+  assert.doesNotMatch(auto, /#region agent log/);
+  assert.doesNotMatch(channel, /#region agent log/);
+});
+
+test("auth-core getUser projection drops persisted widgetSettings and skips AI", () => {
+  const parsed = parseUsersAuthCoreRow({
+    id: "workspace-a",
+    name: "A",
+    email: "a@b.c",
+    password: "hashed-not-for-ai",
+    widget_settings: { enabled: true, allowedOrigins: ["https://example.com"] },
+    widgetSettings: { enabled: true, allowedOrigins: ["https://example.com"] },
+  });
+  assert.ok(parsed);
+  const authCoreUser = userFromAuthCoreRow(parsed!);
+  assert.equal(authCoreUser.widgetSettings, undefined);
+  assert.equal(Object.keys(authCoreUser).sort().join(","), "email,id,name,password");
+  const fromAuthCore = widgetSettingsForAiDispatch(authCoreUser.widgetSettings);
+  assert.equal(fromAuthCore.enabled, false);
+  assert.equal(
+    decideWebchatAiReply({
+      ...aiBase,
+      rolloutEnabled: false,
+      allowlisted: true,
+      widgetEnabled: isWidgetEnabled(fromAuthCore),
+    }),
+    "skip_widget_disabled",
+  );
+});
+
+test("narrow accessor maps persisted enabled for inbound AI and keeps disabled skip", () => {
+  const persistedActive = {
+    enabled: true,
+    allowedOrigins: ["https://example.com"],
+    welcomeMessage: "Hi",
+  };
+  const mapped = mapWebchatInboundReplySettings({
+    id: "workspace-a",
+    widgetSettings: persistedActive,
+    businessHoursEnabled: false,
+    awayMessageEnabled: false,
+  });
+  const forAi = widgetSettingsForAiDispatch(mapped.widgetSettings);
+  assert.equal(forAi.enabled, true);
+  assert.equal(Object.keys(forAi).join(","), "enabled");
+  assert.equal(
+    decideWebchatAiReply({
+      ...aiBase,
+      rolloutEnabled: false,
+      allowlisted: true,
+      widgetEnabled: isWidgetEnabled(forAi),
+    }),
+    "send_auto",
+  );
+  assert.equal(
+    decideWebchatAiReply({
+      ...aiBase,
+      rolloutEnabled: false,
+      allowlisted: true,
+      widgetEnabled: isWidgetEnabled(
+        widgetSettingsForAiDispatch(PRODUCTION_SHORT_LEGACY_WIDGET_SETTINGS),
+      ),
+    }),
+    "send_auto",
+  );
+  assert.equal(
+    decideWebchatAiReply({
+      ...aiBase,
+      rolloutEnabled: true,
+      allowlisted: false,
+      widgetEnabled: isWidgetEnabled(widgetSettingsForAiDispatch({ enabled: false })),
+    }),
+    "skip_widget_disabled",
+  );
+  assert.equal(isWidgetEnabled({}), false);
+  assert.equal(isWidgetEnabled(undefined), false);
+
+  const live = resolveWidgetActivationState(persistedActive);
+  assert.equal(widgetSurfaceStatus(live).widgetStatusLabel, "Active");
+  assert.equal(live.requestedEnabled, true);
+  assert.equal(
+    widgetSurfaceStatus(resolveWidgetActivationState(widgetSettingsForAiDispatch(undefined))).widgetStatusLabel,
+    "Disabled",
+  );
 });

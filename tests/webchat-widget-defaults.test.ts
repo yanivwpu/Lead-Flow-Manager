@@ -219,6 +219,8 @@ const exactLegacyStored = {
   if (!empty.ok) assert.equal(empty.reason, "disabled");
   assert.equal(isWidgetEnabled(undefined), false);
   assert.equal(isWidgetEnabled({}), false);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /getWebchatInboundReplySettings/);
 
   const noOrigin = resolveWidgetActivationState({ enabled: true, allowedOrigins: [] });
   assert.equal(noOrigin.effectivePublic, false);

@@ -50,6 +50,11 @@ import {
   type InboundProcessingSubState,
 } from "@shared/inboundProcessing";
 import { resolveWebchatConfiguredAwayReply } from "@shared/webchatReplyPolicy";
+import {
+  getWebchatInboundReplySettings,
+  widgetSettingsForAiDispatch,
+  type WebchatInboundReplySettings,
+} from "./webchatInboundUserSettings";
 
 type ForceChannelInput = Channel | string | undefined;
 
@@ -1831,12 +1836,19 @@ class ChannelService {
     let awayMessageWillFire = false;
     let awayConfigured = false;
     if (!chatbotWillFire) {
-      let webchatUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
+      let inboundSettings: WebchatInboundReplySettings | undefined;
       if (channel === "webchat") {
-        webchatUser = await storage.getUser(userId);
-        awayConfigured = Boolean(webchatUser?.businessHoursEnabled && webchatUser?.awayMessageEnabled);
+        try {
+          inboundSettings = await getWebchatInboundReplySettings(userId);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "unknown";
+          console.error("[AIAutoReply]", { evaluated: true, outcome: "failure", error: msg });
+        }
+        awayConfigured = Boolean(
+          inboundSettings?.businessHoursEnabled && inboundSettings?.awayMessageEnabled,
+        );
         awayMessageWillFire = Boolean(
-          webchatUser && resolveWebchatConfiguredAwayReply(webchatUser).send,
+          inboundSettings && resolveWebchatConfiguredAwayReply(inboundSettings).send,
         );
         console.info("[AwayReply]", {
           configured: awayConfigured,
@@ -1853,10 +1865,6 @@ class ChannelService {
         priorMessageCount,
       }).catch((err: Error) => console.error("[AwayReply] Scheduling error:", err.message));
       if (channel === "webchat") {
-        const widgetSettings =
-          webchatUser?.widgetSettings && typeof webchatUser.widgetSettings === "object"
-            ? (webchatUser.widgetSettings as Record<string, unknown>)
-            : {};
         try {
           const { dispatchWebchatInboundAi } = await import("./webchatInboundReplyDispatch");
           await dispatchWebchatInboundAi({
@@ -1871,7 +1879,7 @@ class ChannelService {
             turnOwner: turn.owner,
             awayConfigured,
             awayReplyWillSend: awayMessageWillFire,
-            widgetSettings,
+            widgetSettings: widgetSettingsForAiDispatch(inboundSettings?.widgetSettings),
           });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : "unknown";

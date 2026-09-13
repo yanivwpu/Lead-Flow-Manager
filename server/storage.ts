@@ -90,14 +90,14 @@ import {
 import { readDemoBookings, writeDemoBookingUpdate } from "./demoBookingStorage";
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
-type UsersAuthCoreRow = {
+export type UsersAuthCoreRow = {
   id: string;
   name: string;
   email: string;
   password: string;
 };
 
-function parseUsersAuthCoreRow(raw: Record<string, unknown>): UsersAuthCoreRow | null {
+export function parseUsersAuthCoreRow(raw: Record<string, unknown>): UsersAuthCoreRow | null {
   const id = raw.id;
   if (typeof id !== "string" || !id) return null;
   // Auth core reads must tolerate NULL/legacy rows (missing name/password) — never drop the row.
@@ -109,7 +109,7 @@ function parseUsersAuthCoreRow(raw: Record<string, unknown>): UsersAuthCoreRow |
 }
 
 /** Minimal `User` for Passport auth — only id/name/email/password are loaded; other fields read as undefined until full migrate. */
-function userFromAuthCoreRow(row: UsersAuthCoreRow): User {
+export function userFromAuthCoreRow(row: UsersAuthCoreRow): User {
   return row as unknown as User;
 }
 
