@@ -577,6 +577,19 @@ export function UnifiedInbox() {
                 type: "active",
               });
             }
+          } else if (msg.type === "ai_review_draft") {
+            if (typeof msg.contactId === "string" && msg.contactId) {
+              queryClient.invalidateQueries({
+                queryKey: [`/api/contacts/${msg.contactId}/timeline?limit=60`],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["/api/contacts", msg.contactId, "timeline"],
+              });
+              void queryClient.refetchQueries({
+                queryKey: [`/api/contacts/${msg.contactId}/timeline?limit=60`],
+                type: "active",
+              });
+            }
           } else if (msg.type === "new_message") {
             queryClient.refetchQueries({ queryKey: ["/api/inbox"], type: "active" });
             ackIfVisibleRef.current();

@@ -37,6 +37,7 @@ function read(rel: string): string {
   const composer = read("client/src/components/AIComposer.tsx");
   assert.match(composer, /serverHeldDraft/);
   assert.match(inbox, /serverHeldDraft=\{serverHeldDraft\}/);
+  assert.match(inbox, /ai_review_draft/);
 }
 
 {

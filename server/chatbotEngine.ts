@@ -73,6 +73,8 @@ export interface TriggerContext {
   awaitExecution?: boolean;
   /** Inbound webhook/message id — duplicate deliveries must not advance Ask Question twice. */
   sourceEventId?: string;
+  /** Persisted inbox message id — structured Ask Question provenance must match this inbound. */
+  inboundMessageId?: string;
   flowRunId?: string;
   consumedSourceEventIds?: string[];
   /** Visitor conversation / widget locale for static node variants. */
@@ -307,6 +309,7 @@ async function persistAskQuestionAnswer(
   pending: ChatbotPendingAsk,
   validated: ChatbotAskValidateOk,
   variableName: string,
+  resolution: "ask_question_structured" | "ask_question_free_text",
 ): Promise<boolean> {
   try {
     const contact = await storage.getContact(ctx.contactId);
@@ -321,6 +324,9 @@ async function persistAskQuestionAnswer(
       channel: ctx.channel,
       conversationId: ctx.conversationId,
       flowRunId: pending.flowRunId,
+      inboundMessageId: ctx.inboundMessageId || ctx.sourceEventId,
+      sourceEventId: ctx.sourceEventId,
+      resolution,
     });
     if (!applied.ok) return false;
     await storage.updateContact(contact.id, applied.patch, {
@@ -364,6 +370,7 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
 
   const variableName = claim.pending.kind === "consent_buttons" ? "consent" : claim.pending.variableName;
   let replyText = ctx.message;
+  let structuredMatch = false;
   if (claim.pending.kind === "consent_buttons") {
     const pendingButtons = getPendingButtons(ctx.conversationId);
     if (pendingButtons) {
@@ -376,7 +383,10 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
       claim.pending.quickReplies,
       localeOptionSetsFromPending(claim.pending),
     );
-    if (matched) replyText = matched.value || matched.label;
+    if (matched) {
+      replyText = matched.value || matched.label;
+      structuredMatch = true;
+    }
   }
   const validated = validateChatbotAskAnswer(variableName || "answer", replyText);
   if (!validated.ok) {
@@ -385,7 +395,13 @@ async function checkAndResolvePendingAsk(ctx: TriggerContext): Promise<ChatbotTr
     return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
   }
 
-  const saved = await persistAskQuestionAnswer(ctx, claim.pending, validated, variableName);
+  const saved = await persistAskQuestionAnswer(
+    ctx,
+    claim.pending,
+    validated,
+    variableName,
+    structuredMatch ? "ask_question_structured" : "ask_question_free_text",
+  );
   if (!saved) {
     releaseChatbotPendingClaim(ctx.conversationId, ctx.sourceEventId);
     return { triggered: true, visitorFacing: true, reason: "wait_for_input" };
@@ -1320,7 +1336,13 @@ async function executeFlow(
               });
               const validated = validateChatbotAskAnswer(pending.variableName || "answer", opening.option.value);
               if (validated.ok) {
-                const saved = await persistAskQuestionAnswer(ctx, pending, validated, pending.variableName || "answer");
+                const saved = await persistAskQuestionAnswer(
+                  ctx,
+                  pending,
+                  validated,
+                  pending.variableName || "answer",
+                  "ask_question_structured",
+                );
                 if (saved) {
                   markChatbotPendingConsumed(pending, ctx.sourceEventId);
                   await writePendingAsk(ctx, null);

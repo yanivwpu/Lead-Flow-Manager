@@ -176,6 +176,15 @@ export function evaluateFullAutoSend(params: {
   confidenceProvided?: boolean;
   /** True only when retrieved published facts exist and the draft passed grounding. */
   knowledgeGrounded?: boolean;
+  /**
+   * Current-inbound structured Ask Question resolution only.
+   * Stale visitor_intent from an earlier turn must not be passed as trusted.
+   */
+  currentTurnAskIntent?: {
+    trusted?: boolean;
+    provenanceCurrentInbound?: boolean;
+    kind?: string;
+  } | null;
 }): {
   allowed: boolean;
   reason: string;
@@ -203,6 +212,10 @@ export function evaluateFullAutoSend(params: {
 
   const joinedInbound = inboundMsgs.map((m) => m.content || "").join("\n");
   const lastInbound = inboundMsgs[inboundMsgs.length - 1]?.content?.trim() || "";
+  const structuredBooking =
+    params.currentTurnAskIntent?.trusted === true &&
+    params.currentTurnAskIntent.provenanceCurrentInbound === true &&
+    params.currentTurnAskIntent.kind === "book_demo";
 
   if (!lastInbound) {
     return none("empty_last_inbound", inboundCount);
@@ -265,7 +278,7 @@ export function evaluateFullAutoSend(params: {
     }
     const mayDefault =
       webchat &&
-      knowledgeQuestion &&
+      (knowledgeQuestion || structuredBooking) &&
       grounded &&
       !isCasualWebchatGreeting(lastInbound);
     if (!mayDefault) {
@@ -310,16 +323,17 @@ export function evaluateFullAutoSend(params: {
     };
   }
 
-  if (!strongIntent && inboundCount < 2 && !knowledgeQuestion) {
+  if (!strongIntent && !structuredBooking && inboundCount < 2 && !knowledgeQuestion) {
     return none("conversation_too_short", inboundCount, missingLen);
   }
 
-  if (!strongIntent && GREETING_ONLY.test(lastInbound)) {
+  if (!strongIntent && !structuredBooking && GREETING_ONLY.test(lastInbound)) {
     return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =
+    structuredBooking ||
     signals.strongIntent ||
     signals.viewingIntent ||
     lastInbound.length >= 25 ||
@@ -347,7 +361,11 @@ export function evaluateFullAutoSend(params: {
     }
     return {
       allowed: true,
-      reason: knowledgeQuestion ? "ok_knowledge_question" : "ok",
+      reason: structuredBooking
+        ? "ok_structured_booking"
+        : knowledgeQuestion
+          ? "ok_knowledge_question"
+          : "ok",
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: conf.source,

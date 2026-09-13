@@ -4,6 +4,10 @@
  */
 
 import { matchAskQuestionQuickReply } from "./chatbotAskQuestionOptions";
+import {
+  classifyChatbotVisitorIntent,
+  type ChatbotVisitorIntentKind,
+} from "./chatbotCompletionContext";
 
 export const CHATBOT_ASK_CHANNELS = [
   "facebook",
@@ -205,11 +209,28 @@ export function validateChatbotAskAnswer(
   return { ok: true, kind, value: text.slice(0, 500) };
 }
 
+export type AskIntentResolution = "ask_question_structured" | "ask_question_free_text";
+
+export type ChatbotVarProvenance = {
+  inboundMessageId?: string;
+  sourceEventId?: string;
+  resolution?: AskIntentResolution;
+};
+
+export type CurrentTurnStructuredAskIntent = {
+  trusted: boolean;
+  provenanceCurrentInbound: boolean;
+  kind?: ChatbotVisitorIntentKind;
+  resolution?: string;
+  variableName?: string;
+};
+
 export function mergeChatbotCustomVariable(
   existing: unknown,
   variableName: string,
   value: string,
   savedAt: string,
+  provenance?: ChatbotVarProvenance,
 ): Record<string, unknown> {
   const customFields =
     existing && typeof existing === "object" && !Array.isArray(existing)
@@ -221,9 +242,85 @@ export function mergeChatbotCustomVariable(
     customFields.chatbotVars && typeof customFields.chatbotVars === "object" && !Array.isArray(customFields.chatbotVars)
       ? { ...(customFields.chatbotVars as Record<string, unknown>) }
       : {};
-  prior[key] = { value, savedAt };
+  prior[key] = {
+    value,
+    savedAt,
+    ...(provenance?.inboundMessageId
+      ? { inboundMessageId: String(provenance.inboundMessageId).trim().slice(0, 80) }
+      : {}),
+    ...(provenance?.sourceEventId
+      ? { sourceEventId: String(provenance.sourceEventId).trim().slice(0, 80) }
+      : {}),
+    ...(provenance?.resolution ? { resolution: provenance.resolution } : {}),
+  };
   customFields.chatbotVars = prior;
   return customFields;
+}
+
+function readChatbotVarStamp(
+  customFields: unknown,
+  variableName: string,
+): {
+  value: string;
+  inboundMessageId?: string;
+  sourceEventId?: string;
+  resolution?: string;
+} | null {
+  const cf =
+    customFields && typeof customFields === "object" && !Array.isArray(customFields)
+      ? (customFields as Record<string, unknown>)
+      : null;
+  const rawVars = cf?.chatbotVars;
+  const vars =
+    rawVars && typeof rawVars === "object" && !Array.isArray(rawVars)
+      ? (rawVars as Record<string, unknown>)
+      : null;
+  if (!vars) return null;
+  const rec = vars[variableName];
+  if (typeof rec === "string" && rec.trim()) return { value: rec.trim() };
+  if (!rec || typeof rec !== "object" || Array.isArray(rec)) return null;
+  const o = rec as Record<string, unknown>;
+  const value = typeof o.value === "string" ? o.value.trim() : "";
+  if (!value) return null;
+  return {
+    value,
+    inboundMessageId: typeof o.inboundMessageId === "string" ? o.inboundMessageId.trim() : undefined,
+    sourceEventId: typeof o.sourceEventId === "string" ? o.sourceEventId.trim() : undefined,
+    resolution: typeof o.resolution === "string" ? o.resolution : undefined,
+  };
+}
+
+/**
+ * Trust only a structured Ask Question option resolved for THIS inbound.
+ * Stale visitor_intent from an earlier turn is never treated as current intent.
+ */
+export function resolveCurrentTurnStructuredAskIntent(params: {
+  customFields: unknown;
+  inboundMessageId: string;
+  sourceEventId?: string | null;
+  variableName?: string;
+}): CurrentTurnStructuredAskIntent {
+  const inboundId = String(params.inboundMessageId || "").trim();
+  const sourceEventId = String(params.sourceEventId || "").trim();
+  const variableName = sanitizeChatbotVariableName(params.variableName || "visitor_intent") || "visitor_intent";
+  const stamp = readChatbotVarStamp(params.customFields, variableName);
+  if (!stamp) {
+    return { trusted: false, provenanceCurrentInbound: false, variableName };
+  }
+  const provenanceCurrentInbound = Boolean(
+    (inboundId && (stamp.inboundMessageId === inboundId || stamp.sourceEventId === inboundId)) ||
+      (sourceEventId && (stamp.inboundMessageId === sourceEventId || stamp.sourceEventId === sourceEventId)),
+  );
+  const kind = classifyChatbotVisitorIntent(stamp.value);
+  const trusted =
+    stamp.resolution === "ask_question_structured" && provenanceCurrentInbound && kind !== "other";
+  return {
+    trusted,
+    provenanceCurrentInbound,
+    kind,
+    resolution: stamp.resolution,
+    variableName,
+  };
 }
 
 export function mergeChatbotConsent(
@@ -258,6 +355,9 @@ export function applyChatbotAskAnswer(params: {
   conversationId: string;
   flowRunId: string;
   savedAt?: string;
+  inboundMessageId?: string;
+  sourceEventId?: string;
+  resolution?: AskIntentResolution;
 }): { ok: true; patch: ChatbotAskContactPatch } | { ok: false; reason: "tenant_mismatch" } {
   if (params.contact.userId && params.contact.userId !== params.expectedUserId) {
     return { ok: false, reason: "tenant_mismatch" };
@@ -290,6 +390,11 @@ export function applyChatbotAskAnswer(params: {
       sanitizeChatbotVariableName(params.variableName) || "answer",
       params.validated.value,
       savedAt,
+      {
+        inboundMessageId: params.inboundMessageId,
+        sourceEventId: params.sourceEventId,
+        resolution: params.resolution,
+      },
     );
     patch.customFields = customFields;
   }

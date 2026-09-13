@@ -1786,6 +1786,7 @@ class ChannelService {
       skipBookingIntent: bookingIntent,
       awaitExecution: true,
       sourceEventId: externalMessageId || message.id,
+      inboundMessageId: message.id,
       locale: conversationLanguage,
     };
     const chatbotArb = await evaluateChatbotInboundArbitration(chatbotCtx);

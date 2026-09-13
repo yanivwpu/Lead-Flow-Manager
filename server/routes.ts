@@ -11256,6 +11256,7 @@ export async function registerRoutes(
 
       let resolvedContactId: string | null =
         typeof bodyContactId === "string" && bodyContactId.trim() ? bodyContactId.trim() : null;
+      let contactCustomFieldsForGate: unknown = null;
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
 
@@ -11271,6 +11272,7 @@ export async function registerRoutes(
         if (!contactOwned) {
           return res.status(404).json(FOREIGN_RESOURCE_BODY);
         }
+        contactCustomFieldsForGate = contactOwned.customFields;
       }
 
       let buyerMatchingTraceId: string | null = null;
@@ -11908,6 +11910,11 @@ export async function registerRoutes(
           autoSendReason = "auto_dispatch_not_requested";
         } else {
           const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
+          const { resolveCurrentTurnStructuredAskIntent } = await import("@shared/chatbotAskQuestion");
+          const currentTurnAskIntent = resolveCurrentTurnStructuredAskIntent({
+            customFields: contactCustomFieldsForGate,
+            inboundMessageId: inboundMessageIdForAuto || "",
+          });
           const gate = evaluateFullAutoSend({
             businessMode,
             conversationHistory,
@@ -11918,6 +11925,7 @@ export async function registerRoutes(
             businessKnowledge: scoringKnowledge,
             groundingViolations: suggestion.groundingViolations,
             channel: gateChannel,
+            currentTurnAskIntent,
           });
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;

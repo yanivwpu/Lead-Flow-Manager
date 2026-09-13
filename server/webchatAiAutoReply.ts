@@ -36,6 +36,7 @@ import {
   businessKnowledgeFromAiRecord,
   evaluateFullAutoSend,
 } from "./aiAutoSendGate";
+import { resolveCurrentTurnStructuredAskIntent } from "@shared/chatbotAskQuestion";
 import {
   clearWebchatGenerationAbort,
   registerWebchatGenerationAbort,
@@ -384,6 +385,16 @@ export async function maybeRunWebchatServerAi(
       },
       actorType: "ai",
     }).catch(() => {});
+    try {
+      const { notifyUser } = await import("./presence");
+      notifyUser(params.userId, {
+        type: "ai_review_draft",
+        contactId: contact.id,
+        conversationId: conv.id,
+      });
+    } catch {
+      /* inbox still hydrates on next timeline fetch */
+    }
     report(reasonCode, { hasDraft: true });
     return { decision: reasonCode, sent: false };
   } finally {
@@ -441,6 +452,16 @@ export async function maybeRunWebchatServerAi(
         },
         actorType: "ai",
       });
+      try {
+        const { notifyUser } = await import("./presence");
+        notifyUser(params.userId, {
+          type: "ai_review_draft",
+          contactId: contact.id,
+          conversationId: conv.id,
+        });
+      } catch {
+        /* inbox still hydrates on next timeline fetch */
+      }
     }
     await storage.updateConversation(conv.id, {
       aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
@@ -454,6 +475,10 @@ export async function maybeRunWebchatServerAi(
   }
 
   const knowledge = await storage.getAiBusinessKnowledge(params.userId);
+  const currentTurnAskIntent = resolveCurrentTurnStructuredAskIntent({
+    customFields: contact.customFields,
+    inboundMessageId: params.inboundMessageId,
+  });
   const gate = evaluateFullAutoSend({
     businessMode: "auto",
     channel: "webchat",
@@ -464,6 +489,7 @@ export async function maybeRunWebchatServerAi(
     knowledgeGrounded: suggestion.knowledgeGrounded === true,
     businessKnowledge: businessKnowledgeFromAiRecord(knowledge as Record<string, unknown> | undefined),
     groundingViolations: suggestion.groundingViolations,
+    currentTurnAskIntent,
   });
   if (!gate.allowed) {
     const reasonCode = `send_auto:held:${gate.reason}`;
