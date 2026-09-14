@@ -12,6 +12,7 @@ import {
   resolveLocalizedPageRuleGreeting,
   resolveLocalizedPageRuleQuestions,
 } from "./webchatWidgetCopyI18n";
+import { resolveLocalizedPageRuleTeaser } from "./webchatPageRuleTeaser";
 
 export const WIDGET_PAGE_RULE_MATCH_TYPES = ["contains", "pathname", "pathname_prefix"] as const;
 export type WidgetPageRuleMatchType = (typeof WIDGET_PAGE_RULE_MATCH_TYPES)[number];
@@ -20,6 +21,7 @@ export type WidgetPageRuleMatchInput = {
   urlContains?: unknown;
   matchType?: unknown;
   greeting?: unknown;
+  teaserGreeting?: unknown;
   prefilledMessage?: unknown;
   suggestedQuestions?: unknown;
   chatbotFlowId?: unknown;
@@ -33,6 +35,7 @@ export type MatchedWidgetPageRule = {
   matchType: WidgetPageRuleMatchType;
   ruleKey: string;
   greeting?: string;
+  teaserGreeting?: string;
   prefilledMessage?: string;
   suggestedQuestions: string[];
   chatbotFlowId?: string;
@@ -133,6 +136,13 @@ export function hydrateMatchedWidgetPageRule(
         localized: raw.localized,
         fallback: "",
       }) || greetingRaw || undefined,
+    teaserGreeting:
+      resolveLocalizedPageRuleTeaser({
+        locale,
+        teaserGreeting: raw.teaserGreeting,
+        greeting: greetingRaw,
+        localized: raw.localized,
+      }) || undefined,
     prefilledMessage:
       typeof raw.prefilledMessage === "string" ? raw.prefilledMessage : undefined,
     suggestedQuestions: questions,

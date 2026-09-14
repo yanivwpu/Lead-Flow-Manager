@@ -15,9 +15,16 @@ import {
   visitorSafeWidgetPageRules,
 } from "../shared/webchatWidgetLauncher";
 import { mergeNeutralWidgetSettings, validateWidgetPageRules } from "../shared/webchatWidgetSettings";
-import { PRICING_PAGE_RULE_FIXTURE } from "../shared/webchatPageRuleFixtures";
+import { PRICING_PAGE_RULE_FIXTURE, PRICING_PAGE_RULE_TEASER } from "../shared/webchatPageRuleFixtures";
 import { matchWidgetPageRule } from "../shared/webchatPageRuleMatch";
 import { readShownPageRuleKeys } from "../shared/webchatPageRuleEngagement";
+import {
+  decidePageRuleTeaser,
+  fallbackPageRuleTeaserFromGreeting,
+  PAGE_RULE_TEASER_COOLDOWN_MS,
+  pageRuleTeaserCooldownActive,
+  resolveLocalizedPageRuleTeaser,
+} from "../shared/webchatPageRuleTeaser";
 import { publicWidgetEmbedDecision } from "../shared/webchatOriginPolicy";
 import { MARKETING_WEBSITE_CHAT_ALLOWED_ORIGINS } from "../shared/marketingWebsiteChatWidget";
 
@@ -58,7 +65,12 @@ type BootOpts = {
   historyWritable?: boolean;
   localStorageRaw?: string | null;
   sessionShown?: boolean;
+  pageTeaserShown?: string[];
+  timerMode?: "immediate" | "queue";
+  clock?: number;
 };
+
+type QueuedTimer = { id: number; ms: number; fn: () => void };
 
 type MockEl = {
   tag: string;
@@ -142,6 +154,9 @@ function bootWidget(opts: BootOpts) {
   const store: Record<string, string> = {};
   if (opts.localStorageRaw != null) store[`wcw-pr-shown:${WIDGET_ID}:visitor`] = opts.localStorageRaw;
   if (opts.sessionShown) store[`wcw-teaser-${WIDGET_ID}`] = "1";
+  if (opts.pageTeaserShown) {
+    store[`wcw-pr-teaser:${WIDGET_ID}`] = JSON.stringify(opts.pageTeaserShown);
+  }
   const storage = {
     getItem(k: string) {
       return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
@@ -150,10 +165,29 @@ function bootWidget(opts: BootOpts) {
       store[k] = String(v);
     },
   };
+  const loc = new URL(opts.href);
+  const locationObj = {
+    href: loc.href,
+    pathname: loc.pathname,
+    origin: loc.origin,
+  };
+  const applyUrl = (url: unknown) => {
+    if (url == null || url === "") return;
+    try {
+      const next = new URL(String(url), locationObj.href);
+      locationObj.href = next.href;
+      locationObj.pathname = next.pathname;
+      locationObj.origin = next.origin;
+    } catch {
+      /* ignore */
+    }
+  };
   const origPush = function pushState(this: unknown, ...args: unknown[]) {
+    applyUrl(args[2]);
     return { kind: "push", args };
   };
   const origReplace = function replaceState(this: unknown, ...args: unknown[]) {
+    applyUrl(args[2]);
     return { kind: "replace", args };
   };
   const historyObj: {
@@ -175,7 +209,11 @@ function bootWidget(opts: BootOpts) {
       configurable: false,
     });
   }
-  const loc = new URL(opts.href);
+  const timers: QueuedTimer[] = [];
+  let timerId = 1;
+  const queueMode = opts.timerMode === "queue";
+  let clock = opts.clock ?? 1_700_000_000_000;
+  const windowListeners: Record<string, Array<(...args: unknown[]) => void>> = {};
   const ctx: Record<string, unknown> = {
     Array,
     String,
@@ -184,7 +222,9 @@ function bootWidget(opts: BootOpts) {
     Number,
     JSON,
     Math,
-    Date,
+    Date: {
+      now: () => clock,
+    },
     Error,
     TypeError,
     URL,
@@ -208,13 +248,13 @@ function bootWidget(opts: BootOpts) {
       body: bodyEl,
       documentElement: { lang: "en", getAttribute: () => null },
       readyState: "complete",
-      title: loc.pathname === "/pricing" ? "Pricing" : "Home",
+      title: locationObj.pathname === "/pricing" ? "Pricing" : "Home",
       referrer: "",
       createElement: makeEl,
       getElementsByTagName: (tag: string) => (tag === "script" ? [{ src: scriptSrc }] : []),
       addEventListener() {},
     },
-    location: { href: opts.href, pathname: loc.pathname, origin: loc.origin },
+    location: locationObj,
     history: historyObj,
     navigator: {
       userAgent: opts.mobile ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" : "Mozilla/5.0",
@@ -225,13 +265,23 @@ function bootWidget(opts: BootOpts) {
       matches: String(q).includes("max-width: 767px") ? !!opts.mobile : false,
     }),
     requestIdleCallback: (cb: () => void) => cb(),
-    setTimeout: (cb: () => void) => {
-      cb();
-      return 0;
+    setTimeout: (cb: () => void, ms?: number) => {
+      if (!queueMode) {
+        cb();
+        return 0;
+      }
+      const id = timerId++;
+      timers.push({ id, ms: typeof ms === "number" ? ms : 0, fn: cb });
+      return id;
     },
-    clearTimeout() {},
+    clearTimeout(id: number) {
+      const i = timers.findIndex((t) => t.id === id);
+      if (i >= 0) timers.splice(i, 1);
+    },
     requestAnimationFrame: (cb: () => void) => cb(),
-    addEventListener() {},
+    addEventListener(type: string, fn: (...args: unknown[]) => void) {
+      (windowListeners[type] ||= []).push(fn);
+    },
     sessionStorage: storage,
     localStorage: storage,
   };
@@ -241,7 +291,35 @@ function bootWidget(opts: BootOpts) {
   vm.createContext(ctx);
   vm.runInContext(js, ctx, { timeout: 3000 });
   const launcher = created.find((el) => el.attrs["data-testid"] === "wcw-launcher");
-  return { created, launcher, historyObj, settingsBody, ctx, js };
+  const teaser = created.find((el) => el.attrs["data-wcw"] === "teaser");
+  const flushTimers = (maxMs: number) => {
+    const due = timers.filter((t) => t.ms <= maxMs);
+    const rest = timers.filter((t) => t.ms > maxMs);
+    timers.length = 0;
+    timers.push(...rest);
+    for (const t of due) t.fn();
+  };
+  const dispatchMessage = (data: unknown) => {
+    for (const fn of windowListeners.message || []) {
+      fn({ origin: ORIGIN, data });
+    }
+  };
+  return {
+    created,
+    launcher,
+    teaser,
+    historyObj,
+    settingsBody,
+    ctx,
+    js,
+    store,
+    locationObj,
+    flushTimers,
+    dispatchMessage,
+    advanceClock(ms: number) {
+      clock += ms;
+    },
+  };
 }
 
 const js = buildWebchatPublicScript({ origin: ORIGIN });
@@ -251,6 +329,12 @@ assert.equal(/https\?:\/\/\//.test(js), false);
 assert.match(js, /indexOf\('https:\/\/'\)/);
 assert.match(js, /try \{ hookHistory\(\); \}/);
 assert.match(js, /return ret;/);
+assert.match(js, /wcw-pr-teaser/);
+assert.match(js, /wcw-teaser-gate/);
+assert.match(js, /TRIGGER === 'always'/);
+assert.match(js, /TRIGGER === 'delay'/);
+assert.match(js, /TRIGGER === 'scroll'/);
+assert.doesNotMatch(js, /Comparing plans\? I can help you choose Free or Pro/);
 
 {
   const { launcher } = bootWidget({ href: "https://www.whachatcrm.com/", pageRules: [] });
@@ -409,6 +493,174 @@ assert.match(js, /return ret;/);
   assert.ok(desktop.launcher);
   assert.ok(mobile.launcher);
   assert.equal(String(desktop.launcher?.style.cssText || "").includes("display:none"), false);
+}
+
+const CONTACT_RULE = {
+  urlContains: "/contact",
+  matchType: "pathname" as const,
+  greeting: "Want to talk with the team?",
+  teaserGreeting: "Need a hand? Ask us anything.",
+};
+
+function teaserBody(el: { lastChild?: { textContent: string } } | undefined) {
+  return el?.lastChild?.textContent || "";
+}
+
+{
+  const longGreeting = PRICING_PAGE_RULE_FIXTURE.greeting;
+  assert.ok(fallbackPageRuleTeaserFromGreeting(longGreeting).length <= 140);
+  assert.notEqual(fallbackPageRuleTeaserFromGreeting(longGreeting), longGreeting);
+  assert.equal(
+    resolveLocalizedPageRuleTeaser({ locale: "en", ...PRICING_PAGE_RULE_FIXTURE }),
+    PRICING_PAGE_RULE_TEASER.en,
+  );
+  assert.equal(
+    resolveLocalizedPageRuleTeaser({ locale: "es", ...PRICING_PAGE_RULE_FIXTURE }),
+    PRICING_PAGE_RULE_TEASER.es,
+  );
+  assert.equal(
+    resolveLocalizedPageRuleTeaser({ locale: "he", ...PRICING_PAGE_RULE_FIXTURE }),
+    PRICING_PAGE_RULE_TEASER.he,
+  );
+  const legacy = resolveLocalizedPageRuleTeaser({
+    locale: "en",
+    greeting: "Questions about pricing? I can walk you through every plan in detail for several minutes.",
+  });
+  assert.ok(legacy.startsWith("Questions about pricing?"));
+  assert.ok(!legacy.includes("several minutes"));
+  assert.equal(
+    decidePageRuleTeaser({
+      openBehavior: "teaser",
+      chatOpen: false,
+      deviceAllowed: true,
+      ruleKey: "pathname:/pricing",
+      teaserText: PRICING_PAGE_RULE_TEASER.en,
+      alreadyShownForRule: false,
+      cooldownActive: false,
+      humanTakeover: true,
+      pendingVisitorInput: false,
+    }),
+    "none",
+  );
+  assert.equal(pageRuleTeaserCooldownActive(100, 100 + PAGE_RULE_TEASER_COOLDOWN_MS - 1), true);
+  assert.equal(pageRuleTeaserCooldownActive(100, 100 + PAGE_RULE_TEASER_COOLDOWN_MS), false);
+}
+
+{
+  const home = bootWidget({
+    href: "https://www.whachatcrm.com/",
+    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    timerMode: "queue",
+  });
+  assert.ok(home.launcher);
+  home.flushTimers(1200);
+  assert.equal(home.teaser?.style.opacity, "1");
+  assert.equal(home.teaser?.attrs["data-wcw-teaser-kind"], "global");
+  assert.equal(teaserBody(home.teaser).includes("estimate savings"), false);
+  home.historyObj.pushState({}, "", "/pricing");
+  assert.equal(home.locationObj.pathname, "/pricing");
+  assert.equal(home.teaser?.style.opacity, "0");
+  home.flushTimers(1200);
+  assert.equal(home.teaser?.style.opacity, "1");
+  assert.equal(home.teaser?.attrs["data-wcw-teaser-kind"], "page");
+  assert.equal(teaserBody(home.teaser), PRICING_PAGE_RULE_TEASER.en);
+  assert.ok(home.launcher);
+}
+
+{
+  const direct = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    timerMode: "queue",
+  });
+  direct.flushTimers(1200);
+  assert.equal(direct.teaser?.attrs["data-wcw-teaser-kind"], "page");
+  assert.equal(teaserBody(direct.teaser), PRICING_PAGE_RULE_TEASER.en);
+  assert.notEqual(teaserBody(direct.teaser), PRICING_PAGE_RULE_FIXTURE.greeting);
+  const click = direct.teaser?.listeners.click?.[0];
+  assert.ok(click);
+  click();
+  const findTag = (els: MockEl[], tag: string): MockEl | undefined => {
+    for (const el of els) {
+      if (el.tag === tag) return el;
+      const nested = findTag(el.children || [], tag);
+      if (nested) return nested;
+    }
+  };
+  const iframe = findTag(direct.created, "iframe");
+  assert.ok(iframe);
+  const src = String(iframe!.src || iframe!.attrs.src || "");
+  assert.match(src, /greeting=/);
+  assert.ok(decodeURIComponent(src).includes("estimate savings"));
+  assert.equal(direct.launcher?.style.opacity === "0", false);
+}
+
+{
+  const pending = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    timerMode: "queue",
+  });
+  pending.historyObj.pushState({}, "", "/");
+  pending.flushTimers(1200);
+  assert.notEqual(pending.teaser?.attrs["data-wcw-teaser-kind"], "page");
+  assert.ok(!String(pending.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+}
+
+{
+  const again = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    timerMode: "queue",
+    pageTeaserShown: ["pathname:/pricing"],
+  });
+  again.flushTimers(1200);
+  assert.notEqual(again.teaser?.style.opacity, "1");
+  assert.ok(again.launcher);
+}
+
+{
+  const rules = [{ ...PRICING_PAGE_RULE_FIXTURE }, CONTACT_RULE];
+  const rapid = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: rules,
+    timerMode: "queue",
+  });
+  rapid.flushTimers(1200);
+  assert.equal(rapid.teaser?.attrs["data-wcw-teaser-kind"], "page");
+  rapid.historyObj.pushState({}, "", "/contact");
+  rapid.flushTimers(1200);
+  assert.notEqual(teaserBody(rapid.teaser), CONTACT_RULE.teaserGreeting);
+  rapid.advanceClock(PAGE_RULE_TEASER_COOLDOWN_MS + 1);
+  rapid.historyObj.pushState({}, "", "/");
+  rapid.historyObj.pushState({}, "", "/contact");
+  rapid.flushTimers(1200);
+  assert.equal(teaserBody(rapid.teaser), CONTACT_RULE.teaserGreeting);
+}
+
+{
+  const gated = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    timerMode: "queue",
+  });
+  gated.dispatchMessage({
+    source: "wcw",
+    type: "wcw-teaser-gate",
+    widgetId: WIDGET_ID,
+    blocked: true,
+  });
+  gated.flushTimers(1200);
+  assert.notEqual(gated.teaser?.style.opacity, "1");
+  assert.ok(gated.launcher);
+}
+
+{
+  const es = visitorSafeWidgetPageRules({ pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }] }, "es");
+  const he = visitorSafeWidgetPageRules({ pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }] }, "he");
+  assert.equal(es[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.es);
+  assert.equal(he[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.he);
+  assert.notEqual(es[0]?.teaserGreeting, es[0]?.greeting);
 }
 
 console.log("webchat-launcher-boot-repro: ok");

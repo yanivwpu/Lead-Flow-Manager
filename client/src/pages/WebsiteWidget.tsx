@@ -145,15 +145,16 @@ export interface WidgetPageRule {
   urlContains: string;
   matchType?: "contains" | "pathname" | "pathname_prefix";
   greeting: string;
+  teaserGreeting?: string;
   prefilledMessage: string;
   suggestedQuestions?: string[];
   chatbotFlowId?: string;
   ctaLabel?: string;
   ctaUrl?: string;
   localized?: {
-    en?: { greeting?: string; suggestedQuestions?: string[] };
-    es?: { greeting?: string; suggestedQuestions?: string[] };
-    he?: { greeting?: string; suggestedQuestions?: string[] };
+    en?: { greeting?: string; teaserGreeting?: string; suggestedQuestions?: string[] };
+    es?: { greeting?: string; teaserGreeting?: string; suggestedQuestions?: string[] };
+    he?: { greeting?: string; teaserGreeting?: string; suggestedQuestions?: string[] };
   };
 }
 
@@ -262,6 +263,7 @@ function normalizePageRulesFromServer(
     urlContains?: string;
     matchType?: WidgetPageRule["matchType"];
     greeting?: string;
+    teaserGreeting?: string;
     prefilledMessage?: string;
     suggestedQuestions?: string[];
     chatbotFlowId?: string;
@@ -278,6 +280,7 @@ function normalizePageRulesFromServer(
         ? r.matchType
         : undefined,
     greeting: String(r.greeting ?? ""),
+    teaserGreeting: String(r.teaserGreeting ?? ""),
     prefilledMessage: String(r.prefilledMessage ?? ""),
     suggestedQuestions: Array.isArray(r.suggestedQuestions)
       ? r.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
@@ -290,18 +293,21 @@ function normalizePageRulesFromServer(
         ? {
             en: {
               greeting: String(r.localized.en?.greeting || ""),
+              teaserGreeting: String(r.localized.en?.teaserGreeting || ""),
               suggestedQuestions: Array.isArray(r.localized.en?.suggestedQuestions)
                 ? r.localized.en!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
                 : [],
             },
             es: {
               greeting: String(r.localized.es?.greeting || ""),
+              teaserGreeting: String(r.localized.es?.teaserGreeting || ""),
               suggestedQuestions: Array.isArray(r.localized.es?.suggestedQuestions)
                 ? r.localized.es!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
                 : [],
             },
             he: {
               greeting: String(r.localized.he?.greeting || ""),
+              teaserGreeting: String(r.localized.he?.teaserGreeting || ""),
               suggestedQuestions: Array.isArray(r.localized.he?.suggestedQuestions)
                 ? r.localized.he!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
                 : [],
@@ -373,6 +379,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     urlContains: string;
     matchType?: WidgetPageRule["matchType"];
     greeting: string;
+    teaserGreeting?: string;
     prefilledMessage: string;
     suggestedQuestions?: string[];
     chatbotFlowId?: string;
@@ -410,10 +417,11 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     offlineMessage: settings.offlineMessage || "",
     localized: settings.localized || {},
     pageRules: settings.pageRules.map(
-      ({ urlContains, matchType, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
+      ({ urlContains, matchType, greeting, teaserGreeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
         urlContains,
         ...(matchType ? { matchType } : {}),
         greeting,
+        ...(teaserGreeting ? { teaserGreeting } : {}),
         prefilledMessage,
         suggestedQuestions: suggestedQuestions?.filter(Boolean).slice(0, 8) || [],
         chatbotFlowId: chatbotFlowId || "",
@@ -1727,7 +1735,7 @@ export function WebsiteWidget() {
                     <Input
                       value={rule.greeting}
                       onChange={(e) => updatePageRule(index, { greeting: e.target.value })}
-                      placeholder="Bubble and chat welcome"
+                      placeholder="Full greeting inside the open chat"
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-greeting-${index}`}
                     />
@@ -1761,6 +1769,48 @@ export function WebsiteWidget() {
                         placeholder="Hebrew greeting (optional)"
                         className="h-9 text-sm border-gray-200 bg-white"
                         data-testid={`input-rule-greeting-he-${index}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-gray-600">Teaser (closed widget)</Label>
+                    <Input
+                      value={rule.teaserGreeting || ""}
+                      onChange={(e) => updatePageRule(index, { teaserGreeting: e.target.value })}
+                      placeholder="Optional short bubble — leave empty to use a truncated greeting"
+                      className="h-9 text-sm border-gray-200 bg-white"
+                      data-testid={`input-rule-teaser-${index}`}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        {...builderLocalizedInputProps("es")}
+                        value={rule.localized?.es?.teaserGreeting || ""}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              es: { ...(rule.localized?.es || {}), teaserGreeting: e.target.value },
+                            },
+                          })
+                        }
+                        placeholder="Spanish teaser (optional)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-teaser-es-${index}`}
+                      />
+                      <Input
+                        {...builderLocalizedInputProps("he")}
+                        value={rule.localized?.he?.teaserGreeting || ""}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              he: { ...(rule.localized?.he || {}), teaserGreeting: e.target.value },
+                            },
+                          })
+                        }
+                        placeholder="Hebrew teaser (optional)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-teaser-he-${index}`}
                       />
                     </div>
                   </div>

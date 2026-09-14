@@ -34,7 +34,11 @@ import {
   writeShownPageRuleKeys,
 } from "@shared/webchatPageRuleEngagement";
 import { pageRuleChatbotTriggerGates } from "@shared/webchatPageRuleChatbotGates";
-import { PRICING_PAGE_RULE_ACTION, PRICING_PAGE_RULE_FIXTURE } from "@shared/webchatPageRuleFixtures";
+import {
+  decidePageRuleTeaser,
+  resolveLocalizedPageRuleTeaser,
+} from "@shared/webchatPageRuleTeaser";
+import { PRICING_PAGE_RULE_ACTION, PRICING_PAGE_RULE_FIXTURE, PRICING_PAGE_RULE_TEASER } from "@shared/webchatPageRuleFixtures";
 import { validateWidgetPageRules } from "@shared/webchatWidgetSettings";
 import { visitorSafeWidgetPageRules } from "@shared/webchatWidgetLauncher";
 import { buildWebchatPublicScript } from "../server/webchatPublicScript";
@@ -302,6 +306,10 @@ test("SPA widget.js posts page context and does not reload the iframe", () => {
   assert.match(js, /wcw-parent/);
   assert.match(js, /function postPageContext/);
   assert.match(js, /pathname_prefix/);
+  assert.match(js, /wcw-pr-teaser/);
+  assert.match(js, /wcw-teaser-gate/);
+  assert.match(js, /teaserGreeting/);
+  assert.doesNotMatch(js, /Comparing plans\? I can help you choose Free or Pro/);
   const sync = js.slice(js.indexOf("function syncFrameSrc()"), js.indexOf("function loadIframe()"));
   assert.doesNotMatch(sync, /fr\.src\s*=/);
   assert.match(sync, /postPageContext/);
@@ -309,7 +317,7 @@ test("SPA widget.js posts page context and does not reload the iframe", () => {
   assert.match(frame, /parseTrustedParentPageContextMessage/);
   assert.match(frame, /setParentPageHref/);
   assert.match(frame, /webchat-page-rule-card/);
-  assert.match(frame, /shouldApplyPageRulePrefill/);
+  assert.match(frame, /webchatTeaserGateMessage/);
   assert.doesNotMatch(frame, /PRICING_PAGE_RULE_FIXTURE/);
   assert.doesNotMatch(js, /whachatcrm\.com/);
 });
@@ -377,6 +385,8 @@ test("visitor-safe launcher includes matchType and never ships flow ids or the f
   );
   assert.equal(rules[0]?.matchType, "pathname");
   assert.equal(rules[0]?.suggestedQuestions[0], "Comparar Free y Pro");
+  assert.equal(rules[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.es);
+  assert.notEqual(rules[0]?.teaserGreeting, rules[0]?.greeting);
   assert.equal("chatbotFlowId" in rules[0], false);
   const defaults = read("shared/webchatWidgetSettings.ts");
   assert.match(defaults, /pageRules: \[\]/);
@@ -384,12 +394,52 @@ test("visitor-safe launcher includes matchType and never ships flow ids or the f
   const website = read("client/src/pages/WebsiteWidget.tsx");
   assert.match(website, /select-rule-match/);
   assert.match(website, /input-rule-questions-es/);
+  assert.match(website, /input-rule-teaser/);
+  assert.match(website, /teaserGreeting/);
+});
+
+test("page-rule teaser copy is short, localized, and suppressed for takeover or pending input", () => {
+  assert.equal(resolveLocalizedPageRuleTeaser({ locale: "en", ...PRICING_PAGE_RULE_FIXTURE }), PRICING_PAGE_RULE_TEASER.en);
+  assert.equal(resolveLocalizedPageRuleTeaser({ locale: "es", ...PRICING_PAGE_RULE_FIXTURE }), PRICING_PAGE_RULE_TEASER.es);
+  assert.equal(resolveLocalizedPageRuleTeaser({ locale: "he", ...PRICING_PAGE_RULE_FIXTURE }), PRICING_PAGE_RULE_TEASER.he);
+  const legacy = { urlContains: "/about", greeting: "Hello there from a long welcome that should not fill the bubble by itself if we only take the first sentence." };
+  const fallback = resolveLocalizedPageRuleTeaser(legacy);
+  assert.ok(fallback.length <= 140);
+  assert.notEqual(fallback, PRICING_PAGE_RULE_FIXTURE.greeting);
+  assert.equal(
+    decidePageRuleTeaser({
+      openBehavior: "teaser",
+      chatOpen: true,
+      deviceAllowed: true,
+      ruleKey: "pathname:/pricing",
+      teaserText: PRICING_PAGE_RULE_TEASER.en,
+      alreadyShownForRule: false,
+      cooldownActive: false,
+      humanTakeover: false,
+      pendingVisitorInput: false,
+    }),
+    "none",
+  );
+  assert.equal(
+    decidePageRuleTeaser({
+      openBehavior: "teaser",
+      chatOpen: false,
+      deviceAllowed: true,
+      ruleKey: "pathname:/pricing",
+      teaserText: PRICING_PAGE_RULE_TEASER.en,
+      alreadyShownForRule: false,
+      cooldownActive: false,
+      humanTakeover: false,
+      pendingVisitorInput: true,
+    }),
+    "none",
+  );
 });
 
 test("cross-tenant page-rule flow still requires workspace ownership", () => {
   const routes = read("server/routes.ts");
   assert.match(routes, /getChatbotFlowForWorkspace/);
-  assert.match(routes, /matchType: z\.enum\(\["contains", "pathname", "pathname_prefix"\]\)/);
+  assert.match(routes, /teaserGreeting: z\.string\(\)\.max\(200\)\.optional\(\)/);
   const webhooks = read("server/routes/webhooks.ts");
   assert.match(webhooks, /getChatbotFlowForWorkspace\(userId, matched\.chatbotFlowId\)/);
 });

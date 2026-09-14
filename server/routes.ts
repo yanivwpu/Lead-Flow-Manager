@@ -1295,6 +1295,7 @@ export async function registerRoutes(
 
   const widgetPageRuleLocaleSchema = z.object({
     greeting: z.string().max(500).optional(),
+    teaserGreeting: z.string().max(200).optional(),
     suggestedQuestions: z.array(z.string().max(200)).max(8).optional(),
   });
 
@@ -1302,6 +1303,7 @@ export async function registerRoutes(
     urlContains: z.string().max(500),
     matchType: z.enum(["contains", "pathname", "pathname_prefix"]).optional(),
     greeting: z.string().max(500),
+    teaserGreeting: z.string().max(200).optional(),
     prefilledMessage: z.string().max(2000),
     suggestedQuestions: z.array(z.string().max(200)).max(8).optional(),
     chatbotFlowId: z.string().max(64).optional().or(z.literal("")),

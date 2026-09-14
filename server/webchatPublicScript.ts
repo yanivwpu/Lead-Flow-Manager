@@ -3,6 +3,15 @@
  * /api/webchat/:id/settings with cache: "no-store". Layout CSS comes from that payload.
  */
 
+import {
+  PAGE_RULE_TEASER_AT_STORAGE_PREFIX,
+  PAGE_RULE_TEASER_COOLDOWN_MS,
+  PAGE_RULE_TEASER_DELAY_MS,
+  PAGE_RULE_TEASER_HOLD_MS,
+  PAGE_RULE_TEASER_MAX,
+  PAGE_RULE_TEASER_STORAGE_PREFIX,
+} from "@shared/webchatPageRuleTeaser";
+
 export type WebchatPublicScriptInput = {
   /** Platform origin fallback when document.currentScript is missing. */
   origin: string;
@@ -80,6 +89,15 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     var btn, bubble, iframeLoaded = false;
     var revealed = false;
     var TEASER_KEY = 'wcw-teaser-' + WIDGET_ID;
+    var PAGE_TEASER_KEY = ${JSON.stringify(PAGE_RULE_TEASER_STORAGE_PREFIX)} + ':' + WIDGET_ID;
+    var PAGE_TEASER_AT_KEY = ${JSON.stringify(PAGE_RULE_TEASER_AT_STORAGE_PREFIX)} + ':' + WIDGET_ID;
+    var PAGE_TEASER_MAX = ${PAGE_RULE_TEASER_MAX};
+    var PAGE_TEASER_DELAY_MS = ${PAGE_RULE_TEASER_DELAY_MS};
+    var PAGE_TEASER_HOLD_MS = ${PAGE_RULE_TEASER_HOLD_MS};
+    var PAGE_TEASER_COOLDOWN_MS = ${PAGE_RULE_TEASER_COOLDOWN_MS};
+    var pendingTeaserTimer = null;
+    var teaserGen = 0;
+    var teaserBlocked = false;
 
     function prefersReducedMotion() {
       try {
@@ -170,9 +188,160 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     }
 
     function teaserText() {
-      var r = activeRule();
-      if (r && r.greeting) return r.greeting;
       return TEASER_TEXT || DEFAULT_WELCOME;
+    }
+
+    function ruleKey(rule) {
+      if (!rule) return '';
+      var matchType = rule.matchType === 'pathname' || rule.matchType === 'pathname_prefix' ? rule.matchType : 'contains';
+      var fragment = String(rule.urlContains || '').trim().toLowerCase().slice(0, 200);
+      if (!fragment) return '';
+      return matchType + ':' + fragment;
+    }
+
+    function fallbackPageRuleTeaser(greeting) {
+      var t = String(greeting || '').trim();
+      if (!t) return '';
+      var cut = t;
+      var q = t.indexOf('?');
+      var d = t.indexOf('.');
+      var b = t.indexOf('!');
+      var end = -1;
+      if (q !== -1) end = q;
+      if (d !== -1 && (end === -1 || d < end)) end = d;
+      if (b !== -1 && (end === -1 || b < end)) end = b;
+      if (end !== -1) cut = t.slice(0, end + 1);
+      if (cut.length <= PAGE_TEASER_MAX) return cut;
+      var sliced = cut.slice(0, PAGE_TEASER_MAX - 3).replace(/\\s+\\S*$/, '').replace(/\\s+$/, '');
+      return (sliced || cut.slice(0, PAGE_TEASER_MAX - 3)).trim() + '...';
+    }
+
+    function pageRuleTeaserCopy(rule) {
+      if (!rule) return '';
+      var explicit = String(rule.teaserGreeting || '').trim();
+      if (explicit) return explicit.slice(0, 200);
+      return fallbackPageRuleTeaser(rule.greeting);
+    }
+
+    function readPageTeaserKeys() {
+      try {
+        var raw = localStorage.getItem(PAGE_TEASER_KEY);
+        if (!raw) return [];
+        var parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        var out = [];
+        for (var i = 0; i < parsed.length && out.length < 30; i++) {
+          var k = String(parsed[i] || '').trim().slice(0, 220);
+          if (k && k.indexOf('://') === -1) out.push(k);
+        }
+        return out;
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function pageTeaserShown(key) {
+      if (!key) return false;
+      var keys = readPageTeaserKeys();
+      return keys.indexOf(key) !== -1;
+    }
+
+    function markPageTeaserShown(key) {
+      if (!key || key.indexOf('://') !== -1) return;
+      var keys = readPageTeaserKeys();
+      if (keys.indexOf(key) !== -1) return;
+      keys.push(key);
+      try { localStorage.setItem(PAGE_TEASER_KEY, JSON.stringify(keys.slice(0, 30))); } catch (e) {}
+    }
+
+    function pageTeaserCooldownActive() {
+      try {
+        var n = Number(localStorage.getItem(PAGE_TEASER_AT_KEY) || '0');
+        if (!n || n !== n || n <= 0) return false;
+        return (Date.now() - n) < PAGE_TEASER_COOLDOWN_MS;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function markPageTeaserCooldown() {
+      try { localStorage.setItem(PAGE_TEASER_AT_KEY, String(Date.now())); } catch (e) {}
+    }
+
+    function hideTeaserBubble() {
+      if (!bubble) return;
+      bubble.style.opacity = '0';
+      bubble.style.pointerEvents = 'none';
+    }
+
+    function showTeaserBubble(text, kind) {
+      if (!bubble || chatOpen) return;
+      var body = bubble.lastChild;
+      if (body && body.textContent !== undefined) body.textContent = text;
+      try { bubble.setAttribute('data-wcw-teaser-kind', kind || ''); } catch (e) {}
+      bubble.style.opacity = '1';
+      bubble.style.pointerEvents = 'auto';
+    }
+
+    function cancelPendingTeaser() {
+      teaserGen += 1;
+      if (pendingTeaserTimer) {
+        clearTimeout(pendingTeaserTimer);
+        pendingTeaserTimer = null;
+      }
+    }
+
+    function scheduleGlobalTeaser() {
+      if (OPEN_BEHAVIOR !== 'teaser' || teaserAlreadyShown() || chatOpen) return false;
+      markTeaserShown();
+      var gen = teaserGen;
+      var delay = prefersReducedMotion() ? 0 : PAGE_TEASER_DELAY_MS;
+      var hold = prefersReducedMotion() ? 0 : PAGE_TEASER_HOLD_MS;
+      pendingTeaserTimer = setTimeout(function() {
+        if (gen !== teaserGen || chatOpen) return;
+        showTeaserBubble(teaserText(), 'global');
+        if (!hold) return;
+        pendingTeaserTimer = setTimeout(function() {
+          if (gen !== teaserGen || iframeLoaded) return;
+          hideTeaserBubble();
+        }, hold);
+      }, delay);
+      return true;
+    }
+
+    function schedulePageRuleTeaser() {
+      if (OPEN_BEHAVIOR !== 'teaser' || chatOpen || !allowDevice() || teaserBlocked) return false;
+      var r = activeRule();
+      var key = ruleKey(r);
+      var text = pageRuleTeaserCopy(r);
+      if (!key || !text || pageTeaserShown(key) || pageTeaserCooldownActive()) return false;
+      var gen = teaserGen;
+      var delay = prefersReducedMotion() ? 0 : PAGE_TEASER_DELAY_MS;
+      var hold = prefersReducedMotion() ? 0 : PAGE_TEASER_HOLD_MS;
+      pendingTeaserTimer = setTimeout(function() {
+        if (gen !== teaserGen || chatOpen || teaserBlocked) return;
+        var now = activeRule();
+        if (ruleKey(now) !== key) return;
+        showTeaserBubble(text, 'page');
+        markPageTeaserShown(key);
+        markPageTeaserCooldown();
+        if (!hold) return;
+        pendingTeaserTimer = setTimeout(function() {
+          if (gen !== teaserGen) return;
+          hideTeaserBubble();
+        }, hold);
+      }, delay);
+      return true;
+    }
+
+    function planTeasers() {
+      if (!revealed || chatOpen || OPEN_BEHAVIOR !== 'teaser' || !allowDevice()) return;
+      cancelPendingTeaser();
+      if (activeRule()) {
+        schedulePageRuleTeaser();
+        return;
+      }
+      scheduleGlobalTeaser();
     }
 
     function iframeSrc() {
@@ -260,21 +429,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         if (!chatOpen) toggleChat();
       });
       document.body.appendChild(bubble);
-      if (OPEN_BEHAVIOR !== 'teaser' || teaserAlreadyShown()) return;
-      markTeaserShown();
-      var teaserDelay = prefersReducedMotion() ? 0 : 1200;
-      var teaserHold = prefersReducedMotion() ? 0 : 8000;
-      setTimeout(function() {
-        bubble.style.opacity = '1';
-        bubble.style.pointerEvents = 'auto';
-        if (!teaserHold) return;
-        setTimeout(function() {
-          if (!iframeLoaded) {
-            bubble.style.opacity = '0';
-            bubble.style.pointerEvents = 'none';
-          }
-        }, teaserHold);
-      }, teaserDelay);
+      planTeasers();
     }
 
     var brandingReady = false;
@@ -346,11 +501,10 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     }
 
     function onParentNavigate() {
-      if (bubble && OPEN_BEHAVIOR === 'teaser' && !teaserAlreadyShown()) {
-        var body = bubble.lastChild;
-        if (body && body.textContent !== undefined) body.textContent = teaserText();
-      }
+      hideTeaserBubble();
+      cancelPendingTeaser();
       postPageContext();
+      planTeasers();
     }
 
     function hidePanelFrame(immediate) {
@@ -387,10 +541,20 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       try {
         if (e.origin !== ORIGIN) return;
         var data = e.data;
-        if (!data || data.source !== 'wcw' || data.type !== 'wcw-branding-ready') return;
+        if (!data || data.source !== 'wcw') return;
         if (String(data.widgetId || '') !== String(WIDGET_ID)) return;
-        brandingReady = true;
-        revealPanelIfOpen();
+        if (data.type === 'wcw-branding-ready') {
+          brandingReady = true;
+          revealPanelIfOpen();
+          return;
+        }
+        if (data.type === 'wcw-teaser-gate') {
+          teaserBlocked = data.blocked === true;
+          if (teaserBlocked) {
+            cancelPendingTeaser();
+            hideTeaserBubble();
+          }
+        }
       } catch (err) {}
     }
     window.addEventListener('message', onHostMessage);
@@ -433,10 +597,8 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       chatOpen = !chatOpen;
       setLauncherOpen(chatOpen);
       if (chatOpen) {
-        if (bubble) {
-          bubble.style.opacity = '0';
-          bubble.style.pointerEvents = 'none';
-        }
+        cancelPendingTeaser();
+        hideTeaserBubble();
         if (!frameContainer) {
           frameContainer = loadIframe();
         } else {

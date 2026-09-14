@@ -7,12 +7,14 @@ import { sanitizePlainWidgetText } from "./webchatWidgetBranding";
 import type { WebchatChromeLayout } from "./webchatWidgetChrome";
 import { toVisitorSafePublicWebchatPayload } from "./webchatWidgetBranding";
 import { resolveLocalizedPageRuleGreeting, resolveLocalizedPageRuleQuestions } from "./webchatWidgetCopyI18n";
+import { resolveLocalizedPageRuleTeaser } from "./webchatPageRuleTeaser";
 import { normalizePageRuleMatchType, type WidgetPageRuleMatchType } from "./webchatPageRuleMatch";
 
 export type VisitorSafeWidgetPageRule = {
   urlContains: string;
   matchType: WidgetPageRuleMatchType;
   greeting: string;
+  teaserGreeting: string;
   prefilledMessage: string;
   suggestedQuestions: string[];
 };
@@ -83,6 +85,12 @@ export function visitorSafeWidgetPageRules(
           greeting: r.greeting,
           localized: r.localized,
           fallback: "",
+        }),
+        teaserGreeting: resolveLocalizedPageRuleTeaser({
+          locale,
+          teaserGreeting: r.teaserGreeting,
+          greeting: r.greeting,
+          localized: r.localized,
         }),
         prefilledMessage: sanitizePlainWidgetText(r.prefilledMessage, 2000),
         suggestedQuestions: questions,

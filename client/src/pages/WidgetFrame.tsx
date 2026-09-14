@@ -39,6 +39,7 @@ import {
   type WidgetChromeCopy,
 } from "@shared/webchatWidgetLocale";
 import { parseTrustedParentPageContextMessage } from "@shared/webchatPageContextMessage";
+import { webchatTeaserGateMessage } from "@shared/webchatPageRuleTeaser";
 import {
   decidePageRuleEngagement,
   readShownPageRuleKeys,
@@ -552,6 +553,28 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       markRuleShown(pageRuleKey);
     }
   }, [pageRulePresentation, pageRuleKey, markRuleShown, visitorId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const payload = webchatTeaserGateMessage(userId, humanTakeover || pendingVisitorInput);
+    let target = "*";
+    if (parentPageHref) {
+      try {
+        target = new URL(parentPageHref).origin;
+      } catch {
+        target = "*";
+      }
+    }
+    try {
+      window.parent.postMessage(payload, target);
+    } catch {
+      try {
+        window.parent.postMessage(payload, "*");
+      } catch {
+        /* parent may be inaccessible */
+      }
+    }
+  }, [userId, humanTakeover, pendingVisitorInput, parentPageHref]);
 
   useLayoutEffect(() => {
     const decision = decideWebchatScrollAction({

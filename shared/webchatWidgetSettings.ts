@@ -25,6 +25,7 @@ export type WidgetPageRuleShape = {
   urlContains?: string;
   matchType?: unknown;
   greeting?: string;
+  teaserGreeting?: string;
   prefilledMessage?: string;
   suggestedQuestions?: unknown;
   chatbotFlowId?: unknown;
