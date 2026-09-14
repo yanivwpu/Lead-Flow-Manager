@@ -292,6 +292,8 @@ test("untrusted page-context postMessage is rejected; same page is not a duplica
 
 test("SPA widget.js posts page context and does not reload the iframe", () => {
   const js = buildWebchatPublicScript({ origin: "https://app.example.com" });
+  assert.doesNotThrow(() => new Function(js));
+  assert.equal(/https\?:\/\/\//.test(js), false);
   assert.match(js, /hist\.pushState/);
   assert.match(js, /hist\.replaceState/);
   assert.match(js, /popstate/);

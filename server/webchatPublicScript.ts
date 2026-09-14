@@ -150,7 +150,9 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       var href = '';
       try { href = window.location.href || ''; } catch (e) {}
       for (var i = 0; i < rules.length; i++) {
-        if (ruleMatches(rules[i], href)) return rules[i];
+        try {
+          if (ruleMatches(rules[i], href)) return rules[i];
+        } catch (matchErr) {}
       }
       return null;
     }
@@ -288,7 +290,8 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       try { href = window.location.href || ''; } catch (e) {}
       try { pageTitle = document.title || ''; } catch (e2) {}
       try {
-        if (document.referrer && /^https?:\/\//i.test(document.referrer)) referrer = document.referrer;
+        var ref = String(document.referrer || '');
+        if (ref.indexOf('https://') === 0 || ref.indexOf('http://') === 0) referrer = ref;
       } catch (e3) {}
       return {
         source: 'wcw-parent',
@@ -316,24 +319,30 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       if (historyHooked) return;
       historyHooked = true;
       var hist = window.history;
-      if (hist && typeof hist.pushState === 'function') {
-        var origPush = hist.pushState;
-        hist.pushState = function() {
-          var ret = origPush.apply(this, arguments);
-          onParentNavigate();
-          return ret;
-        };
-      }
-      if (hist && typeof hist.replaceState === 'function') {
-        var origReplace = hist.replaceState;
-        hist.replaceState = function() {
-          var ret = origReplace.apply(this, arguments);
-          onParentNavigate();
-          return ret;
-        };
-      }
-      window.addEventListener('popstate', onParentNavigate);
-      window.addEventListener('hashchange', onParentNavigate);
+      try {
+        if (hist && typeof hist.pushState === 'function') {
+          var origPush = hist.pushState;
+          hist.pushState = function() {
+            var ret = origPush.apply(this, arguments);
+            try { onParentNavigate(); } catch (navErr) {}
+            return ret;
+          };
+        }
+      } catch (pushErr) {}
+      try {
+        if (hist && typeof hist.replaceState === 'function') {
+          var origReplace = hist.replaceState;
+          hist.replaceState = function() {
+            var ret = origReplace.apply(this, arguments);
+            try { onParentNavigate(); } catch (navErr2) {}
+            return ret;
+          };
+        }
+      } catch (replaceErr) {}
+      try {
+        window.addEventListener('popstate', onParentNavigate);
+        window.addEventListener('hashchange', onParentNavigate);
+      } catch (listenErr) {}
     }
 
     function onParentNavigate() {
@@ -474,9 +483,9 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       if (revealed) return;
       if (!allowDevice()) return;
       revealed = true;
-      createButton();
-      createBubble();
-      document.addEventListener('keydown', onKey);
+      try { createButton(); } catch (btnErr) {}
+      try { createBubble(); } catch (bubbleErr) {}
+      try { document.addEventListener('keydown', onKey); } catch (keyErr) {}
     }
 
     function scheduleReveal() {
@@ -531,7 +540,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
 
     function boot() {
       if (!document.body) return;
-      hookHistory();
+      try { hookHistory(); } catch (hookErr) {}
       scheduleReveal();
     }
 

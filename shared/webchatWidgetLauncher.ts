@@ -66,27 +66,31 @@ export function visitorSafeWidgetPageRules(
   const rules = Array.isArray(settings.pageRules) ? settings.pageRules : [];
   const out: VisitorSafeWidgetPageRule[] = [];
   for (const raw of rules) {
-    const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-    const urlContains = sanitizePlainWidgetText(r.urlContains, 500);
-    if (!urlContains) continue;
-    const questions = resolveLocalizedPageRuleQuestions({
-      locale,
-      suggestedQuestions: r.suggestedQuestions,
-      localized: r.localized,
-    });
-    out.push({
-      urlContains,
-      matchType: normalizePageRuleMatchType(r.matchType),
-      greeting: resolveLocalizedPageRuleGreeting({
+    try {
+      const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      const urlContains = sanitizePlainWidgetText(r.urlContains, 500);
+      if (!urlContains) continue;
+      const questions = resolveLocalizedPageRuleQuestions({
         locale,
-        greeting: r.greeting,
+        suggestedQuestions: r.suggestedQuestions,
         localized: r.localized,
-        fallback: "",
-      }),
-      prefilledMessage: sanitizePlainWidgetText(r.prefilledMessage, 2000),
-      suggestedQuestions: questions,
-    });
-    if (out.length >= 30) break;
+      });
+      out.push({
+        urlContains,
+        matchType: normalizePageRuleMatchType(r.matchType),
+        greeting: resolveLocalizedPageRuleGreeting({
+          locale,
+          greeting: r.greeting,
+          localized: r.localized,
+          fallback: "",
+        }),
+        prefilledMessage: sanitizePlainWidgetText(r.prefilledMessage, 2000),
+        suggestedQuestions: questions,
+      });
+      if (out.length >= 30) break;
+    } catch {
+      continue;
+    }
   }
   return out;
 }

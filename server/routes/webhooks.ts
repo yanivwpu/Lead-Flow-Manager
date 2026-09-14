@@ -330,7 +330,12 @@ export function registerWebhookRoutes(app: Express): void {
         explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
         pathname: hrefParam,
       });
-      const matched = hrefParam ? matchWidgetPageRule(ws, hrefParam, locale) : null;
+      let matched = null;
+      try {
+        matched = hrefParam ? matchWidgetPageRule(ws, hrefParam, locale) : null;
+      } catch {
+        matched = null;
+      }
       const appOrigin =
         process.env.APP_URL ||
         `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;

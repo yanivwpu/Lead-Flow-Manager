@@ -150,9 +150,14 @@ export function matchWidgetPageRule(
 ): MatchedWidgetPageRule | null {
   const rules = Array.isArray(settings?.pageRules) ? settings!.pageRules : [];
   for (const raw of rules) {
-    const r = raw && typeof raw === "object" ? (raw as WidgetPageRuleMatchInput) : {};
-    if (!pageRuleMatchesHref(r, href)) continue;
-    return hydrateMatchedWidgetPageRule(r, locale);
+    try {
+      const r = raw && typeof raw === "object" ? (raw as WidgetPageRuleMatchInput) : {};
+      if (!pageRuleMatchesHref(r, href)) continue;
+      const hydrated = hydrateMatchedWidgetPageRule(r, locale);
+      if (hydrated) return hydrated;
+    } catch {
+      continue;
+    }
   }
   return null;
 }
