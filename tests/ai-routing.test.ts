@@ -37,6 +37,31 @@ test("pricing question → continue AI (info-seeking, not handoff)", () => {
   assert.equal(r.turnIntent, "info_seeking");
 });
 
+test("send the link again after Calendly resends booking", () => {
+  const r = resolveAiRouting({
+    inbound: "Can you send the link again?",
+    history: [
+      { role: "assistant", content: "Sure — you can pick a time here:\nhttps://calendly.com/whachatcrm/product-demo" },
+    ],
+  });
+  assert.equal(r.decision, "BOOK_APPOINTMENT");
+  assert.equal(r.reason, "booking_link_resend");
+  assert.equal(routingAllowsSchedulingLink(r), true);
+});
+
+test("thanks I'll pick a time after Calendly is acknowledgment, not a new booking", () => {
+  const r = resolveAiRouting({
+    inbound: "Thanks I'll pick a time",
+    history: [
+      { role: "user", content: "Book a demo" },
+      { role: "assistant", content: "Sure — you can pick a time here:\nhttps://calendly.com/whachatcrm/product-demo" },
+    ],
+  });
+  assert.equal(r.decision, "CONTINUE_AI");
+  assert.equal(r.reason, "booking_acknowledgment");
+  assert.equal(routingAllowsSchedulingLink(r), false);
+});
+
 test("schedule a call → book appointment", () => {
   const r = resolveAiRouting({ inbound: "Can we schedule a call tomorrow?" });
   assert.equal(r.decision, "BOOK_APPOINTMENT");

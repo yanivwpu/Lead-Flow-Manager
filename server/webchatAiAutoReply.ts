@@ -118,6 +118,8 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
   const completion = buildChatbotCompletionContactContext({
     customFields: contact?.customFields,
     name: contact?.name,
+    source: contact?.source,
+    sourceDetails: contact?.sourceDetails,
     leadSource: "webchat",
     conversationLanguage: control.conversationLanguage,
   });

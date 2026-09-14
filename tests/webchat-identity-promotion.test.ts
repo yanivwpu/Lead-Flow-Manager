@@ -195,6 +195,11 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   const promo = read("server/webchatIdentityPromotionService.ts");
   assert.match(promo, /eq\(contacts\.userId, params\.userId\)/);
   assert.match(promo, /contact\.userId !== params\.userId/);
+  assert.match(promo, /incoming\?: ValidatedWebchatIdentity/);
+  const calendlyWh = read("server/calendlyWebhook.ts");
+  assert.match(calendlyWh, /incoming,/);
+  assert.match(calendlyWh, /collectValidatedIdentity\(\{ name: inviteeName, email: inviteeEmail \}\)/);
+  assert.doesNotMatch(calendlyWh, /inviteeName === contact\.name/);
 }
 
 console.log("webchat-identity-promotion.test.ts: all assertions passed");

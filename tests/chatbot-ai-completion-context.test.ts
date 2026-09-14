@@ -40,6 +40,19 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   });
   assert.equal(ctx.visitorIntent, "Features & pricing");
   assert.equal(ctx.intent, "Features & pricing");
+  const anon = buildChatbotCompletionContactContext({
+    name: "Website Visitor",
+    source: "webchat",
+    customFields: { webchatIdentity: { status: "anonymous" } },
+    leadSource: "webchat",
+  });
+  assert.equal(anon.name, undefined);
+  const named = buildChatbotCompletionContactContext({
+    name: "Ada Lovelace",
+    source: "webchat",
+    leadSource: "webchat",
+  });
+  assert.equal(named.name, "Ada Lovelace");
 }
 
 {

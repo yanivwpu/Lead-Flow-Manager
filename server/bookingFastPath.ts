@@ -1,5 +1,14 @@
 import type { Contact, Conversation } from "@shared/schema";
-import { detectHighConfidenceBookingIntent, bookingIntentRouteLabel } from "@shared/bookingIntent";
+import {
+  detectBookingAcknowledgment,
+  detectBookingLinkResendRequest,
+  detectHighConfidenceBookingIntent,
+  bookingIntentRouteLabel,
+} from "@shared/bookingIntent";
+import {
+  formatPersonalizedBookingLinkReply,
+  usableVisitorPersonalizationFirstName,
+} from "@shared/visitorNamePersonalization";
 import { detectSellerConsultationBookingIntent } from "@shared/sellerIntent";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
@@ -14,14 +23,22 @@ import type { Channel } from "@shared/schema";
 const W3_CALENDLY_SENT_AT_KEY = "_w3CalendlyBookingSentAt";
 const BOOKING_FAST_PATH_THROTTLE_MS = 60_000;
 
-function firstName(contact: Contact): string {
-  const raw = (contact.name || "").trim() || "there";
-  return raw.split(/\s+/)[0] || "there";
+function personalizationFirstName(contact: Contact): string | null {
+  return usableVisitorPersonalizationFirstName({
+    name: contact.name,
+    source: contact.source,
+    sourceDetails: contact.sourceDetails,
+    customFields: contact.customFields,
+  });
 }
 
 function buildFallbackBookingReply(schedulingUrl: string, contact: Contact): string {
-  const name = firstName(contact);
-  return `Hi ${name}! Sure — you can pick a time here: ${schedulingUrl}`;
+  return formatPersonalizedBookingLinkReply(schedulingUrl, {
+    name: contact.name,
+    source: contact.source,
+    sourceDetails: contact.sourceDetails,
+    customFields: contact.customFields,
+  });
 }
 
 async function loadScheduleShowingTemplateBody(userId: string): Promise<string | null> {
@@ -38,9 +55,13 @@ async function loadScheduleShowingTemplateBody(userId: string): Promise<string |
 function interpolateTemplateBody(body: string, contact: Contact, schedulingUrl: string): string {
   const cf = (contact.customFields as Record<string, unknown>) || {};
   const city = String(cf.city ?? cf.City ?? "your area");
+  const name = personalizationFirstName(contact) || "";
   let out = body
-    .replace(/\{\{\s*firstName\s*\}\}/gi, firstName(contact))
+    .replace(/\{\{\s*firstName\s*\}\}/gi, name)
     .replace(/\{\{\s*city\s*\}\}/gi, city);
+  if (!name) {
+    out = out.replace(/\bHi\s+!/gi, "Hi!").replace(/\bHey\s+!/gi, "Hi!");
+  }
   return injectRgeSchedulingTemplateVariables(out, schedulingUrl);
 }
 
@@ -97,7 +118,19 @@ export async function tryBookingFastPathReply(params: BookingFastPathParams): Pr
     route: bookingIntentRouteLabel(),
   });
 
-  if (!detectHighConfidenceBookingIntent(inboundText) && !detectSellerConsultationBookingIntent(inboundText)) {
+  if (detectBookingAcknowledgment(inboundText) && !detectBookingLinkResendRequest(inboundText)) {
+    logBookingReplyTrace({
+      stage: "skipped",
+      userId,
+      contactId: contact.id,
+      conversationId: conversation.id,
+      messageId,
+      reason: "booking_acknowledgment",
+    });
+    return { sent: false, reason: "booking_acknowledgment" };
+  }
+
+  if (!detectHighConfidenceBookingIntent(inboundText) && !detectSellerConsultationBookingIntent(inboundText) && !detectBookingLinkResendRequest(inboundText)) {
     logBookingReplyTrace({
       stage: "skipped",
       userId,
@@ -145,7 +178,8 @@ export async function tryBookingFastPathReply(params: BookingFastPathParams): Pr
   });
 
   const lastSentMs = readRecentBookingSentAt(contact);
-  if (!Number.isNaN(lastSentMs) && Date.now() - lastSentMs < BOOKING_FAST_PATH_THROTTLE_MS) {
+  const isResend = detectBookingLinkResendRequest(inboundText);
+  if (!isResend && !Number.isNaN(lastSentMs) && Date.now() - lastSentMs < BOOKING_FAST_PATH_THROTTLE_MS) {
     logBookingReplyTrace({
       stage: "skipped",
       userId,

@@ -19,6 +19,7 @@ import {
   promotedWebchatSourceDetails,
   resolveIdentityContactConflict,
   stampPromotedWebchatIdentity,
+  type ValidatedWebchatIdentity,
 } from "@shared/webchatIdentityPromotion";
 import { isCrmListedContact } from "@shared/contactCrmVisibility";
 import { isWebchatSourcedContact } from "@shared/webchatContactIdentity";
@@ -27,6 +28,7 @@ export async function maybePromoteWebchatVisitorIdentity(params: {
   userId: string;
   contactId: string;
   identifiedFrom?: string;
+  incoming?: ValidatedWebchatIdentity;
 }): Promise<Contact | null> {
   const contact = await storage.getContact(params.contactId);
   if (!contact || contact.userId !== params.userId) return null;
@@ -35,11 +37,7 @@ export async function maybePromoteWebchatVisitorIdentity(params: {
 
   const identity = mergeIdentityWithoutDowngrade({
     current: { name: contact.name, email: contact.email, phone: contact.phone },
-    incoming: collectValidatedIdentity({
-      name: contact.name,
-      email: contact.email,
-      phone: contact.phone,
-    }),
+    incoming: params.incoming || {},
   });
   if (!meetsWebchatPromotionThreshold(identity)) return contact;
 

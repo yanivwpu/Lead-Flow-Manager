@@ -1897,9 +1897,19 @@ export function InboxLeadDetailsPanel({
       contactActivityRaw.some((e) => {
         const hay = `${JSON.stringify(e.eventData ?? {})}`.toLowerCase();
         return /scheduling link sent|booking link sent/i.test(hay);
-      }),
-    [contactActivityRaw],
+      }) ||
+      messages.some(
+        (m) => m.direction === "outbound" && /calendly\.com/i.test(String(m.content || "")),
+      ),
+    [contactActivityRaw, messages],
   );
+
+  const appointmentConfirmed = useMemo(() => {
+    const lastBooking = (contact.customFields as Record<string, unknown> | undefined)?.calendlyLastBooking;
+    if (!lastBooking || typeof lastBooking !== "object") return false;
+    const status = String((lastBooking as { status?: unknown }).status || "").toLowerCase();
+    return status !== "cancelled" && status !== "canceled";
+  }, [contact.customFields]);
 
   const buyerPrefChips = useMemo(
     () =>
@@ -2010,6 +2020,7 @@ export function InboxLeadDetailsPanel({
       showingTimingPhrase: extractShowingTimingPhrase(currentInbound),
       mentionedDeposit,
       schedulingLinkSent,
+      appointmentConfirmed,
       aiRoutingDecision: aiRouting.decision,
       needsRoutingClarification: aiRouting.needsRoutingClarification,
       enrollableCampaignCount,
@@ -2071,6 +2082,7 @@ export function InboxLeadDetailsPanel({
     stageSignals.strongIntent,
     businessKnowledge?.industry,
     schedulingLinkSent,
+    appointmentConfirmed,
     enrollableCampaignCount,
     inventoryStatus?.rgeInstalled,
     persistedBuyerProfile,

@@ -250,6 +250,7 @@ async function rememberCalendlyBookingContext(contact: Contact, context: {
       customFields: {
         ...customFields,
         _calendlyBookingContexts: [nextContext, ...existing].slice(0, 10),
+        _w3CalendlyBookingSentAt: now.toISOString(),
       },
     } as any,
     { skipAutomationHooks: true }

@@ -4,6 +4,12 @@
  */
 
 import { resolveAiRouting, type AiRoutingResult } from "./aiRouting";
+import {
+  detectBookingAcknowledgment,
+  detectBookingLinkResendRequest,
+  lastAssistantCalendlyUrl,
+} from "./bookingIntent";
+import { usableVisitorPersonalizationName } from "./visitorNamePersonalization";
 
 export type ChatbotVisitorIntentKind = "features_pricing" | "find_solution" | "book_demo" | "other";
 
@@ -80,8 +86,12 @@ export function formatNaturalPrice(amount: number, period: "month" | "year", lan
 export function buildChatbotCompletionContactContext(input: {
   customFields?: unknown;
   name?: string | null;
+  source?: string | null;
+  sourceDetails?: unknown;
   leadSource?: string | null;
   conversationLanguage?: string | null;
+  workspaceName?: string | null;
+  pageTitle?: string | null;
 }): {
   intent?: string;
   visitorIntent?: string;
@@ -93,8 +103,16 @@ export function buildChatbotCompletionContactContext(input: {
   const vars = readChatbotVars(input.customFields);
   const visitorIntent = vars.visitor_intent || "";
   const lines = Object.entries(vars).map(([k, v]) => `${k}=${v}`);
+  const name = usableVisitorPersonalizationName({
+    name: input.name,
+    source: input.source,
+    sourceDetails: input.sourceDetails,
+    customFields: input.customFields,
+    workspaceName: input.workspaceName,
+    pageTitle: input.pageTitle,
+  });
   return {
-    ...(input.name ? { name: input.name } : {}),
+    ...(name ? { name } : {}),
     ...(input.leadSource ? { leadSource: input.leadSource } : {}),
     ...(visitorIntent ? { intent: visitorIntent, visitorIntent } : {}),
     ...(lines.length ? { chatbotVariables: lines.join("; ") } : {}),
@@ -109,9 +127,14 @@ export function resolveChatbotCompletionRouting(input: {
   industry?: string;
   handoffKeywords?: string[];
 }): AiRoutingResult {
-  const kind = classifyChatbotVisitorIntent(input.visitorIntent || input.inbound);
+  const currentKind = classifyChatbotVisitorIntent(input.inbound);
+  const storedKind = classifyChatbotVisitorIntent(input.visitorIntent);
+  const acknowledgment =
+    detectBookingAcknowledgment(input.inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
+  const resend = detectBookingLinkResendRequest(input.inbound);
+  const kind = acknowledgment ? currentKind : storedKind !== "other" ? storedKind : currentKind;
   const inbound =
-    kind === "other"
+    acknowledgment || resend || kind === "other"
       ? input.inbound
       : `${input.inbound}\n${input.visitorIntent || ""}`.trim();
   const routing = resolveAiRouting({
@@ -121,6 +144,9 @@ export function resolveChatbotCompletionRouting(input: {
     industry: input.industry,
     handoffKeywords: input.handoffKeywords,
   });
+  if (acknowledgment) {
+    return routing;
+  }
   if (kind === "book_demo" && !routing.subIntents.includes("booking_question")) {
     return { ...routing, subIntents: [...routing.subIntents, "booking_question"] };
   }
@@ -140,9 +166,16 @@ export function chatbotCompletionPromptRules(input: {
   visitorIntent?: string | null;
   conversationLanguage?: string | null;
   bookingUrl?: string | null;
+  inbound?: string | null;
+  history?: Array<{ role: string; content?: string }>;
 }): string {
-  const kind = classifyChatbotVisitorIntent(input.visitorIntent);
+  const inbound = input.inbound || "";
+  const priorUrl = lastAssistantCalendlyUrl(input.history);
+  const acknowledgment = detectBookingAcknowledgment(inbound) && Boolean(priorUrl);
+  const resend = detectBookingLinkResendRequest(inbound);
+  const kind = classifyChatbotVisitorIntent(acknowledgment ? inbound : input.visitorIntent);
   const allowBooking = visitorIntentAllowsBookingCta(kind);
+  const verifiedUrl = input.bookingUrl || priorUrl || "";
   const lines = [
     "CHATBOT COMPLETION — answer the visitor's current request directly.",
     "- Use only relevant published facts. Do not dump unrelated benefits, source labels, or extraction text.",
@@ -150,7 +183,17 @@ export function chatbotCompletionPromptRules(input: {
     "- Format prices naturally for the reply language (e.g. $49/month, $490/year). Never write 'USD 49 per month'.",
     "- Preserve accurate product names, plan names, prices, requirements, URLs, and plan distinctions.",
     "- Never invent missing features, pricing, integrations, or promises.",
+    "- Never invent availability, appointment confirmation, or meeting details before Calendly confirms a booking.",
+    "- Never address the visitor as Website, Web Chat, Unknown, Visitor, Guest, or any channel/site label.",
   ];
+  if (acknowledgment && !resend) {
+    lines.push("- The visitor acknowledged the booking link already sent. Reply briefly and naturally. Do not repeat the scheduling URL.");
+    return lines.join("\n");
+  }
+  if (resend && verifiedUrl) {
+    lines.push(`- The visitor asked for the booking link again or said it failed. Resend this exact workspace-selected Calendly URL on its own line:\n${verifiedUrl}`);
+    return lines.join("\n");
+  }
   if (kind === "features_pricing") {
     lines.push("- The visitor asked about features and pricing only. Answer that. Do not add a booking CTA or booking link.");
   } else if (kind === "find_solution") {

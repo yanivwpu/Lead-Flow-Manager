@@ -5,6 +5,11 @@
  */
 
 import { detectListingFollowUp } from "./inventory/inventoryListingFollowUp";
+import {
+  detectBookingAcknowledgment,
+  detectBookingLinkResendRequest,
+  lastAssistantCalendlyUrl,
+} from "./bookingIntent";
 
 export type AiRoutingDecision =
   | "CONTINUE_AI"
@@ -251,6 +256,11 @@ function buildPromptGuidance(
 - Offer to connect them with a team member, or ask the single most helpful qualifying question before handoff.
 - Do not push self-service booking unless they explicitly ask to schedule.`;
     case "BOOK_APPOINTMENT":
+      if (result.reason === "booking_link_resend") {
+        return `The visitor asked for the scheduling link again or said the prior link failed.
+- Resend the exact verified workspace Calendly URL already provided in SCHEDULING LINK rules.
+- Do not invent a different URL, availability, or a confirmed appointment.`;
+      }
       return `The customer wants to schedule a meeting/call/showing.
 - You may share the scheduling link only if one is provided in SCHEDULING LINK rules above.
 - Confirm what type of meeting they need in one sentence if unclear.`;
@@ -269,6 +279,12 @@ function buildPromptGuidance(
       }
       if (result.signals.includes("info_seeking")) {
         return buildInfoSeekingPromptGuidance(industry);
+      }
+      if (result.reason === "booking_acknowledgment" || result.signals.includes("booking_acknowledgment")) {
+        return `The visitor acknowledged the scheduling link already sent.
+- Reply briefly and naturally. Looking forward to speaking is enough.
+- Do NOT repeat the Calendly URL unless they ask for it again or say the link failed.
+- Do NOT invent availability, appointment confirmation, or meeting details.`;
       }
       return `Continue the conversation naturally.
 - Do NOT send a scheduling link unless the customer clearly asks to book or schedule.
@@ -303,6 +319,7 @@ function resolveTurnIntent(
   if (partial.signals.includes("info_seeking") || partial.reason === "info_seeking_qualify") {
     return "info_seeking";
   }
+  if (partial.reason === "booking_acknowledgment") return "continue";
   if (partial.decision === "BOOK_APPOINTMENT") return "appointment";
   if (partial.decision === "START_NURTURE") return "nurture";
   return "continue";
@@ -384,12 +401,20 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
     industry.includes("property") ||
     industry.includes("realtor");
 
+  const priorCalendlyUrl = lastAssistantCalendlyUrl(input.history);
+  const bookingAcknowledgment =
+    Boolean(priorCalendlyUrl) && detectBookingAcknowledgment(inbound);
+  const bookingLinkResend =
+    Boolean(priorCalendlyUrl) && detectBookingLinkResendRequest(inbound);
+
   const infoSeeking = isInfoSeeking(latest);
   const hasAppointment =
-    APPOINTMENT_RE.test(latest) ||
-    matchesCustomPhrases(latest, input.industrySignals?.appointmentPhrases) ||
-    (input.industrySignals?.viewingIntent === true &&
-      /\b(view|tour|showing|see the)\b/i.test(latest));
+    !bookingAcknowledgment &&
+    (APPOINTMENT_RE.test(latest) ||
+      matchesCustomPhrases(latest, input.industrySignals?.appointmentPhrases) ||
+      (input.industrySignals?.viewingIntent === true &&
+        /\b(view|tour|showing|see the)\b/i.test(latest)) ||
+      bookingLinkResend);
   const hasExplicitHuman =
     !infoSeeking &&
     (EXPLICIT_HUMAN_CHAT_RE.test(latest) ||
@@ -435,6 +460,31 @@ export function resolveAiRouting(input: AiRoutingInput): AiRoutingResult {
         confidence: 0.92,
         reason: "clarified_schedule",
         signals: [...signals, "clarified:schedule"],
+        needsRoutingClarification: false,
+      },
+      { ...meta, humanHandoffRequested: false },
+    );
+  }
+
+  if (bookingAcknowledgment) {
+    return continueAiResult(
+      "booking_acknowledgment",
+      [...signals, "booking_acknowledgment"],
+      0.9,
+      false,
+      industry,
+      subIntents,
+      false,
+    );
+  }
+
+  if (bookingLinkResend) {
+    return finalizeRoutingResult(
+      {
+        decision: "BOOK_APPOINTMENT",
+        confidence: 0.9,
+        reason: "booking_link_resend",
+        signals: [...signals, "booking_link_resend"],
         needsRoutingClarification: false,
       },
       { ...meta, humanHandoffRequested: false },

@@ -1778,6 +1778,10 @@ export function UnifiedInbox() {
           ? data.conversationId
           : event.conversationId;
       if (eventConv && eventConv !== convId) return false;
+      const inboundId = typeof data.inboundMessageId === "string" ? data.inboundMessageId : "";
+      if (inboundId !== tailInboundMessageId) return false;
+      const holdReason = typeof data.holdReason === "string" ? data.holdReason : "";
+      if (!holdReason) return false;
       return typeof data.suggestion === "string" && data.suggestion.trim().length > 0;
     });
     if (!match) return null;

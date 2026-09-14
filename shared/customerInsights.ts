@@ -14,6 +14,8 @@ import {
   MIN_HOT_TAG_SCORE,
 } from "./leadQualification";
 import { resolveAiRouting, type AiRoutingDecision } from "./aiRouting";
+import { classifyChatbotVisitorIntent } from "./chatbotCompletionContext";
+import { detectBookingAcknowledgment, detectHighConfidenceBookingIntent } from "./bookingIntent";
 import { resolveCopilotDominantIntent } from "./copilotIntent";
 import {
   resolveAiDomainEligibility,
@@ -48,6 +50,11 @@ const REASON_INSIGHTS: Record<string, InsightCandidate> = {
     group: "ready",
     rank: 92,
     bullet: "Ready to move forward",
+  },
+  "Customer requested a demo and is awaiting scheduling": {
+    group: "showing",
+    rank: 93,
+    bullet: "Demo requested — awaiting scheduling",
   },
   "Customer asked about pricing and buying": {
     group: "purchase",
@@ -189,6 +196,8 @@ export type ContextualActionContext = {
   showingTimingPhrase?: string | null;
   mentionedDeposit?: boolean;
   schedulingLinkSent?: boolean;
+  /** Calendly webhook has confirmed an appointment for this contact. */
+  appointmentConfirmed?: boolean;
   /** Platform routing decision — aligns Copilot with AI auto-reply routing */
   aiRoutingDecision?: AiRoutingDecision;
   needsRoutingClarification?: boolean;
@@ -609,6 +618,33 @@ function collectContextualActionCandidates(ctx: ContextualActionContext): Collec
   const needsClarify =
     ctx.needsRoutingClarification ?? routing?.needsRoutingClarification ?? false;
   const infoSeeking = routing?.signals.includes("info_seeking") ?? false;
+  const currentIsDemo = classifyChatbotVisitorIntent(currentInbound) === "book_demo";
+  const awaitingVisitorScheduling =
+    !ctx.appointmentConfirmed &&
+    (ctx.schedulingLinkSent === true ||
+      routingDecision === "BOOK_APPOINTMENT" ||
+      currentIsDemo ||
+      detectHighConfidenceBookingIntent(currentInbound) ||
+      detectBookingAcknowledgment(currentInbound) ||
+      classifyChatbotVisitorIntent(String(ctx.inboundText || "")) === "book_demo");
+
+  if (ctx.appointmentConfirmed) {
+    actions.push({
+      label: "Prepare for booked appointment",
+      rank: 96,
+      group: "showing",
+      capability: "book",
+      source: "calendly_appointment_confirmed",
+    });
+  } else if (awaitingVisitorScheduling && !needsClarify) {
+    actions.push({
+      label: ctx.schedulingLinkSent ? "Help complete scheduling" : "Help the visitor schedule",
+      rank: 97,
+      group: "showing",
+      capability: "book",
+      source: "booking_awaiting_schedule",
+    });
+  }
 
   if (needsClarify) {
     actions.push({
@@ -1051,6 +1087,9 @@ export function composerSuggestionForAction(label: string): string {
   const l = label.toLowerCase();
   if (isSchedulingComposerAction(label)) {
     return SCHEDULING_COMPOSER_INTRO;
+  }
+  if (/help complete scheduling|help the visitor schedule|awaiting booking/.test(l)) {
+    return "Perfect — choose any time that works for you. Looking forward to speaking with you.";
   }
   if (/financing|lender/.test(l)) {
     return "Are you already working with a lender, or would you like me to connect you with one?";

@@ -1,5 +1,6 @@
 import type { ConversationMessage } from "./conversationIntelligence";
 import {
+  BUCKET_THRESHOLDS,
   bucketFromNumericScore,
   buildTagDiagnostics,
   hasGenuineConversationActivity,
@@ -10,6 +11,12 @@ import {
 } from "@shared/leadQualification";
 import { looksLikeSystemOrNotificationEmail } from "@shared/aiDomainEligibility";
 import { hasPropertyShowingIntent } from "@shared/conversationTextSignals";
+import { classifyChatbotVisitorIntent } from "@shared/chatbotCompletionContext";
+import {
+  detectBookingAcknowledgment,
+  detectHighConfidenceBookingIntent,
+} from "@shared/bookingIntent";
+import { resolveAiRouting } from "@shared/aiRouting";
 
 export type { LeadBucket } from "@shared/leadQualification";
 
@@ -314,6 +321,23 @@ function computeCriticalUrgencyBoost(inbound: string): { boost: number; detected
 
 function detectDealReadyIntent(inbound: string): boolean {
   return DEAL_READY_INTENT_PATTERNS.some((re) => re.test(inbound));
+}
+
+/** Current-turn explicit demo/booking — strong commercial intent, not a deal-ready close. */
+function currentTurnExplicitBookingRequest(latest: string): boolean {
+  const t = (latest || "").trim();
+  if (!t) return false;
+  if (detectBookingAcknowledgment(t)) return false;
+  if (classifyChatbotVisitorIntent(t) === "book_demo") return true;
+  if (detectHighConfidenceBookingIntent(t)) return true;
+  const routing = resolveAiRouting({ inbound: t });
+  return routing.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
+}
+
+function threadHasVerifiedBookingRequest(joinedInbound: string, latest: string): boolean {
+  if (currentTurnExplicitBookingRequest(latest)) return true;
+  if (classifyChatbotVisitorIntent(joinedInbound) === "book_demo") return true;
+  return /\bbook(?:ing)?\s+(?:a\s+)?demo\b|קביעת\s*הדגמה|reservar\s+(?:una\s+)?demo/i.test(joinedInbound);
 }
 
 function computeSoftNegativeScore(inbound: string): { value: number; detected: string[] } {
@@ -745,6 +769,10 @@ export function scoreLead(
   const reSignals = isRealEstate ? extractRealEstateSignals(inbound, latestInbound) : null;
   const specificRentalSearch = isRealEstate && !!reSignals?.specificRentalSearch;
   const specificActiveBuySearch = isRealEstate && !!reSignals?.specificActiveBuySearch;
+  const strongBookingIntent =
+    !mediaOnly &&
+    !dealReadyIntent &&
+    threadHasVerifiedBookingRequest(inbound, latestInbound);
 
   let decisionOverride = false;
   let dealReadyOverride = false;
@@ -762,6 +790,9 @@ export function scoreLead(
   } else if (core.decisionScore >= DECISION_HOT_THRESHOLD) {
     decisionOverride = true;
     score = Math.max(score, 75);
+  } else if (strongBookingIntent) {
+    // Published Warm floor (45). Missing qualification fields must not erase booking intent.
+    score = Math.max(score, BUCKET_THRESHOLDS.warm);
   }
 
   score = clampScore(score);
@@ -789,6 +820,7 @@ export function scoreLead(
       ...(specificRentalSearch ? ["re:specific_rental_criteria"] : []),
       ...(specificActiveBuySearch ? ["re:specific_buy_search"] : []),
       ...(dealReadyIntent ? ["decision:deal_ready"] : []),
+      ...(strongBookingIntent ? ["decision:demo_requested"] : []),
     ]),
   );
 
@@ -806,7 +838,13 @@ export function scoreLead(
   if (genuineActivity && engagement.value >= 12) reasons.push("Customer is highly engaged");
   else if (genuineActivity && engagement.value >= 6) reasons.push("Customer is engaged");
   if (interest.detected.some((d) => d.startsWith("interest:"))) reasons.push("Customer is exploring options");
-  if (decision.detected.length > 0) reasons.push("Customer appears ready to move forward");
+  if (dealReadyIntent) {
+    // already added
+  } else if (strongBookingIntent || decision.detected.includes("decision:book")) {
+    reasons.push("Customer requested a demo and is awaiting scheduling");
+  } else if (decision.detected.length > 0) {
+    reasons.push("Customer appears ready to move forward");
+  }
   if (urgency.detected.length > 0 || criticalUrgency.boost > 0) reasons.push("Customer seems time-sensitive");
   if (industry?.layer === "real_estate" && (industry.bonus ?? 0) > 0) {
     reasons.push("Customer shared property-related details");

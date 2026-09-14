@@ -436,6 +436,13 @@ function isUniqueViolation(err: unknown): boolean {
   return /unique|duplicate key/i.test(msg);
 }
 
+/**
+ * Safe match keys: utm_content contactId (tenant-checked), calendly channel email,
+ * or recent `_calendlyBookingContexts` on an already-known contact.
+ * Visitor-facing Calendly URLs are sanitized of utm_content, so anonymous Web Chat
+ * without a stored email cannot be guessed from invitee display name.
+ * Never match or merge solely by invitee name.
+ */
 async function resolvePreferredCalendlyContactId(
   userId: string,
   inviteeEmail: string,
@@ -565,11 +572,14 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
     contact = await promoteInboxIdentityToCrm(contact, "email");
   }
   try {
+    const { collectValidatedIdentity } = await import("@shared/webchatIdentityFields");
     const { maybePromoteWebchatVisitorIdentity } = await import("./webchatIdentityPromotionService");
+    const incoming = collectValidatedIdentity({ name: inviteeName, email: inviteeEmail });
     const promoted = await maybePromoteWebchatVisitorIdentity({
       userId,
       contactId: contact.id,
       identifiedFrom: "calendly",
+      incoming,
     });
     if (promoted) contact = promoted;
   } catch {
@@ -642,12 +652,14 @@ async function applyCalendlyConfirmedBookingCrmEffects(params: {
     return;
   }
 
+  const { collectValidatedIdentity } = await import("@shared/webchatIdentityFields");
+  const incomingIdentity = collectValidatedIdentity({ name: inviteeName, email: inviteeEmail });
   const patch: Record<string, unknown> = {};
-  if (!contact.email && inviteeEmail) {
-    patch.email = inviteeEmail;
+  if (!collectValidatedIdentity({ email: contact.email }).email && incomingIdentity.email) {
+    patch.email = incomingIdentity.email;
   }
-  if ((!contact.name || contact.name === "Unknown") && inviteeName) {
-    patch.name = inviteeName;
+  if (!collectValidatedIdentity({ name: contact.name }).name && incomingIdentity.name) {
+    patch.name = incomingIdentity.name;
   }
   if (PIPELINE_BEFORE_APPOINTMENT_SET.has(contact.pipelineStage || "")) {
     patch.pipelineStage = "Appointment Set";

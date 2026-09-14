@@ -15,6 +15,9 @@ const msg = "Let's schedule a showing on Monday";
 
 assert(detectHighConfidenceBookingIntent(msg), "detects schedule showing");
 assert(!detectHighConfidenceBookingIntent("hello there"), "ignores greeting");
+assert(!detectHighConfidenceBookingIntent("Thanks I'll pick a time"), "ack is not a fresh booking");
+assert(!detectHighConfidenceBookingIntent("Gracias, elegiré un horario"), "Spanish ack is not booking");
+assert(!detectHighConfidenceBookingIntent("תודה, אבחר שעה"), "Hebrew ack is not booking");
 assert(bookingIntentRouteLabel() === "book", "route label book");
 
 const routing = resolveAiRouting({ inbound: msg });

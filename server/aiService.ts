@@ -22,6 +22,12 @@ import {
 } from "@shared/factGrounding";
 import { chatbotCompletionPromptRules, classifyChatbotVisitorIntent } from "@shared/chatbotCompletionContext";
 import {
+  detectBookingAcknowledgment,
+  detectBookingLinkResendRequest,
+  lastAssistantCalendlyUrl,
+} from "@shared/bookingIntent";
+import { usableVisitorPersonalizationName } from "@shared/visitorNamePersonalization";
+import {
   ensureVerifiedBookingUrlInDraft,
   isTrustedCalendlySchedulingUrl,
 } from "@shared/verifiedBookingUrl";
@@ -122,6 +128,8 @@ export class AIService {
     modelGenerationSucceeded?: boolean;
   }> {
     const lastMessage = conversationHistory[conversationHistory.length - 1]?.content || "";
+    const lastUserMessage =
+      [...conversationHistory].reverse().find((m) => m.role === "user")?.content || lastMessage;
     const greetingTurn = isWebchatChannel(channel) && isCasualWebchatGreeting(lastMessage);
 
     // Don't suggest when there is no real conversational context yet.
@@ -170,9 +178,18 @@ export class AIService {
       }
     }
 
-    const visitorKind = classifyChatbotVisitorIntent(
+    const storedVisitorKind = classifyChatbotVisitorIntent(
       contactContext?.visitorIntent || contactContext?.intent || lastMessage,
     );
+    const currentVisitorKind = classifyChatbotVisitorIntent(lastUserMessage);
+    const bookingAcknowledgment =
+      detectBookingAcknowledgment(lastUserMessage) && Boolean(lastAssistantCalendlyUrl(conversationHistory));
+    const bookingLinkResend = detectBookingLinkResendRequest(lastUserMessage);
+    const visitorKind = bookingAcknowledgment
+      ? "other"
+      : currentVisitorKind !== "other"
+        ? currentVisitorKind
+        : storedVisitorKind;
     const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     if (visitorKind === "book_demo") {
       grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
@@ -250,6 +267,8 @@ export class AIService {
         websiteText: turnEvidence.promptWebsiteText,
         structuredPricesSelected,
       },
+      lastUserMessage,
+      conversationHistory,
     );
 
     const evaluateDraft = (draft: string): GroundingCheck =>
@@ -289,7 +308,7 @@ export class AIService {
 
     try {
       let { suggestion, confidence: rawConfidence, confidenceProvided } = await runCompletion(systemPrompt);
-      if (visitorKind === "book_demo") {
+      if ((visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment) {
         suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
       }
       let groundingCheck = evaluateDraft(suggestion);
@@ -312,7 +331,7 @@ export class AIService {
           const retry = await runCompletion(
             `${systemPrompt}\n\n${FACT_COMPLETENESS_RETRY_INSTRUCTION}`,
           );
-          suggestion = visitorKind === "book_demo"
+          suggestion = (visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment
             ? ensureVerifiedBookingUrlInDraft(retry.suggestion, verifiedBookingUrl)
             : retry.suggestion;
           confidenceProvided = confidenceProvided && retry.confidenceProvided;
@@ -337,7 +356,7 @@ export class AIService {
           subIntents: routing?.subIntents,
           conflictingKeys: grounding.conflictingKeys,
         });
-        if (visitorKind === "book_demo") {
+        if ((visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment) {
           suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
         }
         groundingCheck = evaluateDraft(suggestion);
@@ -849,6 +868,8 @@ Return JSON only: { "summary": "..." }`;
     liveBusinessDataBlock?: string,
     greetingOnlyTurn?: boolean,
     evidenceWebsite?: { text: string; structuredPricesSelected: boolean },
+    latestInbound?: string,
+    conversationHistory?: Array<{ role: string; content?: string }>,
   ): string {
     const langInstruction = languageInstructionForConversation(
       language || contactContext?.conversationLanguage || "en",
@@ -934,7 +955,7 @@ ${heading}
 ${cap}`;
 })()}
 ${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):
-${contactContext.name ? `- Lead name: ${contactContext.name}` : ''}
+${usableVisitorPersonalizationName({ name: contactContext.name }) ? `- Lead name: ${usableVisitorPersonalizationName({ name: contactContext.name })}` : ''}
 ${contactContext.leadSource ? `- Lead source: ${contactContext.leadSource}` : ''}
 ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}
 ${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
@@ -1093,6 +1114,8 @@ When replying, work through these qualification questions in order. Ask only ONE
         visitorIntent: contactContext.visitorIntent || contactContext.intent,
         conversationLanguage: contactContext.conversationLanguage || language,
         bookingUrl: bookingUrl || null,
+        inbound: latestInbound,
+        history: conversationHistory,
       })}`;
     }
 
