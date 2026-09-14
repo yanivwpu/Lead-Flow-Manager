@@ -13,6 +13,7 @@ import {
   readChatbotVars,
   resolveChatbotCompletionRouting,
   visitorIntentAllowsBookingCta,
+  isCanonicalBookingTurn,
 } from "../shared/chatbotCompletionContext";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
@@ -21,6 +22,8 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(classifyChatbotVisitorIntent("Features & pricing"), "features_pricing");
   assert.equal(classifyChatbotVisitorIntent("Find my solution"), "find_solution");
   assert.equal(classifyChatbotVisitorIntent("Book a demo"), "book_demo");
+  assert.equal(isCanonicalBookingTurn({ inbound: "I'd like to schedule a demo" }), true);
+  assert.equal(isCanonicalBookingTurn({ inbound: "Features & pricing" }), false);
   assert.equal(classifyChatbotVisitorIntent("קביעת הדגמה"), "book_demo");
   assert.equal(classifyChatbotVisitorIntent("Reservar una demo"), "book_demo");
   assert.equal(visitorIntentAllowsBookingCta("features_pricing"), false);
@@ -83,6 +86,25 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
     visitorIntent: "Book a demo",
   });
   assert.equal(demoRoute.decision, "BOOK_APPOINTMENT");
+  const laterDemo = resolveChatbotCompletionRouting({
+    inbound: "I'd like to schedule a demo",
+    visitorIntent: "Features & pricing",
+    history: [
+      { role: "user", content: "Features & pricing" },
+      { role: "assistant", content: "Pro is $49/month." },
+    ],
+  });
+  assert.equal(laterDemo.decision, "BOOK_APPOINTMENT");
+  assert.equal(laterDemo.turnIntent, "appointment");
+  assert.ok(laterDemo.subIntents.includes("booking_question"));
+  assert.ok(!laterDemo.subIntents.includes("pricing_question"));
+  const laterPrompt = chatbotCompletionPromptRules({
+    visitorIntent: "Features & pricing",
+    inbound: "I'd like to schedule a demo",
+    bookingUrl: "https://calendly.com/yanivharamaty/whachatcrm-live-product-demo",
+  });
+  assert.match(laterPrompt, /yanivharamaty\/whachatcrm-live-product-demo/);
+  assert.doesNotMatch(laterPrompt, /Do not add a booking CTA/);
   assert.equal(formatNaturalPrice(49, "month", "en"), "$49/month");
   assert.equal(formatNaturalPrice(490, "year", "en"), "$490/year");
 }
@@ -90,6 +112,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 {
   const ai = read("server/aiService.ts");
   assert.match(ai, /chatbotCompletionPromptRules/);
+  assert.match(ai, /isCanonicalBookingTurn/);
   assert.match(ai, /visitorIntent/);
   assert.match(ai, /2–4 short sentences/);
   assert.match(ai, /languageInstructionForConversation/);

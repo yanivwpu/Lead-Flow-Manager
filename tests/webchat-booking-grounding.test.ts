@@ -9,6 +9,7 @@ import { join } from "node:path";
 import {
   classifyChatbotVisitorIntent,
   chatbotCompletionPromptRules,
+  isCanonicalBookingTurn,
   resolveChatbotCompletionRouting,
 } from "../shared/chatbotCompletionContext";
 import { matchAskQuestionOpeningMessage } from "../shared/chatbotAskOpeningMatch";
@@ -25,6 +26,7 @@ import {
   isTrustedCalendlySchedulingUrl,
   normalizeSchedulingUrlForCompare,
   replaceRetrievedBookingWithVerifiedUrl,
+  replaceUntrustedBookingUrlsInKnowledgeText,
 } from "../shared/verifiedBookingUrl";
 import { factKey, type KnowledgeFact } from "../shared/businessKnowledgeFacts";
 import { dispatchWebchatInboundAi } from "../server/webchatInboundReplyDispatch";
@@ -149,6 +151,9 @@ function productionMismatchCheck(draft: string) {
 
 {
   assert.equal(classifyChatbotVisitorIntent("Book a demo"), "book_demo");
+  assert.equal(isCanonicalBookingTurn({ inbound: "I'd like to schedule a demo" }), true);
+  assert.equal(isCanonicalBookingTurn({ inbound: "Book a demo" }), true);
+  assert.equal(isCanonicalBookingTurn({ inbound: "Features & pricing" }), false);
   assert.equal(classifyChatbotVisitorIntent("קביעת הדגמה"), "book_demo");
   assert.equal(classifyChatbotVisitorIntent("Reservar una demo"), "book_demo");
   const he = matchAskQuestionOpeningMessage("קביעת הדגמה", CANONICAL, [HE]);
@@ -160,6 +165,34 @@ function productionMismatchCheck(draft: string) {
   const opening = matchAskQuestionOpeningMessage("אני רוצה לקבוע הדגמה", CANONICAL, [HE]);
   assert.equal(opening.matched, true);
   if (opening.matched) assert.equal(classifyChatbotVisitorIntent(opening.option.value), "book_demo");
+}
+
+{
+  const later = resolveChatbotCompletionRouting({
+    inbound: "I'd like to schedule a demo",
+    visitorIntent: "Features & pricing",
+  });
+  assert.equal(later.decision, "BOOK_APPOINTMENT");
+  assert.ok(later.subIntents.includes("booking_question"));
+  assert.ok(!later.subIntents.includes("pricing_question"));
+  const laterPrompt = chatbotCompletionPromptRules({
+    visitorIntent: "Features & pricing",
+    inbound: "I'd like to schedule a demo",
+    bookingUrl: DEMO_URL,
+  });
+  assert.match(laterPrompt, /yanivharamaty\/whachatcrm-live-product-demo/);
+  const replacedContact = ensureVerifiedBookingUrlInDraft(
+    `Book a Demo: ${CONTACT_URL}`,
+    DEMO_URL,
+  );
+  assert.doesNotMatch(replacedContact, /whachatcrm\.com\/contact/);
+  assert.match(replacedContact, /yanivharamaty\/whachatcrm-live-product-demo/);
+  const knowledge = replaceUntrustedBookingUrlsInKnowledgeText(
+    `Book a Demo: ${CONTACT_URL}`,
+    DEMO_URL,
+  );
+  assert.doesNotMatch(knowledge, /whachatcrm\.com\/contact/);
+  assert.match(knowledge, /yanivharamaty\/whachatcrm-live-product-demo/);
 }
 
 {

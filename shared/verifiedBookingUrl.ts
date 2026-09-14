@@ -55,10 +55,14 @@ export function draftContainsVerifiedBookingUrl(draft: string, url: string): boo
 export function ensureVerifiedBookingUrlInDraft(draft: string, url: string): string {
   const text = (draft || "").trim();
   if (!isTrustedCalendlySchedulingUrl(url)) return text;
-  if (draftContainsVerifiedBookingUrl(text, url)) {
-    return replaceUntrustedBookingUrls(text, url);
-  }
-  return text ? `${text}\n${url}` : url;
+  const cleaned = replaceUntrustedBookingUrls(text, url);
+  if (draftContainsVerifiedBookingUrl(cleaned, url)) return cleaned;
+  return cleaned ? `${cleaned}\n${url}` : url;
+}
+
+/** Replace competing booking/contact URLs in website knowledge so they cannot outrank Calendly. */
+export function replaceUntrustedBookingUrlsInKnowledgeText(text: string, verifiedUrl: string): string {
+  return replaceUntrustedBookingUrls(text, verifiedUrl);
 }
 
 export function replaceUntrustedBookingUrls(draft: string, verifiedUrl: string): string {
@@ -66,8 +70,12 @@ export function replaceUntrustedBookingUrls(draft: string, verifiedUrl: string):
   const expected = normalizeSchedulingUrlForCompare(verifiedUrl);
   let next = draft;
   for (const found of extractHttpUrls(draft)) {
-    if (!/calendly\.com/i.test(found)) continue;
     if (normalizeSchedulingUrlForCompare(found) === expected) continue;
+    const competing =
+      /calendly\.com/i.test(found) ||
+      /\/contact\b/i.test(found) ||
+      /book|demo|schedul/i.test(found);
+    if (!competing) continue;
     next = next.split(found).join(verifiedUrl);
   }
   return next;

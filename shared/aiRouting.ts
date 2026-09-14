@@ -316,11 +316,11 @@ function resolveTurnIntent(
   if (partial.signals.includes("listing_follow_up") || partial.reason === "listing_follow_up") {
     return "listing_follow_up";
   }
+  if (partial.reason === "booking_acknowledgment") return "continue";
+  if (partial.decision === "BOOK_APPOINTMENT") return "appointment";
   if (partial.signals.includes("info_seeking") || partial.reason === "info_seeking_qualify") {
     return "info_seeking";
   }
-  if (partial.reason === "booking_acknowledgment") return "continue";
-  if (partial.decision === "BOOK_APPOINTMENT") return "appointment";
   if (partial.decision === "START_NURTURE") return "nurture";
   return "continue";
 }

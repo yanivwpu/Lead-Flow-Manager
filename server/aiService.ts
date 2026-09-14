@@ -20,7 +20,11 @@ import {
   type GroundedPromptBlock,
   type GroundingCheck,
 } from "@shared/factGrounding";
-import { chatbotCompletionPromptRules, classifyChatbotVisitorIntent } from "@shared/chatbotCompletionContext";
+import {
+  chatbotCompletionPromptRules,
+  classifyChatbotVisitorIntent,
+  isCanonicalBookingTurn,
+} from "@shared/chatbotCompletionContext";
 import {
   detectBookingAcknowledgment,
   detectBookingLinkResendRequest,
@@ -30,6 +34,7 @@ import { usableVisitorPersonalizationName } from "@shared/visitorNamePersonaliza
 import {
   ensureVerifiedBookingUrlInDraft,
   isTrustedCalendlySchedulingUrl,
+  replaceUntrustedBookingUrlsInKnowledgeText,
 } from "@shared/verifiedBookingUrl";
 import {
   buildTurnEvidenceBundle,
@@ -185,11 +190,19 @@ export class AIService {
     const bookingAcknowledgment =
       detectBookingAcknowledgment(lastUserMessage) && Boolean(lastAssistantCalendlyUrl(conversationHistory));
     const bookingLinkResend = detectBookingLinkResendRequest(lastUserMessage);
+    const routingIsBooking =
+      routing?.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
+    const canonicalBooking =
+      !bookingAcknowledgment &&
+      (isCanonicalBookingTurn({ inbound: lastUserMessage, history: conversationHistory }) ||
+        routingIsBooking);
     const visitorKind = bookingAcknowledgment
       ? "other"
-      : currentVisitorKind !== "other"
-        ? currentVisitorKind
-        : storedVisitorKind;
+      : canonicalBooking
+        ? "book_demo"
+        : currentVisitorKind !== "other"
+          ? currentVisitorKind
+          : storedVisitorKind;
     const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     if (visitorKind === "book_demo") {
       grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
@@ -234,10 +247,14 @@ export class AIService {
       }
     }
 
-    const promptWebsiteText = selectWebsiteKnowledgeChunkForPrompt(
+    const promptWebsiteTextRaw = selectWebsiteKnowledgeChunkForPrompt(
       (businessKnowledge as { websiteKnowledgeSummary?: unknown } | undefined)?.websiteKnowledgeSummary,
       WEBSITE_KNOWLEDGE_PROMPT_LIMIT,
     );
+    const promptWebsiteText =
+      visitorKind === "book_demo"
+        ? replaceUntrustedBookingUrlsInKnowledgeText(promptWebsiteTextRaw, verifiedBookingUrl)
+        : promptWebsiteTextRaw;
     const turnEvidence: TurnEvidenceBundle = buildTurnEvidenceBundle({
       userId,
       retrieved: grounding.retrieved,

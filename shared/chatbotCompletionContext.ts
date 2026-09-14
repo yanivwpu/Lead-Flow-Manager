@@ -74,6 +74,47 @@ export function visitorIntentAllowsBookingCta(
   return routing?.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
 }
 
+/**
+ * One current-turn booking result for first inbound, quick replies, opening match,
+ * later free-text, and follow-ups after pricing. Reuses existing classifiers only.
+ */
+export function isCanonicalBookingTurn(input: {
+  inbound?: string | null;
+  history?: Array<{ role: string; content?: string }>;
+}): boolean {
+  const inbound = (input.inbound || "").trim();
+  if (!inbound) return false;
+  if (detectBookingAcknowledgment(inbound) && lastAssistantCalendlyUrl(input.history)) {
+    return detectBookingLinkResendRequest(inbound);
+  }
+  if (detectBookingLinkResendRequest(inbound)) return true;
+  if (classifyChatbotVisitorIntent(inbound) === "book_demo") return true;
+  const routing = resolveAiRouting({
+    inbound,
+    joinedInbound: inbound,
+    history: input.history,
+  });
+  return (
+    (routing.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true) ||
+    routing.subIntents.includes("booking_question")
+  );
+}
+
+function currentTurnVisitorKind(input: {
+  inbound?: string | null;
+  visitorIntent?: string | null;
+  history?: Array<{ role: string; content?: string }>;
+}): ChatbotVisitorIntentKind {
+  const inbound = input.inbound || "";
+  const acknowledgment =
+    detectBookingAcknowledgment(inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
+  if (acknowledgment && !detectBookingLinkResendRequest(inbound)) return "other";
+  if (isCanonicalBookingTurn({ inbound, history: input.history })) return "book_demo";
+  const currentKind = classifyChatbotVisitorIntent(inbound);
+  if (currentKind !== "other") return currentKind;
+  return classifyChatbotVisitorIntent(input.visitorIntent);
+}
+
 export function formatNaturalPrice(amount: number, period: "month" | "year", language?: string | null): string {
   const lang = String(language || "en").split("-")[0];
   const n = Number.isFinite(amount) ? amount : 0;
@@ -127,14 +168,16 @@ export function resolveChatbotCompletionRouting(input: {
   industry?: string;
   handoffKeywords?: string[];
 }): AiRoutingResult {
-  const currentKind = classifyChatbotVisitorIntent(input.inbound);
-  const storedKind = classifyChatbotVisitorIntent(input.visitorIntent);
   const acknowledgment =
     detectBookingAcknowledgment(input.inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
   const resend = detectBookingLinkResendRequest(input.inbound);
-  const kind = acknowledgment ? currentKind : storedKind !== "other" ? storedKind : currentKind;
+  const currentBooking = isCanonicalBookingTurn({
+    inbound: input.inbound,
+    history: input.history,
+  });
+  const kind = currentTurnVisitorKind(input);
   const inbound =
-    acknowledgment || resend || kind === "other"
+    acknowledgment || resend || currentBooking || kind === "other"
       ? input.inbound
       : `${input.inbound}\n${input.visitorIntent || ""}`.trim();
   const routing = resolveAiRouting({
@@ -151,6 +194,7 @@ export function resolveChatbotCompletionRouting(input: {
     return { ...routing, subIntents: [...routing.subIntents, "booking_question"] };
   }
   if (
+    !currentBooking &&
     (kind === "features_pricing" || kind === "find_solution") &&
     routing.subIntents.includes("booking_question")
   ) {
@@ -173,7 +217,11 @@ export function chatbotCompletionPromptRules(input: {
   const priorUrl = lastAssistantCalendlyUrl(input.history);
   const acknowledgment = detectBookingAcknowledgment(inbound) && Boolean(priorUrl);
   const resend = detectBookingLinkResendRequest(inbound);
-  const kind = classifyChatbotVisitorIntent(acknowledgment ? inbound : input.visitorIntent);
+  const kind = currentTurnVisitorKind({
+    inbound,
+    visitorIntent: input.visitorIntent,
+    history: input.history,
+  });
   const allowBooking = visitorIntentAllowsBookingCta(kind);
   const verifiedUrl = input.bookingUrl || priorUrl || "";
   const lines = [

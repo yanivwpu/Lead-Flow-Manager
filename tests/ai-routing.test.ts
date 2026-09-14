@@ -65,7 +65,18 @@ test("thanks I'll pick a time after Calendly is acknowledgment, not a new bookin
 test("schedule a call → book appointment", () => {
   const r = resolveAiRouting({ inbound: "Can we schedule a call tomorrow?" });
   assert.equal(r.decision, "BOOK_APPOINTMENT");
+  assert.equal(r.turnIntent, "appointment");
   assert.equal(routingAllowsSchedulingLink(r), true);
+});
+
+test("later-turn schedule a demo stays appointment even with pricing words in thread text", () => {
+  const r = resolveAiRouting({
+    inbound: "I'd like to schedule a demo",
+    joinedInbound: "Features & pricing\nI'd like to schedule a demo",
+  });
+  assert.equal(r.decision, "BOOK_APPOINTMENT");
+  assert.equal(r.turnIntent, "appointment");
+  assert.ok(r.subIntents.includes("booking_question"));
 });
 
 test("clarify then live chat → assign agent", () => {

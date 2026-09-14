@@ -17,6 +17,7 @@ import {
   buildChatbotCompletionContactContext,
   chatbotCompletionPromptRules,
   classifyChatbotVisitorIntent,
+  isCanonicalBookingTurn,
   resolveChatbotCompletionRouting,
 } from "../shared/chatbotCompletionContext";
 import {
@@ -309,6 +310,34 @@ await test("route-level production-shaped booking sequence", async () => {
     confidence: scored.confidence,
   });
   assert.equal(actions[0]?.label, "Help complete scheduling");
+});
+
+await test("later-turn schedule a demo after Features & pricing uses canonical booking", () => {
+  assert.equal(isCanonicalBookingTurn({ inbound: "I'd like to schedule a demo" }), true);
+  assert.equal(detectHighConfidenceBookingIntent("I'd like to schedule a demo"), false);
+  const later = resolveChatbotCompletionRouting({
+    inbound: "I'd like to schedule a demo",
+    visitorIntent: "Features & pricing",
+    history: [
+      { role: "user", content: "Features & pricing" },
+      { role: "assistant", content: "Pro is $49/month." },
+    ],
+  });
+  assert.equal(later.decision, "BOOK_APPOINTMENT");
+  assert.equal(later.turnIntent, "appointment");
+  assert.ok(later.subIntents.includes("booking_question"));
+  const laterOwner = decideWebchatTurnOwner({
+    bookingIntent: detectHighConfidenceBookingIntent("I'd like to schedule a demo"),
+    chatbot: { triggered: true, visitorFacing: false, reason: "pending_ask_complete" },
+  });
+  assert.equal(laterOwner.owner, "ai_eligible");
+  const prompt = chatbotCompletionPromptRules({
+    visitorIntent: "Features & pricing",
+    inbound: "I'd like to schedule a demo",
+    bookingUrl: DEMO_URL,
+  });
+  assert.match(prompt, /calendly\.com/);
+  assert.doesNotMatch(prompt, /Do not add a booking CTA/);
 });
 
 if (process.exitCode !== 1) {

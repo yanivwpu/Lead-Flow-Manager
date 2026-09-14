@@ -333,7 +333,6 @@ function draftMentionsNextAction(draft: string, actions: RetrievedFact[]): boole
         const expected = normalizeSchedulingUrlForCompare(d.url);
         if (expected && raw.includes(expected)) return true;
       }
-      if (d.label && lower.includes(normalizePhrase(d.label))) return true;
     }
   }
   return false;

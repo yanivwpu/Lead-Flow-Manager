@@ -3,3 +3,4 @@ node_modules
 dist
 .tmp-review-screenshots/
 .tmp-i18n/
+.cursor/debug-*.log
