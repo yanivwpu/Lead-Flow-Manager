@@ -18,7 +18,12 @@ import {
   resolveInboxSelectionState,
   shouldFetchInboxMessages,
 } from "@/lib/inboxSelectionState";
-import { inboxRowKey, isEmailConversationChannel } from "@shared/inboxRowModel";
+import {
+  inboxRowKey,
+  isEmailConversationChannel,
+  nextInboxHrefAfterConversationDelete,
+  remainingInboxItemsAfterConversationDelete,
+} from "@shared/inboxRowModel";
 import {
   mergeInboxWithSessionPins,
   recordInboxTiming,
@@ -771,6 +776,7 @@ export function UnifiedInbox() {
   const [showSaveToContacts, setShowSaveToContacts] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteConversationConfirm, setShowDeleteConversationConfirm] = useState(false);
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const [saveToContactsForm, setSaveToContactsForm] = useState({ name: "", email: "" });
@@ -2522,6 +2528,59 @@ export function UnifiedInbox() {
     },
   });
 
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (conversationId: string) => {
+      const res = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          body.code === "identified_contact"
+            ? "This conversation belongs to a saved contact."
+            : body.error === "insufficient_identity"
+              ? "Not enough identity to save this visitor."
+              : typeof body.error === "string"
+                ? body.error
+                : "Failed to delete conversation";
+        throw new Error(message);
+      }
+      return body as {
+        ok: true;
+        alreadyDeleted?: boolean;
+        conversationId?: string;
+        contactId?: string;
+        contactDeleted?: boolean;
+      };
+    },
+    onSuccess: (data, conversationId) => {
+      const contactId = data.contactId || selectedContactId || "";
+      const current = queryClient.getQueryData<InboxItem[]>(inboxRecentKey) || recentInbox;
+      const remaining = remainingInboxItemsAfterConversationDelete(current, {
+        conversationId,
+        contactId,
+        contactDeleted: !!data.contactDeleted,
+      });
+      queryClient.setQueryData<InboxItem[]>(inboxRecentKey, remaining);
+      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], remaining);
+      queryClient.removeQueries({ queryKey: [`/api/conversations/${conversationId}/messages`] });
+      if (contactId) {
+        queryClient.removeQueries({ queryKey: ["/api/contacts", contactId] });
+      }
+      invalidateQueriesAfterContactDeletion(queryClient);
+      setShowDeleteConversationConfirm(false);
+      setLocation(nextInboxHrefAfterConversationDelete(remaining));
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not delete conversation",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const trashEmailMutation = useMutation({
     mutationFn: async (vars: { messageId: string; source: "list" | "bubble" }) => {
       const res = await apiRequest(
@@ -3955,6 +4014,15 @@ export function UnifiedInbox() {
                         <Trash2 className="w-4 h-4 mr-2" /> Delete Contact
                       </DropdownMenuItem>
                     ) : null}
+                    {conversationMenuActions.includes("delete_conversation") ? (
+                      <DropdownMenuItem
+                        onClick={() => setShowDeleteConversationConfirm(true)}
+                        className="text-red-600"
+                        data-testid="menu-delete-conversation"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete conversation
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -4991,6 +5059,45 @@ export function UnifiedInbox() {
                 );
               })
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showDeleteConversationConfirm}
+        onOpenChange={(open) => {
+          if (deleteConversationMutation.isPending) return;
+          setShowDeleteConversationConfirm(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete conversation?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently remove this conversation and its messages. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConversationConfirm(false)}
+              disabled={deleteConversationMutation.isPending}
+              data-testid="button-cancel-delete-conversation"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!primaryConversation?.id || deleteConversationMutation.isPending) return;
+                deleteConversationMutation.mutate(primaryConversation.id);
+              }}
+              disabled={deleteConversationMutation.isPending || !primaryConversation?.id}
+              data-testid="button-confirm-delete-conversation"
+            >
+              {deleteConversationMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Delete conversation
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

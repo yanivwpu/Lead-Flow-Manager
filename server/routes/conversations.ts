@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import { waMetaWebhookFailureHint } from "../waMetaDeliveryHints";
+import { deleteAnonymousInboxConversationSafely } from "../conversationDeleteService";
 import { storage } from "../storage";
 
 /** Include Postgres `code` / `detail` when present (node-postgres / Drizzle). */
@@ -177,6 +178,25 @@ export function registerConversationRoutes(app: Express): void {
         error: "Failed to load messages",
         ...dbErrorPayload(error),
       });
+    }
+  });
+
+  app.delete("/api/conversations/:id", async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = await deleteAnonymousInboxConversationSafely(req.user.id, req.params.id);
+      if (!result.ok) {
+        if (result.code === "identified_contact") {
+          return res.status(403).json({ error: "identified_contact", code: "identified_contact" });
+        }
+        return res.status(404).json({ error: "Not found" });
+      }
+      return res.json(result);
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      return res.status(500).json({ error: "Failed to delete conversation" });
     }
   });
 

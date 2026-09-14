@@ -153,3 +153,33 @@ export function inboxRowKey(item: {
 }): string {
   return item.conversation?.id || item.contact.id;
 }
+
+export function remainingInboxItemsAfterConversationDelete<
+  T extends {
+    contact: { id: string };
+    conversation?: { id?: string | null } | null;
+  },
+>(
+  items: readonly T[],
+  deleted: { conversationId: string; contactId: string; contactDeleted: boolean },
+): T[] {
+  return items.filter((item) => {
+    if (deleted.contactDeleted && item.contact.id === deleted.contactId) return false;
+    if (item.conversation?.id === deleted.conversationId) return false;
+    return true;
+  });
+}
+
+export function nextInboxHrefAfterConversationDelete(
+  remaining: ReadonlyArray<{
+    contact: { id: string };
+    conversation?: { id?: string | null } | null;
+  }>,
+): string {
+  const next = remaining[0];
+  if (!next) return "/app/inbox";
+  if (next.conversation?.id) {
+    return `/app/inbox/${next.contact.id}?conversation=${encodeURIComponent(next.conversation.id)}`;
+  }
+  return `/app/inbox/${next.contact.id}`;
+}

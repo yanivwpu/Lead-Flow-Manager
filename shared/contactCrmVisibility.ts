@@ -1,4 +1,8 @@
 import { webchatContactQualifiesForCrmListing } from "./webchatContactIdentity";
+import {
+  collectValidatedIdentity,
+  meetsWebchatPromotionThreshold,
+} from "./webchatIdentityFields";
 
 /**
  * CRM Contacts vs Inbox-only email identities.
@@ -100,7 +104,29 @@ export type InboxConversationMenuAction =
   | "edit_contact"
   | "pause_automations"
   | "activity_timeline"
-  | "delete_contact";
+  | "delete_contact"
+  | "delete_conversation";
+
+export type InboxMenuIdentityContact = {
+  source?: string | null;
+  sourceDetails?: unknown;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  customFields?: unknown;
+};
+
+/** Two distinct valid factors from stored name/email/phone — not visitor IDs or qualification fields. */
+export function canSaveInboxIdentityToContacts(contact: InboxMenuIdentityContact): boolean {
+  if (isCrmListedContact(contact)) return false;
+  return meetsWebchatPromotionThreshold(
+    collectValidatedIdentity({
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone,
+    }),
+  );
+}
 
 /**
  * Inbox conversation kebab visibility from server-backed CRM lifecycle.
@@ -108,15 +134,17 @@ export type InboxConversationMenuAction =
  * already fail closed). Pause Automations is therefore hidden until promotion.
  * Delete Contact hard-deletes the participant row and FK-cascades Inbox
  * history, so it is not offered until the row is a saved Contact.
+ * Delete conversation is only for Unknown/anonymous Inbox-only threads.
  * Activity Timeline stays: GET /api/contacts/:id/timeline is tenant-scoped
  * to this participant’s conversation/activity history.
  */
-export function inboxConversationMenuActions(contact: {
-  source?: string | null;
-  sourceDetails?: unknown;
-}): InboxConversationMenuAction[] {
+export function inboxConversationMenuActions(contact: InboxMenuIdentityContact): InboxConversationMenuAction[] {
   if (!isCrmListedContact(contact)) {
-    return ["save_to_contacts", "activity_timeline"];
+    const actions: InboxConversationMenuAction[] = ["activity_timeline", "delete_conversation"];
+    if (canSaveInboxIdentityToContacts(contact)) {
+      return ["save_to_contacts", ...actions];
+    }
+    return actions;
   }
   return ["edit_contact", "pause_automations", "activity_timeline", "delete_contact"];
 }

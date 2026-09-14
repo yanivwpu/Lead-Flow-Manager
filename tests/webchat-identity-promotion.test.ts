@@ -27,6 +27,9 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
 {
   assert.equal(isValidIdentityName("Hi"), null);
+  assert.equal(isValidIdentityName("Unknown"), null);
+  assert.equal(isValidIdentityName("Anonymous"), null);
+  assert.equal(isValidIdentityName("Guest"), null);
   assert.equal(isValidIdentityName("Features & pricing"), null);
   assert.equal(isValidIdentityName("Book a demo"), null);
   assert.equal(isValidIdentityName("Ada Lovelace"), "Ada Lovelace");

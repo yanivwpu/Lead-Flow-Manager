@@ -5,6 +5,7 @@ import {
   isEmailInboxIdentitySource,
   savedContactSourceDetails,
 } from "@shared/contactCrmVisibility";
+import { collectValidatedIdentity, meetsWebchatPromotionThreshold } from "@shared/webchatIdentityFields";
 import { normalizeEmailAddress } from "@shared/emailChannel";
 import {
   findContactsByEmail,
@@ -476,6 +477,16 @@ export function registerContactRoutes(app: Express): void {
         }
         const inboxIdentity = existing.find((c) => !isCrmListedContact(c));
         if (inboxIdentity) {
+          const requestedName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+          const requestedPhone = typeof req.body?.phone === "string" ? req.body.phone : "";
+          const nextIdentity = collectValidatedIdentity({
+            name: requestedName || inboxIdentity.name,
+            email: email || inboxIdentity.email,
+            phone: requestedPhone || inboxIdentity.phone,
+          });
+          if (!meetsWebchatPromotionThreshold(nextIdentity)) {
+            return res.status(400).json({ error: "insufficient_identity", code: "insufficient_identity" });
+          }
           let contact = await promoteInboxIdentityToCrm(inboxIdentity, "email");
           const patch: Record<string, unknown> = {};
           if (typeof req.body.name === "string" && req.body.name.trim()) patch.name = req.body.name.trim();
@@ -514,9 +525,18 @@ export function registerContactRoutes(app: Express): void {
 
       const requestedName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
       const requestedEmail = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+      const requestedPhone = typeof req.body?.phone === "string" ? req.body.phone : "";
       const nextEmail = requestedEmail ? normalizeEmailAddress(requestedEmail) : "";
       if (requestedEmail && !nextEmail) {
         return res.status(400).json({ error: "Enter a valid email address" });
+      }
+      const nextIdentity = collectValidatedIdentity({
+        name: requestedName || contact.name,
+        email: nextEmail || contact.email,
+        phone: requestedPhone || contact.phone,
+      });
+      if (!isCrmListedContact(contact) && !meetsWebchatPromotionThreshold(nextIdentity)) {
+        return res.status(400).json({ error: "insufficient_identity", code: "insufficient_identity" });
       }
 
       let saved = isCrmListedContact(contact)

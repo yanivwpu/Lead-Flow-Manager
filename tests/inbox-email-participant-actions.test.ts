@@ -29,11 +29,19 @@ const savedEmail = {
 };
 const savedManual = { source: "manual" };
 
-test("inbox-only has one Save to Contacts action, inside the dropdown only", () => {
+test("inbox-only Save to Contacts is dropdown-only and requires two identity factors", () => {
   assert.deepEqual(inboxConversationMenuActions(inboxOnly), [
-    "save_to_contacts",
     "activity_timeline",
+    "delete_conversation",
   ]);
+  assert.deepEqual(
+    inboxConversationMenuActions({
+      ...inboxOnly,
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+    }),
+    ["save_to_contacts", "activity_timeline", "delete_conversation"],
+  );
   assert.equal(isCrmListedContact(inboxOnly), false);
 
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
@@ -134,7 +142,9 @@ test("invalid or cross-tenant promotion fails closed", () => {
 
 test("Contact deletion behavior is unchanged for saved Contacts and hidden for inbox-only", () => {
   assert.equal(inboxConversationMenuActions(inboxOnly).includes("delete_contact"), false);
+  assert.equal(inboxConversationMenuActions(inboxOnly).includes("delete_conversation"), true);
   assert.equal(inboxConversationMenuActions(savedEmail).includes("delete_contact"), true);
+  assert.equal(inboxConversationMenuActions(savedEmail).includes("delete_conversation"), false);
 
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   assert.match(inbox, /conversationMenuActions\.includes\("delete_contact"\)/);
@@ -163,7 +173,8 @@ test("Pause Automations is hidden for inbox-only; Activity Timeline stays tenant
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   assert.match(inbox, /conversationMenuActions\.includes\("pause_automations"\)/);
   assert.match(inbox, /conversationMenuActions\.includes\("activity_timeline"\)/);
-  assert.doesNotMatch(inbox, /archiveConversation|Delete Conversation|menu-archive/);
+  assert.doesNotMatch(inbox, /archiveConversation|menu-archive/);
+  assert.match(inbox, /menu-delete-conversation/);
 
   const timeline = read("server/routes/contacts.ts");
   const tl = timeline.slice(timeline.indexOf('app.get("/api/contacts/:id/timeline"'));
