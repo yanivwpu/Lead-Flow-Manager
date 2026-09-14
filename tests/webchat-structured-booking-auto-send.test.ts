@@ -7,7 +7,12 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { matchAskQuestionQuickReply } from "../shared/chatbotAskQuestionOptions";
-import { matchAskQuestionOpeningMessage } from "../shared/chatbotAskOpeningMatch";
+import {
+  firstAskQuestionFromFlow,
+  matchAskQuestionOpeningMessage,
+} from "../shared/chatbotAskOpeningMatch";
+import { decideWebchatTurnOwner } from "../shared/webchatTurnOwner";
+import { detectHighConfidenceBookingIntent } from "../shared/bookingIntent";
 import {
   applyChatbotAskAnswer,
   resolveCurrentTurnStructuredAskIntent,
@@ -181,11 +186,157 @@ function bookingGate(
   assert.equal(esSent.reason, "ok_structured_booking");
 }
 
-{
-  const opening = matchAskQuestionOpeningMessage("אני רוצה לקבוע הדגמה", CANONICAL, [HE]);
-  assert.equal(opening.matched, true);
-  if (opening.matched) assert.equal(opening.option.value, "Book a demo");
+function stampOpeningStructured(message: string, inboundMessageId: string) {
+  assert.equal(
+    matchAskQuestionQuickReply(message, CANONICAL, [HE, ES]),
+    null,
+    "chip matcher must not treat this free text as a click",
+  );
+  const opening = matchAskQuestionOpeningMessage(message, CANONICAL, [HE, ES]);
+  assert.equal(opening.matched, true, message);
+  if (!opening.matched) throw new Error("expected opening match");
+  const validated = validateChatbotAskAnswer("visitor_intent", opening.option.value);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) throw new Error("expected valid");
+  const applied = applyChatbotAskAnswer({
+    contact: { userId: "workspace-a", customFields: {} },
+    expectedUserId: "workspace-a",
+    variableName: "visitor_intent",
+    validated,
+    channel: "webchat",
+    conversationId: "conv-new",
+    flowRunId: "run-new",
+    inboundMessageId,
+    sourceEventId: inboundMessageId,
+    resolution: "ask_question_structured",
+  });
+  assert.equal(applied.ok, true);
+  if (!applied.ok) throw new Error("expected apply ok");
+  const intent = resolveCurrentTurnStructuredAskIntent({
+    customFields: applied.patch.customFields,
+    inboundMessageId,
+  });
+  return { opening, customFields: applied.patch.customFields, intent };
 }
+
+test("new anonymous conversation: אני רוצה לקבוע הדגמה Auto-sends one Calendly reply", async () => {
+  const inboundMessageId = "in-opening-he";
+  const inbound = "אני רוצה לקבוע הדגמה";
+  assert.equal(detectHighConfidenceBookingIntent(inbound), false);
+
+  const firstAsk = firstAskQuestionFromFlow(
+    [
+      { id: "start", type: "start", data: {} },
+      {
+        id: "q1",
+        type: "question",
+        data: { options: CANONICAL, variableName: "visitor_intent" },
+      },
+    ],
+    [{ source: "start", target: "q1" }],
+  );
+  assert.equal(firstAsk?.id, "q1");
+
+  const stamped = stampOpeningStructured(inbound, inboundMessageId);
+  assert.equal(stamped.opening.option.value, "Book a demo");
+  assert.equal(classifyChatbotVisitorIntent(stamped.opening.option.value), "book_demo");
+  assert.equal(stamped.intent.trusted, true);
+  assert.equal(stamped.intent.provenanceCurrentInbound, true);
+  assert.equal(stamped.intent.kind, "book_demo");
+  assert.equal(stamped.intent.resolution, "ask_question_structured");
+  const structuredBooking =
+    stamped.intent.trusted &&
+    stamped.intent.provenanceCurrentInbound &&
+    stamped.intent.kind === "book_demo";
+  assert.equal(structuredBooking, true);
+  assert.equal(isSafeStructuredBookingCta(HE_REPLY, DEMO_URL), true);
+
+  const turn = decideWebchatTurnOwner({
+    bookingIntent: false,
+    chatbot: { triggered: true, visitorFacing: false, reason: "pending_ask_complete" },
+  });
+  assert.equal(turn.chatbotOwnsReply, false);
+  assert.equal(turn.owner, "ai_eligible");
+
+  const gate = bookingGate(inbound, stamped.intent, {
+    businessKnowledge: QUALIFYING_GAPS,
+    verifiedBookingUrl: DEMO_URL,
+  });
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_structured_booking");
+  assert.match(HE_REPLY, /https:\/\/calendly\.com\/yanivharamaty\/whachatcrm-live-product-demo/);
+
+  const en = stampOpeningStructured("I want to book a demo", "in-opening-en");
+  assert.equal(en.opening.option.value, "Book a demo");
+  const enGate = bookingGate("I want to book a demo", en.intent, {
+    suggestion: `Happy to book a live demo.\n${DEMO_URL}`,
+    businessKnowledge: QUALIFYING_GAPS,
+    verifiedBookingUrl: DEMO_URL,
+  });
+  assert.equal(enGate.allowed, true);
+
+  const es = stampOpeningStructured("Quiero reservar una demostración", "in-opening-es");
+  assert.equal(es.opening.option.value, "Book a demo");
+  const esGate = bookingGate("Quiero reservar una demostración", es.intent, {
+    suggestion: `Con gusto agendamos una demo.\n${DEMO_URL}`,
+    businessKnowledge: QUALIFYING_GAPS,
+    verifiedBookingUrl: DEMO_URL,
+  });
+  assert.equal(esGate.allowed, true);
+
+  const ambiguous = matchAskQuestionOpeningMessage("אולי אחר כך", CANONICAL, [HE, ES]);
+  assert.equal(ambiguous.matched, false);
+  const ambiguousGate = bookingGate("אולי אחר כך", null, {
+    priorInbound: "שלום",
+    businessKnowledge: QUALIFYING_GAPS,
+    verifiedBookingUrl: DEMO_URL,
+  });
+  assert.equal(ambiguousGate.allowed, false);
+  assert.notEqual(ambiguousGate.reason, "ok_structured_booking");
+
+  const stale = resolveCurrentTurnStructuredAskIntent({
+    customFields: stamped.customFields,
+    inboundMessageId: "in-later",
+  });
+  assert.equal(stale.trusted, false);
+  assert.equal(stale.provenanceCurrentInbound, false);
+
+  const contact = { id: "anon-1", userId: "workspace-a" } as Contact;
+  const conversation = { id: "conv-new", userId: "workspace-a", contactId: "anon-1" } as Conversation;
+  const seen = new Set<string>();
+  const runAi = async (p: { inboundMessageId: string }) => {
+    if (seen.has(p.inboundMessageId)) return { decision: "skip_already_replied", sent: false };
+    seen.add(p.inboundMessageId);
+    return { decision: "send_auto", sent: true };
+  };
+  const args = {
+    userId: "workspace-a",
+    contact,
+    conversation,
+    inboundMessageId,
+    inboundText: inbound,
+    contentType: "text",
+    channel: "webchat",
+    chatbotOwnsReply: false,
+    turnOwner: "ai_eligible" as const,
+    awayConfigured: false,
+    awayReplyWillSend: false,
+    widgetSettings: { enabled: true },
+  };
+  const first = await dispatchWebchatInboundAi(args, { runAi });
+  const second = await dispatchWebchatInboundAi(args, { runAi });
+  assert.equal(first.sent, true);
+  assert.equal(first.decision, "send_auto");
+  assert.equal(second.sent, false);
+  assert.equal(seen.size, 1);
+
+  const engine = read("server/chatbotEngine.ts");
+  assert.match(engine, /matchAskQuestionOpeningMessage/);
+  assert.match(engine, /Opening inbound already answered Ask Question/);
+  assert.match(engine, /ask_question_structured/);
+  assert.match(engine, /inboundMessageId: ctx\.inboundMessageId/);
+  assert.doesNotMatch(engine, /sendAskQuestionPrompt\(ctx, promptText, askOptions\);\s*[\s\S]*opening\.matched/);
+});
 
 {
   const stale = stampStructured("קביעת הדגמה", "in-old", HE);
