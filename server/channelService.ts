@@ -1353,7 +1353,7 @@ class ChannelService {
       await storage.updateContact(contact.id, contactUpdates);
     }
 
-    if (channel === "webchat" && contact) {
+    if (channel === "webchat" && contact && !validatedPageRuleAction) {
       try {
         const { extractIdentityHints } = await import("@shared/agent/webchatLeadContext");
         const { acceptExtractedIdentity, collectValidatedIdentity } = await import(
@@ -1834,8 +1834,61 @@ class ChannelService {
     const latestForTurn = (await storage.getConversation(conversation.id)) || conversation;
     const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
     const turnControl = readConversationAiControl(latestForTurn.aiControl);
+    let nextJourney = turnControl.activeJourney;
+    if (channel === "webchat") {
+      const {
+        applyJourneyInbound,
+        markJourneyStatus,
+        readActiveJourney,
+        resolveCurrentTurnJourney,
+        startPricingSavingsJourney,
+      } = await import("@shared/webchatActiveJourney");
+      const { detectSavingsIntentChange, extractSavingsSlots } = await import("@shared/webchatSavingsJourney");
+      const visitorId = String(contact.webchatId || channelContactId || "");
+      if (validatedPageRuleAction?.kind === "calculate_savings") {
+        nextJourney = startPricingSavingsJourney({
+          userId,
+          visitorId,
+          conversationId: conversation.id,
+          ruleKey: validatedPageRuleAction.ruleKey,
+          actionIndex: validatedPageRuleAction.actionIndex,
+          originInboundId: message.id,
+          locale: conversationLanguage,
+        });
+        if (chatbotWillFire || bookingIntent) {
+          nextJourney = markJourneyStatus(nextJourney, "paused");
+        }
+      } else {
+        const existing = readActiveJourney(turnControl.activeJourney);
+        const current = resolveCurrentTurnJourney({
+          journey: existing,
+          userId,
+          visitorId,
+          conversationId: conversation.id,
+          inboundMessageId: message.id,
+        });
+        if (existing && current.trusted) {
+          if (chatbotWillFire || bookingIntent || detectSavingsIntentChange(content)) {
+            nextJourney = markJourneyStatus(existing, "paused");
+          } else {
+            nextJourney = applyJourneyInbound({
+              journey: existing,
+              inboundMessageId: message.id,
+              extracted: extractSavingsSlots(content),
+            }).journey;
+          }
+        } else if (existing && !current.trusted) {
+          nextJourney = existing;
+        }
+      }
+    }
     await storage.updateConversation(conversation.id, {
-      aiControl: { ...turnControl, lastTurnOwner: turn.owner, conversationLanguage },
+      aiControl: {
+        ...turnControl,
+        lastTurnOwner: turn.owner,
+        conversationLanguage,
+        activeJourney: nextJourney,
+      },
     });
     console.info("[INBOUND_AUTOMATION]", {
       tag: "channel_inbound",

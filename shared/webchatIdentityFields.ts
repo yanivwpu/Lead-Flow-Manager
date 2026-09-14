@@ -24,6 +24,15 @@ const BUTTON_AND_INTENT_LABELS = new Set(
     "book demo",
     "pricing",
     "features",
+    "calculate my savings",
+    "compare free & pro",
+    "compare free and pro",
+    "calcular mi ahorro",
+    "comparar free y pro",
+    "reservar una demo",
+    "חישוב החיסכון שלי",
+    "השוואת free ו-pro",
+    "קביעת הדגמה",
   ].map((s) => s.toLowerCase()),
 );
 
@@ -68,6 +77,9 @@ export function isValidIdentityName(raw: unknown): string | null {
   if (text.length < 2 || text.length > 80) return null;
   if (GREETING_NAMES.has(text.toLowerCase())) return null;
   if (BUTTON_AND_INTENT_LABELS.has(text.toLowerCase())) return null;
+  if (/\b(savings|ahorro|החיסכון|pricing|demo|compare|comparar|השוואת|calculate|calcular)\b/i.test(text)) {
+    return null;
+  }
   if (isAnonymousWebchatVisitorName(text)) return null;
   if (/\.(jpe?g|png|gif|webp|heic|pdf|docx?|mp4|mov)$/i.test(text)) return null;
   if (isWebchatVisitorId(text)) return null;

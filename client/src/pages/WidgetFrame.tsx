@@ -49,6 +49,12 @@ import {
   WEBCHAT_HUMAN_TAKEOVER_HEADER,
   writeShownPageRuleKeys,
 } from "@shared/webchatPageRuleEngagement";
+import { resolveComposerEnterAction } from "@shared/composerKeyboard";
+import {
+  nextComposerTextareaLayout,
+  WIDGET_COMPOSER_TEXTAREA_MAX_PX,
+  WIDGET_COMPOSER_TEXTAREA_MIN_PX,
+} from "@shared/composerTextareaHeight";
 
 interface ButtonOption {
   label: string;
@@ -188,7 +194,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [composerHeightPx, setComposerHeightPx] = useState(WIDGET_COMPOSER_TEXTAREA_MIN_PX);
+  const [composerOverflowY, setComposerOverflowY] = useState<"hidden" | "auto">("hidden");
+  const [composerIsMobile, setComposerIsMobile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingUploadsRef = useRef<Map<string, File>>(new Map());
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,6 +212,29 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const settingsReadyRef = useRef(false);
   const activePageRuleRef = useRef<string | null>(null);
   const userId = widgetId;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const coarse = window.matchMedia("(pointer: coarse)");
+    const update = () => setComposerIsMobile(coarse.matches);
+    update();
+    coarse.addEventListener("change", update);
+    return () => coarse.removeEventListener("change", update);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = nextComposerTextareaLayout(
+      el.scrollHeight,
+      WIDGET_COMPOSER_TEXTAREA_MIN_PX,
+      WIDGET_COMPOSER_TEXTAREA_MAX_PX,
+    );
+    setComposerHeightPx(next.heightPx);
+    setComposerOverflowY(next.overflowY);
+    el.style.height = `${next.heightPx}px`;
+  }, [inputText]);
 
   useEffect(() => {
     if (!userId) return;
@@ -759,11 +791,21 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     setPendingFile(file);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage(inputText);
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const composing =
+      e.nativeEvent.isComposing || (typeof e.keyCode === "number" && e.keyCode === 229);
+    const decision = resolveComposerEnterAction({
+      channel: "webchat",
+      isMobile: composerIsMobile,
+      key: e.key,
+      shiftKey: e.shiftKey,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      canSend: Boolean(inputText.trim() || pendingFile) && !isSending && !widgetUnavailable && !isLoading,
+      isComposing: composing,
+    });
+    if (decision.preventDefault) e.preventDefault();
+    if (decision.action === "send") sendMessage(inputText);
   };
 
   if (!userId) {
@@ -1055,7 +1097,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             </button>
           </div>
         )}
-        <div className="flex min-w-0 gap-2 items-center">
+        <div className="flex min-w-0 gap-2 items-end">
           <input
             ref={fileInputRef}
             type="file"
@@ -1075,9 +1117,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           >
             <Paperclip className="h-4 w-4" />
           </button>
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={inputText}
             onChange={e => {
               setInputText(e.target.value);
@@ -1088,8 +1130,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             dir="auto"
             disabled={isSending || widgetUnavailable || isLoading}
             data-testid="input-chat-message"
-            className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50"
-            style={{ "--tw-ring-color": accentColor } as React.CSSProperties}
+            aria-label={chromeCopy.inputPlaceholder}
+            className="min-w-0 flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 resize-none overflow-x-hidden whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+            style={{
+              "--tw-ring-color": accentColor,
+              height: `${composerHeightPx}px`,
+              overflowY: composerOverflowY,
+              maxHeight: `${WIDGET_COMPOSER_TEXTAREA_MAX_PX}px`,
+            } as React.CSSProperties}
           />
           <button
             onClick={() => sendMessage(inputText)}

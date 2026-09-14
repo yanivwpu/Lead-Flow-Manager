@@ -469,11 +469,13 @@ test("public inbound route stamps current-turn provenance and does not persist v
   assert.match(channel, /validatedPageRuleAction/);
   assert.match(auto, /resolveCurrentTurnPageAction/);
   assert.match(auto, /currentTurnPageAction/);
+  assert.match(auto, /resolveCurrentTurnJourney/);
   assert.match(auto, /pageActionValidated/);
   assert.match(auto, /ok_validated_page_action|pageActionGateDiagnostics/);
   assert.match(gate, /ok_validated_page_action/);
   assert.match(gate, /conversation_too_short/);
   assert.match(inbox, /resolveCurrentTurnPageAction/);
+  assert.match(inbox, /resolveCurrentTurnJourney/);
   const diag = pageActionGateDiagnostics({
     trusted: true,
     provenanceCurrentInbound: true,

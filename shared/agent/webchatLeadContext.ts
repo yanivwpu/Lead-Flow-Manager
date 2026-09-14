@@ -17,7 +17,20 @@ const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_RE =
   /\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b|\b\d{10,11}\b/;
 const NAME_RE =
-  /(?:^|\b)(?:i['']?m|i am|my name is|this is|call me)\s+([A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2})/i;
+  /(?:^|\b)(?:i['']?m|i am|my name is|call me)\s+([A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2})/i;
+const NAME_VERBS = new Set([
+  "using",
+  "paying",
+  "looking",
+  "trying",
+  "sending",
+  "calculate",
+  "compare",
+  "book",
+  "need",
+  "want",
+  "have",
+]);
 
 export function isAnonymousWebchatVisitorName(name: string | null | undefined): boolean {
   const trimmed = (name || "").trim();
@@ -61,21 +74,23 @@ export function extractIdentityHints(text: string): {
   }
 
   const nameMatch = trimmed.match(NAME_RE);
-  const candidate = nameMatch?.[1]?.trim()
-    || (
-      !hints.email &&
-      !hints.phone &&
-      trimmed.length <= 40 &&
-      /^[A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2}$/.test(trimmed)
-        ? trimmed
-        : ""
-    );
+  const bareName =
+    !hints.email &&
+    !hints.phone &&
+    trimmed.length <= 40 &&
+    /^[A-Za-z][A-Za-z'.-]+(?:\s+[A-Za-z][A-Za-z'.-]+){0,2}$/.test(trimmed)
+      ? trimmed
+      : "";
+  const candidate = nameMatch?.[1]?.trim() || bareName;
   if (candidate) {
+    const first = candidate.split(/\s+/)[0] || "";
     const blocked =
+      NAME_VERBS.has(first.toLowerCase()) ||
       /^(hi|hello|hey|hola|shalom|thanks|thank you|ok|okay|yes|no|please|help|got it|sure|yo|sup)$/i.test(candidate) ||
-      /^(features?\s*(&|and)?\s*pricing|find my solution|book a demo)$/i.test(candidate) ||
+      /^(features?\s*(&|and)?\s*pricing|find my solution|book a demo|calculate my savings|compare free(?:\s*(&|and)\s*pro)?)$/i.test(candidate) ||
+      /\b(savings|ahorro|pricing|demo|compare|comparar|calculate|calcular)\b/i.test(candidate) ||
       isAnonymousWebchatVisitorName(candidate);
-    if (!blocked) hints.name = candidate;
+    if (!blocked && /^[A-Z]/.test(first)) hints.name = candidate;
   }
 
   return hints;

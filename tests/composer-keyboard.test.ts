@@ -116,6 +116,22 @@ test("mobile: bare Enter never sends; mod+Enter can send", () => {
   });
 });
 
+test("IME composition does not send on Enter", () => {
+  assert.deepEqual(
+    resolveComposerEnterAction({
+      channel: "webchat",
+      isMobile: false,
+      key: "Enter",
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      canSend: true,
+      isComposing: true,
+    }),
+    { action: "ignore", preventDefault: false },
+  );
+});
+
 test("non-Enter keys are ignored", () => {
   assert.deepEqual(
     resolveComposerEnterAction({

@@ -11266,6 +11266,8 @@ export async function registerRoutes(
         typeof bodyContactId === "string" && bodyContactId.trim() ? bodyContactId.trim() : null;
       let contactCustomFieldsForGate: unknown = null;
       let contactWebchatContextForGate: unknown = null;
+      let conversationAiControlForGate: unknown = null;
+      let contactWebchatIdForGate = "";
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
 
@@ -11275,6 +11277,7 @@ export async function registerRoutes(
           return res.status(404).json(FOREIGN_RESOURCE_BODY);
         }
         resolvedContactId = convOwned.contactId;
+        conversationAiControlForGate = convOwned.aiControl;
       }
       if (resolvedContactId) {
         const contactOwned = await getContactForWorkspace(userId, resolvedContactId);
@@ -11283,6 +11286,7 @@ export async function registerRoutes(
         }
         contactCustomFieldsForGate = contactOwned.customFields;
         contactWebchatContextForGate = contactOwned.webchatContext;
+        contactWebchatIdForGate = String(contactOwned.webchatId || "");
       }
 
       let buyerMatchingTraceId: string | null = null;
@@ -11520,6 +11524,7 @@ export async function registerRoutes(
         retrievedFactCount?: number;
         retrievedFactTypeCounts?: string;
         retrievedFactTypeHash?: string;
+        retrievalIntent?: string;
         liveOfferRecordCount?: number;
         tenantKnowledgeChunkCount?: number;
         tenantKnowledgeAmountCount?: number;
@@ -11806,6 +11811,32 @@ export async function registerRoutes(
         }
       }
 
+      if (resolvedConversationId && conversationAiControlForGate) {
+        try {
+          const { resolveCurrentTurnJourney } = await import("@shared/webchatActiveJourney");
+          const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
+          const inboxJourney = resolveCurrentTurnJourney({
+            journey: readConversationAiControl(conversationAiControlForGate).activeJourney,
+            userId,
+            visitorId: contactWebchatIdForGate,
+            conversationId: resolvedConversationId,
+            inboundMessageId: "",
+          });
+          if (inboxJourney.trusted) {
+            enrichedContactContext = {
+              ...(enrichedContactContext || {}),
+              journeyKind: inboxJourney.kind,
+              journeyTrusted: true,
+              journeyContinuation: inboxJourney.continuation,
+              journeyCollected: inboxJourney.collected,
+              journeyMissing: inboxJourney.missingFields,
+            };
+          }
+        } catch {
+          /* journey is optional context */
+        }
+      }
+
       let modelWasInvoked = false;
       let modelGenerationSucceeded = false;
       if (!skipAiModelForAutoNonText) {
@@ -11855,13 +11886,7 @@ export async function registerRoutes(
       let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
       let autoSendIdempotencyKey: string | undefined;
       let autoSendConfidenceSource: "model" | "defaulted" | "missing" | undefined;
-      let pageActionDiag: {
-        pageActionValidated: boolean;
-        pageActionCurrentInbound: boolean;
-        pageRuleKey?: string;
-        pageActionIndex?: number;
-        explicitUserChoice: boolean;
-      } | undefined;
+      let pageActionDiag: Record<string, boolean | string | number | undefined> | undefined;
       let gateChannel: string | null = messagingChannel;
 
       if (wantsAuto && chatId) {
@@ -11931,12 +11956,25 @@ export async function registerRoutes(
           const { resolveCurrentTurnPageAction, pageActionGateDiagnostics } = await import(
             "@shared/webchatPageRuleAction"
           );
+          const { resolveCurrentTurnJourney, journeyGateDiagnostics } = await import(
+            "@shared/webchatActiveJourney"
+          );
           const currentTurnAskIntent = resolveCurrentTurnStructuredAskIntent({
             customFields: contactCustomFieldsForGate,
             inboundMessageId: inboundMessageIdForAuto || "",
           });
           const currentTurnPageAction = resolveCurrentTurnPageAction({
             pageContext: contactWebchatContextForGate,
+            inboundMessageId: inboundMessageIdForAuto || "",
+          });
+          const currentTurnJourney = resolveCurrentTurnJourney({
+            journey: conversationAiControlForGate
+              ? (await import("@shared/webchatAiPolicy")).readConversationAiControl(conversationAiControlForGate)
+                  .activeJourney
+              : undefined,
+            userId,
+            visitorId: contactWebchatIdForGate,
+            conversationId: resolvedConversationId || "",
             inboundMessageId: inboundMessageIdForAuto || "",
           });
           const gate = evaluateFullAutoSend({
@@ -11951,9 +11989,20 @@ export async function registerRoutes(
             channel: gateChannel,
             currentTurnAskIntent,
             currentTurnPageAction,
+            currentTurnJourney,
             verifiedBookingUrl: String((knowledge as { bookingLink?: string } | undefined)?.bookingLink || "").trim(),
           });
-          const pageActionDiagResolved = pageActionGateDiagnostics(currentTurnPageAction);
+          const pageActionDiagResolved = {
+            ...pageActionGateDiagnostics(currentTurnPageAction),
+            ...journeyGateDiagnostics(currentTurnJourney, inboundMessageIdForAuto || ""),
+            ...(suggestion.retrievalIntent ? { retrievalIntent: suggestion.retrievalIntent } : {}),
+            groundingResult:
+              suggestion.groundingViolations && suggestion.groundingViolations.length
+                ? suggestion.groundingViolations[0]
+                : suggestion.knowledgeGrounded
+                  ? "grounded"
+                  : "ungrounded",
+          };
           pageActionDiag = pageActionDiagResolved;
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;

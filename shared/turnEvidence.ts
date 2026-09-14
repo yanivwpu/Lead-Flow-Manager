@@ -16,6 +16,9 @@ export const EVIDENCE_SOURCE_TYPES = [
   "live_offer",
   "business_profile",
   "website_chunk",
+  "visitor_provided",
+  "canonical_catalog",
+  "derived_arithmetic",
 ] as const;
 
 export type EvidenceSourceType = (typeof EVIDENCE_SOURCE_TYPES)[number];
@@ -215,6 +218,13 @@ export function buildTurnEvidenceBundle(params: {
   servicesProducts?: string | null;
   /** Already extracted and capped website chunk that will enter the prompt. */
   websiteKnowledgeText?: string | null;
+  /** Server-computed journey amounts with typed provenance. */
+  supplementalEvidence?: Array<{
+    sourceType: EvidenceSourceType;
+    text: string;
+    identity?: string | null;
+    amounts?: string[];
+  }>;
 }): TurnEvidenceBundle {
   const userId = String(params.userId || "").trim();
   const blocked = new Set(params.conflictingKeys ?? []);
@@ -300,6 +310,44 @@ export function buildTurnEvidenceBundle(params: {
       stale: false,
       inactive: false,
       amounts: extractSupportedAmountsFromText(promptWebsiteText, "website_chunk"),
+    });
+  }
+
+  for (const extra of params.supplementalEvidence ?? []) {
+    if (
+      extra.sourceType !== "visitor_provided" &&
+      extra.sourceType !== "canonical_catalog" &&
+      extra.sourceType !== "derived_arithmetic"
+    ) {
+      continue;
+    }
+    const text = String(extra.text || "").trim();
+    if (!text) continue;
+    const identity = normalizeEvidenceIdentity(extra.identity);
+    const extracted = extractSupportedAmountsFromText(text, extra.sourceType).map((a) => ({
+      ...a,
+      identity: null,
+      supportsAuto: true,
+    }));
+    const extraAmounts = (extra.amounts ?? [])
+      .map((raw) => String(raw || "").replace(/[^\d.]/g, ""))
+      .filter((amount) => isPlausiblePriceAmount(amount))
+      .filter((amount) => !extracted.some((a) => a.amount === amount))
+      .map((amount) => ({
+        amount,
+        currency: extra.sourceType === "canonical_catalog" ? "USD" : null,
+        interval: null,
+        identity: null,
+        sourceType: extra.sourceType,
+        supportsAuto: true,
+      }));
+    items.push({
+      sourceType: extra.sourceType,
+      text,
+      identity,
+      stale: false,
+      inactive: false,
+      amounts: [...extracted, ...extraAmounts],
     });
   }
 

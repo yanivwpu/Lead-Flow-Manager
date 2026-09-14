@@ -89,6 +89,8 @@ export type ConversationAiControl = {
   chatbotPendingInput?: unknown;
   /** Visitor conversation language — not the dashboard user's locale. */
   conversationLanguage?: string;
+  /** Server-owned multi-turn journey. Not click provenance. */
+  activeJourney?: unknown;
 };
 
 function readLease(raw: unknown): WebchatGenerationLease | null {
@@ -124,6 +126,7 @@ export function readConversationAiControl(raw: unknown): ConversationAiControl {
       typeof o.conversationLanguage === "string" && /^[a-z]{2,8}$/.test(o.conversationLanguage)
         ? o.conversationLanguage
         : undefined,
+    activeJourney: o.activeJourney,
   };
 }
 
@@ -134,6 +137,17 @@ function bumpEpoch(current: ConversationAiControl): number {
 function cancelLease(lease: WebchatGenerationLease | null, epoch: number): WebchatGenerationLease | null {
   if (!lease) return null;
   return { ...lease, epoch, status: "cancelled" };
+}
+
+function pauseStoredJourney(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const status = (raw as { status?: unknown }).status;
+  if (status !== "collecting" && status !== "ready_to_calculate") return raw;
+  return {
+    ...raw,
+    status: "paused",
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function pauseAiControl(
@@ -158,6 +172,7 @@ export function pauseAiControl(
     lastTurnOwner: current.lastTurnOwner,
     chatbotPendingInput: current.chatbotPendingInput,
     conversationLanguage: current.conversationLanguage,
+    activeJourney: pauseStoredJourney(current.activeJourney),
   };
 }
 
@@ -175,6 +190,7 @@ export function resumeAiControl(previous?: unknown): ConversationAiControl {
     lastTurnOwner: current.lastTurnOwner,
     chatbotPendingInput: current.chatbotPendingInput,
     conversationLanguage: current.conversationLanguage,
+    activeJourney: current.activeJourney,
   };
 }
 

@@ -60,6 +60,8 @@ export type WebchatAiGenerateFn = (input: {
   knowledgeGrounded?: boolean;
   modelGenerationSucceeded?: boolean;
   groundingViolations?: string[];
+  retrievalIntent?: string;
+  savingsJourneyComplete?: boolean;
 }>;
 
 export type WebchatAiAutoReplyDeps = {
@@ -124,6 +126,14 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     pageContext: contact?.webchatContext,
     inboundMessageId: input.inboundMessageId || "",
   });
+  const { resolveCurrentTurnJourney } = await import("@shared/webchatActiveJourney");
+  const journey = resolveCurrentTurnJourney({
+    journey: control.activeJourney,
+    userId: input.userId,
+    visitorId: String(contact?.webchatId || ""),
+    conversationId: input.conversationId,
+    inboundMessageId: input.inboundMessageId || "",
+  });
   const completion = buildChatbotCompletionContactContext({
     customFields: contact?.customFields,
     name: contact?.name,
@@ -139,6 +149,7 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     handoffKeywords: settings?.handoffKeywords ?? undefined,
     industry: knowledge?.industry ?? undefined,
     pageActionKind: pageAction.trusted ? pageAction.kind : undefined,
+    journeyKind: journey.trusted ? journey.kind : undefined,
   });
   if (input.signal.aborted) {
     const err = new Error("aborted");
@@ -159,6 +170,15 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
       ...completion,
       ...(pageAction.trusted
         ? { pageActionKind: pageAction.kind, pageActionLabel: pageAction.label }
+        : {}),
+      ...(journey.trusted
+        ? {
+            journeyKind: journey.kind,
+            journeyTrusted: true,
+            journeyContinuation: journey.continuation,
+            journeyCollected: journey.collected,
+            journeyMissing: journey.missingFields,
+          }
         : {}),
     },
     routing,
@@ -248,6 +268,15 @@ export async function maybeRunWebchatServerAi(
     pageRuleKey?: string;
     pageActionIndex?: number;
     explicitUserChoice?: boolean;
+    activeJourneyKind?: string;
+    activeJourneyTrusted?: boolean;
+    activeJourneyContinuation?: boolean;
+    activeJourneyOriginInboundId?: string;
+    currentInboundId?: string;
+    collectedFields?: string;
+    missingFields?: string;
+    retrievalIntent?: string;
+    groundingResult?: string;
   }) => {
     const outcome = extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra);
     const rollout = readWebchatServerAiRollout(params.userId);
@@ -281,6 +310,21 @@ export async function maybeRunWebchatServerAi(
               explicitUserChoice: extra.explicitUserChoice === true,
             }
           : {}),
+        ...(typeof extra?.activeJourneyTrusted === "boolean"
+          ? {
+              activeJourneyTrusted: extra.activeJourneyTrusted,
+              activeJourneyContinuation: extra.activeJourneyContinuation === true,
+              ...(extra.activeJourneyKind ? { activeJourneyKind: extra.activeJourneyKind } : {}),
+              ...(extra.activeJourneyOriginInboundId
+                ? { activeJourneyOriginInboundId: extra.activeJourneyOriginInboundId }
+                : {}),
+              ...(extra.currentInboundId ? { currentInboundId: extra.currentInboundId } : {}),
+              ...(extra.collectedFields ? { collectedFields: extra.collectedFields } : {}),
+              ...(extra.missingFields ? { missingFields: extra.missingFields } : {}),
+              ...(extra.retrievalIntent ? { retrievalIntent: extra.retrievalIntent } : {}),
+              ...(extra.groundingResult ? { groundingResult: extra.groundingResult } : {}),
+            }
+          : {}),
       },
     });
     console.info("[AIAutoReply]", {
@@ -307,6 +351,17 @@ export async function maybeRunWebchatServerAi(
             ...(extra.pageRuleKey ? { pageRuleKey: extra.pageRuleKey } : {}),
             ...(typeof extra.pageActionIndex === "number" ? { pageActionIndex: extra.pageActionIndex } : {}),
             explicitUserChoice: extra.explicitUserChoice === true,
+          }
+        : {}),
+      ...(typeof extra?.activeJourneyTrusted === "boolean"
+        ? {
+            activeJourneyTrusted: extra.activeJourneyTrusted,
+            activeJourneyContinuation: extra.activeJourneyContinuation === true,
+            ...(extra.activeJourneyKind ? { activeJourneyKind: extra.activeJourneyKind } : {}),
+            ...(extra.collectedFields ? { collectedFields: extra.collectedFields } : {}),
+            ...(extra.missingFields ? { missingFields: extra.missingFields } : {}),
+            ...(extra.retrievalIntent ? { retrievalIntent: extra.retrievalIntent } : {}),
+            ...(extra.groundingResult ? { groundingResult: extra.groundingResult } : {}),
           }
         : {}),
     });
@@ -366,6 +421,8 @@ export async function maybeRunWebchatServerAi(
     knowledgeGrounded?: boolean;
     modelGenerationSucceeded?: boolean;
     groundingViolations?: string[];
+    retrievalIntent?: string;
+    savingsJourneyComplete?: boolean;
   } = {
     suggestion: "",
     confidence: 0,
@@ -528,6 +585,15 @@ export async function maybeRunWebchatServerAi(
     pageContext: contact.webchatContext,
     inboundMessageId: params.inboundMessageId,
   });
+  const { resolveCurrentTurnJourney, journeyGateDiagnostics, markJourneyStatus, readActiveJourney } =
+    await import("@shared/webchatActiveJourney");
+  const currentTurnJourney = resolveCurrentTurnJourney({
+    journey: controlNow.activeJourney,
+    userId: params.userId,
+    visitorId: String(contact.webchatId || ""),
+    conversationId: conv.id,
+    inboundMessageId: params.inboundMessageId,
+  });
   const gate = evaluateFullAutoSend({
     businessMode: "auto",
     channel: "webchat",
@@ -541,8 +607,19 @@ export async function maybeRunWebchatServerAi(
     groundingViolations: suggestion.groundingViolations,
     currentTurnAskIntent,
     currentTurnPageAction,
+    currentTurnJourney,
   });
-  const gateDiagnostics = pageActionGateDiagnostics(currentTurnPageAction);
+  const gateDiagnostics = {
+    ...pageActionGateDiagnostics(currentTurnPageAction),
+    ...journeyGateDiagnostics(currentTurnJourney, params.inboundMessageId),
+    ...(suggestion.retrievalIntent ? { retrievalIntent: suggestion.retrievalIntent } : {}),
+    groundingResult:
+      suggestion.groundingViolations && suggestion.groundingViolations.length
+        ? suggestion.groundingViolations[0]
+        : suggestion.knowledgeGrounded
+          ? "grounded"
+          : "ungrounded",
+  };
   if (!gate.allowed) {
     const reasonCode = `send_auto:held:${gate.reason}`;
     await persistDraft(reasonCode);
@@ -598,8 +675,17 @@ export async function maybeRunWebchatServerAi(
     return { decision: "send_failed", sent: false };
   }
   const afterSend = (await storage.getConversation(conv.id)) || conv;
+  const afterControl = readConversationAiControl(afterSend.aiControl);
+  const completedLease = completeWebchatGenerationLease(afterControl, leaseId);
+  const liveJourney = readActiveJourney(afterControl.activeJourney);
   await storage.updateConversation(conv.id, {
-    aiControl: completeWebchatGenerationLease(afterSend.aiControl, leaseId),
+    aiControl: {
+      ...completedLease,
+      activeJourney:
+        suggestion.savingsJourneyComplete && liveJourney
+          ? markJourneyStatus(liveJourney, "completed")
+          : afterControl.activeJourney,
+    },
   });
   report(gate.reason, { sent: true, confidenceSource: gate.confidenceSource, ...gateDiagnostics });
   return { decision, sent: true };

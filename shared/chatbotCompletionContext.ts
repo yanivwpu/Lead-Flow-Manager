@@ -109,6 +109,7 @@ export function isCanonicalBookingTurn(input: {
   inbound?: string | null;
   history?: Array<{ role: string; content?: string }>;
   pageActionKind?: string | null;
+  journeyKind?: string | null;
 }): boolean {
   const inbound = (input.inbound || "").trim();
   const fromPage = visitorKindFromPageAction(input.pageActionKind);
@@ -136,6 +137,7 @@ function currentTurnVisitorKind(input: {
   visitorIntent?: string | null;
   history?: Array<{ role: string; content?: string }>;
   pageActionKind?: string | null;
+  journeyKind?: string | null;
 }): ChatbotVisitorIntentKind {
   const inbound = input.inbound || "";
   const acknowledgment =
@@ -143,9 +145,14 @@ function currentTurnVisitorKind(input: {
   if (acknowledgment && !detectBookingLinkResendRequest(inbound)) return "other";
   const fromPage = visitorKindFromPageAction(input.pageActionKind);
   if (fromPage) return fromPage;
-  if (isCanonicalBookingTurn({ inbound, history: input.history })) return "book_demo";
+  if (isCanonicalBookingTurn({ inbound, history: input.history, pageActionKind: input.pageActionKind })) {
+    return "book_demo";
+  }
   const currentKind = classifyChatbotVisitorIntent(inbound);
   if (currentKind !== "other") return currentKind;
+  if (input.journeyKind === "pricing_savings" || input.journeyKind === "calculate_savings") {
+    return "calculate_savings";
+  }
   return classifyChatbotVisitorIntent(input.visitorIntent);
 }
 
@@ -202,6 +209,7 @@ export function resolveChatbotCompletionRouting(input: {
   industry?: string;
   handoffKeywords?: string[];
   pageActionKind?: string | null;
+  journeyKind?: string | null;
 }): AiRoutingResult {
   const acknowledgment =
     detectBookingAcknowledgment(input.inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
@@ -216,7 +224,7 @@ export function resolveChatbotCompletionRouting(input: {
     acknowledgment || resend || currentBooking || kind === "other"
       ? input.inbound
       : `${input.inbound}\n${input.visitorIntent || ""}`.trim();
-  const routing = resolveAiRouting({
+  let routing = resolveAiRouting({
     inbound,
     joinedInbound: inbound,
     history: input.history,
@@ -234,10 +242,17 @@ export function resolveChatbotCompletionRouting(input: {
     (kind === "features_pricing" || kind === "find_solution" || kind === "calculate_savings") &&
     routing.subIntents.includes("booking_question")
   ) {
-    return {
+    routing = {
       ...routing,
       subIntents: routing.subIntents.filter((intent) => intent !== "booking_question"),
     };
+  }
+  if (
+    !currentBooking &&
+    (kind === "calculate_savings" || input.journeyKind === "pricing_savings") &&
+    !routing.subIntents.includes("pricing_question")
+  ) {
+    return { ...routing, subIntents: [...routing.subIntents, "pricing_question"] };
   }
   return routing;
 }
@@ -249,6 +264,9 @@ export function chatbotCompletionPromptRules(input: {
   inbound?: string | null;
   history?: Array<{ role: string; content?: string }>;
   pageActionKind?: string | null;
+  journeyKind?: string | null;
+  journeyContinuation?: boolean;
+  journeyMissing?: string[];
 }): string {
   const inbound = input.inbound || "";
   const priorUrl = lastAssistantCalendlyUrl(input.history);
@@ -259,6 +277,7 @@ export function chatbotCompletionPromptRules(input: {
     visitorIntent: input.visitorIntent,
     history: input.history,
     pageActionKind: input.pageActionKind,
+    journeyKind: input.journeyKind,
   });
   const allowBooking = visitorIntentAllowsBookingCta(kind);
   const verifiedUrl = input.bookingUrl || priorUrl || "";
@@ -283,7 +302,16 @@ export function chatbotCompletionPromptRules(input: {
   if (kind === "features_pricing") {
     lines.push("- The visitor asked to compare published plans or pricing. Use only current workspace pricing knowledge. Do not invent plan facts. Do not add a booking CTA or booking link.");
   } else if (kind === "calculate_savings") {
-    lines.push("- The visitor wants a savings estimate. On this first turn, ask for the minimum missing inputs: their current platform and approximate monthly cost. Do not invent a calculation or savings amount. Do not add a booking CTA.");
+    if (input.journeyContinuation) {
+      const missing = (input.journeyMissing || []).filter((field) => field === "platform" || field === "monthlyCost" || field === "currency");
+      lines.push(
+        missing.length
+          ? `- Continue the savings estimate. Ask only for the remaining required inputs (${missing.join(", ")}). Do not repeat already-collected facts. Do not invent a calculation, ManyChat prices, exchange rates, or savings amounts. Do not add a booking CTA.`
+          : "- Continue the savings estimate using only visitor-provided cost and canonical WhachatCRM prices. Do not invent ManyChat prices, exchange rates, or unsupported amounts. Do not add a booking CTA.",
+      );
+    } else {
+      lines.push("- The visitor wants a savings estimate. On this first turn, ask for the minimum missing inputs: their current platform and approximate monthly cost. Do not invent a calculation or savings amount. Do not add a booking CTA.");
+    }
   } else if (kind === "find_solution") {
     lines.push("- The visitor wants help choosing. Ask ONE useful qualification question. Do not pitch everything at once.");
   } else if (kind === "book_demo") {

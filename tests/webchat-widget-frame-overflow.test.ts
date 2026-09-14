@@ -36,7 +36,10 @@ function read(rel: string): string {
   assert.match(frame, /break-words/);
   assert.match(frame, /\[overflow-wrap:anywhere\]/);
   assert.match(frame, /min-w-0 flex-1 px-3 py-2/);
-  assert.match(frame, /flex min-w-0 gap-2 items-center/);
+  assert.match(frame, /flex min-w-0 gap-2 items-end/);
+  assert.match(frame, /<textarea/);
+  assert.match(frame, /overflow-x-hidden/);
+  assert.match(frame, /resize-none/);
   assert.match(frame, /WebchatMediaBubble/);
   assert.match(frame, /btn-attach-image/);
 }

@@ -49,8 +49,12 @@ export function resolveComposerEnterAction(params: {
   ctrlKey: boolean;
   metaKey: boolean;
   canSend: boolean;
+  isComposing?: boolean;
 }): ComposerEnterDecision {
   if (params.key !== "Enter") {
+    return { action: "ignore", preventDefault: false };
+  }
+  if (params.isComposing) {
     return { action: "ignore", preventDefault: false };
   }
 

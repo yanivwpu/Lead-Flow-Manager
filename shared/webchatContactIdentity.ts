@@ -105,6 +105,9 @@ export function looksLikeMessageDerivedWebchatName(name: string | null | undefin
   if (isAnonymousWebchatVisitorName(trimmed)) return false;
   if (CHAT_TOKEN_NAMES.has(trimmed.toLowerCase())) return true;
   if (FILENAME_RE.test(trimmed)) return true;
+  if (/\b(savings|ahorro|pricing|demo|compare|comparar|calculate|calcular|features)\b/i.test(trimmed)) {
+    return true;
+  }
   if (trimmed.length <= 40 && MESSAGE_DERIVED_NAME_RE.test(trimmed) && trimmed.split(/\s+/).length <= 3) {
     return true;
   }

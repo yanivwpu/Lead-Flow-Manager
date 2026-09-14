@@ -229,6 +229,15 @@ export function evaluateFullAutoSend(params: {
     actionIndex?: number;
     explicitUserChoice?: boolean;
   } | null;
+  /**
+   * Server-owned multi-turn journey. Continuation is not click provenance.
+   * Must never reuse a stale pageAction as current.
+   */
+  currentTurnJourney?: {
+    trusted?: boolean;
+    continuation?: boolean;
+    kind?: string;
+  } | null;
   /** Workspace-selected Calendly URL. Required for the scoped Book a demo qualification skip. */
   verifiedBookingUrl?: string | null;
 }): {
@@ -243,6 +252,9 @@ export function evaluateFullAutoSend(params: {
   pageRuleKey?: string;
   pageActionIndex?: number;
   explicitUserChoice?: boolean;
+  activeJourneyKind?: string;
+  activeJourneyTrusted?: boolean;
+  activeJourneyContinuation?: boolean;
 } {
   const { businessMode, conversationHistory, suggestion, businessKnowledge } = params;
   const webchat = isWebchatChannel(params.channel);
@@ -250,6 +262,9 @@ export function evaluateFullAutoSend(params: {
     params.currentTurnPageAction?.trusted === true &&
     params.currentTurnPageAction.provenanceCurrentInbound === true;
   const explicitUserChoice = pageActionValidated;
+  const journeyTrusted = params.currentTurnJourney?.trusted === true;
+  const journeyContinuation = journeyTrusted && params.currentTurnJourney?.continuation === true;
+  const contextuallyClear = explicitUserChoice || journeyContinuation;
   const pageActionDiagnostics = {
     pageActionValidated,
     pageActionCurrentInbound: params.currentTurnPageAction?.provenanceCurrentInbound === true,
@@ -260,6 +275,11 @@ export function evaluateFullAutoSend(params: {
       ? { pageActionIndex: params.currentTurnPageAction.actionIndex }
       : {}),
     explicitUserChoice,
+    activeJourneyTrusted: journeyTrusted,
+    activeJourneyContinuation: journeyContinuation,
+    ...(journeyTrusted && params.currentTurnJourney?.kind
+      ? { activeJourneyKind: String(params.currentTurnJourney.kind).slice(0, 40) }
+      : {}),
   };
   const none = (
     reason: string,
@@ -363,7 +383,7 @@ export function evaluateFullAutoSend(params: {
       !isCasualWebchatGreeting(lastInbound) &&
       ((knowledgeQuestion && grounded) ||
         (structuredBooking && grounded) ||
-        (explicitUserChoice &&
+        ((explicitUserChoice || journeyContinuation) &&
           !structuredBooking &&
           (grounded || !draftHasCurrencyAmount(suggestion))));
     if (!mayDefault) {
@@ -412,18 +432,18 @@ export function evaluateFullAutoSend(params: {
     };
   }
 
-  if (!strongIntent && !structuredBooking && !explicitUserChoice && inboundCount < 2 && !knowledgeQuestion) {
+  if (!strongIntent && !structuredBooking && !contextuallyClear && inboundCount < 2 && !knowledgeQuestion) {
     return none("conversation_too_short", inboundCount, missingLen);
   }
 
-  if (!strongIntent && !structuredBooking && !explicitUserChoice && GREETING_ONLY.test(lastInbound)) {
+  if (!strongIntent && !structuredBooking && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
     return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =
     structuredBooking ||
-    explicitUserChoice ||
+    contextuallyClear ||
     signals.strongIntent ||
     signals.viewingIntent ||
     lastInbound.length >= 25 ||
@@ -443,14 +463,14 @@ export function evaluateFullAutoSend(params: {
     if (!conf.ok) {
       return none(conf.reason, inboundCount, missingLen, conf.source);
     }
-    if ((knowledgeQuestion || explicitUserChoice) && !grounded && draftHasCurrencyAmount(suggestion)) {
+    if ((knowledgeQuestion || contextuallyClear) && !grounded && draftHasCurrencyAmount(suggestion)) {
       return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
     }
     if (
       qualifyingGuess &&
       !safeBookingCta &&
       !knowledgeQuestion &&
-      !(explicitUserChoice && !structuredBooking)
+      !(contextuallyClear && !structuredBooking)
     ) {
       return none("missing_required_gt_one", inboundCount, missingLen, conf.source, missingRequired);
     }
@@ -460,9 +480,11 @@ export function evaluateFullAutoSend(params: {
         ? "ok_structured_booking"
         : explicitUserChoice
           ? "ok_validated_page_action"
-          : knowledgeQuestion
-            ? "ok_knowledge_question"
-            : "ok",
+          : journeyContinuation
+            ? "ok_active_journey"
+            : knowledgeQuestion
+              ? "ok_knowledge_question"
+              : "ok",
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: conf.source,
@@ -475,7 +497,7 @@ export function evaluateFullAutoSend(params: {
   if (!conf.ok) {
     return none(conf.reason, inboundCount, missingLen, conf.source);
   }
-  if ((knowledgeQuestion || explicitUserChoice) && !grounded && draftHasCurrencyAmount(suggestion)) {
+  if ((knowledgeQuestion || contextuallyClear) && !grounded && draftHasCurrencyAmount(suggestion)) {
     return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
   }
 

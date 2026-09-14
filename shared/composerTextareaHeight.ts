@@ -14,6 +14,10 @@ export const CHAT_COMPOSER_TEXTAREA_MAX_PX = 160;
 export const EMAIL_COMPOSER_TEXTAREA_MIN_PX = CHAT_COMPOSER_TEXTAREA_MIN_PX;
 export const EMAIL_COMPOSER_TEXTAREA_MAX_PX = 120;
 
+/** Public Website Chat widget — one visual row, grow to ~4–5 rows, then scroll. */
+export const WIDGET_COMPOSER_TEXTAREA_MIN_PX = 38;
+export const WIDGET_COMPOSER_TEXTAREA_MAX_PX = 128;
+
 export type ComposerTextareaKind = "email" | "chat";
 
 export type ComposerTextareaBounds = {

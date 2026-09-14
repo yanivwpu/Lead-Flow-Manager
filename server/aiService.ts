@@ -25,6 +25,7 @@ import {
   classifyChatbotVisitorIntent,
   isCanonicalBookingTurn,
 } from "@shared/chatbotCompletionContext";
+import { resolveSavingsJourneyReply } from "@shared/webchatSavingsJourney";
 import {
   detectBookingAcknowledgment,
   detectBookingLinkResendRequest,
@@ -57,7 +58,7 @@ import {
   type AiSettings,
 } from "@shared/schema";
 import type { AiRoutingResult } from "@shared/aiRouting";
-import { isWebchatChannel, isCasualWebchatGreeting } from "./aiAutoSendGate";
+import { isWebchatChannel, isCasualWebchatGreeting, WEBCHAT_AUTO_SEND_MIN_CONFIDENCE } from "./aiAutoSendGate";
 import {
   coerceWebchatGreetingWelcome,
   webchatSafeGreetingWelcome,
@@ -104,6 +105,17 @@ export class AIService {
       conversationLanguage?: string;
       pageActionKind?: string;
       pageActionLabel?: string;
+      journeyKind?: string;
+      journeyTrusted?: boolean;
+      journeyContinuation?: boolean;
+      journeyCollected?: {
+        platform?: string;
+        monthlyCost?: number;
+        currency?: string;
+        teamSize?: number;
+        monthlyVolume?: number;
+      };
+      journeyMissing?: string[];
     },
     routing?: AiRoutingResult,
     channel?: string | null,
@@ -117,6 +129,8 @@ export class AIService {
     retrievedFactCount?: number;
     retrievedFactTypeCounts?: string;
     retrievedFactTypeHash?: string;
+    retrievalIntent?: string;
+    savingsJourneyComplete?: boolean;
     liveOfferRecordCount?: number;
     tenantKnowledgeChunkCount?: number;
     tenantKnowledgeAmountCount?: number;
@@ -154,6 +168,15 @@ export class AIService {
       contactContext?.conversationLanguage ||
       (await this.detectMessageLanguage(lastMessage));
     const isFirstMessage = conversationHistory.length <= 2;
+
+    if (
+      contactContext?.journeyTrusted &&
+      (contactContext.journeyKind === "pricing_savings" || contactContext.journeyKind === "calculate_savings") &&
+      routing &&
+      !routing.subIntents.includes("pricing_question")
+    ) {
+      routing = { ...routing, subIntents: [...routing.subIntents, "pricing_question"] };
+    }
 
     // AI Brain source decision: Knowledge Sources and/or Live Business Data connectors.
     const liveDecision = resolveLiveBusinessDataDecision({
@@ -204,12 +227,18 @@ export class AIService {
         ? "book_demo"
         : currentVisitorKind !== "other"
           ? currentVisitorKind
-          : storedVisitorKind;
+          : contactContext?.journeyTrusted &&
+              (contactContext.journeyKind === "pricing_savings" ||
+                contactContext.journeyKind === "calculate_savings")
+            ? "calculate_savings"
+            : storedVisitorKind;
     const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     if (visitorKind === "book_demo") {
       grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
     } else if (visitorKind === "features_pricing" || visitorKind === "find_solution") {
       grounding = excludeFactTypesFromGrounding(grounding, ["booking_link"]);
+    } else if (visitorKind === "calculate_savings") {
+      grounding = excludeFactTypesFromGrounding(grounding, ["booking_link", "call_to_action"]);
     }
 
     let liveBusinessDataBlock = "";
@@ -257,6 +286,15 @@ export class AIService {
       visitorKind === "book_demo"
         ? replaceUntrustedBookingUrlsInKnowledgeText(promptWebsiteTextRaw, verifiedBookingUrl)
         : promptWebsiteTextRaw;
+    const savingsScripted =
+      contactContext?.journeyTrusted &&
+      (contactContext.journeyKind === "pricing_savings" || contactContext.journeyKind === "calculate_savings")
+        ? resolveSavingsJourneyReply({
+            locale: contactContext.conversationLanguage || detectedLanguage,
+            collected: contactContext.journeyCollected || {},
+            missing: contactContext.journeyMissing || [],
+          })
+        : null;
     const turnEvidence: TurnEvidenceBundle = buildTurnEvidenceBundle({
       userId,
       retrieved: grounding.retrieved,
@@ -264,6 +302,7 @@ export class AIService {
       liveRecords: liveRecordsForBundle,
       servicesProducts: businessKnowledge?.servicesProducts,
       websiteKnowledgeText: promptWebsiteText,
+      supplementalEvidence: savingsScripted?.evidence,
     });
     const evidenceDiag = evidenceDiagnostics(turnEvidence);
     const structuredPricesSelected = turnEvidence.supportedAmountSourceTypes.some(
@@ -290,7 +329,7 @@ export class AIService {
       conversationHistory,
     );
 
-    const evaluateDraft = (draft: string): GroundingCheck =>
+    const evaluateDraft = (draft: string, opts?: { skipCompleteness?: boolean }): GroundingCheck =>
       mergeGroundingChecks(
         validateGroundedClaims({
           draft,
@@ -299,13 +338,48 @@ export class AIService {
           conflictingKeys: grounding.conflictingKeys,
           bundle: turnEvidence,
         }),
-        validateResponseCompleteness({
-          draft,
-          retrieved: grounding.retrieved,
-          subIntents: routing?.subIntents,
-          conflictingKeys: grounding.conflictingKeys,
-        }),
+        opts?.skipCompleteness
+          ? { ok: true, violations: [] }
+          : validateResponseCompleteness({
+              draft,
+              retrieved: grounding.retrieved,
+              subIntents: routing?.subIntents,
+              conflictingKeys: grounding.conflictingKeys,
+            }),
       );
+
+    if (savingsScripted?.text) {
+      const groundingCheck = evaluateDraft(savingsScripted.text, {
+        skipCompleteness: !savingsScripted.complete,
+      });
+      const knowledgeGrounded =
+        groundingCheck.ok &&
+        isDraftAmountGrounded({
+          draft: savingsScripted.text,
+          retrieved: grounding.retrieved,
+          conflictingKeys: grounding.conflictingKeys,
+          bundle: turnEvidence,
+        });
+      return {
+        suggestion: savingsScripted.text,
+        confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+        confidenceProvided: false,
+        knowledgeGrounded,
+        groundingViolations: groundingCheck.violations.map((v) => v.kind),
+        retrievedFactTypes: turnEvidence.publishedFactTypes,
+        retrievedFactCount: turnEvidence.publishedFactCount,
+        retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
+        retrievedFactTypeHash: hashPublishedFactTypes(userId, turnEvidence.publishedFactTypes),
+        retrievalIntent: savingsScripted.retrievalIntent,
+        savingsJourneyComplete: savingsScripted.complete,
+        liveOfferRecordCount: turnEvidence.liveOfferRecordCount,
+        tenantKnowledgeChunkCount: turnEvidence.tenantKnowledgeChunkCount,
+        tenantKnowledgeAmountCount: turnEvidence.tenantKnowledgeAmountCount,
+        supportedAmountSourceTypes: turnEvidence.supportedAmountSourceTypes,
+        conflictReason: turnEvidence.conflictReason,
+        modelGenerationSucceeded: false,
+      };
+    }
 
     const runCompletion = async (prompt: string) => {
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -881,6 +955,10 @@ Return JSON only: { "summary": "..." }`;
       conversationLanguage?: string;
       pageActionKind?: string;
       pageActionLabel?: string;
+      journeyKind?: string;
+      journeyTrusted?: boolean;
+      journeyContinuation?: boolean;
+      journeyMissing?: string[];
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -1131,7 +1209,12 @@ When replying, work through these qualification questions in order. Ask only ONE
       prompt += `\n\nADDITIONAL INSTRUCTIONS: ${businessKnowledge.customInstructions}`;
     }
 
-    if (contactContext?.visitorIntent || contactContext?.chatbotVariables || contactContext?.pageActionKind) {
+    if (
+      contactContext?.visitorIntent ||
+      contactContext?.chatbotVariables ||
+      contactContext?.pageActionKind ||
+      contactContext?.journeyTrusted
+    ) {
       prompt += `\n\n${chatbotCompletionPromptRules({
         visitorIntent: contactContext.visitorIntent || contactContext.intent,
         conversationLanguage: contactContext.conversationLanguage || language,
@@ -1139,6 +1222,9 @@ When replying, work through these qualification questions in order. Ask only ONE
         inbound: latestInbound,
         history: conversationHistory,
         pageActionKind: contactContext.pageActionKind,
+        journeyKind: contactContext.journeyTrusted ? contactContext.journeyKind : undefined,
+        journeyContinuation: contactContext.journeyContinuation === true,
+        journeyMissing: contactContext.journeyMissing,
       })}`;
     }
 
