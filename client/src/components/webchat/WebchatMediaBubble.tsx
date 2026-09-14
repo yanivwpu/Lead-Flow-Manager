@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, RotateCcw, ExternalLink } from "lucide-react";
 import { contrastTextForBackground } from "@shared/webchatWidgetBranding";
+import { WebchatLinkedText } from "@/components/webchat/WebchatLinkedText";
 
 export function WebchatMediaBubble(props: {
   src: string;
@@ -92,7 +93,9 @@ export function WebchatMediaBubble(props: {
         )}
       </div>
       {caption ? (
-        <p className="px-3 py-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{caption}</p>
+        <p className="px-3 py-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+          <WebchatLinkedText text={caption} />
+        </p>
       ) : null}
     </div>
   );

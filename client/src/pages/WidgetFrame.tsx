@@ -11,6 +11,7 @@ import {
 } from "@/components/webchat/WidgetFrameErrorBoundary";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { sanitizeWebchatFormDefinition, type WebchatFormDefinition } from "@shared/webchatStructuredForm";
+import { WebchatLinkedText } from "@/components/webchat/WebchatLinkedText";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
 import { WebchatQuickReplyButtons } from "@/components/webchat/WebchatQuickReplyButtons";
 import {
@@ -31,7 +32,6 @@ import {
   webchatMessageIds,
 } from "@shared/webchatWidgetScroll";
 import {
-  messageTextDir,
   resolveWidgetStaticLocale,
   sanitizeWidgetLocaleParam,
   widgetChromeCopyForLocale,
@@ -674,7 +674,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         {!isLoading && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
-              <span dir={messageTextDir(urlGreeting || settingsWelcome)}>{urlGreeting || settingsWelcome}</span>
+              <WebchatLinkedText text={urlGreeting || settingsWelcome} />
             </div>
           </div>
         )}
@@ -773,9 +773,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                         : {}
                     }
                   >
-                    <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]" dir={messageTextDir(msg.content)}>
-                      {msg.content}
-                    </span>
+                    <WebchatLinkedText
+                      text={msg.content}
+                      className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                    />
                   </div>
                 ) : null}
 

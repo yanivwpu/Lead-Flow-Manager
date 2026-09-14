@@ -143,9 +143,12 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.match(settings, /chromeCopy/);
   assert.doesNotMatch(settings.slice(settings.indexOf('app.get("/api/webchat/:userId/settings"'), settings.indexOf('app.get("/api/webchat/:userId/:visitorId/messages"')), /email|password|token/);
   const frame = read("client/src/pages/WidgetFrame.tsx");
+  const linked = read("client/src/components/webchat/WebchatLinkedText.tsx");
   assert.match(frame, /dir=\{widgetChromeDir/);
   assert.match(frame, /dir="auto"/);
   assert.match(frame, /locale: widgetLocale/);
+  assert.match(frame, /WebchatLinkedText/);
+  assert.match(linked, /dir=\{messageTextDir\(value\)\}/);
 }
 
 console.log("webchat-widget-locale.test.ts: all assertions passed");

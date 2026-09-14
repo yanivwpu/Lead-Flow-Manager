@@ -100,8 +100,10 @@ const MIXED = "הכירו את WhachatCRM 👋 — Features & pricing";
 
 {
   const frame = read("client/src/pages/WidgetFrame.tsx");
-  assert.match(frame, /dir=\{messageTextDir/);
+  const linked = read("client/src/components/webchat/WebchatLinkedText.tsx");
+  assert.match(frame, /WebchatLinkedText/);
   assert.match(frame, /dir="auto"/);
+  assert.match(linked, /dir=\{messageTextDir/);
   assert.doesNotMatch(frame, /builderLocalizedInputProps/);
 }
 

@@ -4,6 +4,7 @@ import {
   chromeCssForPreview,
   type WebchatChromeState,
 } from "@shared/webchatWidgetChrome";
+import { WebchatLinkedText } from "@/components/webchat/WebchatLinkedText";
 import { WebchatPanelHeader } from "@/components/webchat/WebchatPanelHeader";
 import { WebchatQuickReplyButtons } from "@/components/webchat/WebchatQuickReplyButtons";
 import {
@@ -103,7 +104,7 @@ export function WebchatChromePreview({
           <div className="min-w-0 flex-1 overflow-y-auto bg-gray-50 p-3 space-y-2">
             <div className="max-w-[85%] min-w-0">
               <div className="break-words rounded-2xl rounded-bl-none border border-gray-100 bg-white px-3 py-2 text-xs text-gray-800 [overflow-wrap:anywhere]">
-                {p.chatGreeting || p.welcomeMessage}
+                <WebchatLinkedText text={p.chatGreeting || p.welcomeMessage} />
               </div>
               <WebchatQuickReplyButtons
                 buttons={[
