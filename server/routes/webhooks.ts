@@ -16,7 +16,7 @@ import {
 } from "../webchatAccess";
 import { isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
 import { mergeWebchatPageContext, parseHttpUrl, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
-import { validatePageRuleInboundAction } from "@shared/webchatPageRuleMatch";
+import { resolveTrustedPageRuleInboundAction } from "@shared/webchatPageRuleAction";
 import { WEBCHAT_HUMAN_TAKEOVER_HEADER } from "@shared/webchatPageRuleEngagement";
 import { readConversationAiControl } from "@shared/webchatAiPolicy";
 import { resolveTelegramWebhookOwner, resolveTiktokLeadOwner } from "../ingressPublicTokens";
@@ -234,8 +234,11 @@ export function registerWebhookRoutes(app: Express): void {
       }
 
       const matched = matchWidgetPageRule(access.owner.widgetSettings, parentUrl || "", locale);
-      const validatedAction = validatePageRuleInboundAction({
-        matched,
+      const validatedAction = resolveTrustedPageRuleInboundAction({
+        originAuthorized: true,
+        settings: access.owner.widgetSettings,
+        parentUrl,
+        locale,
         message,
         actionIndex: pageRuleActionIndex,
       });
@@ -278,6 +281,7 @@ export function registerWebhookRoutes(app: Express): void {
         preferredChatbotFlowId,
         visitorLocale: locale,
         skipNewChatTrigger: Boolean(validatedAction),
+        validatedPageRuleAction: validatedAction || undefined,
       });
 
       if (result.success && result.contact && result.conversation && !result.deduped) {

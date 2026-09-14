@@ -217,6 +217,18 @@ export function evaluateFullAutoSend(params: {
     provenanceCurrentInbound?: boolean;
     kind?: string;
   } | null;
+  /**
+   * Current-inbound page-rule suggested action only.
+   * Stale contact pageAction from an earlier inbound must not be passed as trusted.
+   */
+  currentTurnPageAction?: {
+    trusted?: boolean;
+    provenanceCurrentInbound?: boolean;
+    kind?: string;
+    ruleKey?: string;
+    actionIndex?: number;
+    explicitUserChoice?: boolean;
+  } | null;
   /** Workspace-selected Calendly URL. Required for the scoped Book a demo qualification skip. */
   verifiedBookingUrl?: string | null;
 }): {
@@ -226,9 +238,29 @@ export function evaluateFullAutoSend(params: {
   inboundCount: number;
   confidenceSource: AutoSendConfidenceSource;
   missingRequired: string[];
+  pageActionValidated?: boolean;
+  pageActionCurrentInbound?: boolean;
+  pageRuleKey?: string;
+  pageActionIndex?: number;
+  explicitUserChoice?: boolean;
 } {
   const { businessMode, conversationHistory, suggestion, businessKnowledge } = params;
   const webchat = isWebchatChannel(params.channel);
+  const pageActionValidated =
+    params.currentTurnPageAction?.trusted === true &&
+    params.currentTurnPageAction.provenanceCurrentInbound === true;
+  const explicitUserChoice = pageActionValidated;
+  const pageActionDiagnostics = {
+    pageActionValidated,
+    pageActionCurrentInbound: params.currentTurnPageAction?.provenanceCurrentInbound === true,
+    ...(pageActionValidated && params.currentTurnPageAction?.ruleKey
+      ? { pageRuleKey: String(params.currentTurnPageAction.ruleKey).slice(0, 220) }
+      : {}),
+    ...(pageActionValidated && typeof params.currentTurnPageAction?.actionIndex === "number"
+      ? { pageActionIndex: params.currentTurnPageAction.actionIndex }
+      : {}),
+    explicitUserChoice,
+  };
   const none = (
     reason: string,
     inboundCount = 0,
@@ -242,6 +274,7 @@ export function evaluateFullAutoSend(params: {
     inboundCount,
     confidenceSource,
     missingRequired,
+    ...pageActionDiagnostics,
   });
 
   if (businessMode !== "auto") {
@@ -255,9 +288,10 @@ export function evaluateFullAutoSend(params: {
   const joinedInbound = inboundMsgs.map((m) => m.content || "").join("\n");
   const lastInbound = inboundMsgs[inboundMsgs.length - 1]?.content?.trim() || "";
   const structuredBooking =
-    params.currentTurnAskIntent?.trusted === true &&
-    params.currentTurnAskIntent.provenanceCurrentInbound === true &&
-    params.currentTurnAskIntent.kind === "book_demo";
+    (params.currentTurnAskIntent?.trusted === true &&
+      params.currentTurnAskIntent.provenanceCurrentInbound === true &&
+      params.currentTurnAskIntent.kind === "book_demo") ||
+    (pageActionValidated && params.currentTurnPageAction?.kind === "book_demo");
 
   if (!lastInbound) {
     return none("empty_last_inbound", inboundCount);
@@ -326,9 +360,12 @@ export function evaluateFullAutoSend(params: {
     }
     const mayDefault =
       webchat &&
-      (knowledgeQuestion || structuredBooking) &&
-      grounded &&
-      !isCasualWebchatGreeting(lastInbound);
+      !isCasualWebchatGreeting(lastInbound) &&
+      ((knowledgeQuestion && grounded) ||
+        (structuredBooking && grounded) ||
+        (explicitUserChoice &&
+          !structuredBooking &&
+          (grounded || !draftHasCurrencyAmount(suggestion))));
     if (!mayDefault) {
       return { ok: false, reason: "confidence_not_provided", source: "missing" };
     }
@@ -351,6 +388,7 @@ export function evaluateFullAutoSend(params: {
       inboundCount,
       confidenceSource: conf.source,
       missingRequired,
+      ...pageActionDiagnostics,
     };
   }
 
@@ -370,20 +408,22 @@ export function evaluateFullAutoSend(params: {
       inboundCount,
       confidenceSource: modelProvided ? "model" : "defaulted",
       missingRequired,
+      ...pageActionDiagnostics,
     };
   }
 
-  if (!strongIntent && !structuredBooking && inboundCount < 2 && !knowledgeQuestion) {
+  if (!strongIntent && !structuredBooking && !explicitUserChoice && inboundCount < 2 && !knowledgeQuestion) {
     return none("conversation_too_short", inboundCount, missingLen);
   }
 
-  if (!strongIntent && !structuredBooking && GREETING_ONLY.test(lastInbound)) {
+  if (!strongIntent && !structuredBooking && !explicitUserChoice && GREETING_ONLY.test(lastInbound)) {
     return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =
     structuredBooking ||
+    explicitUserChoice ||
     signals.strongIntent ||
     signals.viewingIntent ||
     lastInbound.length >= 25 ||
@@ -403,23 +443,31 @@ export function evaluateFullAutoSend(params: {
     if (!conf.ok) {
       return none(conf.reason, inboundCount, missingLen, conf.source);
     }
-    if (knowledgeQuestion && !grounded && draftHasCurrencyAmount(suggestion)) {
+    if ((knowledgeQuestion || explicitUserChoice) && !grounded && draftHasCurrencyAmount(suggestion)) {
       return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
     }
-    if (!knowledgeQuestion && qualifyingGuess && !safeBookingCta) {
+    if (
+      qualifyingGuess &&
+      !safeBookingCta &&
+      !knowledgeQuestion &&
+      !(explicitUserChoice && !structuredBooking)
+    ) {
       return none("missing_required_gt_one", inboundCount, missingLen, conf.source, missingRequired);
     }
     return {
       allowed: true,
       reason: structuredBooking
         ? "ok_structured_booking"
-        : knowledgeQuestion
-          ? "ok_knowledge_question"
-          : "ok",
+        : explicitUserChoice
+          ? "ok_validated_page_action"
+          : knowledgeQuestion
+            ? "ok_knowledge_question"
+            : "ok",
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: conf.source,
       missingRequired,
+      ...pageActionDiagnostics,
     };
   }
 
@@ -427,7 +475,7 @@ export function evaluateFullAutoSend(params: {
   if (!conf.ok) {
     return none(conf.reason, inboundCount, missingLen, conf.source);
   }
-  if (knowledgeQuestion && !grounded && draftHasCurrencyAmount(suggestion)) {
+  if ((knowledgeQuestion || explicitUserChoice) && !grounded && draftHasCurrencyAmount(suggestion)) {
     return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
   }
 
@@ -452,6 +500,7 @@ export function evaluateFullAutoSend(params: {
     inboundCount,
     confidenceSource: conf.source,
     missingRequired,
+    ...pageActionDiagnostics,
   };
 }
 

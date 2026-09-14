@@ -102,6 +102,8 @@ export class AIService {
       visitorIntent?: string;
       chatbotVariables?: string;
       conversationLanguage?: string;
+      pageActionKind?: string;
+      pageActionLabel?: string;
     },
     routing?: AiRoutingResult,
     channel?: string | null,
@@ -877,6 +879,8 @@ Return JSON only: { "summary": "..." }`;
       visitorIntent?: string;
       chatbotVariables?: string;
       conversationLanguage?: string;
+      pageActionKind?: string;
+      pageActionLabel?: string;
     },
     isFirstMessage?: boolean,
     routing?: AiRoutingResult,
@@ -978,6 +982,7 @@ ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineSta
 ${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
 ${contactContext.intent ? `- Detected intent: ${contactContext.intent}` : ''}
 ${contactContext.visitorIntent ? `- Visitor chatbot answer (visitor_intent): ${contactContext.visitorIntent}` : ''}
+${contactContext.pageActionKind ? `- Server-validated page-rule action: ${contactContext.pageActionKind}` : ''}
 ${contactContext.chatbotVariables ? `- Chatbot variables: ${contactContext.chatbotVariables}` : ''}
 ${contactContext.conversationLanguage ? `- Conversation language: ${contactContext.conversationLanguage}` : ''}
 ${contactContext.budget ? `- Budget (already mentioned): ${contactContext.budget} — DO NOT ask for budget again` : ''}
@@ -1126,13 +1131,14 @@ When replying, work through these qualification questions in order. Ask only ONE
       prompt += `\n\nADDITIONAL INSTRUCTIONS: ${businessKnowledge.customInstructions}`;
     }
 
-    if (contactContext?.visitorIntent || contactContext?.chatbotVariables) {
+    if (contactContext?.visitorIntent || contactContext?.chatbotVariables || contactContext?.pageActionKind) {
       prompt += `\n\n${chatbotCompletionPromptRules({
         visitorIntent: contactContext.visitorIntent || contactContext.intent,
         conversationLanguage: contactContext.conversationLanguage || language,
         bookingUrl: bookingUrl || null,
         inbound: latestInbound,
         history: conversationHistory,
+        pageActionKind: contactContext.pageActionKind,
       })}`;
     }
 

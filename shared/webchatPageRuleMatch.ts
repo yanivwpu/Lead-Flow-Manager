@@ -203,8 +203,9 @@ export type ValidatedPageRuleAction = {
 };
 
 /**
- * Trust the matched rule + current inbound label (and optional index).
+ * Trust the matched rule + current inbound label at a supplied action index.
  * Never trust a client-supplied canonical intent or rule key.
+ * Never infer trust merely because free text equals a saved label.
  */
 export function validatePageRuleInboundAction(input: {
   matched: MatchedWidgetPageRule | null;
@@ -215,23 +216,12 @@ export function validatePageRuleInboundAction(input: {
   if (!matched) return null;
   const message = String(input.message || "").trim();
   if (!message) return null;
-  const tryIndex = (index: number): ValidatedPageRuleAction | null => {
-    const labels = pageRuleActionLabelsAtIndex(matched, index);
-    if (!labels.includes(message)) return null;
-    return { ruleKey: matched.ruleKey, actionIndex: index, label: message };
-  };
-  if (typeof input.actionIndex === "number" && Number.isInteger(input.actionIndex)) {
-    return tryIndex(input.actionIndex);
+  if (typeof input.actionIndex !== "number" || !Number.isInteger(input.actionIndex)) {
+    return null;
   }
-  const baseCount = Math.max(
-    suggestedQuestionsFromRule(matched.suggestedQuestions).length,
-    8,
-  );
-  for (let i = 0; i < baseCount; i++) {
-    const hit = tryIndex(i);
-    if (hit) return hit;
-  }
-  return null;
+  const labels = pageRuleActionLabelsAtIndex(matched, input.actionIndex);
+  if (!labels.includes(message)) return null;
+  return { ruleKey: matched.ruleKey, actionIndex: input.actionIndex, label: message };
 }
 
 export function mergeShownPageRuleKeys(

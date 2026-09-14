@@ -11265,6 +11265,7 @@ export async function registerRoutes(
       let resolvedContactId: string | null =
         typeof bodyContactId === "string" && bodyContactId.trim() ? bodyContactId.trim() : null;
       let contactCustomFieldsForGate: unknown = null;
+      let contactWebchatContextForGate: unknown = null;
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
 
@@ -11281,6 +11282,7 @@ export async function registerRoutes(
           return res.status(404).json(FOREIGN_RESOURCE_BODY);
         }
         contactCustomFieldsForGate = contactOwned.customFields;
+        contactWebchatContextForGate = contactOwned.webchatContext;
       }
 
       let buyerMatchingTraceId: string | null = null;
@@ -11853,6 +11855,13 @@ export async function registerRoutes(
       let autoSendReason = wantsAuto ? "not_evaluated" : "not_requested";
       let autoSendIdempotencyKey: string | undefined;
       let autoSendConfidenceSource: "model" | "defaulted" | "missing" | undefined;
+      let pageActionDiag: {
+        pageActionValidated: boolean;
+        pageActionCurrentInbound: boolean;
+        pageRuleKey?: string;
+        pageActionIndex?: number;
+        explicitUserChoice: boolean;
+      } | undefined;
       let gateChannel: string | null = messagingChannel;
 
       if (wantsAuto && chatId) {
@@ -11919,8 +11928,15 @@ export async function registerRoutes(
         } else {
           const scoringKnowledge = businessKnowledgeFromAiRecord(knowledge as any);
           const { resolveCurrentTurnStructuredAskIntent } = await import("@shared/chatbotAskQuestion");
+          const { resolveCurrentTurnPageAction, pageActionGateDiagnostics } = await import(
+            "@shared/webchatPageRuleAction"
+          );
           const currentTurnAskIntent = resolveCurrentTurnStructuredAskIntent({
             customFields: contactCustomFieldsForGate,
+            inboundMessageId: inboundMessageIdForAuto || "",
+          });
+          const currentTurnPageAction = resolveCurrentTurnPageAction({
+            pageContext: contactWebchatContextForGate,
             inboundMessageId: inboundMessageIdForAuto || "",
           });
           const gate = evaluateFullAutoSend({
@@ -11934,8 +11950,11 @@ export async function registerRoutes(
             groundingViolations: suggestion.groundingViolations,
             channel: gateChannel,
             currentTurnAskIntent,
+            currentTurnPageAction,
             verifiedBookingUrl: String((knowledge as { bookingLink?: string } | undefined)?.bookingLink || "").trim(),
           });
+          const pageActionDiagResolved = pageActionGateDiagnostics(currentTurnPageAction);
+          pageActionDiag = pageActionDiagResolved;
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;
           autoSendConfidenceSource = gate.confidenceSource;
@@ -11997,6 +12016,7 @@ export async function registerRoutes(
             supportedAmountSourceTypes: (suggestion.supportedAmountSourceTypes || []).join(","),
             conflictReason: suggestion.conflictReason || "",
             groundingReasonCodes: (suggestion.groundingViolations || []).join(","),
+            ...(pageActionDiag || {}),
           },
         });
 

@@ -38,6 +38,10 @@ import {
 } from "./aiAutoSendGate";
 import { resolveCurrentTurnStructuredAskIntent } from "@shared/chatbotAskQuestion";
 import {
+  pageActionGateDiagnostics,
+  resolveCurrentTurnPageAction,
+} from "@shared/webchatPageRuleAction";
+import {
   clearWebchatGenerationAbort,
   registerWebchatGenerationAbort,
 } from "./webchatGenerationAbort";
@@ -47,6 +51,7 @@ export type WebchatAiGenerateFn = (input: {
   conversationId: string;
   history: Array<{ role: string; content: string }>;
   inboundText: string;
+  inboundMessageId?: string;
   signal: AbortSignal;
 }) => Promise<{
   suggestion?: string;
@@ -115,6 +120,10 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
   const conversation = await storage.getConversation(input.conversationId);
   const contact = conversation?.contactId ? await storage.getContact(conversation.contactId) : null;
   const control = readConversationAiControl(conversation?.aiControl);
+  const pageAction = resolveCurrentTurnPageAction({
+    pageContext: contact?.webchatContext,
+    inboundMessageId: input.inboundMessageId || "",
+  });
   const completion = buildChatbotCompletionContactContext({
     customFields: contact?.customFields,
     name: contact?.name,
@@ -129,6 +138,7 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     history: input.history,
     handoffKeywords: settings?.handoffKeywords ?? undefined,
     industry: knowledge?.industry ?? undefined,
+    pageActionKind: pageAction.trusted ? pageAction.kind : undefined,
   });
   if (input.signal.aborted) {
     const err = new Error("aborted");
@@ -147,6 +157,9 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
       websiteFormInquiry: undefined,
       leadSource: "webchat",
       ...completion,
+      ...(pageAction.trusted
+        ? { pageActionKind: pageAction.kind, pageActionLabel: pageAction.label }
+        : {}),
     },
     routing,
     "webchat",
@@ -226,7 +239,16 @@ export async function maybeRunWebchatServerAi(
     });
   };
 
-  const report = (reasonCode: string, extra?: { sent?: boolean; hasDraft?: boolean; confidenceSource?: string }) => {
+  const report = (reasonCode: string, extra?: {
+    sent?: boolean;
+    hasDraft?: boolean;
+    confidenceSource?: string;
+    pageActionValidated?: boolean;
+    pageActionCurrentInbound?: boolean;
+    pageRuleKey?: string;
+    pageActionIndex?: number;
+    explicitUserChoice?: boolean;
+  }) => {
     const outcome = extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra);
     const rollout = readWebchatServerAiRollout(params.userId);
     logAiReplyDecision({
@@ -250,6 +272,15 @@ export async function maybeRunWebchatServerAi(
         widgetSource: "users.widget_settings",
         widgetEnabled: isWidgetEnabled(params.widgetSettings),
         confidenceSource: extra?.confidenceSource,
+        ...(typeof extra?.pageActionValidated === "boolean"
+          ? {
+              pageActionValidated: extra.pageActionValidated,
+              pageActionCurrentInbound: extra.pageActionCurrentInbound === true,
+              ...(extra.pageRuleKey ? { pageRuleKey: extra.pageRuleKey } : {}),
+              ...(typeof extra.pageActionIndex === "number" ? { pageActionIndex: extra.pageActionIndex } : {}),
+              explicitUserChoice: extra.explicitUserChoice === true,
+            }
+          : {}),
       },
     });
     console.info("[AIAutoReply]", {
@@ -269,6 +300,15 @@ export async function maybeRunWebchatServerAi(
       widgetProperty: "widgetSettings.enabled",
       widgetSource: "users.widget_settings",
       widgetEnabled: isWidgetEnabled(params.widgetSettings),
+      ...(typeof extra?.pageActionValidated === "boolean"
+        ? {
+            pageActionValidated: extra.pageActionValidated,
+            pageActionCurrentInbound: extra.pageActionCurrentInbound === true,
+            ...(extra.pageRuleKey ? { pageRuleKey: extra.pageRuleKey } : {}),
+            ...(typeof extra.pageActionIndex === "number" ? { pageActionIndex: extra.pageActionIndex } : {}),
+            explicitUserChoice: extra.explicitUserChoice === true,
+          }
+        : {}),
     });
   };
 
@@ -338,6 +378,7 @@ export async function maybeRunWebchatServerAi(
         ? [{ role: "system", content: pageBlock }, ...history]
         : history,
       inboundText: joinedInbound,
+      inboundMessageId: params.inboundMessageId,
       signal: controller.signal,
     });
     suggestion = await Promise.race([
@@ -483,6 +524,10 @@ export async function maybeRunWebchatServerAi(
     customFields: contact.customFields,
     inboundMessageId: params.inboundMessageId,
   });
+  const currentTurnPageAction = resolveCurrentTurnPageAction({
+    pageContext: contact.webchatContext,
+    inboundMessageId: params.inboundMessageId,
+  });
   const gate = evaluateFullAutoSend({
     businessMode: "auto",
     channel: "webchat",
@@ -495,21 +540,16 @@ export async function maybeRunWebchatServerAi(
     businessKnowledge: businessKnowledgeFromAiRecord(knowledge as Record<string, unknown> | undefined),
     groundingViolations: suggestion.groundingViolations,
     currentTurnAskIntent,
+    currentTurnPageAction,
   });
+  const gateDiagnostics = pageActionGateDiagnostics(currentTurnPageAction);
   if (!gate.allowed) {
     const reasonCode = `send_auto:held:${gate.reason}`;
     await persistDraft(reasonCode);
     report(reasonCode, {
       hasDraft: true,
       confidenceSource: gate.confidenceSource,
-    });
-    console.info("[AIAutoReply]", {
-      evaluated: true,
-      decision: reasonCode,
-      outcome: "drafted",
-      holdReason: gate.reason,
-      widgetProperty: "widgetSettings.enabled",
-      widgetSource: "users.widget_settings",
+      ...gateDiagnostics,
     });
     return { decision: reasonCode, sent: false };
   }
@@ -561,6 +601,6 @@ export async function maybeRunWebchatServerAi(
   await storage.updateConversation(conv.id, {
     aiControl: completeWebchatGenerationLease(afterSend.aiControl, leaseId),
   });
-  report(gate.reason, { sent: true, confidenceSource: gate.confidenceSource });
+  report(gate.reason, { sent: true, confidenceSource: gate.confidenceSource, ...gateDiagnostics });
   return { decision, sent: true };
 }

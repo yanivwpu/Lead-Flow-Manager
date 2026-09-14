@@ -8,6 +8,18 @@ export type WebchatUtm = {
   content?: string;
 };
 
+export type WebchatPageActionContext = {
+  source: "page_rule_suggested_action";
+  ruleKey: string;
+  actionIndex: number;
+  label: string;
+  configuredLabel?: string;
+  kind?: string;
+  inboundMessageId: string;
+  parentUrl?: string;
+  origin?: string;
+};
+
 export type WebchatPageContext = {
   landingUrl?: string;
   latestUrl?: string;
@@ -16,6 +28,7 @@ export type WebchatPageContext = {
   utm?: WebchatUtm;
   matchedPageRule?: string;
   shownPageRules?: string[];
+  pageAction?: WebchatPageActionContext;
   firstSeenAt?: string;
   latestSeenAt?: string;
 };
@@ -130,6 +143,7 @@ export function mergeWebchatPageContext(
     ...(shownUnique.length ? { shownPageRules: shownUnique } : {}),
     firstSeenAt: prev.firstSeenAt || nowIso,
     latestSeenAt: nowIso,
+    ...(prev.pageAction ? { pageAction: prev.pageAction } : {}),
   };
 }
 

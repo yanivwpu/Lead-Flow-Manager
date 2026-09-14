@@ -1146,6 +1146,7 @@ class ChannelService {
     preferredChatbotFlowId?: string;
     visitorLocale?: string;
     skipNewChatTrigger?: boolean;
+    validatedPageRuleAction?: import("@shared/webchatPageRuleAction").TrustedPageRuleAction | null;
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -1168,6 +1169,7 @@ class ChannelService {
       preferredChatbotFlowId,
       visitorLocale,
       skipNewChatTrigger,
+      validatedPageRuleAction,
     } = params;
     const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
@@ -1766,6 +1768,32 @@ class ChannelService {
         { expectedWorkspaceUserId: userId, skipAutomationHooks: true },
       );
       if (updated) contact = updated;
+    }
+
+    if (channel === "webchat") {
+      const existingAction = Boolean(
+        contact.webchatContext &&
+          typeof contact.webchatContext === "object" &&
+          (contact.webchatContext as { pageAction?: unknown }).pageAction,
+      );
+      if (validatedPageRuleAction || existingAction) {
+        const { bindPageRuleActionToInbound, stampWebchatPageAction } = await import(
+          "@shared/webchatPageRuleAction"
+        );
+        const stamp = validatedPageRuleAction
+          ? bindPageRuleActionToInbound(validatedPageRuleAction, message.id)
+          : null;
+        const stamped = stampWebchatPageAction(
+          (contact.webchatContext as Record<string, unknown>) || {},
+          stamp,
+        );
+        const updated = await storage.updateContact(
+          contact.id,
+          { webchatContext: stamped },
+          { expectedWorkspaceUserId: userId, skipAutomationHooks: true },
+        );
+        if (updated) contact = updated;
+      }
     }
 
     const { evaluateChatbotInboundArbitration, triggerChatbotFlows } = await import('./chatbotEngine');

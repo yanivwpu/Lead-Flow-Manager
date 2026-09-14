@@ -117,6 +117,13 @@ test("localized EN/ES/HE actions map by stable index and validate the current la
     })?.label,
     "Book a demo",
   );
+  assert.equal(
+    validatePageRuleInboundAction({
+      matched: matchedEn!,
+      message: "Calculate my savings",
+    }),
+    null,
+  );
 });
 
 test("empty landing vs existing conversation card, dismiss, and one-shot", () => {
@@ -347,8 +354,10 @@ test("page-rule action skips generic Ask Question and cannot steal an existing c
   assert.match(engine, /pageRuleChatbotTriggerGates/);
   assert.match(engine, /skipNewChatTrigger/);
   const webhooks = read("server/routes/webhooks.ts");
-  assert.match(webhooks, /validatePageRuleInboundAction/);
+  assert.match(webhooks, /resolveTrustedPageRuleInboundAction/);
   assert.match(webhooks, /skipNewChatTrigger: Boolean\(validatedAction\)/);
+  assert.match(webhooks, /validatedPageRuleAction: validatedAction/);
+  assert.doesNotMatch(webhooks, /visitor_intent/);
 });
 
 test("Pricing fixture routes compare/savings through pricing AI and Book a demo through booking", () => {
@@ -356,7 +365,7 @@ test("Pricing fixture routes compare/savings through pricing AI and Book a demo 
   const savings = PRICING_PAGE_RULE_FIXTURE.suggestedQuestions[PRICING_PAGE_RULE_ACTION.savings];
   const book = PRICING_PAGE_RULE_FIXTURE.suggestedQuestions[PRICING_PAGE_RULE_ACTION.bookDemo];
   assert.equal(classifyChatbotVisitorIntent(compare), "features_pricing");
-  assert.equal(classifyChatbotVisitorIntent(savings), "features_pricing");
+  assert.equal(classifyChatbotVisitorIntent(savings), "calculate_savings");
   assert.equal(classifyChatbotVisitorIntent(book), "book_demo");
   assert.equal(isCanonicalBookingTurn({ inbound: book }), true);
   assert.equal(isCanonicalBookingTurn({ inbound: compare }), false);

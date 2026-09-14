@@ -11,7 +11,12 @@ import {
 } from "./bookingIntent";
 import { usableVisitorPersonalizationName } from "./visitorNamePersonalization";
 
-export type ChatbotVisitorIntentKind = "features_pricing" | "find_solution" | "book_demo" | "other";
+export type ChatbotVisitorIntentKind =
+  | "features_pricing"
+  | "find_solution"
+  | "calculate_savings"
+  | "book_demo"
+  | "other";
 
 export type ChatbotVarRecord = Record<string, { value?: unknown } | unknown>;
 
@@ -45,6 +50,14 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     return "book_demo";
   }
   if (
+    /\bcalculate(?:\s+my)?\s+savings\b/.test(t) ||
+    t === "calculate my savings" ||
+    /calcular\s+(?:mi\s+)?ahorro/.test(t) ||
+    /חישוב\s+החיסכון|החיסכון\s+שלי/.test(t)
+  ) {
+    return "calculate_savings";
+  }
+  if (
     /\b(?:find(?:ing)?\s+my\s+solution|find\s+the\s+right\s+solution|which\s+plan|what\s+plan|help me choose|choose the right|right setup|right plan)\b/.test(t) ||
     t === "find my solution" ||
     /למצוא\s+את\s+הפתרון|הפתרון\s+שלי/.test(t) ||
@@ -54,11 +67,12 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     return "find_solution";
   }
   if (
-    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much|compare\s+(?:plans?|pricing|free)|free\s*(?:&|and)\s*pro|calculate(?:\s+my)?\s+savings|my\s+savings)\b/.test(t) ||
+    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much|compare\s+(?:plans?|pricing|free)|free\s*(?:&|and)\s*pro)\b/.test(t) ||
     t === "features & pricing" ||
     t === "features and pricing" ||
-    /comparar\s+(?:planes?|free)|calcular\s+(?:mi\s+)?ahorro/.test(t) ||
-    /השוואת|החיסכון\s+שלי/.test(t) ||
+    t === "compare free & pro" ||
+    /comparar\s+(?:planes?|free)/.test(t) ||
+    /השוואת/.test(t) ||
     /פיצ['׳]רים\s+ומחירים|תכונות\s+ומחירים/.test(t) ||
     /caracter[ií]sticas\s+y\s+precios|funciones\s+y\s+precios/.test(t)
   ) {
@@ -72,8 +86,19 @@ export function visitorIntentAllowsBookingCta(
   routing?: Pick<AiRoutingResult, "decision" | "needsRoutingClarification"> | null,
 ): boolean {
   if (intent === "book_demo") return true;
-  if (intent === "features_pricing" || intent === "find_solution") return false;
+  if (intent === "features_pricing" || intent === "find_solution" || intent === "calculate_savings") {
+    return false;
+  }
   return routing?.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
+}
+
+function visitorKindFromPageAction(kind?: string | null): ChatbotVisitorIntentKind | null {
+  if (kind === "book_demo") return "book_demo";
+  if (kind === "calculate_savings") return "calculate_savings";
+  if (kind === "compare_plans" || kind === "features_pricing") return "features_pricing";
+  if (kind === "find_solution") return "find_solution";
+  if (kind === "other") return "other";
+  return null;
 }
 
 /**
@@ -83,8 +108,12 @@ export function visitorIntentAllowsBookingCta(
 export function isCanonicalBookingTurn(input: {
   inbound?: string | null;
   history?: Array<{ role: string; content?: string }>;
+  pageActionKind?: string | null;
 }): boolean {
   const inbound = (input.inbound || "").trim();
+  const fromPage = visitorKindFromPageAction(input.pageActionKind);
+  if (fromPage === "book_demo") return true;
+  if (fromPage && fromPage !== "other") return false;
   if (!inbound) return false;
   if (detectBookingAcknowledgment(inbound) && lastAssistantCalendlyUrl(input.history)) {
     return detectBookingLinkResendRequest(inbound);
@@ -106,11 +135,14 @@ function currentTurnVisitorKind(input: {
   inbound?: string | null;
   visitorIntent?: string | null;
   history?: Array<{ role: string; content?: string }>;
+  pageActionKind?: string | null;
 }): ChatbotVisitorIntentKind {
   const inbound = input.inbound || "";
   const acknowledgment =
     detectBookingAcknowledgment(inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
   if (acknowledgment && !detectBookingLinkResendRequest(inbound)) return "other";
+  const fromPage = visitorKindFromPageAction(input.pageActionKind);
+  if (fromPage) return fromPage;
   if (isCanonicalBookingTurn({ inbound, history: input.history })) return "book_demo";
   const currentKind = classifyChatbotVisitorIntent(inbound);
   if (currentKind !== "other") return currentKind;
@@ -169,6 +201,7 @@ export function resolveChatbotCompletionRouting(input: {
   history?: Array<{ role: string; content?: string }>;
   industry?: string;
   handoffKeywords?: string[];
+  pageActionKind?: string | null;
 }): AiRoutingResult {
   const acknowledgment =
     detectBookingAcknowledgment(input.inbound) && Boolean(lastAssistantCalendlyUrl(input.history));
@@ -176,6 +209,7 @@ export function resolveChatbotCompletionRouting(input: {
   const currentBooking = isCanonicalBookingTurn({
     inbound: input.inbound,
     history: input.history,
+    pageActionKind: input.pageActionKind,
   });
   const kind = currentTurnVisitorKind(input);
   const inbound =
@@ -197,7 +231,7 @@ export function resolveChatbotCompletionRouting(input: {
   }
   if (
     !currentBooking &&
-    (kind === "features_pricing" || kind === "find_solution") &&
+    (kind === "features_pricing" || kind === "find_solution" || kind === "calculate_savings") &&
     routing.subIntents.includes("booking_question")
   ) {
     return {
@@ -214,6 +248,7 @@ export function chatbotCompletionPromptRules(input: {
   bookingUrl?: string | null;
   inbound?: string | null;
   history?: Array<{ role: string; content?: string }>;
+  pageActionKind?: string | null;
 }): string {
   const inbound = input.inbound || "";
   const priorUrl = lastAssistantCalendlyUrl(input.history);
@@ -223,6 +258,7 @@ export function chatbotCompletionPromptRules(input: {
     inbound,
     visitorIntent: input.visitorIntent,
     history: input.history,
+    pageActionKind: input.pageActionKind,
   });
   const allowBooking = visitorIntentAllowsBookingCta(kind);
   const verifiedUrl = input.bookingUrl || priorUrl || "";
@@ -245,7 +281,9 @@ export function chatbotCompletionPromptRules(input: {
     return lines.join("\n");
   }
   if (kind === "features_pricing") {
-    lines.push("- The visitor asked about features and pricing only. Answer that. Do not add a booking CTA or booking link.");
+    lines.push("- The visitor asked to compare published plans or pricing. Use only current workspace pricing knowledge. Do not invent plan facts. Do not add a booking CTA or booking link.");
+  } else if (kind === "calculate_savings") {
+    lines.push("- The visitor wants a savings estimate. On this first turn, ask for the minimum missing inputs: their current platform and approximate monthly cost. Do not invent a calculation or savings amount. Do not add a booking CTA.");
   } else if (kind === "find_solution") {
     lines.push("- The visitor wants help choosing. Ask ONE useful qualification question. Do not pitch everything at once.");
   } else if (kind === "book_demo") {
