@@ -14,6 +14,10 @@ import {
 import { parseHttpUrl } from "@shared/webchatPageContext";
 import { createWebchatVisitorId, isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
 import {
+  matchWidgetPageRule as matchWidgetPageRuleShared,
+  type MatchedWidgetPageRule,
+} from "@shared/webchatPageRuleMatch";
+import {
   WEBCHAT_POLL_LIMIT_IP,
   WEBCHAT_POLL_LIMIT_VISITOR,
   WEBCHAT_POLL_LIMIT_WIDGET,
@@ -138,52 +142,17 @@ export type WebchatInboundBody = {
   pageTitle?: string;
   referrer?: string;
   locale?: string;
+  pageRuleActionIndex?: number;
 };
 
-export type MatchedWidgetPageRule = {
-  urlContains: string;
-  greeting?: string;
-  prefilledMessage?: string;
-  suggestedQuestions: string[];
-  chatbotFlowId?: string;
-  ctaLabel?: string;
-  ctaUrl?: string;
-  localized?: unknown;
-};
+export type { MatchedWidgetPageRule };
 
 export function matchWidgetPageRule(
   settings: Record<string, unknown> | undefined,
   href: string,
+  locale?: string | null,
 ): MatchedWidgetPageRule | null {
-  const trimmedHref = (href || "").slice(0, 4000);
-  const rules = Array.isArray(settings?.pageRules) ? settings!.pageRules : [];
-  for (const raw of rules) {
-    const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-    const q = String(r.urlContains ?? "").trim();
-    if (q && trimmedHref.indexOf(q) !== -1) {
-      const questions = Array.isArray(r.suggestedQuestions)
-        ? r.suggestedQuestions
-            .filter((x): x is string => typeof x === "string")
-            .map((x) => x.trim())
-            .filter(Boolean)
-            .slice(0, 8)
-        : [];
-      const flowId = typeof r.chatbotFlowId === "string" ? r.chatbotFlowId.trim() : "";
-      const ctaLabel = typeof r.ctaLabel === "string" ? r.ctaLabel.trim().slice(0, 80) : "";
-      const ctaUrl = typeof r.ctaUrl === "string" ? r.ctaUrl.trim().slice(0, 2000) : "";
-      return {
-        urlContains: q.slice(0, 500),
-        greeting: typeof r.greeting === "string" ? r.greeting : undefined,
-        prefilledMessage: typeof r.prefilledMessage === "string" ? r.prefilledMessage : undefined,
-        suggestedQuestions: questions,
-        chatbotFlowId: flowId || undefined,
-        ctaLabel: ctaLabel || undefined,
-        ctaUrl: ctaUrl || undefined,
-        localized: r.localized && typeof r.localized === "object" ? r.localized : undefined,
-      };
-    }
-  }
-  return null;
+  return matchWidgetPageRuleShared(settings, href, locale);
 }
 
 export function parseWebchatInboundBody(body: unknown): { ok: true; data: WebchatInboundBody } | { ok: false } {
@@ -202,9 +171,17 @@ export function parseWebchatInboundBody(body: unknown): { ok: true; data: Webcha
   if (referrer && !parseHttpUrl(referrer)) return { ok: false };
   const localeRaw = typeof b.locale === "string" ? b.locale.trim().toLowerCase().split("-")[0] : "";
   const locale = localeRaw && /^[a-z]{2,8}$/.test(localeRaw) ? localeRaw.slice(0, 8) : undefined;
+  const actionRaw =
+    b.pageRuleAction && typeof b.pageRuleAction === "object"
+      ? (b.pageRuleAction as Record<string, unknown>).actionIndex
+      : b.pageRuleActionIndex;
+  const pageRuleActionIndex =
+    typeof actionRaw === "number" && Number.isInteger(actionRaw) && actionRaw >= 0 && actionRaw <= 7
+      ? actionRaw
+      : undefined;
   return {
     ok: true,
-    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer, locale },
+    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer, locale, pageRuleActionIndex },
   };
 }
 

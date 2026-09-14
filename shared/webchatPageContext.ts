@@ -15,6 +15,7 @@ export type WebchatPageContext = {
   referrer?: string;
   utm?: WebchatUtm;
   matchedPageRule?: string;
+  shownPageRules?: string[];
   firstSeenAt?: string;
   latestSeenAt?: string;
 };
@@ -69,6 +70,7 @@ export function sanitizeWebchatPageContextInput(input: {
   pageTitle?: unknown;
   referrer?: unknown;
   matchedPageRule?: unknown;
+  shownPageRules?: unknown;
 }): {
   url?: string;
   origin?: string;
@@ -76,10 +78,17 @@ export function sanitizeWebchatPageContextInput(input: {
   referrer?: string;
   utm: WebchatUtm;
   matchedPageRule?: string;
+  shownPageRules?: string[];
 } {
   const parsed = parseHttpUrl(typeof input.parentUrl === "string" ? input.parentUrl : "");
   const url = parsed ? parsed.toString().slice(0, MAX_URL) : undefined;
   const referrerParsed = parseHttpUrl(typeof input.referrer === "string" ? input.referrer : "");
+  const shown = Array.isArray(input.shownPageRules)
+    ? input.shownPageRules
+        .filter((item): item is string => typeof item === "string" && !!item.trim() && !item.includes("://"))
+        .map((item) => item.trim().slice(0, MAX_RULE))
+        .slice(0, 30)
+    : undefined;
   return {
     url,
     origin: parsed ? parsed.origin : undefined,
@@ -87,6 +96,7 @@ export function sanitizeWebchatPageContextInput(input: {
     referrer: referrerParsed ? referrerParsed.toString().slice(0, MAX_REFERRER) : undefined,
     utm: url ? extractUtmFromUrl(url) : {},
     matchedPageRule: clip(input.matchedPageRule, MAX_RULE),
+    shownPageRules: shown,
   };
 }
 
@@ -97,6 +107,19 @@ export function mergeWebchatPageContext(
 ): WebchatPageContext {
   const prev = existing && typeof existing === "object" ? existing : {};
   const utm = { ...(prev.utm || {}), ...(next.utm || {}) };
+  const shown = [
+    ...(Array.isArray(prev.shownPageRules) ? prev.shownPageRules : []),
+    ...(Array.isArray(next.shownPageRules) ? next.shownPageRules : []),
+  ];
+  const shownUnique: string[] = [];
+  const seen = new Set<string>();
+  for (const key of shown) {
+    const k = String(key || "").trim().slice(0, MAX_RULE);
+    if (!k || k.includes("://") || seen.has(k)) continue;
+    seen.add(k);
+    shownUnique.push(k);
+    if (shownUnique.length >= 30) break;
+  }
   return {
     landingUrl: prev.landingUrl || next.url,
     latestUrl: next.url || prev.latestUrl,
@@ -104,6 +127,7 @@ export function mergeWebchatPageContext(
     referrer: next.referrer || prev.referrer,
     utm: Object.keys(utm).length ? utm : prev.utm,
     matchedPageRule: next.matchedPageRule || prev.matchedPageRule,
+    ...(shownUnique.length ? { shownPageRules: shownUnique } : {}),
     firstSeenAt: prev.firstSeenAt || nowIso,
     latestSeenAt: nowIso,
   };

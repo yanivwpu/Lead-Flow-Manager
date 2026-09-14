@@ -222,6 +222,36 @@ export function resolveLocalizedPageRuleGreeting(input: {
   });
 }
 
+function suggestedQuestionList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => sanitizePlainWidgetText(item, 200))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+/**
+ * Localized chip labels mapped by stable index onto the canonical base list.
+ * Missing locale entries fall back to the base `suggestedQuestions` at the same index.
+ */
+export function resolveLocalizedPageRuleQuestions(input: {
+  locale: string | null | undefined;
+  suggestedQuestions?: unknown;
+  localized?: unknown;
+}): string[] {
+  const base = suggestedQuestionList(input.suggestedQuestions);
+  const loc = normalizeWidgetStaticLocale(input.locale);
+  const variant = suggestedQuestionList(asRecord(asRecord(input.localized)[loc]).suggestedQuestions);
+  if (!base.length && !variant.length) return [];
+  const count = Math.max(base.length, variant.length);
+  const out: string[] = [];
+  for (let i = 0; i < count && i < 8; i++) {
+    const label = variant[i] || base[i] || "";
+    if (label) out.push(label);
+  }
+  return out;
+}
+
 export function firstUnsafeLocalizedWidgetCopyField(raw: unknown): string | null {
   if (widgetCopyI18nHasUnsafeMarkup(raw)) return "localized";
   return null;

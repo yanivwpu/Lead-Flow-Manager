@@ -38,6 +38,16 @@ import {
   widgetChromeDir,
   type WidgetChromeCopy,
 } from "@shared/webchatWidgetLocale";
+import { parseTrustedParentPageContextMessage } from "@shared/webchatPageContextMessage";
+import {
+  decidePageRuleEngagement,
+  readShownPageRuleKeys,
+  shouldApplyPageRulePrefill,
+  shownPageRulesStorageKey,
+  transcriptHasPendingVisitorInput,
+  WEBCHAT_HUMAN_TAKEOVER_HEADER,
+  writeShownPageRuleKeys,
+} from "@shared/webchatPageRuleEngagement";
 
 interface ButtonOption {
   label: string;
@@ -120,8 +130,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     return parentUrlForRules;
   }, [resolvePageHref, parentUrlForRules]);
 
-  /** Parent site URL for origin/page-rule checks — never the iframe host. */
-  const parentPageHref = useMemo(() => {
+  const initialParentHref = useMemo(() => {
     const preferred = ruleMatchHref != null && ruleMatchHref !== "" ? ruleMatchHref : "";
     if (preferred) return preferred.slice(0, 4000);
     if (typeof document === "undefined") return null;
@@ -135,6 +144,18 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       return null;
     }
   }, [ruleMatchHref]);
+
+  const [parentPageHref, setParentPageHref] = useState<string | null>(initialParentHref);
+  const [parentPageTitle, setParentPageTitle] = useState("");
+  const expectedParentOrigin = useMemo(() => {
+    const href = parentPageHref || initialParentHref;
+    if (!href) return "";
+    try {
+      return new URL(href).origin;
+    } catch {
+      return "";
+    }
+  }, [parentPageHref, initialParentHref]);
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
@@ -146,6 +167,12 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   );
   const [apiPrefill, setApiPrefill] = useState("");
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [pageRuleKey, setPageRuleKey] = useState<string | null>(null);
+  const [pageRuleDismissed, setPageRuleDismissed] = useState(false);
+  const [shownRuleKeys, setShownRuleKeys] = useState<string[]>([]);
+  const [humanTakeover, setHumanTakeover] = useState(false);
+  const [composerDirty, setComposerDirty] = useState(false);
+  const [prefillApplied, setPrefillApplied] = useState(false);
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
   const [chromeCopy, setChromeCopy] = useState<WidgetChromeCopy>(() =>
@@ -171,9 +198,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const userInitiatedScrollRef = useRef(false);
   const expectFormConfirmationRef = useRef(false);
   const preserveScrollTopRef = useRef<number | null>(null);
+  const pageRuleKeyRef = useRef<string | null>(null);
+  const settingsReadyRef = useRef(false);
+  const activePageRuleRef = useRef<string | null>(null);
   const userId = widgetId;
 
-  // Init: get/create visitorId from localStorage
   useEffect(() => {
     if (!userId) return;
     const storageKey = `wchat_visitor_${userId}`;
@@ -181,6 +210,42 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     const { visitorId: vid } = loadOrRotateWebchatVisitorId(stored);
     localStorage.setItem(storageKey, vid);
     setVisitorId(vid);
+    setShownRuleKeys(readShownPageRuleKeys(localStorage.getItem(shownPageRulesStorageKey(userId, vid))));
+  }, [userId]);
+
+  const markRuleShown = useCallback((ruleKey: string) => {
+    if (!userId || !visitorId || !ruleKey) return;
+    setShownRuleKeys((prev) => {
+      const next = writeShownPageRuleKeys(prev, ruleKey);
+      try {
+        localStorage.setItem(shownPageRulesStorageKey(userId, visitorId), JSON.stringify(next));
+      } catch {
+        /* private mode */
+      }
+      return next;
+    });
+  }, [userId, visitorId]);
+
+  useEffect(() => {
+    if (!userId || typeof window === "undefined") return;
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parseTrustedParentPageContextMessage(event, {
+        widgetId: userId,
+        expectedParentOrigin,
+        expectedSource: window.parent,
+      });
+      if (!parsed) return;
+      setParentPageHref((prev) => (prev === parsed.href ? prev : parsed.href));
+      if (parsed.pageTitle) setParentPageTitle(parsed.pageTitle);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [userId, expectedParentOrigin]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    if (!settingsReadyRef.current) setIsLoading(true);
 
     const settingsQs = new URLSearchParams();
     if (parentPageHref) settingsQs.set("href", parentPageHref);
@@ -191,6 +256,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
     fetch(settingsUrl, { cache: "no-store" })
       .then(async (r) => {
+        if (cancelled) return;
         if (!r.ok) {
           const fallback = resolveWebchatPanelHeaderPaint({ settingsStatus: "failed" });
           setPresentation(fallback.presentation);
@@ -222,13 +288,26 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         setPresentation(nextPresentation);
         setSettingsWelcome(nextPresentation.chatGreeting || nextPresentation.welcomeMessage);
         if (typeof data?.chatPrefill === "string") setApiPrefill(data.chatPrefill);
+        else setApiPrefill("");
         if (Array.isArray(data?.suggestedQuestions)) {
           setSuggestedQuestions(
             data.suggestedQuestions.filter((q: unknown): q is string => typeof q === "string" && q.trim().length > 0),
           );
+        } else {
+          setSuggestedQuestions([]);
         }
+        const nextRuleKey =
+          typeof data?.pageRuleKey === "string" && data.pageRuleKey.trim() ? data.pageRuleKey.trim() : null;
+        if (pageRuleKeyRef.current !== nextRuleKey) {
+          pageRuleKeyRef.current = nextRuleKey;
+          setPageRuleDismissed(false);
+        }
+        setPageRuleKey(nextRuleKey);
+        settingsReadyRef.current = true;
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
+        else setCtaLabel("");
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
+        else setCtaUrl("");
         setLeadForm(sanitizeWebchatFormDefinition(data?.leadForm));
         const resolvedLocale = resolveWidgetStaticLocale({
           explicit: typeof data?.locale === "string" ? data.locale : urlLocale,
@@ -245,12 +324,16 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         setIsLoading(false);
       })
       .catch(() => {
+        if (cancelled) return;
         const fallback = resolveWebchatPanelHeaderPaint({ settingsStatus: "failed" });
         setPresentation(fallback.presentation);
         setWidgetUnavailable(true);
         setIsLoading(false);
       });
-  }, [userId, parentPageHref]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, parentPageHref, urlLocale]);
 
   useLayoutEffect(() => {
     if (!presentation || !userId) return;
@@ -275,11 +358,20 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [presentation, userId, parentPageHref]);
 
   useEffect(() => {
-    const fromUrl = urlPrefill || "";
-    const fromApi = apiPrefill || "";
-    const prefill = fromUrl || fromApi;
-    if (prefill) setInputText(prefill);
-  }, [urlPrefill, apiPrefill]);
+    const prefill = urlPrefill || apiPrefill || "";
+    if (
+      !shouldApplyPageRulePrefill({
+        transcriptCount: messages.length,
+        composerDirty,
+        alreadyApplied: prefillApplied,
+        prefill,
+      })
+    ) {
+      return;
+    }
+    setInputText(prefill);
+    setPrefillApplied(true);
+  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied]);
 
   const fetchMessages = useCallback(async (): Promise<boolean> => {
     if (!userId || !visitorId) return false;
@@ -293,6 +385,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         setPollError(true);
         return false;
       }
+      setHumanTakeover(res.headers.get(WEBCHAT_HUMAN_TAKEOVER_HEADER) === "1");
       const data: unknown = await res.json();
       if (!Array.isArray(data)) {
         setPollError(true);
@@ -440,6 +533,26 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     [messages],
   );
 
+  const pendingVisitorInput = transcriptHasPendingVisitorInput(deduped);
+  const alreadyShownRule = Boolean(pageRuleKey && shownRuleKeys.includes(pageRuleKey));
+  const pageRulePresentation = decidePageRuleEngagement({
+    hasMatch: Boolean(pageRuleKey),
+    ruleKey: pageRuleKey,
+    alreadyShown: alreadyShownRule,
+    activeThisMount: Boolean(pageRuleKey && activePageRuleRef.current === pageRuleKey),
+    dismissed: pageRuleDismissed,
+    transcriptCount: deduped.length,
+    humanTakeover,
+    pendingVisitorInput,
+  });
+
+  useEffect(() => {
+    if ((pageRulePresentation === "empty" || pageRulePresentation === "card") && pageRuleKey) {
+      activePageRuleRef.current = pageRuleKey;
+      markRuleShown(pageRuleKey);
+    }
+  }, [pageRulePresentation, pageRuleKey, markRuleShown, visitorId]);
+
   useLayoutEffect(() => {
     const decision = decideWebchatScrollAction({
       prevIds: prevMessageIdsRef.current,
@@ -471,9 +584,17 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     );
   }, []);
 
-  const sendMessage = useCallback(async (text: string, retryId?: string, fileOverride?: File | null) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    retryId?: string,
+    fileOverride?: File | null,
+    meta?: { pageRuleActionIndex?: number },
+  ) => {
     const file = fileOverride || (!retryId ? pendingFile : pendingUploadsRef.current.get(retryId) || null);
     if ((!text.trim() && !file) || !userId || !visitorId || isSending || widgetUnavailable) return;
+    const pageRuleActionKey =
+      typeof meta?.pageRuleActionIndex === "number" ? `pr:${meta.pageRuleActionIndex}:${text}` : "";
+    if (pageRuleActionKey && clickedButtons.has(pageRuleActionKey)) return;
     setIsSending(true);
     const optId = retryId || `opt_${Date.now()}`;
     if (file) pendingUploadsRef.current.set(optId, file);
@@ -530,15 +651,22 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             name: visitorLabel,
             source: urlLeadSource || undefined,
             parentUrl,
-            pageTitle: typeof document !== "undefined" ? document.title : undefined,
+            pageTitle: parentPageTitle || (typeof document !== "undefined" ? document.title : undefined),
             referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
             locale: widgetLocale,
+            ...(typeof meta?.pageRuleActionIndex === "number"
+              ? { pageRuleAction: { actionIndex: meta.pageRuleActionIndex } }
+              : {}),
           }),
         });
       }
       if (!res.ok) {
         markFailed(optId);
         return;
+      }
+      if (pageRuleActionKey) {
+        setClickedButtons((prev) => new Set([...prev, pageRuleActionKey]));
+        if (pageRuleKey) markRuleShown(pageRuleKey);
       }
       pendingUploadsRef.current.delete(optId);
       await new Promise((r) => setTimeout(r, 800));
@@ -550,7 +678,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       setIsSending(false);
       inputRef.current?.focus();
     }
-  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, markFailed, pendingFile, widgetLocale]);
+  }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, parentPageTitle, markFailed, pendingFile, widgetLocale, clickedButtons, pageRuleKey, markRuleShown]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks
@@ -674,22 +802,67 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         {!isLoading && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
-              <WebchatLinkedText text={urlGreeting || settingsWelcome} />
+              <WebchatLinkedText
+                text={
+                  pageRulePresentation === "empty"
+                    ? settingsWelcome
+                    : settingsWelcome
+                }
+              />
             </div>
           </div>
         )}
-        {!isLoading && !widgetUnavailable && deduped.length === 0 && suggestedQuestions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {suggestedQuestions.map((q) => (
+        {!isLoading && !widgetUnavailable && pageRulePresentation === "empty" && suggestedQuestions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1" data-testid="webchat-page-rule-empty-actions">
+            {suggestedQuestions.map((q, index) => (
               <button
-                key={q}
+                key={`${index}:${q}`}
                 type="button"
                 className="text-xs rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-700 hover:bg-gray-50"
-                onClick={() => sendMessage(q)}
+                data-testid={`webchat-page-rule-action-${index}`}
+                onClick={() => sendMessage(q, undefined, null, { pageRuleActionIndex: index })}
               >
                 {q}
               </button>
             ))}
+          </div>
+        )}
+        {!isLoading && !widgetUnavailable && pageRulePresentation === "card" && (
+          <div
+            className="rounded-xl border border-gray-200 bg-white p-3 space-y-2 shadow-sm"
+            data-testid="webchat-page-rule-card"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm text-gray-800 whitespace-pre-wrap [overflow-wrap:anywhere]">{settingsWelcome}</p>
+              <button
+                type="button"
+                className="shrink-0 text-gray-400 hover:text-gray-600"
+                aria-label="Dismiss"
+                data-testid="webchat-page-rule-dismiss"
+                onClick={() => {
+                  activePageRuleRef.current = null;
+                  setPageRuleDismissed(true);
+                  if (pageRuleKey) markRuleShown(pageRuleKey);
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {suggestedQuestions.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {suggestedQuestions.map((q, index) => (
+                  <button
+                    key={`${index}:${q}`}
+                    type="button"
+                    className="text-xs rounded-full border border-gray-200 bg-white px-2.5 py-1 text-gray-700 hover:bg-gray-50"
+                    data-testid={`webchat-page-rule-action-${index}`}
+                    onClick={() => sendMessage(q, undefined, null, { pageRuleActionIndex: index })}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
         {!isLoading && !widgetUnavailable && deduped.length === 0 && ctaLabel && ctaUrl && (
@@ -883,7 +1056,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             ref={inputRef}
             type="text"
             value={inputText}
-            onChange={e => setInputText(e.target.value)}
+            onChange={e => {
+              setInputText(e.target.value);
+              setComposerDirty(true);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={widgetUnavailable ? chromeCopy.chatUnavailable : chromeCopy.inputPlaceholder}
             dir="auto"

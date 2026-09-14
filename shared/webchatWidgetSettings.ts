@@ -23,6 +23,7 @@ export const LEGACY_WIDGET_WELCOME = "Hi there! How can we help you today?";
 
 export type WidgetPageRuleShape = {
   urlContains?: string;
+  matchType?: unknown;
   greeting?: string;
   prefilledMessage?: string;
   suggestedQuestions?: unknown;
@@ -375,9 +376,14 @@ export function validateWidgetPageRules(raw: unknown): PageRuleValidation {
     if (ctaUrl && !/^https?:\/\//i.test(ctaUrl)) {
       return { ok: false, error: "CTA URL must start with https:// or http://." };
     }
+    const matchType =
+      rule.matchType === "pathname" || rule.matchType === "pathname_prefix" || rule.matchType === "contains"
+        ? rule.matchType
+        : undefined;
     rules.push({
       ...rule,
       urlContains,
+      ...(matchType ? { matchType } : {}),
       greeting: normText(rule.greeting).slice(0, 500),
       prefilledMessage: String(rule.prefilledMessage || "").slice(0, 2000),
       ctaUrl,

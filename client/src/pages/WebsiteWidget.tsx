@@ -143,13 +143,18 @@ export interface WidgetPageRule {
   /** Stable list key (client-only; stripped before save). */
   id: string;
   urlContains: string;
+  matchType?: "contains" | "pathname" | "pathname_prefix";
   greeting: string;
   prefilledMessage: string;
   suggestedQuestions?: string[];
   chatbotFlowId?: string;
   ctaLabel?: string;
   ctaUrl?: string;
-  localized?: { es?: { greeting?: string }; he?: { greeting?: string } };
+  localized?: {
+    en?: { greeting?: string; suggestedQuestions?: string[] };
+    es?: { greeting?: string; suggestedQuestions?: string[] };
+    he?: { greeting?: string; suggestedQuestions?: string[] };
+  };
 }
 
 interface WidgetSettings {
@@ -255,6 +260,7 @@ function newRuleId(): string {
 function normalizePageRulesFromServer(
   rules: Array<{
     urlContains?: string;
+    matchType?: WidgetPageRule["matchType"];
     greeting?: string;
     prefilledMessage?: string;
     suggestedQuestions?: string[];
@@ -267,6 +273,10 @@ function normalizePageRulesFromServer(
 ): WidgetPageRule[] {
   return rules.map((r) => ({
     urlContains: String(r.urlContains ?? ""),
+    matchType:
+      r.matchType === "pathname" || r.matchType === "pathname_prefix" || r.matchType === "contains"
+        ? r.matchType
+        : undefined,
     greeting: String(r.greeting ?? ""),
     prefilledMessage: String(r.prefilledMessage ?? ""),
     suggestedQuestions: Array.isArray(r.suggestedQuestions)
@@ -278,8 +288,24 @@ function normalizePageRulesFromServer(
     localized:
       r.localized && typeof r.localized === "object"
         ? {
-            es: { greeting: String((r.localized as { es?: { greeting?: string } }).es?.greeting || "") },
-            he: { greeting: String((r.localized as { he?: { greeting?: string } }).he?.greeting || "") },
+            en: {
+              greeting: String(r.localized.en?.greeting || ""),
+              suggestedQuestions: Array.isArray(r.localized.en?.suggestedQuestions)
+                ? r.localized.en!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
+                : [],
+            },
+            es: {
+              greeting: String(r.localized.es?.greeting || ""),
+              suggestedQuestions: Array.isArray(r.localized.es?.suggestedQuestions)
+                ? r.localized.es!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
+                : [],
+            },
+            he: {
+              greeting: String(r.localized.he?.greeting || ""),
+              suggestedQuestions: Array.isArray(r.localized.he?.suggestedQuestions)
+                ? r.localized.he!.suggestedQuestions.map((q) => String(q)).filter(Boolean).slice(0, 8)
+                : [],
+            },
           }
         : undefined,
     id: typeof r.id === "string" && r.id.length > 0 ? r.id : newRuleId(),
@@ -345,6 +371,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
 > & {
   pageRules: {
     urlContains: string;
+    matchType?: WidgetPageRule["matchType"];
     greeting: string;
     prefilledMessage: string;
     suggestedQuestions?: string[];
@@ -383,8 +410,9 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     offlineMessage: settings.offlineMessage || "",
     localized: settings.localized || {},
     pageRules: settings.pageRules.map(
-      ({ urlContains, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
+      ({ urlContains, matchType, greeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
         urlContains,
+        ...(matchType ? { matchType } : {}),
         greeting,
         prefilledMessage,
         suggestedQuestions: suggestedQuestions?.filter(Boolean).slice(0, 8) || [],
@@ -785,7 +813,7 @@ export function WebsiteWidget() {
         ...prev,
         pageRules: [
           ...prev.pageRules,
-          { id: newRuleId(), urlContains: "", greeting: "", prefilledMessage: "" },
+          { id: newRuleId(), urlContains: "", matchType: "pathname", greeting: "", prefilledMessage: "" },
         ],
       };
       schedulePageRulesDebouncedSave(next);
@@ -1665,15 +1693,34 @@ export function WebsiteWidget() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-gray-600">URL contains</Label>
-                    <Input
-                      value={rule.urlContains}
-                      onChange={(e) => updatePageRule(index, { urlContains: e.target.value })}
-                      placeholder="/about or ?campaign=spring"
-                      className="h-9 text-sm border-gray-200 bg-white"
-                      data-testid={`input-rule-url-${index}`}
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-600">URL contains</Label>
+                      <Input
+                        value={rule.urlContains}
+                        onChange={(e) => updatePageRule(index, { urlContains: e.target.value })}
+                        placeholder="/about or ?campaign=spring"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-url-${index}`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-gray-600">Match</Label>
+                      <select
+                        value={rule.matchType || "contains"}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            matchType: e.target.value as WidgetPageRule["matchType"],
+                          })
+                        }
+                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
+                        data-testid={`select-rule-match-${index}`}
+                      >
+                        <option value="contains">Contains (legacy)</option>
+                        <option value="pathname">Exact path</option>
+                        <option value="pathname_prefix">Path prefix</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs text-gray-600">Greeting</Label>
@@ -1692,7 +1739,7 @@ export function WebsiteWidget() {
                           updatePageRule(index, {
                             localized: {
                               ...(rule.localized || {}),
-                              es: { greeting: e.target.value },
+                              es: { ...(rule.localized?.es || {}), greeting: e.target.value },
                             },
                           })
                         }
@@ -1707,7 +1754,7 @@ export function WebsiteWidget() {
                           updatePageRule(index, {
                             localized: {
                               ...(rule.localized || {}),
-                              he: { greeting: e.target.value },
+                              he: { ...(rule.localized?.he || {}), greeting: e.target.value },
                             },
                           })
                         }
@@ -1745,6 +1792,52 @@ export function WebsiteWidget() {
                       className="h-9 text-sm border-gray-200 bg-white"
                       data-testid={`input-rule-questions-${index}`}
                     />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        {...builderLocalizedInputProps("es")}
+                        value={(rule.localized?.es?.suggestedQuestions || []).join(", ")}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              es: {
+                                ...(rule.localized?.es || {}),
+                                suggestedQuestions: e.target.value
+                                  .split(",")
+                                  .map((q) => q.trim())
+                                  .filter(Boolean)
+                                  .slice(0, 8),
+                              },
+                            },
+                          })
+                        }
+                        placeholder="Spanish questions (same order)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-questions-es-${index}`}
+                      />
+                      <Input
+                        {...builderLocalizedInputProps("he")}
+                        value={(rule.localized?.he?.suggestedQuestions || []).join(", ")}
+                        onChange={(e) =>
+                          updatePageRule(index, {
+                            localized: {
+                              ...(rule.localized || {}),
+                              he: {
+                                ...(rule.localized?.he || {}),
+                                suggestedQuestions: e.target.value
+                                  .split(",")
+                                  .map((q) => q.trim())
+                                  .filter(Boolean)
+                                  .slice(0, 8),
+                              },
+                            },
+                          })
+                        }
+                        placeholder="Hebrew questions (same order)"
+                        className="h-9 text-sm border-gray-200 bg-white"
+                        data-testid={`input-rule-questions-he-${index}`}
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-2">

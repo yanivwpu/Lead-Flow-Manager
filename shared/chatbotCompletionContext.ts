@@ -54,9 +54,11 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     return "find_solution";
   }
   if (
-    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much)\b/.test(t) ||
+    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much|compare\s+(?:plans?|pricing|free)|free\s*(?:&|and)\s*pro|calculate(?:\s+my)?\s+savings|my\s+savings)\b/.test(t) ||
     t === "features & pricing" ||
     t === "features and pricing" ||
+    /comparar\s+(?:planes?|free)|calcular\s+(?:mi\s+)?ahorro/.test(t) ||
+    /השוואת|החיסכון\s+שלי/.test(t) ||
     /פיצ['׳]רים\s+ומחירים|תכונות\s+ומחירים/.test(t) ||
     /caracter[ií]sticas\s+y\s+precios|funciones\s+y\s+precios/.test(t)
   ) {

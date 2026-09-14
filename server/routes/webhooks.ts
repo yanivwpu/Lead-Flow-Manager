@@ -16,6 +16,9 @@ import {
 } from "../webchatAccess";
 import { isPublicWebchatVisitorId } from "@shared/webchatVisitorId";
 import { mergeWebchatPageContext, parseHttpUrl, sanitizeWebchatPageContextInput } from "@shared/webchatPageContext";
+import { validatePageRuleInboundAction } from "@shared/webchatPageRuleMatch";
+import { WEBCHAT_HUMAN_TAKEOVER_HEADER } from "@shared/webchatPageRuleEngagement";
+import { readConversationAiControl } from "@shared/webchatAiPolicy";
 import { resolveTelegramWebhookOwner, resolveTiktokLeadOwner } from "../ingressPublicTokens";
 import { getChatbotFlowForWorkspace } from "../tenantOwnership";
 import { parseIncomingWebhook, findUserByTwilioCredentials } from "../userTwilio";
@@ -219,7 +222,7 @@ export function registerWebhookRoutes(app: Express): void {
       }
 
       const userId = access.owner.userId;
-      const { visitorId, message, source, parentUrl, pageTitle, referrer, locale } = parsed.data;
+      const { visitorId, message, source, parentUrl, pageTitle, referrer, locale, pageRuleActionIndex } = parsed.data;
       const existing = await storage.getContactByChannelId(userId, "webchat", visitorId);
       const newContactOk = await consumeWebchatContactCap({
         widgetPublicId: access.owner.widgetPublicId,
@@ -230,7 +233,12 @@ export function registerWebhookRoutes(app: Express): void {
         return res.status(429).json(WEBCHAT_GENERIC_RATE_LIMIT);
       }
 
-      const matched = matchWidgetPageRule(access.owner.widgetSettings, parentUrl || "");
+      const matched = matchWidgetPageRule(access.owner.widgetSettings, parentUrl || "", locale);
+      const validatedAction = validatePageRuleInboundAction({
+        matched,
+        message,
+        actionIndex: pageRuleActionIndex,
+      });
       let preferredChatbotFlowId: string | undefined;
       if (matched?.chatbotFlowId) {
         const ownedFlow = await getChatbotFlowForWorkspace(userId, matched.chatbotFlowId);
@@ -240,7 +248,8 @@ export function registerWebhookRoutes(app: Express): void {
         parentUrl,
         pageTitle,
         referrer,
-        matchedPageRule: matched?.urlContains,
+        matchedPageRule: matched?.ruleKey || matched?.urlContains,
+        shownPageRules: validatedAction ? [validatedAction.ruleKey] : undefined,
       });
       const webchatPageContext = mergeWebchatPageContext(
         (existing?.webchatContext as Record<string, unknown>) || {},
@@ -268,6 +277,7 @@ export function registerWebhookRoutes(app: Express): void {
         webchatPageContext,
         preferredChatbotFlowId,
         visitorLocale: locale,
+        skipNewChatTrigger: Boolean(validatedAction),
       });
 
       if (result.success && result.contact && result.conversation && !result.deduped) {
@@ -310,7 +320,17 @@ export function registerWebhookRoutes(app: Express): void {
         return sendWebchatPublicJson(res, access.status, access.body);
       }
       const ws = access.owner.widgetSettings;
-      const matched = hrefParam ? matchWidgetPageRule(ws, hrefParam) : null;
+      const {
+        resolveWidgetStaticLocale,
+        widgetChromeCopyForLocale,
+        widgetChromeDir,
+        sanitizeWidgetLocaleParam,
+      } = await import("@shared/webchatWidgetLocale");
+      const locale = resolveWidgetStaticLocale({
+        explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
+        pathname: hrefParam,
+      });
+      const matched = hrefParam ? matchWidgetPageRule(ws, hrefParam, locale) : null;
       const appOrigin =
         process.env.APP_URL ||
         `https://${(process.env.REPLIT_DOMAINS || "").split(",")[0]}`;
@@ -343,19 +363,9 @@ export function registerWebhookRoutes(app: Express): void {
         ]),
       });
       const { sanitizeWebchatFormDefinition } = await import("@shared/webchatStructuredForm");
-      const {
-        resolveWidgetStaticLocale,
-        widgetChromeCopyForLocale,
-        widgetChromeDir,
-        sanitizeWidgetLocaleParam,
-      } = await import("@shared/webchatWidgetLocale");
       const { applyTenantWidgetCopyI18n, resolveLocalizedPageRuleGreeting } = await import(
         "@shared/webchatWidgetCopyI18n"
       );
-      const locale = resolveWidgetStaticLocale({
-        explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
-        pathname: hrefParam,
-      });
       const localizedPresentation = applyTenantWidgetCopyI18n(presentation, locale, ws.localized, {
         inputPlaceholder: typeof ws.inputPlaceholder === "string" ? ws.inputPlaceholder : "",
         offlineMessage: typeof ws.offlineMessage === "string" ? ws.offlineMessage : "",
@@ -383,6 +393,7 @@ export function registerWebhookRoutes(app: Express): void {
         locale,
         dir: widgetChromeDir(locale),
         chromeCopy,
+        ...(matched?.ruleKey ? { pageRuleKey: matched.ruleKey } : {}),
         ...(leadForm ? { leadForm } : {}),
       });
     } catch {
@@ -432,6 +443,9 @@ export function registerWebhookRoutes(app: Express): void {
       const { buildSignedWebchatVisitorMediaUrl } = await import("../webchatVisitorMedia");
       const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
       const messages = await storage.getMessages(conversation.id, 50);
+      if (readConversationAiControl(conversation.aiControl).paused) {
+        res.setHeader(WEBCHAT_HUMAN_TAKEOVER_HEADER, "1");
+      }
       return sendWebchatPublicJson(res, 200, toPublicWebchatMessages(messages, (message) => {
         if (!isWebchatImageContentType(message.contentType)) return null;
         return buildSignedWebchatVisitorMediaUrl({

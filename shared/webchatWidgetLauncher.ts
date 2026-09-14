@@ -6,10 +6,12 @@
 import { sanitizePlainWidgetText } from "./webchatWidgetBranding";
 import type { WebchatChromeLayout } from "./webchatWidgetChrome";
 import { toVisitorSafePublicWebchatPayload } from "./webchatWidgetBranding";
-import { resolveLocalizedPageRuleGreeting } from "./webchatWidgetCopyI18n";
+import { resolveLocalizedPageRuleGreeting, resolveLocalizedPageRuleQuestions } from "./webchatWidgetCopyI18n";
+import { normalizePageRuleMatchType, type WidgetPageRuleMatchType } from "./webchatPageRuleMatch";
 
 export type VisitorSafeWidgetPageRule = {
   urlContains: string;
+  matchType: WidgetPageRuleMatchType;
   greeting: string;
   prefilledMessage: string;
   suggestedQuestions: string[];
@@ -67,15 +69,14 @@ export function visitorSafeWidgetPageRules(
     const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
     const urlContains = sanitizePlainWidgetText(r.urlContains, 500);
     if (!urlContains) continue;
-    const questions = Array.isArray(r.suggestedQuestions)
-      ? r.suggestedQuestions
-          .filter((q): q is string => typeof q === "string")
-          .map((q) => sanitizePlainWidgetText(q, 200))
-          .filter(Boolean)
-          .slice(0, 8)
-      : [];
+    const questions = resolveLocalizedPageRuleQuestions({
+      locale,
+      suggestedQuestions: r.suggestedQuestions,
+      localized: r.localized,
+    });
     out.push({
       urlContains,
+      matchType: normalizePageRuleMatchType(r.matchType),
       greeting: resolveLocalizedPageRuleGreeting({
         locale,
         greeting: r.greeting,

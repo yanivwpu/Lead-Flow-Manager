@@ -1293,8 +1293,14 @@ export async function registerRoutes(
     ctaLabel: z.string().max(80).optional(),
   });
 
+  const widgetPageRuleLocaleSchema = z.object({
+    greeting: z.string().max(500).optional(),
+    suggestedQuestions: z.array(z.string().max(200)).max(8).optional(),
+  });
+
   const widgetPageRuleSchema = z.object({
     urlContains: z.string().max(500),
+    matchType: z.enum(["contains", "pathname", "pathname_prefix"]).optional(),
     greeting: z.string().max(500),
     prefilledMessage: z.string().max(2000),
     suggestedQuestions: z.array(z.string().max(200)).max(8).optional(),
@@ -1302,9 +1308,9 @@ export async function registerRoutes(
     ctaLabel: z.string().max(80).optional(),
     ctaUrl: z.string().max(2000).optional(),
     localized: z.object({
-      en: z.object({ greeting: z.string().max(500).optional() }).optional(),
-      es: z.object({ greeting: z.string().max(500).optional() }).optional(),
-      he: z.object({ greeting: z.string().max(500).optional() }).optional(),
+      en: widgetPageRuleLocaleSchema.optional(),
+      es: widgetPageRuleLocaleSchema.optional(),
+      he: widgetPageRuleLocaleSchema.optional(),
     }).optional(),
   });
 

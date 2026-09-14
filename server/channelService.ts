@@ -1145,6 +1145,7 @@ class ChannelService {
     webchatPageContext?: import("@shared/webchatPageContext").WebchatPageContext;
     preferredChatbotFlowId?: string;
     visitorLocale?: string;
+    skipNewChatTrigger?: boolean;
   }): Promise<InboundProcessingResult> {
     const {
       userId,
@@ -1166,6 +1167,7 @@ class ChannelService {
       webchatPageContext,
       preferredChatbotFlowId,
       visitorLocale,
+      skipNewChatTrigger,
     } = params;
     const isCommerceInbound = inboundMode === "commerce";
     let { channelContactId, contactName } = params;
@@ -1783,7 +1785,8 @@ class ChannelService {
       channel,
       message: content,
       isNewConversation,
-      preferredFlowId: preferredChatbotFlowId,
+      preferredFlowId: isNewConversation ? preferredChatbotFlowId : undefined,
+      skipNewChatTrigger: skipNewChatTrigger === true,
       skipBookingIntent: bookingIntent,
       awaitExecution: true,
       sourceEventId: externalMessageId || message.id,

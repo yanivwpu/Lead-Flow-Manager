@@ -8,6 +8,7 @@ import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import { withAutomationSendGuard } from "./automationSendGuard";
 import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
 import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
+import { pageRuleChatbotTriggerGates } from "@shared/webchatPageRuleChatbotGates";
 
 // ─── Button types ──────────────────────────────────────────────────────────
 
@@ -67,6 +68,8 @@ export interface TriggerContext {
   isNewConversation: boolean;
   /** Optional page-rule chatbot flow; must belong to userId. */
   preferredFlowId?: string;
+  /** Validated current-turn page-rule chip — do not fire generic new-chat Ask Question. */
+  skipNewChatTrigger?: boolean;
   /** When true, do not execute or claim the turn (booking fast-path owns the reply). */
   skipBookingIntent?: boolean;
   /** When true, wait for the first visitor-facing work instead of fire-and-forget. */
@@ -484,8 +487,9 @@ export async function evaluateChatbotInboundArbitration(
     }
 
     const activeFlows = await storage.getActiveChatbotFlows(ctx.userId);
-    if (ctx.preferredFlowId) {
-      const preferred = activeFlows.find((f) => f.id === ctx.preferredFlowId);
+    const gates = pageRuleChatbotTriggerGates(ctx);
+    if (gates.preferredFlowId) {
+      const preferred = activeFlows.find((f) => f.id === gates.preferredFlowId);
       if (preferred) {
         if (flowOpeningAskAlreadyAnswered(preferred, ctx)) {
           return { flowMatched: false, reason: "pending_ask_complete" };
@@ -509,7 +513,7 @@ export async function evaluateChatbotInboundArbitration(
         shouldTrigger = true;
         triggerReason = `keyword_match:${flow.id}`;
       }
-      if (!shouldTrigger && triggerOnNewChat && ctx.isNewConversation) {
+      if (!shouldTrigger && triggerOnNewChat && gates.allowNewChatTrigger) {
         shouldTrigger = true;
         triggerReason = `new_chat_trigger:${flow.id}`;
       }
@@ -1578,8 +1582,9 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
 
     console.log(`[Chatbot] Found ${activeFlows.length} active flow(s) for userId: ${ctx.userId}`);
 
+    const gates = pageRuleChatbotTriggerGates(ctx);
     const preferred =
-      ctx.preferredFlowId ? activeFlows.find((f) => f.id === ctx.preferredFlowId) : undefined;
+      gates.preferredFlowId ? activeFlows.find((f) => f.id === gates.preferredFlowId) : undefined;
     const chosen = preferred
       ? { flow: preferred, reason: `page_rule_flow:${preferred.id}` }
       : findKeywordOrNewChatFlow(activeFlows, ctx);
@@ -1640,7 +1645,7 @@ function findKeywordOrNewChatFlow(
     if (keywords.length > 0 && keywordMatches(ctx.message, keywords)) {
       return { flow, reason: `keyword_match:${flow.id}` };
     }
-    if (triggerOnNewChat && ctx.isNewConversation) {
+    if (triggerOnNewChat && pageRuleChatbotTriggerGates(ctx).allowNewChatTrigger) {
       return { flow, reason: `new_chat_trigger:${flow.id}` };
     }
   }
