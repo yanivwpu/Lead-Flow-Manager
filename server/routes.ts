@@ -11926,6 +11926,7 @@ export async function registerRoutes(
             groundingViolations: suggestion.groundingViolations,
             channel: gateChannel,
             currentTurnAskIntent,
+            verifiedBookingUrl: String((knowledge as { bookingLink?: string } | undefined)?.bookingLink || "").trim(),
           });
           autoSendAllowed = gate.allowed;
           autoSendReason = gate.reason;

@@ -8,6 +8,12 @@ import {
   unsafeWebchatGreetingWelcomeReason,
 } from "@shared/webchatGreetingWelcome";
 import { draftHasCurrencyAmount } from "@shared/factGrounding";
+import {
+  draftContainsVerifiedBookingUrl,
+  extractHttpUrls,
+  isTrustedCalendlySchedulingUrl,
+  normalizeSchedulingUrlForCompare,
+} from "@shared/verifiedBookingUrl";
 
 export { isCasualWebchatGreeting } from "@shared/webchatGreetingWelcome";
 
@@ -105,10 +111,36 @@ export function shouldBypassAutoGuardsForInbound(params: {
 }
 
 /**
- * High-intent phrases / bundles — when matched, Full Auto may bypass strict Copilot gates
- * (intent_unclear, low_confidence, conversation length, qualifyingQuestions gaps).
- * Safety disqualifiers (stop/complaint), trivial suggestion, and placeholders still apply.
+ * Invented meeting details, guarantees, or customer-profile claims.
+ * A safe Book a demo CTA is a short invitation plus the verified Calendly URL.
  */
+const UNSAFE_BOOKING_REPLY_RE =
+  /\b(?:available (?:on|at|from)|availability|time slot|opens?\s+at|guarante(?:e|ed)|we promise|100\s*%|your (?:budget|company|team|package|timeline)|i see you)\b|\b\d{1,2}:\d{2}(?:\s*(?:am|pm))?\b|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b.{0,24}\b(?:at|from)\b|זמין(?:ה)?(?:\s+ב)|בשעה\s+\d|מובטח|disponible\s+(?:el|mañana)|garantiz/i;
+
+/** Qualification-field gaps from Copilot scoring — not reply-grounding facts. */
+export function listMissingRequiredQualificationLabels(
+  conversationHistory: ChatTurn[],
+  businessKnowledge?: BusinessKnowledgeForScoring,
+): string[] {
+  return scoreLead(toConversationMessages(conversationHistory), businessKnowledge).missingRequired ?? [];
+}
+
+/**
+ * Structured Book a demo may skip qualification-gap holds only when the reply is a
+ * grounded booking invitation that contains the exact verified workspace URL.
+ */
+export function isSafeStructuredBookingCta(draft: string, verifiedUrl: string): boolean {
+  if (!isTrustedCalendlySchedulingUrl(verifiedUrl)) return false;
+  if (!draftContainsVerifiedBookingUrl(draft, verifiedUrl)) return false;
+  const expected = normalizeSchedulingUrlForCompare(verifiedUrl);
+  if (extractHttpUrls(draft).some((found) => normalizeSchedulingUrlForCompare(found) !== expected)) {
+    return false;
+  }
+  if (draftHasCurrencyAmount(draft)) return false;
+  const withoutUrls = (draft || "").replace(/https?:\/\/\S+/gi, " ");
+  return !UNSAFE_BOOKING_REPLY_RE.test(withoutUrls);
+}
+
 export function detectStrongAutoIntent(joinedInbound: string, lastInbound: string): boolean {
   const text = `${joinedInbound}\n${lastInbound}`.trim();
   if (!text) return false;
@@ -185,21 +217,31 @@ export function evaluateFullAutoSend(params: {
     provenanceCurrentInbound?: boolean;
     kind?: string;
   } | null;
+  /** Workspace-selected Calendly URL. Required for the scoped Book a demo qualification skip. */
+  verifiedBookingUrl?: string | null;
 }): {
   allowed: boolean;
   reason: string;
   missingRequiredLen: number;
   inboundCount: number;
   confidenceSource: AutoSendConfidenceSource;
+  missingRequired: string[];
 } {
   const { businessMode, conversationHistory, suggestion, businessKnowledge } = params;
   const webchat = isWebchatChannel(params.channel);
-  const none = (reason: string, inboundCount = 0, missingRequiredLen = 0, confidenceSource: AutoSendConfidenceSource = "missing") => ({
+  const none = (
+    reason: string,
+    inboundCount = 0,
+    missingRequiredLen = 0,
+    confidenceSource: AutoSendConfidenceSource = "missing",
+    missingRequired: string[] = [],
+  ) => ({
     allowed: false,
     reason,
     missingRequiredLen,
     inboundCount,
     confidenceSource,
+    missingRequired,
   });
 
   if (businessMode !== "auto") {
@@ -261,11 +303,17 @@ export function evaluateFullAutoSend(params: {
   };
 
   const scored = scoreLead(msgs, businessKnowledge);
-  const missingLen = scored.missingRequired?.length ?? 0;
+  const missingRequired = scored.missingRequired ?? [];
+  const missingLen = missingRequired.length;
   const requiredQs = (businessKnowledge?.qualifyingQuestions || []).filter(
     (q) => q?.question?.trim() && (q.required ?? true) && (q as { enabled?: boolean }).enabled !== false,
   );
   const qualifyingGuess = requiredQs.length > 0 && missingLen > 1;
+  const verifiedBookingUrl = String(params.verifiedBookingUrl || "").trim();
+  const safeBookingCta =
+    structuredBooking &&
+    grounded &&
+    isSafeStructuredBookingCta(suggestion, verifiedBookingUrl);
 
   const resolveConfidence = (opts?: { bypassLowModel?: boolean }):
     | { ok: true; confidence: number; source: AutoSendConfidenceSource }
@@ -294,7 +342,7 @@ export function evaluateFullAutoSend(params: {
     }
     const conf = resolveConfidence();
     if (!conf.ok) {
-      return none(conf.reason, inboundCount, missingLen, conf.source);
+      return none(conf.reason, inboundCount, missingLen, conf.source, missingRequired);
     }
     return {
       allowed: true,
@@ -302,6 +350,7 @@ export function evaluateFullAutoSend(params: {
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: conf.source,
+      missingRequired,
     };
   }
 
@@ -320,6 +369,7 @@ export function evaluateFullAutoSend(params: {
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: modelProvided ? "model" : "defaulted",
+      missingRequired,
     };
   }
 
@@ -356,8 +406,8 @@ export function evaluateFullAutoSend(params: {
     if (knowledgeQuestion && !grounded && draftHasCurrencyAmount(suggestion)) {
       return none("ungrounded_pricing", inboundCount, missingLen, conf.source);
     }
-    if (!knowledgeQuestion && qualifyingGuess) {
-      return none("missing_required_gt_one", inboundCount, missingLen, conf.source);
+    if (!knowledgeQuestion && qualifyingGuess && !safeBookingCta) {
+      return none("missing_required_gt_one", inboundCount, missingLen, conf.source, missingRequired);
     }
     return {
       allowed: true,
@@ -369,6 +419,7 @@ export function evaluateFullAutoSend(params: {
       missingRequiredLen: missingLen,
       inboundCount,
       confidenceSource: conf.source,
+      missingRequired,
     };
   }
 
@@ -400,6 +451,7 @@ export function evaluateFullAutoSend(params: {
     missingRequiredLen: missingLen,
     inboundCount,
     confidenceSource: conf.source,
+    missingRequired,
   };
 }
 

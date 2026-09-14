@@ -474,7 +474,9 @@ export async function maybeRunWebchatServerAi(
     return { decision, sent: false };
   }
 
-  const knowledge = await storage.getAiBusinessKnowledge(params.userId);
+  const knowledgeRaw = await storage.getAiBusinessKnowledge(params.userId);
+  const { applyCalendlyBookingLinkForAi } = await import("./calendlyBookingConnected");
+  const knowledge = await applyCalendlyBookingLinkForAi(params.userId, knowledgeRaw || undefined);
   const currentTurnAskIntent = resolveCurrentTurnStructuredAskIntent({
     customFields: contact.customFields,
     inboundMessageId: params.inboundMessageId,
@@ -487,6 +489,7 @@ export async function maybeRunWebchatServerAi(
     confidence: typeof suggestion.confidence === "number" ? suggestion.confidence : 0,
     confidenceProvided: suggestion.confidenceProvided === true,
     knowledgeGrounded: suggestion.knowledgeGrounded === true,
+    verifiedBookingUrl: String(knowledge?.bookingLink || "").trim(),
     businessKnowledge: businessKnowledgeFromAiRecord(knowledge as Record<string, unknown> | undefined),
     groundingViolations: suggestion.groundingViolations,
     currentTurnAskIntent,
