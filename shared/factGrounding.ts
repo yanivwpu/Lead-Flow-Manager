@@ -608,7 +608,7 @@ export function assembleDeterministicGroundedDraft(params: {
       let line = `${prefix}${d.name} is ${price}.`;
       if (
         (intents.has("benefits_question") || intents.has("pricing_question") || intents.has("listing_join_question")) &&
-        d.benefits.length > 0
+        Array.isArray(d.benefits) && d.benefits.length > 0
       ) {
         line += ` It includes: ${d.benefits.join("; ")}.`;
       }

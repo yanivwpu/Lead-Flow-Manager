@@ -783,7 +783,9 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
     case "pricing_plan": {
       const d = fact.data as FactDataMap["pricing_plan"];
       const price = formatPlanPrices(d);
-      const benefits = d.benefits.length ? ` — includes: ${d.benefits.join("; ")}` : "";
+      const benefits = Array.isArray(d.benefits) && d.benefits.length
+        ? ` — includes: ${d.benefits.join("; ")}`
+        : "";
       return price ? `${d.name}: ${price}${benefits}` : `${d.name}${benefits}`;
     }
     case "product":
@@ -806,7 +808,9 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
     }
     case "policy": {
       const d = fact.data as FactDataMap["policy"];
-      const conditions = d.conditions.length ? ` Conditions: ${d.conditions.join("; ")}` : "";
+      const conditions = Array.isArray(d.conditions) && d.conditions.length
+        ? ` Conditions: ${d.conditions.join("; ")}`
+        : "";
       return `${d.title} (${d.category}): ${d.details}${conditions}`;
     }
     case "location": {
@@ -822,7 +826,7 @@ export function formatFactValue(fact: Pick<KnowledgeFact, "factType" | "data">):
     }
     case "business_hours": {
       const d = fact.data as FactDataMap["business_hours"];
-      const lines = d.entries.map((e) => `${e.days} ${e.opens}–${e.closes}`).join("; ");
+      const lines = (Array.isArray(d.entries) ? d.entries : []).map((e) => `${e.days} ${e.opens}–${e.closes}`).join("; ");
       return d.timezone ? `${lines} (${d.timezone})` : lines;
     }
     case "contact_method": {

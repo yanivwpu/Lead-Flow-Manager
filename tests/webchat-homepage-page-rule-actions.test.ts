@@ -411,6 +411,8 @@ test("aliases, RTL, savings journey, and anonymous identity remain intact", () =
   assert.match(src, /trustedPageRuleBookDemoReply/);
   assert.match(src, /selectedEvidenceCategories/);
   assert.match(src, /assembleFeaturesPricingReply/);
+  assert.match(src, /realizeTrustedFeaturesPricingReply/);
+  assert.match(src, /fromPage === "features_pricing" \|\| fromPage === "compare_plans"/);
   assert.match(src, /isRoboticFeaturesPricingDraft/);
   const enrollments = read("server/routes/campaignEnrollments.ts");
   assert.match(enrollments, /storage\.getCampaignEnrollmentsForContact/);
@@ -503,7 +505,8 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
     true,
   );
   assert.match(en!, /Free — \$0\/month/);
-  assert.match(en!, /Pro — \$49\/month, or \$490\/year/);
+  assert.match(en!, /Pro — \$49\/month or \$490\/year/);
+  assert.doesNotMatch(en!, /\$49\/month, or/);
   assert.equal((en!.match(/\$49\/month/g) || []).length, 1);
   assert.equal((en!.match(/\$490\/year/g) || []).length, 1);
   assert.equal((en!.match(/AI Brain/gi) || []).length, 1);
@@ -526,9 +529,16 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
     userId: "tenant-a",
     retrieved: PRODUCTION_SHAPED_PLANS,
   });
+  const factsOnlyDraft = assembleFeaturesPricingReply({
+    retrieved: PRODUCTION_SHAPED_PLANS,
+    locale: "en",
+    bundle: factsOnly,
+  });
+  assert.ok(factsOnlyDraft);
+  assert.match(factsOnlyDraft!, /Pro — \$49\/month(?:,)? or \$490\/year/);
   assert.equal(
     isDraftAmountGrounded({
-      draft: en!,
+      draft: factsOnlyDraft!,
       retrieved: PRODUCTION_SHAPED_PLANS,
       bundle: factsOnly,
     }),
@@ -538,7 +548,7 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
   const he = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "he", bundle: factsOnly });
   assert.ok(es);
   assert.ok(he);
-  assert.match(es!, /\$49\/mes, o \$490\/año/);
+  assert.match(es!, /\$49\/mes(?:,)? o \$490\/año/);
   assert.match(es!, /\$0\/mes/);
   assert.match(es!, /Incluye integraciones y plantillas básicas de WhatsApp/);
   assert.match(es!, /Incluye AI Brain, una prueba Pro de 14 días y 0% de recargo de WhachatCRM en las tarifas de conversación de Meta/);
@@ -546,7 +556,7 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
   assert.equal(isRoboticFeaturesPricingDraft(es!), false);
   assert.doesNotMatch(es!, /USD 49 per month/);
   assert.equal(isDraftAmountGrounded({ draft: es!, retrieved: PRODUCTION_SHAPED_PLANS, bundle: factsOnly }), true);
-  assert.match(he!, /\$49 לחודש, או \$490 לשנה/);
+  assert.match(he!, /\$49 לחודש(?:,)? או \$490 לשנה/);
   assert.match(he!, /\$0 לחודש/);
   assert.match(he!, /כולל אינטגרציות ותבניות WhatsApp בסיסיות/);
   assert.ok(he!.includes("\n"));

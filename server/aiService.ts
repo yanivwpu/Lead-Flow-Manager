@@ -28,7 +28,9 @@ import {
 } from "@shared/chatbotCompletionContext";
 import {
   assembleFeaturesPricingReply,
+  featuresPricingClarification,
   isRoboticFeaturesPricingDraft,
+  realizeTrustedFeaturesPricingReply,
 } from "@shared/featuresPricingReply";
 import {
   trustedPageRuleBookDemoReply,
@@ -340,15 +342,33 @@ export class AIService {
             missing: contactContext.journeyMissing || [],
           })
         : null;
-    const turnEvidence: TurnEvidenceBundle = buildTurnEvidenceBundle({
-      userId,
-      retrieved: grounding.retrieved,
-      conflictingKeys: grounding.conflictingKeys,
-      liveRecords: liveRecordsForBundle,
-      servicesProducts: businessKnowledge?.servicesProducts,
-      websiteKnowledgeText: promptWebsiteText,
-      supplementalEvidence: savingsScripted?.evidence,
-    });
+    let turnEvidence: TurnEvidenceBundle;
+    try {
+      turnEvidence = buildTurnEvidenceBundle({
+        userId,
+        retrieved: grounding.retrieved,
+        conflictingKeys: grounding.conflictingKeys,
+        liveRecords: liveRecordsForBundle,
+        servicesProducts: businessKnowledge?.servicesProducts,
+        websiteKnowledgeText: promptWebsiteText,
+        supplementalEvidence: savingsScripted?.evidence,
+      });
+    } catch (err) {
+      console.warn("[AI] evidence_bundle_failed", {
+        userId,
+        channel: channel ?? null,
+        stage: "evidence",
+        pageActionKind: contactContext?.pageActionKind || null,
+        errorName: err instanceof Error ? err.name : "Error",
+        errorCode: err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120),
+      });
+      turnEvidence = buildTurnEvidenceBundle({
+        userId,
+        retrieved: [],
+        websiteKnowledgeText: promptWebsiteText,
+        servicesProducts: businessKnowledge?.servicesProducts,
+      });
+    }
     const evidenceDiag = evidenceDiagnostics(turnEvidence);
     const structuredPricesSelected = turnEvidence.supportedAmountSourceTypes.some(
       (t) => t === "published_fact" || t === "live_offer",
@@ -484,6 +504,42 @@ export class AIService {
         : null;
     if (findScripted) {
       return groundedScriptedReturn(findScripted, "find_solution", { skipCompleteness: true });
+    }
+
+    if (fromPage === "features_pricing" || fromPage === "compare_plans") {
+      const locale = contactContext?.conversationLanguage || detectedLanguage;
+      let realized = realizeTrustedFeaturesPricingReply({
+        retrieved: grounding.retrieved,
+        conflictingKeys: grounding.conflictingKeys,
+        locale,
+        bundle: turnEvidence,
+      });
+      if (realized.outcome === "formatted") {
+        const formattedCheck = evaluateDraft(realized.text, { skipCompleteness: true });
+        const formattedGrounded =
+          formattedCheck.ok &&
+          isDraftAmountGrounded({
+            draft: realized.text,
+            retrieved: grounding.retrieved,
+            conflictingKeys: grounding.conflictingKeys,
+            bundle: turnEvidence,
+          });
+        if (!formattedGrounded) {
+          realized = { text: featuresPricingClarification(locale), outcome: "clarification" };
+        }
+      }
+      console.info("[AI] features_pricing_realize", {
+        userId,
+        channel: channel ?? null,
+        stage: "formatter",
+        pageActionKind: contactContext?.pageActionKind || null,
+        locale: String(locale || "en").slice(0, 8),
+        selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
+        formatterOutcome: realized.outcome,
+        fallbackAttempted: realized.outcome !== "formatted",
+        fallbackSucceeded: Boolean(realized.text && realized.text.trim()),
+      });
+      return groundedScriptedReturn(realized.text, "pricing_question", { skipCompleteness: true });
     }
 
     const runCompletion = async (prompt: string) => {
@@ -716,6 +772,29 @@ export class AIService {
         "[AI] Error generating suggestion:",
         error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
       );
+      console.info("[AI] generation_stage", {
+        userId,
+        channel: channel ?? null,
+        stage: "model",
+        pageActionKind: contactContext?.pageActionKind || null,
+        locale: String(contactContext?.conversationLanguage || detectedLanguage || "en").slice(0, 8),
+        selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
+        formatterOutcome: "not_used",
+        errorName: error instanceof Error ? error.name : "Error",
+        errorCode: error instanceof Error ? error.message.slice(0, 120) : String(error).slice(0, 120),
+        fallbackAttempted: fromPage === "features_pricing" || fromPage === "compare_plans" || greetingTurn,
+        fallbackSucceeded: false,
+      });
+      if (fromPage === "features_pricing" || fromPage === "compare_plans") {
+        const locale = contactContext?.conversationLanguage || detectedLanguage;
+        const realized = realizeTrustedFeaturesPricingReply({
+          retrieved: grounding.retrieved,
+          conflictingKeys: grounding.conflictingKeys,
+          locale,
+          bundle: turnEvidence,
+        });
+        return groundedScriptedReturn(realized.text, "pricing_question", { skipCompleteness: true });
+      }
       if (greetingTurn) {
         return {
           suggestion: webchatSafeGreetingWelcome(businessKnowledge?.businessName),
@@ -1355,11 +1434,11 @@ GOOD: "I found several homes that match those criteria. Would you like me to sen
     }
 
     // Business-defined qualification criteria — override the generic goal when present
-    const qualifyingQuestions = (
-      ((businessKnowledge as any)?.qualifyingQuestions as Array<{
-        key?: string; label?: string; question: string; required?: boolean; enabled?: boolean;
-      }> | undefined) ?? []
-    ).filter((q) => q?.question?.trim() && q.enabled !== false);
+    const qualifyingSource = (businessKnowledge as any)?.qualifyingQuestions;
+    const qualifyingQuestions = (Array.isArray(qualifyingSource) ? qualifyingSource : []).filter(
+      (q: { key?: string; label?: string; question?: string; required?: boolean; enabled?: boolean }) =>
+        q?.question?.trim() && q.enabled !== false,
+    );
     const hasCustomCriteria = qualifyingQuestions.length > 0;
     if (hasCustomCriteria && contactContext?.pageActionKind !== "book_demo") {
       prompt += `

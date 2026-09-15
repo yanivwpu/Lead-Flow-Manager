@@ -35,6 +35,7 @@ import { contactHasDoNotContact, withAutomationSendGuard } from "./automationSen
 import {
   businessKnowledgeFromAiRecord,
   evaluateFullAutoSend,
+  WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
 } from "./aiAutoSendGate";
 import { resolveCurrentTurnStructuredAskIntent } from "@shared/chatbotAskQuestion";
 import {
@@ -410,6 +411,11 @@ export async function maybeRunWebchatServerAi(
     content: m.content || "",
   }));
   const pageBlock = formatPageContextForAi(contact.webchatContext as WebchatPageContext);
+  const currentTurnPageActionForGenerate = resolveCurrentTurnPageAction({
+    pageContext: contact.webchatContext,
+    inboundMessageId: params.inboundMessageId,
+  });
+  const generateLocale = String(readConversationAiControl(conv.aiControl).conversationLanguage || "en").slice(0, 8);
 
   const controller = new AbortController();
   registerWebchatGenerationAbort(conv.id, controller);
@@ -427,7 +433,9 @@ export async function maybeRunWebchatServerAi(
     suggestion: "",
     confidence: 0,
   };
+  let generationStage = "model";
   try {
+    generationStage = "model";
     const genPromise = generate({
       userId: params.userId,
       conversationId: conv.id,
@@ -452,51 +460,85 @@ export async function maybeRunWebchatServerAi(
     const name = err instanceof Error ? err.name : "";
     conv = (await storage.getConversation(conv.id)) || conv;
     const leaseStillValid = generationLeaseAllowsCommit(readConversationAiControl(conv.aiControl), leaseId);
+    const trustedPricingAction =
+      currentTurnPageActionForGenerate.trusted === true &&
+      currentTurnPageActionForGenerate.provenanceCurrentInbound === true &&
+      (currentTurnPageActionForGenerate.kind === "compare_plans" ||
+        currentTurnPageActionForGenerate.kind === "features_pricing");
     const reasonCode =
       !leaseStillValid
         ? "skip_lease_invalid"
         : name === "TimeoutError" || name === "AbortError"
           ? "skip_generation_timeout"
           : "generation_failed";
-    await storage.createActivityEvent({
-      userId: params.userId,
-      contactId: contact.id,
-      conversationId: conv.id,
-      eventType: "ai_generation_failed",
-      eventData: {
-        reason: name || "generation_failed",
-        reasonCode,
-      },
-      actorType: "ai",
-    }).catch(() => {});
-    await storage.createActivityEvent({
-      userId: params.userId,
-      contactId: contact.id,
-      conversationId: conv.id,
-      eventType: "ai_suggestion",
-      eventData: {
-        suggestion: "AI could not generate a reply. Review this conversation.",
-        confidence: 0,
-        channel: "webchat",
-        holdReason: reasonCode,
-        generationFailed: true,
-        inboundMessageId: params.inboundMessageId,
-        conversationId: conv.id,
-      },
-      actorType: "ai",
-    }).catch(() => {});
-    try {
-      const { notifyUser } = await import("./presence");
-      notifyUser(params.userId, {
-        type: "ai_review_draft",
+    const diag = {
+      stage: generationStage,
+      pageActionKind: currentTurnPageActionForGenerate.kind || null,
+      locale: generateLocale,
+      formatterOutcome: trustedPricingAction ? "clarification" : "not_used",
+      errorName: name || "Error",
+      errorCode: err instanceof Error ? err.message.slice(0, 120) : "generation_failed",
+      fallbackAttempted: trustedPricingAction,
+      fallbackSucceeded: false,
+      finalDecision: reasonCode,
+    };
+    if (trustedPricingAction && leaseStillValid && reasonCode === "generation_failed") {
+      const { featuresPricingClarification } = await import("@shared/featuresPricingReply");
+      suggestion = {
+        suggestion: featuresPricingClarification(generateLocale),
+        confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+        confidenceProvided: false,
+        knowledgeGrounded: false,
+        modelGenerationSucceeded: false,
+        groundingViolations: [],
+        retrievalIntent: "pricing_question",
+      };
+      diag.fallbackSucceeded = true;
+      diag.finalDecision = "formatter_fallback";
+      console.info("[AI] generation_stage", diag);
+    } else {
+      await storage.createActivityEvent({
+        userId: params.userId,
         contactId: contact.id,
         conversationId: conv.id,
-      });
-    } catch {
-      /* inbox still hydrates on next timeline fetch */
+        eventType: "ai_generation_failed",
+        eventData: {
+          reason: name || "generation_failed",
+          reasonCode,
+          ...diag,
+        },
+        actorType: "ai",
+      }).catch(() => {});
+      await storage.createActivityEvent({
+        userId: params.userId,
+        contactId: contact.id,
+        conversationId: conv.id,
+        eventType: "ai_suggestion",
+        eventData: {
+          suggestion: "AI could not generate a reply. Review this conversation.",
+          confidence: 0,
+          channel: "webchat",
+          holdReason: reasonCode,
+          generationFailed: true,
+          inboundMessageId: params.inboundMessageId,
+          conversationId: conv.id,
+          ...diag,
+        },
+        actorType: "ai",
+      }).catch(() => {});
+      try {
+        const { notifyUser } = await import("./presence");
+        notifyUser(params.userId, {
+          type: "ai_review_draft",
+          contactId: contact.id,
+          conversationId: conv.id,
+        });
+      } catch {
+        /* inbox still hydrates on next timeline fetch */
+      }
+      report(reasonCode, { hasDraft: true });
+      return { decision: reasonCode, sent: false };
     }
-    report(reasonCode, { hasDraft: true });
-    return { decision: reasonCode, sent: false };
   } finally {
     clearTimeout(timer);
     clearWebchatGenerationAbort(conv.id, controller);

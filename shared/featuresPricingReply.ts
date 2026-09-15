@@ -11,6 +11,7 @@ import {
 } from "./businessKnowledgeFacts";
 import type { RetrievedFact } from "./knowledgeRetrieval";
 import {
+  evaluateBundleAmountGrounding,
   extractSupportedAmountsFromText,
   supportingAmounts,
   type TurnEvidenceBundle,
@@ -45,6 +46,10 @@ type PlanView = {
   prices: FactMoney[];
   hits: BenefitHit[];
 };
+
+type PlanAccum = { name: string; prices: FactMoney[]; raw: string[] };
+
+export type FeaturesPricingRealizeOutcome = "formatted" | "clarification" | "formatter_error";
 
 function classifyBenefit(raw: string): BenefitHit | null {
   const t = String(raw || "")
@@ -106,51 +111,125 @@ function formatVisitorPrice(money: FactMoney, locale: WidgetStaticLocale): strin
   return `${money.currency} ${amount}/${money.billingPeriod}`;
 }
 
-function formatPlanPrices(prices: FactMoney[], locale: WidgetStaticLocale): string {
-  const bits = prices.map((p) => formatVisitorPrice(p, locale));
-  if (bits.length <= 1) return bits[0] || "";
-  // Comma keeps month+year on one visitor line while amount-identity
-  // matching still treats the yearly figure as the same published Pro plan.
-  const sep = locale === "he" ? ", או " : locale === "es" ? ", o " : ", or ";
-  return bits.join(sep);
+function priceJoin(locale: WidgetStaticLocale, compact: boolean): string {
+  if (locale === "he") return compact ? ", או " : " או ";
+  if (locale === "es") return compact ? ", o " : " o ";
+  return compact ? ", or " : " or ";
 }
 
-function collectPlans(retrieved: RetrievedFact[], conflictingKeys?: string[]): PlanView[] {
+function formatPlanPrices(prices: FactMoney[], locale: WidgetStaticLocale, compact = false): string {
+  const bits = prices.map((p) => formatVisitorPrice(p, locale)).filter(Boolean);
+  if (bits.length <= 1) return bits[0] || "";
+  return bits.join(priceJoin(locale, compact));
+}
+
+function pushUniquePrice(existing: PlanAccum, price: FactMoney): void {
+  if (!price || !Number.isFinite(price.amount)) return;
+  const id = `${price.currency}:${price.amount}:${price.billingPeriod}`;
+  if (existing.prices.some((p) => `${p.currency}:${p.amount}:${p.billingPeriod}` === id)) return;
+  existing.prices.push(price);
+}
+
+function ensurePlan(byName: Map<string, PlanAccum>, name: string): PlanAccum {
+  const key = name.toLowerCase();
+  const existing = byName.get(key) || { name, prices: [], raw: [] };
+  byName.set(key, existing);
+  return existing;
+}
+
+function mentionsFreePlan(lower: string): boolean {
+  if (!/\bfree\b/.test(lower)) return false;
+  if (/\b\d+[\s-]*day\s+free\b/.test(lower)) return false;
+  if (/\bfree\s+pro\s+trial\b/.test(lower)) return false;
+  return true;
+}
+
+function absorbEvidenceText(text: string, byName: Map<string, PlanAccum>, extras: string[]): void {
+  const src = String(text || "");
+  if (!src.trim()) return;
+  for (const line of src.split(/\n+/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const clauses = trimmed
+      .split(/\s*[·;]\s*|(?<=[.!?])\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    for (const clause of clauses.length ? clauses : [trimmed]) {
+      const lower = clause.toLowerCase();
+      const mentionsFree = mentionsFreePlan(lower);
+      const mentionsPro = /\bpro\b/.test(lower);
+      const amounts = extractSupportedAmountsFromText(clause, "website_chunk");
+      const fragments = [clause];
+      const assign = (name: string, withFragments: boolean) => {
+        const existing = ensurePlan(byName, name);
+        const key = name.toLowerCase();
+        for (const extracted of amounts) {
+          const amount = Number(String(extracted.amount || "").replace(/,/g, ""));
+          if (!Number.isFinite(amount)) continue;
+          if (extracted.interval !== "month" && extracted.interval !== "year") continue;
+          const identity = (extracted.identity || "").toLowerCase();
+          if (mentionsFree && mentionsPro && identity && !identity.includes(key)) continue;
+          pushUniquePrice(existing, {
+            amount,
+            currency:
+              extracted.currency === "EUR" || extracted.currency === "GBP" || extracted.currency === "ILS"
+                ? extracted.currency
+                : "USD",
+            billingPeriod: extracted.interval,
+          });
+        }
+        if (withFragments) existing.raw.push(...fragments);
+      };
+      if (mentionsFree && !mentionsPro) assign("Free", true);
+      else if (mentionsPro && !mentionsFree) assign("Pro", true);
+      else if (mentionsFree && mentionsPro) {
+        assign("Free", false);
+        assign("Pro", false);
+        extras.push(...fragments);
+      } else {
+        extras.push(...fragments);
+      }
+    }
+  }
+}
+
+function collectPlans(
+  retrieved: RetrievedFact[],
+  conflictingKeys?: string[],
+  bundle?: TurnEvidenceBundle,
+): PlanView[] {
   const blocked = new Set(conflictingKeys ?? []);
-  const byName = new Map<string, { name: string; prices: FactMoney[]; raw: string[] }>();
+  const byName = new Map<string, PlanAccum>();
   const extras: string[] = [];
-  for (const entry of retrieved) {
+  for (const entry of retrieved || []) {
+    if (!entry?.fact) continue;
     const fact = entry.fact as KnowledgeFact;
     if (blocked.has(fact.factKey)) continue;
     if (fact.factType === "pricing_plan") {
-      const d = fact.data as {
+      const d = (fact.data || {}) as {
         name?: string;
         price?: FactMoney | null;
         additionalPrices?: FactMoney[];
         benefits?: string[];
         priceQualifier?: "from" | "up_to" | "exact";
       };
-      const name = String(d.name || "").trim();
+      const name = String(d?.name || "").trim();
       if (!name) continue;
-      const key = name.toLowerCase();
-      const existing = byName.get(key) || { name, prices: [], raw: [] };
-      const incoming = listedPlanPrices({
-        name,
-        description: null,
-        price: d.price ?? null,
-        additionalPrices: d.additionalPrices || [],
-        priceQualifier: d.priceQualifier || "exact",
-        benefits: [],
-      });
-      const seen = new Set(existing.prices.map((p) => `${p.currency}:${p.amount}:${p.billingPeriod}`));
-      for (const price of incoming) {
-        const id = `${price.currency}:${price.amount}:${price.billingPeriod}`;
-        if (seen.has(id)) continue;
-        seen.add(id);
-        existing.prices.push(price);
+      const existing = ensurePlan(byName, name);
+      try {
+        const incoming = listedPlanPrices({
+          name,
+          description: null,
+          price: d.price ?? null,
+          additionalPrices: Array.isArray(d.additionalPrices) ? d.additionalPrices : [],
+          priceQualifier: d.priceQualifier || "exact",
+          benefits: [],
+        });
+        for (const price of incoming) pushUniquePrice(existing, price);
+      } catch {
+        /* omit a malformed price object rather than failing the turn */
       }
       existing.raw.push(...(Array.isArray(d.benefits) ? d.benefits : []));
-      byName.set(key, existing);
       continue;
     }
     if (fact.factType === "benefit") {
@@ -165,8 +244,15 @@ function collectPlans(retrieved: RetrievedFact[], conflictingKeys?: string[]): P
       }
     }
   }
+  if (bundle) {
+    for (const item of bundle.items || []) {
+      if (!item || item.inactive) continue;
+      absorbEvidenceText(String(item.text || ""), byName, extras);
+    }
+  }
   for (const extra of extras) {
-    if (SHARED_SCOPE_RE.test(extra) || classifyBenefit(extra)?.id === "prospect_ai") {
+    const extraId = classifyBenefit(extra)?.id;
+    if (SHARED_SCOPE_RE.test(extra) || extraId === "prospect_ai" || extraId === "no_setup") {
       for (const plan of byName.values()) plan.raw.push(extra);
     }
   }
@@ -330,6 +416,35 @@ function draftAmountsSupported(draft: string, allowed: Set<string>): boolean {
   return true;
 }
 
+function renderFeaturesPricingDraft(
+  plans: PlanView[],
+  locale: WidgetStaticLocale,
+  compactPrices: boolean,
+): string {
+  const shared = sharedHits(plans);
+  const sharedIds = new Set(shared.map((h) => h.id));
+  const lines: string[] = [];
+  const heading = intro(locale, plans.length);
+  if (heading) lines.push(heading, "");
+  for (const plan of plans) {
+    const priceBit = formatPlanPrices(plan.prices, locale, compactPrices);
+    lines.push(priceBit ? `${plan.name} — ${priceBit}` : plan.name);
+    const exclusive = exclusiveHits(plan, sharedIds)
+      .slice(0, 4)
+      .map((hit) => realizeBenefit(hit, locale))
+      .filter(Boolean);
+    const include = includesLine(exclusive, locale);
+    if (include) lines.push(include);
+    lines.push("");
+  }
+  const closing = sharedClosing(shared, locale);
+  if (closing) {
+    lines.push(closing, "");
+  }
+  lines.push(followUp(locale));
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function isRoboticFeaturesPricingDraft(draft: string): boolean {
   const text = String(draft || "");
   if (!text.trim()) return true;
@@ -350,6 +465,29 @@ export function isRoboticFeaturesPricingDraft(draft: string): boolean {
   return false;
 }
 
+export function featuresPricingClarification(locale?: string | null): string {
+  const loc = normalizeWidgetStaticLocale(locale);
+  if (loc === "es") {
+    return "Puedo explicarte los planes Free y Pro publicados. ¿Quieres una comparación lado a lado o una estimación de ahorro?";
+  }
+  if (loc === "he") {
+    return "אפשר לעבור איתכם על תוכניות Free ו-Pro שפורסמו. רוצים השוואה בין התוכניות או הערכת חיסכון?";
+  }
+  return "I can walk you through the published Free and Pro plans. Would you like a side-by-side comparison or a savings estimate?";
+}
+
+function finalizeDraft(draft: string, plans: PlanView[], bundle?: TurnEvidenceBundle): string | null {
+  const allowed = canonicalAmountSet(plans, bundle);
+  if (!draftAmountsSupported(draft, allowed)) return null;
+  if (/USD\s+\d/i.test(draft) && /per\s+(month|year)/i.test(draft)) return null;
+  if (bundle) {
+    const natural = evaluateBundleAmountGrounding({ draft, bundle });
+    if (natural.ok) return draft;
+    return null;
+  }
+  return draft;
+}
+
 export function assembleFeaturesPricingReply(params: {
   retrieved: RetrievedFact[];
   conflictingKeys?: string[];
@@ -357,34 +495,28 @@ export function assembleFeaturesPricingReply(params: {
   bundle?: TurnEvidenceBundle;
 }): string | null {
   const locale = normalizeWidgetStaticLocale(params.locale);
-  const plans = collectPlans(params.retrieved, params.conflictingKeys).filter(
+  const plans = collectPlans(params.retrieved || [], params.conflictingKeys, params.bundle).filter(
     (p) => p.prices.length > 0 || p.hits.length > 0,
   );
   if (plans.length === 0) return null;
-  const shared = sharedHits(plans);
-  const sharedIds = new Set(shared.map((h) => h.id));
-  const lines: string[] = [];
-  const heading = intro(locale, plans.length);
-  if (heading) lines.push(heading, "");
-  for (const plan of plans) {
-    const priceBit = formatPlanPrices(plan.prices, locale);
-    lines.push(priceBit ? `${plan.name} — ${priceBit}` : plan.name);
-    const exclusive = exclusiveHits(plan, sharedIds)
-      .slice(0, 4)
-      .map((hit) => realizeBenefit(hit, locale))
-      .filter(Boolean);
-    const include = includesLine(exclusive, locale);
-    if (include) lines.push(include);
-    lines.push("");
+  const natural = renderFeaturesPricingDraft(plans, locale, false);
+  const naturalOk = finalizeDraft(natural, plans, params.bundle);
+  if (naturalOk) return naturalOk;
+  const compact = renderFeaturesPricingDraft(plans, locale, true);
+  return finalizeDraft(compact, plans, params.bundle);
+}
+
+export function realizeTrustedFeaturesPricingReply(params: {
+  retrieved: RetrievedFact[];
+  conflictingKeys?: string[];
+  locale?: string | null;
+  bundle?: TurnEvidenceBundle;
+}): { text: string; outcome: FeaturesPricingRealizeOutcome } {
+  try {
+    const formatted = assembleFeaturesPricingReply(params);
+    if (formatted && formatted.trim()) return { text: formatted, outcome: "formatted" };
+    return { text: featuresPricingClarification(params.locale), outcome: "clarification" };
+  } catch {
+    return { text: featuresPricingClarification(params.locale), outcome: "formatter_error" };
   }
-  const closing = sharedClosing(shared, locale);
-  if (closing) {
-    lines.push(closing, "");
-  }
-  lines.push(followUp(locale));
-  const draft = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  const allowed = canonicalAmountSet(plans, params.bundle);
-  if (!draftAmountsSupported(draft, allowed)) return null;
-  if (/USD\s+\d/i.test(draft) && /per\s+(month|year)/i.test(draft)) return null;
-  return draft;
 }
