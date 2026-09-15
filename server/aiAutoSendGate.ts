@@ -9,6 +9,10 @@ import {
 } from "@shared/webchatGreetingWelcome";
 import { draftHasCurrencyAmount } from "@shared/factGrounding";
 import {
+  isWebchatGenerationRecovery,
+  WEBCHAT_GENERATION_RECOVERY_REASON,
+} from "@shared/webchatGenerationRecovery";
+import {
   draftContainsVerifiedBookingUrl,
   extractHttpUrls,
   isTrustedCalendlySchedulingUrl,
@@ -438,6 +442,29 @@ export function evaluateFullAutoSend(params: {
 
   if (!strongIntent && !structuredBooking && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
     return none("last_message_greeting_only", inboundCount, missingLen);
+  }
+
+  if (
+    webchat &&
+    isWebchatGenerationRecovery(suggestion) &&
+    !(params.groundingViolations && params.groundingViolations.length)
+  ) {
+    const suggestionOk = finishSuggestionChecks();
+    if (!suggestionOk.ok) {
+      return none(suggestionOk.reason, inboundCount, missingLen);
+    }
+    if (draftHasCurrencyAmount(suggestion)) {
+      return none("ungrounded_pricing", inboundCount, missingLen);
+    }
+    return {
+      allowed: true,
+      reason: WEBCHAT_GENERATION_RECOVERY_REASON,
+      missingRequiredLen: missingLen,
+      inboundCount,
+      confidenceSource: "defaulted",
+      missingRequired,
+      ...pageActionDiagnostics,
+    };
   }
 
   const signals = getStageSignals(msgs, businessKnowledge);

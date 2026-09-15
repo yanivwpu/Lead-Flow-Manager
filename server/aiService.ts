@@ -43,6 +43,10 @@ import {
 } from "@shared/webchatPageRuleReplies";
 import { resolveSavingsJourneyReply } from "@shared/webchatSavingsJourney";
 import {
+  classifyWebchatGenerationFailure,
+  safeGenerationErrorCode,
+} from "@shared/webchatGenerationRecovery";
+import {
   detectBookingAcknowledgment,
   detectBookingLinkResendRequest,
   lastAssistantCalendlyUrl,
@@ -378,7 +382,8 @@ export class AIService {
         stage: "evidence",
         pageActionKind: contactContext?.pageActionKind || null,
         errorName: err instanceof Error ? err.name : "Error",
-        errorCode: err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120),
+        errorClass: classifyWebchatGenerationFailure(err, false),
+        errorCode: safeGenerationErrorCode(err, false),
       });
       turnEvidence = buildTurnEvidenceBundle({
         userId,
@@ -792,10 +797,10 @@ export class AIService {
         modelGenerationSucceeded: true,
       };
     } catch (error) {
-      console.error(
-        "[AI] Error generating suggestion:",
-        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
-      );
+      console.error("[AI] Error generating suggestion:", {
+        errorClass: classifyWebchatGenerationFailure(error, false),
+        errorCode: safeGenerationErrorCode(error, false),
+      });
       console.info("[AI] generation_stage", {
         userId,
         channel: channel ?? null,
@@ -805,7 +810,8 @@ export class AIService {
         selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
         formatterOutcome: "not_used",
         errorName: error instanceof Error ? error.name : "Error",
-        errorCode: error instanceof Error ? error.message.slice(0, 120) : String(error).slice(0, 120),
+        errorClass: classifyWebchatGenerationFailure(error, false),
+        errorCode: safeGenerationErrorCode(error, false),
         fallbackAttempted: pricingCompareTurn || greetingTurn,
         fallbackSucceeded: false,
       });

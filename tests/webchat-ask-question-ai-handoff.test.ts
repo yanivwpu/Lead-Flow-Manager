@@ -229,8 +229,9 @@ function completeAsk(clickText: string, localeSets: Record<string, typeof HE>) {
   assert.match(auto, /pendingAskFromAiControl/);
   assert.match(auto, /chatbotOwnsReply \|\| pendingStillActive/);
   assert.doesNotMatch(auto, /lastTurnOwner === "chatbot"/);
-  assert.match(auto, /generationFailed: true/);
-  assert.match(auto, /AI could not generate a reply/);
+  assert.match(auto, /recoverWebchatGenerationFailure/);
+  assert.match(auto, /generation_recovery/);
+  assert.doesNotMatch(auto, /AI could not generate a reply/);
   const channel = read("server/channelService.ts");
   assert.match(channel, /dispatchWebchatInboundAi/);
   const webhooks = read("server/routes/webhooks.ts");

@@ -234,15 +234,16 @@ test("duplicate sourceEventId → no duplicate AI generation", async () => {
 
 test("generation failure is observable, not a silent ready state", async () => {
   const out = await dispatchWebchatInboundAi(productionInboundArgs(), {
-    runAi: async () => ({ decision: "generation_failed", sent: false }),
+    runAi: async () => ({ decision: "ok_generation_recovery", sent: true }),
   });
   assert.equal(out.evaluated, true);
-  assert.equal(out.sent, false);
-  assert.equal(out.decision, "generation_failed");
+  assert.equal(out.sent, true);
+  assert.equal(out.decision, "ok_generation_recovery");
   const auto = read("server/webchatAiAutoReply.ts");
-  assert.match(auto, /generationFailed: true/);
-  assert.match(auto, /AI could not generate a reply/);
+  assert.match(auto, /recoverWebchatGenerationFailure/);
+  assert.match(auto, /generation_recovery/);
   assert.match(auto, /\[AIAutoReply\]/);
+  assert.doesNotMatch(auto, /AI could not generate a reply/);
 });
 
 test("new-conversation smart matching from 1ca9f2a9 still works", () => {

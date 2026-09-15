@@ -1974,9 +1974,14 @@ class ChannelService {
       if (channel === "webchat") {
         try {
           inboundSettings = await getWebchatInboundReplySettings(userId);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "unknown";
-          console.error("[AIAutoReply]", { evaluated: true, outcome: "failure", error: msg });
+        } catch {
+          console.error("[AIAutoReply]", {
+            evaluated: true,
+            outcome: "failure",
+            errorClass: "settings_exception",
+            outboundPersisted: false,
+            publicPollingEligible: false,
+          });
         }
         awayConfigured = Boolean(
           inboundSettings?.businessHoursEnabled && inboundSettings?.awayMessageEnabled,
@@ -2015,9 +2020,14 @@ class ChannelService {
             awayReplyWillSend: awayMessageWillFire,
             widgetSettings: widgetSettingsForAiDispatch(inboundSettings?.widgetSettings),
           });
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : "unknown";
-          console.error("[AIAutoReply]", { evaluated: true, outcome: "failure", error: msg });
+        } catch {
+          console.error("[AIAutoReply]", {
+            evaluated: true,
+            outcome: "failure",
+            errorClass: "dispatch_exception",
+            outboundPersisted: false,
+            publicPollingEligible: false,
+          });
         }
       }
     } else {

@@ -46,6 +46,11 @@ import {
   clearWebchatGenerationAbort,
   registerWebchatGenerationAbort,
 } from "./webchatGenerationAbort";
+import {
+  classifyWebchatGenerationFailure,
+  safeGenerationErrorCode,
+  webchatGenerationRecoveryMessage,
+} from "@shared/webchatGenerationRecovery";
 
 export type WebchatAiGenerateFn = (input: {
   userId: string;
@@ -201,27 +206,86 @@ async function recoverPricingCompareSuggestion(input: {
   pageActionKind?: string | null;
   parentUrl?: string | null;
 }): Promise<{ text: string; outcome: string }> {
-  const { realizeTrustedFeaturesPricingReply } = await import("@shared/featuresPricingReply");
-  const { canonicalPricingCompareEvidence, parentUrlAllowsCanonicalWhachatCatalog } = await import(
-    "@shared/webchatPricingCompare"
-  );
-  const { buildTurnEvidenceBundle } = await import("@shared/turnEvidence");
-  const useCanonical = parentUrlAllowsCanonicalWhachatCatalog(input.parentUrl);
-  const bundle = buildTurnEvidenceBundle({
-    userId: "recover",
-    retrieved: [],
-    supplementalEvidence: useCanonical ? canonicalPricingCompareEvidence() : [],
-  });
-  const realized = realizeTrustedFeaturesPricingReply({
-    retrieved: [],
-    locale: input.locale,
-    bundle,
-    useCanonicalCatalog: useCanonical,
-    parentUrl: input.parentUrl,
-    inbound: input.inboundText,
-    pageActionKind: input.pageActionKind,
-  });
-  return { text: realized.text, outcome: realized.outcome };
+  try {
+    const { realizeTrustedFeaturesPricingReply } = await import("@shared/featuresPricingReply");
+    const { canonicalPricingCompareEvidence, parentUrlAllowsCanonicalWhachatCatalog } = await import(
+      "@shared/webchatPricingCompare"
+    );
+    const { buildTurnEvidenceBundle } = await import("@shared/turnEvidence");
+    const useCanonical = parentUrlAllowsCanonicalWhachatCatalog(input.parentUrl);
+    const bundle = buildTurnEvidenceBundle({
+      userId: "recover",
+      retrieved: [],
+      supplementalEvidence: useCanonical ? canonicalPricingCompareEvidence() : [],
+    });
+    const realized = realizeTrustedFeaturesPricingReply({
+      retrieved: [],
+      locale: input.locale,
+      bundle,
+      useCanonicalCatalog: useCanonical,
+      parentUrl: input.parentUrl,
+      inbound: input.inboundText,
+      pageActionKind: input.pageActionKind,
+    });
+    return { text: realized.text, outcome: realized.outcome };
+  } catch {
+    return { text: "", outcome: "formatter_exception" };
+  }
+}
+
+async function recoverWebchatGenerationFailure(input: {
+  locale: string;
+  inboundText: string;
+  pageActionKind?: string | null;
+  parentUrl?: string | null;
+  journeyKind?: string | null;
+  journeyTrusted?: boolean;
+  journeyCollected?: {
+    platform?: string;
+    monthlyCost?: number;
+    currency?: string;
+    teamSize?: number;
+    monthlyVolume?: number;
+  };
+  journeyMissing?: string[];
+  verifiedBookingUrl?: string | null;
+}): Promise<{ text: string; outcome: string; kind: "pricing" | "savings" | "booking" | "find_solution" | "generic" }> {
+  try {
+    const kind = String(input.pageActionKind || "");
+    if (kind === "book_demo") {
+      const { trustedPageRuleBookDemoReply } = await import("@shared/webchatPageRuleReplies");
+      const text = trustedPageRuleBookDemoReply(input.locale, input.verifiedBookingUrl || "");
+      if (text?.trim()) return { text: text.trim(), outcome: "formatted", kind: "booking" };
+    }
+    if (kind === "find_solution") {
+      const { trustedPageRuleFindSolutionReply } = await import("@shared/webchatPageRuleReplies");
+      const text = trustedPageRuleFindSolutionReply(input.locale);
+      if (text?.trim()) return { text: text.trim(), outcome: "formatted", kind: "find_solution" };
+    }
+    if (kind === "compare_plans" || kind === "features_pricing") {
+      const recovered = await recoverPricingCompareSuggestion(input);
+      if (recovered.text.trim()) return { ...recovered, kind: "pricing" };
+    }
+    if (input.journeyTrusted && (input.journeyKind === "pricing_compare" || kind === "compare_plans")) {
+      const recovered = await recoverPricingCompareSuggestion({
+        ...input,
+        pageActionKind: input.pageActionKind || "compare_plans",
+      });
+      if (recovered.text.trim()) return { ...recovered, kind: "pricing" };
+    }
+    if (input.journeyTrusted && (input.journeyKind === "pricing_savings" || input.journeyKind === "calculate_savings")) {
+      const { resolveSavingsJourneyReply } = await import("@shared/webchatSavingsJourney");
+      const savings = resolveSavingsJourneyReply({
+        locale: input.locale,
+        collected: input.journeyCollected || {},
+        missing: input.journeyMissing || [],
+      });
+      if (savings.text.trim()) return { text: savings.text, outcome: "formatted", kind: "savings" };
+    }
+  } catch {
+    /* generic recovery below — never throw out of this helper */
+  }
+  return { text: webchatGenerationRecoveryMessage(input.locale), outcome: "generic_recovery", kind: "generic" };
 }
 
 export async function maybeRunWebchatServerAi(
@@ -315,9 +379,29 @@ export async function maybeRunWebchatServerAi(
     missingFields?: string;
     retrievalIntent?: string;
     groundingResult?: string;
+    stage?: string;
+    effectiveMode?: string;
+    turnOwner?: string;
+    routeCategory?: string;
+    generationOutcome?: string;
+    errorClass?: string;
+    errorCode?: string;
+    fallbackAttempted?: boolean;
+    fallbackSucceeded?: boolean;
+    outboundPersisted?: boolean;
+    publicPollingEligible?: boolean;
   }) => {
     const outcome = extra?.sent ? "sent" : outcomeForReasonCode(reasonCode, extra);
     const rollout = readWebchatServerAiRollout(params.userId);
+    const turnOwner =
+      extra?.turnOwner ||
+      (params.chatbotWillFire
+        ? "chatbot"
+        : params.bookingOwnsReply
+          ? "booking"
+          : params.crmFallbackOwnsReply
+            ? "away"
+            : "ai_eligible");
     logAiReplyDecision({
       source: "webchat_unattended",
       channel: "webchat",
@@ -325,6 +409,27 @@ export async function maybeRunWebchatServerAi(
       reasonCode,
       workspaceUserId: params.userId,
       eligibility: {
+        correlationId: leaseId.slice(0, 8),
+        stage: extra?.stage || (reasonCode.startsWith("skip_") ? "evaluate" : "outbound"),
+        turnOwner,
+        effectiveMode:
+          extra?.effectiveMode ||
+          (reasonCode === "skip_manual"
+            ? "manual"
+            : reasonCode === "suggest_only"
+              ? "suggest"
+              : reasonCode.startsWith("skip_")
+                ? "skip"
+                : "auto"),
+        ...(extra?.routeCategory ? { routeCategory: extra.routeCategory } : {}),
+        ...(extra?.generationOutcome ? { generationOutcome: extra.generationOutcome } : {}),
+        ...(extra?.errorClass ? { errorClass: extra.errorClass } : {}),
+        ...(extra?.errorCode ? { errorCode: extra.errorCode.slice(0, 80) } : {}),
+        fallbackAttempted: extra?.fallbackAttempted === true,
+        fallbackSucceeded: extra?.fallbackSucceeded === true,
+        outboundPersisted: extra?.outboundPersisted === true || extra?.sent === true,
+        publicPollingEligible: extra?.publicPollingEligible === true || extra?.sent === true,
+        finalOutcomeReason: reasonCode.slice(0, 80),
         decision: reasonCode,
         chatbotWillFire: params.chatbotWillFire,
         bookingOwnsReply: params.bookingOwnsReply === true,
@@ -369,6 +474,14 @@ export async function maybeRunWebchatServerAi(
       evaluated: true,
       decision: reasonCode,
       outcome,
+      correlationId: leaseId.slice(0, 8),
+      stage: extra?.stage || null,
+      generationOutcome: extra?.generationOutcome || null,
+      errorClass: extra?.errorClass || null,
+      fallbackAttempted: extra?.fallbackAttempted === true,
+      fallbackSucceeded: extra?.fallbackSucceeded === true,
+      outboundPersisted: extra?.outboundPersisted === true,
+      publicPollingEligible: extra?.publicPollingEligible === true,
       chatbotOwns: params.chatbotWillFire === true,
       awayConfigured: params.awayConfigured === true,
       awayWillSend: params.crmFallbackOwnsReply === true,
@@ -475,7 +588,7 @@ export async function maybeRunWebchatServerAi(
 
   const controller = new AbortController();
   registerWebchatGenerationAbort(conv.id, controller);
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort("timeout"), timeoutMs);
   let suggestion: {
     suggestion?: string;
     confidence?: number;
@@ -526,76 +639,46 @@ export async function maybeRunWebchatServerAi(
       stage: generationStage,
       pageActionKind: currentTurnPageActionForGenerate.kind || currentTurnJourneyForGenerate.kind || null,
       locale: generateLocale,
-      formatterOutcome: pricingRecoverable ? "recovery" : "not_used",
+      formatterOutcome: "recovery",
       errorName: name || "Error",
-      errorCode: err instanceof Error ? err.message.slice(0, 120) : "generation_failed",
-      fallbackAttempted: pricingRecoverable,
+      errorCode: safeGenerationErrorCode(err, false),
+      errorClass: classifyWebchatGenerationFailure(err, false),
+      fallbackAttempted: true,
       fallbackSucceeded: false,
       finalDecision: reasonCode,
     };
-    if (pricingRecoverable && leaseStillValid && reasonCode !== "skip_lease_invalid") {
-      const recovered = await recoverPricingCompareSuggestion({
-        locale: generateLocale,
-        inboundText: joinedInbound,
-        pageActionKind: currentTurnPageActionForGenerate.kind || "compare_plans",
-        parentUrl: webchatParentUrl(contact),
-      });
-      suggestion = {
-        suggestion: recovered.text,
-        confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
-        confidenceProvided: false,
-        knowledgeGrounded: recovered.outcome === "formatted",
-        modelGenerationSucceeded: false,
-        groundingViolations: [],
-        retrievalIntent: "pricing_question",
-      };
-      diag.fallbackSucceeded = Boolean(recovered.text.trim());
-      diag.formatterOutcome = recovered.outcome;
-      diag.finalDecision = "formatter_fallback";
-      console.info("[AI] generation_stage", diag);
-    } else {
-      await storage.createActivityEvent({
-        userId: params.userId,
-        contactId: contact.id,
-        conversationId: conv.id,
-        eventType: "ai_generation_failed",
-        eventData: {
-          reason: name || "generation_failed",
-          reasonCode,
-          ...diag,
-        },
-        actorType: "ai",
-      }).catch(() => {});
-      await storage.createActivityEvent({
-        userId: params.userId,
-        contactId: contact.id,
-        conversationId: conv.id,
-        eventType: "ai_suggestion",
-        eventData: {
-          suggestion: "AI could not generate a reply. Review this conversation.",
-          confidence: 0,
-          channel: "webchat",
-          holdReason: reasonCode,
-          generationFailed: true,
-          inboundMessageId: params.inboundMessageId,
-          conversationId: conv.id,
-          ...diag,
-        },
-        actorType: "ai",
-      }).catch(() => {});
-      try {
-        const { notifyUser } = await import("./presence");
-        notifyUser(params.userId, {
-          type: "ai_review_draft",
-          contactId: contact.id,
-          conversationId: conv.id,
-        });
-      } catch {
-        /* inbox still hydrates on next timeline fetch */
-      }
-      report(reasonCode, { hasDraft: true });
-      return { decision: reasonCode, sent: false };
+    if (!leaseStillValid || reasonCode === "skip_lease_invalid") {
+      console.info("[AI] generation_stage", { ...diag, fallbackAttempted: false });
+      report("skip_lease_invalid");
+      return { decision: "skip_lease_invalid", sent: false };
     }
+    const recovered = await recoverWebchatGenerationFailure({
+      locale: generateLocale,
+      inboundText: joinedInbound,
+      pageActionKind: pricingRecoverable
+        ? currentTurnPageActionForGenerate.kind
+        : currentTurnPageActionForGenerate.trusted
+          ? currentTurnPageActionForGenerate.kind
+          : inboundVisitorKind,
+      parentUrl: webchatParentUrl(contact),
+      journeyKind: currentTurnJourneyForGenerate.kind,
+      journeyTrusted: currentTurnJourneyForGenerate.trusted,
+      journeyCollected: currentTurnJourneyForGenerate.collected,
+      journeyMissing: currentTurnJourneyForGenerate.missingFields,
+    });
+    suggestion = {
+      suggestion: recovered.text,
+      confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+      confidenceProvided: recovered.kind !== "generic",
+      knowledgeGrounded: recovered.kind !== "generic" && recovered.outcome === "formatted",
+      modelGenerationSucceeded: false,
+      groundingViolations: [],
+      retrievalIntent: recovered.kind === "generic" ? "generation_recovery" : "pricing_question",
+    };
+    diag.fallbackSucceeded = Boolean(recovered.text.trim());
+    diag.formatterOutcome = recovered.outcome;
+    diag.finalDecision = recovered.kind === "generic" ? "generation_recovery" : "formatter_fallback";
+    console.info("[AI] generation_stage", diag);
   } finally {
     clearTimeout(timer);
     clearWebchatGenerationAbort(conv.id, controller);
@@ -605,36 +688,54 @@ export async function maybeRunWebchatServerAi(
   if (isCasualWebchatGreeting(params.inboundText)) {
     text = coerceWebchatGreetingWelcome(text).text;
   }
-  if (!text && pricingRecoverable) {
-    const recovered = await recoverPricingCompareSuggestion({
+  if (!text) {
+    const recovered = await recoverWebchatGenerationFailure({
       locale: generateLocale,
       inboundText: joinedInbound,
-      pageActionKind: currentTurnPageActionForGenerate.kind || "compare_plans",
+      pageActionKind: pricingRecoverable
+        ? currentTurnPageActionForGenerate.kind
+        : currentTurnPageActionForGenerate.trusted
+          ? currentTurnPageActionForGenerate.kind
+          : inboundVisitorKind,
       parentUrl: webchatParentUrl(contact),
+      journeyKind: currentTurnJourneyForGenerate.kind,
+      journeyTrusted: currentTurnJourneyForGenerate.trusted,
+      journeyCollected: currentTurnJourneyForGenerate.collected,
+      journeyMissing: currentTurnJourneyForGenerate.missingFields,
     });
     text = recovered.text.trim();
     suggestion = {
       ...suggestion,
       suggestion: text,
       confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
-      confidenceProvided: false,
-      knowledgeGrounded: recovered.outcome === "formatted",
+      confidenceProvided: recovered.kind !== "generic",
+      knowledgeGrounded: recovered.kind !== "generic" && recovered.outcome === "formatted",
       modelGenerationSucceeded: false,
-      retrievalIntent: "pricing_question",
+      retrievalIntent: recovered.kind === "generic" ? "generation_recovery" : suggestion.retrievalIntent,
     };
     console.info("[AI] generation_stage", {
       stage: "formatter",
       pageActionKind: currentTurnPageActionForGenerate.kind || currentTurnJourneyForGenerate.kind || null,
       locale: generateLocale,
       formatterOutcome: recovered.outcome,
+      errorClass: "empty",
+      errorCode: "empty",
       fallbackAttempted: true,
       fallbackSucceeded: Boolean(text),
-      finalDecision: text ? "empty_recovered" : "empty",
+      finalDecision: text ? (recovered.kind === "generic" ? "generation_recovery" : "empty_recovered") : "empty",
     });
   }
   if (!text) {
-    report(`${decision}:empty`);
-    return { decision: `${decision}:empty`, sent: false };
+    text = webchatGenerationRecoveryMessage(generateLocale);
+    suggestion = {
+      ...suggestion,
+      suggestion: text,
+      confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+      confidenceProvided: false,
+      knowledgeGrounded: false,
+      modelGenerationSucceeded: false,
+      retrievalIntent: "generation_recovery",
+    };
   }
 
   contact = (await storage.getContact(contact.id)) || contact;
@@ -792,12 +893,26 @@ export async function maybeRunWebchatServerAi(
   );
   if (!guarded.ok) {
     const reasonCode = `skip_guard:${guarded.reason}`;
-    report(reasonCode);
+    await persistDraft(reasonCode);
+    report(reasonCode, {
+      hasDraft: true,
+      stage: "outbound",
+      outboundPersisted: false,
+      publicPollingEligible: false,
+      fallbackAttempted: true,
+      fallbackSucceeded: false,
+    });
     return { decision: reasonCode, sent: false };
   }
   const send = guarded.result;
   if (!send.success) {
-    report("send_failed");
+    await persistDraft("send_failed");
+    report("send_failed", {
+      hasDraft: true,
+      stage: "outbound",
+      outboundPersisted: false,
+      publicPollingEligible: false,
+    });
     return { decision: "send_failed", sent: false };
   }
   const afterSend = (await storage.getConversation(conv.id)) || conv;
@@ -813,6 +928,16 @@ export async function maybeRunWebchatServerAi(
           : afterControl.activeJourney,
     },
   });
-  report(gate.reason, { sent: true, confidenceSource: gate.confidenceSource, ...gateDiagnostics });
+  report(gate.reason, {
+    sent: true,
+    confidenceSource: gate.confidenceSource,
+    stage: "outbound",
+    generationOutcome: suggestion.modelGenerationSucceeded ? "model" : "recovered",
+    fallbackAttempted: suggestion.modelGenerationSucceeded !== true,
+    fallbackSucceeded: suggestion.modelGenerationSucceeded !== true,
+    outboundPersisted: true,
+    publicPollingEligible: true,
+    ...gateDiagnostics,
+  });
   return { decision, sent: true };
 }
