@@ -26,7 +26,10 @@ import {
   classifyChatbotVisitorIntent,
   isCanonicalBookingTurn,
 } from "@shared/chatbotCompletionContext";
-import { pageActionKindToVisitorIntent } from "@shared/webchatPageRuleAction";
+import {
+  assembleFeaturesPricingReply,
+  isRoboticFeaturesPricingDraft,
+} from "@shared/featuresPricingReply";
 import {
   trustedPageRuleBookDemoReply,
   trustedPageRuleFindSolutionReply,
@@ -390,6 +393,28 @@ export class AIService {
             }),
       );
 
+    const featuresPricingFormatter = () => {
+      if (visitorKind !== "features_pricing" && visitorKind !== "compare_plans") return null;
+      const formatted = assembleFeaturesPricingReply({
+        retrieved: grounding.retrieved,
+        conflictingKeys: grounding.conflictingKeys,
+        locale: contactContext?.conversationLanguage || detectedLanguage,
+        bundle: turnEvidence,
+      });
+      if (!formatted) return null;
+      const groundingCheck = evaluateDraft(formatted, { skipCompleteness: true });
+      const knowledgeGrounded =
+        groundingCheck.ok &&
+        isDraftAmountGrounded({
+          draft: formatted,
+          retrieved: grounding.retrieved,
+          conflictingKeys: grounding.conflictingKeys,
+          bundle: turnEvidence,
+        });
+      if (!knowledgeGrounded) return null;
+      return { suggestion: formatted, groundingCheck };
+    };
+
     const groundedScriptedReturn = (
       text: string,
       retrievalIntent: string,
@@ -547,23 +572,10 @@ export class AIService {
             grounding.retrieved.length > 0 &&
             (visitorKind === "features_pricing" || visitorKind === "compare_plans")
           ) {
-            const fallback = assembleDeterministicGroundedDraft({
-              retrieved: grounding.retrieved,
-              subIntents: routing?.subIntents,
-              conflictingKeys: grounding.conflictingKeys,
-            });
-            const fallbackCheck = evaluateDraft(fallback);
-            const fallbackGrounded =
-              fallbackCheck.ok &&
-              isDraftAmountGrounded({
-                draft: fallback,
-                retrieved: grounding.retrieved,
-                conflictingKeys: grounding.conflictingKeys,
-                bundle: turnEvidence,
-              });
-            if (fallbackGrounded) {
-              suggestion = fallback;
-              groundingCheck = fallbackCheck;
+            const formatted = featuresPricingFormatter();
+            if (formatted) {
+              suggestion = formatted.suggestion;
+              groundingCheck = formatted.groundingCheck;
             }
           }
         } catch (retryErr) {
@@ -578,15 +590,21 @@ export class AIService {
         (v) => v.kind === "incomplete_required_fact",
       );
       if (stillIncomplete && grounding.retrieved.length > 0) {
-        suggestion = assembleDeterministicGroundedDraft({
-          retrieved: grounding.retrieved,
-          subIntents: routing?.subIntents,
-          conflictingKeys: grounding.conflictingKeys,
-        });
-        if ((visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment) {
-          suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
+        const formatted = featuresPricingFormatter();
+        if (formatted) {
+          suggestion = formatted.suggestion;
+          groundingCheck = formatted.groundingCheck;
+        } else {
+          suggestion = assembleDeterministicGroundedDraft({
+            retrieved: grounding.retrieved,
+            subIntents: routing?.subIntents,
+            conflictingKeys: grounding.conflictingKeys,
+          });
+          if ((visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment) {
+            suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
+          }
+          groundingCheck = evaluateDraft(suggestion);
         }
-        groundingCheck = evaluateDraft(suggestion);
         if (!groundingCheck.ok) {
           groundingCheck = {
             ok: false,
@@ -615,6 +633,17 @@ export class AIService {
           selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
           publishedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         });
+      }
+
+      if (
+        (visitorKind === "features_pricing" || visitorKind === "compare_plans") &&
+        isRoboticFeaturesPricingDraft(suggestion)
+      ) {
+        const formatted = featuresPricingFormatter();
+        if (formatted) {
+          suggestion = formatted.suggestion;
+          groundingCheck = formatted.groundingCheck;
+        }
       }
 
       if (

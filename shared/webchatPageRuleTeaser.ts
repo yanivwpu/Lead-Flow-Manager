@@ -89,6 +89,26 @@ export function writeShownPageRuleTeaserKeys(existing: string[], nextKey: string
 
 export type PageRuleTeaserDecision = "schedule" | "none";
 
+export type PageRuleTeaserReason =
+  | "eligible"
+  | "scheduled"
+  | "rendered"
+  | "already_consumed"
+  | "cooldown"
+  | "chat_open"
+  | "takeover"
+  | "pending_chatbot"
+  | "navigation_cancelled"
+  | "render_failed"
+  | "open_behavior"
+  | "device"
+  | "no_match";
+
+export function remainingPageRuleTeaserCooldownMs(lastShownAt: number, now: number): number {
+  if (!pageRuleTeaserCooldownActive(lastShownAt, now)) return 0;
+  return Math.max(0, PAGE_RULE_TEASER_COOLDOWN_MS - (now - lastShownAt));
+}
+
 export type PageRuleTeaserLocaleSync = "update-visible" | "reschedule-pending" | "keep-consumed" | "replan";
 
 /**
@@ -115,6 +135,32 @@ export function decidePageRuleTeaserLocaleSync(input: {
   return "replan";
 }
 
+export function explainPageRuleTeaser(input: {
+  openBehavior?: string | null;
+  chatOpen: boolean;
+  deviceAllowed: boolean;
+  ruleKey?: string | null;
+  teaserText: string;
+  alreadyShownForRule: boolean;
+  cooldownActive: boolean;
+  humanTakeover: boolean;
+  pendingVisitorInput: boolean;
+}): { decision: PageRuleTeaserDecision; reason: PageRuleTeaserReason } {
+  if (input.openBehavior && input.openBehavior !== "teaser") {
+    return { decision: "none", reason: "open_behavior" };
+  }
+  if (input.chatOpen) return { decision: "none", reason: "chat_open" };
+  if (!input.deviceAllowed) return { decision: "none", reason: "device" };
+  if (!input.ruleKey || !String(input.teaserText || "").trim()) {
+    return { decision: "none", reason: "no_match" };
+  }
+  if (input.alreadyShownForRule) return { decision: "none", reason: "already_consumed" };
+  if (input.humanTakeover) return { decision: "none", reason: "takeover" };
+  if (input.pendingVisitorInput) return { decision: "none", reason: "pending_chatbot" };
+  if (input.cooldownActive) return { decision: "none", reason: "cooldown" };
+  return { decision: "schedule", reason: "eligible" };
+}
+
 export function decidePageRuleTeaser(input: {
   openBehavior?: string | null;
   chatOpen: boolean;
@@ -126,28 +172,34 @@ export function decidePageRuleTeaser(input: {
   humanTakeover: boolean;
   pendingVisitorInput: boolean;
 }): PageRuleTeaserDecision {
-  if (input.openBehavior && input.openBehavior !== "teaser") return "none";
-  if (input.chatOpen || !input.deviceAllowed) return "none";
-  if (!input.ruleKey || !String(input.teaserText || "").trim()) return "none";
-  if (input.alreadyShownForRule || input.cooldownActive) return "none";
-  if (input.humanTakeover || input.pendingVisitorInput) return "none";
-  return "schedule";
+  return explainPageRuleTeaser(input).decision;
 }
+
+export type PageRuleTeaserGateReason = "takeover" | "pending_chatbot";
 
 export type WebchatTeaserGateMessage = {
   source: typeof WEBCHAT_BRANDING_MESSAGE_SOURCE;
   type: typeof WEBCHAT_TEASER_GATE_MESSAGE_TYPE;
   widgetId: string;
   blocked: boolean;
+  reason?: PageRuleTeaserGateReason;
 };
 
-export function webchatTeaserGateMessage(widgetId: string, blocked: boolean): WebchatTeaserGateMessage {
-  return {
+export function webchatTeaserGateMessage(
+  widgetId: string,
+  blocked: boolean,
+  reason?: PageRuleTeaserGateReason | null,
+): WebchatTeaserGateMessage {
+  const payload: WebchatTeaserGateMessage = {
     source: WEBCHAT_BRANDING_MESSAGE_SOURCE,
     type: WEBCHAT_TEASER_GATE_MESSAGE_TYPE,
     widgetId: String(widgetId || ""),
     blocked: blocked === true,
   };
+  if (payload.blocked && (reason === "takeover" || reason === "pending_chatbot")) {
+    payload.reason = reason;
+  }
+  return payload;
 }
 
 export function parseWebchatTeaserGateMessage(
@@ -159,5 +211,6 @@ export function parseWebchatTeaserGateMessage(
   if (payload.source !== WEBCHAT_BRANDING_MESSAGE_SOURCE) return null;
   if (payload.type !== WEBCHAT_TEASER_GATE_MESSAGE_TYPE) return null;
   if (String(payload.widgetId || "") !== String(widgetId || "")) return null;
-  return webchatTeaserGateMessage(String(payload.widgetId || ""), payload.blocked === true);
+  const reason = payload.reason === "takeover" || payload.reason === "pending_chatbot" ? payload.reason : null;
+  return webchatTeaserGateMessage(String(payload.widgetId || ""), payload.blocked === true, reason);
 }

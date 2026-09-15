@@ -45,8 +45,13 @@ import {
 import { startPricingSavingsJourney } from "@shared/webchatActiveJourney";
 import { mergeWebchatPolledMessages } from "@shared/webchatWidgetScroll";
 import { toPublicWebchatMessages } from "@shared/webchatPublicMessages";
-import { isValidIdentityName } from "@shared/webchatIdentityPromotion";
+import {
+  assembleFeaturesPricingReply,
+  isRoboticFeaturesPricingDraft,
+} from "@shared/featuresPricingReply";
 import { validateWidgetPageRules } from "@shared/webchatWidgetSettings";
+import { isValidIdentityName } from "@shared/webchatIdentityFields";
+import { isDraftAmountGrounded } from "@shared/factGrounding";
 
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 const DEMO_URL = "https://calendly.com/yanivharamaty/whachatcrm-live-product-demo";
@@ -405,8 +410,134 @@ test("aliases, RTL, savings journey, and anonymous identity remain intact", () =
   assert.match(src, /FACT_AMOUNT_RETRY_INSTRUCTION/);
   assert.match(src, /trustedPageRuleBookDemoReply/);
   assert.match(src, /selectedEvidenceCategories/);
-  assert.match(src, /pageActionKind !== "book_demo"/);
+  assert.match(src, /assembleFeaturesPricingReply/);
+  assert.match(src, /isRoboticFeaturesPricingDraft/);
   const enrollments = read("server/routes/campaignEnrollments.ts");
   assert.match(enrollments, /storage\.getCampaignEnrollmentsForContact/);
   assert.doesNotMatch(enrollments.slice(0, 40), /import \{[^}]*storage/);
+});
+
+function publishedPlan(name: string, data: Record<string, unknown>) {
+  return {
+    fact: {
+      id: `fact-${name}`,
+      factType: "pricing_plan" as const,
+      factKey: `pricing_plan:${name.toLowerCase()}`,
+      data,
+      state: "published" as const,
+      proposedAction: null,
+      origin: "website_verified" as const,
+      confidence: 0.9,
+      isPinned: false,
+      userEdited: false,
+      conflictGroup: null,
+      conflictResolution: null,
+      supersededByFactId: null,
+      sourceId: "src-pricing",
+      sourceUrl: "https://www.whachatcrm.com/pricing",
+      sourceTitle: "Pricing",
+      excerpt: null,
+      provenance: [],
+      firstSeenAt: "2026-08-01T00:00:00.000Z",
+      lastVerifiedAt: "2026-09-01T00:00:00.000Z",
+      publishedAt: "2026-09-01T00:00:00.000Z",
+      retiredAt: null,
+    },
+    freshness: { verifiedAt: "2026-09-01T00:00:00.000Z", ageDays: 1, ttlDays: 30, tier: "fresh" as const },
+    precedence: 1,
+    relevanceRank: 0,
+    lexicalOverlap: 1,
+  };
+}
+
+const PRODUCTION_SHAPED_PLANS = [
+  publishedPlan("Pro", {
+    name: "Pro",
+    price: { amount: 49, currency: "USD", billingPeriod: "month" },
+    additionalPrices: [{ amount: 490, currency: "USD", billingPeriod: "year" }],
+    priceQualifier: "exact",
+    benefits: [
+      "14-day free Pro trial",
+      "AI Brain included",
+      "0% markup on Meta fees",
+      "No setup fees",
+      "AI Brain included with Pro",
+      "0% WhachatCRM markup on Meta conversation fees",
+    ],
+  }),
+  publishedPlan("Free", {
+    name: "Free",
+    price: { amount: 0, currency: "USD", billingPeriod: "month" },
+    additionalPrices: [],
+    priceQualifier: "exact",
+    benefits: [
+      "Free and Pro plans with clear conversation and user limits",
+      "Integrations and basic WhatsApp templates on Free",
+      "Prospect AI included on every plan",
+    ],
+  }),
+];
+
+test("Features & pricing formatter synthesizes Free/Pro once without USD-per-month catalog dump", () => {
+  const robotic =
+    "Pro is USD 49 per month. It includes: 14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees; AI Brain included with Pro; 0% WhachatCRM markup on Meta conversation fees. Free is USD 0 per month. It includes: Free and Pro plans with clear conversation and user limits; Integrations and basic WhatsApp templates on Free; Prospect AI included on every plan.";
+  assert.equal(isRoboticFeaturesPricingDraft(robotic), true);
+  const bundle = buildTurnEvidenceBundle({
+    userId: "tenant-a",
+    retrieved: PRODUCTION_SHAPED_PLANS,
+    websiteKnowledgeText: "Free is $0/month. Pro is $49/month or $490/year.",
+  });
+  const en = assembleFeaturesPricingReply({
+    retrieved: PRODUCTION_SHAPED_PLANS,
+    locale: "en",
+    bundle,
+  });
+  assert.ok(en);
+  assert.equal(isRoboticFeaturesPricingDraft(en!), false);
+  assert.equal(
+    isDraftAmountGrounded({
+      draft: en!,
+      retrieved: PRODUCTION_SHAPED_PLANS,
+      bundle,
+    }),
+    true,
+  );
+  assert.match(en!, /\$0\/month/);
+  assert.match(en!, /\$49\/month/);
+  assert.match(en!, /\$490\/year/);
+  assert.equal((en!.match(/\$49\/month/g) || []).length, 1);
+  assert.equal((en!.match(/AI Brain/gi) || []).length, 1);
+  assert.equal((en!.match(/0%/g) || []).length, 1);
+  assert.match(en!, /Prospect AI/);
+  assert.doesNotMatch(en!, /USD 49 per month/);
+  assert.doesNotMatch(en!, /It includes:/);
+  assert.doesNotMatch(en!, /clear conversation and user limits/);
+  assert.doesNotMatch(en!, /factKey|tenant_chunk|VERIFIED BUSINESS/);
+  assert.ok(en!.includes("\n"));
+  assert.ok(en!.length < 700);
+  assert.match(en!, /compare the plan limits or estimate your savings/);
+  const es = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "es", bundle });
+  const he = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "he", bundle });
+  assert.match(es!, /\$49\/mes/);
+  assert.match(he!, /\$49 לחודש/);
+  const partial = assembleFeaturesPricingReply({
+    retrieved: [PRODUCTION_SHAPED_PLANS[1]],
+    locale: "en",
+    bundle: buildTurnEvidenceBundle({
+      userId: "tenant-a",
+      retrieved: [PRODUCTION_SHAPED_PLANS[1]],
+      websiteKnowledgeText: "Free is $0/month.",
+    }),
+  });
+  assert.ok(partial);
+  assert.match(partial!, /\$0\/month/);
+  assert.doesNotMatch(partial!, /\$49\/month/);
+  const inventedHeld = gateFor("Features & pricing", widgetInbound({
+    message: "Features & pricing",
+    actionIndex: 0,
+  }).current, {
+    suggestion: "Pro is $999/month.",
+    groundingViolations: ["unsupported_amount"],
+  });
+  assert.equal(inventedHeld.reason, "grounding_violation:unsupported_amount");
 });

@@ -98,6 +98,15 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     var pendingTeaserTimer = null;
     var teaserGen = 0;
     var teaserBlocked = false;
+    var teaserBlockReason = 'pending_chatbot';
+    var lastTeaserReason = '';
+
+    function setTeaserReason(reason) {
+      lastTeaserReason = String(reason || '');
+      try {
+        if (bubble) bubble.setAttribute('data-wcw-teaser-reason', lastTeaserReason);
+      } catch (e) {}
+    }
 
     function prefersReducedMotion() {
       try {
@@ -180,16 +189,50 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       return false;
     }
 
+    function ruleMatchRank(rule, href) {
+      if (!ruleMatches(rule, href)) return -1;
+      var matchType = rule.matchType === 'pathname' || rule.matchType === 'pathname_prefix' ? rule.matchType : 'contains';
+      var q = (rule && rule.urlContains ? String(rule.urlContains) : '').trim();
+      var pathLen = function(fragment) {
+        var n = fragment.indexOf('://') !== -1 ? hrefPathname(fragment) : normalizePathname(String(fragment || '').split('?')[0].split('#')[0]);
+        return n ? n.length : String(fragment || '').length;
+      };
+      if (matchType === 'pathname') {
+        var best = 0;
+        if (fragmentMatches(q, 'pathname', href)) best = pathLen(q);
+        var aliases = rule && rule.urlAliases;
+        if (aliases && aliases.length) {
+          for (var a = 0; a < aliases.length && a < 8; a++) {
+            var extra = String(aliases[a] || '').trim();
+            if (!extra || extra.indexOf(',') !== -1) continue;
+            if (fragmentMatches(extra, 'pathname', href)) {
+              var n = pathLen(extra);
+              if (n > best) best = n;
+            }
+          }
+        }
+        return 2000 + best;
+      }
+      if (matchType === 'pathname_prefix') return 1000 + pathLen(q);
+      return q.length;
+    }
+
     function activeRule() {
       var rules = PAGE_RULES || [];
       var href = '';
       try { href = window.location.href || ''; } catch (e) {}
+      var best = null;
+      var bestRank = -1;
       for (var i = 0; i < rules.length; i++) {
         try {
-          if (ruleMatches(rules[i], href)) return rules[i];
+          var rank = ruleMatchRank(rules[i], href);
+          if (rank > bestRank) {
+            best = rules[i];
+            bestRank = rank;
+          }
         } catch (matchErr) {}
       }
-      return null;
+      return best;
     }
 
     function welcomeText() {
@@ -290,6 +333,17 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       }
     }
 
+    function remainingPageTeaserCooldownMs() {
+      try {
+        var n = Number(localStorage.getItem(PAGE_TEASER_AT_KEY) || '0');
+        if (!n || n !== n || n <= 0) return 0;
+        var left = PAGE_TEASER_COOLDOWN_MS - (Date.now() - n);
+        return left > 0 ? left : 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
     function markPageTeaserCooldown() {
       try { localStorage.setItem(PAGE_TEASER_AT_KEY, String(Date.now())); } catch (e) {}
     }
@@ -301,31 +355,49 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     }
 
     function showTeaserBubble(text, kind) {
-      if (!bubble || chatOpen) return;
+      if (!bubble || chatOpen) {
+        setTeaserReason('render_failed');
+        return false;
+      }
       var body = bubble.lastChild;
       if (body && body.textContent !== undefined) body.textContent = text;
       try { bubble.setAttribute('data-wcw-teaser-kind', kind || ''); } catch (e) {}
       bubble.style.opacity = '1';
       bubble.style.pointerEvents = 'auto';
+      if (bubble.style.opacity !== '1') {
+        setTeaserReason('render_failed');
+        return false;
+      }
+      setTeaserReason('rendered');
+      return true;
     }
 
-    function cancelPendingTeaser() {
+    function cancelPendingTeaser(reason) {
       teaserGen += 1;
       if (pendingTeaserTimer) {
         clearTimeout(pendingTeaserTimer);
         pendingTeaserTimer = null;
+        if (reason) setTeaserReason(reason);
       }
     }
 
     function scheduleGlobalTeaser() {
-      if (OPEN_BEHAVIOR !== 'teaser' || teaserAlreadyShown() || chatOpen) return false;
-      markTeaserShown();
+      if (OPEN_BEHAVIOR !== 'teaser' || teaserAlreadyShown() || chatOpen) {
+        if (chatOpen) setTeaserReason('chat_open');
+        else if (teaserAlreadyShown()) setTeaserReason('already_consumed');
+        return false;
+      }
+      setTeaserReason('scheduled');
       var gen = teaserGen;
       var delay = prefersReducedMotion() ? 0 : PAGE_TEASER_DELAY_MS;
       var hold = prefersReducedMotion() ? 0 : PAGE_TEASER_HOLD_MS;
       pendingTeaserTimer = setTimeout(function() {
-        if (gen !== teaserGen || chatOpen) return;
-        showTeaserBubble(teaserText(), 'global');
+        if (gen !== teaserGen || chatOpen) {
+          setTeaserReason(chatOpen ? 'chat_open' : 'navigation_cancelled');
+          return;
+        }
+        if (!showTeaserBubble(teaserText(), 'global')) return;
+        markTeaserShown();
         if (!hold) return;
         pendingTeaserTimer = setTimeout(function() {
           if (gen !== teaserGen || iframeLoaded) return;
@@ -335,20 +407,50 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       return true;
     }
 
-    function schedulePageRuleTeaser() {
-      if (OPEN_BEHAVIOR !== 'teaser' || chatOpen || !allowDevice() || teaserBlocked) return false;
+    function schedulePageRuleTeaser(immediate) {
+      if (OPEN_BEHAVIOR !== 'teaser' || chatOpen || !allowDevice() || teaserBlocked) {
+        if (chatOpen) setTeaserReason('chat_open');
+        else if (teaserBlocked) setTeaserReason(teaserBlockReason || 'pending_chatbot');
+        else if (!allowDevice()) setTeaserReason('device');
+        else setTeaserReason('open_behavior');
+        return false;
+      }
       var r = activeRule();
       var key = ruleKey(r);
       var text = pageRuleTeaserCopy(r);
-      if (!key || !text || pageTeaserShown(key) || pageTeaserCooldownActive()) return false;
+      if (!key || !text) {
+        setTeaserReason('no_match');
+        return false;
+      }
+      if (pageTeaserShown(key)) {
+        setTeaserReason('already_consumed');
+        return false;
+      }
+      if (pageTeaserCooldownActive()) {
+        setTeaserReason('cooldown');
+        var wait = remainingPageTeaserCooldownMs() + 25;
+        var coolGen = teaserGen;
+        pendingTeaserTimer = setTimeout(function() {
+          if (coolGen !== teaserGen || chatOpen || teaserBlocked) return;
+          schedulePageRuleTeaser(true);
+        }, wait);
+        return false;
+      }
+      setTeaserReason('scheduled');
       var gen = teaserGen;
-      var delay = prefersReducedMotion() ? 0 : PAGE_TEASER_DELAY_MS;
+      var delay = immediate || prefersReducedMotion() ? 0 : PAGE_TEASER_DELAY_MS;
       var hold = prefersReducedMotion() ? 0 : PAGE_TEASER_HOLD_MS;
-      pendingTeaserTimer = setTimeout(function() {
-        if (gen !== teaserGen || chatOpen || teaserBlocked) return;
+      function showPage() {
+        if (gen !== teaserGen || chatOpen || teaserBlocked) {
+          setTeaserReason(chatOpen ? 'chat_open' : teaserBlocked ? (teaserBlockReason || 'pending_chatbot') : 'navigation_cancelled');
+          return;
+        }
         var now = activeRule();
-        if (ruleKey(now) !== key) return;
-        showTeaserBubble(pageRuleTeaserCopy(now) || text, 'page');
+        if (ruleKey(now) !== key) {
+          setTeaserReason('navigation_cancelled');
+          return;
+        }
+        if (!showTeaserBubble(pageRuleTeaserCopy(now) || text, 'page')) return;
         markPageTeaserShown(key);
         markPageTeaserCooldown();
         if (!hold) return;
@@ -356,7 +458,12 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
           if (gen !== teaserGen) return;
           hideTeaserBubble();
         }, hold);
-      }, delay);
+      }
+      if (!delay) {
+        showPage();
+        return true;
+      }
+      pendingTeaserTimer = setTimeout(showPage, delay);
       return true;
     }
 
@@ -456,7 +563,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       });
       document.body.appendChild(bubble);
       planTeasers();
-      lastNavContextKey = pageContextDedupeKey(parentPagePayload());
+      lastNavContextKey = teaserNavKey();
     }
 
     var brandingReady = false;
@@ -498,6 +605,20 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         }
       } catch (e) {}
       return origin + path + '\\n' + String(payload.pageTitle || '') + '\\n' + String(payload.locale || '');
+    }
+
+    function teaserNavKey() {
+      var payload = parentPagePayload();
+      var origin = '';
+      var path = '';
+      try {
+        var u = new URL(String(payload.href || ''), window.location.href);
+        if (u.protocol === 'http:' || u.protocol === 'https:') {
+          origin = u.origin || '';
+          path = normalizePathname(u.pathname);
+        }
+      } catch (e) {}
+      return origin + path + '\\n' + String(payload.locale || '');
     }
 
     function postPageContext() {
@@ -568,9 +689,14 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       if (nextLocale) LOCALE = nextLocale;
       var localeChanged = Boolean(nextLocale && nextLocale !== prevLocale);
       if (localeChanged) applyDisplayDir(LOCALE);
-      var navKey = pageContextDedupeKey(parentPagePayload());
+      if (!revealed) {
+        postPageContext();
+        return;
+      }
+      var navKey = teaserNavKey();
       if (navKey === lastNavContextKey) {
         postPageContext();
+        if (localeChanged) syncVisiblePageTeaser();
         return;
       }
       lastNavContextKey = navKey;
@@ -578,13 +704,14 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       var key = ruleKey(r);
       var visiblePage = !!(bubble && bubble.style.opacity === '1' && bubble.getAttribute('data-wcw-teaser-kind') === 'page');
       var already = key ? pageTeaserShown(key) : false;
-      cancelPendingTeaser();
+      cancelPendingTeaser('navigation_cancelled');
       postPageContext();
       if (key && already && visiblePage) {
         syncVisiblePageTeaser();
         return;
       }
       if (key && already && !visiblePage) {
+        setTeaserReason('already_consumed');
         return;
       }
       hideTeaserBubble();
@@ -634,9 +761,11 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         }
         if (data.type === 'wcw-teaser-gate') {
           teaserBlocked = data.blocked === true;
+          teaserBlockReason = data.reason === 'takeover' ? 'takeover' : 'pending_chatbot';
           if (teaserBlocked) {
-            cancelPendingTeaser();
+            cancelPendingTeaser(teaserBlockReason);
             hideTeaserBubble();
+            setTeaserReason(teaserBlockReason);
           }
         }
       } catch (err) {}
@@ -681,8 +810,9 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       chatOpen = !chatOpen;
       setLauncherOpen(chatOpen);
       if (chatOpen) {
-        cancelPendingTeaser();
+        cancelPendingTeaser('chat_open');
         hideTeaserBubble();
+        setTeaserReason('chat_open');
         if (!frameContainer) {
           frameContainer = loadIframe();
         } else {

@@ -298,23 +298,56 @@ export function hydrateMatchedWidgetPageRule(
   };
 }
 
+/**
+ * Higher wins when several rules match the same href (e.g. Homepage `/` vs Pricing `/pricing`).
+ * Exact path beats prefix beats contains; longer matched paths beat `/`.
+ */
+export function pageRuleMatchRank(
+  rule: { urlContains?: unknown; urlAliases?: unknown; matchType?: unknown },
+  href: string,
+): number {
+  if (!pageRuleMatchesHref(rule, href)) return -1;
+  const matchType = normalizePageRuleMatchType(rule.matchType);
+  const primary = String(rule.urlContains || "").trim();
+  const pathLen = (fragment: string) => (rulePathname(fragment) || fragment).length;
+  if (matchType === "pathname") {
+    let best = 0;
+    for (const fragment of [primary, ...collectPageRuleAliasFragments(rule)]) {
+      if (fragmentMatchesHref(fragment, "pathname", href)) {
+        const n = pathLen(fragment);
+        if (n > best) best = n;
+      }
+    }
+    return 2000 + best;
+  }
+  if (matchType === "pathname_prefix") return 1000 + pathLen(primary);
+  return primary.length;
+}
+
 export function matchWidgetPageRule(
   settings: Record<string, unknown> | null | undefined,
   href: string,
   locale?: string | null,
 ): MatchedWidgetPageRule | null {
   const rules = Array.isArray(settings?.pageRules) ? settings!.pageRules : [];
+  let best: MatchedWidgetPageRule | null = null;
+  let bestRank = -1;
   for (const raw of rules) {
     try {
       const r = raw && typeof raw === "object" ? (raw as WidgetPageRuleMatchInput) : {};
-      if (!pageRuleMatchesHref(r, href)) continue;
+      const rank = pageRuleMatchRank(r, href);
+      if (rank < 0 || rank < bestRank) continue;
       const hydrated = hydrateMatchedWidgetPageRule(r, locale);
-      if (hydrated) return hydrated;
+      if (!hydrated) continue;
+      if (rank > bestRank) {
+        best = hydrated;
+        bestRank = rank;
+      }
     } catch {
       continue;
     }
   }
-  return null;
+  return best;
 }
 
 export function pageRuleActionLabelsAtIndex(

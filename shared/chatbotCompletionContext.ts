@@ -318,8 +318,8 @@ export function chatbotCompletionPromptRules(input: {
   }
   if (kind === "features_pricing") {
     lines.push(
-      "- The visitor asked for a features and pricing overview. Use only selected evidence. Cover Free versus Pro when those plans are in evidence: canonical monthly/yearly prices, whether AI Brain is included, Unified Inbox, Website Chat/AI chatbot, workflows and follow-ups, Prospect AI, users and WhatsApp-account capacity, and 0% WhachatCRM markup without implying Meta fees disappear.",
-      "- Keep the reply mobile-readable (short paragraphs or a compact list). End with one natural follow-up question. Do not ask what “features” means. Do not add a booking CTA or booking link.",
+      "- The visitor asked for a features and pricing overview. Synthesize selected evidence into a short Free versus Pro answer. Mention each benefit once. When selected evidence uses USD, write natural $N/month or $N/year prices, never 'USD N per month'. Never repeat the same benefit. Never expose evidence labels, identifiers, or vague catalog fragments.",
+      "- Keep the reply mobile-readable with short paragraphs or line breaks. End with one natural follow-up about comparing limits or estimating savings. Do not ask what “features” means. Do not add a booking CTA or booking link.",
     );
   } else if (kind === "compare_plans") {
     lines.push("- The visitor asked to compare published plans or pricing. Use only current workspace pricing knowledge. Do not invent plan facts. Do not add a booking CTA or booking link.");

@@ -610,7 +610,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
   useEffect(() => {
     if (!userId) return;
-    const payload = webchatTeaserGateMessage(userId, humanTakeover || pendingVisitorInput);
+    const gateReason = humanTakeover ? "takeover" : pendingVisitorInput ? "pending_chatbot" : null;
+    const payload = webchatTeaserGateMessage(userId, Boolean(gateReason), gateReason);
     let target = "*";
     if (parentPageHref) {
       try {

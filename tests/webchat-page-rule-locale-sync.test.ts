@@ -237,6 +237,8 @@ test("visitor-safe rules ship locale maps; widget.js hooks history before iframe
   assert.match(js, /lastPrefixedLocale/);
   assert.match(js, /pageContextDedupeKey/);
   assert.match(js, /lastNavContextKey/);
+  assert.match(js, /teaserNavKey/);
+  assert.match(js, /data-wcw-teaser-reason/);
   assert.match(js, /applyDisplayDir/);
   assert.match(js, /syncVisiblePageTeaser/);
   const reveal = js.slice(js.indexOf("function reveal()"), js.indexOf("function scheduleReveal()"));
