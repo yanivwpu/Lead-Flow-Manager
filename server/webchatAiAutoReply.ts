@@ -135,6 +135,8 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     conversationId: input.conversationId,
     inboundMessageId: input.inboundMessageId || "",
   });
+  const pageCtx = contact?.webchatContext as WebchatPageContext | undefined;
+  const parentUrl = pageCtx?.latestUrl || pageCtx?.pageAction?.parentUrl || pageCtx?.landingUrl;
   const completion = buildChatbotCompletionContactContext({
     customFields: contact?.customFields,
     name: contact?.name,
@@ -172,6 +174,7 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
       ...(pageAction.trusted
         ? { pageActionKind: pageAction.kind, pageActionLabel: pageAction.label }
         : {}),
+      ...(parentUrl ? { parentUrl } : {}),
       ...(journey.trusted
         ? {
             journeyKind: journey.kind,
@@ -185,6 +188,40 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
     routing,
     "webchat",
   );
+}
+
+function webchatParentUrl(contact: Contact): string | undefined {
+  const ctx = contact.webchatContext as WebchatPageContext | undefined;
+  return ctx?.latestUrl || ctx?.pageAction?.parentUrl || ctx?.landingUrl;
+}
+
+async function recoverPricingCompareSuggestion(input: {
+  locale: string;
+  inboundText: string;
+  pageActionKind?: string | null;
+  parentUrl?: string | null;
+}): Promise<{ text: string; outcome: string }> {
+  const { realizeTrustedFeaturesPricingReply } = await import("@shared/featuresPricingReply");
+  const { canonicalPricingCompareEvidence, parentUrlAllowsCanonicalWhachatCatalog } = await import(
+    "@shared/webchatPricingCompare"
+  );
+  const { buildTurnEvidenceBundle } = await import("@shared/turnEvidence");
+  const useCanonical = parentUrlAllowsCanonicalWhachatCatalog(input.parentUrl);
+  const bundle = buildTurnEvidenceBundle({
+    userId: "recover",
+    retrieved: [],
+    supplementalEvidence: useCanonical ? canonicalPricingCompareEvidence() : [],
+  });
+  const realized = realizeTrustedFeaturesPricingReply({
+    retrieved: [],
+    locale: input.locale,
+    bundle,
+    useCanonicalCatalog: useCanonical,
+    parentUrl: input.parentUrl,
+    inbound: input.inboundText,
+    pageActionKind: input.pageActionKind,
+  });
+  return { text: realized.text, outcome: realized.outcome };
 }
 
 export async function maybeRunWebchatServerAi(
@@ -415,7 +452,26 @@ export async function maybeRunWebchatServerAi(
     pageContext: contact.webchatContext,
     inboundMessageId: params.inboundMessageId,
   });
+  const { resolveCurrentTurnJourney: resolveJourneyForGenerate } = await import("@shared/webchatActiveJourney");
+  const currentTurnJourneyForGenerate = resolveJourneyForGenerate({
+    journey: readConversationAiControl(conv.aiControl).activeJourney,
+    userId: params.userId,
+    visitorId: String(contact.webchatId || ""),
+    conversationId: conv.id,
+    inboundMessageId: params.inboundMessageId,
+  });
   const generateLocale = String(readConversationAiControl(conv.aiControl).conversationLanguage || "en").slice(0, 8);
+  const { classifyChatbotVisitorIntent } = await import("@shared/chatbotCompletionContext");
+  const inboundVisitorKind = classifyChatbotVisitorIntent(joinedInbound);
+  const pricingRecoverable =
+    (currentTurnPageActionForGenerate.trusted === true &&
+      currentTurnPageActionForGenerate.provenanceCurrentInbound === true &&
+      (currentTurnPageActionForGenerate.kind === "compare_plans" ||
+        currentTurnPageActionForGenerate.kind === "features_pricing")) ||
+    (currentTurnJourneyForGenerate.trusted === true &&
+      currentTurnJourneyForGenerate.kind === "pricing_compare") ||
+    inboundVisitorKind === "features_pricing" ||
+    inboundVisitorKind === "compare_plans";
 
   const controller = new AbortController();
   registerWebchatGenerationAbort(conv.id, controller);
@@ -460,11 +516,6 @@ export async function maybeRunWebchatServerAi(
     const name = err instanceof Error ? err.name : "";
     conv = (await storage.getConversation(conv.id)) || conv;
     const leaseStillValid = generationLeaseAllowsCommit(readConversationAiControl(conv.aiControl), leaseId);
-    const trustedPricingAction =
-      currentTurnPageActionForGenerate.trusted === true &&
-      currentTurnPageActionForGenerate.provenanceCurrentInbound === true &&
-      (currentTurnPageActionForGenerate.kind === "compare_plans" ||
-        currentTurnPageActionForGenerate.kind === "features_pricing");
     const reasonCode =
       !leaseStillValid
         ? "skip_lease_invalid"
@@ -473,27 +524,33 @@ export async function maybeRunWebchatServerAi(
           : "generation_failed";
     const diag = {
       stage: generationStage,
-      pageActionKind: currentTurnPageActionForGenerate.kind || null,
+      pageActionKind: currentTurnPageActionForGenerate.kind || currentTurnJourneyForGenerate.kind || null,
       locale: generateLocale,
-      formatterOutcome: trustedPricingAction ? "clarification" : "not_used",
+      formatterOutcome: pricingRecoverable ? "recovery" : "not_used",
       errorName: name || "Error",
       errorCode: err instanceof Error ? err.message.slice(0, 120) : "generation_failed",
-      fallbackAttempted: trustedPricingAction,
+      fallbackAttempted: pricingRecoverable,
       fallbackSucceeded: false,
       finalDecision: reasonCode,
     };
-    if (trustedPricingAction && leaseStillValid && reasonCode === "generation_failed") {
-      const { featuresPricingClarification } = await import("@shared/featuresPricingReply");
+    if (pricingRecoverable && leaseStillValid && reasonCode !== "skip_lease_invalid") {
+      const recovered = await recoverPricingCompareSuggestion({
+        locale: generateLocale,
+        inboundText: joinedInbound,
+        pageActionKind: currentTurnPageActionForGenerate.kind || "compare_plans",
+        parentUrl: webchatParentUrl(contact),
+      });
       suggestion = {
-        suggestion: featuresPricingClarification(generateLocale),
+        suggestion: recovered.text,
         confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
         confidenceProvided: false,
-        knowledgeGrounded: false,
+        knowledgeGrounded: recovered.outcome === "formatted",
         modelGenerationSucceeded: false,
         groundingViolations: [],
         retrievalIntent: "pricing_question",
       };
-      diag.fallbackSucceeded = true;
+      diag.fallbackSucceeded = Boolean(recovered.text.trim());
+      diag.formatterOutcome = recovered.outcome;
       diag.finalDecision = "formatter_fallback";
       console.info("[AI] generation_stage", diag);
     } else {
@@ -547,6 +604,33 @@ export async function maybeRunWebchatServerAi(
   let text = (suggestion.suggestion || "").trim();
   if (isCasualWebchatGreeting(params.inboundText)) {
     text = coerceWebchatGreetingWelcome(text).text;
+  }
+  if (!text && pricingRecoverable) {
+    const recovered = await recoverPricingCompareSuggestion({
+      locale: generateLocale,
+      inboundText: joinedInbound,
+      pageActionKind: currentTurnPageActionForGenerate.kind || "compare_plans",
+      parentUrl: webchatParentUrl(contact),
+    });
+    text = recovered.text.trim();
+    suggestion = {
+      ...suggestion,
+      suggestion: text,
+      confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+      confidenceProvided: false,
+      knowledgeGrounded: recovered.outcome === "formatted",
+      modelGenerationSucceeded: false,
+      retrievalIntent: "pricing_question",
+    };
+    console.info("[AI] generation_stage", {
+      stage: "formatter",
+      pageActionKind: currentTurnPageActionForGenerate.kind || currentTurnJourneyForGenerate.kind || null,
+      locale: generateLocale,
+      formatterOutcome: recovered.outcome,
+      fallbackAttempted: true,
+      fallbackSucceeded: Boolean(text),
+      finalDecision: text ? "empty_recovered" : "empty",
+    });
   }
   if (!text) {
     report(`${decision}:empty`);

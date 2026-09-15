@@ -1837,16 +1837,38 @@ class ChannelService {
     let nextJourney = turnControl.activeJourney;
     if (channel === "webchat") {
       const {
+        applyCompareJourneyInbound,
         applyJourneyInbound,
         markJourneyStatus,
         readActiveJourney,
         resolveCurrentTurnJourney,
+        startPricingCompareJourney,
         startPricingSavingsJourney,
       } = await import("@shared/webchatActiveJourney");
       const { detectSavingsIntentChange, extractSavingsSlots } = await import("@shared/webchatSavingsJourney");
+      const {
+        detectPricingCompareIntentChange,
+        detectSavingsFollowUpFromCompare,
+      } = await import("@shared/webchatPricingCompare");
       const visitorId = String(contact.webchatId || channelContactId || "");
       if (validatedPageRuleAction?.kind === "calculate_savings") {
         nextJourney = startPricingSavingsJourney({
+          userId,
+          visitorId,
+          conversationId: conversation.id,
+          ruleKey: validatedPageRuleAction.ruleKey,
+          actionIndex: validatedPageRuleAction.actionIndex,
+          originInboundId: message.id,
+          locale: conversationLanguage,
+        });
+        if (chatbotWillFire || bookingIntent) {
+          nextJourney = markJourneyStatus(nextJourney, "paused");
+        }
+      } else if (
+        validatedPageRuleAction?.kind === "compare_plans" ||
+        validatedPageRuleAction?.kind === "features_pricing"
+      ) {
+        nextJourney = startPricingCompareJourney({
           userId,
           visitorId,
           conversationId: conversation.id,
@@ -1871,14 +1893,37 @@ class ChannelService {
           inboundMessageId: message.id,
         });
         if (existing && current.trusted) {
-          if (chatbotWillFire || bookingIntent || detectSavingsIntentChange(content)) {
+          if (chatbotWillFire || bookingIntent) {
             nextJourney = markJourneyStatus(existing, "paused");
-          } else {
-            nextJourney = applyJourneyInbound({
-              journey: existing,
-              inboundMessageId: message.id,
-              extracted: extractSavingsSlots(content),
-            }).journey;
+          } else if (existing.kind === "pricing_savings") {
+            if (detectSavingsIntentChange(content)) {
+              nextJourney = markJourneyStatus(existing, "paused");
+            } else {
+              nextJourney = applyJourneyInbound({
+                journey: existing,
+                inboundMessageId: message.id,
+                extracted: extractSavingsSlots(content),
+              }).journey;
+            }
+          } else if (existing.kind === "pricing_compare") {
+            if (detectPricingCompareIntentChange(content)) {
+              nextJourney = markJourneyStatus(existing, "paused");
+            } else if (detectSavingsFollowUpFromCompare(content)) {
+              nextJourney = startPricingSavingsJourney({
+                userId,
+                visitorId,
+                conversationId: conversation.id,
+                ruleKey: existing.ruleKey,
+                actionIndex: existing.actionIndex,
+                originInboundId: message.id,
+                locale: conversationLanguage || existing.locale,
+              });
+            } else {
+              nextJourney = applyCompareJourneyInbound({
+                journey: existing,
+                inboundMessageId: message.id,
+              }).journey;
+            }
           }
         } else if (existing && !current.trusted) {
           nextJourney = existing;

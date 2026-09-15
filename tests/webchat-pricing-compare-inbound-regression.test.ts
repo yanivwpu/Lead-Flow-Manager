@@ -32,6 +32,23 @@ import {
   featuresPricingClarification,
   realizeTrustedFeaturesPricingReply,
 } from "@shared/featuresPricingReply";
+import {
+  canonicalPricingCompareEvidence,
+  classifyPricingCompareTopic,
+  detectPricingCompareIntentChange,
+  detectSavingsFollowUpFromCompare,
+  formatCanonicalPricingComparison,
+  parentUrlAllowsCanonicalWhachatCatalog,
+} from "@shared/webchatPricingCompare";
+import {
+  applyCompareJourneyInbound,
+  resolveCurrentTurnJourney,
+  startPricingCompareJourney,
+  startPricingSavingsJourney,
+} from "@shared/webchatActiveJourney";
+import { classifyChatbotVisitorIntent } from "@shared/chatbotCompletionContext";
+import { PLAN_LIMITS } from "@shared/schema";
+import { getPaidPlanMonthlyPriceUsd, getPaidPlanYearlyPriceUsd } from "@shared/pricingEntitlements";
 import { mergeWebchatPolledMessages } from "@shared/webchatWidgetScroll";
 import { toPublicWebchatMessages } from "@shared/webchatPublicMessages";
 
@@ -125,6 +142,9 @@ function widgetInbound(input: {
   return { parsed: parsed.data, validated, current };
 }
 
+const PRODUCTION_FOLLOW_UP =
+  "Show me a side-by-side comparison, including pricing, users, WhatsApp numbers, AI Brain, automations, and plan limits.";
+
 function productionBundle(retrieved = INCOMPLETE_RETRIEVED) {
   return buildTurnEvidenceBundle({
     userId: "tenant-prod",
@@ -133,11 +153,29 @@ function productionBundle(retrieved = INCOMPLETE_RETRIEVED) {
   });
 }
 
-function realizeFor(locale: string, retrieved = INCOMPLETE_RETRIEVED) {
+function canonicalBundle(retrieved = INCOMPLETE_RETRIEVED) {
+  return buildTurnEvidenceBundle({
+    userId: "tenant-prod",
+    retrieved,
+    websiteKnowledgeText: WEBSITE_CHUNK,
+    supplementalEvidence: canonicalPricingCompareEvidence(),
+  });
+}
+
+function realizeFor(
+  locale: string,
+  retrieved = INCOMPLETE_RETRIEVED,
+  inbound = "Compare Free & Pro",
+  kind: "compare_plans" | "features_pricing" = "compare_plans",
+) {
   return realizeTrustedFeaturesPricingReply({
     retrieved,
     locale,
-    bundle: productionBundle(retrieved),
+    bundle: canonicalBundle(retrieved),
+    useCanonicalCatalog: true,
+    parentUrl: PARENT,
+    inbound,
+    pageActionKind: kind,
   });
 }
 
@@ -156,7 +194,12 @@ function gateCompare(locale: "en" | "es" | "he", kind: "compare" | "features") {
     parentUrl,
     settings,
   });
-  const realized = realizeFor(locale);
+  const realized = realizeFor(
+    locale,
+    INCOMPLETE_RETRIEVED,
+    hit.parsed.message,
+    kind === "features" ? "features_pricing" : "compare_plans",
+  );
   const gate = evaluateFullAutoSend({
     businessMode: "auto",
     channel: "webchat",
@@ -167,7 +210,7 @@ function gateCompare(locale: "en" | "es" | "he", kind: "compare" | "features") {
     knowledgeGrounded: isDraftAmountGrounded({
       draft: realized.text,
       retrieved: INCOMPLETE_RETRIEVED,
-      bundle: productionBundle(),
+      bundle: canonicalBundle(),
     }),
     currentTurnPageAction: hit.current,
     businessKnowledge: { qualifyingQuestions: [] },
@@ -183,6 +226,11 @@ test("trusted Compare click Auto-sends one public outbound from incomplete produ
   assert.equal(hit.current.provenanceCurrentInbound, true);
   assert.equal(realized.outcome, "formatted");
   assert.match(realized.text, /Pro — \$49\/month or \$490\/year/);
+  assert.match(realized.text, /1 user/i);
+  assert.match(realized.text, /WhatsApp Business account/i);
+  assert.match(realized.text, /AI Brain/i);
+  assert.match(realized.text, /Workflow Automation/i);
+  assert.doesNotMatch(realized.text, /Would you like a side-by-side comparison/);
   assert.doesNotMatch(realized.text, /USD 49 per month/);
   assert.doesNotMatch(realized.text, /AI could not generate a reply/);
   assert.equal(gate.allowed, true);
@@ -348,12 +396,284 @@ test("reply path uses the formatter before the model and diagnoses generation_fa
   assert.match(ai, /formatterOutcome/);
   assert.match(ai, /stage: "formatter"/);
   assert.match(ai, /stage: "evidence"/);
+  assert.match(ai, /pricingCompareTurn/);
+  assert.match(ai, /canonicalPricingCompareEvidence/);
   assert.match(ai, /Array\.isArray\(qualifyingSource\)/);
   const auto = read("server/webchatAiAutoReply.ts");
   assert.match(auto, /generation_stage/);
   assert.match(auto, /fallbackAttempted/);
   assert.match(auto, /fallbackSucceeded/);
-  assert.match(auto, /featuresPricingClarification/);
-  assert.match(auto, /trustedPricingAction/);
+  assert.match(auto, /pricingRecoverable/);
+  assert.match(auto, /recoverPricingCompareSuggestion/);
+  assert.match(auto, /empty_recovered/);
   assert.doesNotMatch(auto, /campaign-enrollments/);
+  const channel = read("server/channelService.ts");
+  assert.match(channel, /startPricingCompareJourney/);
+  assert.match(channel, /detectSavingsFollowUpFromCompare/);
+});
+
+const PRODUCTION_COMPARE_CLICK = "Compare Free & Pro";
+
+function compareJourney(overrides?: Partial<Parameters<typeof startPricingCompareJourney>[0]>) {
+  return startPricingCompareJourney({
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    ruleKey: "pathname:/pricing",
+    actionIndex: 0,
+    originInboundId: "in-compare",
+    locale: "en",
+    ...overrides,
+  });
+}
+
+function gateContinuation(input: {
+  inbound: string;
+  suggestion: string;
+  journey: ReturnType<typeof resolveCurrentTurnJourney>;
+  pageAction?: ReturnType<typeof resolveCurrentTurnPageAction>;
+  grounded?: boolean;
+  violations?: string[];
+}) {
+  return evaluateFullAutoSend({
+    businessMode: "auto",
+    channel: "webchat",
+    conversationHistory: [
+      { role: "user", content: PRODUCTION_COMPARE_CLICK },
+      { role: "assistant", content: realizeFor("en").text },
+      { role: "user", content: input.inbound },
+    ],
+    suggestion: input.suggestion,
+    confidence: 0.9,
+    confidenceProvided: false,
+    knowledgeGrounded: input.grounded !== false,
+    groundingViolations: input.violations,
+    currentTurnPageAction: input.pageAction,
+    currentTurnJourney: input.journey,
+    businessKnowledge: { qualifyingQuestions: [] },
+    verifiedBookingUrl: DEMO_URL,
+  });
+}
+
+test("trusted Compare click starts a continuation; turn 2 Auto-sends the comparison", () => {
+  assert.equal(parentUrlAllowsCanonicalWhachatCatalog(PARENT), true);
+  assert.equal(parentUrlAllowsCanonicalWhachatCatalog("https://customer.example.com/pricing"), false);
+  assert.equal(classifyChatbotVisitorIntent(PRODUCTION_FOLLOW_UP), "features_pricing");
+  assert.equal(classifyPricingCompareTopic(PRODUCTION_FOLLOW_UP), "full");
+  assert.equal(classifyPricingCompareTopic("What are the user limits?"), "users");
+  assert.equal(classifyPricingCompareTopic("How many WhatsApp numbers?"), "whatsapp");
+  assert.equal(classifyPricingCompareTopic("Does Free include AI Brain?"), "ai_brain");
+  assert.equal(classifyPricingCompareTopic("What about automations?"), "automation");
+
+  const started = compareJourney();
+  assert.equal(started.kind, "pricing_compare");
+  const turn1 = resolveCurrentTurnJourney({
+    journey: started,
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    inboundMessageId: "in-compare",
+  });
+  assert.equal(turn1.trusted, true);
+  assert.equal(turn1.continuation, false);
+
+  const advanced = applyCompareJourneyInbound({
+    journey: started,
+    inboundMessageId: "in-follow",
+  });
+  const turn2 = resolveCurrentTurnJourney({
+    journey: advanced.journey,
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(turn2.trusted, true);
+  assert.equal(turn2.continuation, true);
+  assert.equal(turn2.kind, "pricing_compare");
+
+  const follow = realizeFor("en", INCOMPLETE_RETRIEVED, PRODUCTION_FOLLOW_UP);
+  assert.equal(follow.outcome, "formatted");
+  assert.match(follow.text, /\$49\/month or \$490\/year/);
+  assert.match(follow.text, /1 user/i);
+  assert.match(follow.text, /WhatsApp Business account/i);
+  assert.match(follow.text, /AI Brain/i);
+  assert.doesNotMatch(follow.text, /Would you like a side-by-side comparison/);
+  assert.doesNotMatch(follow.text, /AI could not generate a reply/);
+  const gate = gateContinuation({
+    inbound: PRODUCTION_FOLLOW_UP,
+    suggestion: follow.text,
+    journey: turn2,
+  });
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.reason, "ok_active_journey");
+  assert.doesNotMatch(gate.reason, /generation_failed/);
+
+  const inbound = {
+    id: "in-follow",
+    direction: "inbound" as const,
+    content: PRODUCTION_FOLLOW_UP,
+    contentType: "text",
+    createdAt: new Date().toISOString(),
+  };
+  const outbound = {
+    id: "out-follow",
+    direction: "outbound" as const,
+    content: follow.text,
+    contentType: "text",
+    createdAt: new Date().toISOString(),
+  };
+  const publicMsgs = toPublicWebchatMessages([inbound, outbound]);
+  assert.equal(publicMsgs.find((m) => m.id === "out-follow")?.direction, "outbound");
+});
+
+test("Compare continuation answers users, WhatsApp, AI Brain, automation, and limits", () => {
+  const topics: Array<{ inbound: string; topic: ReturnType<typeof classifyPricingCompareTopic>; re: RegExp }> = [
+    { inbound: "What are the user limits?", topic: "users", re: /1 user|Unlimited/i },
+    { inbound: "How many WhatsApp numbers?", topic: "whatsapp", re: /WhatsApp/i },
+    { inbound: "Does Free include AI Brain?", topic: "ai_brain", re: /AI Brain/i },
+    { inbound: "What about automations?", topic: "automation", re: /Workflow Automation|Follow-ups/i },
+    { inbound: "What are the plan limits?", topic: "limits", re: /Active conversations|Users|WhatsApp/i },
+  ];
+  for (const row of topics) {
+    assert.equal(classifyPricingCompareTopic(row.inbound), row.topic);
+    const reply = formatCanonicalPricingComparison({ locale: "en", kind: "compare_plans", topic: row.topic });
+    assert.match(reply.text, row.re);
+    assert.doesNotMatch(reply.text, /\$999/);
+    assert.equal(reply.evidence.some((item) => item.amounts.includes(String(getPaidPlanMonthlyPriceUsd("pro")))), true);
+  }
+  assert.equal(PLAN_LIMITS.free.maxUsers, 1);
+  assert.equal(PLAN_LIMITS.pro.maxWhatsappNumbers, 5);
+  assert.equal(getPaidPlanYearlyPriceUsd("pro"), 490);
+});
+
+test("EN/ES/HE canonical comparison and Features wording share catalog amounts", () => {
+  for (const locale of ["en", "es", "he"] as const) {
+    const compare = formatCanonicalPricingComparison({ locale, kind: "compare_plans", topic: "full" });
+    const features = formatCanonicalPricingComparison({ locale, kind: "features_pricing", topic: "full" });
+    assert.match(compare.text, /\$49/);
+    assert.match(compare.text, /\$490/);
+    assert.match(features.text, /\$49/);
+    assert.notEqual(compare.text, features.text);
+    assert.doesNotMatch(compare.text, /Would you like a side-by-side comparison/);
+    assert.doesNotMatch(features.text, /Would you like a side-by-side comparison/);
+  }
+});
+
+test("Compare → savings switches journeys; Book demo is an intent change", () => {
+  assert.equal(detectSavingsFollowUpFromCompare("I'd like a savings estimate"), true);
+  assert.equal(detectSavingsFollowUpFromCompare(PRODUCTION_FOLLOW_UP), false);
+  assert.equal(detectPricingCompareIntentChange("Book a demo"), true);
+  assert.equal(detectPricingCompareIntentChange(PRODUCTION_FOLLOW_UP), false);
+  const compare = compareJourney();
+  const savings = startPricingSavingsJourney({
+    userId: compare.userId,
+    visitorId: compare.visitorId,
+    conversationId: compare.conversationId,
+    ruleKey: compare.ruleKey,
+    actionIndex: compare.actionIndex,
+    originInboundId: "in-savings-switch",
+    locale: "en",
+  });
+  assert.equal(savings.kind, "pricing_savings");
+  assert.notEqual(savings.originInboundId, compare.originInboundId);
+  const book = widgetInbound({
+    message: "Book a demo",
+    actionIndex: HOMEPAGE_PAGE_RULE_ACTION.bookDemo,
+    parentUrl: HOME,
+    settings: { pageRules: [HOMEPAGE_PAGE_RULE_FIXTURE] },
+  });
+  assert.equal(book.current.kind, "book_demo");
+});
+
+test("expired, wrong-tenant, wrong-visitor, and wrong-conversation continuations are rejected", () => {
+  const started = compareJourney();
+  const expired = resolveCurrentTurnJourney({
+    journey: { ...started, expiresAt: "2000-01-01T00:00:00.000Z" },
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(expired.trusted, false);
+  assert.equal(expired.status, "expired");
+  const wrongTenant = resolveCurrentTurnJourney({
+    journey: started,
+    userId: "tenant-b",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(wrongTenant.trusted, false);
+  const wrongVisitor = resolveCurrentTurnJourney({
+    journey: started,
+    userId: "tenant-a",
+    visitorId: "visitor-b",
+    conversationId: "conv-a",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(wrongVisitor.trusted, false);
+  const wrongConv = resolveCurrentTurnJourney({
+    journey: started,
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-b",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(wrongConv.trusted, false);
+});
+
+test("takeover and pending chatbot suppress continuation; typed label stays untrusted", () => {
+  const paused = resolveCurrentTurnJourney({
+    journey: { ...compareJourney(), status: "paused" },
+    userId: "tenant-a",
+    visitorId: "visitor-a",
+    conversationId: "conv-a",
+    inboundMessageId: "in-follow",
+  });
+  assert.equal(paused.trusted, false);
+  const typed = widgetInbound({ message: PRODUCTION_COMPARE_CLICK });
+  assert.equal(typed.current.trusted, false);
+  assert.equal(classifyChatbotVisitorIntent(PRODUCTION_COMPARE_CLICK), "features_pricing");
+  const freeText = realizeFor("en", [], PRODUCTION_FOLLOW_UP);
+  assert.equal(freeText.outcome, "formatted");
+  assert.match(freeText.text, /\$49\/month or \$490\/year/);
+});
+
+test("canonical catalog still grounds when published facts are empty", () => {
+  const empty = realizeTrustedFeaturesPricingReply({
+    retrieved: [],
+    locale: "en",
+    bundle: canonicalBundle([]),
+    useCanonicalCatalog: true,
+    parentUrl: PARENT,
+    inbound: PRODUCTION_COMPARE_CLICK,
+    pageActionKind: "compare_plans",
+  });
+  assert.equal(empty.outcome, "formatted");
+  assert.match(empty.text, /Free — \$0\/month/);
+  assert.match(empty.text, /Pro — \$49\/month or \$490\/year/);
+  assert.equal(
+    isDraftAmountGrounded({
+      draft: empty.text,
+      retrieved: [],
+      bundle: canonicalBundle([]),
+    }),
+    true,
+  );
+});
+
+test("desktop and mobile Compare labels share the same validated action", () => {
+  const desktop = widgetInbound({
+    message: PRODUCTION_COMPARE_CLICK,
+    actionIndex: PRICING_PAGE_RULE_ACTION.compare,
+  });
+  const mobile = widgetInbound({
+    message: PRODUCTION_COMPARE_CLICK,
+    actionIndex: PRICING_PAGE_RULE_ACTION.compare,
+    inboundMessageId: "in-mobile",
+  });
+  assert.equal(desktop.current.kind, mobile.current.kind);
+  assert.equal(desktop.current.trusted, true);
+  assert.equal(mobile.current.trusted, true);
 });

@@ -6,9 +6,12 @@
 
 export const WEBCHAT_ACTIVE_JOURNEY_SOURCE = "server_active_journey" as const;
 export const WEBCHAT_SAVINGS_JOURNEY_KIND = "pricing_savings" as const;
+export const WEBCHAT_COMPARE_JOURNEY_KIND = "pricing_compare" as const;
 export const WEBCHAT_ACTIVE_JOURNEY_TTL_MS = 24 * 60 * 60 * 1000;
 
-export type WebchatActiveJourneyKind = typeof WEBCHAT_SAVINGS_JOURNEY_KIND;
+export type WebchatActiveJourneyKind =
+  | typeof WEBCHAT_SAVINGS_JOURNEY_KIND
+  | typeof WEBCHAT_COMPARE_JOURNEY_KIND;
 
 export type WebchatActiveJourneyStatus =
   | "collecting"
@@ -85,6 +88,41 @@ export function collectedFieldNames(collected: WebchatSavingsCollected): string[
   return names;
 }
 
+function baseJourney(input: {
+  kind: WebchatActiveJourneyKind;
+  userId: string;
+  visitorId: string;
+  conversationId: string;
+  ruleKey: string;
+  actionIndex: number;
+  originInboundId: string;
+  locale?: string | null;
+  now?: Date;
+  collected: WebchatSavingsCollected;
+  missing: string[];
+}): WebchatActiveJourney {
+  const now = input.now || new Date();
+  const iso = now.toISOString();
+  return {
+    source: WEBCHAT_ACTIVE_JOURNEY_SOURCE,
+    kind: input.kind,
+    status: "collecting",
+    userId: clipId(input.userId),
+    visitorId: clipId(input.visitorId),
+    conversationId: clipId(input.conversationId),
+    ruleKey: String(input.ruleKey || "").trim().slice(0, MAX_RULE),
+    actionIndex: input.actionIndex,
+    originInboundId: clipId(input.originInboundId),
+    lastProcessedInboundId: clipId(input.originInboundId),
+    locale: input.locale ? String(input.locale).slice(0, 8) : undefined,
+    collected: input.collected,
+    missing: input.missing,
+    startedAt: iso,
+    updatedAt: iso,
+    expiresAt: new Date(now.getTime() + WEBCHAT_ACTIVE_JOURNEY_TTL_MS).toISOString(),
+  };
+}
+
 export function startPricingSavingsJourney(input: {
   userId: string;
   visitorId: string;
@@ -95,33 +133,37 @@ export function startPricingSavingsJourney(input: {
   locale?: string | null;
   now?: Date;
 }): WebchatActiveJourney {
-  const now = input.now || new Date();
-  const iso = now.toISOString();
-  return {
-    source: WEBCHAT_ACTIVE_JOURNEY_SOURCE,
+  return baseJourney({
+    ...input,
     kind: WEBCHAT_SAVINGS_JOURNEY_KIND,
-    status: "collecting",
-    userId: clipId(input.userId),
-    visitorId: clipId(input.visitorId),
-    conversationId: clipId(input.conversationId),
-    ruleKey: String(input.ruleKey || "").trim().slice(0, MAX_RULE),
-    actionIndex: input.actionIndex,
-    originInboundId: clipId(input.originInboundId),
-    lastProcessedInboundId: clipId(input.originInboundId),
-    locale: input.locale ? String(input.locale).slice(0, 8) : undefined,
     collected: {},
     missing: savingsMissingFields({}),
-    startedAt: iso,
-    updatedAt: iso,
-    expiresAt: new Date(now.getTime() + WEBCHAT_ACTIVE_JOURNEY_TTL_MS).toISOString(),
-  };
+  });
+}
+
+export function startPricingCompareJourney(input: {
+  userId: string;
+  visitorId: string;
+  conversationId: string;
+  ruleKey: string;
+  actionIndex: number;
+  originInboundId: string;
+  locale?: string | null;
+  now?: Date;
+}): WebchatActiveJourney {
+  return baseJourney({
+    ...input,
+    kind: WEBCHAT_COMPARE_JOURNEY_KIND,
+    collected: {},
+    missing: [],
+  });
 }
 
 export function readActiveJourney(raw: unknown): WebchatActiveJourney | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (o.source !== WEBCHAT_ACTIVE_JOURNEY_SOURCE) return null;
-  if (o.kind !== WEBCHAT_SAVINGS_JOURNEY_KIND) return null;
+  if (o.kind !== WEBCHAT_SAVINGS_JOURNEY_KIND && o.kind !== WEBCHAT_COMPARE_JOURNEY_KIND) return null;
   const status = o.status;
   if (
     status !== "collecting" &&
@@ -134,27 +176,31 @@ export function readActiveJourney(raw: unknown): WebchatActiveJourney | null {
   }
   const collectedRaw = o.collected && typeof o.collected === "object" ? (o.collected as Record<string, unknown>) : {};
   const collected: WebchatSavingsCollected = {};
-  if (typeof collectedRaw.platform === "string" && collectedRaw.platform.trim()) {
-    collected.platform = collectedRaw.platform.trim().slice(0, 80);
-  }
-  if (typeof collectedRaw.monthlyCost === "number" && Number.isFinite(collectedRaw.monthlyCost)) {
-    collected.monthlyCost = collectedRaw.monthlyCost;
-  }
-  if (typeof collectedRaw.currency === "string" && collectedRaw.currency.trim()) {
-    collected.currency = collectedRaw.currency.trim().toUpperCase().slice(0, 8);
-  }
-  if (typeof collectedRaw.teamSize === "number" && Number.isFinite(collectedRaw.teamSize)) {
-    collected.teamSize = collectedRaw.teamSize;
-  }
-  if (typeof collectedRaw.monthlyVolume === "number" && Number.isFinite(collectedRaw.monthlyVolume)) {
-    collected.monthlyVolume = collectedRaw.monthlyVolume;
+  if (o.kind === WEBCHAT_SAVINGS_JOURNEY_KIND) {
+    if (typeof collectedRaw.platform === "string" && collectedRaw.platform.trim()) {
+      collected.platform = collectedRaw.platform.trim().slice(0, 80);
+    }
+    if (typeof collectedRaw.monthlyCost === "number" && Number.isFinite(collectedRaw.monthlyCost)) {
+      collected.monthlyCost = collectedRaw.monthlyCost;
+    }
+    if (typeof collectedRaw.currency === "string" && collectedRaw.currency.trim()) {
+      collected.currency = collectedRaw.currency.trim().toUpperCase().slice(0, 8);
+    }
+    if (typeof collectedRaw.teamSize === "number" && Number.isFinite(collectedRaw.teamSize)) {
+      collected.teamSize = collectedRaw.teamSize;
+    }
+    if (typeof collectedRaw.monthlyVolume === "number" && Number.isFinite(collectedRaw.monthlyVolume)) {
+      collected.monthlyVolume = collectedRaw.monthlyVolume;
+    }
   }
   const missing = Array.isArray(o.missing)
     ? o.missing.filter((item): item is string => typeof item === "string").slice(0, 8)
-    : savingsMissingFields(collected);
+    : o.kind === WEBCHAT_SAVINGS_JOURNEY_KIND
+      ? savingsMissingFields(collected)
+      : [];
   return {
     source: WEBCHAT_ACTIVE_JOURNEY_SOURCE,
-    kind: WEBCHAT_SAVINGS_JOURNEY_KIND,
+    kind: o.kind,
     status,
     userId: clipId(o.userId),
     visitorId: clipId(o.visitorId),
@@ -242,12 +288,39 @@ export function mergeCollectedSavings(
   };
 }
 
+export function applyCompareJourneyInbound(input: {
+  journey: WebchatActiveJourney;
+  inboundMessageId: string;
+  now?: Date;
+}): { journey: WebchatActiveJourney; advanced: boolean } {
+  if (input.journey.kind !== WEBCHAT_COMPARE_JOURNEY_KIND) {
+    return { journey: input.journey, advanced: false };
+  }
+  const inboundId = clipId(input.inboundMessageId);
+  if (!inboundId) return { journey: input.journey, advanced: false };
+  if (input.journey.lastProcessedInboundId === inboundId) {
+    return { journey: input.journey, advanced: false };
+  }
+  const now = input.now || new Date();
+  return {
+    advanced: true,
+    journey: {
+      ...input.journey,
+      lastProcessedInboundId: inboundId,
+      updatedAt: now.toISOString(),
+    },
+  };
+}
+
 export function applyJourneyInbound(input: {
   journey: WebchatActiveJourney;
   inboundMessageId: string;
   extracted: WebchatSavingsCollected;
   now?: Date;
 }): { journey: WebchatActiveJourney; advanced: boolean } {
+  if (input.journey.kind !== WEBCHAT_SAVINGS_JOURNEY_KIND) {
+    return applyCompareJourneyInbound(input);
+  }
   const inboundId = clipId(input.inboundMessageId);
   if (!inboundId) return { journey: input.journey, advanced: false };
   if (input.journey.lastProcessedInboundId === inboundId) {

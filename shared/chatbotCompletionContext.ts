@@ -51,10 +51,10 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     return "book_demo";
   }
   if (
-    /\bcalculate(?:\s+my)?\s+savings\b/.test(t) ||
+    /\b(?:calculate(?:\s+my)?\s+savings|savings estimate|estimate(?:\s+\w+)?\s+savings)\b/.test(t) ||
     t === "calculate my savings" ||
-    /calcular\s+(?:mi\s+)?ahorro/.test(t) ||
-    /חישוב\s+החיסכון|החיסכון\s+שלי/.test(t)
+    /calcular\s+(?:mi\s+)?ahorro|estimaci[oó]n de ahorro/.test(t) ||
+    /חישוב\s+החיסכון|החיסכון\s+שלי|הערכת\s+חיסכון/.test(t)
   ) {
     return "calculate_savings";
   }
@@ -68,12 +68,12 @@ export function classifyChatbotVisitorIntent(text: unknown): ChatbotVisitorInten
     return "find_solution";
   }
   if (
-    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much|compare\s+(?:plans?|pricing|free)|free\s*(?:&|and)\s*pro)\b/.test(t) ||
+    /\b(?:features?\s*(?:&|and)?\s*pricing|pricing|prices?|plans?|what\s+does\s+it\s+cost|how\s+much|compare\s+(?:plans?|pricing|free)|free\s*(?:&|and)\s*pro|side[\s-]*by[\s-]*side|user limits?|whatsapp numbers?|plan limits?|does (?:free|pro) include|how many (?:users?|whatsapp))\b/.test(t) ||
     t === "features & pricing" ||
     t === "features and pricing" ||
     t === "compare free & pro" ||
-    /comparar\s+(?:planes?|free)/.test(t) ||
-    /השוואת/.test(t) ||
+    /comparar\s+(?:planes?|free)|comparaci[oó]n lado a lado/.test(t) ||
+    /השוואת|השוואה בין/.test(t) ||
     /פיצ['׳]רים\s+ומחירים|תכונות\s+ומחירים/.test(t) ||
     /caracter[ií]sticas\s+y\s+precios|funciones\s+y\s+precios/.test(t)
   ) {
@@ -167,6 +167,9 @@ function currentTurnVisitorKind(input: {
   if (currentKind !== "other") return currentKind;
   if (input.journeyKind === "pricing_savings" || input.journeyKind === "calculate_savings") {
     return "calculate_savings";
+  }
+  if (input.journeyKind === "pricing_compare") {
+    return "compare_plans";
   }
   return classifyChatbotVisitorIntent(input.visitorIntent);
 }
@@ -264,6 +267,9 @@ export function resolveChatbotCompletionRouting(input: {
   ) {
     return withRoutingSubIntents(routing, ["pricing_question"], ["booking_question"]);
   }
+  if (!currentBooking && input.journeyKind === "pricing_compare") {
+    return withRoutingSubIntents(routing, ["pricing_question", "benefits_question"], ["booking_question"]);
+  }
   if (
     !currentBooking &&
     (kind === "features_pricing" || kind === "find_solution" || kind === "calculate_savings") &&
@@ -322,7 +328,9 @@ export function chatbotCompletionPromptRules(input: {
       "- Keep the reply mobile-readable with short paragraphs or line breaks. End with one natural follow-up about comparing limits or estimating savings. Do not ask what “features” means. Do not add a booking CTA or booking link.",
     );
   } else if (kind === "compare_plans") {
-    lines.push("- The visitor asked to compare published plans or pricing. Use only current workspace pricing knowledge. Do not invent plan facts. Do not add a booking CTA or booking link.");
+    lines.push(
+      "- The visitor asked to compare published plans or pricing. Answer with the supported Free versus Pro comparison from selected canonical evidence. Include verified prices, user limits, WhatsApp-number limits, AI Brain, automations, and other supported plan limits. Do not ask whether they want the comparison. Do not invent plan facts. Do not add a booking CTA or booking link.",
+    );
   } else if (kind === "calculate_savings") {
     if (input.journeyContinuation) {
       const missing = (input.journeyMissing || []).filter((field) => field === "platform" || field === "monthlyCost" || field === "currency");

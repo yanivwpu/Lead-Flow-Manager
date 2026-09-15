@@ -16,6 +16,11 @@ import {
   supportingAmounts,
   type TurnEvidenceBundle,
 } from "./turnEvidence";
+import {
+  classifyPricingCompareTopic,
+  formatCanonicalPricingComparison,
+  parentUrlAllowsCanonicalWhachatCatalog,
+} from "./webchatPricingCompare";
 import { normalizeWidgetStaticLocale, type WidgetStaticLocale } from "./webchatWidgetLocale";
 
 const VAGUE_BENEFIT_RE =
@@ -346,9 +351,9 @@ function sharedClosing(hits: BenefitHit[], locale: WidgetStaticLocale): string {
 }
 
 function followUp(locale: WidgetStaticLocale): string {
-  if (locale === "es") return "¿Quieres una comparación lado a lado o una estimación de ahorro?";
-  if (locale === "he") return "רוצים השוואה בין התוכניות או הערכת חיסכון?";
-  return "Would you like a side-by-side comparison or a savings estimate?";
+  if (locale === "es") return "Si quieres, puedo revisar un límite concreto.";
+  if (locale === "he") return "אפשר גם לעבור על מגבלה ספציפית.";
+  return "I can also walk through a specific limit if you want more detail.";
 }
 
 function intro(locale: WidgetStaticLocale, count: number): string {
@@ -468,12 +473,12 @@ export function isRoboticFeaturesPricingDraft(draft: string): boolean {
 export function featuresPricingClarification(locale?: string | null): string {
   const loc = normalizeWidgetStaticLocale(locale);
   if (loc === "es") {
-    return "Puedo explicarte los planes Free y Pro publicados. ¿Quieres una comparación lado a lado o una estimación de ahorro?";
+    return "Puedo explicarte los planes Free y Pro publicados. Pregunta por un precio o un límite del plan y usaré los datos verificados.";
   }
   if (loc === "he") {
-    return "אפשר לעבור איתכם על תוכניות Free ו-Pro שפורסמו. רוצים השוואה בין התוכניות או הערכת חיסכון?";
+    return "אפשר לעבור איתכם על תוכניות Free ו-Pro שפורסמו. שאלו על מחיר או מגבלת תוכנית ואשתמש בפרטים המאומתים.";
   }
-  return "I can walk you through the published Free and Pro plans. Would you like a side-by-side comparison or a savings estimate?";
+  return "I can walk you through the published Free and Pro plans. Ask about a price or plan limit and I will use the verified details.";
 }
 
 function finalizeDraft(draft: string, plans: PlanView[], bundle?: TurnEvidenceBundle): string | null {
@@ -511,12 +516,51 @@ export function realizeTrustedFeaturesPricingReply(params: {
   conflictingKeys?: string[];
   locale?: string | null;
   bundle?: TurnEvidenceBundle;
+  useCanonicalCatalog?: boolean;
+  parentUrl?: string | null;
+  inbound?: string | null;
+  pageActionKind?: string | null;
 }): { text: string; outcome: FeaturesPricingRealizeOutcome } {
+  const useCanonical =
+    params.useCanonicalCatalog === true || parentUrlAllowsCanonicalWhachatCatalog(params.parentUrl);
   try {
+    if (useCanonical) {
+      const kind = params.pageActionKind === "features_pricing" ? "features_pricing" : "compare_plans";
+      const formatted = formatCanonicalPricingComparison({
+        locale: params.locale,
+        kind,
+        topic: classifyPricingCompareTopic(params.inbound),
+      });
+      if (formatted.text.trim()) {
+        const grounded = finalizeDraft(formatted.text, [], params.bundle);
+        if (grounded) return { text: grounded, outcome: "formatted" };
+        if (!params.bundle) return { text: formatted.text, outcome: "formatted" };
+      }
+    }
     const formatted = assembleFeaturesPricingReply(params);
     if (formatted && formatted.trim()) return { text: formatted, outcome: "formatted" };
+    if (useCanonical) {
+      const fallback = formatCanonicalPricingComparison({
+        locale: params.locale,
+        kind: params.pageActionKind === "features_pricing" ? "features_pricing" : "compare_plans",
+        topic: classifyPricingCompareTopic(params.inbound),
+      });
+      if (fallback.text.trim()) return { text: fallback.text, outcome: "formatted" };
+    }
     return { text: featuresPricingClarification(params.locale), outcome: "clarification" };
   } catch {
+    if (useCanonical) {
+      try {
+        const fallback = formatCanonicalPricingComparison({
+          locale: params.locale,
+          kind: params.pageActionKind === "features_pricing" ? "features_pricing" : "compare_plans",
+          topic: "full",
+        });
+        if (fallback.text.trim()) return { text: fallback.text, outcome: "formatter_error" };
+      } catch {
+        /* fall through to clarification without prices */
+      }
+    }
     return { text: featuresPricingClarification(params.locale), outcome: "formatter_error" };
   }
 }

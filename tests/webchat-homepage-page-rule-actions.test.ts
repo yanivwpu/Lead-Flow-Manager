@@ -412,7 +412,7 @@ test("aliases, RTL, savings journey, and anonymous identity remain intact", () =
   assert.match(src, /selectedEvidenceCategories/);
   assert.match(src, /assembleFeaturesPricingReply/);
   assert.match(src, /realizeTrustedFeaturesPricingReply/);
-  assert.match(src, /fromPage === "features_pricing" \|\| fromPage === "compare_plans"/);
+  assert.match(src, /pricingCompareTurn/);
   assert.match(src, /isRoboticFeaturesPricingDraft/);
   const enrollments = read("server/routes/campaignEnrollments.ts");
   assert.match(enrollments, /storage\.getCampaignEnrollmentsForContact/);
@@ -524,7 +524,7 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
   assert.doesNotMatch(en!, /Integrations and basic WhatsApp templates on Free/);
   assert.ok(en!.includes("\n"));
   assert.ok(en!.length < 700);
-  assert.match(en!, /side-by-side comparison or a savings estimate/);
+  assert.doesNotMatch(en!, /Would you like a side-by-side comparison/);
   const factsOnly = buildTurnEvidenceBundle({
     userId: "tenant-a",
     retrieved: PRODUCTION_SHAPED_PLANS,

@@ -33,6 +33,11 @@ import {
   realizeTrustedFeaturesPricingReply,
 } from "@shared/featuresPricingReply";
 import {
+  canonicalPricingCompareEvidence,
+  parentUrlAllowsCanonicalWhachatCatalog,
+} from "@shared/webchatPricingCompare";
+import { pageActionKindToVisitorIntent } from "@shared/webchatPageRuleAction";
+import {
   trustedPageRuleBookDemoReply,
   trustedPageRuleFindSolutionReply,
 } from "@shared/webchatPageRuleReplies";
@@ -116,6 +121,7 @@ export class AIService {
       conversationLanguage?: string;
       pageActionKind?: string;
       pageActionLabel?: string;
+      parentUrl?: string;
       journeyKind?: string;
       journeyTrusted?: boolean;
       journeyContinuation?: boolean;
@@ -190,8 +196,10 @@ export class AIService {
     }
 
     const fromPage = pageActionKindToVisitorIntent(contactContext?.pageActionKind);
+    const compareJourney =
+      contactContext?.journeyTrusted === true && contactContext.journeyKind === "pricing_compare";
     if (
-      (fromPage === "features_pricing" || fromPage === "compare_plans") &&
+      (fromPage === "features_pricing" || fromPage === "compare_plans" || compareJourney) &&
       routing &&
       !routing.subIntents.includes("pricing_question")
     ) {
@@ -269,7 +277,9 @@ export class AIService {
                 (contactContext.journeyKind === "pricing_savings" ||
                   contactContext.journeyKind === "calculate_savings")
               ? "calculate_savings"
-              : storedVisitorKind;
+              : contactContext?.journeyTrusted && contactContext.journeyKind === "pricing_compare"
+                ? "compare_plans"
+                : storedVisitorKind;
     const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     if (visitorKind === "book_demo") {
       grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
@@ -342,6 +352,14 @@ export class AIService {
             missing: contactContext.journeyMissing || [],
           })
         : null;
+    const pricingCompareTurn =
+      fromPage === "features_pricing" ||
+      fromPage === "compare_plans" ||
+      visitorKind === "features_pricing" ||
+      visitorKind === "compare_plans";
+    const useCanonicalCatalog =
+      pricingCompareTurn && parentUrlAllowsCanonicalWhachatCatalog(contactContext?.parentUrl);
+    const pricingCompareEvidence = useCanonicalCatalog ? canonicalPricingCompareEvidence() : [];
     let turnEvidence: TurnEvidenceBundle;
     try {
       turnEvidence = buildTurnEvidenceBundle({
@@ -351,7 +369,7 @@ export class AIService {
         liveRecords: liveRecordsForBundle,
         servicesProducts: businessKnowledge?.servicesProducts,
         websiteKnowledgeText: promptWebsiteText,
-        supplementalEvidence: savingsScripted?.evidence,
+        supplementalEvidence: [...(savingsScripted?.evidence || []), ...pricingCompareEvidence],
       });
     } catch (err) {
       console.warn("[AI] evidence_bundle_failed", {
@@ -367,6 +385,7 @@ export class AIService {
         retrieved: [],
         websiteKnowledgeText: promptWebsiteText,
         servicesProducts: businessKnowledge?.servicesProducts,
+        supplementalEvidence: pricingCompareEvidence,
       });
     }
     const evidenceDiag = evidenceDiagnostics(turnEvidence);
@@ -506,13 +525,17 @@ export class AIService {
       return groundedScriptedReturn(findScripted, "find_solution", { skipCompleteness: true });
     }
 
-    if (fromPage === "features_pricing" || fromPage === "compare_plans") {
+    if (pricingCompareTurn) {
       const locale = contactContext?.conversationLanguage || detectedLanguage;
       let realized = realizeTrustedFeaturesPricingReply({
         retrieved: grounding.retrieved,
         conflictingKeys: grounding.conflictingKeys,
         locale,
         bundle: turnEvidence,
+        useCanonicalCatalog,
+        parentUrl: contactContext?.parentUrl,
+        inbound: lastUserMessage,
+        pageActionKind: fromPage || visitorKind,
       });
       if (realized.outcome === "formatted") {
         const formattedCheck = evaluateDraft(realized.text, { skipCompleteness: true });
@@ -525,14 +548,15 @@ export class AIService {
             bundle: turnEvidence,
           });
         if (!formattedGrounded) {
-          realized = { text: featuresPricingClarification(locale), outcome: "clarification" };
+          const amountFree = featuresPricingClarification(locale);
+          realized = { text: amountFree, outcome: "clarification" };
         }
       }
       console.info("[AI] features_pricing_realize", {
         userId,
         channel: channel ?? null,
         stage: "formatter",
-        pageActionKind: contactContext?.pageActionKind || null,
+        pageActionKind: contactContext?.pageActionKind || visitorKind || null,
         locale: String(locale || "en").slice(0, 8),
         selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
         formatterOutcome: realized.outcome,
@@ -782,16 +806,20 @@ export class AIService {
         formatterOutcome: "not_used",
         errorName: error instanceof Error ? error.name : "Error",
         errorCode: error instanceof Error ? error.message.slice(0, 120) : String(error).slice(0, 120),
-        fallbackAttempted: fromPage === "features_pricing" || fromPage === "compare_plans" || greetingTurn,
+        fallbackAttempted: pricingCompareTurn || greetingTurn,
         fallbackSucceeded: false,
       });
-      if (fromPage === "features_pricing" || fromPage === "compare_plans") {
+      if (pricingCompareTurn) {
         const locale = contactContext?.conversationLanguage || detectedLanguage;
         const realized = realizeTrustedFeaturesPricingReply({
           retrieved: grounding.retrieved,
           conflictingKeys: grounding.conflictingKeys,
           locale,
           bundle: turnEvidence,
+          useCanonicalCatalog,
+          parentUrl: contactContext?.parentUrl,
+          inbound: lastUserMessage,
+          pageActionKind: fromPage || visitorKind,
         });
         return groundedScriptedReturn(realized.text, "pricing_question", { skipCompleteness: true });
       }
@@ -1199,6 +1227,7 @@ Return JSON only: { "summary": "..." }`;
       conversationLanguage?: string;
       pageActionKind?: string;
       pageActionLabel?: string;
+      parentUrl?: string;
       journeyKind?: string;
       journeyTrusted?: boolean;
       journeyContinuation?: boolean;
