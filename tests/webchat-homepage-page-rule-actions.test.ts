@@ -502,32 +502,56 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
     }),
     true,
   );
-  assert.match(en!, /\$0\/month/);
-  assert.match(en!, /\$49\/month/);
-  assert.match(en!, /\$490\/year/);
+  assert.match(en!, /Free — \$0\/month/);
+  assert.match(en!, /Pro — \$49\/month, or \$490\/year/);
   assert.equal((en!.match(/\$49\/month/g) || []).length, 1);
+  assert.equal((en!.match(/\$490\/year/g) || []).length, 1);
   assert.equal((en!.match(/AI Brain/gi) || []).length, 1);
   assert.equal((en!.match(/0%/g) || []).length, 1);
-  assert.match(en!, /Prospect AI/);
+  assert.match(en!, /Includes integrations and basic WhatsApp templates/);
+  assert.match(en!, /Includes AI Brain, a 14-day Pro trial, and 0% WhachatCRM markup on Meta conversation fees/);
+  assert.match(en!, /Prospect AI is available on every plan, and there are no setup fees/);
   assert.doesNotMatch(en!, /USD 49 per month/);
   assert.doesNotMatch(en!, /It includes:/);
+  assert.doesNotMatch(en!, /on Free/);
+  assert.doesNotMatch(en!, /included with Pro/);
+  assert.doesNotMatch(en!, /^or /m);
   assert.doesNotMatch(en!, /clear conversation and user limits/);
   assert.doesNotMatch(en!, /factKey|tenant_chunk|VERIFIED BUSINESS/);
+  assert.doesNotMatch(en!, /Integrations and basic WhatsApp templates on Free/);
   assert.ok(en!.includes("\n"));
   assert.ok(en!.length < 700);
-  assert.match(en!, /compare the plan limits or estimate your savings/);
-  const es = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "es", bundle });
-  const he = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "he", bundle });
-  assert.match(es!, /\$49\/mes/);
+  assert.match(en!, /side-by-side comparison or a savings estimate/);
+  const factsOnly = buildTurnEvidenceBundle({
+    userId: "tenant-a",
+    retrieved: PRODUCTION_SHAPED_PLANS,
+  });
+  assert.equal(
+    isDraftAmountGrounded({
+      draft: en!,
+      retrieved: PRODUCTION_SHAPED_PLANS,
+      bundle: factsOnly,
+    }),
+    true,
+  );
+  const es = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "es", bundle: factsOnly });
+  const he = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "he", bundle: factsOnly });
+  assert.ok(es);
+  assert.ok(he);
+  assert.match(es!, /\$49\/mes, o \$490\/año/);
   assert.match(es!, /\$0\/mes/);
-  assert.match(es!, /\$490\/año/);
+  assert.match(es!, /Incluye integraciones y plantillas básicas de WhatsApp/);
+  assert.match(es!, /Incluye AI Brain, una prueba Pro de 14 días y 0% de recargo de WhachatCRM en las tarifas de conversación de Meta/);
   assert.ok(es!.includes("\n"));
   assert.equal(isRoboticFeaturesPricingDraft(es!), false);
   assert.doesNotMatch(es!, /USD 49 per month/);
-  assert.match(he!, /\$49 לחודש/);
+  assert.equal(isDraftAmountGrounded({ draft: es!, retrieved: PRODUCTION_SHAPED_PLANS, bundle: factsOnly }), true);
+  assert.match(he!, /\$49 לחודש, או \$490 לשנה/);
   assert.match(he!, /\$0 לחודש/);
+  assert.match(he!, /כולל אינטגרציות ותבניות WhatsApp בסיסיות/);
   assert.ok(he!.includes("\n"));
   assert.equal(isRoboticFeaturesPricingDraft(he!), false);
+  assert.equal(isDraftAmountGrounded({ draft: he!, retrieved: PRODUCTION_SHAPED_PLANS, bundle: factsOnly }), true);
   assert.ok(es!.length < 700);
   assert.ok(he!.length < 700);
   const partial = assembleFeaturesPricingReply({
@@ -536,12 +560,14 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
     bundle: buildTurnEvidenceBundle({
       userId: "tenant-a",
       retrieved: [PRODUCTION_SHAPED_PLANS[1]],
-      websiteKnowledgeText: "Free is $0/month.",
     }),
   });
   assert.ok(partial);
-  assert.match(partial!, /\$0\/month/);
-  assert.doesNotMatch(partial!, /\$49\/month/);
+  assert.match(partial!, /Free — \$0\/month/);
+  assert.match(partial!, /Includes integrations and basic WhatsApp templates/);
+  assert.doesNotMatch(partial!, /on Free/);
+  assert.doesNotMatch(partial!, /\$49/);
+  assert.equal(isRoboticFeaturesPricingDraft(partial!), false);
   const inventedHeld = gateFor("Features & pricing", widgetInbound({
     message: "Features & pricing",
     actionIndex: 0,
