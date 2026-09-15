@@ -1858,6 +1858,9 @@ class ChannelService {
         if (chatbotWillFire || bookingIntent) {
           nextJourney = markJourneyStatus(nextJourney, "paused");
         }
+      } else if (validatedPageRuleAction) {
+        const existing = readActiveJourney(turnControl.activeJourney);
+        if (existing) nextJourney = markJourneyStatus(existing, "paused");
       } else {
         const existing = readActiveJourney(turnControl.activeJourney);
         const current = resolveCurrentTurnJourney({

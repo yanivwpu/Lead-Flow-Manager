@@ -134,6 +134,12 @@ export const FACT_COMPLETENESS_RETRY_INSTRUCTION = `FACT-ONLY RETRY — your pre
 - Do not use vague substitutes ("competitively priced", "various options", "contact us for details").
 - Answer first. Next step second.`;
 
+export const FACT_AMOUNT_RETRY_INSTRUCTION = `AMOUNT-ONLY RETRY — your previous draft used numeric amounts that are not in the selected evidence for this turn.
+- Restate only prices, fees, capacities, and percentages that appear in ${VERIFIED_FACTS_HEADER} or other selected evidence already in this prompt.
+- Do not invent, round, convert, or reuse example amounts from these instructions.
+- If a published amount is missing from selected evidence, omit the number rather than guessing.
+- Keep the reply useful and concise. Do not add a booking CTA unless this turn is a verified book-a-demo request.`;
+
 const DEFLECTION_RE =
   /\b(?:i(?:'m| am)?\s*(?:not\s+sure|unsure)|i\s*(?:don'?t|do not)\s+have|we\s*(?:don'?t|do not)\s+have|no\s+(?:information|details|pricing)\s+(?:on|about)|let\s+me\s+(?:check|find\s+out|look)|i(?:'ll| will)\s+(?:check|find\s+out|look\s+into|get\s+back)|need\s+to\s+(?:check|confirm)\s+(?:on\s+)?that|i\s+can'?t\s+say)\b/i;
 

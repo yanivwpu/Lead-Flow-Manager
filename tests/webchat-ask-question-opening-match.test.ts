@@ -98,7 +98,7 @@ function persistCanonical(click: string) {
 {
   assert.equal(persistCanonical("Help me choose the right setup"), "Find my solution");
   const find = chatbotCompletionPromptRules({ visitorIntent: "Find my solution" });
-  assert.match(find, /ONE useful qualification question/);
+  assert.match(find, /business type and primary goal or problem/);
 }
 
 {

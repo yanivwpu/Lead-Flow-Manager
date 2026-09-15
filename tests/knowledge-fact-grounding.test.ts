@@ -556,6 +556,7 @@ run("WhatsApp/Facebook/Instagram/Email share the same grounding contract in sugg
   const src = readFileSync(new URL("../server/aiService.ts", import.meta.url), "utf8");
   assert.ok(src.includes("validateResponseCompleteness"));
   assert.ok(src.includes("FACT_COMPLETENESS_RETRY_INSTRUCTION"));
+  assert.ok(src.includes("FACT_AMOUNT_RETRY_INSTRUCTION"));
   assert.ok(src.includes("assembleDeterministicGroundedDraft"));
   // Channel only changes email framing — completeness runs for every suggestReply call.
   assert.ok(/evaluateDraft\(suggestion\)/.test(src));

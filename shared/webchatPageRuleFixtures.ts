@@ -46,3 +46,37 @@ export const PRICING_PAGE_RULE_ACTION = {
   savings: 1,
   bookDemo: 2,
 } as const;
+
+export const HOMEPAGE_PAGE_RULE_FIXTURE = {
+  urlContains: "/",
+  matchType: "pathname" as WidgetPageRuleMatchType,
+  urlAliases: ["/es", "/he"],
+  greeting: "Hi! I can walk you through features and pricing, help you find the right setup, or book a demo.",
+  teaserGreeting: "Need help choosing a plan?",
+  prefilledMessage: "",
+  suggestedQuestions: ["Features & pricing", "Find my solution", "Book a demo"],
+  actionKinds: ["features_pricing", "find_solution", "book_demo"],
+  localized: {
+    en: {
+      greeting: "Hi! I can walk you through features and pricing, help you find the right setup, or book a demo.",
+      teaserGreeting: "Need help choosing a plan?",
+      suggestedQuestions: ["Features & pricing", "Find my solution", "Book a demo"],
+    },
+    es: {
+      greeting: "¡Hola! Puedo explicarte funciones y precios, ayudarte a encontrar la solución o reservar una demo.",
+      teaserGreeting: "¿Necesitas ayuda para elegir un plan?",
+      suggestedQuestions: ["Características y precios", "Encontrar mi solución", "Reservar una demo"],
+    },
+    he: {
+      greeting: "היי! אפשר לעזור עם פיצ'רים ומחירים, למצוא את הפתרון או לקבוע הדגמה.",
+      teaserGreeting: "צריכים עזרה בבחירת תוכנית?",
+      suggestedQuestions: ["פיצ'רים ומחירים", "למצוא את הפתרון שלי", "קביעת הדגמה"],
+    },
+  },
+} as const;
+
+export const HOMEPAGE_PAGE_RULE_ACTION = {
+  features: 0,
+  findSolution: 1,
+  bookDemo: 2,
+} as const;

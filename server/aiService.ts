@@ -11,6 +11,7 @@ import {
 } from "./websiteKnowledge/factContext";
 import {
   assembleDeterministicGroundedDraft,
+  FACT_AMOUNT_RETRY_INSTRUCTION,
   FACT_COMPLETENESS_RETRY_INSTRUCTION,
   incompleteRequiredFactCodes,
   isDraftAmountGrounded,
@@ -25,6 +26,11 @@ import {
   classifyChatbotVisitorIntent,
   isCanonicalBookingTurn,
 } from "@shared/chatbotCompletionContext";
+import { pageActionKindToVisitorIntent } from "@shared/webchatPageRuleAction";
+import {
+  trustedPageRuleBookDemoReply,
+  trustedPageRuleFindSolutionReply,
+} from "@shared/webchatPageRuleReplies";
 import { resolveSavingsJourneyReply } from "@shared/webchatSavingsJourney";
 import {
   detectBookingAcknowledgment,
@@ -178,6 +184,27 @@ export class AIService {
       routing = { ...routing, subIntents: [...routing.subIntents, "pricing_question"] };
     }
 
+    const fromPage = pageActionKindToVisitorIntent(contactContext?.pageActionKind);
+    if (
+      (fromPage === "features_pricing" || fromPage === "compare_plans") &&
+      routing &&
+      !routing.subIntents.includes("pricing_question")
+    ) {
+      routing = {
+        ...routing,
+        subIntents: [...routing.subIntents, "pricing_question", "benefits_question"].filter(
+          (intent, i, all) => all.indexOf(intent) === i,
+        ),
+      };
+    }
+    if (
+      fromPage === "book_demo" &&
+      routing &&
+      !routing.subIntents.includes("booking_question")
+    ) {
+      routing = { ...routing, subIntents: [...routing.subIntents, "booking_question"] };
+    }
+
     // AI Brain source decision: Knowledge Sources and/or Live Business Data connectors.
     const liveDecision = resolveLiveBusinessDataDecision({
       message: lastMessage,
@@ -219,23 +246,33 @@ export class AIService {
       routing?.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
     const canonicalBooking =
       !bookingAcknowledgment &&
-      (isCanonicalBookingTurn({ inbound: lastUserMessage, history: conversationHistory }) ||
+      (isCanonicalBookingTurn({
+        inbound: lastUserMessage,
+        history: conversationHistory,
+        pageActionKind: contactContext?.pageActionKind,
+      }) ||
         routingIsBooking);
     const visitorKind = bookingAcknowledgment
       ? "other"
-      : canonicalBooking
-        ? "book_demo"
-        : currentVisitorKind !== "other"
-          ? currentVisitorKind
-          : contactContext?.journeyTrusted &&
-              (contactContext.journeyKind === "pricing_savings" ||
-                contactContext.journeyKind === "calculate_savings")
-            ? "calculate_savings"
-            : storedVisitorKind;
+      : fromPage && fromPage !== "other"
+        ? fromPage
+        : canonicalBooking
+          ? "book_demo"
+          : currentVisitorKind !== "other"
+            ? currentVisitorKind
+            : contactContext?.journeyTrusted &&
+                (contactContext.journeyKind === "pricing_savings" ||
+                  contactContext.journeyKind === "calculate_savings")
+              ? "calculate_savings"
+              : storedVisitorKind;
     const verifiedBookingUrl = String(businessKnowledge?.bookingLink || "").trim();
     if (visitorKind === "book_demo") {
       grounding = applyBookDemoVerifiedBookingGrounding(grounding, verifiedBookingUrl);
-    } else if (visitorKind === "features_pricing" || visitorKind === "find_solution") {
+    } else if (
+      visitorKind === "features_pricing" ||
+      visitorKind === "compare_plans" ||
+      visitorKind === "find_solution"
+    ) {
       grounding = excludeFactTypesFromGrounding(grounding, ["booking_link"]);
     } else if (visitorKind === "calculate_savings") {
       grounding = excludeFactTypesFromGrounding(grounding, ["booking_link", "call_to_action"]);
@@ -266,8 +303,13 @@ export class AIService {
           .filter((r) => r.providerId === "businessPackages")
           .map((r) => String((r.data as { checkoutUrl?: string | null }).checkoutUrl || "").trim())
           .filter((u) => /^https:\/\//i.test(u));
-        // Structured offers win over scanned pricing_plan knowledge rows.
-        if (live.usedBusinessPackages) {
+        // Structured offers win over scanned pricing_plan knowledge rows,
+        // except trusted features/compare actions which need published plan facts.
+        if (
+          live.usedBusinessPackages &&
+          visitorKind !== "features_pricing" &&
+          visitorKind !== "compare_plans"
+        ) {
           grounding = excludeFactTypesFromGrounding(grounding, ["pricing_plan"]);
         }
       } catch (err) {
@@ -348,20 +390,32 @@ export class AIService {
             }),
       );
 
-    if (savingsScripted?.text) {
-      const groundingCheck = evaluateDraft(savingsScripted.text, {
-        skipCompleteness: !savingsScripted.complete,
-      });
+    const groundedScriptedReturn = (
+      text: string,
+      retrievalIntent: string,
+      opts?: { skipCompleteness?: boolean; complete?: boolean },
+    ) => {
+      const groundingCheck = evaluateDraft(text, { skipCompleteness: opts?.skipCompleteness === true });
       const knowledgeGrounded =
         groundingCheck.ok &&
         isDraftAmountGrounded({
-          draft: savingsScripted.text,
+          draft: text,
           retrieved: grounding.retrieved,
           conflictingKeys: grounding.conflictingKeys,
           bundle: turnEvidence,
         });
+      console.info("[AI] selected evidence", {
+        userId,
+        channel: channel ?? null,
+        retrievalIntent,
+        pageActionKind: contactContext?.pageActionKind || null,
+        selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
+        publishedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
+        liveOfferRecordCount: evidenceDiag.liveOfferRecordCount,
+        supportedAmountSourceTypes: evidenceDiag.supportedAmountSourceTypes,
+      });
       return {
-        suggestion: savingsScripted.text,
+        suggestion: text,
         confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
         confidenceProvided: false,
         knowledgeGrounded,
@@ -370,8 +424,8 @@ export class AIService {
         retrievedFactCount: turnEvidence.publishedFactCount,
         retrievedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         retrievedFactTypeHash: hashPublishedFactTypes(userId, turnEvidence.publishedFactTypes),
-        retrievalIntent: savingsScripted.retrievalIntent,
-        savingsJourneyComplete: savingsScripted.complete,
+        retrievalIntent,
+        savingsJourneyComplete: opts?.complete,
         liveOfferRecordCount: turnEvidence.liveOfferRecordCount,
         tenantKnowledgeChunkCount: turnEvidence.tenantKnowledgeChunkCount,
         tenantKnowledgeAmountCount: turnEvidence.tenantKnowledgeAmountCount,
@@ -379,6 +433,32 @@ export class AIService {
         conflictReason: turnEvidence.conflictReason,
         modelGenerationSucceeded: false,
       };
+    };
+
+    if (savingsScripted?.text) {
+      return groundedScriptedReturn(savingsScripted.text, savingsScripted.retrievalIntent, {
+        skipCompleteness: !savingsScripted.complete,
+        complete: savingsScripted.complete,
+      });
+    }
+
+    const bookScripted =
+      fromPage === "book_demo" && !bookingAcknowledgment
+        ? trustedPageRuleBookDemoReply(
+            contactContext?.conversationLanguage || detectedLanguage,
+            verifiedBookingUrl,
+          )
+        : null;
+    if (bookScripted) {
+      return groundedScriptedReturn(bookScripted, "booking_question", { skipCompleteness: true });
+    }
+
+    const findScripted =
+      fromPage === "find_solution"
+        ? trustedPageRuleFindSolutionReply(contactContext?.conversationLanguage || detectedLanguage)
+        : null;
+    if (findScripted) {
+      return groundedScriptedReturn(findScripted, "find_solution", { skipCompleteness: true });
     }
 
     const runCompletion = async (prompt: string) => {
@@ -440,6 +520,60 @@ export class AIService {
         }
       }
 
+      const unsupportedAmount =
+        !incomplete && groundingCheck.violations.some((v) => v.kind === "unsupported_amount");
+      if (unsupportedAmount) {
+        console.warn("[AI] reply used amounts outside selected evidence; regenerating once", {
+          userId,
+          channel: channel ?? null,
+          violations: groundingCheck.violations.map((v) => v.kind),
+          pageActionKind: contactContext?.pageActionKind || null,
+          selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
+          publishedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
+        });
+        try {
+          const retry = await runCompletion(`${systemPrompt}\n\n${FACT_AMOUNT_RETRY_INSTRUCTION}`);
+          suggestion =
+            (visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment
+              ? ensureVerifiedBookingUrlInDraft(retry.suggestion, verifiedBookingUrl)
+              : retry.suggestion;
+          confidenceProvided = confidenceProvided && retry.confidenceProvided;
+          const a = typeof rawConfidence === "number" ? rawConfidence : 1;
+          const b = typeof retry.confidence === "number" ? retry.confidence : 1;
+          rawConfidence = Math.min(a, b);
+          groundingCheck = evaluateDraft(suggestion);
+          if (
+            groundingCheck.violations.some((v) => v.kind === "unsupported_amount") &&
+            grounding.retrieved.length > 0 &&
+            (visitorKind === "features_pricing" || visitorKind === "compare_plans")
+          ) {
+            const fallback = assembleDeterministicGroundedDraft({
+              retrieved: grounding.retrieved,
+              subIntents: routing?.subIntents,
+              conflictingKeys: grounding.conflictingKeys,
+            });
+            const fallbackCheck = evaluateDraft(fallback);
+            const fallbackGrounded =
+              fallbackCheck.ok &&
+              isDraftAmountGrounded({
+                draft: fallback,
+                retrieved: grounding.retrieved,
+                conflictingKeys: grounding.conflictingKeys,
+                bundle: turnEvidence,
+              });
+            if (fallbackGrounded) {
+              suggestion = fallback;
+              groundingCheck = fallbackCheck;
+            }
+          }
+        } catch (retryErr) {
+          console.warn(
+            "[AI] amount-grounding retry failed",
+            retryErr instanceof Error ? retryErr.message.slice(0, 240) : String(retryErr).slice(0, 240),
+          );
+        }
+      }
+
       const stillIncomplete = groundingCheck.violations.some(
         (v) => v.kind === "incomplete_required_fact",
       );
@@ -478,6 +612,8 @@ export class AIService {
           userId,
           violations: groundingCheck.violations.map((v) => v.kind),
           incompleteFactCodes: incompleteRequiredFactCodes(groundingCheck),
+          selectedEvidenceCategories: evidenceDiag.selectedEvidenceCategories,
+          publishedFactTypeCounts: evidenceDiag.publishedFactTypeCounts,
         });
       }
 
@@ -1081,7 +1217,7 @@ ${contactContext.listingFollowUp ? `\n${contactContext.listingFollowUp}\nThe cus
 3. WRITE ONE USEFUL REPLY — not a template, not a form, not a generic opener.
    Structure: [brief acknowledgment of what they said] + [one smart next-step question or action]
    
-4. KEEP IT SHORT: 2–4 short sentences unless the visitor asked for detail. Answer the current request only. Use natural price formatting for the reply language ($49/month, $490/year) — never "USD 49 per month". Do not dump unrelated fact bullets, source labels, or internal extraction text.
+4. KEEP IT SHORT: 2–4 short sentences unless the visitor asked for detail. Answer the current request only. Use natural price formatting for the reply language from selected evidence only — never invent amounts or write 'USD 49 per month'. Do not dump unrelated fact bullets, source labels, or internal extraction text.
 
 5. FORBIDDEN phrases — do not use any of these:
    - "Thank you for your inquiry"
@@ -1196,7 +1332,7 @@ GOOD: "I found several homes that match those criteria. Would you like me to sen
       }> | undefined) ?? []
     ).filter((q) => q?.question?.trim() && q.enabled !== false);
     const hasCustomCriteria = qualifyingQuestions.length > 0;
-    if (hasCustomCriteria) {
+    if (hasCustomCriteria && contactContext?.pageActionKind !== "book_demo") {
       prompt += `
 
 QUALIFICATION CRITERIA — This business qualifies leads using these specific questions (in priority order):

@@ -20,6 +20,7 @@ import {
   pageRulePathInputIssue,
   sanitizePageRuleUrlAliases,
 } from "./webchatPageRuleMatch";
+import { sanitizePageRuleActionKinds } from "./webchatPageRuleAction";
 
 export const NEUTRAL_WIDGET_COLOR = "#10b981";
 export const NEUTRAL_WIDGET_WELCOME = "Hi! How can we help you today?";
@@ -38,6 +39,7 @@ export type WidgetPageRuleShape = {
   ctaLabel?: unknown;
   ctaUrl?: unknown;
   localized?: unknown;
+  actionKinds?: unknown;
 };
 
 export type WidgetSettingsShape = {
@@ -419,6 +421,10 @@ export function validateWidgetPageRules(raw: unknown): PageRuleValidation {
     else delete next.matchType;
     if (urlAliases?.length) next.urlAliases = urlAliases;
     else delete next.urlAliases;
+    const questions = Array.isArray(rule.suggestedQuestions) ? rule.suggestedQuestions.filter((q) => typeof q === "string") : [];
+    const actionKinds = sanitizePageRuleActionKinds(rule.actionKinds, questions.length || 8);
+    if (actionKinds) next.actionKinds = actionKinds;
+    else delete next.actionKinds;
     rules.push(next);
   }
   return { ok: true, rules };

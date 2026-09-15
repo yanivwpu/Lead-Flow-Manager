@@ -27,9 +27,17 @@ const BUTTON_AND_INTENT_LABELS = new Set(
     "calculate my savings",
     "compare free & pro",
     "compare free and pro",
+    "características y precios",
+    "caracteristicas y precios",
+    "funciones y precios",
+    "encontrar mi solución",
+    "encontrar mi solucion",
     "calcular mi ahorro",
     "comparar free y pro",
     "reservar una demo",
+    "פיצ'רים ומחירים",
+    "פיצרים ומחירים",
+    "למצוא את הפתרון שלי",
     "חישוב החיסכון שלי",
     "השוואת free ו-pro",
     "קביעת הדגמה",
@@ -77,7 +85,11 @@ export function isValidIdentityName(raw: unknown): string | null {
   if (text.length < 2 || text.length > 80) return null;
   if (GREETING_NAMES.has(text.toLowerCase())) return null;
   if (BUTTON_AND_INTENT_LABELS.has(text.toLowerCase())) return null;
-  if (/\b(savings|ahorro|החיסכון|pricing|demo|compare|comparar|השוואת|calculate|calcular)\b/i.test(text)) {
+  if (
+    /\b(savings|ahorro|החיסכון|pricing|precios|מחירים|demo|compare|comparar|השוואת|calculate|calcular|solution|soluci[oó]n|פתרון|features|caracter[ií]sticas|funciones|פיצ['׳]?רים)\b/i.test(
+      text,
+    )
+  ) {
     return null;
   }
   if (isAnonymousWebchatVisitorName(text)) return null;

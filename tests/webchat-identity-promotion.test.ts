@@ -31,6 +31,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(isValidIdentityName("Anonymous"), null);
   assert.equal(isValidIdentityName("Guest"), null);
   assert.equal(isValidIdentityName("Features & pricing"), null);
+  assert.equal(isValidIdentityName("Find my solution"), null);
   assert.equal(isValidIdentityName("Book a demo"), null);
   assert.equal(isValidIdentityName("Calculate my savings"), null);
   assert.equal(isValidIdentityName("Calcular mi ahorro"), null);

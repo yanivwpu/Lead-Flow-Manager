@@ -22,6 +22,13 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(classifyChatbotVisitorIntent("Features & pricing"), "features_pricing");
   assert.equal(classifyChatbotVisitorIntent("Find my solution"), "find_solution");
   assert.equal(classifyChatbotVisitorIntent("Book a demo"), "book_demo");
+  assert.equal(visitorIntentAllowsBookingCta("compare_plans"), false);
+  const heFeatures = resolveChatbotCompletionRouting({
+    inbound: "פיצ'רים ומחירים",
+    pageActionKind: "features_pricing",
+  });
+  assert.ok(heFeatures.subIntents.includes("pricing_question"));
+  assert.ok(heFeatures.subIntents.includes("benefits_question"));
   assert.equal(isCanonicalBookingTurn({ inbound: "I'd like to schedule a demo" }), true);
   assert.equal(isCanonicalBookingTurn({ inbound: "Features & pricing" }), false);
   assert.equal(classifyChatbotVisitorIntent("קביעת הדגמה"), "book_demo");
@@ -61,7 +68,8 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 {
   const pricing = chatbotCompletionPromptRules({ visitorIntent: "Features & pricing" });
   assert.match(pricing, /2–4 short sentences|2-4 short sentences/);
-  assert.match(pricing, /\$49\/month/);
+  assert.match(pricing, /selected evidence/);
+  assert.doesNotMatch(pricing, /\$49\/month/);
   assert.match(pricing, /Do not add a booking CTA/);
   assert.doesNotMatch(pricing, /Share this exact workspace-selected Calendly/);
   const demo = chatbotCompletionPromptRules({
@@ -71,7 +79,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.match(demo, /https:\/\/calendly.com\/whachatcrm\/product-demo/);
   assert.doesNotMatch(demo, /whachatcrm\.com\/contact/);
   const find = chatbotCompletionPromptRules({ visitorIntent: "Find my solution" });
-  assert.match(find, /ONE useful qualification question/);
+  assert.match(find, /business type and primary goal or problem/);
 }
 
 {

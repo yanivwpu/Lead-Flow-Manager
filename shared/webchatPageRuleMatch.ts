@@ -31,6 +31,7 @@ export type WidgetPageRuleMatchInput = {
   ctaLabel?: unknown;
   ctaUrl?: unknown;
   localized?: unknown;
+  actionKinds?: unknown;
 };
 
 export type MatchedWidgetPageRule = {
@@ -46,6 +47,8 @@ export type MatchedWidgetPageRule = {
   ctaLabel?: string;
   ctaUrl?: string;
   localized?: unknown;
+  /** Optional per-index semantic kinds. Absent rules still classify from localized labels. */
+  actionKinds?: string[];
 };
 
 const MAX_HREF = 4000;
@@ -283,6 +286,15 @@ export function hydrateMatchedWidgetPageRule(
     ctaLabel: ctaLabel || undefined,
     ctaUrl: ctaUrl || undefined,
     localized: raw.localized && typeof raw.localized === "object" ? raw.localized : undefined,
+    ...(Array.isArray(raw.actionKinds)
+      ? {
+          actionKinds: raw.actionKinds
+            .filter((k): k is string => typeof k === "string")
+            .map((k) => k.trim())
+            .filter(Boolean)
+            .slice(0, 8),
+        }
+      : {}),
   };
 }
 

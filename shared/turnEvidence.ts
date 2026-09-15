@@ -465,6 +465,7 @@ export function evidenceDiagnostics(bundle: TurnEvidenceBundle): {
   supportedAmountSourceTypes: string;
   publishedFactCount: number;
   publishedFactTypeCounts: string;
+  selectedEvidenceCategories: string;
   conflictReason: string | null;
 } {
   const typeCounts = new Map<string, number>();
@@ -483,6 +484,16 @@ export function evidenceDiagnostics(bundle: TurnEvidenceBundle): {
     supportedAmountSourceTypes: bundle.supportedAmountSourceTypes.join(","),
     publishedFactCount: bundle.publishedFactCount,
     publishedFactTypeCounts,
+    selectedEvidenceCategories: [
+      publishedFactTypeCounts && `published:${publishedFactTypeCounts}`,
+      bundle.liveOfferRecordCount > 0 ? `live_offer:${bundle.liveOfferRecordCount}` : "",
+      bundle.tenantKnowledgeChunkCount > 0 ? `tenant_chunk:${bundle.tenantKnowledgeChunkCount}` : "",
+      bundle.supportedAmountSourceTypes.length
+        ? `amount_sources:${bundle.supportedAmountSourceTypes.join("+")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("|"),
     conflictReason: bundle.conflictReason,
   };
 }

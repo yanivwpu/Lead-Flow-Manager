@@ -13,6 +13,7 @@ import { usableVisitorPersonalizationName } from "./visitorNamePersonalization";
 
 export type ChatbotVisitorIntentKind =
   | "features_pricing"
+  | "compare_plans"
   | "find_solution"
   | "calculate_savings"
   | "book_demo"
@@ -86,7 +87,12 @@ export function visitorIntentAllowsBookingCta(
   routing?: Pick<AiRoutingResult, "decision" | "needsRoutingClarification"> | null,
 ): boolean {
   if (intent === "book_demo") return true;
-  if (intent === "features_pricing" || intent === "find_solution" || intent === "calculate_savings") {
+  if (
+    intent === "features_pricing" ||
+    intent === "compare_plans" ||
+    intent === "find_solution" ||
+    intent === "calculate_savings"
+  ) {
     return false;
   }
   return routing?.decision === "BOOK_APPOINTMENT" && routing.needsRoutingClarification !== true;
@@ -95,10 +101,19 @@ export function visitorIntentAllowsBookingCta(
 function visitorKindFromPageAction(kind?: string | null): ChatbotVisitorIntentKind | null {
   if (kind === "book_demo") return "book_demo";
   if (kind === "calculate_savings") return "calculate_savings";
-  if (kind === "compare_plans" || kind === "features_pricing") return "features_pricing";
+  if (kind === "compare_plans") return "compare_plans";
+  if (kind === "features_pricing") return "features_pricing";
   if (kind === "find_solution") return "find_solution";
   if (kind === "other") return "other";
   return null;
+}
+
+function withRoutingSubIntents(routing: AiRoutingResult, extra: string[], drop: string[] = []): AiRoutingResult {
+  const next = routing.subIntents.filter((intent) => !drop.includes(intent));
+  for (const intent of extra) {
+    if (!next.includes(intent)) next.push(intent);
+  }
+  return next === routing.subIntents ? routing : { ...routing, subIntents: next };
 }
 
 /**
@@ -234,25 +249,27 @@ export function resolveChatbotCompletionRouting(input: {
   if (acknowledgment) {
     return routing;
   }
-  if (kind === "book_demo" && !routing.subIntents.includes("booking_question")) {
-    return { ...routing, subIntents: [...routing.subIntents, "booking_question"] };
+  if (kind === "book_demo") {
+    return withRoutingSubIntents(routing, ["booking_question"]);
+  }
+  if (kind === "features_pricing" || kind === "compare_plans") {
+    return withRoutingSubIntents(routing, ["pricing_question", "benefits_question"], ["booking_question"]);
+  }
+  if (kind === "find_solution") {
+    return withRoutingSubIntents(routing, [], ["booking_question"]);
+  }
+  if (
+    !currentBooking &&
+    (kind === "calculate_savings" || input.journeyKind === "pricing_savings")
+  ) {
+    return withRoutingSubIntents(routing, ["pricing_question"], ["booking_question"]);
   }
   if (
     !currentBooking &&
     (kind === "features_pricing" || kind === "find_solution" || kind === "calculate_savings") &&
     routing.subIntents.includes("booking_question")
   ) {
-    routing = {
-      ...routing,
-      subIntents: routing.subIntents.filter((intent) => intent !== "booking_question"),
-    };
-  }
-  if (
-    !currentBooking &&
-    (kind === "calculate_savings" || input.journeyKind === "pricing_savings") &&
-    !routing.subIntents.includes("pricing_question")
-  ) {
-    return { ...routing, subIntents: [...routing.subIntents, "pricing_question"] };
+    return withRoutingSubIntents(routing, [], ["booking_question"]);
   }
   return routing;
 }
@@ -285,7 +302,7 @@ export function chatbotCompletionPromptRules(input: {
     "CHATBOT COMPLETION — answer the visitor's current request directly.",
     "- Use only relevant published facts. Do not dump unrelated benefits, source labels, or extraction text.",
     "- Keep most answers to 2–4 short sentences unless the visitor asked for detail.",
-    "- Format prices naturally for the reply language (e.g. $49/month, $490/year). Never write 'USD 49 per month'.",
+    "- Format prices naturally for the reply language using the exact published amounts from selected evidence. Never invent figures or write 'USD 49 per month'.",
     "- Preserve accurate product names, plan names, prices, requirements, URLs, and plan distinctions.",
     "- Never invent missing features, pricing, integrations, or promises.",
     "- Never invent availability, appointment confirmation, or meeting details before Calendly confirms a booking.",
@@ -300,6 +317,11 @@ export function chatbotCompletionPromptRules(input: {
     return lines.join("\n");
   }
   if (kind === "features_pricing") {
+    lines.push(
+      "- The visitor asked for a features and pricing overview. Use only selected evidence. Cover Free versus Pro when those plans are in evidence: canonical monthly/yearly prices, whether AI Brain is included, Unified Inbox, Website Chat/AI chatbot, workflows and follow-ups, Prospect AI, users and WhatsApp-account capacity, and 0% WhachatCRM markup without implying Meta fees disappear.",
+      "- Keep the reply mobile-readable (short paragraphs or a compact list). End with one natural follow-up question. Do not ask what “features” means. Do not add a booking CTA or booking link.",
+    );
+  } else if (kind === "compare_plans") {
     lines.push("- The visitor asked to compare published plans or pricing. Use only current workspace pricing knowledge. Do not invent plan facts. Do not add a booking CTA or booking link.");
   } else if (kind === "calculate_savings") {
     if (input.journeyContinuation) {
@@ -313,7 +335,7 @@ export function chatbotCompletionPromptRules(input: {
       lines.push("- The visitor wants a savings estimate. On this first turn, ask for the minimum missing inputs: their current platform and approximate monthly cost. Do not invent a calculation or savings amount. Do not add a booking CTA.");
     }
   } else if (kind === "find_solution") {
-    lines.push("- The visitor wants help choosing. Ask ONE useful qualification question. Do not pitch everything at once.");
+    lines.push("- The visitor wants help choosing. Ask about their business type and primary goal or problem. Do not pitch everything at once. Do not treat the action label as their name.");
   } else if (kind === "book_demo") {
     if (input.bookingUrl) {
       lines.push(`- The visitor asked to book a demo. Share this exact workspace-selected Calendly URL on its own line:\n${input.bookingUrl}`);

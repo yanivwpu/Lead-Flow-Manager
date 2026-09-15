@@ -16,7 +16,37 @@ import {
 
 export const PAGE_RULE_ACTION_SOURCE = "page_rule_suggested_action" as const;
 
-export type PageRuleActionKind = "compare_plans" | "calculate_savings" | "book_demo" | "other";
+export const PAGE_RULE_ACTION_KINDS = [
+  "features_pricing",
+  "find_solution",
+  "compare_plans",
+  "calculate_savings",
+  "book_demo",
+  "other",
+] as const;
+
+export type PageRuleActionKind = (typeof PAGE_RULE_ACTION_KINDS)[number];
+
+export function isPageRuleActionKind(value: unknown): value is PageRuleActionKind {
+  return (
+    value === "features_pricing" ||
+    value === "find_solution" ||
+    value === "compare_plans" ||
+    value === "calculate_savings" ||
+    value === "book_demo" ||
+    value === "other"
+  );
+}
+
+export function sanitizePageRuleActionKinds(raw: unknown, count: number): PageRuleActionKind[] | undefined {
+  if (!Array.isArray(raw) || !Number.isInteger(count) || count <= 0) return undefined;
+  const out: PageRuleActionKind[] = [];
+  for (let i = 0; i < Math.min(count, 8); i++) {
+    const kind = raw[i];
+    out.push(isPageRuleActionKind(kind) && kind !== "other" ? kind : "other");
+  }
+  return out.some((k) => k !== "other") ? out : undefined;
+}
 
 export type TrustedPageRuleAction = ValidatedPageRuleAction & {
   source: typeof PAGE_RULE_ACTION_SOURCE;
@@ -58,11 +88,18 @@ const MAX_URL = 2000;
 const MAX_ORIGIN = 200;
 const MAX_INBOUND_ID = 80;
 
+const COMPARE_PLANS_RE =
+  /^(?:compare\s+(?:free(?:\s*(?:&|and)\s*pro)?|plans?|pricing)|comparar\s+(?:planes?|free)|השוואת)/i;
+
 export function classifyPageRuleActionKind(text: unknown): PageRuleActionKind {
-  const kind = classifyChatbotVisitorIntent(text);
+  const raw = String(text || "").trim();
+  const kind = classifyChatbotVisitorIntent(raw);
   if (kind === "book_demo") return "book_demo";
   if (kind === "calculate_savings") return "calculate_savings";
-  if (kind === "features_pricing") return "compare_plans";
+  if (kind === "find_solution") return "find_solution";
+  if (kind === "features_pricing") {
+    return COMPARE_PLANS_RE.test(raw) ? "compare_plans" : "features_pricing";
+  }
   return "other";
 }
 
@@ -70,6 +107,8 @@ export function classifyPageRuleActionKindFromRule(
   matched: MatchedWidgetPageRule,
   actionIndex: number,
 ): PageRuleActionKind {
+  const configured = matched.actionKinds?.[actionIndex];
+  if (isPageRuleActionKind(configured) && configured !== "other") return configured;
   const labels = [
     matched.suggestedQuestions[actionIndex],
     ...pageRuleActionLabelsAtIndex(matched, actionIndex),
@@ -190,10 +229,7 @@ function readPageActionStamp(pageContext: unknown): WebchatPageActionStamp | nul
     return null;
   }
   const kindRaw = typeof o.kind === "string" ? o.kind : "";
-  const kind: PageRuleActionKind =
-    kindRaw === "compare_plans" || kindRaw === "calculate_savings" || kindRaw === "book_demo"
-      ? kindRaw
-      : "other";
+  const kind: PageRuleActionKind = isPageRuleActionKind(kindRaw) ? kindRaw : "other";
   return {
     source: PAGE_RULE_ACTION_SOURCE,
     ruleKey,
@@ -254,10 +290,12 @@ export function pageActionGateDiagnostics(action: CurrentTurnPageAction | null |
 
 export function pageActionKindToVisitorIntent(
   kind: PageRuleActionKind | null | undefined,
-): "features_pricing" | "calculate_savings" | "book_demo" | "other" | undefined {
+): "features_pricing" | "compare_plans" | "find_solution" | "calculate_savings" | "book_demo" | "other" | undefined {
   if (kind === "book_demo") return "book_demo";
   if (kind === "calculate_savings") return "calculate_savings";
-  if (kind === "compare_plans") return "features_pricing";
+  if (kind === "compare_plans") return "compare_plans";
+  if (kind === "features_pricing") return "features_pricing";
+  if (kind === "find_solution") return "find_solution";
   if (kind === "other") return "other";
   return undefined;
 }
