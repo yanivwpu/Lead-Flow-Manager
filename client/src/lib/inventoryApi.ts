@@ -87,10 +87,15 @@ export async function fetchInventorySourcesBundle(): Promise<{
   publicationStats: ListingPublicationStats;
 }> {
   const res = await apiRequest("GET", "/api/inventory/sources");
-  const data = (await res.json()) as {
-    sources?: PublicInventorySource[];
-    publicationStats?: ListingPublicationStats;
-  };
+  const data = (await res.json()) as
+    | PublicInventorySource[]
+    | {
+        sources?: PublicInventorySource[];
+        publicationStats?: ListingPublicationStats;
+      };
+  if (Array.isArray(data)) {
+    return { sources: data, publicationStats: EMPTY_LISTING_PUBLICATION_STATS };
+  }
   return {
     sources: data.sources ?? [],
     publicationStats: data.publicationStats ?? EMPTY_LISTING_PUBLICATION_STATS,

@@ -2,10 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Home, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { fetchInventorySources, fetchInventoryStatus } from "@/lib/inventoryApi";
+import { useAuth } from "@/lib/auth-context";
+import { fetchInventorySourcesBundle, fetchInventoryStatus } from "@/lib/inventoryApi";
+import { inventorySourcesQueryKey, normalizeInventorySourcesQueryData } from "@/lib/inventorySourceFormState";
 import { isWorkspaceInventoryConnected } from "@shared/inventory/inventoryWorkspaceConnected";
 
 export function InventorySidebarSummary() {
+  const { user } = useAuth();
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
@@ -13,8 +16,9 @@ export function InventorySidebarSummary() {
   });
 
   const { data: sources = [], isLoading: sourcesLoading } = useQuery({
-    queryKey: ["/api/inventory/sources"],
-    queryFn: fetchInventorySources,
+    queryKey: inventorySourcesQueryKey(user?.id),
+    queryFn: fetchInventorySourcesBundle,
+    select: (bundle) => normalizeInventorySourcesQueryData(bundle).sources,
     enabled: !!status?.canUse,
     staleTime: 5_000,
   });

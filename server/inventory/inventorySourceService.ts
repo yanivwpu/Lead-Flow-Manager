@@ -19,7 +19,7 @@ import {
   patchInventorySource,
   type SourceListingStats,
 } from "./inventoryDb";
-import { readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
+import { DEFAULT_MAX_LISTINGS, readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
 import {
@@ -171,7 +171,8 @@ function validateProviderPayload(
   return { ok: true };
 }
 
-function mergeCredentialsPatch(
+/** Merge credential patches. Blank secrets keep the existing encrypted values. */
+export function mergeCredentialsPatch(
   provider: InventoryProvider,
   existing: Record<string, unknown>,
   patch: Record<string, unknown> | undefined,
@@ -233,13 +234,142 @@ export async function listSourcesForUser(userId: string) {
   );
 }
 
+export function isInventorySourcesUserProviderUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as {
+    code?: string;
+    constraint?: string;
+    message?: string;
+    cause?: { code?: string; constraint?: string; message?: string };
+  };
+  const nested = e.cause && typeof e.cause === "object" ? e.cause : null;
+  const code = e.code ?? nested?.code;
+  const constraint = `${e.constraint ?? ""} ${nested?.constraint ?? ""}`;
+  const message = `${e.message ?? ""} ${nested?.message ?? ""} ${String(error)}`;
+  if (constraint.includes("inventory_sources_user_provider_unique")) return true;
+  if (code === "23505" && message.includes("inventory_sources_user_provider_unique")) return true;
+  if (
+    code === "23505" &&
+    /inventory_sources/i.test(message) &&
+    /unique|duplicate/i.test(message)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function resolveCreateInventorySourcePlan(
+  existingOwned: { id: string } | undefined,
+): { mode: "update"; sourceId: string } | { mode: "insert" } {
+  return existingOwned?.id
+    ? { mode: "update", sourceId: existingOwned.id }
+    : { mode: "insert" };
+}
+
+const DEFAULT_DISPLAY_NAMES: Record<string, string[]> = {
+  mls_grid: ["My MLS inventory", "Primary inventory source"],
+  trestle: ["My Trestle inventory", "Trestle inventory source"],
+  bridge_interactive: ["My Bridge inventory", "Bridge inventory source"],
+};
+
+export function isDefaultInventoryDisplayName(
+  provider: InventoryProvider,
+  name: string | undefined,
+): boolean {
+  const trimmed = name?.trim() ?? "";
+  if (!trimmed) return true;
+  return (DEFAULT_DISPLAY_NAMES[provider] ?? []).includes(trimmed) || trimmed === defaultDisplayName(provider);
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function nonEmptyStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const next = value.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  return next.length > 0 ? next : undefined;
+}
+
+/** Config keys a stale/default create is allowed to write onto an existing owned source. */
+export function meaningfulInventoryConfigPatch(
+  config: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!config || Object.keys(config).length === 0) return undefined;
+  const next: Record<string, unknown> = {};
+  const datasetId = nonEmptyString(config.datasetId);
+  if (datasetId) next.datasetId = datasetId;
+  const originatingSystemName = nonEmptyString(config.originatingSystemName);
+  if (originatingSystemName) next.originatingSystemName = originatingSystemName;
+  const syncCities = nonEmptyStringArray(config.syncCities);
+  if (syncCities) next.syncCities = syncCities;
+  const syncZipCodes = nonEmptyStringArray(config.syncZipCodes);
+  if (syncZipCodes) next.syncZipCodes = syncZipCodes;
+  if (
+    typeof config.maxListings === "number" &&
+    Number.isFinite(config.maxListings) &&
+    config.maxListings !== DEFAULT_MAX_LISTINGS
+  ) {
+    next.maxListings = config.maxListings;
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+export function credentialsAreBlankOrAbsent(credentials: Record<string, unknown> | undefined): boolean {
+  if (!credentials) return true;
+  const values = Object.values(credentials);
+  if (values.length === 0) return true;
+  return values.every((v) => v == null || (typeof v === "string" && v.trim() === ""));
+}
+
+/**
+ * Conservative patch when POST hits an already-owned provider.
+ * Empty/default form fields must not clobber display name, market scope,
+ * dataset ID, credentials, connection status, or sync metadata.
+ */
+export function buildDuplicateCreateRecoveryPatch(
+  provider: InventoryProvider,
+  body: z.infer<typeof createInventorySourceBodySchema>,
+): z.infer<typeof patchInventorySourceBodySchema> {
+  const patch: z.infer<typeof patchInventorySourceBodySchema> = {};
+  if (!isDefaultInventoryDisplayName(provider, body.displayName)) {
+    patch.displayName = body.displayName!.trim();
+  }
+  const config = meaningfulInventoryConfigPatch(body.config as Record<string, unknown> | undefined);
+  if (config) patch.config = config;
+  if (!credentialsAreBlankOrAbsent(body.credentials as Record<string, unknown> | undefined)) {
+    patch.credentials = body.credentials;
+  }
+  if (typeof body.integrationId === "string" && body.integrationId.trim().length > 0) {
+    patch.integrationId = body.integrationId;
+  }
+  return patch;
+}
+
+export function duplicateCreateRecoveryPatchIsEmpty(
+  patch: z.infer<typeof patchInventorySourceBodySchema>,
+): boolean {
+  return (
+    patch.displayName === undefined &&
+    patch.config === undefined &&
+    patch.credentials === undefined &&
+    patch.integrationId === undefined &&
+    patch.connectionStatus === undefined &&
+    patch.isActive === undefined
+  );
+}
+
 export async function createSourceForUser(
   userId: string,
   body: z.infer<typeof createInventorySourceBodySchema>,
 ) {
   const existing = await getInventorySourceByProvider(userId, body.provider);
-  if (existing) {
-    throw new InventorySourceError("provider_exists", "An inventory source already exists for this provider");
+  const plan = resolveCreateInventorySourcePlan(existing);
+  if (plan.mode === "update") {
+    const recovered = await recoverOwnedSourceFromDuplicateCreate(userId, plan.sourceId, body);
+    if (recovered) return recovered;
   }
 
   const credentials = body.credentials ?? {};
@@ -253,24 +383,61 @@ export async function createSourceForUser(
     throw new InventorySourceError("invalid_payload", validation.message);
   }
 
-  const row = await insertInventorySource({
-    userId,
-    provider: body.provider,
-    displayName: body.displayName?.trim() || defaultDisplayName(body.provider),
-    connectionStatus: "configuring",
-    config: body.config,
-    credentialsEnc: encryptSourceCredentials(credentials),
-    integrationId: body.integrationId ?? null,
-    isActive: true,
-  });
+  try {
+    const row = await insertInventorySource({
+      userId,
+      provider: body.provider,
+      displayName: body.displayName?.trim() || defaultDisplayName(body.provider),
+      connectionStatus: "configuring",
+      config: body.config,
+      credentialsEnc: encryptSourceCredentials(credentials),
+      integrationId: body.integrationId ?? null,
+      isActive: true,
+    });
 
-  return toPublicInventorySource(row);
+    return toPublicInventorySource(row);
+  } catch (error) {
+    if (!isInventorySourcesUserProviderUniqueViolation(error)) {
+      throw error;
+    }
+    const raced = await getInventorySourceByProvider(userId, body.provider);
+    if (!raced) {
+      throw new InventorySourceError(
+        "provider_exists",
+        "An inventory source already exists for this provider",
+      );
+    }
+    const recovered = await recoverOwnedSourceFromDuplicateCreate(userId, raced.id, body);
+    if (!recovered) {
+      throw new InventorySourceError(
+        "provider_exists",
+        "An inventory source already exists for this provider",
+      );
+    }
+    return recovered;
+  }
+}
+
+async function recoverOwnedSourceFromDuplicateCreate(
+  userId: string,
+  sourceId: string,
+  body: z.infer<typeof createInventorySourceBodySchema>,
+) {
+  const existing = await getInventorySource(userId, sourceId);
+  if (!existing) return null;
+  const patch = buildDuplicateCreateRecoveryPatch(existing.provider as InventoryProvider, body);
+  if (duplicateCreateRecoveryPatchIsEmpty(patch)) {
+    const counts = await countListingStatsBySourceForUser(userId);
+    return toPublicInventorySource(existing, counts[existing.id] ?? { total: 0, matchable: 0 });
+  }
+  return updateSourceForUser(userId, sourceId, patch, { preserveRuntimeState: true });
 }
 
 export async function updateSourceForUser(
   userId: string,
   sourceId: string,
   body: z.infer<typeof patchInventorySourceBodySchema>,
+  options?: { preserveRuntimeState?: boolean },
 ) {
   const existing = await getInventorySource(userId, sourceId);
   if (!existing) return null;
@@ -289,7 +456,7 @@ export async function updateSourceForUser(
     incomingConfig?.datasetId != null &&
     String(incomingConfig.datasetId).trim() !== String(existingConfig.datasetId ?? "").trim();
   const feedIdentityChanged = origChanged || datasetChanged;
-  if (feedIdentityChanged) {
+  if (feedIdentityChanged && !options?.preserveRuntimeState) {
     nextConfig = {
       ...nextConfig,
       initialImportComplete: false,
@@ -334,11 +501,11 @@ export async function updateSourceForUser(
   };
   if (body.connectionStatus !== undefined) {
     patch.connectionStatus = body.connectionStatus;
-  } else if (credentialsPatch !== undefined || body.config !== undefined) {
+  } else if (!options?.preserveRuntimeState && (credentialsPatch !== undefined || body.config !== undefined)) {
     patch.connectionStatus = "configuring";
   }
 
-  if (feedIdentityChanged) {
+  if (feedIdentityChanged && !options?.preserveRuntimeState) {
     patch.lastSyncStatus = null;
     patch.lastSyncAt = null;
     patch.lastSyncError = null;

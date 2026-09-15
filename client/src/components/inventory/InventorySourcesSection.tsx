@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth-context";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { toast } from "@/hooks/use-toast";
@@ -36,12 +37,33 @@ import {
   fetchInventoryStatus,
   friendlyInventoryErrorMessage,
   formatInventorySyncStatRows,
-  formatInventoryConnectionStatus,
-  readSyncScopeFromConfig,
   type InventorySourceForm,
   type ListingPublicationStats,
   type PublicInventorySource,
 } from "@/lib/inventoryApi";
+import {
+  applyInventorySourcesCacheUpdate,
+  clearInventorySourceSecrets,
+  EMPTY_INVENTORY_SOURCE_FORM,
+  inventoryFormHydrationIdentity,
+  inventorySourcesQueryKey,
+  inventorySourceSaveRequest,
+  inventorySourceSyncUrl,
+  loadInventorySourceForm,
+  normalizeInventorySourcesQueryData,
+  shouldResetInventoryForm,
+} from "@/lib/inventorySourceFormState";
+import {
+  applySecretReplacementToForm,
+  buildInventorySourceSummaryCard,
+  canConnectInventoryProvider,
+  inventoryConnectionStateBadgeClass,
+  inventoryCredentialConfiguredLabel,
+  inventoryReplaceSecretLabel,
+  inventorySecretFieldMode,
+  listInventoryConnectorAvailability,
+  resolveInventoryFormPanel,
+} from "@/lib/inventorySourceConnectionUi";
 import {
   focusInventoryFormField,
   inventoryFieldHasError,
@@ -52,8 +74,6 @@ import {
 import {
   INVENTORY_PROVIDER_UI_OPTIONS,
   inventoryProviderUserLabel,
-  sanitizeInventoryDisplayNameForUi,
-  sanitizeOriginatingSystemForUi,
   formatInventorySourceStatusRows,
 } from "@shared/inventory/inventoryProviderDisplay";
 import { deriveInventorySourcePhase } from "@shared/inventory/inventorySourcePhase";
@@ -68,21 +88,7 @@ type Props = {
   className?: string;
 };
 
-const EMPTY_FORM: InventorySourceForm = {
-  displayName: "",
-  originatingSystemName: "",
-  accessToken: "",
-  clientId: "",
-  clientSecret: "",
-  datasetId: "",
-  serverToken: "",
-  syncCities: "",
-  syncZipCodes: "",
-  maxListings: DEFAULT_MAX_LISTINGS,
-};
-
 const PRODUCTION_UI = import.meta.env.PROD;
-const INVENTORY_PROVIDER_STORAGE_KEY = "inventory-selected-provider";
 
 function defaultDisplayNamePlaceholder(provider: InventoryProvider): string {
   if (provider === "bridge_interactive") {
@@ -109,35 +115,6 @@ function inventoryInputClass(hasError: boolean, extra?: string): string {
   return cn(hasError && "border-red-500 focus-visible:ring-red-500", extra);
 }
 
-function loadFormFromSource(source: PublicInventorySource | undefined): InventorySourceForm {
-  if (!source) return { ...EMPTY_FORM };
-  const cfg = source.config || {};
-  const rawDisplayName = source.displayName || "";
-  const rawOrigin =
-    typeof cfg.originatingSystemName === "string" ? cfg.originatingSystemName : "";
-  return {
-    displayName: sanitizeInventoryDisplayNameForUi(rawDisplayName, PRODUCTION_UI),
-    originatingSystemName: sanitizeOriginatingSystemForUi(rawOrigin, PRODUCTION_UI),
-    accessToken: "",
-    clientId: "",
-    clientSecret: "",
-    datasetId: typeof cfg.datasetId === "string" ? cfg.datasetId : "",
-    serverToken: "",
-    ...readSyncScopeFromConfig(cfg),
-  };
-}
-
-function inventoryFormsEqual(a: InventorySourceForm, b: InventorySourceForm): boolean {
-  return (
-    a.displayName === b.displayName &&
-    a.originatingSystemName === b.originatingSystemName &&
-    a.datasetId === b.datasetId &&
-    a.syncCities === b.syncCities &&
-    a.syncZipCodes === b.syncZipCodes &&
-    a.maxListings === b.maxListings
-  );
-}
-
 function normalizeProviderSelectValue(provider: string): InventoryProvider {
   const match = INVENTORY_PROVIDER_UI_OPTIONS.find((option) => option.id === provider);
   return match?.id ?? "mls_grid";
@@ -152,10 +129,10 @@ function normalizeMaxListingsSelectValue(value: number | undefined): string {
 
 export function InventorySourcesSection({ variant = "section", className }: Props) {
   const hideGrowthEngine = useHideGrowthEngineForShopify();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showSecrets, setShowSecrets] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [selectedProvider, setSelectedProvider] = useState<InventoryProvider>("mls_grid");
+  const [form, setForm] = useState(EMPTY_INVENTORY_SOURCE_FORM);
   const [maxListingsDraft, setMaxListingsDraft] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<InventoryFormFieldErrors>({});
   const [formBannerError, setFormBannerError] = useState<string | null>(null);
@@ -163,7 +140,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [bulkPublishConfirmOpen, setBulkPublishConfirmOpen] = useState(false);
   const [bulkUnpublishConfirmOpen, setBulkUnpublishConfirmOpen] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const providerInitialized = useRef(false);
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [connectingProvider, setConnectingProvider] = useState<InventoryProvider | null>(null);
+  const [replacingSecret, setReplacingSecret] = useState(false);
+  const [disconnectSourceId, setDisconnectSourceId] = useState<string | null>(null);
+  const hydratedIdentityRef = useRef<string | null>(null);
+  const lastWorkspaceIdRef = useRef<string | undefined>(user?.id);
+  const sourcesQueryKey = inventorySourcesQueryKey(user?.id);
 
   const clearFieldError = (field: InventoryFormField) => {
     setFieldErrors((prev) => {
@@ -190,72 +173,81 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const {
     data: sourcesBundle,
     isLoading: sourcesLoading,
+    isError: sourcesError,
     refetch: refetchSources,
   } = useQuery({
-    queryKey: ["/api/inventory/sources"],
+    queryKey: sourcesQueryKey,
     queryFn: fetchInventorySourcesBundle,
     enabled: sourcesEnabled,
     staleTime: 5_000,
     refetchInterval: (query) => {
-      const list = query.state.data?.sources;
-      const hasRunning = list?.some((s) => s.lastSyncStatus === "running");
+      const list = normalizeInventorySourcesQueryData(query.state.data).sources;
+      const hasRunning = list.some((s) => s.lastSyncStatus === "running");
       return hasRunning ? 3_000 : false;
     },
   });
 
-  const sources = sourcesBundle?.sources ?? [];
-  const publicationStats: ListingPublicationStats | undefined = sourcesBundle?.publicationStats;
-
-  useEffect(() => {
-    if (sourcesLoading || providerInitialized.current) return;
-    if (sources.length === 0) {
-      const saved = sessionStorage.getItem(INVENTORY_PROVIDER_STORAGE_KEY);
-      if (saved) setSelectedProvider(saved as InventoryProvider);
-      providerInitialized.current = true;
-      return;
-    }
-
-    const saved = sessionStorage.getItem(INVENTORY_PROVIDER_STORAGE_KEY);
-    if (saved && sources.some((s) => s.provider === saved)) {
-      setSelectedProvider(saved as InventoryProvider);
-      providerInitialized.current = true;
-      return;
-    }
-
-    const running = sources.find((s) => s.lastSyncStatus === "running");
-    const connected = sources.find((s) => s.connectionStatus === "connected");
-    const preferred = running ?? connected ?? sources[0];
-    if (preferred) {
-      setSelectedProvider(normalizeProviderSelectValue(preferred.provider));
-    }
-    providerInitialized.current = true;
-  }, [sources, sourcesLoading]);
-
-  useEffect(() => {
-    sessionStorage.setItem(INVENTORY_PROVIDER_STORAGE_KEY, selectedProvider);
-  }, [selectedProvider]);
-
-  const activeSource = useMemo(
-    () => sources.find((s) => s.provider === selectedProvider),
-    [sources, selectedProvider],
+  const { sources, publicationStats: loadedPublicationStats } = useMemo(
+    () => normalizeInventorySourcesQueryData(sourcesBundle),
+    [sourcesBundle],
   );
-
-  const providerOption = INVENTORY_PROVIDER_UI_OPTIONS.find((o) => o.id === selectedProvider);
-  const providerAvailable = providerOption?.available ?? false;
+  const publicationStats: ListingPublicationStats | undefined = sourcesBundle
+    ? loadedPublicationStats
+    : undefined;
 
   useEffect(() => {
-    const source = sources.find((s) => s.provider === selectedProvider);
-    if (source) {
-      const nextForm = loadFormFromSource(source);
-      setForm((prev) => (inventoryFormsEqual(prev, nextForm) ? prev : nextForm));
-      setMaxListingsDraft(null);
-    } else {
-      setForm((prev) => (inventoryFormsEqual(prev, EMPTY_FORM) ? prev : { ...EMPTY_FORM }));
-      setMaxListingsDraft(null);
-    }
+    if (lastWorkspaceIdRef.current === user?.id) return;
+    lastWorkspaceIdRef.current = user?.id;
+    hydratedIdentityRef.current = null;
+    setEditingSourceId(null);
+    setConnectingProvider(null);
+    setReplacingSecret(false);
+    setDisconnectSourceId(null);
+    setForm({ ...EMPTY_INVENTORY_SOURCE_FORM });
+    setMaxListingsDraft(null);
     setFieldErrors({});
     setFormBannerError(null);
-  }, [selectedProvider, activeSource?.id, activeSource?.updatedAt]);
+  }, [user?.id]);
+
+  const formTarget = useMemo(
+    () => resolveInventoryFormPanel({ editingSourceId, connectingProvider, sources }),
+    [editingSourceId, connectingProvider, sources],
+  );
+  const activeSource = formTarget.source;
+  const selectedProvider = formTarget.provider ?? "mls_grid";
+  const providerOption = INVENTORY_PROVIDER_UI_OPTIONS.find((o) => o.id === selectedProvider);
+  const providerAvailable = providerOption?.available ?? false;
+  const formOpen = formTarget.panel.kind !== "idle";
+  const connectedSummaries = useMemo(() => sources.map(buildInventorySourceSummaryCard), [sources]);
+  const connectorAvailability = useMemo(() => listInventoryConnectorAvailability(sources), [sources]);
+  const disconnectSource = useMemo(
+    () => sources.find((s) => s.id === disconnectSourceId) ?? activeSource,
+    [sources, disconnectSourceId, activeSource],
+  );
+
+  useEffect(() => {
+    if (sourcesLoading || sourcesError || !formOpen) return;
+    const nextIdentity = inventoryFormHydrationIdentity({
+      workspaceUserId: user?.id,
+      selectedProvider,
+      sourceId: activeSource?.id ?? null,
+    });
+    if (!shouldResetInventoryForm(hydratedIdentityRef.current, nextIdentity)) return;
+    hydratedIdentityRef.current = nextIdentity;
+    setForm(loadInventorySourceForm(activeSource, PRODUCTION_UI));
+    setMaxListingsDraft(null);
+    setFieldErrors({});
+    setFormBannerError(null);
+    if (formTarget.panel.kind === "connect") setReplacingSecret(false);
+  }, [
+    sourcesLoading,
+    sourcesError,
+    user?.id,
+    selectedProvider,
+    activeSource,
+    formOpen,
+    formTarget.panel.kind,
+  ]);
 
   const serverMaxListings = normalizeMaxListingsSelectValue(form.maxListings);
   const maxListingsValue = maxListingsDraft ?? serverMaxListings;
@@ -288,37 +280,29 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       const isUpdate = !!activeSource;
       const payload = buildInventorySourcePayload(
         selectedProvider as "mls_grid" | "trestle" | "bridge_interactive",
-        form,
+        applySecretReplacementToForm(form, isUpdate ? replacingSecret : true),
         isUpdate,
       );
-      if (isUpdate) {
-        const res = await apiRequest("PATCH", `/api/inventory/sources/${activeSource!.id}`, payload);
-        return res.json();
-      }
-      const res = await apiRequest("POST", "/api/inventory/sources", payload);
+      const saveReq = inventorySourceSaveRequest(activeSource);
+      const res = await apiRequest(saveReq.method, saveReq.url, payload);
       return res.json();
     },
     onSuccess: (payload: { source?: PublicInventorySource }) => {
       if (payload?.source) {
-        queryClient.setQueryData(
-          ["/api/inventory/sources"],
-          (prev: { sources?: PublicInventorySource[]; publicationStats?: ListingPublicationStats } | undefined) => {
-            if (!prev?.sources) return prev;
-            const idx = prev.sources.findIndex((s) => s.id === payload.source!.id);
-            const sources =
-              idx >= 0
-                ? prev.sources.map((s, i) => (i === idx ? payload.source! : s))
-                : [...prev.sources, payload.source!];
-            return { ...prev, sources };
-          },
+        queryClient.setQueryData(sourcesQueryKey, (prev: unknown) =>
+          applyInventorySourcesCacheUpdate(prev, payload.source!),
         );
       }
-      setForm((f) => ({ ...f, accessToken: "", clientId: "", clientSecret: "", serverToken: "" }));
+      setForm((f) => clearInventorySourceSecrets(f));
       setMaxListingsDraft(null);
+      setReplacingSecret(false);
+      setConnectingProvider(null);
+      setEditingSourceId(null);
+      hydratedIdentityRef.current = null;
       clearFormValidation();
       toast({
         title: "Inventory source saved",
-        description: "Validate your connection to start importing listings.",
+        description: "Your connection settings are saved. Automatic background sync stays on.",
       });
     },
     onError: (err: Error) => {
@@ -331,9 +315,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   });
 
   const syncMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeSource) throw new Error("Save your inventory source before syncing.");
-      const res = await fetch(`/api/inventory/sources/${activeSource.id}/sync`, {
+    mutationFn: async (sourceId: string) => {
+      const res = await fetch(inventorySourceSyncUrl({ id: sourceId }), {
         method: "POST",
         credentials: "include",
       });
@@ -352,7 +335,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       return body;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: "Sync started",
         description: "Your listings are syncing in the background.",
@@ -360,7 +343,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       void refetchSources();
     },
     onError: (err: Error & { validationFailed?: boolean }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: err.validationFailed ? "Connection failed" : "Could not start sync",
         description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
@@ -369,19 +352,15 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     },
   });
 
-  const runFormValidation = (requireSavedSource: boolean) => {
+  const runFormValidation = () => {
     clearFormValidation();
 
-    if (!providerAvailable || !providerSupportsListingSync(selectedProvider)) {
+    if (!formOpen || !providerAvailable || !providerSupportsListingSync(selectedProvider)) {
       toast({
         title: "Provider not available",
         description: `${providerOption?.label ?? "This provider"} is not available yet.`,
       });
       return false;
-    }
-
-    if (requireSavedSource && !activeSource) {
-      setFormBannerError("Save your connection settings before continuing.");
     }
 
     const validation = validateInventorySourceForm({
@@ -397,34 +376,59 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       return false;
     }
 
-    if (requireSavedSource && !activeSource) {
-      return false;
-    }
-
     return true;
   };
 
   const handleSave = () => {
-    if (!runFormValidation(false)) return;
+    if (!runFormValidation()) return;
     saveMutation.mutate();
   };
 
-  const handleSync = () => {
-    if (!runFormValidation(true)) return;
-    syncMutation.mutate();
+  const handleSyncSource = (sourceId: string) => {
+    syncMutation.mutate(sourceId);
+  };
+
+  const openEditSettings = (sourceId: string, reconnect = false) => {
+    hydratedIdentityRef.current = null;
+    setConnectingProvider(null);
+    setEditingSourceId(sourceId);
+    setReplacingSecret(reconnect);
+    setShowDiagnostics(false);
+  };
+
+  const openConnectProvider = (provider: InventoryProvider) => {
+    if (!canConnectInventoryProvider(provider, sources)) return;
+    setEditingSourceId(null);
+    setConnectingProvider(provider);
+    setReplacingSecret(false);
+    hydratedIdentityRef.current = null;
+    setForm({ ...EMPTY_INVENTORY_SOURCE_FORM });
+    setMaxListingsDraft(null);
+    clearFormValidation();
+  };
+
+  const closeFormPanel = () => {
+    setEditingSourceId(null);
+    setConnectingProvider(null);
+    setReplacingSecret(false);
+    hydratedIdentityRef.current = null;
+    setForm({ ...EMPTY_INVENTORY_SOURCE_FORM });
+    setMaxListingsDraft(null);
+    clearFormValidation();
   };
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (!activeSource) return;
-      await apiRequest("DELETE", `/api/inventory/sources/${activeSource.id}`);
+      const sourceId = disconnectSource?.id;
+      if (!sourceId) return;
+      await apiRequest("DELETE", `/api/inventory/sources/${sourceId}`);
     },
     onSuccess: () => {
       setRemoveSourceConfirmOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
-      setForm(EMPTY_FORM);
-      setMaxListingsDraft(null);
-      toast({ title: "Inventory source removed" });
+      setDisconnectSourceId(null);
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
+      closeFormPanel();
+      toast({ title: "Inventory source disconnected" });
     },
     onError: (err: Error) => {
       toast({
@@ -439,7 +443,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     mutationFn: bulkPublishEligibleListings,
     onSuccess: (result) => {
       setBulkPublishConfirmOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: "Listings published",
         description: `${result.published.toLocaleString()} listing${result.published === 1 ? "" : "s"} now appear on your Agent Page.`,
@@ -454,7 +458,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     mutationFn: bulkUnpublishAllListings,
     onSuccess: (result) => {
       setBulkUnpublishConfirmOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory/sources"] });
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
       toast({
         title: "Listings unpublished",
         description: `${result.unpublished.toLocaleString()} listing${result.unpublished === 1 ? "" : "s"} removed from your Agent Page.`,
@@ -494,9 +498,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const importJustFinished =
     sourcePhase?.phase === "initial_import_complete" ||
     (sourcePhase?.phase === "up_to_date" && activeSource?.lastSyncStatus === "success");
-  const connectionStatusLabel = syncRunning
-    ? "Syncing"
-    : formatInventoryConnectionStatus(activeSource?.connectionStatus);
+  const connectionStatusLabel = syncRunning ? "Syncing" : "Connected";
   const technicalDetailRows = syncStatRows;
   const pagesProcessed =
     typeof activeSource?.lastSyncStats?.pagesFetched === "number"
@@ -536,6 +538,11 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const isMlsGrid = selectedProvider === "mls_grid";
   const isTrestle = selectedProvider === "trestle";
   const isBridge = selectedProvider === "bridge_interactive";
+  const secretMode = inventorySecretFieldMode({
+    isUpdate: !!activeSource,
+    hasStoredCredentials: activeSource?.hasCredentials ?? false,
+    replacing: replacingSecret,
+  });
   const datasetId =
     typeof activeSource?.config?.datasetId === "string" ? activeSource.config.datasetId : null;
   const originatingSystem =
@@ -565,63 +572,233 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
             opportunities, price reduction alerts, and AI listing drafts.
           </p>
 
-          {sourcesLoading ? (
+          {sourcesError ? (
+            <Alert className="border-red-200 bg-red-50/80">
+              <AlertCircle className="h-4 w-4 text-red-800" />
+              <AlertTitle className="text-red-950">Could not load inventory source</AlertTitle>
+              <AlertDescription className="text-red-900/90 text-sm flex flex-wrap items-center gap-2">
+                Check your connection and try again.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refetchSources()}
+                  data-testid="button-inventory-sources-retry"
+                >
+                  Try again
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : sourcesLoading ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading inventory source…
             </div>
           ) : (
             <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="inventory-provider">Provider</Label>
-                  <Select
-                    value={providerSelectValue}
-                    onValueChange={(v) => {
-                      const next = normalizeProviderSelectValue(v);
-                      logRgeSelect(
-                        "InventorySourcesSection",
-                        "provider",
-                        activeSource?.provider ?? null,
-                        selectedProvider,
-                        next,
-                        "change",
-                      );
-                      if (next === providerSelectValue) return;
-                      setSelectedProvider(next);
-                      setMaxListingsDraft(null);
-                      setFieldErrors({});
-                      setFormBannerError(null);
-                    }}
-                  >
-                    <SelectTrigger id="inventory-provider" data-testid="select-inventory-provider">
-                      <SelectValue placeholder="Select provider" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INVENTORY_PROVIDER_UI_OPTIONS.map((option) => (
-                        <SelectItem
-                          key={option.id}
-                          value={option.id}
-                          disabled={!option.available && !activeSource}
-                        >
-                          {option.label}
-                          {!option.available ? " — Coming soon" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!providerAvailable && (
-                    <p className="text-[11px] text-muted-foreground">
-                      {providerOption?.helper ?? "Coming soon"} — listing sync is not available for this provider
-                      yet.
+              {connectedSummaries.length > 0 && (
+                <div className="space-y-3" data-testid="inventory-connected-sources">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">Connected inventory sources</h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Existing feeds stay here even if a sync or credential needs attention.
                     </p>
-                  )}
-                  {providerAvailable && isListingSyncProvider && providerOption?.helper && (
-                    <p className="text-[11px] text-muted-foreground">{providerOption.helper}</p>
-                  )}
+                  </div>
+                  {connectedSummaries.map((card) => {
+                    const source = sources.find((s) => s.id === card.sourceId);
+                    const cardSyncing = source?.lastSyncStatus === "running";
+                    return (
+                      <div
+                        key={card.sourceId}
+                        className="rounded-lg border border-gray-200 bg-white p-4 space-y-3"
+                        data-testid={`inventory-source-card-${card.sourceId}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{card.providerLabel}</p>
+                            <p className="text-xs text-muted-foreground">{card.displayName}</p>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
+                              inventoryConnectionStateBadgeClass(card.connectionState),
+                            )}
+                            data-testid="inventory-source-connection-state"
+                          >
+                            {card.connectionStateLabel}
+                          </span>
+                        </div>
+                        <dl className="grid gap-2 sm:grid-cols-2 text-xs">
+                          {card.datasetId ? (
+                            <div>
+                              <dt className="text-muted-foreground">Dataset ID</dt>
+                              <dd className="font-medium font-mono">{card.datasetId}</dd>
+                            </div>
+                          ) : null}
+                          {card.originatingSystemName ? (
+                            <div>
+                              <dt className="text-muted-foreground">Originating system</dt>
+                              <dd className="font-medium font-mono">{card.originatingSystemName}</dd>
+                            </div>
+                          ) : null}
+                          <div>
+                            <dt className="text-muted-foreground">Market scope</dt>
+                            <dd className="font-medium">{card.marketScope}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Listings / cap</dt>
+                            <dd className="font-medium tabular-nums" data-testid="inventory-total-synced">
+                              {card.listingCountLabel}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Automatic sync</dt>
+                            <dd className="font-medium">{card.automaticSyncLabel}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-muted-foreground">Last successful sync</dt>
+                            <dd className="font-medium">{card.lastSuccessfulSyncLabel}</dd>
+                          </div>
+                          {card.credentialConfiguredLabel ? (
+                            <div className="sm:col-span-2">
+                              <dt className="text-muted-foreground">Credentials</dt>
+                              <dd className="font-medium" data-testid="inventory-credential-configured">
+                                {card.credentialConfiguredLabel}
+                              </dd>
+                            </div>
+                          ) : null}
+                        </dl>
+                        {card.lastError ? (
+                          <Alert variant="destructive" className="py-2">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle className="text-sm">Needs attention</AlertTitle>
+                            <AlertDescription className="text-xs leading-relaxed" data-testid="inventory-sync-error">
+                              {card.lastError}
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={syncMutation.isPending || cardSyncing || card.connectionState === "disconnected"}
+                            onClick={() => handleSyncSource(card.sourceId)}
+                            data-testid="button-inventory-sync"
+                          >
+                            {syncMutation.isPending || cardSyncing ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Syncing…
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Sync now
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditSettings(card.sourceId, false)}
+                            data-testid="button-inventory-edit"
+                          >
+                            Edit settings
+                          </Button>
+                          {card.showReconnect ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-brand-green hover:bg-brand-green/90"
+                              onClick={() => openEditSettings(card.sourceId, true)}
+                              data-testid="button-inventory-reconnect"
+                            >
+                              Reconnect
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => {
+                              setDisconnectSourceId(card.sourceId);
+                              setRemoveSourceConfirmOpen(true);
+                            }}
+                            data-testid="button-inventory-remove"
+                          >
+                            Disconnect
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
 
-                {isListingSyncProvider && providerAvailable && (
+              <div className="space-y-3" data-testid="inventory-available-connectors">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Available connectors</h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Connect another listing feed, or see which providers are already in use.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {connectorAvailability.map((connector) => (
+                    <div
+                      key={connector.id}
+                      className="rounded-lg border border-gray-200 bg-muted/20 p-3 space-y-2"
+                      data-testid={`inventory-connector-${connector.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium">{connector.label}</p>
+                          {connector.helper ? (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{connector.helper}</p>
+                          ) : null}
+                        </div>
+                        <span
+                          className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                          data-testid={`inventory-connector-status-${connector.id}`}
+                        >
+                          {connector.statusLabel}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={connector.status === "available" ? "default" : "outline"}
+                        className={connector.status === "available" ? "bg-brand-green hover:bg-brand-green/90" : undefined}
+                        disabled={connector.disabled}
+                        onClick={() => openConnectProvider(connector.id)}
+                        data-testid={`button-inventory-connect-${connector.id}`}
+                      >
+                        {connector.actionLabel}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {formOpen && isListingSyncProvider && providerAvailable && (
+                <div className="grid gap-4 sm:grid-cols-2 rounded-lg border border-gray-200 bg-gray-50/70 p-4" data-testid="inventory-source-form">
+                  <div className="sm:col-span-2 flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        {activeSource ? "Edit settings" : `Connect ${providerOption?.label ?? "provider"}`}
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {activeSource
+                          ? "Saving updates this existing source. Credentials stay encrypted."
+                          : "This creates a new inventory source for the current workspace."}
+                      </p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={closeFormPanel}>
+                      Close
+                    </Button>
+                  </div>
                   <>
                     {formBannerError && (
                       <div
@@ -754,7 +931,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         ) : null}
                       </div>
                     </div>
-                    {isMlsGrid && (
+                    {isMlsGrid && secretMode === "hidden_configured" && (
+                      <div className="space-y-2 sm:col-span-2">
+                        <p className="text-sm font-medium" data-testid="inventory-credential-configured">
+                          {inventoryCredentialConfiguredLabel("mls_grid")}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setReplacingSecret(true)}
+                          data-testid="button-inventory-replace-token"
+                        >
+                          {inventoryReplaceSecretLabel("mls_grid")}
+                        </Button>
+                      </div>
+                    )}
+                    {isMlsGrid && secretMode !== "hidden_configured" && (
                       <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="inventory-access-token">Access token</Label>
                         <div className="relative">
@@ -766,11 +959,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, accessToken: e.target.value }));
                               clearFieldError("accessToken");
                             }}
-                            placeholder={
-                              activeSource?.hasCredentials
-                                ? "••••••••  (leave blank to keep)"
-                                : "Paste access token"
-                            }
+                            placeholder="Paste access token"
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "accessToken")}
                             className={inventoryInputClass(
@@ -802,7 +991,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         )}
                       </div>
                     )}
-                    {isBridge && (
+                    {isBridge && secretMode === "hidden_configured" && (
+                      <div className="space-y-2 sm:col-span-2">
+                        <p className="text-sm font-medium" data-testid="inventory-credential-configured">
+                          {inventoryCredentialConfiguredLabel("bridge_interactive")}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setReplacingSecret(true)}
+                          data-testid="button-inventory-replace-token"
+                        >
+                          {inventoryReplaceSecretLabel("bridge_interactive")}
+                        </Button>
+                      </div>
+                    )}
+                    {isBridge && secretMode !== "hidden_configured" && (
                       <div className="space-y-2 sm:col-span-2">
                         <Label htmlFor="inventory-server-token">Server token</Label>
                         <div className="relative">
@@ -814,11 +1019,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, serverToken: e.target.value }));
                               clearFieldError("serverToken");
                             }}
-                            placeholder={
-                              activeSource?.hasCredentials
-                                ? "••••••••  (leave blank to keep)"
-                                : "Paste Bridge server token"
-                            }
+                            placeholder="Paste Bridge server token"
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "serverToken")}
                             className={inventoryInputClass(
@@ -841,16 +1042,43 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             {fieldErrors.serverToken}
                           </p>
                         ) : (
-                          activeSource?.hasCredentials && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Token is stored securely and never shown again after save. Paste a new server
-                              token here to rotate credentials.
-                            </p>
-                          )
+                          <p className="text-[11px] text-muted-foreground">
+                            The stored token is never shown. Leave this blank to keep it, or paste a new token to
+                            replace it.
+                          </p>
                         )}
+                        {secretMode === "replace" && activeSource?.hasCredentials ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setReplacingSecret(false);
+                              setForm((f) => ({ ...f, serverToken: "" }));
+                            }}
+                          >
+                            Cancel replace
+                          </Button>
+                        ) : null}
                       </div>
                     )}
-                    {isTrestle && (
+                    {isTrestle && secretMode === "hidden_configured" && (
+                      <div className="space-y-2 sm:col-span-2">
+                        <p className="text-sm font-medium" data-testid="inventory-credential-configured">
+                          {inventoryCredentialConfiguredLabel("trestle")}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setReplacingSecret(true)}
+                          data-testid="button-inventory-replace-token"
+                        >
+                          {inventoryReplaceSecretLabel("trestle")}
+                        </Button>
+                      </div>
+                    )}
+                    {isTrestle && secretMode !== "hidden_configured" && (
                       <>
                         <div className="space-y-2">
                           <Label htmlFor="inventory-client-id">Client ID</Label>
@@ -861,11 +1089,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               setForm((f) => ({ ...f, clientId: e.target.value }));
                               clearFieldError("clientId");
                             }}
-                            placeholder={
-                              activeSource?.hasCredentials
-                                ? "••••••••  (leave blank to keep)"
-                                : "Paste Trestle client ID"
-                            }
+                            placeholder="Paste Trestle client ID"
                             autoComplete="off"
                             aria-invalid={inventoryFieldHasError(fieldErrors, "clientId")}
                             className={inventoryInputClass(inventoryFieldHasError(fieldErrors, "clientId"))}
@@ -888,11 +1112,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                                 setForm((f) => ({ ...f, clientSecret: e.target.value }));
                                 clearFieldError("clientSecret");
                               }}
-                              placeholder={
-                                activeSource?.hasCredentials
-                                  ? "••••••••  (leave blank to keep)"
-                                  : "Paste Trestle client secret"
-                              }
+                              placeholder="Paste Trestle client secret"
                               autoComplete="off"
                               aria-invalid={inventoryFieldHasError(fieldErrors, "clientSecret")}
                               className={inventoryInputClass(
@@ -926,10 +1146,10 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       </>
                     )}
                   </>
-                )}
-              </div>
+                </div>
+              )}
 
-              {isListingSyncProvider && providerAvailable && (
+              {formOpen && isListingSyncProvider && providerAvailable && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -950,8 +1170,8 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={syncMutation.isPending || syncRunning}
-                    onClick={handleSync}
+                    disabled={syncMutation.isPending || syncRunning || !activeSource}
+                    onClick={() => activeSource && handleSyncSource(activeSource.id)}
                     data-testid="button-inventory-sync"
                   >
                     {syncMutation.isPending ? (
@@ -969,7 +1189,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 </div>
               )}
 
-              {activeSource && isListingSyncProvider && (
+              {formOpen && activeSource && isListingSyncProvider && (
                 <div
                   className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 text-sm space-y-4"
                   data-testid="inventory-source-status"
@@ -1252,8 +1472,10 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                       variant="destructive"
                       size="sm"
                       disabled={deleteMutation.isPending}
-                      onClick={() => setRemoveSourceConfirmOpen(true)}
-                      data-testid="button-inventory-remove"
+                      onClick={() => {
+                        if (activeSource) setDisconnectSourceId(activeSource.id);
+                        setRemoveSourceConfirmOpen(true);
+                      }}
                     >
                       {deleteMutation.isPending ? (
                         <>
@@ -1261,7 +1483,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           Removing…
                         </>
                       ) : (
-                        "Remove source"
+                        "Disconnect"
                       )}
                     </Button>
                   </div>
@@ -1278,19 +1500,19 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     <AlertDialog open={removeSourceConfirmOpen} onOpenChange={setRemoveSourceConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Remove inventory source?</AlertDialogTitle>
+          <AlertDialogTitle>Disconnect inventory source?</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm text-muted-foreground">
               <p>
                 This will disconnect this MLS feed and remove all synced listings imported from this source. This
                 action cannot be undone.
               </p>
-              {activeSource != null && (
+              {disconnectSource != null && (
                 <p>
-                  This source currently has {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} synced listing
-                  {(inventoryStats?.totalSynced ?? activeSource.listingCount) === 1 ? "" : "s"}
-                  {inventoryStats
-                    ? ` (${inventoryStats.activeForMatching.toLocaleString()} active listings available, cap ${inventoryStats.configuredCap.toLocaleString()}).`
+                  This source currently has {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount).toLocaleString()} synced listing
+                  {(disconnectSource.inventoryStats?.totalSynced ?? disconnectSource.listingCount) === 1 ? "" : "s"}
+                  {disconnectSource.inventoryStats
+                    ? ` (${disconnectSource.inventoryStats.activeForMatching.toLocaleString()} active listings available, cap ${disconnectSource.inventoryStats.configuredCap.toLocaleString()}).`
                     : "."}
                 </p>
               )}
@@ -1310,7 +1532,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 Removing…
               </>
             ) : (
-              "Remove source"
+              "Disconnect"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -1408,9 +1630,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Home className="h-4 w-4 text-brand-green" />
-              Inventory Source
+              Inventory sources
             </CardTitle>
-            <CardDescription>Connect your inventory source and sync your listings.</CardDescription>
+            <CardDescription>Manage connected feeds or add another listing provider.</CardDescription>
           </CardHeader>
           <CardContent>{inner}</CardContent>
         </Card>
@@ -1429,20 +1651,20 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
         data-testid="section-inventory-sources"
       >
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory Source</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Inventory sources</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Connect your inventory source to sync listings into your workspace.
+            Connected feeds stay configured. Add another provider only if this workspace does not already use it.
           </p>
         </div>
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Home className="h-5 w-5 text-brand-green" />
-              Connect your inventory source
+              Inventory sources
             </CardTitle>
             <CardDescription>
-              Sync your listings for buyer matching and inventory intelligence. Credentials are encrypted and never
-              returned to the browser after save.
+              Review connected feeds, edit the existing source, or connect a provider that is still available.
+              Credentials are encrypted and never returned to the browser after save.
             </CardDescription>
           </CardHeader>
           <CardContent>{inner}</CardContent>

@@ -130,7 +130,8 @@ import {
   snapshotProfileTraceFields,
 } from "@/lib/buyerMatchingTraceClient";
 import { resolveClientBuyerMatchingTraceId } from "@/lib/buyerMatchingTraceStore";
-import { fetchInventoryStatus, fetchInventorySources, isWorkspaceInventoryConnected } from "@/lib/inventoryApi";
+import { fetchInventoryStatus, fetchInventorySourcesBundle, isWorkspaceInventoryConnected } from "@/lib/inventoryApi";
+import { inventorySourcesQueryKey, normalizeInventorySourcesQueryData } from "@/lib/inventorySourceFormState";
 import { CopilotInventoryEmptyState } from "@/components/inventory/CopilotInventoryEmptyState";
 import { CopilotInventorySourcesUnavailable } from "@/components/inventory/CopilotInventorySourcesUnavailable";
 import { MatchingListingsPanel } from "@/components/inventory/MatchingListingsPanel";
@@ -1619,8 +1620,9 @@ export function InboxLeadDetailsPanel({
     isError: inventorySourcesError,
     refetch: refetchInventorySources,
   } = useQuery({
-    queryKey: ["/api/inventory/sources"],
-    queryFn: fetchInventorySources,
+    queryKey: inventorySourcesQueryKey(user?.id),
+    queryFn: fetchInventorySourcesBundle,
+    select: (bundle) => normalizeInventorySourcesQueryData(bundle).sources,
     enabled: !!inventoryStatus?.canUse,
     staleTime: 60_000,
   });

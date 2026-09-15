@@ -1,8 +1,14 @@
 /**
- * Guards against InventorySourcesSection maxListings reset on sources poll.
+ * Guards against InventorySourcesSection resetting dirty form state on sources poll.
  * Run: npx tsx tests/rge-select-sync-guard.test.ts
  */
 import { INVENTORY_MAX_LISTINGS_OPTIONS, DEFAULT_MAX_LISTINGS } from "../shared/inventory/reso/resoSyncScope";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  inventoryFormHydrationIdentity,
+  shouldResetInventoryForm,
+} from "../client/src/lib/inventorySourceFormState";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -17,9 +23,29 @@ function normalizeMaxListingsSelectValue(value: number | undefined): string {
   return String(normalized ?? DEFAULT_MAX_LISTINGS);
 }
 
-// Effect deps must NOT include `sources` array — only stable source identity fields.
-const FORM_SYNC_DEPS = ["selectedProvider", "activeSource?.id", "activeSource?.updatedAt"] as const;
-assert(!FORM_SYNC_DEPS.includes("sources" as never), "form sync must not depend on sources poll ref");
+const section = readFileSync(
+  join(process.cwd(), "client", "src", "components", "inventory", "InventorySourcesSection.tsx"),
+  "utf8",
+);
+
+assert(
+  section.includes("shouldResetInventoryForm"),
+  "form hydrate must use identity guard so polls cannot wipe dirty values",
+);
+assert(
+  !section.includes("activeSource?.updatedAt"),
+  "form hydrate must not reset when source updatedAt changes on poll",
+);
+
+const identity = inventoryFormHydrationIdentity({
+  workspaceUserId: "ws-1",
+  selectedProvider: "bridge_interactive",
+  sourceId: "src-1",
+});
+assert(
+  shouldResetInventoryForm(identity, identity) === false,
+  "same identity after refetch/tab must keep dirty form",
+);
 
 assert(normalizeMaxListingsSelectValue(2500) === "2500", "valid max listings string");
 assert(normalizeMaxListingsSelectValue(99999) === String(DEFAULT_MAX_LISTINGS), "invalid max falls back");
