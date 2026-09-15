@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { 
   Copy, Check, Smartphone, Monitor,
-  AlertCircle, Plus, Trash2
+  AlertCircle, Plus, Trash2, X
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -45,6 +45,12 @@ import {
   resolveWidgetActivationState,
   widgetSurfaceStatus,
 } from "@shared/webchatWidgetSettings";
+import {
+  pageRulePathInputIssue,
+  pageRuleUrlFieldLabel,
+  pageRulesHavePathInputIssues,
+  WIDGET_PAGE_RULE_MAX_ALIASES,
+} from "@shared/webchatPageRuleMatch";
 import {
   NEUTRAL_WEBCHAT_BRANDING,
   WEBCHAT_CHAT_ICONS,
@@ -143,6 +149,8 @@ export interface WidgetPageRule {
   /** Stable list key (client-only; stripped before save). */
   id: string;
   urlContains: string;
+  /** Exact-path extras only. Omitted for Contains / Path prefix. */
+  urlAliases?: string[];
   matchType?: "contains" | "pathname" | "pathname_prefix";
   greeting: string;
   teaserGreeting?: string;
@@ -261,6 +269,7 @@ function newRuleId(): string {
 function normalizePageRulesFromServer(
   rules: Array<{
     urlContains?: string;
+    urlAliases?: string[];
     matchType?: WidgetPageRule["matchType"];
     greeting?: string;
     teaserGreeting?: string;
@@ -275,6 +284,10 @@ function normalizePageRulesFromServer(
 ): WidgetPageRule[] {
   return rules.map((r) => ({
     urlContains: String(r.urlContains ?? ""),
+    urlAliases:
+      r.matchType === "pathname" && Array.isArray(r.urlAliases)
+        ? r.urlAliases.map((alias) => String(alias)).map((alias) => alias.trim()).filter(Boolean).slice(0, WIDGET_PAGE_RULE_MAX_ALIASES)
+        : [],
     matchType:
       r.matchType === "pathname" || r.matchType === "pathname_prefix" || r.matchType === "contains"
         ? r.matchType
@@ -377,6 +390,7 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
 > & {
   pageRules: {
     urlContains: string;
+    urlAliases?: string[];
     matchType?: WidgetPageRule["matchType"];
     greeting: string;
     teaserGreeting?: string;
@@ -417,8 +431,14 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
     offlineMessage: settings.offlineMessage || "",
     localized: settings.localized || {},
     pageRules: settings.pageRules.map(
-      ({ urlContains, matchType, greeting, teaserGreeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => ({
+      ({ urlContains, urlAliases, matchType, greeting, teaserGreeting, prefilledMessage, suggestedQuestions, chatbotFlowId, ctaLabel, ctaUrl, localized }) => {
+        const aliases =
+          matchType === "pathname"
+            ? (urlAliases || []).map((alias) => alias.trim()).filter(Boolean).slice(0, WIDGET_PAGE_RULE_MAX_ALIASES)
+            : [];
+        return {
         urlContains,
+        ...(aliases.length ? { urlAliases: aliases } : {}),
         ...(matchType ? { matchType } : {}),
         greeting,
         ...(teaserGreeting ? { teaserGreeting } : {}),
@@ -428,7 +448,8 @@ function stripPageRuleIds(settings: WidgetSettings): Omit<
         ctaLabel: ctaLabel || "",
         ctaUrl: ctaUrl || "",
         localized,
-      }),
+        };
+      },
     ),
   };
 }
@@ -535,6 +556,7 @@ export function WebsiteWidget() {
   const [logoDisplayName, setLogoDisplayName] = useState("Logo uploaded");
   const [logoRemoveOpen, setLogoRemoveOpen] = useState(false);
   const [saveQueued, setSaveQueued] = useState(false);
+  const [clearedAliasNoticeIds, setClearedAliasNoticeIds] = useState<Set<string>>(() => new Set());
   /** Avoid resetting local form on every widget-settings refetch (fixes Page Rules focus / cursor bugs). */
   const didHydrateFromWidgetQuery = useRef(false);
   const pageRulesSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -632,6 +654,9 @@ export function WebsiteWidget() {
       const accentInvalid = Boolean(next.accentColor && !sanitizeWidgetHexColor(next.accentColor));
       const headerInvalid =
         next.headerTextColor !== "auto" && !sanitizeWidgetHexColor(next.headerTextColor);
+      if (pageRulesHavePathInputIssues(next.pageRules)) {
+        return;
+      }
       saveMutation.mutate({
         ...next,
         logoUrl,
@@ -649,6 +674,11 @@ export function WebsiteWidget() {
 
   const schedulePageRulesDebouncedSave = useCallback(
     (next: WidgetSettings) => {
+      if (pageRulesHavePathInputIssues(next.pageRules)) {
+        setSaveQueued(false);
+        clearPageRulesSaveDebounce();
+        return;
+      }
       setSaveQueued(true);
       clearPageRulesSaveDebounce();
       pageRulesSaveTimerRef.current = setTimeout(() => {
@@ -833,6 +863,15 @@ export function WebsiteWidget() {
     if (!window.confirm("Remove this page rule?")) return;
     clearPageRulesSaveDebounce();
     setSettings((prev) => {
+      const removed = prev.pageRules[index];
+      if (removed) {
+        setClearedAliasNoticeIds((ids) => {
+          if (!ids.has(removed.id)) return ids;
+          const next = new Set(ids);
+          next.delete(removed.id);
+          return next;
+        });
+      }
       const next = {
         ...prev,
         pageRules: prev.pageRules.filter((_, i) => i !== index),
@@ -842,11 +881,40 @@ export function WebsiteWidget() {
     });
   };
 
+  const changePageRuleMatchType = (index: number, matchType: WidgetPageRule["matchType"]) => {
+    const current = settings.pageRules[index];
+    const hadAliases = (current?.urlAliases || []).some((alias) => String(alias).trim());
+    if (matchType !== "pathname" && hadAliases && current) {
+      setClearedAliasNoticeIds((ids) => new Set(ids).add(current.id));
+    } else if (matchType === "pathname" && current) {
+      setClearedAliasNoticeIds((ids) => {
+        const next = new Set(ids);
+        next.delete(current.id);
+        return next;
+      });
+    }
+    updatePageRule(index, {
+      matchType,
+      urlAliases: matchType === "pathname" ? current?.urlAliases || [] : [],
+    });
+  };
+
   const activation = resolveWidgetActivationState(settings);
   const surface = widgetSurfaceStatus(activation);
   const showOriginHint = Boolean(surface.originHint) || enableBlockedHint;
   const showLeftoverLegacyRules = leftoverLegacyExamplePageRules(settings);
   const brandingErrors = brandingFieldError(settings);
+  const pageRulePathIssues = pageRulesHavePathInputIssues(settings.pageRules);
+  const pageRulesSaveStatus =
+    saveQueued || saveMutation.isPending
+      ? "Saving…"
+      : saveMutation.isError
+        ? "Could not save"
+        : pageRulePathIssues
+          ? ""
+          : saveMutation.isSuccess
+            ? "Saved"
+            : "";
 
   const focusDomainSetup = () => {
     setEnableBlockedHint(true);
@@ -1644,17 +1712,36 @@ export function WebsiteWidget() {
 
           <Card className="border border-gray-200 shadow-sm overflow-hidden rounded-xl">
             <CardHeader className="p-3 sm:p-4 pb-2">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <CardTitle className="text-base sm:text-lg font-semibold">Page Rules</CardTitle>
                   <CardDescription className="text-xs">
                     Optional rules for specific URLs. The first matching rule wins. No page-specific rules are configured until you add one.
                   </CardDescription>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={addPageRule} className="shrink-0">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Add rule
-                </Button>
+                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                  <span
+                    className="text-[11px] text-gray-500"
+                    data-testid="text-page-rules-save-status"
+                  >
+                    {pageRulesSaveStatus}
+                  </span>
+                  {saveMutation.isError ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => persistWidgetSettings(settingsRef.current)}
+                      data-testid="button-page-rules-save-retry"
+                    >
+                      Retry
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="outline" size="sm" onClick={addPageRule} className="shrink-0">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    Add rule
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-3 sm:p-4 pt-0 space-y-4">
@@ -1685,7 +1772,7 @@ export function WebsiteWidget() {
               {settings.pageRules.map((rule, index) => (
                 <div
                   key={rule.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3"
+                  className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 space-y-3 overflow-x-hidden min-w-0"
                   data-testid={`page-rule-${index}`}
                 >
                   <div className="flex justify-between gap-2">
@@ -1701,35 +1788,118 @@ export function WebsiteWidget() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-gray-600">URL contains</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+                    <div className="space-y-2 min-w-0">
+                      <Label className="text-xs text-gray-600">{pageRuleUrlFieldLabel(rule.matchType)}</Label>
                       <Input
+                        dir="ltr"
                         value={rule.urlContains}
                         onChange={(e) => updatePageRule(index, { urlContains: e.target.value })}
-                        placeholder="/about or ?campaign=spring"
-                        className="h-9 text-sm border-gray-200 bg-white"
+                        placeholder={
+                          rule.matchType === "pathname"
+                            ? "/pricing"
+                            : rule.matchType === "pathname_prefix"
+                              ? "/blog"
+                              : "/about or ?campaign=spring"
+                        }
+                        className="h-9 text-sm border-gray-200 bg-white min-w-0"
                         data-testid={`input-rule-url-${index}`}
                       />
+                      {pageRulePathInputIssue(rule.urlContains) ? (
+                        <p className="text-xs text-red-600" data-testid={`error-rule-url-${index}`}>
+                          {pageRulePathInputIssue(rule.urlContains)}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0">
                       <Label className="text-xs text-gray-600">Match</Label>
                       <select
                         value={rule.matchType || "contains"}
                         onChange={(e) =>
-                          updatePageRule(index, {
-                            matchType: e.target.value as WidgetPageRule["matchType"],
-                          })
+                          changePageRuleMatchType(index, e.target.value as WidgetPageRule["matchType"])
                         }
-                        className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
+                        className="h-9 w-full min-w-0 rounded-md border border-gray-200 bg-white px-2 text-sm"
                         data-testid={`select-rule-match-${index}`}
                       >
                         <option value="contains">Contains (legacy)</option>
                         <option value="pathname">Exact path</option>
                         <option value="pathname_prefix">Path prefix</option>
                       </select>
+                      {rule.matchType !== "pathname" ? (
+                        <p className="text-[11px] text-gray-500" data-testid={`text-aliases-exact-only-${index}`}>
+                          Additional paths are available for Exact path matching only.
+                        </p>
+                      ) : null}
+                      {clearedAliasNoticeIds.has(rule.id) ? (
+                        <p className="text-[11px] text-amber-800" data-testid={`text-aliases-cleared-${index}`}>
+                          Additional paths apply only to Exact path matching and were cleared.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
+                  {rule.matchType === "pathname" ? (
+                    <div className="space-y-2 min-w-0" data-testid={`section-rule-aliases-${index}`}>
+                      <Label className="text-xs text-gray-600">Additional paths</Label>
+                      <p className="text-[11px] text-gray-500">
+                        Add localized or alternate URLs that should use this same greeting, actions, and funnel.
+                      </p>
+                      {(rule.urlAliases || []).map((alias, aliasIndex) => (
+                        <div key={`${rule.id}-alias-${aliasIndex}`} className="flex items-center gap-2 min-w-0">
+                          <Input
+                            dir="ltr"
+                            value={alias}
+                            onChange={(e) => {
+                              const nextAliases = [...(rule.urlAliases || [])];
+                              nextAliases[aliasIndex] = e.target.value;
+                              updatePageRule(index, { urlAliases: nextAliases });
+                            }}
+                            placeholder="/es/pricing"
+                            className="h-9 min-w-0 flex-1 text-sm border-gray-200 bg-white"
+                            data-testid={`input-rule-alias-${index}-${aliasIndex}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 shrink-0 text-gray-500 hover:text-red-600"
+                            onClick={() =>
+                              updatePageRule(index, {
+                                urlAliases: (rule.urlAliases || []).filter((_, i) => i !== aliasIndex),
+                              })
+                            }
+                            data-testid={`button-remove-alias-${index}-${aliasIndex}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                      {(rule.urlAliases || []).map((alias, aliasIndex) =>
+                        pageRulePathInputIssue(alias) ? (
+                          <p
+                            key={`${rule.id}-alias-error-${aliasIndex}`}
+                            className="text-xs text-red-600"
+                            data-testid={`error-rule-alias-${index}-${aliasIndex}`}
+                          >
+                            {pageRulePathInputIssue(alias)}
+                          </p>
+                        ) : null,
+                      )}
+                      {(rule.urlAliases || []).length < WIDGET_PAGE_RULE_MAX_ALIASES ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updatePageRule(index, { urlAliases: [...(rule.urlAliases || []), ""] })
+                          }
+                          data-testid={`button-add-alias-${index}`}
+                        >
+                          <Plus className="mr-1.5 h-3.5 w-3.5" />
+                          Add path
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="space-y-2">
                     <Label className="text-xs text-gray-600">Greeting</Label>
                     <Input

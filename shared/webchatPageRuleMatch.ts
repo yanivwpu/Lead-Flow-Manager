@@ -17,8 +17,11 @@ import { resolveLocalizedPageRuleTeaser } from "./webchatPageRuleTeaser";
 export const WIDGET_PAGE_RULE_MATCH_TYPES = ["contains", "pathname", "pathname_prefix"] as const;
 export type WidgetPageRuleMatchType = (typeof WIDGET_PAGE_RULE_MATCH_TYPES)[number];
 
+export const WIDGET_PAGE_RULE_MAX_ALIASES = 8;
+
 export type WidgetPageRuleMatchInput = {
   urlContains?: unknown;
+  urlAliases?: unknown;
   matchType?: unknown;
   greeting?: unknown;
   teaserGreeting?: unknown;
@@ -32,6 +35,7 @@ export type WidgetPageRuleMatchInput = {
 
 export type MatchedWidgetPageRule = {
   urlContains: string;
+  urlAliases?: string[];
   matchType: WidgetPageRuleMatchType;
   ruleKey: string;
   greeting?: string;
@@ -75,29 +79,152 @@ function rulePathname(fragment: string): string | null {
   return normalizePathnameForMatch(trimmed.split("?")[0].split("#")[0]);
 }
 
+export function pageRuleUrlFieldLabel(matchType: unknown): string {
+  const type = normalizePageRuleMatchType(matchType);
+  if (type === "pathname") return "Primary path";
+  if (type === "pathname_prefix") return "Path prefix";
+  return "URL contains";
+}
+
+export function pageRulePathInputIssue(raw: string): string | null {
+  if (String(raw || "").includes(",")) {
+    return "Add each path separately. Comma-separated paths are not supported.";
+  }
+  return null;
+}
+
+export function pageRulesHavePathInputIssues(
+  rules: Array<{ urlContains?: unknown; urlAliases?: unknown }>,
+): boolean {
+  if (!Array.isArray(rules)) return false;
+  for (const rule of rules) {
+    if (pageRulePathInputIssue(String(rule?.urlContains || ""))) return true;
+    if (!Array.isArray(rule?.urlAliases)) continue;
+    for (const alias of rule.urlAliases) {
+      if (pageRulePathInputIssue(String(alias || ""))) return true;
+    }
+  }
+  return false;
+}
+
+export function pageRuleDuplicateIdentityKeys(
+  fragment: string,
+  matchType: WidgetPageRuleMatchType,
+): string[] {
+  const trimmed = String(fragment || "").trim();
+  if (!trimmed) return [];
+  const keys = [trimmed.toLowerCase()];
+  if (matchType === "pathname" || matchType === "pathname_prefix") {
+    const path = rulePathname(trimmed);
+    if (path) keys.push(path.toLowerCase());
+  }
+  return [...new Set(keys)];
+}
+
+/**
+ * Extra Exact-path fragments. Ignored for Contains / Path prefix.
+ * Skips empty, comma-separated, duplicate, and primary-equal values.
+ */
+export function collectPageRuleAliasFragments(rule: {
+  urlContains?: unknown;
+  urlAliases?: unknown;
+  matchType?: unknown;
+}): string[] {
+  if (normalizePageRuleMatchType(rule.matchType) !== "pathname") return [];
+  if (!Array.isArray(rule.urlAliases)) return [];
+  const primary = String(rule.urlContains || "").trim().slice(0, MAX_FRAGMENT);
+  const seen = new Set(pageRuleDuplicateIdentityKeys(primary, "pathname"));
+  const out: string[] = [];
+  for (const item of rule.urlAliases.slice(0, WIDGET_PAGE_RULE_MAX_ALIASES)) {
+    try {
+      if (typeof item !== "string" && typeof item !== "number") continue;
+      const fragment = String(item || "").trim().slice(0, MAX_FRAGMENT);
+      if (!fragment || pageRulePathInputIssue(fragment)) continue;
+      const keys = pageRuleDuplicateIdentityKeys(fragment, "pathname");
+      if (keys.some((key) => seen.has(key))) continue;
+      for (const key of keys) seen.add(key);
+      out.push(fragment);
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+export function sanitizePageRuleUrlAliases(
+  raw: unknown,
+  primary?: string,
+): { aliases: string[]; error?: string } {
+  if (raw == null) return { aliases: [] };
+  if (!Array.isArray(raw)) return { aliases: [], error: "Additional paths must be a list." };
+  if (raw.length > WIDGET_PAGE_RULE_MAX_ALIASES) {
+    return { aliases: [], error: "Too many additional paths (maximum 8)." };
+  }
+  const seen = new Set(pageRuleDuplicateIdentityKeys(String(primary || ""), "pathname"));
+  const out: string[] = [];
+  for (const item of raw) {
+    if (item == null || item === "") continue;
+    if (typeof item !== "string" && typeof item !== "number") {
+      return { aliases: [], error: "Each additional path must be text." };
+    }
+    const fragment = String(item).trim();
+    if (!fragment) continue;
+    const comma = pageRulePathInputIssue(fragment);
+    if (comma) return { aliases: [], error: comma };
+    if (fragment.length > MAX_FRAGMENT) {
+      return { aliases: [], error: "URL fragment is too long." };
+    }
+    const keys = pageRuleDuplicateIdentityKeys(fragment, "pathname");
+    if (keys.some((key) => seen.has(key))) {
+      return {
+        aliases: [],
+        error: "Additional paths cannot duplicate the primary path or each other.",
+      };
+    }
+    for (const key of keys) seen.add(key);
+    out.push(fragment.slice(0, MAX_FRAGMENT));
+  }
+  return { aliases: out };
+}
+
 export function pageRuleStableKey(rule: { urlContains?: unknown; matchType?: unknown }): string {
   const fragment = String(rule.urlContains || "").trim().toLowerCase().slice(0, 200);
   const matchType = normalizePageRuleMatchType(rule.matchType);
   return `${matchType}:${fragment}`;
 }
 
-export function pageRuleMatchesHref(
-  rule: { urlContains?: unknown; matchType?: unknown },
+function fragmentMatchesHref(
+  fragment: string,
+  matchType: WidgetPageRuleMatchType,
   href: string,
 ): boolean {
-  const fragment = String(rule.urlContains || "").trim();
-  if (!fragment) return false;
-  const matchType = normalizePageRuleMatchType(rule.matchType);
+  const trimmed = String(fragment || "").trim();
+  if (!trimmed) return false;
   const trimmedHref = String(href || "").slice(0, MAX_HREF);
   if (!trimmedHref) return false;
   if (matchType === "contains") {
-    return trimmedHref.indexOf(fragment) !== -1;
+    return trimmedHref.indexOf(trimmed) !== -1;
   }
   const path = hrefPathnameForMatch(trimmedHref);
-  const want = rulePathname(fragment);
+  const want = rulePathname(trimmed);
   if (!path || !want) return false;
   if (matchType === "pathname") return path === want;
   return path === want || path.startsWith(`${want}/`);
+}
+
+export function pageRuleMatchesHref(
+  rule: { urlContains?: unknown; urlAliases?: unknown; matchType?: unknown },
+  href: string,
+): boolean {
+  const matchType = normalizePageRuleMatchType(rule.matchType);
+  const primary = String(rule.urlContains || "").trim();
+  if (!primary) return false;
+  if (fragmentMatchesHref(primary, matchType, href)) return true;
+  if (matchType !== "pathname") return false;
+  for (const alias of collectPageRuleAliasFragments(rule)) {
+    if (fragmentMatchesHref(alias, matchType, href)) return true;
+  }
+  return false;
 }
 
 function suggestedQuestionsFromRule(raw: unknown): string[] {
@@ -125,8 +252,14 @@ export function hydrateMatchedWidgetPageRule(
   const ctaLabel = typeof raw.ctaLabel === "string" ? raw.ctaLabel.trim().slice(0, 80) : "";
   const ctaUrl = typeof raw.ctaUrl === "string" ? raw.ctaUrl.trim().slice(0, 2000) : "";
   const greetingRaw = typeof raw.greeting === "string" ? raw.greeting : "";
+  const urlAliases = collectPageRuleAliasFragments({
+    urlContains,
+    urlAliases: raw.urlAliases,
+    matchType,
+  });
   return {
     urlContains,
+    ...(urlAliases.length ? { urlAliases } : {}),
     matchType,
     ruleKey: pageRuleStableKey({ urlContains, matchType }),
     greeting:

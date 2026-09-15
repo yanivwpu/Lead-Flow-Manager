@@ -8,10 +8,15 @@ import type { WebchatChromeLayout } from "./webchatWidgetChrome";
 import { toVisitorSafePublicWebchatPayload } from "./webchatWidgetBranding";
 import { resolveLocalizedPageRuleGreeting, resolveLocalizedPageRuleQuestions } from "./webchatWidgetCopyI18n";
 import { resolveLocalizedPageRuleTeaser } from "./webchatPageRuleTeaser";
-import { normalizePageRuleMatchType, type WidgetPageRuleMatchType } from "./webchatPageRuleMatch";
+import {
+  collectPageRuleAliasFragments,
+  normalizePageRuleMatchType,
+  type WidgetPageRuleMatchType,
+} from "./webchatPageRuleMatch";
 
 export type VisitorSafeWidgetPageRule = {
   urlContains: string;
+  urlAliases?: string[];
   matchType: WidgetPageRuleMatchType;
   greeting: string;
   teaserGreeting: string;
@@ -72,6 +77,12 @@ export function visitorSafeWidgetPageRules(
       const r = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
       const urlContains = sanitizePlainWidgetText(r.urlContains, 500);
       if (!urlContains) continue;
+      const matchType = normalizePageRuleMatchType(r.matchType);
+      const urlAliases = collectPageRuleAliasFragments({
+        urlContains,
+        urlAliases: r.urlAliases,
+        matchType,
+      });
       const questions = resolveLocalizedPageRuleQuestions({
         locale,
         suggestedQuestions: r.suggestedQuestions,
@@ -79,7 +90,8 @@ export function visitorSafeWidgetPageRules(
       });
       out.push({
         urlContains,
-        matchType: normalizePageRuleMatchType(r.matchType),
+        ...(urlAliases.length ? { urlAliases } : {}),
+        matchType,
         greeting: resolveLocalizedPageRuleGreeting({
           locale,
           greeting: r.greeting,

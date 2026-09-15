@@ -1301,6 +1301,7 @@ export async function registerRoutes(
 
   const widgetPageRuleSchema = z.object({
     urlContains: z.string().max(500),
+    urlAliases: z.array(z.string().max(500)).max(8).optional(),
     matchType: z.enum(["contains", "pathname", "pathname_prefix"]).optional(),
     greeting: z.string().max(500),
     teaserGreeting: z.string().max(200).optional(),

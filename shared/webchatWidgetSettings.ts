@@ -15,6 +15,11 @@ import {
 } from "./webchatWidgetBranding";
 import { sanitizeWebchatFormDefinition } from "./webchatStructuredForm";
 import { sanitizeWidgetCopyI18nMap } from "./webchatWidgetCopyI18n";
+import {
+  pageRuleDuplicateIdentityKeys,
+  pageRulePathInputIssue,
+  sanitizePageRuleUrlAliases,
+} from "./webchatPageRuleMatch";
 
 export const NEUTRAL_WIDGET_COLOR = "#10b981";
 export const NEUTRAL_WIDGET_WELCOME = "Hi! How can we help you today?";
@@ -23,6 +28,7 @@ export const LEGACY_WIDGET_WELCOME = "Hi there! How can we help you today?";
 
 export type WidgetPageRuleShape = {
   urlContains?: string;
+  urlAliases?: string[];
   matchType?: unknown;
   greeting?: string;
   teaserGreeting?: string;
@@ -181,6 +187,7 @@ function ctaLabelMatchLegacyDefault(raw: unknown): boolean {
 
 /** Empty extras or the old UI placeholders — not a customer customization. */
 function extrasAreUntouchedPlatformDefaults(rule: WidgetPageRuleShape): boolean {
+  if (Array.isArray(rule.urlAliases) && rule.urlAliases.some((item) => normText(item))) return false;
   if (normText(rule.chatbotFlowId)) return false;
   if (normText(rule.ctaUrl)) return false;
   if (!ctaLabelMatchLegacyDefault(rule.ctaLabel)) return false;
@@ -356,6 +363,15 @@ export function validateWidgetPageRules(raw: unknown): PageRuleValidation {
   if (raw.length > 30) return { ok: false, error: "Too many page rules." };
   const seen = new Set<string>();
   const rules: WidgetPageRuleShape[] = [];
+  const claimKeys = (keys: string[]): string | null => {
+    for (const key of keys) {
+      if (seen.has(key)) {
+        return "Two page rules use the same URL fragment. The first match wins — remove the duplicate.";
+      }
+    }
+    for (const key of keys) seen.add(key);
+    return null;
+  };
   for (const item of raw) {
     if (!item || typeof item !== "object") {
       return { ok: false, error: "Each page rule must be an object." };
@@ -368,28 +384,42 @@ export function validateWidgetPageRules(raw: unknown): PageRuleValidation {
     if (urlContains.length > 500) {
       return { ok: false, error: "URL fragment is too long." };
     }
-    const key = urlContains.toLowerCase();
-    if (seen.has(key)) {
-      return { ok: false, error: "Two page rules use the same URL fragment. The first match wins — remove the duplicate." };
-    }
-    seen.add(key);
-    const ctaUrl = normText(rule.ctaUrl);
-    if (ctaUrl && !/^https?:\/\//i.test(ctaUrl)) {
-      return { ok: false, error: "CTA URL must start with https:// or http://." };
-    }
+    const comma = pageRulePathInputIssue(urlContains);
+    if (comma) return { ok: false, error: comma };
     const matchType =
       rule.matchType === "pathname" || rule.matchType === "pathname_prefix" || rule.matchType === "contains"
         ? rule.matchType
         : undefined;
-    rules.push({
+    const identityType = matchType || "contains";
+    const primaryDup = claimKeys(pageRuleDuplicateIdentityKeys(urlContains, identityType));
+    if (primaryDup) return { ok: false, error: primaryDup };
+    let urlAliases: string[] | undefined;
+    if (matchType === "pathname") {
+      const sanitized = sanitizePageRuleUrlAliases(rule.urlAliases, urlContains);
+      if (sanitized.error) return { ok: false, error: sanitized.error };
+      for (const alias of sanitized.aliases) {
+        const aliasDup = claimKeys(pageRuleDuplicateIdentityKeys(alias, "pathname"));
+        if (aliasDup) return { ok: false, error: aliasDup };
+      }
+      if (sanitized.aliases.length) urlAliases = sanitized.aliases;
+    }
+    const ctaUrl = normText(rule.ctaUrl);
+    if (ctaUrl && !/^https?:\/\//i.test(ctaUrl)) {
+      return { ok: false, error: "CTA URL must start with https:// or http://." };
+    }
+    const next: WidgetPageRuleShape = {
       ...rule,
       urlContains,
-      ...(matchType ? { matchType } : {}),
       greeting: normText(rule.greeting).slice(0, 500),
       prefilledMessage: String(rule.prefilledMessage || "").slice(0, 2000),
       ctaUrl,
       ctaLabel: normText(rule.ctaLabel).slice(0, 80),
-    });
+    };
+    if (matchType) next.matchType = matchType;
+    else delete next.matchType;
+    if (urlAliases?.length) next.urlAliases = urlAliases;
+    else delete next.urlAliases;
+    rules.push(next);
   }
   return { ok: true, rules };
 }

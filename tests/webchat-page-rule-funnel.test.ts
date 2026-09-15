@@ -397,6 +397,7 @@ test("visitor-safe launcher includes matchType and never ships flow ids or the f
   assert.equal(rules[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.es);
   assert.notEqual(rules[0]?.teaserGreeting, rules[0]?.greeting);
   assert.equal("chatbotFlowId" in rules[0], false);
+  assert.equal("urlAliases" in rules[0], false);
   const defaults = read("shared/webchatWidgetSettings.ts");
   assert.match(defaults, /pageRules: \[\]/);
   assert.doesNotMatch(defaults, /Comparing plans\?/);

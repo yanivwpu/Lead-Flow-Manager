@@ -151,16 +151,33 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       }
     }
 
-    function ruleMatches(rule, href) {
-      var q = (rule && rule.urlContains ? String(rule.urlContains) : '').trim();
+    function fragmentMatches(fragment, matchType, href) {
+      var q = String(fragment || '').trim();
       if (!q) return false;
-      var matchType = rule.matchType === 'pathname' || rule.matchType === 'pathname_prefix' ? rule.matchType : 'contains';
       if (matchType === 'contains') return href.indexOf(q) !== -1;
       var path = hrefPathname(href);
       var want = q.indexOf('://') !== -1 ? hrefPathname(q) : normalizePathname(q.split('?')[0].split('#')[0]);
       if (!path || !want) return false;
       if (matchType === 'pathname') return path === want;
       return path === want || path.indexOf(want + '/') === 0;
+    }
+
+    function ruleMatches(rule, href) {
+      var q = (rule && rule.urlContains ? String(rule.urlContains) : '').trim();
+      if (!q) return false;
+      var matchType = rule.matchType === 'pathname' || rule.matchType === 'pathname_prefix' ? rule.matchType : 'contains';
+      if (fragmentMatches(q, matchType, href)) return true;
+      if (matchType !== 'pathname') return false;
+      var aliases = rule && rule.urlAliases;
+      if (!aliases || !aliases.length) return false;
+      for (var a = 0; a < aliases.length && a < 8; a++) {
+        try {
+          var extra = String(aliases[a] || '').trim();
+          if (!extra || extra.indexOf(',') !== -1) continue;
+          if (fragmentMatches(extra, matchType, href)) return true;
+        } catch (aliasErr) {}
+      }
+      return false;
     }
 
     function activeRule() {
