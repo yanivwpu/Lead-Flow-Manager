@@ -4,6 +4,7 @@
  */
 
 import { parseHttpUrl } from "./webchatPageContext";
+import { sanitizeWidgetLocaleParam } from "./webchatWidgetLocale";
 
 export const WEBCHAT_PAGE_CONTEXT_MESSAGE_SOURCE = "wcw-parent";
 export const WEBCHAT_PAGE_CONTEXT_MESSAGE_TYPE = "wcw-page-context";
@@ -15,6 +16,8 @@ export type WebchatPageContextMessage = {
   href: string;
   pageTitle?: string;
   referrer?: string;
+  /** Live display locale from the parent page. Independent of page-rule identity. */
+  locale?: string;
 };
 
 const MAX_HREF = 4000;
@@ -26,6 +29,7 @@ export function buildWebchatPageContextMessage(input: {
   href: string;
   pageTitle?: string;
   referrer?: string;
+  locale?: string;
 }): WebchatPageContextMessage | null {
   const widgetId = String(input.widgetId || "").trim();
   const parsed = parseHttpUrl(input.href);
@@ -38,13 +42,17 @@ export function buildWebchatPageContextMessage(input: {
     href: parsed.toString().slice(0, MAX_HREF),
     ...(input.pageTitle ? { pageTitle: String(input.pageTitle).trim().slice(0, MAX_TITLE) } : {}),
     ...(referrerParsed ? { referrer: referrerParsed.toString().slice(0, MAX_REFERRER) } : {}),
+    ...(sanitizeWidgetLocaleParam(input.locale)
+      ? { locale: sanitizeWidgetLocaleParam(input.locale) }
+      : {}),
   };
 }
 
-export function effectivePageContextKey(href: string, pageTitle?: string): string {
+/** Path + title + display locale. Query/hash do not create a new context. Rule key is not part of this. */
+export function effectivePageContextKey(href: string, pageTitle?: string, locale?: string): string {
   const parsed = parseHttpUrl(href);
   const url = parsed ? `${parsed.origin}${parsed.pathname}` : "";
-  return `${url}\n${String(pageTitle || "").trim()}`;
+  return `${url}\n${String(pageTitle || "").trim()}\n${sanitizeWidgetLocaleParam(locale)}`;
 }
 
 export function parseTrustedParentPageContextMessage(
@@ -70,6 +78,7 @@ export function parseTrustedParentPageContextMessage(
     href: typeof payload.href === "string" ? payload.href : "",
     pageTitle: typeof payload.pageTitle === "string" ? payload.pageTitle : undefined,
     referrer: typeof payload.referrer === "string" ? payload.referrer : undefined,
+    locale: typeof payload.locale === "string" ? payload.locale : undefined,
   });
   if (!built) return null;
   const hrefOrigin = parseHttpUrl(built.href)?.origin.toLowerCase() || "";

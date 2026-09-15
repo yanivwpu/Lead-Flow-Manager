@@ -14,6 +14,12 @@ import {
   type WidgetPageRuleMatchType,
 } from "./webchatPageRuleMatch";
 
+export type VisitorSafePageRuleLocaleCopy = {
+  greeting?: string;
+  teaserGreeting?: string;
+  suggestedQuestions?: string[];
+};
+
 export type VisitorSafeWidgetPageRule = {
   urlContains: string;
   urlAliases?: string[];
@@ -22,7 +28,38 @@ export type VisitorSafeWidgetPageRule = {
   teaserGreeting: string;
   prefilledMessage: string;
   suggestedQuestions: string[];
+  localized?: Partial<Record<"en" | "es" | "he", VisitorSafePageRuleLocaleCopy>>;
 };
+
+function visitorSafePageRuleLocalizedCopy(raw: Record<string, unknown>): VisitorSafeWidgetPageRule["localized"] {
+  const out: NonNullable<VisitorSafeWidgetPageRule["localized"]> = {};
+  for (const loc of ["en", "es", "he"] as const) {
+    const greeting = resolveLocalizedPageRuleGreeting({
+      locale: loc,
+      greeting: raw.greeting,
+      localized: raw.localized,
+      fallback: "",
+    });
+    const teaserGreeting = resolveLocalizedPageRuleTeaser({
+      locale: loc,
+      teaserGreeting: raw.teaserGreeting,
+      greeting: raw.greeting,
+      localized: raw.localized,
+    });
+    const suggestedQuestions = resolveLocalizedPageRuleQuestions({
+      locale: loc,
+      suggestedQuestions: raw.suggestedQuestions,
+      localized: raw.localized,
+    });
+    if (!greeting && !teaserGreeting && !suggestedQuestions.length) continue;
+    out[loc] = {
+      ...(greeting ? { greeting } : {}),
+      ...(teaserGreeting ? { teaserGreeting } : {}),
+      ...(suggestedQuestions.length ? { suggestedQuestions } : {}),
+    };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 export type VisitorSafeWidgetLauncher = {
   triggerType: "always" | "delay" | "scroll" | "exit_intent";
@@ -88,6 +125,7 @@ export function visitorSafeWidgetPageRules(
         suggestedQuestions: r.suggestedQuestions,
         localized: r.localized,
       });
+      const localized = visitorSafePageRuleLocalizedCopy(r);
       out.push({
         urlContains,
         ...(urlAliases.length ? { urlAliases } : {}),
@@ -106,6 +144,7 @@ export function visitorSafeWidgetPageRules(
         }),
         prefilledMessage: sanitizePlainWidgetText(r.prefilledMessage, 2000),
         suggestedQuestions: questions,
+        ...(localized ? { localized } : {}),
       });
       if (out.length >= 30) break;
     } catch {

@@ -32,6 +32,8 @@ import {
   webchatMessageIds,
 } from "@shared/webchatWidgetScroll";
 import {
+  nextWidgetHrefLocale,
+  resolveWidgetDisplayLocale,
   resolveWidgetStaticLocale,
   sanitizeWidgetLocaleParam,
   widgetChromeCopyForLocale,
@@ -153,6 +155,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [ruleMatchHref]);
 
   const [parentPageHref, setParentPageHref] = useState<string | null>(initialParentHref);
+  const [parentPageLocale, setParentPageLocale] = useState(() =>
+    resolveWidgetDisplayLocale({ href: initialParentHref, explicit: urlLocale }),
+  );
   const [parentPageTitle, setParentPageTitle] = useState("");
   const expectedParentOrigin = useMemo(() => {
     const href = parentPageHref || initialParentHref;
@@ -211,6 +216,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const pageRuleKeyRef = useRef<string | null>(null);
   const settingsReadyRef = useRef(false);
   const activePageRuleRef = useRef<string | null>(null);
+  const lastPrefixedLocaleRef = useRef(
+    nextWidgetHrefLocale(initialParentHref, {}).lastPrefixedLocale,
+  );
   const userId = widgetId;
 
   useEffect(() => {
@@ -269,11 +277,21 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       });
       if (!parsed) return;
       setParentPageHref((prev) => (prev === parsed.href ? prev : parsed.href));
+      setParentPageLocale((prev) => {
+        const live = sanitizeWidgetLocaleParam(parsed.locale);
+        const next = nextWidgetHrefLocale(
+          parsed.href,
+          { lastPrefixedLocale: lastPrefixedLocaleRef.current },
+          { explicit: live || prev || urlLocale },
+        );
+        lastPrefixedLocaleRef.current = next.lastPrefixedLocale;
+        return next.locale;
+      });
       if (parsed.pageTitle) setParentPageTitle(parsed.pageTitle);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [userId, expectedParentOrigin]);
+  }, [userId, expectedParentOrigin, urlLocale]);
 
   useEffect(() => {
     if (!userId) return;
@@ -282,7 +300,11 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
 
     const settingsQs = new URLSearchParams();
     if (parentPageHref) settingsQs.set("href", parentPageHref);
-    if (urlLocale) settingsQs.set("locale", urlLocale);
+    const displayLocale = resolveWidgetDisplayLocale({
+      href: parentPageHref,
+      explicit: parentPageLocale || urlLocale,
+    });
+    if (displayLocale) settingsQs.set("locale", displayLocale);
     const settingsUrl = settingsQs.toString()
       ? `/api/webchat/${userId}/settings?${settingsQs.toString()}`
       : `/api/webchat/${userId}/settings`;
@@ -342,9 +364,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
         else setCtaUrl("");
         setLeadForm(sanitizeWebchatFormDefinition(data?.leadForm));
-        const resolvedLocale = resolveWidgetStaticLocale({
-          explicit: typeof data?.locale === "string" ? data.locale : urlLocale,
-          pathname: parentPageHref,
+        const resolvedLocale = resolveWidgetDisplayLocale({
+          href: parentPageHref,
+          explicit: typeof data?.locale === "string" ? data.locale : parentPageLocale || urlLocale,
         });
         setWidgetLocale(resolvedLocale);
         const fromApi = data?.chromeCopy && typeof data.chromeCopy === "object" ? data.chromeCopy as Partial<WidgetChromeCopy> : null;
@@ -366,7 +388,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     return () => {
       cancelled = true;
     };
-  }, [userId, parentPageHref, urlLocale]);
+  }, [userId, parentPageHref, parentPageLocale, urlLocale]);
 
   useLayoutEffect(() => {
     if (!presentation || !userId) return;

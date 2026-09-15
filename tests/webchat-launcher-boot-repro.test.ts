@@ -316,6 +316,9 @@ function bootWidget(opts: BootOpts) {
     locationObj,
     flushTimers,
     dispatchMessage,
+    firePopState() {
+      for (const fn of windowListeners.popstate || []) fn({});
+    },
     advanceClock(ms: number) {
       clock += ms;
     },
@@ -661,6 +664,76 @@ function teaserBody(el: { lastChild?: { textContent: string } } | undefined) {
   assert.equal(es[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.es);
   assert.equal(he[0]?.teaserGreeting, PRICING_PAGE_RULE_TEASER.he);
   assert.notEqual(es[0]?.teaserGreeting, es[0]?.greeting);
+}
+
+{
+  const aliased = { ...PRICING_PAGE_RULE_FIXTURE, urlAliases: ["/es/pricing", "/he/pricing"] };
+  const pending = bootWidget({
+    href: "https://www.whachatcrm.com/he/pricing",
+    pageRules: [aliased],
+    timerMode: "queue",
+  });
+  assert.ok(pending.launcher, "closed launcher stays up while locale changes");
+  const histRet = pending.historyObj.pushState({}, "", "/es/pricing");
+  assert.equal((histRet as { kind: string }).kind, "push");
+  pending.flushTimers(1200);
+  assert.equal(teaserBody(pending.teaser), PRICING_PAGE_RULE_TEASER.es);
+  assert.equal(pending.teaser?.attrs.dir, "ltr");
+
+  const visible = bootWidget({
+    href: "https://www.whachatcrm.com/he/pricing",
+    pageRules: [aliased],
+    timerMode: "queue",
+  });
+  visible.flushTimers(1200);
+  assert.equal(teaserBody(visible.teaser), PRICING_PAGE_RULE_TEASER.he);
+  assert.equal(visible.teaser?.attrs.dir, "rtl");
+  visible.historyObj.pushState({}, "", "/es/pricing");
+  assert.equal(teaserBody(visible.teaser), PRICING_PAGE_RULE_TEASER.es);
+  assert.equal(visible.teaser?.attrs["data-wcw-teaser-kind"], "page");
+  visible.locationObj.href = "https://www.whachatcrm.com/pricing";
+  visible.locationObj.pathname = "/pricing";
+  visible.firePopState();
+  assert.equal(teaserBody(visible.teaser), PRICING_PAGE_RULE_TEASER.en);
+  assert.equal(visible.teaser?.attrs.dir, "ltr");
+
+  const consumed = bootWidget({
+    href: "https://www.whachatcrm.com/es/pricing",
+    pageRules: [aliased],
+    pageTeaserShown: ["pathname:/pricing"],
+    timerMode: "queue",
+  });
+  consumed.flushTimers(1200);
+  consumed.historyObj.pushState({}, "", "/he/pricing");
+  consumed.flushTimers(1200);
+  assert.notEqual(consumed.teaser?.style.opacity, "1");
+
+  const queryOnly = bootWidget({
+    href: "https://www.whachatcrm.com/he/pricing",
+    pageRules: [aliased],
+    timerMode: "queue",
+  });
+  queryOnly.historyObj.pushState({}, "", "/he/pricing?utm=1");
+  queryOnly.flushTimers(1200);
+  assert.equal(teaserBody(queryOnly.teaser), PRICING_PAGE_RULE_TEASER.he);
+
+  const opened = bootWidget({
+    href: "https://www.whachatcrm.com/he/pricing",
+    pageRules: [aliased],
+  });
+  opened.launcher!.listeners.click?.[0]?.();
+  const findTag = (els: typeof opened.created, tag: string): (typeof opened.created)[0] | undefined => {
+    for (const el of els) {
+      if (el.tag === tag) return el;
+      const nested = findTag(el.children || [], tag);
+      if (nested) return nested;
+    }
+  };
+  const iframe = findTag(opened.created, "iframe");
+  const initialSrc = String(iframe?.src || iframe?.attrs.src || "");
+  opened.historyObj.pushState({}, "", "/es/pricing");
+  opened.historyObj.replaceState({}, "", "/pricing");
+  assert.equal(String(iframe?.src || iframe?.attrs.src || ""), initialSrc);
 }
 
 console.log("webchat-launcher-boot-repro: ok");

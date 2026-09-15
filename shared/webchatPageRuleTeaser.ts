@@ -89,6 +89,32 @@ export function writeShownPageRuleTeaserKeys(existing: string[], nextKey: string
 
 export type PageRuleTeaserDecision = "schedule" | "none";
 
+export type PageRuleTeaserLocaleSync = "update-visible" | "reschedule-pending" | "keep-consumed" | "replan";
+
+/**
+ * Same logical rule + new display locale: update copy, never a second exposure.
+ * Rule identity stays the primary key; locale is a separate dimension.
+ */
+export function decidePageRuleTeaserLocaleSync(input: {
+  localeChanged: boolean;
+  sameRuleKey: boolean;
+  teaserVisible: boolean;
+  alreadyShownForRule: boolean;
+  pending: boolean;
+}): PageRuleTeaserLocaleSync {
+  if (input.sameRuleKey && input.alreadyShownForRule && input.teaserVisible) {
+    return "update-visible";
+  }
+  if (input.sameRuleKey && input.alreadyShownForRule && !input.teaserVisible) {
+    return "keep-consumed";
+  }
+  if (input.sameRuleKey && input.pending && input.localeChanged) {
+    return "reschedule-pending";
+  }
+  if (!input.localeChanged && input.sameRuleKey) return "keep-consumed";
+  return "replan";
+}
+
 export function decidePageRuleTeaser(input: {
   openBehavior?: string | null;
   chatOpen: boolean;

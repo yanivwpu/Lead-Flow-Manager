@@ -325,14 +325,14 @@ export function registerWebhookRoutes(app: Express): void {
       }
       const ws = access.owner.widgetSettings;
       const {
-        resolveWidgetStaticLocale,
+        resolveWidgetDisplayLocale,
         widgetChromeCopyForLocale,
         widgetChromeDir,
         sanitizeWidgetLocaleParam,
       } = await import("@shared/webchatWidgetLocale");
-      const locale = resolveWidgetStaticLocale({
+      const locale = resolveWidgetDisplayLocale({
+        href: hrefParam,
         explicit: sanitizeWidgetLocaleParam(localeParam) || (typeof ws.widgetLocale === "string" ? ws.widgetLocale : ""),
-        pathname: hrefParam,
       });
       let matched = null;
       try {

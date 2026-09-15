@@ -81,7 +81,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     var LOGO_URL = cfg.logoUrl;
     var ICON_SVG = cfg.iconSvg;
     var CLOSE_SVG = cfg.closeIconSvg;
-    var LOCALE = cfg.locale || '';
+    var LOCALE = cfg.locale || resolveParentLocale() || '';
     var DIR = (LOCALE === 'he' || LOCALE === 'ar') ? 'rtl' : 'ltr';
 
     if (!LAUNCHER_CSS || !WIDGET_ID) return;
@@ -194,7 +194,8 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
 
     function welcomeText() {
       var r = activeRule();
-      if (r && r.greeting) return r.greeting;
+      var g = r ? localizedRuleCopy(r, 'greeting') : '';
+      if (g) return g;
       return DEFAULT_WELCOME;
     }
 
@@ -233,11 +234,19 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       return (sliced || cut.slice(0, PAGE_TEASER_MAX - 3)).trim() + '...';
     }
 
+    function localizedRuleCopy(rule, field) {
+      if (!rule) return '';
+      var loc = LOCALE === 'es' || LOCALE === 'he' ? LOCALE : 'en';
+      var block = rule.localized && typeof rule.localized === 'object' ? rule.localized[loc] : null;
+      if (block && block[field]) return String(block[field] || '');
+      return String(rule[field] || '');
+    }
+
     function pageRuleTeaserCopy(rule) {
       if (!rule) return '';
-      var explicit = String(rule.teaserGreeting || '').trim();
+      var explicit = String(localizedRuleCopy(rule, 'teaserGreeting') || '').trim();
       if (explicit) return explicit.slice(0, 200);
-      return fallbackPageRuleTeaser(rule.greeting);
+      return fallbackPageRuleTeaser(localizedRuleCopy(rule, 'greeting') || rule.greeting);
     }
 
     function readPageTeaserKeys() {
@@ -339,7 +348,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         if (gen !== teaserGen || chatOpen || teaserBlocked) return;
         var now = activeRule();
         if (ruleKey(now) !== key) return;
-        showTeaserBubble(text, 'page');
+        showTeaserBubble(pageRuleTeaserCopy(now) || text, 'page');
         markPageTeaserShown(key);
         markPageTeaserCooldown();
         if (!hold) return;
@@ -373,7 +382,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
           qs.push('parentUrl=' + encodeURIComponent(window.location.href));
         }
       } catch (e) {}
-      if (cfg.locale) qs.push('locale=' + encodeURIComponent(cfg.locale));
+      if (LOCALE) qs.push('locale=' + encodeURIComponent(LOCALE));
       return qs.length ? (base + '?' + qs.join('&')) : base;
     }
 
@@ -447,12 +456,14 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       });
       document.body.appendChild(bubble);
       planTeasers();
+      lastNavContextKey = pageContextDedupeKey(parentPagePayload());
     }
 
     var brandingReady = false;
     var chatOpen = false;
     var frameContainer = null;
     var lastPostedPageKey = '';
+    var lastNavContextKey = '';
     var historyHooked = false;
 
     function parentPagePayload() {
@@ -471,15 +482,29 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
         widgetId: WIDGET_ID,
         href: href,
         pageTitle: pageTitle,
-        referrer: referrer
+        referrer: referrer,
+        locale: LOCALE || ''
       };
+    }
+
+    function pageContextDedupeKey(payload) {
+      var origin = '';
+      var path = '';
+      try {
+        var u = new URL(String(payload.href || ''), window.location.href);
+        if (u.protocol === 'http:' || u.protocol === 'https:') {
+          origin = u.origin || '';
+          path = normalizePathname(u.pathname);
+        }
+      } catch (e) {}
+      return origin + path + '\\n' + String(payload.pageTitle || '') + '\\n' + String(payload.locale || '');
     }
 
     function postPageContext() {
       var fr = frameContainer && frameContainer.querySelector('iframe');
       if (!fr || !fr.contentWindow) return;
       var payload = parentPagePayload();
-      var key = String(payload.href || '') + '\\n' + String(payload.pageTitle || '');
+      var key = pageContextDedupeKey(payload);
       if (key === lastPostedPageKey) return;
       lastPostedPageKey = key;
       try {
@@ -517,10 +542,52 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       } catch (listenErr) {}
     }
 
+    function applyDisplayDir(locale) {
+      DIR = (locale === 'he' || locale === 'ar') ? 'rtl' : 'ltr';
+      try { if (btn) btn.setAttribute('dir', DIR); } catch (e) {}
+      try {
+        if (bubble) {
+          bubble.setAttribute('dir', DIR);
+          bubble.style.textAlign = DIR === 'rtl' ? 'right' : 'left';
+        }
+      } catch (e2) {}
+    }
+
+    function syncVisiblePageTeaser() {
+      if (!bubble || chatOpen) return;
+      if (bubble.style.opacity !== '1') return;
+      if (bubble.getAttribute('data-wcw-teaser-kind') !== 'page') return;
+      var r = activeRule();
+      var text = pageRuleTeaserCopy(r);
+      if (text) showTeaserBubble(text, 'page');
+    }
+
     function onParentNavigate() {
-      hideTeaserBubble();
+      var prevLocale = LOCALE;
+      var nextLocale = resolveParentLocale();
+      if (nextLocale) LOCALE = nextLocale;
+      var localeChanged = Boolean(nextLocale && nextLocale !== prevLocale);
+      if (localeChanged) applyDisplayDir(LOCALE);
+      var navKey = pageContextDedupeKey(parentPagePayload());
+      if (navKey === lastNavContextKey) {
+        postPageContext();
+        return;
+      }
+      lastNavContextKey = navKey;
+      var r = activeRule();
+      var key = ruleKey(r);
+      var visiblePage = !!(bubble && bubble.style.opacity === '1' && bubble.getAttribute('data-wcw-teaser-kind') === 'page');
+      var already = key ? pageTeaserShown(key) : false;
       cancelPendingTeaser();
       postPageContext();
+      if (key && already && visiblePage) {
+        syncVisiblePageTeaser();
+        return;
+      }
+      if (key && already && !visiblePage) {
+        return;
+      }
+      hideTeaserBubble();
       planTeasers();
     }
 
@@ -664,6 +731,7 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
       revealed = true;
       try { createButton(); } catch (btnErr) {}
       try { createBubble(); } catch (bubbleErr) {}
+      try { hookHistory(); } catch (histErr) {}
       try { document.addEventListener('keydown', onKey); } catch (keyErr) {}
     }
 
@@ -773,7 +841,19 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     };
   }
 
+  var lastPrefixedLocale = '';
   function resolveParentLocale() {
+    var path = '';
+    try { path = window.location && window.location.pathname ? String(window.location.pathname) : ''; } catch (e3) {}
+    var fromPath = path.match(/\\/(es|he)(?:\\/|$)/i);
+    if (fromPath) {
+      lastPrefixedLocale = fromPath[1].toLowerCase();
+      return lastPrefixedLocale;
+    }
+    if (lastPrefixedLocale) {
+      lastPrefixedLocale = '';
+      return 'en';
+    }
     var explicit = '';
     try {
       var el = document.documentElement;
@@ -783,14 +863,10 @@ export function buildWebchatPublicScript(input: WebchatPublicScriptInput): strin
     } catch (e) {}
     var htmlLang = '';
     try { htmlLang = document.documentElement && document.documentElement.lang ? String(document.documentElement.lang) : ''; } catch (e2) {}
-    var path = '';
-    try { path = window.location && window.location.pathname ? String(window.location.pathname) : ''; } catch (e3) {}
     var browser = '';
     try { browser = navigator && navigator.language ? String(navigator.language) : ''; } catch (e4) {}
-    var fromPath = path.match(/\\/(es|he)(?:\\/|$)/i);
     if (explicit) return explicit.split('-')[0].toLowerCase();
     if (htmlLang) return htmlLang.split('-')[0].toLowerCase();
-    if (fromPath) return fromPath[1].toLowerCase();
     if (browser) return browser.split('-')[0].toLowerCase();
     return 'en';
   }

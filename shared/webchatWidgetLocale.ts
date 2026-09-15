@@ -126,6 +126,64 @@ export function widgetLocaleFromPathname(pathname: string | null | undefined): W
   return null;
 }
 
+/** es/he only when the path itself encodes a locale prefix. Unprefixed paths return null. */
+export function widgetLocaleFromPrefixedHref(href: string | null | undefined): "es" | "he" | null {
+  const raw = String(href || "").trim();
+  if (!raw) return null;
+  try {
+    const path = raw.startsWith("http") ? new URL(raw).pathname : raw;
+    const parsed = parseLocalizedPath(path);
+    if (parsed.isLocalePrefixed && (parsed.locale === "es" || parsed.locale === "he")) {
+      return parsed.locale;
+    }
+  } catch {
+    const m = raw.match(/\/(es|he)(?:\/|$)/i);
+    if (m) return m[1].toLowerCase() as "es" | "he";
+  }
+  return null;
+}
+
+/**
+ * Display locale for the current parent page.
+ * Prefixed /es and /he paths win over stale boot/query/html snapshots.
+ * After leaving a prefixed route, the next unprefixed URL is English so
+ * /he/pricing → /pricing updates immediately in the same session.
+ */
+export function nextWidgetHrefLocale(
+  href: string | null | undefined,
+  session: { lastPrefixedLocale?: string | null },
+  fallbacks?: {
+    explicit?: string | null;
+    htmlLang?: string | null;
+    browserLanguage?: string | null;
+  },
+): { locale: WidgetStaticLocale; lastPrefixedLocale: string } {
+  const prefixed = widgetLocaleFromPrefixedHref(href);
+  if (prefixed) return { locale: prefixed, lastPrefixedLocale: prefixed };
+  if (session.lastPrefixedLocale === "es" || session.lastPrefixedLocale === "he") {
+    return { locale: "en", lastPrefixedLocale: "" };
+  }
+  return {
+    locale: resolveWidgetStaticLocale({
+      explicit: fallbacks?.explicit,
+      htmlLang: fallbacks?.htmlLang,
+      pathname: href,
+      browserLanguage: fallbacks?.browserLanguage,
+    }),
+    lastPrefixedLocale: "",
+  };
+}
+
+export function resolveWidgetDisplayLocale(input: {
+  href?: string | null;
+  explicit?: string | null;
+  htmlLang?: string | null;
+  browserLanguage?: string | null;
+  lastPrefixedLocale?: string | null;
+}): WidgetStaticLocale {
+  return nextWidgetHrefLocale(input.href, { lastPrefixedLocale: input.lastPrefixedLocale }, input).locale;
+}
+
 export function widgetLocaleFromBrowser(raw: string | null | undefined): WidgetStaticLocale | null {
   return widgetLocaleFromHtmlLang(raw);
 }

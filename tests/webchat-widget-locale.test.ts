@@ -9,6 +9,7 @@ import {
   localizeDefaultChromeText,
   localizeWebchatPresentationStrings,
   messageTextDir,
+  nextWidgetHrefLocale,
   resolveWidgetStaticLocale,
   sanitizeWidgetLocaleParam,
   widgetChromeCopyForLocale,
@@ -26,6 +27,11 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.equal(resolveWidgetStaticLocale({ htmlLang: "he" }), "he");
   assert.equal(resolveWidgetStaticLocale({ pathname: "/he/" }), "he");
   assert.equal(resolveWidgetStaticLocale({ pathname: "https://www.whachatcrm.com/es/pricing" }), "es");
+  assert.equal(nextWidgetHrefLocale("https://www.whachatcrm.com/he/pricing", {}).locale, "he");
+  assert.equal(
+    nextWidgetHrefLocale("https://www.whachatcrm.com/pricing", { lastPrefixedLocale: "he" }, { htmlLang: "he" }).locale,
+    "en",
+  );
   assert.equal(resolveWidgetStaticLocale({ browserLanguage: "es-MX" }), "es");
   assert.equal(resolveWidgetStaticLocale({}), "en");
   assert.equal(sanitizeWidgetLocaleParam("he-IL"), "he");
@@ -139,7 +145,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
   assert.match(script, /locale=/);
   assert.match(script, /setAttribute\('dir', DIR\)/);
   const settings = read("server/routes/webhooks.ts");
-  assert.match(settings, /resolveWidgetStaticLocale/);
+  assert.match(settings, /resolveWidgetDisplayLocale/);
   assert.match(settings, /chromeCopy/);
   assert.doesNotMatch(settings.slice(settings.indexOf('app.get("/api/webchat/:userId/settings"'), settings.indexOf('app.get("/api/webchat/:userId/:visitorId/messages"')), /email|password|token/);
   const frame = read("client/src/pages/WidgetFrame.tsx");
