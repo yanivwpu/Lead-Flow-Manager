@@ -16,7 +16,7 @@ import {
 } from "../shared/webchatWidgetLauncher";
 import { mergeNeutralWidgetSettings, validateWidgetPageRules } from "../shared/webchatWidgetSettings";
 import { HOMEPAGE_PAGE_RULE_FIXTURE, PRICING_PAGE_RULE_FIXTURE, PRICING_PAGE_RULE_TEASER } from "../shared/webchatPageRuleFixtures";
-import { matchWidgetPageRule } from "../shared/webchatPageRuleMatch";
+import { matchWidgetPageRule, pageRuleMatchesHref, pageRuleStableKey } from "../shared/webchatPageRuleMatch";
 import { readShownPageRuleKeys } from "../shared/webchatPageRuleEngagement";
 import {
   decidePageRuleTeaser,
@@ -688,7 +688,7 @@ function teaserBody(el: { lastChild?: { textContent: string } } | undefined) {
 }
 
 {
-  const aliased = { ...PRICING_PAGE_RULE_FIXTURE, urlAliases: ["/es/pricing", "/he/pricing"] };
+  const aliased = PRICING_PAGE_RULE_FIXTURE;
   const pending = bootWidget({
     href: "https://www.whachatcrm.com/he/pricing",
     pageRules: [aliased],
@@ -759,7 +759,7 @@ function teaserBody(el: { lastChild?: { textContent: string } } | undefined) {
 
 const HOME_AND_PRICING = [
   { ...HOMEPAGE_PAGE_RULE_FIXTURE },
-  { ...PRICING_PAGE_RULE_FIXTURE, urlAliases: ["/es/pricing", "/he/pricing"] },
+  { ...PRICING_PAGE_RULE_FIXTURE },
 ];
 
 {
@@ -888,6 +888,82 @@ const HOME_AND_PRICING = [
   homeFirst.flushTimers(1200);
   assert.equal(teaserBody(homeFirst.teaser), HOMEPAGE_PAGE_RULE_FIXTURE.teaserGreeting);
   assert.ok(!String(homeFirst.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+  homeFirst.historyObj.pushState({}, "", "/pricing");
+  assert.notEqual(homeFirst.teaser?.style.opacity, "1");
+  assert.equal(homeFirst.teaser?.attrs["data-wcw-teaser-reason"], "cooldown");
+  assert.ok(!String(homeFirst.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+  homeFirst.advanceClock(PAGE_RULE_TEASER_COOLDOWN_MS + 30);
+  homeFirst.flushTimers(PAGE_RULE_TEASER_COOLDOWN_MS + 50);
+  assert.equal(homeFirst.teaser?.style.opacity, "1");
+  assert.equal(teaserBody(homeFirst.teaser), PRICING_PAGE_RULE_TEASER.en);
+  assert.ok(String(homeFirst.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+}
+
+{
+  assert.equal(PRICING_PAGE_RULE_FIXTURE.matchType, "pathname");
+  assert.deepEqual([...PRICING_PAGE_RULE_FIXTURE.urlAliases], ["/es/pricing", "/he/pricing"]);
+  assert.equal(pageRuleStableKey(PRICING_PAGE_RULE_FIXTURE), "pathname:/pricing");
+  const production = { pageRules: [HOMEPAGE_PAGE_RULE_FIXTURE, PRICING_PAGE_RULE_FIXTURE] };
+  for (const [href, locale, copy] of [
+    ["https://www.whachatcrm.com/pricing", "en", PRICING_PAGE_RULE_TEASER.en],
+    ["https://www.whachatcrm.com/es/pricing", "es", PRICING_PAGE_RULE_TEASER.es],
+    ["https://www.whachatcrm.com/he/pricing", "he", PRICING_PAGE_RULE_TEASER.he],
+  ] as const) {
+    const hit = matchWidgetPageRule(production, href, locale);
+    assert.equal(hit?.ruleKey, "pathname:/pricing", href);
+    assert.equal(pageRuleMatchesHref(HOMEPAGE_PAGE_RULE_FIXTURE, href), false, href);
+    const text = resolveLocalizedPageRuleTeaser({ locale, ...PRICING_PAGE_RULE_FIXTURE });
+    assert.equal(text, copy);
+    assert.equal(
+      explainPageRuleTeaser({
+        openBehavior: "teaser",
+        chatOpen: false,
+        deviceAllowed: true,
+        ruleKey: hit?.ruleKey,
+        teaserText: text,
+        alreadyShownForRule: false,
+        cooldownActive: false,
+        humanTakeover: false,
+        pendingVisitorInput: false,
+      }).reason,
+      "eligible",
+    );
+    for (const mobile of [false, true]) {
+      const boot = bootWidget({ href, pageRules: HOME_AND_PRICING, timerMode: "queue", mobile });
+      assert.ok(boot.launcher);
+      assert.equal(boot.launcher?.attrs["aria-expanded"], "false");
+      assert.notEqual(boot.teaser?.style.opacity, "1");
+      assert.equal(boot.teaser?.attrs["data-wcw-teaser-reason"], "scheduled");
+      assert.ok(!String(boot.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+      boot.flushTimers(1200);
+      assert.equal(boot.teaser?.style.opacity, "1", `${href} mobile=${mobile}`);
+      assert.equal(boot.teaser?.attrs["data-wcw-teaser-kind"], "page");
+      assert.equal(boot.teaser?.attrs["data-wcw-teaser-reason"], "rendered");
+      assert.equal(teaserBody(boot.teaser), copy);
+      assert.ok(String(boot.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+    }
+  }
+}
+
+{
+  const churn = bootWidget({
+    href: "https://www.whachatcrm.com/pricing",
+    pageRules: HOME_AND_PRICING,
+    timerMode: "queue",
+  });
+  assert.equal(churn.teaser?.attrs["data-wcw-teaser-reason"], "scheduled");
+  assert.ok(!String(churn.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+  for (let i = 0; i < 4; i++) {
+    (churn.ctx.document as { title: string }).title = `Pricing | WhachatCRM ${i}`;
+    churn.historyObj.replaceState({}, "", "/pricing");
+    churn.flushTimers(400);
+    assert.notEqual(churn.teaser?.style.opacity, "1");
+    assert.ok(!String(churn.store[`wcw-pr-teaser:${WIDGET_ID}`] || "").includes("pathname:/pricing"));
+  }
+  churn.flushTimers(1200);
+  assert.equal(churn.teaser?.style.opacity, "1");
+  assert.equal(churn.teaser?.attrs["data-wcw-teaser-reason"], "rendered");
+  assert.equal(teaserBody(churn.teaser), PRICING_PAGE_RULE_TEASER.en);
 }
 
 {

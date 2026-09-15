@@ -42,10 +42,7 @@ const DEMO_URL = "https://calendly.com/yanivharamaty/whachatcrm-live-product-dem
 const PRIMARY = "https://www.whachatcrm.com/pricing";
 const ES = "https://www.whachatcrm.com/es/pricing";
 const HE = "https://www.whachatcrm.com/he/pricing";
-const ALIASED_PRICING = {
-  ...PRICING_PAGE_RULE_FIXTURE,
-  urlAliases: ["/es/pricing", "/he/pricing"],
-};
+const ALIASED_PRICING = PRICING_PAGE_RULE_FIXTURE;
 const ALIASED_SETTINGS = { pageRules: [ALIASED_PRICING] };
 const PRIMARY_KEY = pageRuleStableKey({ urlContains: "/pricing", matchType: "pathname" });
 
@@ -57,7 +54,7 @@ test("legacy Exact path rules without aliases stay unchanged", () => {
   assert.equal(pageRuleMatchesHref(rule, ES), false);
   assert.equal(pageRuleMatchesHref(rule, HE), false);
   assert.equal(pageRuleMatchesHref(rule, "https://www.whachatcrm.com/?next=/pricing"), false);
-  const roundTrip = validateWidgetPageRules([{ ...PRICING_PAGE_RULE_FIXTURE }]);
+  const roundTrip = validateWidgetPageRules([rule]);
   assert.equal(roundTrip.ok, true);
   if (roundTrip.ok) {
     assert.equal("urlAliases" in roundTrip.rules[0], false);
@@ -66,9 +63,20 @@ test("legacy Exact path rules without aliases stay unchanged", () => {
   }
   const merged = mergeNeutralWidgetSettings({
     enabled: true,
-    pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }],
+    pageRules: [rule],
   });
   assert.equal("urlAliases" in (merged.pageRules as object[])[0], false);
+});
+
+test("production Pricing fixture is Exact path /pricing with localized aliases and one stable key", () => {
+  assert.equal(PRICING_PAGE_RULE_FIXTURE.matchType, "pathname");
+  assert.deepEqual(PRICING_PAGE_RULE_FIXTURE.urlAliases, ["/es/pricing", "/he/pricing"]);
+  assert.equal(pageRuleStableKey(PRICING_PAGE_RULE_FIXTURE), "pathname:/pricing");
+  const roundTrip = validateWidgetPageRules([{ ...PRICING_PAGE_RULE_FIXTURE }]);
+  assert.equal(roundTrip.ok, true);
+  if (roundTrip.ok) {
+    assert.deepEqual(roundTrip.rules[0]?.urlAliases, ["/es/pricing", "/he/pricing"]);
+  }
 });
 
 test("Exact primary and localized aliases match; query/hash ignored; substring does not", () => {
@@ -328,8 +336,13 @@ test("visitor-safe payload ships aliases for Exact path only; widget.js parses a
   assert.deepEqual(safe[0]?.urlAliases, ["/es/pricing", "/he/pricing"]);
   assert.equal(safe[0]?.suggestedQuestions[PRICING_PAGE_RULE_ACTION.bookDemo], "קביעת הדגמה");
   assert.equal("chatbotFlowId" in safe[0], false);
-  const legacySafe = visitorSafeWidgetPageRules({ pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }] }, "en");
+  const legacySafe = visitorSafeWidgetPageRules(
+    { pageRules: [{ urlContains: "/pricing", matchType: "pathname", greeting: "Hi" }] },
+    "en",
+  );
   assert.equal("urlAliases" in legacySafe[0], false);
+  const productionSafe = visitorSafeWidgetPageRules({ pageRules: [{ ...PRICING_PAGE_RULE_FIXTURE }] }, "en");
+  assert.deepEqual(productionSafe[0]?.urlAliases, ["/es/pricing", "/he/pricing"]);
   const js = buildWebchatPublicScript({ origin: "https://app.example.com" });
   assert.doesNotThrow(() => new Function(js));
   assert.match(js, /urlAliases/);

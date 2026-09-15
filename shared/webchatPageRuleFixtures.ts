@@ -11,9 +11,13 @@ export const PRICING_PAGE_RULE_TEASER = {
   he: "מתלבטים בין התוכניות? אעזור לכם לבחור בין Free ל\u2011Pro.",
 } as const;
 
+/** Stored Exact-path matchType. Editor label is "Exact path" / "Primary path". */
+export const PRICING_PAGE_RULE_ALIASES = ["/es/pricing", "/he/pricing"] as const;
+
 export const PRICING_PAGE_RULE_FIXTURE = {
   urlContains: "/pricing",
   matchType: "pathname" as WidgetPageRuleMatchType,
+  urlAliases: [...PRICING_PAGE_RULE_ALIASES],
   greeting:
     "Comparing plans? I can help you choose between Free and Pro, estimate savings from your current platform, or book a demo.",
   teaserGreeting: PRICING_PAGE_RULE_TEASER.en,

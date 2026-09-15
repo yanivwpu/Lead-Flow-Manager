@@ -519,7 +519,17 @@ test("Features & pricing formatter synthesizes Free/Pro once without USD-per-mon
   const es = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "es", bundle });
   const he = assembleFeaturesPricingReply({ retrieved: PRODUCTION_SHAPED_PLANS, locale: "he", bundle });
   assert.match(es!, /\$49\/mes/);
+  assert.match(es!, /\$0\/mes/);
+  assert.match(es!, /\$490\/año/);
+  assert.ok(es!.includes("\n"));
+  assert.equal(isRoboticFeaturesPricingDraft(es!), false);
+  assert.doesNotMatch(es!, /USD 49 per month/);
   assert.match(he!, /\$49 לחודש/);
+  assert.match(he!, /\$0 לחודש/);
+  assert.ok(he!.includes("\n"));
+  assert.equal(isRoboticFeaturesPricingDraft(he!), false);
+  assert.ok(es!.length < 700);
+  assert.ok(he!.length < 700);
   const partial = assembleFeaturesPricingReply({
     retrieved: [PRODUCTION_SHAPED_PLANS[1]],
     locale: "en",

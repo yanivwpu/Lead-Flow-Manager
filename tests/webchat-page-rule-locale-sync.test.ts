@@ -38,7 +38,7 @@ const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 const PRIMARY = "https://www.whachatcrm.com/pricing";
 const ES = "https://www.whachatcrm.com/es/pricing";
 const HE = "https://www.whachatcrm.com/he/pricing";
-const ALIASED = { ...PRICING_PAGE_RULE_FIXTURE, urlAliases: ["/es/pricing", "/he/pricing"] };
+const ALIASED = PRICING_PAGE_RULE_FIXTURE;
 const SETTINGS = { pageRules: [ALIASED] };
 const KEY = pageRuleStableKey({ urlContains: "/pricing", matchType: "pathname" });
 
