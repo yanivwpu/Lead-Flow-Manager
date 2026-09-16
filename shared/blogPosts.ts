@@ -28,6 +28,18 @@ export interface BlogPostMeta {
 
 export const BLOG_POSTS: BlogPostMeta[] = [
   {
+    slug: "whatsapp-service-message-pricing-october-2026",
+    title: "Meta Will Begin Charging for WhatsApp Service Messages on October 1, 2026",
+    excerpt:
+      "Starting October 1, 2026, Meta will charge for WhatsApp service messages. Learn what changes, what remains free, and how to prepare.",
+    category: "Guides",
+    readTime: "6 min read",
+    date: "2026-09-16",
+    seoTitle: "WhatsApp Service Message Pricing Changes October 2026",
+    keywords:
+      "WhatsApp service message pricing, WhatsApp pricing October 2026, Meta WhatsApp message charges, WhatsApp Business API pricing, WhatsApp service messages, WhatsApp Business Platform pricing",
+  },
+  {
     slug: "realtor-growth-engine-complete-guide",
     title: "What Is the Realtor Growth Engine (RGE)? The Complete Guide for Modern Real Estate Agents",
     excerpt:

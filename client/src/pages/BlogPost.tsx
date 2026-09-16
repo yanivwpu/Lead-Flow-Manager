@@ -10,14 +10,20 @@ import {
   REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
   REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
 } from "@/content/blog/realtor-growth-engine-complete-guide";
+import {
+  WHATSAPP_SERVICE_PRICING_OCT_2026_CONTENT,
+  WHATSAPP_SERVICE_PRICING_OCT_2026_FAQ,
+} from "@/content/blog/whatsapp-service-message-pricing-october-2026";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 
 const BLOG_FAQ_SCHEMA: Record<string, Record<string, unknown>> = {
   "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_FAQ,
+  "whatsapp-service-message-pricing-october-2026": WHATSAPP_SERVICE_PRICING_OCT_2026_FAQ,
 };
 
 const BLOG_CONTENT: Record<string, string> = {
+  "whatsapp-service-message-pricing-october-2026": WHATSAPP_SERVICE_PRICING_OCT_2026_CONTENT,
   "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
   "whatsapp-crm-complete-guide-2025": `
 WhatsApp has become the world's most popular messaging platform with over 2 billion users. For businesses, this presents an incredible opportunity to connect with customers where they already spend their time.
@@ -1299,7 +1305,7 @@ export function BlogPost() {
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
           .replace(/\*(.*?)\*/g, '<em>$1</em>')
           .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
-          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-brand-green hover:underline">$1</a>');
+          .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" class="text-brand-green hover:underline break-words [overflow-wrap:anywhere]">$1</a>');
         elements.push(
           <p key={index} className="text-gray-600 mb-4 leading-relaxed" dangerouslySetInnerHTML={{ __html: formatted }} />
         );
@@ -1340,7 +1346,7 @@ export function BlogPost() {
             <span>•</span>
             <span className="flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {new Date(post.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              {new Date(`${post.date}T00:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </span>
             <span>•</span>
             <span className="flex items-center gap-1">
@@ -1416,7 +1422,7 @@ export function BlogPost() {
           </div>
         </div>
 
-        <div className="prose prose-lg max-w-none">
+        <div className="prose prose-lg max-w-none break-words [overflow-wrap:anywhere]">
           {renderContent(content)}
         </div>
 

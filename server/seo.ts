@@ -1329,7 +1329,7 @@ export function injectHomepageSeoMeta(html: string, locale: MarketingLocale = "e
 }
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? `${dateStr}T00:00:00` : dateStr);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -1401,6 +1401,41 @@ function markdownToHtml(markdown: string): string {
 }
 
 const BLOG_CONTENT_SSR: Record<string, string> = {
+  "whatsapp-service-message-pricing-october-2026": `Beginning October 1, 2026, Meta is changing how messages sent through the WhatsApp Business Platform are priced.
+
+Businesses will begin paying for service messages—the normal replies sent by a team member, chatbot, or AI assistant during the 24-hour customer-service window. Meta will also begin charging for utility template messages sent during that window.
+
+This change affects businesses using the WhatsApp Business Platform through WhachatCRM or another API-connected platform. It does not affect personal WhatsApp accounts or businesses that only use the free WhatsApp Business mobile app.
+
+## The key changes
+
+Starting October 1, 2026:
+
+- Service messages will be charged per delivered message.
+- The first 1,000 service messages per business phone number each month will remain free.
+- Charges begin with the 1,001st service message.
+- Utility templates sent during an open 24-hour customer-service window will also become billable.
+- The 1,000-message allowance applies to service messages, not utility templates.
+- Messages received from customers remain free.
+- Meta’s rates vary according to the recipient’s country.
+- Marketing and authentication templates are already billable, so their billing treatment does not change.
+
+Meta has also instructed businesses to add a payment method to their WhatsApp Business Account by September 30, 2026, to prevent service-message delivery from being interrupted.
+
+## How much will it cost?
+
+Meta charges according to the country associated with the customer’s phone number—not the location of your business. Service messages will use Meta’s applicable country-specific rate. Each business phone number receives 1,000 free service messages every month.
+
+Rates vary between countries and may be updated by Meta. Businesses should review the latest rates on Meta’s official WhatsApp Business Platform pricing page: https://whatsappbusiness.com/products/platform-pricing/
+
+## What this means for WhachatCRM customers
+
+This is a Meta WhatsApp Business Platform pricing change, not an increase to WhachatCRM’s published subscription price.
+
+These charges are set by Meta and are separate from your WhachatCRM subscription. Please confirm that your WhatsApp Business Account has a valid payment method.
+
+For the latest information, review Meta’s official service-message documentation (https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/non-template-messages) and WhatsApp Business Platform pricing (https://whatsappbusiness.com/products/platform-pricing/).`,
+
   "whatsapp-crm-complete-guide-2025": `WhatsApp has become the world's most popular messaging platform with over 2 billion users. For businesses, this presents an incredible opportunity to connect with customers where they already spend their time.
 
 ## What is WhatsApp CRM?
