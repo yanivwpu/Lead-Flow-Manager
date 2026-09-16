@@ -22,6 +22,11 @@ import {
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { BookDemoModal } from "@/components/BookDemoModal";
+import {
+  beginSignupTurnstileAttempt,
+  finishFailedSignupTurnstile,
+  signupResultRequiresTurnstileReset,
+} from "@/lib/turnstileSignupRetry";
 
 export function AuthPage() {
   const { t } = useTranslation();
@@ -137,20 +142,30 @@ export function AuthPage() {
           setError(formatLoginUserMessage(result));
         }
       } else {
+        const attempt = beginSignupTurnstileAttempt({
+          token: turnstileToken,
+          resetKey: turnstileResetKey,
+        });
+        setTurnstileToken(attempt.next.token);
+        setTurnstileResetKey(attempt.next.resetKey);
         const result = await signup(name, email, password, {
           phoneNumber: "",
           businessName,
-          turnstileToken,
+          turnstileToken: attempt.tokenToSend,
           website: honeypot,
         });
         if (result.success && result.pendingVerification) {
           setLocation(CHECK_EMAIL_PATH);
         } else if (result.success) {
           navigateAfterAuth(postAuthRedirect);
-        } else {
+        } else if (signupResultRequiresTurnstileReset(result)) {
           setError(result.error || "Signup failed");
-          setTurnstileToken(null);
-          setTurnstileResetKey((k) => k + 1);
+          const reset = finishFailedSignupTurnstile({
+            token: attempt.next.token,
+            resetKey: attempt.next.resetKey,
+          });
+          setTurnstileToken(reset.token);
+          setTurnstileResetKey(reset.resetKey);
         }
       }
     } catch (err) {

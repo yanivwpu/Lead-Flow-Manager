@@ -9,12 +9,17 @@ import { join } from "node:path";
 import {
   TURNSTILE_GENERIC_ERROR,
   TURNSTILE_SIGNUP_ACTION,
+  TURNSTILE_SITEVERIFY_URL,
   TURNSTILE_TEST_SECRET_KEY,
   TURNSTILE_TEST_SITE_KEY,
+  buildTurnstileSiteverifyRequest,
   describeTurnstileReadiness,
   expectedTurnstileHostnames,
   isTurnstileConfigured,
   isTurnstileRequired,
+  isUsableTurnstileRemoteIp,
+  normalizeTurnstileSecret,
+  sanitizeTurnstileErrorCodes,
   turnstileHostnameAllowed,
   verifyTurnstileToken,
 } from "../server/authTurnstile";
@@ -44,9 +49,11 @@ function withEnv(patch: Record<string, string | undefined>, fn: () => Promise<vo
 
 function mockSiteverify(payload: Record<string, unknown>, status = 200) {
   const original = globalThis.fetch;
+  const text = JSON.stringify(payload);
   globalThis.fetch = (async () => ({
     ok: status >= 200 && status < 300,
     status,
+    text: async () => text,
     json: async () => payload,
   })) as typeof fetch;
   return () => {
@@ -258,5 +265,53 @@ test("login, reset, Shopify, GHL, invite, and seed paths are not Turnstile-gated
   const page = read("client/src/pages/Auth.tsx");
   assert.match(page, /Signup is temporarily unavailable/);
   assert.match(page, /import\.meta\.env\.PROD/);
+  assert.match(page, /beginSignupTurnstileAttempt/);
+  assert.match(page, /finishFailedSignupTurnstile/);
+  assert.match(page, /signupResultRequiresTurnstileReset/);
   assert.ok(TURNSTILE_GENERIC_ERROR.includes("verify"));
+});
+
+test("Siteverify request is form-urlencoded and omits invalid remoteip/action", () => {
+  const request = buildTurnstileSiteverifyRequest({
+    secret: "live-secret",
+    token: "browser-token",
+    remoteIp: "unknown",
+    idempotencyKey: "not-a-uuid",
+  });
+  assert.equal(request.url, TURNSTILE_SITEVERIFY_URL);
+  assert.equal(request.method, "POST");
+  assert.equal(request.contentType, "application/x-www-form-urlencoded");
+  assert.equal(typeof request.body, "string");
+  assert.doesNotMatch(request.body, /undefined/);
+  assert.doesNotMatch(request.body, /(?:^|&)action=/);
+  assert.doesNotMatch(request.body, /remoteip=/);
+  assert.doesNotMatch(request.body, /idempotency_key=/);
+  const fields = new URLSearchParams(request.body);
+  assert.equal(fields.get("secret"), "live-secret");
+  assert.equal(fields.get("response"), "browser-token");
+  assert.deepEqual(request.fieldNames, ["secret", "response"]);
+
+  const withOptional = buildTurnstileSiteverifyRequest({
+    secret: "live-secret",
+    token: "browser-token",
+    remoteIp: "203.0.113.10",
+    idempotencyKey: "11111111-2222-4333-a444-555555555555",
+  });
+  const optional = new URLSearchParams(withOptional.body);
+  assert.equal(optional.get("remoteip"), "203.0.113.10");
+  assert.equal(optional.get("idempotency_key"), "11111111-2222-4333-a444-555555555555");
+  assert.equal(optional.get("action"), null);
+
+  assert.equal(isUsableTurnstileRemoteIp("unknown"), false);
+  assert.equal(isUsableTurnstileRemoteIp("203.0.113.10"), true);
+  assert.equal(isUsableTurnstileRemoteIp("2001:db8::1"), true);
+  assert.equal(normalizeTurnstileSecret('"quoted-secret"'), "quoted-secret");
+  assert.deepEqual(sanitizeTurnstileErrorCodes(["bad-request", "drop-this", "timeout-or-duplicate"]), [
+    "bad-request",
+    "timeout-or-duplicate",
+  ]);
+
+  const src = read("server/authTurnstile.ts");
+  assert.match(src, /params\.toString\(\)/);
+  assert.doesNotMatch(src, /body\.set\("action"/);
 });

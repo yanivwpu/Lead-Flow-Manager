@@ -3,10 +3,14 @@
  * Secret key must never be exposed to the client.
  */
 
+import { randomUUID } from "crypto";
+
 export const TURNSTILE_GENERIC_ERROR =
   "We couldn’t verify this signup. Please try again.";
 
 export const TURNSTILE_SIGNUP_ACTION = "signup";
+
+export const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 /** Cloudflare official test keys (always pass / always fail). */
 export const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
@@ -18,22 +22,50 @@ const DEFAULT_PRODUCTION_HOSTS = [
   "whachatcrm.com",
 ] as const;
 
+const SAFE_SITEVERIFY_ERROR_CODES = new Set([
+  "missing-input-secret",
+  "invalid-input-secret",
+  "missing-input-response",
+  "invalid-input-response",
+  "bad-request",
+  "timeout-or-duplicate",
+  "internal-error",
+]);
+
 export type TurnstileVerifyResult =
   | { ok: true }
   | { ok: false; reason: "missing" | "invalid" | "misconfigured" | "network" | "hostname" | "action" };
+
+export type TurnstileSiteverifyRequest = {
+  url: string;
+  method: "POST";
+  contentType: "application/x-www-form-urlencoded";
+  body: string;
+  fieldNames: string[];
+};
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-export function getTurnstileSiteKey(): string | undefined {
-  const key = process.env.VITE_TURNSTILE_SITE_KEY?.trim();
+export function normalizeTurnstileSecret(raw: string | undefined): string | undefined {
+  let key = String(raw || "").trim();
+  if (!key) return undefined;
+  if (
+    (key.startsWith('"') && key.endsWith('"') && key.length >= 2) ||
+    (key.startsWith("'") && key.endsWith("'") && key.length >= 2)
+  ) {
+    key = key.slice(1, -1).trim();
+  }
   return key || undefined;
 }
 
+export function getTurnstileSiteKey(): string | undefined {
+  return normalizeTurnstileSecret(process.env.VITE_TURNSTILE_SITE_KEY);
+}
+
 export function getTurnstileSecretKey(): string | undefined {
-  const key = process.env.TURNSTILE_SECRET_KEY?.trim();
-  return key || undefined;
+  return normalizeTurnstileSecret(process.env.TURNSTILE_SECRET_KEY);
 }
 
 /** True when both site + secret keys are present in this process environment. */
@@ -67,6 +99,63 @@ export function turnstileHostnameAllowed(hostname: unknown): boolean {
     .toLowerCase();
   if (!host) return false;
   return expectedTurnstileHostnames().includes(host);
+}
+
+/** Cloudflare remoteip must be a single IPv4/IPv6 address — never "unknown" or a header list. */
+export function isUsableTurnstileRemoteIp(ip: unknown): boolean {
+  const value = String(ip || "").trim();
+  if (!value || value === "unknown") return false;
+  if (value.includes(",") || value.includes(" ")) return false;
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value)) {
+    return value.split(".").every((octet) => {
+      const n = Number(octet);
+      return Number.isInteger(n) && n >= 0 && n <= 255;
+    });
+  }
+  if (value.includes("%")) return false;
+  if (value.includes(":") && /^[0-9a-f:]+$/i.test(value) && value.length <= 45) {
+    return true;
+  }
+  return false;
+}
+
+export function sanitizeTurnstileErrorCodes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((code) => String(code)).filter((code) => SAFE_SITEVERIFY_ERROR_CODES.has(code));
+}
+
+/**
+ * Deterministic Cloudflare Siteverify body. Always a form-urlencoded string.
+ * Never includes widget `action` — that is validated on the JSON response.
+ */
+export function buildTurnstileSiteverifyRequest(input: {
+  secret: string;
+  token: string;
+  remoteIp?: string | null;
+  idempotencyKey?: string | null;
+  url?: string;
+}): TurnstileSiteverifyRequest {
+  const params = new URLSearchParams();
+  params.set("secret", input.secret);
+  params.set("response", input.token);
+  const fieldNames = ["secret", "response"];
+  if (isUsableTurnstileRemoteIp(input.remoteIp)) {
+    params.set("remoteip", String(input.remoteIp).trim());
+    fieldNames.push("remoteip");
+  }
+  const idem = String(input.idempotencyKey || "").trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idem)) {
+    params.set("idempotency_key", idem);
+    fieldNames.push("idempotency_key");
+  }
+  const body = params.toString();
+  return {
+    url: input.url || TURNSTILE_SITEVERIFY_URL,
+    method: "POST",
+    contentType: "application/x-www-form-urlencoded",
+    body,
+    fieldNames,
+  };
 }
 
 export function describeTurnstileReadiness(): {
@@ -115,16 +204,44 @@ export function isTurnstileRequired(): boolean {
 }
 
 function classifySiteverifyFailure(errorCodes: unknown): TurnstileVerifyResult["reason"] {
-  const codes = Array.isArray(errorCodes) ? errorCodes.map((c) => String(c)) : [];
-  if (codes.some((c) => c === "missing-input-response" || c === "timeout-or-duplicate")) {
-    return codes.includes("missing-input-response") ? "missing" : "invalid";
+  const codes = sanitizeTurnstileErrorCodes(errorCodes);
+  if (codes.includes("missing-input-response") || codes.includes("missing-input-secret")) {
+    return "missing";
+  }
+  if (codes.includes("bad-request") || codes.includes("internal-error")) {
+    return "network";
   }
   return "invalid";
+}
+
+async function readSiteverifyPayload(response: Response): Promise<{
+  success?: boolean;
+  hostname?: string;
+  action?: string;
+  "error-codes"?: string[];
+} | null> {
+  const text = await response.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as {
+      success?: boolean;
+      hostname?: string;
+      action?: string;
+      "error-codes"?: string[];
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function verifyTurnstileToken(
   token: unknown,
   remoteIp?: string | null,
+  deps?: {
+    fetchImpl?: typeof fetch;
+    siteverifyUrl?: string;
+    idempotencyKey?: string;
+  },
 ): Promise<TurnstileVerifyResult> {
   const secret = getTurnstileSecretKey();
   const production = isProduction();
@@ -137,32 +254,36 @@ export async function verifyTurnstileToken(
     return { ok: false, reason: "missing" };
   }
 
-  try {
-    const body = new URLSearchParams();
-    body.set("secret", secret);
-    body.set("response", token.trim());
-    if (remoteIp) body.set("remoteip", remoteIp);
+  const request = buildTurnstileSiteverifyRequest({
+    secret,
+    token: token.trim(),
+    remoteIp,
+    idempotencyKey: deps?.idempotencyKey || randomUUID(),
+    url: deps?.siteverifyUrl,
+  });
 
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+  try {
+    const fetchImpl = deps?.fetchImpl || fetch;
+    const response = await fetchImpl(request.url, {
+      method: request.method,
+      headers: { "Content-Type": request.contentType },
+      body: request.body,
     });
 
+    const data = await readSiteverifyPayload(response);
+    const errorCodes = sanitizeTurnstileErrorCodes(data?.["error-codes"]);
+
     if (!response.ok) {
-      console.warn("[TURNSTILE] siteverify HTTP error:", response.status);
-      return { ok: false, reason: "network" };
+      console.warn("[TURNSTILE] siteverify HTTP error:", {
+        status: response.status,
+        errorCodes: errorCodes.length ? errorCodes : ["unparseable"],
+      });
+      return { ok: false, reason: classifySiteverifyFailure(errorCodes) };
     }
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      hostname?: string;
-      action?: string;
-      "error-codes"?: string[];
-    };
-    if (data.success !== true) {
-      console.warn("[TURNSTILE] verification failed:", classifySiteverifyFailure(data["error-codes"]));
-      return { ok: false, reason: classifySiteverifyFailure(data["error-codes"]) };
+    if (!data || data.success !== true) {
+      console.warn("[TURNSTILE] verification failed:", classifySiteverifyFailure(errorCodes));
+      return { ok: false, reason: classifySiteverifyFailure(errorCodes) };
     }
 
     const usingTestKeys = secret === TURNSTILE_TEST_SECRET_KEY;
