@@ -1,3 +1,4 @@
+import { normalizeInventorySecretValue } from "@shared/inventory/inventoryCredentialValue";
 import {
   INVENTORY_PROVIDER_UI_OPTIONS,
   inventoryProviderUserLabel,
@@ -98,7 +99,7 @@ export function inventoryConnectionStateBadgeClass(state: InventoryConnectionUiS
 }
 
 export function inventoryCredentialConfiguredLabel(provider: string): string {
-  if (provider === "bridge_interactive") return "Server token configured";
+  if (provider === "bridge_interactive") return "Server token configured.";
   if (provider === "trestle") return "Client credentials configured";
   if (provider === "mls_grid") return "Access token configured";
   return "Credentials configured";
@@ -107,6 +108,30 @@ export function inventoryCredentialConfiguredLabel(provider: string): string {
 export function inventoryReplaceSecretLabel(provider: string): string {
   if (provider === "trestle") return "Replace credentials";
   return "Replace token";
+}
+
+export function inventoryReplaceSecretHelperText(provider: string, replacing: boolean): string {
+  if (replacing) {
+    if (provider === "bridge_interactive") {
+      return "Paste a new Bridge server token. Saving replaces the stored credential and retries the connection.";
+    }
+    return "Paste the new credential. Saving replaces the stored secret and retries the connection.";
+  }
+  if (provider === "bridge_interactive") {
+    return "Paste your Bridge server token. It is stored encrypted and never shown again.";
+  }
+  return "Paste your credential. It is stored encrypted and never shown again.";
+}
+
+export function inventoryConnectedSourceIdentityLine(
+  card: Pick<InventorySourceSummaryCard, "originatingSystemName" | "datasetId" | "providerLabel" | "displayName">,
+): string {
+  const org = card.originatingSystemName?.trim();
+  const dataset = card.datasetId?.trim();
+  if (org && dataset) return `${org} / ${dataset}`;
+  const name = card.displayName?.trim();
+  if (name && dataset && name !== card.providerLabel) return `${name} / ${dataset}`;
+  return org || dataset || name || card.providerLabel;
 }
 
 export function inventorySecretFieldMode(input: {
@@ -126,7 +151,7 @@ export function shouldSendInventorySecretOnSave(input: {
 }): boolean {
   if (!input.isUpdate) return true;
   if (!input.replacing) return false;
-  return input.secretValue.trim().length > 0;
+  return normalizeInventorySecretValue(input.secretValue).length > 0;
 }
 
 export function formatInventoryMarketScope(config: Record<string, unknown> | undefined): string {
@@ -324,6 +349,50 @@ export function resolveInventoryFormPanel(input: {
 /** Existing sources with errors stay in the connected list — never as a new connector. */
 export function existingSourceShouldStayInConnectedList(source: PublicInventorySource): boolean {
   return Boolean(source.id);
+}
+
+export function applyInventorySourceSyncAcceptedState(source: PublicInventorySource): PublicInventorySource {
+  return {
+    ...source,
+    connectionStatus: "connected",
+    lastSyncStatus: "running",
+    lastSyncError: null,
+  };
+}
+
+export function applyInventorySourceReconnectSuccessState(
+  source: PublicInventorySource,
+  successfulSyncAt: string,
+): PublicInventorySource {
+  return {
+    ...source,
+    connectionStatus: "connected",
+    lastSyncStatus: "success",
+    lastSyncError: null,
+    lastSyncAt: successfulSyncAt,
+    lastSyncStats: {
+      ...source.lastSyncStats,
+      lastSuccessfulSyncAt: successfulSyncAt,
+    },
+    config: {
+      ...source.config,
+      initialImportComplete: true,
+      lastSuccessfulSyncAt: successfulSyncAt,
+    },
+  };
+}
+
+/** Replacement-token save closes the editor only when persist succeeded and immediate validate/sync did not fail. */
+export function shouldCloseInventorySourceEditorAfterSave(outcome: {
+  syncError?: string | null;
+}): boolean {
+  return !outcome.syncError;
+}
+
+export function inventoryReconnectFailureMessageIsSafe(message: string, secretValue: string): boolean {
+  const secret = secretValue.trim();
+  if (!secret) return true;
+  return !message.includes(secret);
 }
 
 export function applySecretReplacementToForm(

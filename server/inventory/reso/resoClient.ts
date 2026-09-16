@@ -1,5 +1,6 @@
 import type { ResoAuthConfig, ResoRateLimitConfig } from "@shared/inventory/reso/resoProviderContract";
 import { oDataNextLink, oDataValueRows } from "@shared/inventory/reso/resoOData";
+import { buildResoBearerAuthorization } from "@shared/inventory/inventoryCredentialValue";
 
 const DEFAULT_MAX_RETRIES = 6;
 
@@ -100,7 +101,7 @@ export class ResoClient {
 
       const res = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${this.auth.token}`,
+          Authorization: buildResoBearerAuthorization(this.auth.token),
           Accept: "application/json",
           "Accept-Encoding": "gzip",
         },

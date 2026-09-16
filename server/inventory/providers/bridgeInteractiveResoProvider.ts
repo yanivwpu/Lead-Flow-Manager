@@ -26,6 +26,7 @@ import type {
 import type { ResoSyncMode } from "@shared/inventory/reso/resoSyncTypes";
 import type { InventoryAdapterContext } from "./types";
 import { runResoConnectionProbe, runResoReplicationFetch } from "../reso/resoReplicationEngine";
+import { normalizeInventorySecretValue } from "@shared/inventory/inventoryCredentialValue";
 
 export const BRIDGE_ODATA_BASE = "https://api.bridgedataoutput.com/api/v2/OData";
 export const BRIDGE_REPLICATION_PAGE_SIZE = 2000;
@@ -98,7 +99,7 @@ export function createBridgeInteractiveResoProvider(
       };
     },
     getAuth(): ResoAuthConfig {
-      return { type: "bearer", token: creds.serverToken };
+      return { type: "bearer", token: normalizeInventorySecretValue(creds.serverToken) };
     },
     resolvePropertyResource(mode) {
       return mode === "reconciliation" ? "Property" : "Property/replication";

@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/queryClient";
+import { normalizeInventorySecretValue } from "@shared/inventory/inventoryCredentialValue";
 import {
   DEFAULT_MAX_LISTINGS,
   INVENTORY_MAX_LISTINGS_OPTIONS,
@@ -177,7 +178,7 @@ export function buildMlsSourcePayload(form: InventorySourceForm, isUpdate: boole
       ...syncScopeFromForm(form),
     },
   };
-  const token = form.accessToken.trim();
+  const token = normalizeInventorySecretValue(form.accessToken);
   if (token || !isUpdate) {
     payload.credentials = { accessToken: token };
   }
@@ -204,7 +205,7 @@ export function buildTrestleSourcePayload(form: InventorySourceForm, isUpdate: b
     },
   };
   const clientId = form.clientId.trim();
-  const clientSecret = form.clientSecret.trim();
+  const clientSecret = normalizeInventorySecretValue(form.clientSecret);
   if (!isUpdate || clientId || clientSecret) {
     payload.credentials = { clientId, clientSecret };
   }
@@ -230,11 +231,26 @@ export function buildBridgeSourcePayload(form: InventorySourceForm, isUpdate: bo
       ...syncScopeFromForm(form),
     },
   };
-  const serverToken = form.serverToken.trim();
+  const serverToken = normalizeInventorySecretValue(form.serverToken);
   if (serverToken || !isUpdate) {
     payload.credentials = { serverToken };
   }
   return payload;
+}
+
+export function payloadIncludesInventoryCredentials(payload: { credentials?: unknown }): boolean {
+  if (!payload.credentials || typeof payload.credentials !== "object") return false;
+  return Object.values(payload.credentials as Record<string, unknown>).some(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+export function inventorySourceCredentialFieldName(
+  provider: "mls_grid" | "trestle" | "bridge_interactive",
+): "serverToken" | "accessToken" | "clientSecret" {
+  if (provider === "bridge_interactive") return "serverToken";
+  if (provider === "trestle") return "clientSecret";
+  return "accessToken";
 }
 
 export function buildInventorySourcePayload(

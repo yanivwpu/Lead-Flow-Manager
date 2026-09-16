@@ -23,6 +23,10 @@ import { DEFAULT_MAX_LISTINGS, readInventorySyncScope } from "@shared/inventory/
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
 import {
+  buildResoBearerAuthorization,
+  normalizeInventorySecretValue,
+} from "@shared/inventory/inventoryCredentialValue";
+import {
   assertProductionDevSeedSourceAllowed,
 } from "@shared/inventory/inventoryDevSeedGuard";
 import {
@@ -178,38 +182,95 @@ export function mergeCredentialsPatch(
   patch: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!patch) return undefined;
+  const normalized = normalizeCredentialPatchValues(patch);
 
   if (provider === "mls_grid") {
-    if (typeof patch.accessToken === "string" && patch.accessToken.trim() === "") {
+    if (typeof normalized.accessToken === "string" && normalized.accessToken === "") {
       return undefined;
     }
-    return patch;
+    return normalized;
   }
 
   if (provider === "trestle") {
-    if (!patch) return undefined;
-    const hasClientId = typeof patch.clientId === "string" && patch.clientId.trim() !== "";
-    const hasClientSecret = typeof patch.clientSecret === "string" && patch.clientSecret.trim() !== "";
+    const hasClientId = typeof normalized.clientId === "string" && normalized.clientId !== "";
+    const hasClientSecret = typeof normalized.clientSecret === "string" && normalized.clientSecret !== "";
     if (!hasClientId && !hasClientSecret) return undefined;
 
-    const next: Record<string, unknown> = { ...existing, ...patch };
-    if (typeof patch.clientSecret === "string" && patch.clientSecret.trim() === "") {
+    const next: Record<string, unknown> = { ...existing, ...normalized };
+    if (typeof normalized.clientSecret === "string" && normalized.clientSecret === "") {
       next.clientSecret = existing.clientSecret;
     }
-    if (typeof patch.clientId === "string" && patch.clientId.trim() === "") {
+    if (typeof normalized.clientId === "string" && normalized.clientId === "") {
       next.clientId = existing.clientId;
     }
     return next;
   }
 
   if (provider === "bridge_interactive") {
-    if (typeof patch.serverToken === "string" && patch.serverToken.trim() === "") {
+    if (typeof normalized.serverToken !== "string" || normalized.serverToken === "") {
       return undefined;
     }
-    return patch;
+    return { ...normalized, serverToken: normalized.serverToken };
   }
 
-  return patch;
+  return normalized;
+}
+
+function normalizeCredentialPatchValues(patch: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...patch };
+  if (typeof next.serverToken === "string") {
+    next.serverToken = normalizeInventorySecretValue(next.serverToken);
+  }
+  if (typeof next.accessToken === "string") {
+    next.accessToken = normalizeInventorySecretValue(next.accessToken);
+  }
+  if (typeof next.clientSecret === "string") {
+    next.clientSecret = normalizeInventorySecretValue(next.clientSecret);
+  }
+  if (typeof next.clientId === "string") {
+    next.clientId = next.clientId.trim();
+  }
+  return next;
+}
+
+/**
+ * Same persist + decrypt path used by PATCH then the immediately following sync.
+ * Never returns plaintext tokens — only safe booleans.
+ */
+export function applyBridgeCredentialReplacementForSync(input: {
+  existingCredentialsEnc: Record<string, unknown>;
+  patchCredentials?: Record<string, unknown>;
+}): {
+  credentialsUpdated: boolean;
+  credentialPresent: boolean;
+  tokenReplaced: boolean;
+  usedStaleCredentials: boolean;
+  authorizationHeaderWellFormed: boolean;
+} {
+  const existingDecrypted = decryptSourceCredentials(input.existingCredentialsEnc);
+  const credentialsPatch = mergeCredentialsPatch(
+    "bridge_interactive",
+    existingDecrypted,
+    input.patchCredentials,
+  );
+  const nextEnc = credentialsPatch
+    ? encryptSourceCredentials(credentialsPatch)
+    : input.existingCredentialsEnc;
+  const decryptedForSync = decryptSourceCredentials(nextEnc);
+  const token = typeof decryptedForSync.serverToken === "string" ? decryptedForSync.serverToken : "";
+  const previous = typeof existingDecrypted.serverToken === "string" ? existingDecrypted.serverToken : "";
+  const authorization = token ? buildResoBearerAuthorization(token) : "";
+  const tokenReplaced = Boolean(credentialsPatch) && token.length > 0 && token !== previous;
+  return {
+    credentialsUpdated: credentialsPatch !== undefined,
+    credentialPresent: token.length > 0,
+    tokenReplaced,
+    usedStaleCredentials: credentialsPatch === undefined,
+    authorizationHeaderWellFormed:
+      authorization.startsWith("Bearer ") &&
+      authorization.length > "Bearer ".length &&
+      !/^Bearer\s+Bearer\s+/i.test(authorization),
+  };
 }
 
 export function buildAdapterContext(source: InventorySource): InventoryAdapterContext {

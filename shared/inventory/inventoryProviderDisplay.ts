@@ -327,7 +327,16 @@ export function formatInventorySyncStatRows(
 export function friendlyInventoryErrorMessage(raw: string | null | undefined): string {
   if (!raw?.trim()) return "Something went wrong. Check your settings and try again.";
   const msg = raw.trim();
-  if (msg.includes("MLS Grid HTTP 401") || msg.includes("Unauthorized")) {
+  if (msg.includes("Bridge Interactive HTTP 401") || msg.includes("Bridge Interactive HTTP 403")) {
+    return "Bridge server token was rejected. Confirm your dataset ID and server token, then validate again.";
+  }
+  if (msg.includes("Trestle credentials were rejected") || msg.includes("Trestle authentication failed")) {
+    return "Trestle credentials were rejected. Confirm your client ID, client secret, and originating system name.";
+  }
+  if (msg.includes("Trestle HTTP 401") || msg.includes("Trestle HTTP 403")) {
+    return "Trestle access was denied. Verify your feed credentials with your data provider.";
+  }
+  if (msg.includes("MLS Grid HTTP 401")) {
     return "Access token was rejected. Confirm your token and originating system name, then validate again.";
   }
   if (msg.includes("MLS Grid HTTP 403")) {
@@ -339,20 +348,14 @@ export function friendlyInventoryErrorMessage(raw: string | null | undefined): s
   if (msg.includes("MLS Grid HTTP")) {
     return "Could not reach the listing feed. Try again later or contact your data provider.";
   }
-  if (msg.includes("Trestle credentials were rejected") || msg.includes("Trestle authentication failed")) {
-    return "Trestle credentials were rejected. Confirm your client ID, client secret, and originating system name.";
-  }
-  if (msg.includes("Trestle HTTP 401") || msg.includes("Trestle HTTP 403")) {
-    return "Trestle access was denied. Verify your feed credentials with your data provider.";
-  }
   if (msg.includes("Trestle HTTP 429")) {
     return "Too many requests to Trestle. Wait a few minutes and sync again.";
   }
   if (msg.includes("Trestle HTTP")) {
     return "Could not reach Trestle. Try again later or contact your data provider.";
   }
-  if (msg.includes("Bridge Interactive HTTP 401") || msg.includes("Bridge Interactive HTTP 403")) {
-    return "Bridge server token was rejected. Confirm your dataset ID and server token, then validate again.";
+  if (msg.includes("Unauthorized")) {
+    return "The listing feed rejected this connection. Check your credentials and try again.";
   }
   if (msg.includes("Bridge Interactive HTTP 429")) {
     return "Too many requests to Bridge Interactive. Wait a few minutes and sync again.";
