@@ -170,3 +170,223 @@ test("persist boundary uses an advisory lock and does not send widget action-sty
   assert.match(dbSrc, /insertMatchableListingWithinCap/);
   assert.match(read("server/inventory/inventorySyncService.ts"), /shouldHaltInventoryFetch/);
 });
+
+type StoredListing = {
+  providerListingId: string;
+  status: "active" | "coming_soon" | "inactive";
+  publishPublicly: boolean;
+  priceCents: number;
+};
+
+function productionShapedStore(seed: StoredListing[], maxListings: number) {
+  const rows = new Map(seed.map((row) => [row.providerListingId, { ...row }]));
+  const matchableCount = () =>
+    [...rows.values()].filter((row) => row.status === "active" || row.status === "coming_soon").length;
+
+  const persistOne = (incoming: StoredListing, syncPaused: boolean) => {
+    const existing = rows.get(incoming.providerListingId);
+    const decision = decideInventoryListingPersist({
+      exists: Boolean(existing),
+      inScope: true,
+      incomingStatus: incoming.status === "inactive" ? "sold" : incoming.status,
+      activeStoredCount: matchableCount(),
+      maxListings,
+      syncPaused,
+      listingCompliance: eligibleCompliance,
+    });
+    if (decision.action === "insert") {
+      rows.set(incoming.providerListingId, { ...incoming });
+    } else if (decision.action === "update_existing" && existing) {
+      rows.set(incoming.providerListingId, {
+        ...existing,
+        status: incoming.status,
+        priceCents: incoming.priceCents,
+      });
+    }
+    return decision;
+  };
+
+  const scanPages = (pages: StoredListing[][], syncPaused: boolean) => {
+    let scanned = 0;
+    let halted = false;
+    for (const page of pages) {
+      if (
+        shouldHaltInventoryFetch({
+          paused: syncPaused,
+          activeStoredCount: matchableCount(),
+          maxListings,
+        })
+      ) {
+        halted = true;
+        break;
+      }
+      for (const incoming of page) {
+        scanned += 1;
+        persistOne(incoming, syncPaused);
+      }
+      if (
+        shouldHaltInventoryFetch({
+          paused: syncPaused,
+          activeStoredCount: matchableCount(),
+          maxListings,
+        })
+      ) {
+        halted = true;
+        break;
+      }
+    }
+    return { scanned, halted };
+  };
+
+  return { rows, matchableCount, persistOne, scanPages };
+}
+
+test("a new source starting at zero stores exactly 1,000 rows across multiple provider pages", () => {
+  const store = productionShapedStore([], 1000);
+  const pages = [0, 1, 2, 3].map((page) =>
+    Array.from({ length: 400 }, (_, i) => ({
+      providerListingId: `new-${page * 400 + i}`,
+      status: "active" as const,
+      publishPublicly: false,
+      priceCents: 100000 + i,
+    })),
+  );
+  const { scanned, halted } = store.scanPages(pages, false);
+  assert.equal(store.rows.size, 1000);
+  assert.equal(store.matchableCount(), 1000);
+  assert.equal(halted, true);
+  assert.ok(scanned > 1000);
+  assert.ok(pages.length >= 3);
+
+  const retryPages = [
+    Array.from({ length: 200 }, (_, i) => ({
+      providerListingId: `retry-${i}`,
+      status: "active" as const,
+      publishPublicly: false,
+      priceCents: 1,
+    })),
+  ];
+  store.scanPages(retryPages, false);
+  assert.equal(store.rows.size, 1000);
+
+  const selectedId = "new-0";
+  const selected = store.rows.get(selectedId);
+  assert.ok(selected);
+  store.persistOne({ ...selected, priceCents: 999999 }, false);
+  assert.equal(store.rows.size, 1000);
+  assert.equal(store.rows.get(selectedId)?.priceCents, 999999);
+});
+
+test("serialized concurrent jobs cannot insert past the source-wide cap", () => {
+  const store = productionShapedStore(
+    Array.from({ length: 998 }, (_, i) => ({
+      providerListingId: `seed-${i}`,
+      status: "active" as const,
+      publishPublicly: false,
+      priceCents: 1,
+    })),
+    1000,
+  );
+  const lock: string[] = [];
+  const runJob = (id: string) => {
+    lock.push(id);
+    const decision = store.persistOne(
+      {
+        providerListingId: `job-${id}`,
+        status: "active",
+        publishPublicly: false,
+        priceCents: 1,
+      },
+      false,
+    );
+    return decision.action;
+  };
+  const a = runJob("A");
+  const b = runJob("B");
+  const c = runJob("C");
+  assert.equal(a, "insert");
+  assert.equal(b, "insert");
+  assert.equal(c, "skip");
+  assert.equal(store.rows.size, 1000);
+  assert.deepEqual(lock, ["A", "B", "C"]);
+});
+
+test("grandfathered ~29,000 stored listings keep every row and all published listings", () => {
+  const published = Array.from({ length: 688 }, (_, i) => ({
+    providerListingId: `pub-${i}`,
+    status: "active" as const,
+    publishPublicly: true,
+    priceCents: 250000 + i,
+  }));
+  const unpublished = Array.from({ length: 29000 - 688 }, (_, i) => ({
+    providerListingId: `row-${i}`,
+    status: "active" as const,
+    publishPublicly: false,
+    priceCents: 100000 + i,
+  }));
+  const store = productionShapedStore([...published, ...unpublished], 1000);
+  assert.equal(store.rows.size, 29000);
+  assert.equal([...store.rows.values()].filter((row) => row.publishPublicly).length, 688);
+
+  const extraPages = [
+    Array.from({ length: 200 }, (_, i) => ({
+      providerListingId: `extra-${i}`,
+      status: "active" as const,
+      publishPublicly: false,
+      priceCents: 1,
+    })),
+  ];
+  const { halted } = store.scanPages(extraPages, false);
+  assert.equal(halted, true);
+  assert.equal(store.rows.size, 29000);
+  assert.equal(store.rows.has("extra-0"), false);
+  assert.equal([...store.rows.values()].filter((row) => row.publishPublicly).length, 688);
+
+  const firstPublished = store.rows.get("pub-0");
+  assert.ok(firstPublished);
+  store.persistOne({ ...firstPublished, priceCents: 123456 }, false);
+  assert.equal(store.rows.get("pub-0")?.priceCents, 123456);
+  assert.equal(store.rows.get("pub-0")?.publishPublicly, true);
+  assert.equal(store.rows.size, 29000);
+
+  const syncSrc = read("server/inventory/inventorySyncService.ts");
+  const haltIdx = syncSrc.indexOf("haltedBeforeFetch: true");
+  const reconIdx = syncSrc.indexOf("inactivated = await markListingsInactiveExcept");
+  assert.ok(haltIdx > 0 && reconIdx > haltIdx);
+  assert.match(syncSrc, /lastSyncStatus: "success"/);
+  assert.equal(syncSrc.includes("DELETE FROM inventory_listings"), false);
+
+  const updateSrc = read("server/inventory/inventoryDb.ts");
+  const updateFn = updateSrc.slice(updateSrc.indexOf("async function updateExistingInventoryListing"));
+  const setBlock = updateFn.slice(updateFn.indexOf(".set({"), updateFn.indexOf("})") + 2);
+  assert.equal(setBlock.includes("publishPublicly"), false);
+  assert.equal(setBlock.includes("publishedAt"), false);
+});
+
+test("pause is persisted on the source config and blocks every start path after a process restart", () => {
+  const persisted = withInventorySyncPaused({ datasetId: "miamire", initialImportComplete: true }, true);
+  assert.equal(isInventorySyncPaused(persisted), true);
+
+  const afterRestart = { ...persisted };
+  assert.equal(isInventorySyncPaused(afterRestart), true);
+
+  const syncSrc = read("server/inventory/inventorySyncService.ts");
+  const startFn = syncSrc.slice(syncSrc.indexOf("export async function startInventorySourceSync"));
+  const startBody = startFn.slice(0, startFn.indexOf("export async function") > 0 ? startFn.indexOf("\nasync function runInventorySyncJob") : startFn.length);
+  assert.match(startBody, /isInventorySyncPaused/);
+  assert.match(startBody, /reason: "paused"/);
+  assert.ok(startBody.indexOf('reason: "paused"') < startBody.indexOf("runningSyncs.add"));
+
+  const dbSrc = read("server/inventory/inventoryDb.ts");
+  assert.match(dbSrc, /if \(cfg\.syncPaused === true\) return false/);
+  assert.match(read("server/routes/inventory.ts"), /code: "sync_paused"/);
+
+  const sectionSrc = read("client/src/components/inventory/InventorySourcesSection.tsx");
+  assert.match(sectionSrc, /card\.syncPaused/);
+  assert.match(sectionSrc, /inventorySourcePauseUrl/);
+  assert.match(read("client/src/lib/inventorySourceFormState.ts"), /\/pause/);
+  assert.match(sectionSrc, /disabled=\{syncMutation\.isPending \|\| cardSyncing \|\| card\.connectionState === "disconnected" \|\| card\.syncPaused\}/);
+
+  assert.equal(persist({ syncPaused: true, activeStoredCount: 29000, maxListings: 1000 }).action, "skip");
+});
+
