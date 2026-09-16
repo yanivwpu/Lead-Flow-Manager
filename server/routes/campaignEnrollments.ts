@@ -9,6 +9,8 @@ import {
 import { subscriptionService } from "../subscriptionService";
 import { TEMPLATE_CAMPAIGNS_REQUIRE_PAID_MESSAGE, limitsAllowTemplateCampaigns } from "@shared/pricingEntitlements";
 import { contactBlocksCampaignSends, processCampaignEnrollmentStep } from "../campaignExecution";
+import { storage } from "../storage";
+import { getWhatsAppAvailability } from "../whatsappService";
 
 async function assessChannelInfrastructure(userId: string, channel: Channel): Promise<{ ok: boolean; reason?: string }> {
   if (channel === "whatsapp") {
