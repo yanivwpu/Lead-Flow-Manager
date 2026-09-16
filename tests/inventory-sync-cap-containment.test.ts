@@ -389,4 +389,3 @@ test("pause is persisted on the source config and blocks every start path after 
 
   assert.equal(persist({ syncPaused: true, activeStoredCount: 29000, maxListings: 1000 }).action, "skip");
 });
-
