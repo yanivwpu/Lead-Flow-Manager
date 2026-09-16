@@ -23,6 +23,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
@@ -36,7 +50,6 @@ import {
   fetchInventorySourcesBundle,
   fetchInventoryStatus,
   friendlyInventoryErrorMessage,
-  formatInventorySyncStatRows,
   type InventorySourceForm,
   type ListingPublicationStats,
   type PublicInventorySource,
@@ -52,17 +65,22 @@ import {
   loadInventorySourceForm,
   normalizeInventorySourcesQueryData,
   shouldResetInventoryForm,
+  shouldSyncAfterInventoryCredentialSave,
 } from "@/lib/inventorySourceFormState";
 import {
   applySecretReplacementToForm,
+  applyInventorySourceSyncAcceptedState,
   buildInventorySourceSummaryCard,
   canConnectInventoryProvider,
+  inventoryConnectedSourceIdentityLine,
   inventoryConnectionStateBadgeClass,
   inventoryCredentialConfiguredLabel,
+  inventoryReplaceSecretHelperText,
   inventoryReplaceSecretLabel,
   inventorySecretFieldMode,
   listInventoryConnectorAvailability,
   resolveInventoryFormPanel,
+  shouldCloseInventorySourceEditorAfterSave,
 } from "@/lib/inventorySourceConnectionUi";
 import {
   focusInventoryFormField,
@@ -73,13 +91,10 @@ import {
 } from "@/lib/inventorySourceFormValidation";
 import {
   INVENTORY_PROVIDER_UI_OPTIONS,
-  inventoryProviderUserLabel,
-  formatInventorySourceStatusRows,
 } from "@shared/inventory/inventoryProviderDisplay";
-import { deriveInventorySourcePhase } from "@shared/inventory/inventorySourcePhase";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
-import { Home, RefreshCw, Eye, EyeOff, CheckCircle2, AlertCircle, Loader2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Home, RefreshCw, Eye, EyeOff, AlertCircle, Loader2, MoreHorizontal } from "lucide-react";
 import { INVENTORY_MAX_LISTINGS_OPTIONS, DEFAULT_MAX_LISTINGS } from "@shared/inventory/reso/resoSyncScope";
 import { RGE_INVENTORY_SETTINGS_HASH, RGE_INVENTORY_SETTINGS_PATH } from "@shared/rgePaths";
 
@@ -139,10 +154,10 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const [removeSourceConfirmOpen, setRemoveSourceConfirmOpen] = useState(false);
   const [bulkPublishConfirmOpen, setBulkPublishConfirmOpen] = useState(false);
   const [bulkUnpublishConfirmOpen, setBulkUnpublishConfirmOpen] = useState(false);
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [connectingProvider, setConnectingProvider] = useState<InventoryProvider | null>(null);
   const [replacingSecret, setReplacingSecret] = useState(false);
+  const [showConnectorPicker, setShowConnectorPicker] = useState(false);
   const [disconnectSourceId, setDisconnectSourceId] = useState<string | null>(null);
   const hydratedIdentityRef = useRef<string | null>(null);
   const lastWorkspaceIdRef = useRef<string | undefined>(user?.id);
@@ -278,34 +293,79 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   const saveMutation = useMutation({
     mutationFn: async () => {
       const isUpdate = !!activeSource;
+      const replacing = !isUpdate || replacingSecret;
       const payload = buildInventorySourcePayload(
         selectedProvider as "mls_grid" | "trestle" | "bridge_interactive",
-        applySecretReplacementToForm(form, isUpdate ? replacingSecret : true),
+        applySecretReplacementToForm(form, replacing),
         isUpdate,
       );
       const saveReq = inventorySourceSaveRequest(activeSource);
       const res = await apiRequest(saveReq.method, saveReq.url, payload);
-      return res.json();
+      const saved = (await res.json()) as { source?: PublicInventorySource };
+      const sourceId = saved.source?.id;
+      if (shouldSyncAfterInventoryCredentialSave(payload) && sourceId) {
+        const syncRes = await fetch(inventorySourceSyncUrl({ id: sourceId }), {
+          method: "POST",
+          credentials: "include",
+        });
+        const body = (await syncRes.json().catch(() => ({}))) as { error?: string; code?: string };
+        if (!syncRes.ok) {
+          return {
+            source: saved.source,
+            syncStarted: false,
+            syncError: body.error || `Connection could not be verified (${syncRes.status}).`,
+          };
+        }
+        return { source: saved.source, syncStarted: true, syncError: null as string | null };
+      }
+      return { source: saved.source, syncStarted: false, syncError: null as string | null };
     },
-    onSuccess: (payload: { source?: PublicInventorySource }) => {
+    onSuccess: (payload: {
+      source?: PublicInventorySource;
+      syncStarted?: boolean;
+      syncError?: string | null;
+    }) => {
       if (payload?.source) {
+        const nextSource =
+          payload.syncStarted && !payload.syncError
+            ? applyInventorySourceSyncAcceptedState(payload.source)
+            : payload.source;
         queryClient.setQueryData(sourcesQueryKey, (prev: unknown) =>
-          applyInventorySourcesCacheUpdate(prev, payload.source!),
+          applyInventorySourcesCacheUpdate(prev, nextSource),
         );
       }
       setForm((f) => clearInventorySourceSecrets(f));
       setMaxListingsDraft(null);
       setReplacingSecret(false);
+      if (!shouldCloseInventorySourceEditorAfterSave({ syncError: payload.syncError })) {
+        setFormBannerError(friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")));
+        void refetchSources();
+        toast({
+          title: "Saved, but connection failed",
+          description: friendlyInventoryErrorMessage((payload.syncError || "").replace(/^\d+:\s*/, "")),
+          variant: "destructive",
+        });
+        return;
+      }
       setConnectingProvider(null);
       setEditingSourceId(null);
       hydratedIdentityRef.current = null;
       clearFormValidation();
+      if (payload.syncStarted) {
+        queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
+        toast({
+          title: "Connection updated",
+          description: "The replacement token was saved and sync started.",
+        });
+        return;
+      }
       toast({
         title: "Inventory source saved",
         description: "Your connection settings are saved. Automatic background sync stays on.",
       });
     },
     onError: (err: Error) => {
+      setFormBannerError(friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")));
       toast({
         title: "Could not save inventory source",
         description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
@@ -368,6 +428,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
       form,
       isUpdate: !!activeSource,
       hasStoredCredentials: activeSource?.hasCredentials ?? false,
+      replacingSecret,
     });
 
     if (!validation.valid) {
@@ -393,7 +454,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     setConnectingProvider(null);
     setEditingSourceId(sourceId);
     setReplacingSecret(reconnect);
-    setShowDiagnostics(false);
+    setShowConnectorPicker(false);
   };
 
   const openConnectProvider = (provider: InventoryProvider) => {
@@ -478,62 +539,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
   }
 
   const isCompact = variant === "compact";
-  const syncRunning = activeSource?.lastSyncStatus === "running";
-  const syncFailed = activeSource?.lastSyncStatus === "failed";
-  const lastSyncAt = activeSource?.lastSyncAt ? new Date(activeSource.lastSyncAt).toLocaleString() : null;
-  const sourcePhase = activeSource
-    ? deriveInventorySourcePhase({
-        connectionStatus: activeSource.connectionStatus,
-        lastSyncStatus: activeSource.lastSyncStatus,
-        lastSyncStats: activeSource.lastSyncStats,
-        config: activeSource.config,
-        listingCount: activeSource.inventoryStats?.totalSynced ?? activeSource.listingCount,
-      })
-    : null;
-  const syncStatRows = formatInventorySourceStatusRows(
-    activeSource?.lastSyncStats,
-    activeSource?.config as Record<string, unknown> | undefined,
-  );
-  const devSyncRows = formatInventorySyncStatRows(activeSource?.lastSyncStats);
-  const importJustFinished =
-    sourcePhase?.phase === "initial_import_complete" ||
-    (sourcePhase?.phase === "up_to_date" && activeSource?.lastSyncStatus === "success");
-  const connectionStatusLabel = syncRunning ? "Syncing" : "Connected";
-  const technicalDetailRows = syncStatRows;
-  const pagesProcessed =
-    typeof activeSource?.lastSyncStats?.pagesFetched === "number"
-      ? activeSource.lastSyncStats.pagesFetched
-      : null;
-  const apiRequests =
-    typeof activeSource?.lastSyncStats?.requestsMade === "number"
-      ? activeSource.lastSyncStats.requestsMade
-      : null;
-  const lastFailedSyncAt = (() => {
-    const fromStats = activeSource?.lastSyncStats?.lastFailedSyncAt;
-    if (typeof fromStats === "string" && fromStats.trim()) {
-      return new Date(fromStats).toLocaleString();
-    }
-    const fromConfig = activeSource?.config?.lastFailedSyncAt;
-    if (typeof fromConfig === "string" && fromConfig.trim()) {
-      return new Date(fromConfig).toLocaleString();
-    }
-    return null;
-  })();
-  const lastSyncUpserted =
-    typeof activeSource?.lastSyncStats?.listingsUpserted === "number"
-      ? activeSource.lastSyncStats.listingsUpserted
-      : typeof activeSource?.lastSyncStats?.listingsImported === "number"
-        ? activeSource.lastSyncStats.listingsImported
-        : null;
-  const lastSyncFetched =
-    typeof activeSource?.lastSyncStats?.listingsFetched === "number"
-      ? activeSource.lastSyncStats.listingsFetched
-      : null;
-  const lastSyncSkippedCap =
-    typeof activeSource?.lastSyncStats?.skippedDueToCap === "number"
-      ? activeSource.lastSyncStats.skippedDueToCap
-      : null;
-  const inventoryStats = activeSource?.inventoryStats;
   const isListingSyncProvider = providerSupportsListingSync(selectedProvider);
   const isMlsGrid = selectedProvider === "mls_grid";
   const isTrestle = selectedProvider === "trestle";
@@ -543,12 +548,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     hasStoredCredentials: activeSource?.hasCredentials ?? false,
     replacing: replacingSecret,
   });
-  const datasetId =
-    typeof activeSource?.config?.datasetId === "string" ? activeSource.config.datasetId : null;
-  const originatingSystem =
-    typeof activeSource?.config?.originatingSystemName === "string"
-      ? activeSource.config.originatingSystemName
-      : null;
+  const hasConnectedSource = connectedSummaries.length > 0;
+  const showConnectors = !hasConnectedSource || showConnectorPicker;
+  const editorOpen = formOpen && isListingSyncProvider && providerAvailable;
 
   const inner = (
     <div className={cn("space-y-4", className)}>
@@ -596,88 +598,94 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
             </div>
           ) : (
             <>
-              {connectedSummaries.length > 0 && (
-                <div className="space-y-3" data-testid="inventory-connected-sources">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Connected inventory sources</h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Existing feeds stay here even if a sync or credential needs attention.
-                    </p>
-                  </div>
+              {hasConnectedSource && (
+                <div className="space-y-2" data-testid="inventory-connected-sources">
+                  <h3 className="text-sm font-semibold text-gray-900">Connected source</h3>
                   {connectedSummaries.map((card) => {
                     const source = sources.find((s) => s.id === card.sourceId);
                     const cardSyncing = source?.lastSyncStatus === "running";
                     return (
                       <div
                         key={card.sourceId}
-                        className="rounded-lg border border-gray-200 bg-white p-4 space-y-3"
+                        className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-2"
                         data-testid={`inventory-source-card-${card.sourceId}`}
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-900">{card.providerLabel}</p>
-                            <p className="text-xs text-muted-foreground">{card.displayName}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {inventoryConnectedSourceIdentityLine(card)}
+                            </p>
                           </div>
-                          <span
-                            className={cn(
-                              "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
-                              inventoryConnectionStateBadgeClass(card.connectionState),
-                            )}
-                            data-testid="inventory-source-connection-state"
-                          >
-                            {card.connectionStateLabel}
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span
+                              className={cn(
+                                "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
+                                inventoryConnectionStateBadgeClass(card.connectionState),
+                              )}
+                              data-testid="inventory-source-connection-state"
+                            >
+                              {card.connectionStateLabel}
+                            </span>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="More source actions"
+                                  data-testid="button-inventory-source-more"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => openEditSettings(card.sourceId, false)}
+                                  data-testid="button-inventory-edit"
+                                >
+                                  Edit settings
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-red-600 focus:text-red-600"
+                                  disabled={deleteMutation.isPending}
+                                  onClick={() => {
+                                    setDisconnectSourceId(card.sourceId);
+                                    setRemoveSourceConfirmOpen(true);
+                                  }}
+                                  data-testid="button-inventory-remove"
+                                >
+                                  Disconnect
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
-                        <dl className="grid gap-2 sm:grid-cols-2 text-xs">
-                          {card.datasetId ? (
-                            <div>
-                              <dt className="text-muted-foreground">Dataset ID</dt>
-                              <dd className="font-medium font-mono">{card.datasetId}</dd>
-                            </div>
-                          ) : null}
-                          {card.originatingSystemName ? (
-                            <div>
-                              <dt className="text-muted-foreground">Originating system</dt>
-                              <dd className="font-medium font-mono">{card.originatingSystemName}</dd>
-                            </div>
-                          ) : null}
-                          <div>
-                            <dt className="text-muted-foreground">Market scope</dt>
-                            <dd className="font-medium">{card.marketScope}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted-foreground">Listings / cap</dt>
-                            <dd className="font-medium tabular-nums" data-testid="inventory-total-synced">
-                              {card.listingCountLabel}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted-foreground">Automatic sync</dt>
-                            <dd className="font-medium">{card.automaticSyncLabel}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted-foreground">Last successful sync</dt>
-                            <dd className="font-medium">{card.lastSuccessfulSyncLabel}</dd>
-                          </div>
-                          {card.credentialConfiguredLabel ? (
-                            <div className="sm:col-span-2">
-                              <dt className="text-muted-foreground">Credentials</dt>
-                              <dd className="font-medium" data-testid="inventory-credential-configured">
-                                {card.credentialConfiguredLabel}
-                              </dd>
-                            </div>
-                          ) : null}
-                        </dl>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground tabular-nums" data-testid="inventory-total-synced">
+                            {card.listingCountLabel}
+                          </span>
+                          {" · "}
+                          Last successful sync {card.lastSuccessfulSyncLabel}
+                        </p>
                         {card.lastError ? (
-                          <Alert variant="destructive" className="py-2">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle className="text-sm">Needs attention</AlertTitle>
-                            <AlertDescription className="text-xs leading-relaxed" data-testid="inventory-sync-error">
-                              {card.lastError}
-                            </AlertDescription>
-                          </Alert>
+                          <p className="text-xs text-red-700 leading-snug" data-testid="inventory-sync-error">
+                            {card.lastError}
+                          </p>
                         ) : null}
                         <div className="flex flex-wrap gap-2">
+                          {card.showReconnect ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-brand-green hover:bg-brand-green/90"
+                              onClick={() => openEditSettings(card.sourceId, true)}
+                              data-testid="button-inventory-fix-connection"
+                            >
+                              Fix connection
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="outline"
@@ -698,39 +706,6 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               </>
                             )}
                           </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEditSettings(card.sourceId, false)}
-                            data-testid="button-inventory-edit"
-                          >
-                            Edit settings
-                          </Button>
-                          {card.showReconnect ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="bg-brand-green hover:bg-brand-green/90"
-                              onClick={() => openEditSettings(card.sourceId, true)}
-                              data-testid="button-inventory-reconnect"
-                            >
-                              Reconnect
-                            </Button>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => {
-                              setDisconnectSourceId(card.sourceId);
-                              setRemoveSourceConfirmOpen(true);
-                            }}
-                            data-testid="button-inventory-remove"
-                          >
-                            Disconnect
-                          </Button>
                         </div>
                       </div>
                     );
@@ -738,68 +713,184 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 </div>
               )}
 
-              <div className="space-y-3" data-testid="inventory-available-connectors">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Available connectors</h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Connect another listing feed, or see which providers are already in use.
-                  </p>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {connectorAvailability.map((connector) => (
-                    <div
-                      key={connector.id}
-                      className="rounded-lg border border-gray-200 bg-muted/20 p-3 space-y-2"
-                      data-testid={`inventory-connector-${connector.id}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium">{connector.label}</p>
-                          {connector.helper ? (
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{connector.helper}</p>
-                          ) : null}
-                        </div>
-                        <span
-                          className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                          data-testid={`inventory-connector-status-${connector.id}`}
-                        >
-                          {connector.statusLabel}
-                        </span>
+            {hasConnectedSource && publicationStats && (
+              <div
+                className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-2"
+                data-testid="inventory-agent-page-publication"
+              >
+                <p className="text-sm font-semibold text-gray-900">Agent Page listings</p>
+                <dl className="grid gap-2 sm:grid-cols-2 text-xs">
+                      <div>
+                        <dt className="text-muted-foreground">Synced listings</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
+                          {publicationStats.totalSynced.toLocaleString()}
+                        </dd>
                       </div>
+                      <div>
+                        <dt className="text-muted-foreground">MLS eligible</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-mls-eligible">
+                          {publicationStats.mlsEligible.toLocaleString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Published to Agent Page</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-published">
+                          {publicationStats.publishedOnAgentPage.toLocaleString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Hidden / unpublished</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-hidden">
+                          {publicationStats.hiddenUnpublished.toLocaleString()}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {!publicationStats.workspacePublishEnabled && (
+                      <p className="text-xs text-amber-700 leading-snug">
+                        Turn on &quot;Publish listings publicly&quot; in Agent Page settings before publishing to your
+                        Agent Page.
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 pt-1">
                       <Button
                         type="button"
+                        variant="default"
                         size="sm"
-                        variant={connector.status === "available" ? "default" : "outline"}
-                        className={connector.status === "available" ? "bg-brand-green hover:bg-brand-green/90" : undefined}
-                        disabled={connector.disabled}
-                        onClick={() => openConnectProvider(connector.id)}
-                        data-testid={`button-inventory-connect-${connector.id}`}
+                        disabled={
+                          bulkPublishMutation.isPending ||
+                          !publicationStats.workspacePublishEnabled ||
+                          publicationStats.eligibleToPublish === 0
+                        }
+                        onClick={() => setBulkPublishConfirmOpen(true)}
+                        data-testid="button-bulk-publish-agent-page"
                       >
-                        {connector.actionLabel}
+                        {bulkPublishMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Publishing…
+                          </>
+                        ) : (
+                          "Publish eligible listings to Agent Page"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          bulkUnpublishMutation.isPending || publicationStats.publishedOnAgentPage === 0
+                        }
+                        onClick={() => setBulkUnpublishConfirmOpen(true)}
+                        data-testid="button-bulk-unpublish-agent-page"
+                      >
+                        {bulkUnpublishMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Unpublishing…
+                          </>
+                        ) : (
+                          "Unpublish all from Agent Page"
+                        )}
                       </Button>
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {formOpen && isListingSyncProvider && providerAvailable && (
-                <div className="grid gap-4 sm:grid-cols-2 rounded-lg border border-gray-200 bg-gray-50/70 p-4" data-testid="inventory-source-form">
-                  <div className="sm:col-span-2 flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900">
-                        {activeSource ? "Edit settings" : `Connect ${providerOption?.label ?? "provider"}`}
-                      </h3>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {activeSource
-                          ? "Saving updates this existing source. Credentials stay encrypted."
-                          : "This creates a new inventory source for the current workspace."}
-                      </p>
-                    </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={closeFormPanel}>
-                      Close
-                    </Button>
                   </div>
-                  <>
+                )}
+
+              {hasConnectedSource && !showConnectors ? (
+                <div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="px-0 h-8 text-muted-foreground"
+                    onClick={() => setShowConnectorPicker(true)}
+                    data-testid="button-inventory-add-another-source"
+                  >
+                    Add another source
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2" data-testid="inventory-available-connectors">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {hasConnectedSource ? "Add another source" : "Available connectors"}
+                    </h3>
+                    {hasConnectedSource ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowConnectorPicker(false)}
+                      >
+                        Hide
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {connectorAvailability.map((connector) => (
+                      <div
+                        key={connector.id}
+                        className="rounded-lg border border-gray-200 bg-muted/20 p-3 space-y-2"
+                        data-testid={`inventory-connector-${connector.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium">{connector.label}</p>
+                            {connector.helper ? (
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{connector.helper}</p>
+                            ) : null}
+                          </div>
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                            data-testid={`inventory-connector-status-${connector.id}`}
+                          >
+                            {connector.statusLabel}
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={connector.status === "available" ? "default" : "outline"}
+                          className={connector.status === "available" ? "bg-brand-green hover:bg-brand-green/90" : undefined}
+                          disabled={connector.disabled}
+                          onClick={() => openConnectProvider(connector.id)}
+                          data-testid={`button-inventory-connect-${connector.id}`}
+                        >
+                          {connector.actionLabel}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Dialog
+                open={editorOpen}
+                onOpenChange={(open) => {
+                  if (!open && !saveMutation.isPending) closeFormPanel();
+                }}
+              >
+                <DialogContent
+                  className="max-w-xl max-h-[85vh] overflow-y-auto"
+                  data-testid="inventory-source-form"
+                >
+                  <DialogHeader>
+                    <DialogTitle>
+                      {activeSource
+                        ? replacingSecret || activeSource.connectionStatus === "error" || activeSource.lastSyncStatus === "failed"
+                          ? "Fix connection"
+                          : "Edit settings"
+                        : `Connect ${providerOption?.label ?? "provider"}`}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {activeSource
+                        ? "Saved settings stay on this source. Credentials stay encrypted."
+                        : "This creates a new inventory source for the current workspace."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 sm:grid-cols-2">
                     {formBannerError && (
                       <div
                         className="sm:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
@@ -1043,8 +1134,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           </p>
                         ) : (
                           <p className="text-[11px] text-muted-foreground">
-                            The stored token is never shown. Leave this blank to keep it, or paste a new token to
-                            replace it.
+                            {inventoryReplaceSecretHelperText("bridge_interactive", secretMode === "replace")}
                           </p>
                         )}
                         {secretMode === "replace" && activeSource?.hasCredentials ? (
@@ -1145,350 +1235,35 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </div>
                       </>
                     )}
-                  </>
-                </div>
-              )}
-
-              {formOpen && isListingSyncProvider && providerAvailable && (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    className="bg-brand-green hover:bg-brand-green/90"
-                    disabled={saveMutation.isPending}
-                    onClick={handleSave}
-                    data-testid="button-inventory-save"
-                  >
-                    {saveMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving…
-                      </>
-                    ) : (
-                      "Save changes"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={syncMutation.isPending || syncRunning || !activeSource}
-                    onClick={() => activeSource && handleSyncSource(activeSource.id)}
-                    data-testid="button-inventory-sync"
-                  >
-                    {syncMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        Connecting…
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className={cn("h-4 w-4 mr-1", syncRunning && "animate-spin")} />
-                        {syncRunning ? "Syncing…" : "Sync now"}
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
-
-              {formOpen && activeSource && isListingSyncProvider && (
-                <div
-                  className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 text-sm space-y-4"
-                  data-testid="inventory-source-status"
-                >
-                  <p className="font-medium text-gray-900">Inventory source status</p>
-
-                  <dl className="grid gap-3 sm:grid-cols-2 text-xs sm:text-sm">
-                    <div>
-                      <dt className="text-muted-foreground">Provider</dt>
-                      <dd className="font-medium">{inventoryProviderUserLabel(activeSource.provider)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Connection status</dt>
-                      <dd className="font-medium flex items-center gap-1.5">
-                        {syncRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />}
-                        {!syncRunning && activeSource.connectionStatus === "connected" && (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                        )}
-                        {!syncRunning && activeSource.connectionStatus === "error" && (
-                          <XCircle className="h-3.5 w-3.5 text-red-600" />
-                        )}
-                        {connectionStatusLabel}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Total synced</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-total-synced">
-                        {(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Active listings available</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-active-for-matching">
-                        {(inventoryStats?.activeForMatching ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Listing cap</dt>
-                      <dd className="font-medium tabular-nums" data-testid="inventory-configured-cap">
-                        {(inventoryStats?.configuredCap ?? form.maxListings).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Last sync</dt>
-                      <dd className="font-medium">{lastSyncAt ?? "Never"}</dd>
-                    </div>
-                  </dl>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-xs text-muted-foreground"
-                    onClick={() => setShowDiagnostics((open) => !open)}
-                    data-testid="button-inventory-show-diagnostics"
-                  >
-                    {showDiagnostics ? (
-                      <>
-                        <ChevronUp className="h-3.5 w-3.5 mr-1" />
-                        Hide diagnostics
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown className="h-3.5 w-3.5 mr-1" />
-                        Show diagnostics
-                      </>
-                    )}
-                  </Button>
-
-                  {showDiagnostics && (
-                    <div
-                      className="rounded-md border border-gray-200 bg-white/80 p-3 space-y-3"
-                      data-testid="inventory-source-diagnostics"
-                    >
-                      <dl className="grid gap-2 sm:grid-cols-2 text-xs">
-                        <div>
-                          <dt className="text-muted-foreground">Inactive / off-market</dt>
-                          <dd className="font-medium tabular-nums" data-testid="inventory-inactive-off-market">
-                            {(inventoryStats?.inactiveOffMarket ?? 0).toLocaleString()}
-                          </dd>
-                        </div>
-                        {datasetId && (
-                          <div>
-                            <dt className="text-muted-foreground">Dataset ID</dt>
-                            <dd className="font-medium font-mono">{datasetId}</dd>
-                          </div>
-                        )}
-                        {originatingSystem && (
-                          <div>
-                            <dt className="text-muted-foreground">Originating system</dt>
-                            <dd className="font-medium font-mono">{originatingSystem}</dd>
-                          </div>
-                        )}
-                        {pagesProcessed != null && (
-                          <div>
-                            <dt className="text-muted-foreground">Pages processed</dt>
-                            <dd className="font-medium tabular-nums">{pagesProcessed.toLocaleString()}</dd>
-                          </div>
-                        )}
-                        {apiRequests != null && apiRequests > 0 && (
-                          <div>
-                            <dt className="text-muted-foreground">API requests</dt>
-                            <dd className="font-medium tabular-nums">{apiRequests.toLocaleString()}</dd>
-                          </div>
-                        )}
-                        <div>
-                          <dt className="text-muted-foreground">Last sync fetched</dt>
-                          <dd className="font-medium tabular-nums">
-                            {lastSyncFetched != null ? lastSyncFetched.toLocaleString() : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Last sync upserted</dt>
-                          <dd className="font-medium tabular-nums">
-                            {lastSyncUpserted != null ? lastSyncUpserted.toLocaleString() : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Skipped due to cap</dt>
-                          <dd className="font-medium tabular-nums" data-testid="inventory-skipped-cap">
-                            {lastSyncSkippedCap != null ? lastSyncSkippedCap.toLocaleString() : "—"}
-                          </dd>
-                        </div>
-                        {syncFailed && lastFailedSyncAt && (
-                          <div>
-                            <dt className="text-muted-foreground">Failed sync</dt>
-                            <dd className="font-medium">{lastFailedSyncAt}</dd>
-                          </div>
-                        )}
-                        {technicalDetailRows.map((row) => (
-                          <div key={row.label}>
-                            <dt className="text-muted-foreground">{row.label}</dt>
-                            <dd className="font-medium tabular-nums">{row.value}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                      {devSyncRows.length > 0 && (
-                        <div className="border-t border-gray-100 pt-2">
-                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
-                            Sync diagnostics
-                          </p>
-                          <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                            {devSyncRows.map((row) => (
-                              <div key={row.label} className="flex justify-between gap-2 text-xs">
-                                <span className="text-muted-foreground">{row.label}</span>
-                                <span className="font-medium tabular-nums text-right">{row.value}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {importJustFinished && !syncFailed && (
-                    <Alert className="border-emerald-200 bg-emerald-50/80 py-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                      <AlertTitle className="text-sm text-emerald-950">Import complete</AlertTitle>
-                      <AlertDescription className="text-xs text-emerald-900/90">
-                        {(inventoryStats?.totalSynced ?? activeSource.listingCount) > 0
-                          ? `${(inventoryStats?.totalSynced ?? activeSource.listingCount).toLocaleString()} listings synced (${(inventoryStats?.activeForMatching ?? 0).toLocaleString()} active listings available).`
-                          : "Sync finished. No listings were imported — verify your dataset ID and token with Bridge Data Output."}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {syncFailed && activeSource.lastSyncError && (
-                    <Alert variant="destructive" className="py-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm">
-                        {activeSource.connectionStatus === "connected" ? "Import failed" : "Sync failed"}
-                      </AlertTitle>
-                      <AlertDescription
-                        className="text-xs leading-relaxed"
-                        data-testid="inventory-sync-error"
-                      >
-                        {friendlyInventoryErrorMessage(activeSource.lastSyncError)}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {!syncFailed && activeSource.connectionStatus === "error" && activeSource.lastSyncError && (
-                    <Alert variant="destructive" className="py-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm">Connection error</AlertTitle>
-                      <AlertDescription className="text-xs leading-relaxed">
-                        {friendlyInventoryErrorMessage(activeSource.lastSyncError)}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {publicationStats && (
-                    <div
-                      className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-4 space-y-3"
-                      data-testid="inventory-agent-page-publication"
-                    >
-                      <p className="font-medium text-gray-900">Agent Page listings</p>
-                      <dl className="grid gap-3 sm:grid-cols-2 text-xs sm:text-sm">
-                        <div>
-                          <dt className="text-muted-foreground">Synced listings</dt>
-                          <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
-                            {publicationStats.totalSynced.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">MLS eligible</dt>
-                          <dd className="font-medium tabular-nums" data-testid="publication-mls-eligible">
-                            {publicationStats.mlsEligible.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Published to Agent Page</dt>
-                          <dd className="font-medium tabular-nums" data-testid="publication-published">
-                            {publicationStats.publishedOnAgentPage.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Hidden / unpublished</dt>
-                          <dd className="font-medium tabular-nums" data-testid="publication-hidden">
-                            {publicationStats.hiddenUnpublished.toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
-
-                      {!publicationStats.workspacePublishEnabled && (
-                        <p className="text-xs text-amber-700 leading-snug">
-                          Turn on &quot;Publish listings publicly&quot; in Agent Page settings before publishing to your
-                          Agent Page.
-                        </p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        <Button
-                          type="button"
-                          variant="default"
-                          size="sm"
-                          disabled={
-                            bulkPublishMutation.isPending ||
-                            !publicationStats.workspacePublishEnabled ||
-                            publicationStats.eligibleToPublish === 0
-                          }
-                          onClick={() => setBulkPublishConfirmOpen(true)}
-                          data-testid="button-bulk-publish-agent-page"
-                        >
-                          {bulkPublishMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Publishing…
-                            </>
-                          ) : (
-                            "Publish eligible listings to Agent Page"
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={
-                            bulkUnpublishMutation.isPending || publicationStats.publishedOnAgentPage === 0
-                          }
-                          onClick={() => setBulkUnpublishConfirmOpen(true)}
-                          data-testid="button-bulk-unpublish-agent-page"
-                        >
-                          {bulkUnpublishMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Unpublishing…
-                            </>
-                          ) : (
-                            "Unpublish all from Agent Page"
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="border-t border-gray-200 pt-3">
+                  </div>
+                  <DialogFooter>
                     <Button
                       type="button"
-                      variant="destructive"
-                      size="sm"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => {
-                        if (activeSource) setDisconnectSourceId(activeSource.id);
-                        setRemoveSourceConfirmOpen(true);
-                      }}
+                      variant="outline"
+                      disabled={saveMutation.isPending}
+                      onClick={closeFormPanel}
                     >
-                      {deleteMutation.isPending ? (
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-brand-green hover:bg-brand-green/90"
+                      disabled={saveMutation.isPending}
+                      onClick={handleSave}
+                      data-testid="button-inventory-save"
+                    >
+                      {saveMutation.isPending ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Removing…
+                          Saving…
                         </>
                       ) : (
-                        "Disconnect"
+                        "Save changes"
                       )}
                     </Button>
-                  </div>
-                </div>
-              )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </>
           )}
         </>

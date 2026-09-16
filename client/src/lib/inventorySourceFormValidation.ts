@@ -38,6 +38,7 @@ function validateMlsGridForm(
   form: InventorySourceForm,
   isUpdate: boolean,
   hasStoredCredentials: boolean,
+  replacingSecret: boolean,
 ): InventoryFormValidationResult {
   const errors: InventoryFormFieldErrors = {};
   const order: InventoryFormField[] = ["originatingSystemName", "accessToken"];
@@ -46,7 +47,7 @@ function validateMlsGridForm(
     errors.originatingSystemName = "Enter your originating system name.";
   }
 
-  const needsToken = !isUpdate || (!hasStoredCredentials && !form.accessToken.trim());
+  const needsToken = !isUpdate || replacingSecret || !hasStoredCredentials;
   if (needsToken && !form.accessToken.trim()) {
     errors.accessToken = "Access token is required.";
   }
@@ -59,6 +60,7 @@ function validateTrestleForm(
   form: InventorySourceForm,
   isUpdate: boolean,
   hasStoredCredentials: boolean,
+  replacingSecret: boolean,
 ): InventoryFormValidationResult {
   const errors: InventoryFormFieldErrors = {};
   const order: InventoryFormField[] = ["originatingSystemName", "clientId", "clientSecret"];
@@ -67,7 +69,7 @@ function validateTrestleForm(
     errors.originatingSystemName = "Enter your originating system name.";
   }
 
-  const needsCredentials = !isUpdate || !hasStoredCredentials;
+  const needsCredentials = !isUpdate || replacingSecret || !hasStoredCredentials;
   if (needsCredentials) {
     if (!form.clientId.trim()) {
       errors.clientId = "Client ID is required.";
@@ -85,6 +87,7 @@ function validateBridgeForm(
   form: InventorySourceForm,
   isUpdate: boolean,
   hasStoredCredentials: boolean,
+  replacingSecret: boolean,
 ): InventoryFormValidationResult {
   const errors: InventoryFormFieldErrors = {};
   const order: InventoryFormField[] = ["datasetId", "serverToken"];
@@ -93,9 +96,9 @@ function validateBridgeForm(
     errors.datasetId = "Dataset ID is required.";
   }
 
-  const needsToken = !isUpdate || (!hasStoredCredentials && !form.serverToken.trim());
+  const needsToken = !isUpdate || replacingSecret || !hasStoredCredentials;
   if (needsToken && !form.serverToken.trim()) {
-    errors.serverToken = "Server token is required.";
+    errors.serverToken = "Paste a new server token to replace the stored one.";
   }
 
   if (Object.keys(errors).length === 0) return { valid: true };
@@ -108,14 +111,16 @@ export function validateInventorySourceForm(params: {
   form: InventorySourceForm;
   isUpdate: boolean;
   hasStoredCredentials: boolean;
+  replacingSecret?: boolean;
 }): InventoryFormValidationResult {
+  const replacing = params.replacingSecret === true;
   switch (params.provider) {
     case "mls_grid":
-      return validateMlsGridForm(params.form, params.isUpdate, params.hasStoredCredentials);
+      return validateMlsGridForm(params.form, params.isUpdate, params.hasStoredCredentials, replacing);
     case "trestle":
-      return validateTrestleForm(params.form, params.isUpdate, params.hasStoredCredentials);
+      return validateTrestleForm(params.form, params.isUpdate, params.hasStoredCredentials, replacing);
     case "bridge_interactive":
-      return validateBridgeForm(params.form, params.isUpdate, params.hasStoredCredentials);
+      return validateBridgeForm(params.form, params.isUpdate, params.hasStoredCredentials, replacing);
     default:
       return { valid: true };
   }

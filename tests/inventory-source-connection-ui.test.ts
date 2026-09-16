@@ -15,6 +15,7 @@ import {
 import {
   buildInventorySourceSummaryCard,
   canConnectInventoryProvider,
+  inventoryConnectedSourceIdentityLine,
   inventoryCredentialConfiguredLabel,
   inventorySecretFieldMode,
   listInventoryConnectorAvailability,
@@ -72,9 +73,18 @@ test("connected Bridge source is a collapsed summary, not an empty connector", (
   assert.equal(card.listingCountLabel.includes("2,500"), true);
   assert.equal(card.automaticSyncLabel, "Automatic background sync is on");
   assert.equal(card.lastSuccessfulSyncLabel !== "Never", true);
-  assert.equal(card.credentialConfiguredLabel, "Server token configured");
+  assert.equal(card.credentialConfiguredLabel, "Server token configured.");
   assert.equal(card.showReconnect, false);
   assert.equal(card.lastError, null);
+  assert.equal(inventoryConnectedSourceIdentityLine(card), "My Bridge inventory / miamire");
+  assert.equal(
+    inventoryConnectedSourceIdentityLine({
+      ...card,
+      originatingSystemName: "Miami REALTORS",
+      datasetId: "miamire",
+    }),
+    "Miami REALTORS / miamire",
+  );
 
   const form = loadInventorySourceForm(source, false);
   assert.equal(form.datasetId, "miamire");
@@ -209,7 +219,7 @@ test("edit settings expands the existing source and PATCHes it", () => {
 });
 
 test("token replacement is explicit and a blank replacement preserves the stored token", () => {
-  assert.equal(inventoryCredentialConfiguredLabel("bridge_interactive"), "Server token configured");
+  assert.equal(inventoryCredentialConfiguredLabel("bridge_interactive"), "Server token configured.");
   assert.equal(
     inventorySecretFieldMode({ isUpdate: true, hasStoredCredentials: true, replacing: false }),
     "hidden_configured",
@@ -257,18 +267,25 @@ test("duplicate Bridge provider cannot be added again", () => {
   assert.equal(canConnectInventoryProvider("bridge_interactive", [bridgeSource()]), false);
 });
 
-test("InventorySourcesSection wires the two-section UX", () => {
+test("InventorySourcesSection uses a compact card, modal editor, and hidden connectors", () => {
   const section = readFileSync(
     join(process.cwd(), "client", "src", "components", "inventory", "InventorySourcesSection.tsx"),
     "utf8",
   );
   assert.match(section, /inventory-connected-sources/);
-  assert.match(section, /inventory-available-connectors/);
+  assert.match(section, /button-inventory-add-another-source/);
+  assert.match(section, /button-inventory-fix-connection/);
+  assert.match(section, /button-inventory-source-more/);
   assert.match(section, /button-inventory-edit/);
-  assert.match(section, /button-inventory-reconnect/);
   assert.match(section, /button-inventory-replace-token/);
+  assert.match(section, /inventory-source-form/);
+  assert.match(section, /<Dialog/);
+  assert.match(section, /shouldSyncAfterInventoryCredentialSave/);
   assert.match(section, /inventoryCredentialConfiguredLabel/);
   assert.match(section, /inventoryReplaceSecretLabel/);
   assert.match(section, /inventorySourceSaveRequest/);
   assert.match(section, /listInventoryConnectorAvailability/);
+  assert.equal(section.includes("inventory-source-status"), false);
+  assert.equal(section.includes("Leave this blank to keep it"), false);
+  assert.equal(section.includes("button-inventory-reconnect"), false);
 });

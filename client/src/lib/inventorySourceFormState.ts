@@ -138,6 +138,14 @@ export function inventorySourceSyncUrl(activeSource: { id: string }): string {
   return `/api/inventory/sources/${activeSource.id}/sync`;
 }
 
+/** After a replacement token is saved, immediately validate+sync using the persisted row. */
+export function shouldSyncAfterInventoryCredentialSave(payload: { credentials?: unknown }): boolean {
+  if (!payload.credentials || typeof payload.credentials !== "object") return false;
+  return Object.values(payload.credentials as Record<string, unknown>).some(
+    (value) => typeof value === "string" && value.trim().length > 0,
+  );
+}
+
 export function applyInventorySourcesCacheUpdate(
   prev: unknown,
   saved: PublicInventorySource,
