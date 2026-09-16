@@ -49,7 +49,7 @@ section("Turnstile configuration gating");
     assert.equal(isTurnstileRequired(), false, "dev without keys does not require Turnstile");
 
     process.env.NODE_ENV = "production";
-    assert.equal(isTurnstileRequired(), false, "production without keys does not pretend Turnstile passed");
+    assert.equal(isTurnstileRequired(), true, "production without keys still requires Turnstile (fail-closed)");
 
     process.env.VITE_TURNSTILE_SITE_KEY = "1x00000000000000000000AA";
     process.env.TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA";

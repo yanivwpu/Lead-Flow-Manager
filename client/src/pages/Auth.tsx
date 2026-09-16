@@ -103,9 +103,15 @@ export function AuthPage() {
       return;
     }
 
-    if (!isLogin && turnstileConfigured && !turnstileToken) {
-      setError("Please complete the security check and try again.");
-      return;
+    if (!isLogin) {
+      if (import.meta.env.PROD && !turnstileConfigured) {
+        setError("Signup is temporarily unavailable. Please try again later.");
+        return;
+      }
+      if (turnstileConfigured && !turnstileToken) {
+        setError("Please complete the security check and try again.");
+        return;
+      }
     }
 
     setIsSubmitting(true);

@@ -7,6 +7,7 @@ declare global {
         el: HTMLElement,
         options: {
           sitekey: string;
+          action?: string;
           callback?: (token: string) => void;
           "expired-callback"?: () => void;
           "error-callback"?: () => void;
@@ -81,6 +82,7 @@ export function TurnstileWidget({
 
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
+          action: "signup",
           callback: (token) => onToken(token),
           "expired-callback": () => onToken(null),
           "error-callback": () => onToken(null),
