@@ -27,7 +27,10 @@ export type PublicInventoryListingStats = {
   activeForMatching: number;
   configuredCap: number;
   totalSynced: number;
+  totalStoredRows?: number;
+  listingsScanned?: number;
   inactiveOffMarket: number;
+  syncPaused?: boolean;
 };
 
 export type PublicInventorySource = {
@@ -42,6 +45,7 @@ export type PublicInventorySource = {
   lastSyncError: string | null;
   lastSyncStats: Record<string, unknown>;
   isActive: boolean;
+  syncPaused?: boolean;
   listingSyncSupported: boolean;
   hasCredentials: boolean;
   /** @deprecated Prefer inventoryStats.totalSynced */
@@ -67,6 +71,9 @@ export async function fetchInventoryStatus(): Promise<InventoryConnectorStatus> 
 
 export type ListingPublicationStats = {
   totalSynced: number;
+  totalStoredRows?: number;
+  activeStored?: number;
+  listingsScanned?: number;
   mlsEligible: number;
   publishedOnAgentPage: number;
   hiddenUnpublished: number;
@@ -76,6 +83,9 @@ export type ListingPublicationStats = {
 
 export const EMPTY_LISTING_PUBLICATION_STATS: ListingPublicationStats = {
   totalSynced: 0,
+  totalStoredRows: 0,
+  activeStored: 0,
+  listingsScanned: 0,
   mlsEligible: 0,
   publishedOnAgentPage: 0,
   hiddenUnpublished: 0,
@@ -278,6 +288,8 @@ export function formatInventorySyncStatus(status: string | null | undefined): st
       return "Failed";
     case "partial":
       return "Partially completed";
+    case "paused":
+      return "Paused";
     case "idle":
       return "Ready to sync";
     default:

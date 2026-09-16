@@ -6,14 +6,21 @@ import {
 } from "@shared/inventory/inventoryProviderDisplay";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
+import {
+  formatInventorySyncedCapLabel,
+  inventorySyncedListingCount,
+  isInventorySyncPaused,
+  readListingsScanned,
+} from "@shared/inventory/inventorySyncCap";
 import { formatCommaSeparatedList, readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import type { InventorySourceForm, PublicInventorySource } from "@/lib/inventoryApi";
 
-export type InventoryConnectionUiState = "connected" | "syncing" | "needs_attention" | "disconnected";
+export type InventoryConnectionUiState = "connected" | "syncing" | "paused" | "needs_attention" | "disconnected";
 
 export const INVENTORY_CONNECTION_STATE_LABELS: Record<InventoryConnectionUiState, string> = {
   connected: "Connected",
   syncing: "Syncing",
+  paused: "Paused",
   needs_attention: "Needs attention",
   disconnected: "Disconnected",
 };
@@ -43,6 +50,9 @@ export type InventorySourceSummaryCard = {
   listingCount: number;
   listingCap: number;
   listingCountLabel: string;
+  listingsScanned: number;
+  totalStoredRows: number;
+  syncPaused: boolean;
   automaticSyncLabel: string;
   lastSuccessfulSyncLabel: string;
   lastError: string | null;
@@ -71,6 +81,9 @@ export function deriveInventoryConnectionUiState(
   if (source.lastSyncStatus === "running") {
     return "syncing";
   }
+  if (source.syncPaused || isInventorySyncPaused(source.config) || source.lastSyncStatus === "paused") {
+    return "paused";
+  }
   if (
     !source.hasCredentials ||
     source.connectionStatus === "error" ||
@@ -89,6 +102,8 @@ export function inventoryConnectionStateBadgeClass(state: InventoryConnectionUiS
       return "bg-emerald-50 text-emerald-800 border-emerald-200";
     case "syncing":
       return "bg-blue-50 text-blue-800 border-blue-200";
+    case "paused":
+      return "bg-slate-50 text-slate-700 border-slate-200";
     case "needs_attention":
       return "bg-amber-50 text-amber-900 border-amber-200";
     case "disconnected":
@@ -169,10 +184,11 @@ const LISTING_SYNC_PROVIDERS = new Set(["mls_grid", "trestle", "bridge_interacti
 export function isInventorySourceEnrolledInBackgroundSync(
   source: Pick<
     PublicInventorySource,
-    "isActive" | "connectionStatus" | "listingSyncSupported" | "provider" | "config"
+    "isActive" | "connectionStatus" | "listingSyncSupported" | "provider" | "config" | "lastSyncStatus"
   >,
 ): boolean {
   if (!source.isActive) return false;
+  if (isInventorySyncPaused(source.config) || source.lastSyncStatus === "paused") return false;
   if (source.connectionStatus !== "connected") return false;
   if (source.listingSyncSupported === false) return false;
   if (!LISTING_SYNC_PROVIDERS.has(source.provider)) return false;
@@ -196,6 +212,9 @@ export function automaticInventorySyncLabel(
 ): string {
   if (connectionState === "syncing" || source.lastSyncStatus === "running") {
     return "Sync in progress";
+  }
+  if (connectionState === "paused" || source.syncPaused || isInventorySyncPaused(source.config)) {
+    return "Automatic sync paused";
   }
   if (connectionState === "disconnected" || !source.isActive) {
     return "Automatic sync off";
@@ -228,8 +247,17 @@ export function formatInventorySyncTimestamp(iso: string | null | undefined): st
 export function buildInventorySourceSummaryCard(source: PublicInventorySource): InventorySourceSummaryCard {
   const provider = source.provider as InventoryProvider;
   const connectionState = deriveInventoryConnectionUiState(source);
-  const listingCount = source.inventoryStats?.totalSynced ?? source.listingCount ?? 0;
+  const listingCount = inventorySyncedListingCount({
+    activeForMatching: source.inventoryStats?.activeForMatching,
+    totalSynced: source.inventoryStats?.totalSynced,
+    listingCount: source.listingCount,
+  });
   const listingCap = source.inventoryStats?.configuredCap ?? readInventorySyncScope(source.config || {}).maxListings;
+  const listingsScanned = source.inventoryStats?.listingsScanned ?? readListingsScanned(source.lastSyncStats);
+  const totalStoredRows = source.inventoryStats?.totalStoredRows ?? source.listingCount ?? 0;
+  const syncPaused = Boolean(
+    source.syncPaused || isInventorySyncPaused(source.config) || source.lastSyncStatus === "paused",
+  );
   const datasetId = typeof source.config?.datasetId === "string" ? source.config.datasetId : null;
   const originatingSystemName =
     typeof source.config?.originatingSystemName === "string" ? source.config.originatingSystemName : null;
@@ -249,7 +277,10 @@ export function buildInventorySourceSummaryCard(source: PublicInventorySource): 
     marketScope: formatInventoryMarketScope(source.config),
     listingCount,
     listingCap,
-    listingCountLabel: `${listingCount.toLocaleString()} / ${listingCap.toLocaleString()} cap`,
+    listingCountLabel: formatInventorySyncedCapLabel(listingCount, listingCap),
+    listingsScanned,
+    totalStoredRows,
+    syncPaused,
     automaticSyncLabel: automaticInventorySyncLabel(source, connectionState),
     lastSuccessfulSyncLabel: formatInventorySyncTimestamp(lastSuccessfulSyncIso(source)),
     lastError,

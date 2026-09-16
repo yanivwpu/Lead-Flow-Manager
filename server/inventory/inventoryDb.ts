@@ -51,6 +51,7 @@ import {
 import type { BuyerMatchCriteria, MatchListingInput } from "@shared/inventory/inventoryMatchScoring";
 import { db } from "../../drizzle/db";
 import { decryptIntegrationConfig, encryptIntegrationConfig } from "../integrationConfigCrypto";
+import { decideInventoryListingPersist } from "@shared/inventory/inventorySyncCap";
 
 function devSeedListingExcludeCondition() {
   if (!isProductionDevSeedGuardEnabled()) return null;
@@ -188,9 +189,14 @@ export type ListingUpsertOutcome =
   | { outcome: "inserted"; result: ListingUpsertResult }
   | { outcome: "updated"; result: ListingUpsertResult }
   | { outcome: "skipped_cap" }
-  | { outcome: "skipped_out_of_scope" };
+  | { outcome: "skipped_out_of_scope" }
+  | { outcome: "skipped_ineligible" }
+  | { outcome: "skipped_paused" }
+  | { outcome: "skipped_not_matchable" };
 
-export type InventoryListingUpsertPolicy = Pick<InventorySyncScope, "maxListings" | "cities" | "zipCodes">;
+export type InventoryListingUpsertPolicy = Pick<InventorySyncScope, "maxListings" | "cities" | "zipCodes"> & {
+  syncPaused?: boolean;
+};
 
 export type SourceListingStats = {
   total: number;
@@ -329,6 +335,76 @@ async function updateExistingInventoryListing(
   };
 }
 
+const INVENTORY_SOURCE_CAP_LOCK_NS = 871514;
+
+async function insertMatchableListingWithinCap(
+  userId: string,
+  sourceId: string,
+  row: ReturnType<typeof listingRowFromNormalized>,
+  now: Date,
+  maxListings: number,
+  matchableCountCache: MatchableCountCache,
+): Promise<ListingUpsertOutcome> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${INVENTORY_SOURCE_CAP_LOCK_NS}, hashtext(${sourceId}))`);
+    const [countRow] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(inventoryListings)
+      .where(
+        and(
+          eq(inventoryListings.sourceId, sourceId),
+          inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES]),
+        ),
+      );
+    const activeStored = countRow?.count ?? 0;
+    matchableCountCache.value = activeStored;
+    if (activeStored >= maxListings) {
+      return { outcome: "skipped_cap" as const };
+    }
+
+    const [inserted] = await tx
+      .insert(inventoryListings)
+      .values({
+        ...row,
+        userId,
+        sourceId,
+        syncAlertStatus: "new",
+        firstSeenAt: now,
+      })
+      .returning({ id: inventoryListings.id });
+
+    matchableCountCache.value = activeStored + 1;
+    return {
+      outcome: "inserted" as const,
+      result: {
+        listingId: inserted.id,
+        syncAlertStatus: "new" as const,
+        previousPriceCents: null,
+        currentPriceCents: row.priceCents ?? null,
+        priceReduced: false,
+      },
+    };
+  });
+}
+
+export async function countStoredListingsByStatusForSource(
+  sourceId: string,
+): Promise<Record<string, number>> {
+  const rows = await db
+    .select({
+      status: inventoryListings.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(inventoryListings)
+    .where(eq(inventoryListings.sourceId, sourceId))
+    .groupBy(inventoryListings.status);
+  const out: Record<string, number> = {};
+  for (const row of rows) {
+    out[row.status] = row.count;
+  }
+  return out;
+}
+
 export async function upsertInventoryListingWithPolicy(
   userId: string,
   sourceId: string,
@@ -356,36 +432,31 @@ export async function upsertInventoryListingWithPolicy(
     .limit(1);
 
   if (!existing) {
-    if (!normalizedListingInSyncAreaScope(normalized, policy)) {
-      return { outcome: "skipped_out_of_scope" };
-    }
-    if (matchableCountCache.value >= policy.maxListings) {
-      return { outcome: "skipped_cap" };
-    }
-
-    const [inserted] = await db
-      .insert(inventoryListings)
-      .values({
-        ...row,
-        syncAlertStatus: "new",
-        firstSeenAt: now,
-      })
-      .returning({ id: inventoryListings.id });
-
-    if (isMatchableInventoryStatus(normalized.status)) {
-      matchableCountCache.value += 1;
+    const decision = decideInventoryListingPersist({
+      exists: false,
+      inScope: normalizedListingInSyncAreaScope(normalized, policy),
+      incomingStatus: normalized.status,
+      activeStoredCount: matchableCountCache.value,
+      maxListings: policy.maxListings,
+      syncPaused: policy.syncPaused === true,
+      listingCompliance: normalized.listingCompliance,
+    });
+    if (decision.action === "skip") {
+      if (decision.reason === "out_of_scope") return { outcome: "skipped_out_of_scope" };
+      if (decision.reason === "over_cap") return { outcome: "skipped_cap" };
+      if (decision.reason === "paused") return { outcome: "skipped_paused" };
+      if (decision.reason === "not_matchable") return { outcome: "skipped_not_matchable" };
+      return { outcome: "skipped_ineligible" };
     }
 
-    return {
-      outcome: "inserted",
-      result: {
-        listingId: inserted.id,
-        syncAlertStatus: "new",
-        previousPriceCents: null,
-        currentPriceCents: row.priceCents ?? null,
-        priceReduced: false,
-      },
-    };
+    return insertMatchableListingWithinCap(
+      userId,
+      sourceId,
+      row,
+      now,
+      policy.maxListings,
+      matchableCountCache,
+    );
   }
 
   const wasMatchable = isMatchableInventoryStatus(existing.status as NormalizedInventoryListing["status"]);
@@ -785,6 +856,7 @@ export async function listListingSyncSourcesForReconciliation(): Promise<Invento
 
   return rows.filter((row) => {
     const cfg = (row.config || {}) as Record<string, unknown>;
+    if (cfg.syncPaused === true) return false;
     return cfg.initialImportComplete === true;
   });
 }
@@ -1023,6 +1095,9 @@ export async function setListingPublication(
 
 export type ListingPublicationStats = {
   totalSynced: number;
+  totalStoredRows: number;
+  activeStored: number;
+  listingsScanned: number;
   mlsEligible: number;
   publishedOnAgentPage: number;
   hiddenUnpublished: number;
@@ -1048,6 +1123,11 @@ export async function getListingPublicationStats(userId: string): Promise<Listin
     .from(inventoryListings)
     .where(and(...base));
 
+  const [activeRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(inventoryListings)
+    .where(and(...base, inArray(inventoryListings.status, [...MATCHABLE_INVENTORY_STATUSES])));
+
   const [mlsRow] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(inventoryListings)
@@ -1066,9 +1146,14 @@ export async function getListingPublicationStats(userId: string): Promise<Listin
   const mlsEligible = mlsRow?.count ?? 0;
   const publishedOnAgentPage = workspaceOn ? (publishedRow?.count ?? 0) : 0;
   const hiddenUnpublished = hiddenRow?.count ?? 0;
+  const totalStoredRows = totalRow?.count ?? 0;
+  const activeStored = activeRow?.count ?? 0;
 
   return {
-    totalSynced: totalRow?.count ?? 0,
+    totalSynced: totalStoredRows,
+    totalStoredRows,
+    activeStored,
+    listingsScanned: 0,
     mlsEligible,
     publishedOnAgentPage,
     hiddenUnpublished,

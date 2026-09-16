@@ -138,6 +138,14 @@ export function inventorySourceSyncUrl(activeSource: { id: string }): string {
   return `/api/inventory/sources/${activeSource.id}/sync`;
 }
 
+export function inventorySourcePauseUrl(activeSource: { id: string }): string {
+  return `/api/inventory/sources/${activeSource.id}/pause`;
+}
+
+export function inventorySourceResumeUrl(activeSource: { id: string }): string {
+  return `/api/inventory/sources/${activeSource.id}/resume`;
+}
+
 /** After a replacement token is saved, immediately validate+sync using the persisted row. */
 export function shouldSyncAfterInventoryCredentialSave(payload: { credentials?: unknown }): boolean {
   if (!payload.credentials || typeof payload.credentials !== "object") return false;

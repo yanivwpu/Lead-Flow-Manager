@@ -61,6 +61,8 @@ import {
   inventoryFormHydrationIdentity,
   inventorySourcesQueryKey,
   inventorySourceSaveRequest,
+  inventorySourcePauseUrl,
+  inventorySourceResumeUrl,
   inventorySourceSyncUrl,
   loadInventorySourceForm,
   normalizeInventorySourcesQueryData,
@@ -94,7 +96,7 @@ import {
 } from "@shared/inventory/inventoryProviderDisplay";
 import type { InventoryProvider } from "@shared/inventory/inventoryProviderSchema";
 import { providerSupportsListingSync } from "@shared/inventory/inventoryProviderSchema";
-import { Home, RefreshCw, Eye, EyeOff, AlertCircle, Loader2, MoreHorizontal } from "lucide-react";
+import { Home, RefreshCw, Eye, EyeOff, AlertCircle, Loader2, MoreHorizontal, Pause, Play } from "lucide-react";
 import { INVENTORY_MAX_LISTINGS_OPTIONS, DEFAULT_MAX_LISTINGS } from "@shared/inventory/reso/resoSyncScope";
 import { RGE_INVENTORY_SETTINGS_HASH, RGE_INVENTORY_SETTINGS_PATH } from "@shared/rgePaths";
 
@@ -445,6 +447,60 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
     saveMutation.mutate();
   };
 
+  const pauseMutation = useMutation({
+    mutationFn: async (sourceId: string) => {
+      const res = await fetch(inventorySourcePauseUrl({ id: sourceId }), {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error || "Could not pause sync.");
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
+      toast({
+        title: "Inventory sync paused",
+        description: "No new scheduled, retry, or manual syncs will run. Listings and credentials were kept.",
+      });
+      void refetchSources();
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not pause sync",
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: async (sourceId: string) => {
+      const res = await fetch(inventorySourceResumeUrl({ id: sourceId }), {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(body.error || "Could not resume sync.");
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: sourcesQueryKey });
+      toast({
+        title: "Inventory sync resumed",
+        description: "Scheduled and manual syncs can run again. Use Sync now if you want an immediate run.",
+      });
+      void refetchSources();
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not resume sync",
+        description: friendlyInventoryErrorMessage(err.message.replace(/^\d+:\s*/, "")),
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSyncSource = (sourceId: string) => {
     syncMutation.mutate(sourceId);
   };
@@ -666,6 +722,22 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                           <span className="font-medium text-foreground tabular-nums" data-testid="inventory-total-synced">
                             {card.listingCountLabel}
                           </span>
+                          {card.listingsScanned > 0 ? (
+                            <>
+                              {" · "}
+                              <span data-testid="inventory-listings-scanned">
+                                Scanned {card.listingsScanned.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                          {card.totalStoredRows > card.listingCount ? (
+                            <>
+                              {" · "}
+                              <span data-testid="inventory-stored-rows">
+                                {card.totalStoredRows.toLocaleString()} stored rows
+                              </span>
+                            </>
+                          ) : null}
                           {" · "}
                           Last successful sync {card.lastSuccessfulSyncLabel}
                         </p>
@@ -686,11 +758,44 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                               Fix connection
                             </Button>
                           ) : null}
+                          {card.syncPaused ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={resumeMutation.isPending}
+                              onClick={() => resumeMutation.mutate(card.sourceId)}
+                              data-testid="button-inventory-resume"
+                            >
+                              {resumeMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Play className="h-4 w-4 mr-1" />
+                              )}
+                              Resume
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={pauseMutation.isPending || card.connectionState === "disconnected"}
+                              onClick={() => pauseMutation.mutate(card.sourceId)}
+                              data-testid="button-inventory-pause"
+                            >
+                              {pauseMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Pause className="h-4 w-4 mr-1" />
+                              )}
+                              Pause
+                            </Button>
+                          )}
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={syncMutation.isPending || cardSyncing || card.connectionState === "disconnected"}
+                            disabled={syncMutation.isPending || cardSyncing || card.connectionState === "disconnected" || card.syncPaused}
                             onClick={() => handleSyncSource(card.sourceId)}
                             data-testid="button-inventory-sync"
                           >
@@ -721,9 +826,21 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 <p className="text-sm font-semibold text-gray-900">Agent Page listings</p>
                 <dl className="grid gap-2 sm:grid-cols-2 text-xs">
                       <div>
-                        <dt className="text-muted-foreground">Synced listings</dt>
+                        <dt className="text-muted-foreground">Active synced listings</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
-                          {publicationStats.totalSynced.toLocaleString()}
+                          {(publicationStats.activeStored ?? publicationStats.totalSynced).toLocaleString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Scanned this sync</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-listings-scanned">
+                          {(publicationStats.listingsScanned ?? 0).toLocaleString()}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Stored listing rows</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-stored-rows">
+                          {(publicationStats.totalStoredRows ?? publicationStats.totalSynced).toLocaleString()}
                         </dd>
                       </div>
                       <div>

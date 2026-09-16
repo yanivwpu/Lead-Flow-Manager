@@ -69,7 +69,7 @@ test("connected Bridge source is a collapsed summary, not an empty connector", (
   assert.equal(card.displayName, "My Bridge inventory");
   assert.equal(card.datasetId, "miamire");
   assert.equal(card.marketScope.includes("Miami"), true);
-  assert.equal(card.listingCountLabel.includes("100"), true);
+  assert.equal(card.listingCountLabel.includes("80"), true);
   assert.equal(card.listingCountLabel.includes("2,500"), true);
   assert.equal(card.automaticSyncLabel, "Automatic background sync is on");
   assert.equal(card.lastSuccessfulSyncLabel !== "Never", true);
@@ -285,6 +285,8 @@ test("InventorySourcesSection uses a compact card, modal editor, and hidden conn
   assert.match(section, /inventoryReplaceSecretLabel/);
   assert.match(section, /inventorySourceSaveRequest/);
   assert.match(section, /listInventoryConnectorAvailability/);
+  assert.match(section, /button-inventory-pause/);
+  assert.match(section, /button-inventory-resume/);
   assert.equal(section.includes("inventory-source-status"), false);
   assert.equal(section.includes("Leave this blank to keep it"), false);
   assert.equal(section.includes("button-inventory-reconnect"), false);

@@ -19,6 +19,10 @@ import {
   patchInventorySource,
   type SourceListingStats,
 } from "./inventoryDb";
+import {
+  isInventorySyncPaused,
+  readListingsScanned,
+} from "@shared/inventory/inventorySyncCap";
 import { DEFAULT_MAX_LISTINGS, readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import type { InventoryAdapterContext } from "./providers/types";
@@ -57,7 +61,10 @@ export type PublicInventoryListingStats = {
   activeForMatching: number;
   configuredCap: number;
   totalSynced: number;
+  totalStoredRows: number;
+  listingsScanned: number;
   inactiveOffMarket: number;
+  syncPaused: boolean;
 };
 
 export function toPublicInventorySource(
@@ -72,8 +79,11 @@ export function toPublicInventorySource(
   const inventoryStats: PublicInventoryListingStats = {
     activeForMatching: listingStats.matchable,
     configuredCap,
-    totalSynced: listingStats.total,
+    totalSynced: listingStats.matchable,
+    totalStoredRows: listingStats.total,
+    listingsScanned: readListingsScanned((source.lastSyncStats || {}) as Record<string, unknown>),
     inactiveOffMarket: Math.max(0, listingStats.total - listingStats.matchable),
+    syncPaused: isInventorySyncPaused(rawConfig),
   };
   if (typeof config.originatingSystemName === "string") {
     config.originatingSystemName = sanitizeOriginatingSystemForUi(
@@ -93,6 +103,7 @@ export function toPublicInventorySource(
     lastSyncError: source.lastSyncError,
     lastSyncStats: source.lastSyncStats,
     isActive: source.isActive,
+    syncPaused: isInventorySyncPaused(rawConfig),
     listingSyncSupported: providerSupportsListingSync(source.provider as InventoryProvider),
     hasCredentials,
     listingCount: listingStats.total,

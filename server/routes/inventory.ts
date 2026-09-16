@@ -4,7 +4,7 @@ import { DEV_SEED_PRODUCTION_BLOCK_MESSAGE } from "@shared/inventory/inventoryDe
 import { inventoryListingStatusSchema } from "@shared/inventory/inventoryListingSchema";
 import { canUseInventoryConnector, isInventoryConnectorEnabled } from "../inventory/inventoryGate";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
-import { getInventoryListing, listInventoryListings, setListingPublication, getListingDirectShareMeta, createDirectShareLinkForUserListing, getAuthenticatedListingFlyerPreviewData, getInventorySource, getListingPublicationStats, bulkPublishEligibleListings, bulkUnpublishAllListings } from "../inventory/inventoryDb";
+import { getInventoryListing, listInventoryListings, setListingPublication, getListingDirectShareMeta, createDirectShareLinkForUserListing, getAuthenticatedListingFlyerPreviewData, getInventorySource, getListingPublicationStats, bulkPublishEligibleListings, bulkUnpublishAllListings, countListingStatsBySourceForUser } from "../inventory/inventoryDb";
 import {
   createInventorySourceBodySchema,
   createSourceForUser,
@@ -16,7 +16,12 @@ import {
   updateSourceForUser,
   validateSourceConnection,
 } from "../inventory/inventorySourceService";
-import { startInventorySourceSync } from "../inventory/inventorySyncService";
+import {
+  pauseInventorySourceSync,
+  resumeInventorySourceSync,
+  startInventorySourceSync,
+} from "../inventory/inventorySyncService";
+import { readListingsScanned } from "@shared/inventory/inventorySyncCap";
 import { getRequestOrigin } from "../urlOrigins";
 import {
   buildPublicListingFlyerHtml,
@@ -81,6 +86,14 @@ export function registerInventoryRoutes(app: Express): void {
 
       const sources = await listSourcesForUser(req.user.id);
       const publicationStats = await getListingPublicationStats(req.user.id);
+      publicationStats.listingsScanned = sources.reduce(
+        (max, source) => Math.max(max, source.inventoryStats?.listingsScanned ?? readListingsScanned(source.lastSyncStats)),
+        0,
+      );
+      publicationStats.activeStored = sources.reduce(
+        (sum, source) => sum + (source.inventoryStats?.activeForMatching ?? 0),
+        0,
+      );
       res.json({ sources, publicationStats });
     } catch (error) {
       console.error("[inventory] list sources", error);
@@ -213,12 +226,56 @@ export function registerInventoryRoutes(app: Express): void {
             code: "dev_seed_not_allowed",
           });
         }
+        if (outcome.reason === "paused") {
+          return res.status(409).json({
+            error: "This inventory source is paused. Resume it to sync again.",
+            code: "sync_paused",
+          });
+        }
         return res.status(409).json({ error: "Sync already running", code: "sync_in_progress" });
       }
       res.status(202).json({ syncStarted: true, validated: true });
     } catch (error) {
       console.error("[inventory] sync source", error);
       res.status(500).json({ error: "Failed to start inventory sync" });
+    }
+  });
+
+  app.post("/api/inventory/sources/:id/pause", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const source = await pauseInventorySourceSync(req.user.id, req.params.id);
+      if (!source) return res.status(404).json({ error: "Inventory source not found" });
+      const counts = await countListingStatsBySourceForUser(req.user.id);
+      res.json({
+        source: toPublicInventorySource(source, counts[source.id] ?? { total: 0, matchable: 0 }),
+        paused: true,
+      });
+    } catch (error) {
+      console.error("[inventory] pause source", error);
+      res.status(500).json({ error: "Failed to pause inventory sync" });
+    }
+  });
+
+  app.post("/api/inventory/sources/:id/resume", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const gate = await requireInventoryAccess(req.user.id);
+      if (!gate.ok) return res.status(gate.status).json(gate.body);
+
+      const source = await resumeInventorySourceSync(req.user.id, req.params.id);
+      if (!source) return res.status(404).json({ error: "Inventory source not found" });
+      const counts = await countListingStatsBySourceForUser(req.user.id);
+      res.json({
+        source: toPublicInventorySource(source, counts[source.id] ?? { total: 0, matchable: 0 }),
+        paused: false,
+      });
+    } catch (error) {
+      console.error("[inventory] resume source", error);
+      res.status(500).json({ error: "Failed to resume inventory sync" });
     }
   });
 

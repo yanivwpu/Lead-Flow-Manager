@@ -8,6 +8,13 @@ import {
   resoFailureDiagnosticsFromError,
   type ResoSyncFailureDiagnostics,
 } from "@shared/inventory/reso/resoSyncFailureDiagnostics";
+import {
+  INVENTORY_SYNC_PAUSE_MESSAGE,
+  isInventorySyncPaused,
+  readListingsScanned,
+  shouldHaltInventoryFetch,
+  withInventorySyncPaused,
+} from "@shared/inventory/inventorySyncCap";
 import { readInventorySyncScope } from "@shared/inventory/reso/resoSyncScope";
 import {
   mergeResoSyncCursor,
@@ -31,8 +38,16 @@ import { getInventoryProviderAdapter } from "./inventoryProviderRegistry";
 import { backfillMissingFlyerColumnsForSource } from "./inventoryFlyerBackfill";
 
 const runningSyncs = new Set<string>();
+const abortSyncs = new Set<string>();
 /** No progress for this long → treat DB "running" as stale (safe for multi-instance). */
 const STALE_SYNC_MS = 5 * 60 * 1000;
+
+export class InventorySyncStoppedError extends Error {
+  constructor(public readonly stopReason: "paused" | "cap_reached" | "aborted") {
+    super(stopReason);
+    this.name = "InventorySyncStoppedError";
+  }
+}
 
 export type StartSyncOptions = {
   mode?: ResoSyncMode;
@@ -42,7 +57,26 @@ export type StartSyncOptions = {
 
 export type StartSyncResult =
   | { started: true }
-  | { started: false; reason: "already_running" | "not_supported" | "source_not_found" | "dev_seed_blocked" };
+  | {
+      started: false;
+      reason: "already_running" | "not_supported" | "source_not_found" | "dev_seed_blocked" | "paused";
+    };
+
+export function requestInventorySyncAbort(sourceId: string): void {
+  abortSyncs.add(sourceId);
+}
+
+export function clearInventorySyncAbort(sourceId: string): void {
+  abortSyncs.delete(sourceId);
+}
+
+export function isInventorySyncAbortRequested(sourceId: string): boolean {
+  return abortSyncs.has(sourceId);
+}
+
+export function isInventorySyncRunningInProcess(sourceId: string): boolean {
+  return runningSyncs.has(sourceId);
+}
 
 function resolveSyncMode(source: InventorySource, options?: StartSyncOptions): ResoSyncMode {
   if (options?.mode) return options.mode;
@@ -200,6 +234,7 @@ async function processSyncListingRow(
   skippedInvalid: boolean;
   skippedDueToCap: boolean;
   skippedOutOfScope: boolean;
+  skippedIneligible: boolean;
   upserted: boolean;
   inactiveFromFeed: boolean;
   sampleSkipReason: string | null;
@@ -210,6 +245,7 @@ async function processSyncListingRow(
       skippedInvalid: true,
       skippedDueToCap: false,
       skippedOutOfScope: false,
+      skippedIneligible: false,
       upserted: false,
       inactiveFromFeed: false,
       sampleSkipReason: describeResoNormalizationFailure(raw),
@@ -230,6 +266,7 @@ async function processSyncListingRow(
       skippedInvalid: false,
       skippedDueToCap: true,
       skippedOutOfScope: false,
+      skippedIneligible: false,
       upserted: false,
       inactiveFromFeed,
       sampleSkipReason: null,
@@ -240,6 +277,22 @@ async function processSyncListingRow(
       skippedInvalid: false,
       skippedDueToCap: false,
       skippedOutOfScope: true,
+      skippedIneligible: false,
+      upserted: false,
+      inactiveFromFeed,
+      sampleSkipReason: null,
+    };
+  }
+  if (
+    outcome.outcome === "skipped_ineligible" ||
+    outcome.outcome === "skipped_not_matchable" ||
+    outcome.outcome === "skipped_paused"
+  ) {
+    return {
+      skippedInvalid: false,
+      skippedDueToCap: false,
+      skippedOutOfScope: false,
+      skippedIneligible: true,
       upserted: false,
       inactiveFromFeed,
       sampleSkipReason: null,
@@ -251,6 +304,7 @@ async function processSyncListingRow(
     skippedInvalid: false,
     skippedDueToCap: false,
     skippedOutOfScope: false,
+    skippedIneligible: false,
     upserted: true,
     inactiveFromFeed,
     sampleSkipReason: null,
@@ -290,10 +344,11 @@ export async function recoverStaleInventorySync(
   source: InventorySource,
 ): Promise<InventorySource> {
   if (source.lastSyncStatus !== "running") return source;
-  if (runningSyncs.has(source.id)) return source;
-
+  if (runningSyncs.has(source.id) && !abortSyncs.has(source.id)) {
+    return source;
+  }
   const progressAt = lastProgressMs(source);
-  if (progressAt > 0 && Date.now() - progressAt < STALE_SYNC_MS) {
+  if (!abortSyncs.has(source.id) && progressAt > 0 && Date.now() - progressAt < STALE_SYNC_MS) {
     return source;
   }
 
@@ -329,6 +384,51 @@ export async function recoverOrphanedInventorySync(source: InventorySource): Pro
   return recoverStaleInventorySync(source);
 }
 
+export async function pauseInventorySourceSync(
+  userId: string,
+  sourceId: string,
+): Promise<InventorySource | null> {
+  const source = await getInventorySource(userId, sourceId);
+  if (!source) return null;
+  requestInventorySyncAbort(sourceId);
+  const wasRunning = source.lastSyncStatus === "running";
+  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  const next = await patchInventorySource(sourceId, userId, {
+    config: withInventorySyncPaused((source.config || {}) as Record<string, unknown>, true),
+    lastSyncStatus: wasRunning ? "paused" : source.lastSyncStatus,
+    lastSyncError: wasRunning ? INVENTORY_SYNC_PAUSE_MESSAGE : source.lastSyncError,
+    lastSyncStats: {
+      ...stats,
+      pausedAt: new Date().toISOString(),
+      pausedWhileRunning: wasRunning,
+      listingsScanned: readListingsScanned(stats),
+    },
+  });
+  return next ?? source;
+}
+
+export async function resumeInventorySourceSync(
+  userId: string,
+  sourceId: string,
+): Promise<InventorySource | null> {
+  const source = await getInventorySource(userId, sourceId);
+  if (!source) return null;
+  clearInventorySyncAbort(sourceId);
+  const stats = (source.lastSyncStats || {}) as Record<string, unknown>;
+  const next = await patchInventorySource(sourceId, userId, {
+    config: withInventorySyncPaused((source.config || {}) as Record<string, unknown>, false),
+    lastSyncStatus: source.lastSyncStatus === "paused" ? "success" : source.lastSyncStatus,
+    lastSyncError:
+      source.lastSyncError === INVENTORY_SYNC_PAUSE_MESSAGE ? null : source.lastSyncError,
+    lastSyncStats: {
+      ...stats,
+      resumedAt: new Date().toISOString(),
+      pausedWhileRunning: false,
+    },
+  });
+  return next ?? source;
+}
+
 export async function startInventorySourceSync(
   userId: string,
   sourceId: string,
@@ -345,6 +445,10 @@ export async function startInventorySourceSync(
   );
   if (!devSeedGuard.ok) {
     return { started: false, reason: "dev_seed_blocked" };
+  }
+
+  if (!source.isActive || isInventorySyncPaused((source.config || {}) as Record<string, unknown>)) {
+    return { started: false, reason: "paused" };
   }
 
   if (source.lastSyncStatus === "running") {
@@ -441,6 +545,7 @@ async function runInventorySyncJob(
   let inactiveFromFeed = 0;
   let skippedDueToCap = statNum(prevStats, "skippedDueToCap");
   let skippedOutOfScope = statNum(prevStats, "skippedOutOfScope");
+  let skippedIneligible = statNum(prevStats, "skippedIneligible");
   const upsertResults: ListingUpsertResult[] = [];
   const datasetId = readDatasetId(source);
   let sampleSkipReason: string | null =
@@ -449,13 +554,64 @@ async function runInventorySyncJob(
   let config = { ...(source.config || {}) } as Record<string, unknown>;
   let cursor = readResoSyncCursor(config);
   let runningMaxTs = cursor.maxModificationTimestamp;
-  const syncScope = readInventorySyncScope(config);
+  const syncScope = {
+    ...readInventorySyncScope(config),
+    syncPaused: isInventorySyncPaused(config),
+  };
   const matchableCountAtStart = await countMatchableListingsForSource(sourceId);
   const matchableCountCache: MatchableCountCache = { value: matchableCountAtStart };
-  const importCapRemaining =
-    syncMode === "initial"
-      ? Math.max(0, syncScope.maxListings - matchableCountCache.value)
-      : undefined;
+
+  if (syncScope.syncPaused || abortSyncs.has(sourceId)) {
+    await patchInventorySource(sourceId, userId, {
+      lastSyncStatus: "paused",
+      lastSyncError: INVENTORY_SYNC_PAUSE_MESSAGE,
+      connectionStatus: "connected",
+      lastSyncStats: {
+        ...prevStats,
+        pausedAt: new Date().toISOString(),
+        listingsScanned: readListingsScanned(prevStats),
+        matchableCount: matchableCountAtStart,
+      },
+    });
+    return;
+  }
+
+  if (
+    shouldHaltInventoryFetch({
+      activeStoredCount: matchableCountCache.value,
+      maxListings: syncScope.maxListings,
+    })
+  ) {
+    await patchInventorySource(sourceId, userId, {
+      lastSyncAt: new Date(),
+      lastSyncStatus: "success",
+      lastSyncError: null,
+      connectionStatus: "connected",
+      lastSyncStats: {
+        ...prevStats,
+        syncMode,
+        datasetId,
+        listingsFetched: readListingsScanned(prevStats),
+        listingsScanned: readListingsScanned(prevStats),
+        listingsImported: upserted,
+        matchableCount: matchableCountCache.value,
+        maxListings: syncScope.maxListings,
+        importCapReached: true,
+        haltedBeforeFetch: true,
+        durationMs: Date.now() - startedAt,
+      },
+    });
+    console.log("[inventory-sync] complete", {
+      sourceId,
+      datasetId,
+      syncMode,
+      finalStatus: "success",
+      haltedBeforeFetch: true,
+      matchableCount: matchableCountCache.value,
+      maxListings: syncScope.maxListings,
+    });
+    return;
+  }
 
   const resumeUrl =
     !freshStart && syncMode === "initial" && !cursor.initialImportComplete
@@ -483,7 +639,6 @@ async function runInventorySyncJob(
       mode: syncMode,
       maxModificationTimestamp: cursor.maxModificationTimestamp,
       resumeFromUrl: resumeUrl,
-      maxRows: importCapRemaining && importCapRemaining > 0 ? importCapRemaining : undefined,
       onPage: useStreaming
         ? async ({
             rows,
@@ -498,6 +653,18 @@ async function runInventorySyncJob(
           }) => {
             pagesFetched = pageNumber;
             listingsFetched = rowsFetchedTotal;
+            if (
+              shouldHaltInventoryFetch({
+                paused: isInventorySyncPaused(config) || abortSyncs.has(sourceId),
+                aborted: abortSyncs.has(sourceId),
+                activeStoredCount: matchableCountCache.value,
+                maxListings: syncScope.maxListings,
+              })
+            ) {
+              throw new InventorySyncStoppedError(
+                abortSyncs.has(sourceId) || isInventorySyncPaused(config) ? "paused" : "cap_reached",
+              );
+            }
 
             for (const raw of rows) {
               const rowResult = await processSyncListingRow(
@@ -527,6 +694,11 @@ async function runInventorySyncJob(
                 if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
                 continue;
               }
+              if (rowResult.skippedIneligible) {
+                skippedIneligible += 1;
+                if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+                continue;
+              }
               if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
               upserted += 1;
             }
@@ -537,8 +709,10 @@ async function runInventorySyncJob(
               runningMaxTs,
             );
 
-            const hitImportCap =
-              syncMode === "initial" && matchableCountCache.value >= syncScope.maxListings;
+            const hitImportCap = shouldHaltInventoryFetch({
+              activeStoredCount: matchableCountCache.value,
+              maxListings: syncScope.maxListings,
+            });
             const cursorPatch: Record<string, unknown> = {
               maxModificationTimestamp: runningMaxTs,
             };
@@ -564,6 +738,8 @@ async function runInventorySyncJob(
               listingsSkipped: skipped,
               skippedDueToCap,
               skippedOutOfScope,
+              skippedIneligible,
+              listingsScanned: listingsFetched,
               matchableCount: matchableCountCache.value,
               sampleSkipReason,
               maxListings: syncScope.maxListings,
@@ -571,6 +747,9 @@ async function runInventorySyncJob(
               importResumeNextLink: hitImportCap ? null : nextLink ?? null,
               checkpointPage: pageNumber,
             });
+            if (hitImportCap) {
+              throw new InventorySyncStoppedError("cap_reached");
+            }
           }
         : undefined,
     });
@@ -642,6 +821,11 @@ async function runInventorySyncJob(
           if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
           continue;
         }
+        if (rowResult.skippedIneligible) {
+          skippedIneligible += 1;
+          if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
+          continue;
+        }
         if (rowResult.inactiveFromFeed) inactiveFromFeed += 1;
         upserted += 1;
       }
@@ -661,8 +845,10 @@ async function runInventorySyncJob(
     }
 
     const nowIso = new Date().toISOString();
-    const hitImportCap =
-      syncMode === "initial" && matchableCountCache.value >= syncScope.maxListings;
+    const hitImportCap = shouldHaltInventoryFetch({
+      activeStoredCount: matchableCountCache.value,
+      maxListings: syncScope.maxListings,
+    });
     const importSucceeded = upserted > 0 || listingsFetched === 0 || hitImportCap;
     const cursorPatch = mergeResoSyncCursor(config, {
       maxModificationTimestamp: runningMaxTs,
@@ -698,6 +884,8 @@ async function runInventorySyncJob(
         listingsSkipped: skipped,
         skippedDueToCap,
         skippedOutOfScope,
+        skippedIneligible,
+        listingsScanned: listingsFetched,
         matchableCount: matchableCountCache.value,
         sampleSkipReason,
         inactivated,
@@ -747,6 +935,47 @@ async function runInventorySyncJob(
       durationMs: Date.now() - startedAt,
     });
   } catch (err) {
+    if (err instanceof InventorySyncStoppedError) {
+      const paused = err.stopReason === "paused" || err.stopReason === "aborted";
+      await patchInventorySource(sourceId, userId, {
+        config,
+        lastSyncAt: new Date(),
+        lastSyncStatus: paused ? "paused" : "success",
+        lastSyncError: paused ? INVENTORY_SYNC_PAUSE_MESSAGE : null,
+        connectionStatus: "connected",
+        lastSyncStats: {
+          syncMode,
+          datasetId,
+          upserted,
+          skipped,
+          listingsFetched,
+          listingsScanned: listingsFetched,
+          listingsImported: upserted,
+          listingsSkipped: skipped,
+          skippedDueToCap,
+          skippedOutOfScope,
+          skippedIneligible,
+          matchableCount: matchableCountCache.value,
+          maxListings: syncScope.maxListings,
+          importCapReached: err.stopReason === "cap_reached",
+          stoppedReason: err.stopReason,
+          pagesFetched,
+          durationMs: Date.now() - startedAt,
+        },
+      });
+      console.log("[inventory-sync] complete", {
+        sourceId,
+        datasetId,
+        syncMode,
+        finalStatus: paused ? "paused" : "success",
+        stoppedReason: err.stopReason,
+        pagesFetched,
+        listingsFetched,
+        listingsImported: upserted,
+        matchableCount: matchableCountCache.value,
+      });
+      return;
+    }
     const failureDiag = buildSyncFailureDiagnostics(err, source, syncMode, datasetId);
     const message = isResoHttpError(err)
       ? buildResoFailureUserMessage(err, failureDiag)
@@ -771,6 +1000,8 @@ async function runInventorySyncJob(
         listingsSkipped: skipped,
         skippedDueToCap,
         skippedOutOfScope,
+        skippedIneligible,
+        listingsScanned: listingsFetched,
         matchableCount: matchableCountCache.value,
         sampleSkipReason,
         inactivated,
