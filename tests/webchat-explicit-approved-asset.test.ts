@@ -10,6 +10,7 @@ import { join } from "node:path";
 import {
   approvedAssetClarificationCaption,
   approvedAssetDeterministicCaption,
+  classifyExplicitApprovedAssetDecision,
   inboundLooksLikeExplicitApprovedFileRequest,
   pickApprovedMarketingAssetForInbound,
   resolveExplicitApprovedAssetRequest,
@@ -57,12 +58,23 @@ const brochureB = toMarketingAssetCatalogItem({
   kind: "document",
   topics: ["brochure", "summer"],
 })!;
-const spanishOnly = toMarketingAssetCatalogItem({
-  id: ES_ID,
-  displayName: "WhatsApp Coexistence Guide",
-  language: "es",
+const coexistenceImage = toMarketingAssetCatalogItem({
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8",
+  displayName: "WhatsApp Coexistence",
+  description:
+    "A visual guide for using WhatsApp Business App and WhachatCRM with the same phone number",
+  language: "en",
+  kind: "image",
+  topics: [],
+  originalFilename: "whatsapp-coexistence-guide.png",
+})!;
+const whatsappPricingPdf = toMarketingAssetCatalogItem({
+  id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb8",
+  displayName: "Pricing PDF",
+  description: "WhatsApp pricing",
+  language: "en",
   kind: "document",
-  topics: ["whatsapp"],
+  topics: ["whatsapp", "pricing"],
 })!;
 const FLYER_IMAGE_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
 const ONBOARDING_GUIDE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
@@ -79,6 +91,13 @@ const onboardingGuide = toMarketingAssetCatalogItem({
   language: "en",
   kind: "document",
   topics: ["onboarding", "guide"],
+})!;
+const spanishOnly = toMarketingAssetCatalogItem({
+  id: ES_ID,
+  displayName: "WhatsApp Coexistence Guide",
+  language: "es",
+  kind: "document",
+  topics: ["whatsapp", "coexistence", "guide"],
 })!;
 
 const CANONICAL = [
@@ -113,6 +132,109 @@ test("exact WhachatCRM guide request is a unique explicit match", () => {
   assert.equal(resolved.kind, "unique");
   if (resolved.kind === "unique") assert.equal(resolved.asset.id, GUIDE_ID);
   assert.equal(pickApprovedMarketingAssetForInbound("Tell me about WhatsApp", [guide]), null);
+});
+
+test("shorter-named coexistence image beats a weaker WhatsApp PDF when visitor says guide", () => {
+  const catalog = [coexistenceImage, whatsappPricingPdf, brochureA];
+  const resolved = resolveExplicitApprovedAssetRequest(GUIDE_REQUEST, catalog);
+  assert.equal(resolved.kind, "unique");
+  if (resolved.kind === "unique") {
+    assert.equal(resolved.asset.id, coexistenceImage.id);
+    assert.equal(resolved.asset.kind, "image");
+  }
+  assert.equal(
+    toMarketingAssetCatalogItem({
+      id: coexistenceImage.id,
+      displayName: "WhatsApp Coexistence",
+      language: "English",
+      kind: "image",
+    })?.language,
+    "en",
+  );
+  const byFilename = resolveExplicitApprovedAssetRequest(GUIDE_REQUEST, [
+    toMarketingAssetCatalogItem({
+      id: coexistenceImage.id,
+      displayName: "Coexistence",
+      description:
+        "A visual guide for using WhatsApp Business App and WhachatCRM with the same phone number",
+      language: "en",
+      kind: "image",
+      originalFilename: "whatsapp-coexistence-guide.png",
+    })!,
+    whatsappPricingPdf,
+  ]);
+  assert.equal(byFilename.kind, "unique");
+  if (byFilename.kind === "unique") assert.equal(byFilename.asset.kind, "image");
+  const classified = classifyExplicitApprovedAssetDecision({
+    inboundText: GUIDE_REQUEST,
+    enabledCount: 3,
+    localeMatchedCount: 3,
+    resolution: resolved,
+  });
+  assert.equal(classified.decision, "unique_asset_priority");
+  assert.equal(classified.uniqueKind, "image");
+  assert.equal(
+    classifyExplicitApprovedAssetDecision({
+      inboundText: "Hello",
+      enabledCount: 3,
+      localeMatchedCount: 3,
+      resolution: { kind: "none" },
+    }).decision,
+    "no_explicit_file_intent",
+  );
+  assert.equal(
+    classifyExplicitApprovedAssetDecision({
+      inboundText: GUIDE_REQUEST,
+      enabledCount: 0,
+      localeMatchedCount: 0,
+      resolution: { kind: "none" },
+    }).decision,
+    "no_enabled_assets",
+  );
+  assert.equal(
+    classifyExplicitApprovedAssetDecision({
+      inboundText: GUIDE_REQUEST,
+      enabledCount: 2,
+      localeMatchedCount: 0,
+      resolution: { kind: "none" },
+    }).decision,
+    "locale_mismatch",
+  );
+  assert.equal(
+    classifyExplicitApprovedAssetDecision({
+      inboundText: GUIDE_REQUEST,
+      enabledCount: 2,
+      localeMatchedCount: 2,
+      resolution: { kind: "none" },
+    }).decision,
+    "no_matching_candidate",
+  );
+  assert.equal(
+    classifyExplicitApprovedAssetDecision({
+      inboundText: GUIDE_REQUEST,
+      enabledCount: 2,
+      localeMatchedCount: 2,
+      resolution: { kind: "ambiguous", assets: [brochureA, brochureB] },
+    }).decision,
+    "ambiguous_candidates",
+  );
+  const shared = read("shared/marketingAssets.ts");
+  assert.match(shared, /unique_asset_priority/);
+  assert.match(shared, /no_enabled_assets/);
+  assert.match(shared, /locale_mismatch/);
+  assert.match(shared, /no_explicit_file_intent/);
+  assert.match(shared, /no_matching_candidate/);
+  assert.match(shared, /ambiguous_candidates/);
+  const explicit = read("server/marketingAssets/explicitAssetTurn.ts");
+  assert.match(explicit, /logExplicitApprovedAssetDecision/);
+  assert.match(explicit, /enabledCount: catalog.enabledCount/);
+  assert.match(explicit, /localeMatchedCount: catalog.localeMatchedCount/);
+  assert.match(explicit, /limit: 200/);
+  assert.doesNotMatch(explicit, /mediaStorageKey/);
+  const store = read("server/marketingAssets/assetStore.ts");
+  assert.match(store, /enabledCount/);
+  assert.match(store, /localeMatchedCount/);
+  assert.match(store, /originalFilename: row.originalFilename/);
 });
 
 test("open/see/guide stay delivery-shaped and never become broad triggers", () => {

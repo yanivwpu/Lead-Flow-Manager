@@ -64,7 +64,12 @@ export async function listEnabledMarketingAssetCatalog(
   userId: string,
   locale?: unknown,
   inboundText?: string,
-): Promise<MarketingAssetCatalogItem[]> {
+  opts?: { limit?: number },
+): Promise<{
+  items: MarketingAssetCatalogItem[];
+  enabledCount: number;
+  localeMatchedCount: number;
+}> {
   const rows = await db
     .select()
     .from(workspaceMarketingAssets)
@@ -76,6 +81,7 @@ export async function listEnabledMarketingAssetCatalog(
       ),
     )
     .orderBy(desc(workspaceMarketingAssets.createdAt));
+  const enabledCount = rows.length;
   const { marketingAssetMatchesLocale } = await import("@shared/marketingAssets");
   const out: MarketingAssetCatalogItem[] = [];
   for (const row of rows) {
@@ -87,11 +93,16 @@ export async function listEnabledMarketingAssetCatalog(
       language: row.language,
       topics: row.topics,
       kind: row.kind,
+      originalFilename: row.originalFilename,
     });
     if (item) out.push(item);
-    if (out.length >= 200) break;
   }
-  return rankMarketingAssetCatalog(out, inboundText || "", MARKETING_ASSET_CATALOG_MAX);
+  const limit = opts?.limit ?? MARKETING_ASSET_CATALOG_MAX;
+  return {
+    items: rankMarketingAssetCatalog(out, inboundText || "", limit),
+    enabledCount,
+    localeMatchedCount: out.length,
+  };
 }
 
 export async function getMarketingAsset(

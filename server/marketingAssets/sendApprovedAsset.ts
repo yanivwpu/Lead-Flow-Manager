@@ -87,6 +87,7 @@ export async function sendApprovedMarketingAsset(
         displayName: asset.row.displayName,
         topics: Array.isArray(asset.row.topics) ? asset.row.topics.map(String) : [],
         description: asset.row.description,
+        originalFilename: asset.row.originalFilename,
       },
     })
   ) {

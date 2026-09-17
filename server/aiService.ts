@@ -423,9 +423,9 @@ export class AIService {
           contactContext?.conversationLanguage || detectedLanguage,
           lastUserMessage,
         );
-        marketingCatalogItems = catalog;
-        for (const item of catalog) marketingCatalogIds.add(item.id);
-        marketingMaterialsBlock = buildMarketingMaterialsPromptBlock(catalog);
+        marketingCatalogItems = catalog.items;
+        for (const item of catalog.items) marketingCatalogIds.add(item.id);
+        marketingMaterialsBlock = buildMarketingMaterialsPromptBlock(catalog.items);
       } catch (err) {
         console.warn(
           "[AI] marketing materials catalog failed",

@@ -31,6 +31,7 @@ export type MarketingAssetCatalogItem = {
   language: MarketingAssetLanguage;
   topics: string[];
   kind: MarketingAssetKind;
+  originalFilename?: string | null;
 };
 
 export type MarketingAssetPublicView = MarketingAssetCatalogItem & {
@@ -59,7 +60,10 @@ export function normalizeMarketingAssetLanguage(value: unknown): MarketingAssetL
     .trim()
     .toLowerCase()
     .split("-")[0];
-  if (raw === "en" || raw === "es" || raw === "he" || raw === "all") return raw;
+  if (raw === "en" || raw === "english") return "en";
+  if (raw === "es" || raw === "spanish" || raw === "espanol") return "es";
+  if (raw === "he" || raw === "hebrew") return "he";
+  if (raw === "all") return "all";
   return null;
 }
 
@@ -233,12 +237,19 @@ export function toMarketingAssetCatalogItem(input: {
   language?: string | null;
   topics?: unknown;
   kind?: string | null;
+  originalFilename?: string | null;
 }): MarketingAssetCatalogItem | null {
   if (!isMarketingAssetId(input.id)) return null;
   const displayName = sanitizeMarketingDisplayName(input.displayName);
   if (!displayName) return null;
   const language = normalizeMarketingAssetLanguage(input.language) || "all";
   const kind = input.kind === "document" ? "document" : "image";
+  const originalFilename = input.originalFilename
+    ? sanitizeMarketingFilename(
+        input.originalFilename,
+        kind === "document" ? "application/pdf" : "image/jpeg",
+      )
+    : null;
   return {
     id: input.id,
     displayName,
@@ -246,6 +257,7 @@ export function toMarketingAssetCatalogItem(input: {
     language,
     topics: sanitizeMarketingTopics(input.topics),
     kind,
+    originalFilename,
   };
 }
 
@@ -256,8 +268,11 @@ const FILE_REQUEST_RE =
 const FILE_TRANSFER_RE =
   /\b(?:send|show|share|attach|download|forward|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me|look\s+at)\b|\bopen\s+(?:the|this|that|your|a|an)\b|\b(?:can\s+(?:i|we)|could\s+(?:i|we)|may\s+i|let\s+me|want\s+to|wanna|please)\s+see\b|\bsee\s+(?:the|this|that)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?|abre(?:r)?|ver)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף|פתח/i;
 
-const DOCUMENT_NOUN_RE =
-  /\b(pdf|pdfs|document|documents|brochure|brochures|flyer|flyers|guide|guides|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|documento|documentos|חוברת|מדריך|קובץ|קבצים|מסמך)\b/i;
+const DOCUMENT_KIND_NOUN_RE =
+  /\b(pdf|pdfs|document|documents|archivo|archivos|documento|documentos|קובץ|קבצים|מסמך)\b/i;
+
+const MATERIAL_WRAPPER_RE =
+  /\b(guide|guides|flyer|flyers|brochure|brochures|pdf|pdfs|image|images|photo|photos|picture|pictures|file|files|document|documents|folleto|folletos|gu[ií]a|gu[ií]as|archivo|imagen|חוברת|מדריך|קובץ|תמונה)\b/i;
 
 const UNIQUE_NAME_SCORE = 100;
 const STRONG_RELEVANCE_SCORE = 40;
@@ -286,9 +301,19 @@ export type ExplicitApprovedAssetResolution<T extends MarketingAssetCatalogItem>
   | { kind: "unique"; asset: T; score: number }
   | { kind: "ambiguous"; assets: T[] };
 
+export type ExplicitApprovedAssetDecisionCode =
+  | "no_explicit_file_intent"
+  | "no_enabled_assets"
+  | "locale_mismatch"
+  | "no_matching_candidate"
+  | "ambiguous_candidates"
+  | "unique_asset_priority";
+
 /**
  * Unique enabled-catalog match for a high-confidence send/show/open/download request.
- * Multiple plausible assets never pick an arbitrary winner.
+ * Display name, description, topics, and safe filename all count. Extra material
+ * words such as "guide" do not force a document-only pick. Multiple plausible
+ * assets never pick an arbitrary winner.
  */
 export function resolveExplicitApprovedAssetRequest<T extends MarketingAssetCatalogItem>(
   inboundText: string,
@@ -300,17 +325,20 @@ export function resolveExplicitApprovedAssetRequest<T extends MarketingAssetCata
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score);
   if (!scored.length) return { kind: "none" };
-  const pool =
-    DOCUMENT_NOUN_RE.test(inboundText) && scored.some((row) => row.item.kind === "document")
-      ? scored.filter((row) => row.item.kind === "document")
-      : scored;
-  const nameHits = pool.filter((row) => row.score >= UNIQUE_NAME_SCORE);
+  const nameHits = scored.filter((row) => row.score >= UNIQUE_NAME_SCORE);
   if (nameHits.length === 1) {
     return { kind: "unique", asset: nameHits[0]!.item, score: nameHits[0]!.score };
   }
   if (nameHits.length > 1) {
+    if (nameHits[0]!.score >= nameHits[1]!.score + STRONG_RELEVANCE_SCORE) {
+      return { kind: "unique", asset: nameHits[0]!.item, score: nameHits[0]!.score };
+    }
     return { kind: "ambiguous", assets: nameHits.map((row) => row.item) };
   }
+  const pool =
+    DOCUMENT_KIND_NOUN_RE.test(inboundText) && scored.some((row) => row.item.kind === "document")
+      ? scored.filter((row) => row.item.kind === "document")
+      : scored;
   if (pool.length === 1) {
     return { kind: "unique", asset: pool[0]!.item, score: pool[0]!.score };
   }
@@ -322,6 +350,53 @@ export function resolveExplicitApprovedAssetRequest<T extends MarketingAssetCata
     return { kind: "unique", asset: pool[0]!.item, score: pool[0]!.score };
   }
   return { kind: "ambiguous", assets: pool.map((row) => row.item) };
+}
+
+export function classifyExplicitApprovedAssetDecision(params: {
+  inboundText: string;
+  enabledCount: number;
+  localeMatchedCount: number;
+  resolution: ExplicitApprovedAssetResolution<MarketingAssetCatalogItem>;
+}): {
+  decision: ExplicitApprovedAssetDecisionCode;
+  candidateCount: number;
+  uniqueKind?: "image" | "document";
+} {
+  const { resolution, enabledCount, localeMatchedCount } = params;
+  if (resolution.kind === "unique") {
+    return {
+      decision: "unique_asset_priority",
+      candidateCount: 1,
+      uniqueKind: resolution.asset.kind,
+    };
+  }
+  if (resolution.kind === "ambiguous") {
+    return { decision: "ambiguous_candidates", candidateCount: resolution.assets.length };
+  }
+  if (!inboundLooksLikeExplicitApprovedFileRequest(params.inboundText)) {
+    return { decision: "no_explicit_file_intent", candidateCount: 0 };
+  }
+  if (enabledCount <= 0) return { decision: "no_enabled_assets", candidateCount: 0 };
+  if (localeMatchedCount <= 0) return { decision: "locale_mismatch", candidateCount: 0 };
+  return { decision: "no_matching_candidate", candidateCount: 0 };
+}
+
+export function logExplicitApprovedAssetDecision(fields: {
+  decision: ExplicitApprovedAssetDecisionCode;
+  enabledCount: number;
+  localeMatchedCount: number;
+  candidateCount: number;
+  uniqueKind?: "image" | "document";
+  loadFailed?: boolean;
+}): void {
+  console.info("[ApprovedAsset]", {
+    decision: fields.decision,
+    enabledCount: fields.enabledCount,
+    localeMatchedCount: fields.localeMatchedCount,
+    candidateCount: fields.candidateCount,
+    ...(fields.uniqueKind ? { uniqueKind: fields.uniqueKind } : {}),
+    ...(fields.loadFailed ? { loadFailed: true } : {}),
+  });
 }
 
 export function pickApprovedMarketingAssetForInbound<T extends MarketingAssetCatalogItem>(
@@ -353,29 +428,41 @@ export function isServerOwnedExplicitApprovedAssetAction(
   return resolution.kind === "unique" || resolution.kind === "ambiguous";
 }
 
+function distinctiveNameTokens(value: string): string[] {
+  return value
+    .split(" ")
+    .filter((word) => word.length >= 4 && !MATERIAL_WRAPPER_RE.test(word));
+}
+
+function filenameStemForMatch(originalFilename?: string | null): string {
+  const raw = String(originalFilename || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop() || "";
+  return normalizeMatchText(raw.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "));
+}
+
 export function marketingAssetMatchesVisitorText(
   inboundText: string,
-  asset: { displayName: string; topics: string[]; description?: string | null },
+  asset: {
+    displayName: string;
+    topics: string[];
+    description?: string | null;
+    originalFilename?: string | null;
+  },
 ): boolean {
-  const text = normalizeMatchText(inboundText);
-  if (!text) return false;
-  const hay = ` ${text} `;
-  const name = normalizeMatchText(asset.displayName);
-  if (name.length >= 3 && hay.includes(` ${name} `)) return true;
-  for (const part of name.split(" ").filter((word) => word.length >= 4)) {
-    if (hay.includes(` ${part} `)) return true;
-  }
-  for (const topic of asset.topics) {
-    const t = normalizeMatchText(topic);
-    if (t.length >= 3 && hay.includes(` ${t} `)) return true;
-  }
-  return false;
+  return scoreMarketingAssetForInbound(inboundText, asset) > 0;
 }
 
 export function shouldAllowApprovedAssetSend(params: {
   inboundText: string;
   greetingTurn?: boolean;
-  asset: { displayName: string; topics: string[]; description?: string | null };
+  asset: {
+    displayName: string;
+    topics: string[];
+    description?: string | null;
+    originalFilename?: string | null;
+  };
 }): boolean {
   if (params.greetingTurn) return false;
   const raw = String(params.inboundText || "").trim();
@@ -386,7 +473,12 @@ export function shouldAllowApprovedAssetSend(params: {
 
 export function scoreMarketingAssetForInbound(
   inboundText: string,
-  asset: { displayName: string; topics: string[]; description?: string | null },
+  asset: {
+    displayName: string;
+    topics: string[];
+    description?: string | null;
+    originalFilename?: string | null;
+  },
 ): number {
   const text = normalizeMatchText(inboundText);
   if (!text) return 0;
@@ -394,7 +486,20 @@ export function scoreMarketingAssetForInbound(
   let score = 0;
   const name = normalizeMatchText(asset.displayName);
   if (name.length >= 3 && hay.includes(` ${name} `)) score += 100;
+  const nameTokens = distinctiveNameTokens(name);
+  if (nameTokens.length > 0 && nameTokens.every((token) => hay.includes(` ${token} `))) {
+    score += 100;
+  }
   for (const part of name.split(" ").filter((word) => word.length >= 4)) {
+    if (hay.includes(` ${part} `)) score += 40;
+  }
+  const filename = filenameStemForMatch(asset.originalFilename);
+  if (filename.length >= 3 && hay.includes(` ${filename} `)) score += 100;
+  const fileTokens = distinctiveNameTokens(filename);
+  if (fileTokens.length > 0 && fileTokens.every((token) => hay.includes(` ${token} `))) {
+    score += 100;
+  }
+  for (const part of filename.split(" ").filter((word) => word.length >= 4)) {
     if (hay.includes(` ${part} `)) score += 40;
   }
   for (const topic of asset.topics) {

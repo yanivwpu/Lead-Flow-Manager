@@ -121,6 +121,10 @@ test("AI may select only catalog ids; invented ids and URLs are ignored", () => 
 test("disabled, deleted, and locale mismatches cannot be selected", () => {
   assert.equal(marketingAssetMatchesLocale("all", "en"), true);
   assert.equal(marketingAssetMatchesLocale("en", "en"), true);
+  assert.equal(marketingAssetMatchesLocale("English", "en"), true);
+  assert.equal(marketingAssetMatchesLocale("spanish", "es"), true);
+  assert.equal(marketingAssetMatchesLocale("hebrew", "he"), true);
+  assert.equal(marketingAssetMatchesLocale("en", "en"), true);
   assert.equal(marketingAssetMatchesLocale("es", "en"), false);
   assert.equal(marketingAssetMatchesLocale("he", "he"), true);
   assert.equal(marketingAssetMatchesLocale("en", "he"), false);
@@ -236,6 +240,7 @@ test("AI Auto sends a validated asset; Suggest/Manual/takeover/chatbot do not", 
   const ai = read("server/aiService.ts");
   assert.match(ai, /sendApprovedAssetId/);
   assert.match(ai, /listEnabledMarketingAssetCatalog/);
+  assert.match(ai, /catalog\.items/);
   assert.match(ai, /parseSendApprovedAssetId/);
   assert.match(ai, /stripInventedMarketingMediaUrls/);
   assert.doesNotMatch(ai, /mediaUrl: catalog/);

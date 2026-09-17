@@ -8,7 +8,9 @@ import type { Contact, Conversation } from "@shared/schema";
 import {
   approvedAssetClarificationCaption,
   approvedAssetDeterministicCaption,
+  classifyExplicitApprovedAssetDecision,
   isServerOwnedExplicitApprovedAssetAction,
+  logExplicitApprovedAssetDecision,
   resolveExplicitApprovedAssetRequest,
   type ExplicitApprovedAssetResolution,
   type MarketingAssetCatalogItem,
@@ -24,12 +26,36 @@ export async function resolveExplicitApprovedAssetForTurn(params: {
   inboundText: string;
   locale?: string;
 }): Promise<ExplicitApprovedAssetResolution<MarketingAssetCatalogItem>> {
-  const catalog = await listEnabledMarketingAssetCatalog(
-    params.userId,
-    params.locale,
-    params.inboundText,
-  );
-  return resolveExplicitApprovedAssetRequest(params.inboundText, catalog);
+  try {
+    const catalog = await listEnabledMarketingAssetCatalog(
+      params.userId,
+      params.locale,
+      params.inboundText,
+      { limit: 200 },
+    );
+    const resolution = resolveExplicitApprovedAssetRequest(params.inboundText, catalog.items);
+    const classified = classifyExplicitApprovedAssetDecision({
+      inboundText: params.inboundText,
+      enabledCount: catalog.enabledCount,
+      localeMatchedCount: catalog.localeMatchedCount,
+      resolution,
+    });
+    logExplicitApprovedAssetDecision({
+      ...classified,
+      enabledCount: catalog.enabledCount,
+      localeMatchedCount: catalog.localeMatchedCount,
+    });
+    return resolution;
+  } catch {
+    logExplicitApprovedAssetDecision({
+      decision: "no_matching_candidate",
+      enabledCount: 0,
+      localeMatchedCount: 0,
+      candidateCount: 0,
+      loadFailed: true,
+    });
+    return { kind: "none" };
+  }
 }
 
 export function shouldSkipChatbotForExplicitApprovedAsset(
@@ -145,10 +171,6 @@ export async function loadExplicitApprovedAssetSkipFlag(params: {
   inboundText: string;
   locale?: string;
 }): Promise<boolean> {
-  try {
-    const resolution = await resolveExplicitApprovedAssetForTurn(params);
-    return shouldSkipChatbotForExplicitApprovedAsset(resolution);
-  } catch {
-    return false;
-  }
+  const resolution = await resolveExplicitApprovedAssetForTurn(params);
+  return shouldSkipChatbotForExplicitApprovedAsset(resolution);
 }
