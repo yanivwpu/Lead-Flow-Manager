@@ -1818,6 +1818,15 @@ class ChannelService {
       content,
       visitorLocale,
     );
+    let skipApprovedAssetIntent = false;
+    if (channel === "webchat" && !bookingIntent) {
+      const { loadExplicitApprovedAssetSkipFlag } = await import("./marketingAssets/explicitAssetTurn");
+      skipApprovedAssetIntent = await loadExplicitApprovedAssetSkipFlag({
+        userId,
+        inboundText: content,
+        locale: conversationLanguage,
+      });
+    }
     const chatbotCtx = {
       userId,
       contactId: contact.id,
@@ -1828,6 +1837,7 @@ class ChannelService {
       preferredFlowId: isNewConversation ? preferredChatbotFlowId : undefined,
       skipNewChatTrigger: skipNewChatTrigger === true,
       skipBookingIntent: bookingIntent,
+      skipApprovedAssetIntent,
       awaitExecution: true,
       sourceEventId: externalMessageId || message.id,
       inboundMessageId: message.id,
@@ -1836,7 +1846,9 @@ class ChannelService {
     const chatbotArb = await evaluateChatbotInboundArbitration(chatbotCtx);
     const chatbotResult = bookingIntent
       ? { triggered: false, visitorFacing: false, reason: "booking_fast_path_priority" as const }
-      : await triggerChatbotFlows(chatbotCtx);
+      : skipApprovedAssetIntent
+        ? { triggered: false, visitorFacing: false, reason: "approved_asset_request_priority" as const }
+        : await triggerChatbotFlows(chatbotCtx);
     const { decideWebchatTurnOwner } = await import("@shared/webchatTurnOwner");
     const turn = decideWebchatTurnOwner({
       bookingIntent,
@@ -1959,7 +1971,11 @@ class ChannelService {
       chatbotWillFire,
       turnOwner: turn.owner,
       aiAutoSuppressed: chatbotWillFire,
-      reason: bookingIntent ? "booking_fast_path_priority" : chatbotResult.reason || chatbotArb.reason,
+      reason: bookingIntent
+        ? "booking_fast_path_priority"
+        : skipApprovedAssetIntent
+          ? "approved_asset_request_priority"
+          : chatbotResult.reason || chatbotArb.reason,
     });
 
     if (bookingIntent) {

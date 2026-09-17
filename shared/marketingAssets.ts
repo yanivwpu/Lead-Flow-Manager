@@ -250,10 +250,16 @@ export function toMarketingAssetCatalogItem(input: {
 }
 
 const FILE_REQUEST_RE =
-  /\b(flyer|flyers|brochure|brochures|pdf|pdfs|document|documents|file|files|image|images|photo|photos|picture|pictures|catalog|catalogue|price\s*list|pricing\s*sheet|promo|promotion|material|materials|attachment|attachments|folleto|folletos|archivo|archivos|imagen|imagenes|imágenes|documento|documentos|חוברת|קובץ|קבצים|תמונה|תמונות)\b/i;
+  /\b(flyer|flyers|brochure|brochures|guide|guides|pdf|pdfs|document|documents|file|files|image|images|photo|photos|picture|pictures|catalog|catalogue|price\s*list|pricing\s*sheet|promo|promotion|material|materials|attachment|attachments|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|imagen|imagenes|imágenes|documento|documentos|חוברת|מדריך|קובץ|קבצים|תמונה|תמונות)\b/i;
 
 const FILE_TRANSFER_RE =
-  /\b(?:send|show|share|attach|download|forward|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף/i;
+  /\b(?:send|show|share|attach|download|forward|open|see|look\s+at|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?|abre(?:r)?|ver)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף|פתח/i;
+
+const DOCUMENT_NOUN_RE =
+  /\b(pdf|pdfs|document|documents|brochure|brochures|flyer|flyers|guide|guides|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|documento|documentos|חוברת|מדריך|קובץ|קבצים|מסמך)\b/i;
+
+const UNIQUE_NAME_SCORE = 100;
+const STRONG_RELEVANCE_SCORE = 40;
 
 function normalizeMatchText(value: unknown): string {
   return String(value || "")
@@ -268,31 +274,82 @@ export function inboundLooksLikeMarketingMaterialRequest(text: string): boolean 
   return FILE_REQUEST_RE.test(String(text || ""));
 }
 
-/** Transfer verb + file/brochure noun. "What are your prices?" is not this. */
+/** Transfer verb + file/brochure/guide noun. "Tell me about WhatsApp" is not this. */
 export function inboundLooksLikeExplicitApprovedFileRequest(text: string): boolean {
   const raw = String(text || "");
   return FILE_TRANSFER_RE.test(raw) && FILE_REQUEST_RE.test(raw);
+}
+
+export type ExplicitApprovedAssetResolution<T extends MarketingAssetCatalogItem> =
+  | { kind: "none" }
+  | { kind: "unique"; asset: T; score: number }
+  | { kind: "ambiguous"; assets: T[] };
+
+/**
+ * Unique enabled-catalog match for a high-confidence send/show/open/download request.
+ * Multiple plausible assets never pick an arbitrary winner.
+ */
+export function resolveExplicitApprovedAssetRequest<T extends MarketingAssetCatalogItem>(
+  inboundText: string,
+  items: T[],
+): ExplicitApprovedAssetResolution<T> {
+  if (!inboundLooksLikeExplicitApprovedFileRequest(inboundText)) return { kind: "none" };
+  const scored = items
+    .map((item) => ({ item, score: scoreMarketingAssetForInbound(inboundText, item) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!scored.length) return { kind: "none" };
+  const pool =
+    DOCUMENT_NOUN_RE.test(inboundText) && scored.some((row) => row.item.kind === "document")
+      ? scored.filter((row) => row.item.kind === "document")
+      : scored;
+  const nameHits = pool.filter((row) => row.score >= UNIQUE_NAME_SCORE);
+  if (nameHits.length === 1) {
+    return { kind: "unique", asset: nameHits[0]!.item, score: nameHits[0]!.score };
+  }
+  if (nameHits.length > 1) {
+    return { kind: "ambiguous", assets: nameHits.map((row) => row.item) };
+  }
+  if (pool.length === 1) {
+    return { kind: "unique", asset: pool[0]!.item, score: pool[0]!.score };
+  }
+  if (
+    pool.length > 1 &&
+    pool[0]!.score >= STRONG_RELEVANCE_SCORE &&
+    pool[0]!.score >= pool[1]!.score + STRONG_RELEVANCE_SCORE
+  ) {
+    return { kind: "unique", asset: pool[0]!.item, score: pool[0]!.score };
+  }
+  return { kind: "ambiguous", assets: pool.map((row) => row.item) };
 }
 
 export function pickApprovedMarketingAssetForInbound<T extends MarketingAssetCatalogItem>(
   inboundText: string,
   items: T[],
 ): T | null {
-  if (!inboundLooksLikeExplicitApprovedFileRequest(inboundText)) return null;
-  const scored = items
-    .map((item) => ({ item, score: scoreMarketingAssetForInbound(inboundText, item) }))
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score);
-  if (!scored.length) return null;
-  const preferDocument =
-    /\b(pdf|pdfs|document|documents|brochure|brochures|flyer|flyers|folleto|folletos|archivo|archivos|documento|documentos|חוברת|קובץ|קבצים|מסמך)\b/i.test(
-      inboundText,
-    );
-  if (preferDocument) {
-    const doc = scored.find((row) => row.item.kind === "document");
-    if (doc) return doc.item;
-  }
-  return scored[0]!.item;
+  const resolved = resolveExplicitApprovedAssetRequest(inboundText, items);
+  return resolved.kind === "unique" ? resolved.asset : null;
+}
+
+export function approvedAssetDeterministicCaption(locale: string, displayName: string): string {
+  const name = String(displayName || "").trim() || "file";
+  const lang = String(locale || "en").toLowerCase().slice(0, 2);
+  if (lang === "es") return `Aquí tienes ${name}.`;
+  if (lang === "he") return `הנה ${name}.`;
+  return `Here is ${name}.`;
+}
+
+export function approvedAssetClarificationCaption(locale: string): string {
+  const lang = String(locale || "en").toLowerCase().slice(0, 2);
+  if (lang === "es") return "¿Qué archivo te envío? Nómbralo, por favor.";
+  if (lang === "he") return "איזה קובץ לשלוח? כתוב את השם.";
+  return "Which file should I send? Please name it.";
+}
+
+export function isServerOwnedExplicitApprovedAssetAction(
+  resolution: ExplicitApprovedAssetResolution<MarketingAssetCatalogItem>,
+): boolean {
+  return resolution.kind === "unique" || resolution.kind === "ambiguous";
 }
 
 export function marketingAssetMatchesVisitorText(

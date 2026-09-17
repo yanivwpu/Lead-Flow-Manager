@@ -311,6 +311,7 @@ export async function maybeRunWebchatServerAi(
     contact: Contact,
     conv: Conversation,
     chatbotOwnsReply: boolean,
+    ignorePendingAskForExplicitAsset = false,
   ) => {
     const limits = await subscriptionService.getUserLimits(params.userId);
     const settings = await storage.getAiSettings(params.userId);
@@ -328,10 +329,13 @@ export async function maybeRunWebchatServerAi(
           : "manual";
     const rollout = readWebchatServerAiRollout(params.userId);
     const widgetEnabled = isWidgetEnabled(params.widgetSettings);
+    const chatbotOwnsForPolicy = ignorePendingAskForExplicitAsset
+      ? false
+      : chatbotOwnsReply || pendingStillActive;
     console.info("[AIAutoReply]", {
       evaluate: true,
       effectiveMode,
-      chatbotOwns: chatbotOwnsReply || pendingStillActive,
+      chatbotOwns: chatbotOwnsForPolicy,
       awayConfigured: params.awayConfigured === true,
       awayWillSend: params.crmFallbackOwnsReply === true,
       flagName: rollout.flagName,
@@ -350,7 +354,7 @@ export async function maybeRunWebchatServerAi(
       hasAiBrainAccess: !!limits?.effectiveHasAIBrain,
       planIsProOrTrial: (limits?.plan || "free") === "pro" || !!limits?.effectiveHasAIBrain,
       aiModeRaw: settings?.aiMode,
-      chatbotOwnsReply: chatbotOwnsReply || pendingStillActive,
+      chatbotOwnsReply: chatbotOwnsForPolicy,
       bookingOwnsReply: params.bookingOwnsReply === true || aiControl.lastTurnOwner === "booking",
       crmFallbackOwnsReply: params.crmFallbackOwnsReply === true,
       handoffActive: isConversationHandoffActive(events, conv.id),
@@ -529,7 +533,27 @@ export async function maybeRunWebchatServerAi(
     return { decision: "skip_incomplete_safe", sent: false };
   }
 
-  let decision = await evaluate(contact, conv, params.chatbotWillFire);
+  const {
+    dispatchExplicitApprovedAssetTurn,
+    resolveExplicitApprovedAssetForTurn,
+    shouldSkipChatbotForExplicitApprovedAsset,
+  } = await import("./marketingAssets/explicitAssetTurn");
+  const explicitLocale = String(
+    readConversationAiControl(conv.aiControl).conversationLanguage || "en",
+  ).slice(0, 8);
+  const explicitResolution = await resolveExplicitApprovedAssetForTurn({
+    userId: params.userId,
+    inboundText: params.inboundText,
+    locale: explicitLocale,
+  });
+  const skipChatbotOwnsForExplicit = shouldSkipChatbotForExplicitApprovedAsset(explicitResolution);
+
+  let decision = await evaluate(
+    contact,
+    conv,
+    skipChatbotOwnsForExplicit ? false : params.chatbotWillFire,
+    skipChatbotOwnsForExplicit,
+  );
   if (decision === "skip_manual" || decision.startsWith("skip_")) {
     report(decision);
     return { decision, sent: false };
@@ -553,6 +577,75 @@ export async function maybeRunWebchatServerAi(
       aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
     });
     return { decision: `${decision}:idempotent`, sent: false };
+  }
+
+  if (decision === "send_auto" || decision === "suggest_only") {
+    const persistExplicitDraft = async (
+      reasonCode: string,
+      extra?: { suggestion: string; proposedApprovedAssetId: string | null },
+    ) => {
+      const prior = await storage.getActivityEvents(contact.id, 40);
+      const already = prior.some(
+        (event) =>
+          event.eventType === "ai_suggestion" &&
+          (event.eventData as { inboundMessageId?: string } | null)?.inboundMessageId ===
+            params.inboundMessageId,
+      );
+      if (!already) {
+        await storage.createActivityEvent({
+          userId: params.userId,
+          contactId: contact.id,
+          conversationId: conv.id,
+          eventType: "ai_suggestion",
+          eventData: {
+            suggestion: String(extra?.suggestion || "").slice(0, 2000),
+            confidence: 1,
+            channel: "webchat",
+            holdReason: reasonCode,
+            inboundMessageId: params.inboundMessageId,
+            conversationId: conv.id,
+            proposedApprovedAssetId: extra?.proposedApprovedAssetId || null,
+            holdNote: extra?.proposedApprovedAssetId
+              ? "AI proposed a marketing material. It was not sent. Send it from Inbox if you want."
+              : undefined,
+          },
+          actorType: "ai",
+        });
+      }
+      await storage.updateConversation(conv.id, {
+        aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
+      });
+    };
+    const explicitHandled = await dispatchExplicitApprovedAssetTurn({
+      userId: params.userId,
+      contact,
+      conversation: conv,
+      inboundMessageId: params.inboundMessageId,
+      inboundText: params.inboundText,
+      locale: explicitLocale,
+      decision,
+      persistDraft: persistExplicitDraft,
+    });
+    if (explicitHandled.handled) {
+      if (explicitHandled.sent) {
+        conv = (await storage.getConversation(conv.id)) || conv;
+        await storage.updateConversation(conv.id, {
+          aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
+        });
+        report("send_auto", {
+          sent: true,
+          stage: "outbound",
+          outboundPersisted: true,
+          publicPollingEligible: true,
+        });
+      } else {
+        report(explicitHandled.decision, {
+          sent: false,
+          hasDraft: decision === "suggest_only",
+        });
+      }
+      return { decision: explicitHandled.decision, sent: explicitHandled.sent };
+    }
   }
 
   const joinedInbound = joinLatestVisitorTurn(messages, params.inboundText);
@@ -750,7 +843,12 @@ export async function maybeRunWebchatServerAi(
     report("skip_lease_invalid");
     return { decision: "skip_lease_invalid", sent: false };
   }
-  decision = await evaluate(contact, conv, params.chatbotWillFire);
+  decision = await evaluate(
+    contact,
+    conv,
+    skipChatbotOwnsForExplicit ? false : params.chatbotWillFire,
+    skipChatbotOwnsForExplicit,
+  );
   if (decision === "skip_manual" || decision.startsWith("skip_")) {
     report(decision);
     return { decision, sent: false };

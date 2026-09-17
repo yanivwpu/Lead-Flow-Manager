@@ -72,6 +72,8 @@ export interface TriggerContext {
   skipNewChatTrigger?: boolean;
   /** When true, do not execute or claim the turn (booking fast-path owns the reply). */
   skipBookingIntent?: boolean;
+  /** Unique/ambiguous explicit approved-material request — do not consume Ask Question. */
+  skipApprovedAssetIntent?: boolean;
   /** When true, wait for the first visitor-facing work instead of fire-and-forget. */
   awaitExecution?: boolean;
   /** Inbound webhook/message id — duplicate deliveries must not advance Ask Question twice. */
@@ -270,6 +272,10 @@ function inboundHasBookingIntent(ctx: TriggerContext): boolean {
   return detectHighConfidenceBookingIntent(ctx.message) || detectSellerConsultationBookingIntent(ctx.message);
 }
 
+function inboundHasApprovedAssetIntent(ctx: TriggerContext): boolean {
+  return ctx.skipApprovedAssetIntent === true;
+}
+
 async function loadPendingAsk(ctx: TriggerContext): Promise<ChatbotPendingAsk | null> {
   const mem = peekChatbotPendingAsk(ctx.conversationId);
   if (mem) {
@@ -454,6 +460,9 @@ export async function evaluateChatbotInboundArbitration(
 ): Promise<InboundChatbotArbitration> {
   if (inboundHasBookingIntent(ctx)) {
     return { flowMatched: false, reason: "booking_fast_path_priority" };
+  }
+  if (inboundHasApprovedAssetIntent(ctx)) {
+    return { flowMatched: false, reason: "approved_asset_request_priority" };
   }
   const entitlement = await resolveExecutionEntitlement(ctx.userId);
   if (!entitlement.chatbotAllowed) {
@@ -1540,6 +1549,9 @@ export async function triggerChatbotFlows(ctx: TriggerContext): Promise<ChatbotT
   try {
     if (inboundHasBookingIntent(ctx)) {
       return { triggered: false, visitorFacing: false, reason: "booking_fast_path_priority" };
+    }
+    if (inboundHasApprovedAssetIntent(ctx)) {
+      return { triggered: false, visitorFacing: false, reason: "approved_asset_request_priority" };
     }
     const entitlement = await resolveExecutionEntitlement(ctx.userId);
     if (!entitlement.chatbotAllowed) {

@@ -14,6 +14,9 @@ import {
   inboundLooksLikeMarketingMaterialRequest,
   inboundLooksLikeExplicitApprovedFileRequest,
   pickApprovedMarketingAssetForInbound,
+  resolveExplicitApprovedAssetRequest,
+  approvedAssetDeterministicCaption,
+  approvedAssetClarificationCaption,
   isMarketingAssetId,
   marketingAssetMatchesLocale,
   marketingAssetUploadErrorMessage,
@@ -542,6 +545,11 @@ test("explicit document requests prefer an approved PDF over pricing_question te
     topics: ["brochure", "summer"],
   })!;
   assert.equal(inboundLooksLikeExplicitApprovedFileRequest("What are your prices?"), false);
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Tell me about WhatsApp"), false);
+  assert.equal(
+    inboundLooksLikeExplicitApprovedFileRequest("Can you send me the WhatsApp Coexistence Guide?"),
+    true,
+  );
   assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Please send the pricing PDF"), true);
   assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Envía el PDF de precios"), true);
   assert.equal(inboundLooksLikeExplicitApprovedFileRequest("שלח את קובץ ה-PDF של המחירים"), true);
