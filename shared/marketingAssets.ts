@@ -250,10 +250,11 @@ export function toMarketingAssetCatalogItem(input: {
 }
 
 const FILE_REQUEST_RE =
-  /\b(flyer|flyers|brochure|brochures|guide|guides|pdf|pdfs|document|documents|file|files|image|images|photo|photos|picture|pictures|catalog|catalogue|price\s*list|pricing\s*sheet|promo|promotion|material|materials|attachment|attachments|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|imagen|imagenes|imágenes|documento|documentos|חוברת|מדריך|קובץ|קבצים|תמונה|תמונות)\b/i;
+  /\b(flyer|flyers|brochure|brochures|guides?(?!\s+me\b)|pdf|pdfs|document|documents|file|files|image|images|photo|photos|picture|pictures|catalog|catalogue|price\s*list|pricing\s*sheet|promo|promotion|material|materials|attachment|attachments|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|imagen|imagenes|imágenes|documento|documentos|חוברת|מדריך|קובץ|קבצים|תמונה|תמונות)\b/i;
 
+/** Delivery verbs only. Bare "open"/"see"/"I see"/"are you open" are not material requests. */
 const FILE_TRANSFER_RE =
-  /\b(?:send|show|share|attach|download|forward|open|see|look\s+at|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?|abre(?:r)?|ver)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף|פתח/i;
+  /\b(?:send|show|share|attach|download|forward|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me|look\s+at)\b|\bopen\s+(?:the|this|that|your|a|an)\b|\b(?:can\s+(?:i|we)|could\s+(?:i|we)|may\s+i|let\s+me|want\s+to|wanna|please)\s+see\b|\bsee\s+(?:the|this|that)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?|abre(?:r)?|ver)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף|פתח/i;
 
 const DOCUMENT_NOUN_RE =
   /\b(pdf|pdfs|document|documents|brochure|brochures|flyer|flyers|guide|guides|folleto|folletos|gu[ií]a|gu[ií]as|archivo|archivos|documento|documentos|חוברת|מדריך|קובץ|קבצים|מסמך)\b/i;

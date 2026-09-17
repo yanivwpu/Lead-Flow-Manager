@@ -64,6 +64,22 @@ const spanishOnly = toMarketingAssetCatalogItem({
   kind: "document",
   topics: ["whatsapp"],
 })!;
+const FLYER_IMAGE_ID = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
+const ONBOARDING_GUIDE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1";
+const flyerImage = toMarketingAssetCatalogItem({
+  id: FLYER_IMAGE_ID,
+  displayName: "Vintage listing flyer",
+  language: "en",
+  kind: "image",
+  topics: ["flyer", "listing"],
+})!;
+const onboardingGuide = toMarketingAssetCatalogItem({
+  id: ONBOARDING_GUIDE_ID,
+  displayName: "Onboarding Guide",
+  language: "en",
+  kind: "document",
+  topics: ["onboarding", "guide"],
+})!;
 
 const CANONICAL = [
   { label: "Features & pricing", value: "Features & pricing" },
@@ -97,6 +113,69 @@ test("exact WhachatCRM guide request is a unique explicit match", () => {
   assert.equal(resolved.kind, "unique");
   if (resolved.kind === "unique") assert.equal(resolved.asset.id, GUIDE_ID);
   assert.equal(pickApprovedMarketingAssetForInbound("Tell me about WhatsApp", [guide]), null);
+});
+
+test("open/see/guide stay delivery-shaped and never become broad triggers", () => {
+  const catalog = [guide, brochureA, brochureB, flyerImage, onboardingGuide];
+  const sendGuide = resolveExplicitApprovedAssetRequest(GUIDE_REQUEST, catalog);
+  assert.equal(sendGuide.kind, "unique");
+  if (sendGuide.kind === "unique") assert.equal(sendGuide.asset.id, GUIDE_ID);
+
+  const seeGuide = resolveExplicitApprovedAssetRequest(
+    "Can I see the WhatsApp Coexistence Guide?",
+    catalog,
+  );
+  assert.equal(seeGuide.kind, "unique");
+  if (seeGuide.kind === "unique") assert.equal(seeGuide.asset.id, GUIDE_ID);
+
+  const openBrochure = resolveExplicitApprovedAssetRequest("Open the company brochure", catalog);
+  assert.equal(openBrochure.kind, "unique");
+  if (openBrochure.kind === "unique") assert.equal(openBrochure.asset.id, BROCHURE_ID);
+
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Are you open today?"), false);
+  assert.equal(resolveExplicitApprovedAssetRequest("Are you open today?", catalog).kind, "none");
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("I see your pricing."), false);
+  assert.equal(resolveExplicitApprovedAssetRequest("I see your pricing.", catalog).kind, "none");
+  assert.equal(
+    inboundLooksLikeExplicitApprovedFileRequest("Can you guide me through your pricing?"),
+    false,
+  );
+  assert.equal(
+    resolveExplicitApprovedAssetRequest("Can you guide me through your pricing?", catalog).kind,
+    "none",
+  );
+  assert.equal(pickApprovedMarketingAssetForInbound("Can you guide me through your pricing?", catalog), null);
+
+  const ambiguousGuide = resolveExplicitApprovedAssetRequest("Send me a guide", [
+    guide,
+    onboardingGuide,
+  ]);
+  assert.equal(ambiguousGuide.kind, "ambiguous");
+  assert.equal(pickApprovedMarketingAssetForInbound("Send me a guide", [guide, onboardingGuide]), null);
+  assert.match(approvedAssetClarificationCaption("en"), /Which file/);
+  assert.match(approvedAssetClarificationCaption("es"), /archivo/);
+  assert.match(approvedAssetClarificationCaption("he"), /קובץ/);
+
+  const imageSend = resolveExplicitApprovedAssetRequest("Please send the vintage listing flyer", [
+    flyerImage,
+    guide,
+  ]);
+  assert.equal(imageSend.kind, "unique");
+  if (imageSend.kind === "unique") {
+    assert.equal(imageSend.asset.id, FLYER_IMAGE_ID);
+    assert.equal(imageSend.asset.kind, "image");
+  }
+  const pdfSend = resolveExplicitApprovedAssetRequest(GUIDE_REQUEST, [flyerImage, guide]);
+  assert.equal(pdfSend.kind, "unique");
+  if (pdfSend.kind === "unique") {
+    assert.equal(pdfSend.asset.id, GUIDE_ID);
+    assert.equal(pdfSend.asset.kind, "document");
+  }
+
+  assert.equal(resolveExplicitApprovedAssetRequest(GUIDE_REQUEST, []).kind, "none");
+  assert.equal(pickApprovedMarketingAssetForInbound(GUIDE_REQUEST, [spanishOnly])?.id, ES_ID);
+  assert.equal(pickApprovedMarketingAssetForInbound(GUIDE_REQUEST, [guide])?.id, GUIDE_ID);
+  assert.notEqual(FORGED_ID, GUIDE_ID);
 });
 
 test("fresh new_chat Ask Question does not own a unique explicit asset request", () => {
