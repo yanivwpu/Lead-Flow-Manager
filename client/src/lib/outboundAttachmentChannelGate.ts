@@ -18,12 +18,12 @@ export function outboundDocumentBlockHint(
   return null;
 }
 
-/** Phase-one Website Chat: images only (JPEG / PNG / WebP). */
+/** Website Chat: JPEG / PNG / WebP images and PDF documents. */
 export function outboundWebchatMediaHint(
   channel: string | null | undefined,
   mediaType: string,
 ): string | null {
   if ((channel || "").toLowerCase() !== "webchat") return null;
-  if (mediaType === "image") return null;
-  return "Website Chat only supports JPEG, PNG, and WebP images.";
+  if (mediaType === "image" || mediaType === "document") return null;
+  return "Website Chat only supports JPEG, PNG, WebP images, and PDF documents.";
 }

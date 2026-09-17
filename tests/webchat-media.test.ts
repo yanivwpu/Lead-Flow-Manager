@@ -83,8 +83,22 @@ const textOutbound = {
   status: "sent",
 };
 
+const outboundPdf = {
+  id: "pdf-out-1",
+  direction: "outbound" as const,
+  content: "Here is our brochure.",
+  contentType: "document",
+  mediaUrl: "https://cdn.example.r2.dev/media/tenant-a/marketing-assets/flyer.pdf",
+  mediaFilename: "brochure.pdf",
+  createdAt: "2026-09-06T16:03:00.000Z",
+  status: "sent",
+  userId: "tenant-a",
+  contactId: "contact-a",
+  conversationId: "conv-a",
+};
+
 test("public mapper never leaks stored media URLs and strips failed outbound images", () => {
-  const leaked = toPublicWebchatMessages([outboundImage, inboundImage, outboundImageFailed, textOutbound]);
+  const leaked = toPublicWebchatMessages([outboundImage, inboundImage, outboundImageFailed, textOutbound, outboundPdf]);
   assert.equal(leaked.some((m) => m.id === "img-fail"), false);
   assert.equal(isPublicWebchatMessageVisible(outboundImageFailed), false);
   const stored = leaked.find((m) => m.id === "img-out-1");
@@ -96,6 +110,10 @@ test("public mapper never leaks stored media URLs and strips failed outbound ima
   const text = leaked.find((m) => m.id === "txt-1");
   assert.equal(text?.content, "We can help with that.");
   assert.equal(text?.mediaUrl, null);
+  const pdf = leaked.find((m) => m.id === "pdf-out-1");
+  assert.ok(pdf);
+  assert.equal(pdf!.mediaUrl, null);
+  assert.equal(pdf!.mediaFilename, "brochure.pdf");
 });
 
 test("signed visitor media URLs are issued only for the bound widget/visitor/message", () => {
@@ -124,6 +142,17 @@ test("signed visitor media URLs are issued only for the bound widget/visitor/mes
     }),
   );
   assert.equal(mapped[0].mediaUrl, url);
+
+  const mappedPdf = toPublicWebchatMessages([outboundPdf], (message) =>
+    buildSignedWebchatVisitorMediaUrl({
+      widgetPublicId: widgetA,
+      visitorId: visitorA,
+      messageId: message.id,
+    }),
+  );
+  assert.equal(mappedPdf[0].mediaUrl?.includes("pdf-out-1"), true);
+  assert.equal(mappedPdf[0].mediaFilename, "brochure.pdf");
+  assert.equal(String(mappedPdf[0].mediaUrl).includes("cdn.example"), false);
 
   const exp = Math.floor(Date.now() / 1000) + 600;
   const sig = signWebchatVisitorMedia({
@@ -284,7 +313,9 @@ test("webchat image policy is isomorphic and never references Node Buffer", () =
 test("WidgetFrame renders captionless images and keeps text send unchanged", () => {
   const frame = read("client/src/pages/WidgetFrame.tsx");
   assert.match(frame, /WebchatMediaBubble/);
+  assert.match(frame, /WebchatDocumentBubble/);
   assert.match(frame, /msg\.contentType === "image" && msg\.mediaUrl/);
+  assert.match(frame, /msg\.contentType === "document"/);
   assert.doesNotMatch(frame, /\(msg\.content \|\| msg\.contentType === "buttons"\) && \(/);
   assert.match(frame, /\/api\/webchat\/\$\{userId\}/);
   assert.match(frame, /headers: \{ "Content-Type": "application\/json" \}/);
@@ -315,7 +346,7 @@ test("outbound webchat adapter does not mark media sent unless visitor-available
   assert.match(webchat, /webchatVisitorMediaIsAvailable/);
   assert.match(webchat, /WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE/);
   assert.match(webchat, /WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE/);
-  assert.match(webchat, /isWebchatImageContentType/);
+  assert.match(webchat, /isWebchatDeliverableMediaContentType/);
 });
 
 test("public media GET and visitor upload enforce widget visitor and tenant ownership", () => {
@@ -327,7 +358,7 @@ test("public media GET and visitor upload enforce widget visitor and tenant owne
   assert.match(mediaGet.slice(0, 3200), /message\.userId !== access\.owner\.userId/);
   assert.match(mediaGet.slice(0, 3200), /message\.conversationId !== conversation\.id/);
   assert.match(mediaGet.slice(0, 3500), /verifyWebchatVisitorMedia/);
-  assert.match(mediaGet.slice(0, 4000), /loadWebchatVisitorImageBytes/);
+  assert.match(mediaGet.slice(0, 5500), /loadWebchatVisitorMediaBytes/);
   assert.doesNotMatch(mediaGet.slice(0, 4000), /req\.user/);
 
   const mediaPost = webhooks.slice(webhooks.indexOf('app.post("/api/webchat/:userId/:visitorId/media"'));
@@ -339,10 +370,10 @@ test("public media GET and visitor upload enforce widget visitor and tenant owne
   assert.doesNotMatch(postWindow, /image\/svg/);
 });
 
-test("Inbox blocks non-image webchat attachments before send", () => {
+test("Inbox allows webchat images and PDFs before send", () => {
   const gate = read("client/src/lib/outboundAttachmentChannelGate.ts");
   assert.match(gate, /outboundWebchatMediaHint/);
-  assert.match(gate, /JPEG, PNG, and WebP/);
+  assert.match(gate, /JPEG, PNG, WebP images, and PDF documents/);
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   assert.match(inbox, /outboundWebchatMediaHint/);
 });

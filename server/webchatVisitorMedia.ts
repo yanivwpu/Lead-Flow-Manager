@@ -7,11 +7,16 @@ import crypto from "crypto";
 import sharp from "sharp";
 import {
   inspectWebchatImageBuffer,
-  isWebchatImageContentType,
   WEBCHAT_IMAGE_MAX_PIXELS,
   webchatVisitorMediaPath,
   type WebchatSafeImageMime,
 } from "@shared/webchatImagePolicy";
+import {
+  inspectWebchatPdfBuffer,
+  isWebchatDeliverableMediaContentType,
+  isWebchatDocumentContentType,
+  WEBCHAT_PDF_MIME,
+} from "@shared/webchatDocumentPolicy";
 import { readOwnedStoredMedia, uploadOutboundUserMedia } from "./mediaStorageService";
 
 const WEAK_PLACEHOLDER = "webchat-media-dev-only";
@@ -233,8 +238,9 @@ export async function webchatVisitorMediaIsAvailable(params: {
   mediaStorageKey?: string | null;
   contentType?: string | null;
 }): Promise<boolean> {
-  if (!isWebchatImageContentType(params.contentType || "image") && params.contentType) {
-    if (params.contentType !== "image") return false;
+  const contentType = params.contentType || "image";
+  if (!isWebchatDeliverableMediaContentType(contentType) && contentType) {
+    return false;
   }
   if (!signingSecret()) return false;
   const stored = await readOwnedStoredMedia({
@@ -243,6 +249,9 @@ export async function webchatVisitorMediaIsAvailable(params: {
     mediaStorageKey: params.mediaStorageKey,
   });
   if (!stored) return false;
+  if (isWebchatDocumentContentType(contentType) || stored.mimeType === WEBCHAT_PDF_MIME) {
+    return inspectWebchatPdfBuffer(stored.buffer, stored.mimeType).ok;
+  }
   const inspected = inspectWebchatImageBuffer(stored.buffer, stored.mimeType);
   return inspected.ok;
 }
@@ -268,6 +277,34 @@ export async function loadWebchatVisitorImageBytes(params: {
     return { buffer: stored.buffer, mime: inspected.mime };
   }
   return { buffer: prepared.buffer, mime: prepared.mime };
+}
+
+export async function loadWebchatVisitorDocumentBytes(params: {
+  userId: string;
+  mediaUrl?: string | null;
+  mediaStorageKey?: string | null;
+}): Promise<{ buffer: Buffer; mime: typeof WEBCHAT_PDF_MIME } | null> {
+  const stored = await readOwnedStoredMedia({
+    userId: params.userId,
+    mediaUrl: params.mediaUrl,
+    mediaStorageKey: params.mediaStorageKey,
+  });
+  if (!stored) return null;
+  const inspected = inspectWebchatPdfBuffer(stored.buffer, stored.mimeType);
+  if (!inspected.ok) return null;
+  return { buffer: stored.buffer, mime: inspected.mime };
+}
+
+export async function loadWebchatVisitorMediaBytes(params: {
+  userId: string;
+  mediaUrl?: string | null;
+  mediaStorageKey?: string | null;
+  contentType?: string | null;
+}): Promise<{ buffer: Buffer; mime: string } | null> {
+  if (isWebchatDocumentContentType(params.contentType)) {
+    return loadWebchatVisitorDocumentBytes(params);
+  }
+  return loadWebchatVisitorImageBytes(params);
 }
 
 export async function storeWebchatVisitorImage(params: {

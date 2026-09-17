@@ -450,13 +450,13 @@ export function registerWebhookRoutes(app: Express): void {
 
       const { toPublicWebchatMessages } = await import("@shared/webchatPublicMessages");
       const { buildSignedWebchatVisitorMediaUrl } = await import("../webchatVisitorMedia");
-      const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
+      const { isWebchatDeliverableMediaContentType } = await import("@shared/webchatDocumentPolicy");
       const messages = await storage.getMessages(conversation.id, 50);
       if (readConversationAiControl(conversation.aiControl).paused) {
         res.setHeader(WEBCHAT_HUMAN_TAKEOVER_HEADER, "1");
       }
       return sendWebchatPublicJson(res, 200, toPublicWebchatMessages(messages, (message) => {
-        if (!isWebchatImageContentType(message.contentType)) return null;
+        if (!isWebchatDeliverableMediaContentType(message.contentType)) return null;
         return buildSignedWebchatVisitorMediaUrl({
           widgetPublicId: access.owner.widgetPublicId,
           visitorId,
@@ -514,12 +514,14 @@ export function registerWebhookRoutes(app: Express): void {
       }
       const exp = Number(req.query.exp);
       const sig = typeof req.query.sig === "string" ? req.query.sig : "";
-      const { verifyWebchatVisitorMedia, loadWebchatVisitorImageBytes } = await import(
+      const { verifyWebchatVisitorMedia, loadWebchatVisitorMediaBytes } = await import(
         "../webchatVisitorMedia"
       );
-      const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
+      const { isWebchatDeliverableMediaContentType, isWebchatDocumentContentType } = await import(
+        "@shared/webchatDocumentPolicy"
+      );
       if (
-        !isWebchatImageContentType(message.contentType) ||
+        !isWebchatDeliverableMediaContentType(message.contentType) ||
         !verifyWebchatVisitorMedia({
           widgetPublicId: access.owner.widgetPublicId,
           visitorId,
@@ -530,18 +532,30 @@ export function registerWebhookRoutes(app: Express): void {
       ) {
         return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
       }
-      const bytes = await loadWebchatVisitorImageBytes({
+      const bytes = await loadWebchatVisitorMediaBytes({
         userId: access.owner.userId,
         mediaUrl: message.mediaUrl,
         mediaStorageKey: message.mediaStorageKey,
+        contentType: message.contentType,
       });
       if (!bytes) {
         return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
       }
+      const download = req.query.download === "1";
+      const filename = String(message.mediaFilename || "document.pdf")
+        .replace(/\\/g, "/")
+        .split("/")
+        .pop()
+        ?.replace(/[^\w\u0590-\u05FF\u00C0-\u024F .-]/g, "_")
+        .slice(0, 120) || "document.pdf";
+      const asAttachment = download && isWebchatDocumentContentType(message.contentType);
       res.setHeader("Content-Type", bytes.mime);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      res.setHeader("Content-Disposition", "inline");
+      res.setHeader(
+        "Content-Disposition",
+        `${asAttachment ? "attachment" : "inline"}; filename="${filename.replace(/"/g, "")}"`,
+      );
       return res.status(200).send(bytes.buffer);
     } catch {
       return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);

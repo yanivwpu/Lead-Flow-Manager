@@ -1235,6 +1235,33 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
   WHERE webchat_id IS NOT NULL AND webchat_id <> '';
 `.trim(),
   },
+  {
+    tag: "0092_workspace_marketing_assets",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS workspace_marketing_assets (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id varchar NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        display_name text NOT NULL,
+        description text,
+        language text NOT NULL DEFAULT 'all',
+        topics jsonb NOT NULL DEFAULT '[]'::jsonb,
+        enabled boolean NOT NULL DEFAULT true,
+        kind text NOT NULL,
+        mime_type text NOT NULL,
+        original_filename text NOT NULL,
+        media_url text NOT NULL,
+        media_storage_key text NOT NULL,
+        media_size integer NOT NULL DEFAULT 0,
+        deleted_at timestamp,
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS workspace_marketing_assets_user_enabled_idx
+        ON workspace_marketing_assets (user_id, enabled, deleted_at)`,
+      `CREATE INDEX IF NOT EXISTS workspace_marketing_assets_user_created_idx
+        ON workspace_marketing_assets (user_id, created_at)`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {

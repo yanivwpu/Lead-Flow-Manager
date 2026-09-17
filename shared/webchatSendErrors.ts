@@ -39,10 +39,10 @@ export const WEBCHAT_DELIVERY_FAILED_MESSAGE =
   "Unable to deliver the message. Please try again.";
 
 export const WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE =
-  "This image could not be delivered to the visitor.";
+  "This file could not be delivered to the visitor.";
 
 export const WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE =
-  "Website Chat only supports JPEG, PNG, and WebP images.";
+  "Website Chat only supports JPEG, PNG, WebP images, and PDF documents.";
 
 export function webchatErrorCodeForMessage(error: string | null | undefined): WebchatSendErrorCode | undefined {
   const msg = (error || "").trim();

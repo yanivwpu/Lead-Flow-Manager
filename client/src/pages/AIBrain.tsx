@@ -32,6 +32,7 @@ import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
 import { BusinessKnowledgeSteps } from "@/components/aibrain/BusinessKnowledgeSteps";
+import { MarketingMaterialsSettings } from "@/components/aibrain/MarketingMaterialsSettings";
 import {
   CustomerQuestions,
   type CustomerQuestion,
@@ -837,6 +838,8 @@ function AIBrainContent() {
                 />
               }
             />
+
+            <MarketingMaterialsSettings />
 
 
             {/* Booking — Calendly via Integrations only */}

@@ -252,6 +252,7 @@ test("public payload is visitor-safe: message id plus chat fields only", () => {
     "createdAt",
     "direction",
     "id",
+    "mediaFilename",
     "mediaUrl",
     "status",
     "templateVariables",

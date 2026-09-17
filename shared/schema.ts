@@ -1853,6 +1853,40 @@ export const workspaceOffers = pgTable("workspace_offers", {
 
 export type WorkspaceOfferRow = typeof workspaceOffers.$inferSelect;
 
+/**
+ * Workspace-owned Marketing Materials (approved flyers, brochures, images, PDFs).
+ * Tenancy: userId = workspace owner (users.id). Soft-delete preserves historical messages.
+ */
+export const workspaceMarketingAssets = pgTable("workspace_marketing_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  /** en | es | he | all */
+  language: text("language").notNull().default("all"),
+  topics: jsonb("topics").notNull().default(sql`'[]'::jsonb`),
+  enabled: boolean("enabled").notNull().default(true),
+  /** image | document */
+  kind: text("kind").notNull(),
+  mimeType: text("mime_type").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  mediaUrl: text("media_url").notNull(),
+  mediaStorageKey: text("media_storage_key").notNull(),
+  mediaSize: integer("media_size").notNull().default(0),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  userEnabledIdx: index("workspace_marketing_assets_user_enabled_idx").on(
+    t.userId,
+    t.enabled,
+    t.deletedAt,
+  ),
+  userCreatedIdx: index("workspace_marketing_assets_user_created_idx").on(t.userId, t.createdAt),
+}));
+
+export type WorkspaceMarketingAssetRow = typeof workspaceMarketingAssets.$inferSelect;
+
 /** Leased extraction jobs — scanning runs outside the HTTP request. */
 export const aiKnowledgeScanJobs = pgTable("ai_knowledge_scan_jobs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

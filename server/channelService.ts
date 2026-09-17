@@ -488,6 +488,9 @@ class ChannelService {
     mediaUrl?: string;
     mediaType?: string;
     mediaFilename?: string;
+    mediaStorageKey?: string;
+    mediaMimeType?: string;
+    mediaSize?: number;
     forceChannel?: ForceChannelInput;
     /** When true (e.g. inbox user picked a channel), validate availability and never delivery-fallback to another channel. */
     suppressFallback?: boolean;
@@ -507,6 +510,9 @@ class ChannelService {
       mediaUrl,
       mediaType,
       mediaFilename,
+      mediaStorageKey,
+      mediaMimeType,
+      mediaSize,
       forceChannel,
       suppressFallback,
       enforceWhatsAppCustomerServiceWindow,
@@ -672,6 +678,9 @@ class ChannelService {
           mediaUrl,
           mediaType,
           mediaFilename,
+          mediaStorageKey,
+          mediaMimeType,
+          mediaSize,
           status: "failed",
           errorMessage: WHATSAPP_WINDOW_EXPIRED_MSG,
           errorCode: "meta_reply_window",
@@ -748,6 +757,9 @@ class ChannelService {
       mediaUrl,
       mediaType,
       mediaFilename,
+      mediaStorageKey,
+      mediaMimeType,
+      mediaSize,
       status: 'pending',
       sentByUserId: sentByUserId || undefined,
       generatedBy: generatedBy || (sentByUserId ? "human" : undefined),

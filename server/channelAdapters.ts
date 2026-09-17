@@ -379,11 +379,11 @@ class WebChatAdapter implements ChannelAdapter {
         WEBCHAT_MEDIA_UNAVAILABLE_MESSAGE,
         WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE,
       } = await import("@shared/webchatSendErrors");
-      const { isWebchatImageContentType } = await import("@shared/webchatImagePolicy");
+      const { isWebchatDeliverableMediaContentType } = await import("@shared/webchatDocumentPolicy");
       const { webchatVisitorMediaIsAvailable } = await import("./webchatVisitorMedia");
       const contentType = params.contentType || (params.mediaUrl ? "image" : "text");
-      if (params.mediaUrl || isWebchatImageContentType(contentType)) {
-        if (!isWebchatImageContentType(contentType)) {
+      if (params.mediaUrl || isWebchatDeliverableMediaContentType(contentType)) {
+        if (!isWebchatDeliverableMediaContentType(contentType)) {
           return { success: false, error: WEBCHAT_MEDIA_UNSUPPORTED_MESSAGE };
         }
         const available = await webchatVisitorMediaIsAvailable({

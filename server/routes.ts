@@ -176,6 +176,7 @@ import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKn
 import { registerKnowledgeV2Routes } from "./websiteKnowledge/knowledgeRoutes";
 import { registerLiveBusinessDataRoutes } from "./aiLiveBusinessData/routes";
 import { registerWorkspaceOfferRoutes } from "./workspaceOffers/routes";
+import { registerMarketingAssetRoutes } from "./marketingAssets/routes";
 import {
   WEBSITE_KNOWLEDGE_SLOTS,
   applyScanResultsToSources,
@@ -11130,6 +11131,9 @@ export async function registerRoutes(
 
   // Workspace Offers & Payment Links (Settings editor + Business Packages source of truth).
   registerWorkspaceOfferRoutes(app);
+
+  // Approved Marketing Materials (AI Brain / Settings library + Website Chat send).
+  registerMarketingAssetRoutes(app);
 
   // Get AI health status (no numeric details exposed)
   app.get("/api/ai/health", async (req, res) => {

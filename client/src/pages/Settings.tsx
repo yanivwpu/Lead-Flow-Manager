@@ -16,6 +16,7 @@ import { ConnectMetaWizard } from "@/components/ConnectMetaWizard";
 import { ChannelSettings } from "@/components/ChannelSettings";
 import { BusinessProfileSettings } from "@/components/settings/BusinessProfileSettings";
 import { OffersPaymentLinksSettings } from "@/components/settings/OffersPaymentLinksSettings";
+import { MarketingMaterialsSettings } from "@/components/aibrain/MarketingMaterialsSettings";
 import { cn } from "@/lib/utils";
 import { getSubscriptionApiUrl, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
@@ -1235,6 +1236,8 @@ export function Settings() {
           </div>
 
           <BusinessProfileSettings />
+
+          <MarketingMaterialsSettings />
 
           <OffersPaymentLinksSettings />
 

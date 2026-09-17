@@ -12,6 +12,7 @@ export type WebchatScrollMessage = {
   id: string;
   contentType?: string | null;
   mediaUrl?: string | null;
+  mediaFilename?: string | null;
   status?: string | null;
   content?: string | null;
   createdAt?: string | Date | null;
@@ -91,6 +92,8 @@ function sameCreatedAt(a: unknown, b: unknown): boolean {
 
 export function patchWebchatPolledMessage<T extends WebchatScrollMessage>(prev: T, incoming: T): T {
   const mediaUrl = refreshWebchatVisitorMediaUrl(prev.mediaUrl, incoming.mediaUrl);
+  const mediaFilename =
+    incoming.mediaFilename !== undefined ? incoming.mediaFilename : prev.mediaFilename;
   const status = incoming.status !== undefined ? incoming.status : prev.status;
   const content = incoming.content !== undefined ? incoming.content : prev.content;
   const contentType =
@@ -102,6 +105,7 @@ export function patchWebchatPolledMessage<T extends WebchatScrollMessage>(prev: 
   const createdAt = incoming.createdAt !== undefined ? incoming.createdAt : prev.createdAt;
   if (
     mediaUrl === (prev.mediaUrl ?? null) &&
+    (mediaFilename || null) === (prev.mediaFilename || null) &&
     status === prev.status &&
     content === prev.content &&
     (contentType || "text") === (prev.contentType || "text") &&
@@ -113,6 +117,7 @@ export function patchWebchatPolledMessage<T extends WebchatScrollMessage>(prev: 
   return {
     ...prev,
     mediaUrl,
+    mediaFilename,
     status,
     content,
     contentType,

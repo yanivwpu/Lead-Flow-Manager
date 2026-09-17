@@ -598,6 +598,7 @@ export async function maybeRunWebchatServerAi(
     groundingViolations?: string[];
     retrievalIntent?: string;
     savingsJourneyComplete?: boolean;
+    sendApprovedAssetId?: string | null;
   } = {
     suggestion: "",
     confidence: 0,
@@ -865,6 +866,65 @@ export async function maybeRunWebchatServerAi(
   }
 
   const idempotencyKey = webchatAutoSendIdempotencyKey(params.userId, params.inboundMessageId);
+  const approvedAssetId =
+    typeof suggestion.sendApprovedAssetId === "string" && suggestion.sendApprovedAssetId.trim()
+      ? suggestion.sendApprovedAssetId.trim()
+      : "";
+  if (approvedAssetId) {
+    const { sendApprovedMarketingAsset } = await import("./marketingAssets/sendApprovedAsset");
+    const assetSend = await sendApprovedMarketingAsset({
+      userId: params.userId,
+      contactId: contact.id,
+      conversationId: conv.id,
+      inboundMessageId: params.inboundMessageId,
+      assetId: approvedAssetId,
+      caption: text,
+      locale: generateLocale,
+      generatedBy: "ai_brain",
+      generationMeta: {
+        decision,
+        reasonCode: gate.reason,
+        confidence: suggestion.confidence ?? 0,
+        inboundMessageId: params.inboundMessageId,
+        leaseId,
+        modelGenerationSucceeded: suggestion.modelGenerationSucceeded === true,
+        approvedAssetId,
+      },
+    });
+    if (assetSend.ok || assetSend.reason === "skip_guard:duplicate") {
+      const afterSend = (await storage.getConversation(conv.id)) || conv;
+      const afterControl = readConversationAiControl(afterSend.aiControl);
+      const completedLease = completeWebchatGenerationLease(afterControl, leaseId);
+      const liveJourney = readActiveJourney(afterControl.activeJourney);
+      await storage.updateConversation(conv.id, {
+        aiControl: {
+          ...completedLease,
+          activeJourney:
+            suggestion.savingsJourneyComplete && liveJourney
+              ? markJourneyStatus(liveJourney, "completed")
+              : afterControl.activeJourney,
+        },
+      });
+      report("send_auto", {
+        sent: true,
+        stage: "outbound",
+        outboundPersisted: true,
+        publicPollingEligible: true,
+      });
+      return { decision: "send_auto", sent: true };
+    }
+    if (assetSend.reason === "send_failed" || assetSend.reason.startsWith("skip_guard:")) {
+      await persistDraft(assetSend.reason === "send_failed" ? "send_failed" : assetSend.reason);
+      report(assetSend.reason, {
+        hasDraft: true,
+        stage: "outbound",
+        outboundPersisted: false,
+        publicPollingEligible: false,
+      });
+      return { decision: assetSend.reason, sent: false };
+    }
+    // Disabled, deleted, locale mismatch, or invented id: answer in text only.
+  }
   const guarded = await withAutomationSendGuard(
     {
       userId: params.userId,

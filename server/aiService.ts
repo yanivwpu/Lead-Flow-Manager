@@ -86,6 +86,13 @@ import {
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { sanitizeRoboticBuyerReply } from "@shared/buyerQualification";
 import { detectConversationLanguage, languageInstructionForConversation } from "@shared/conversationLanguage";
+import {
+  buildMarketingMaterialsPromptBlock,
+  extractEmbeddedApprovedAssetId,
+  parseSendApprovedAssetId,
+  stripApprovedAssetActionMarkup,
+  stripInventedMarketingMediaUrls,
+} from "@shared/marketingAssets";
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar" | "zh";
 
 export class AIService {
@@ -162,6 +169,11 @@ export class AIService {
     /** True when the draft includes a payment link that must not auto-send. */
     requiresPaymentLinkApproval?: boolean;
     paymentLinkApprovalReason?: string;
+    /**
+     * Server-owned approved marketing asset id requested by the model.
+     * Never a URL. Validated against the current workspace catalog before send.
+     */
+    sendApprovedAssetId?: string | null;
     /**
      * True only when the reply model completion path succeeded (including one
      * internal fact-completeness retry). False for trivial no-op / provider failure.
@@ -398,6 +410,26 @@ export class AIService {
       (t) => t === "published_fact" || t === "live_offer",
     );
 
+    let marketingMaterialsBlock = "";
+    const marketingCatalogIds = new Set<string>();
+    if (isWebchatChannel(channel) && !greetingTurn) {
+      try {
+        const { listEnabledMarketingAssetCatalog } = await import("./marketingAssets/assetStore");
+        const catalog = await listEnabledMarketingAssetCatalog(
+          userId,
+          contactContext?.conversationLanguage || detectedLanguage,
+        );
+        for (const item of catalog) marketingCatalogIds.add(item.id);
+        marketingMaterialsBlock = buildMarketingMaterialsPromptBlock(catalog);
+      } catch (err) {
+        console.warn(
+          "[AI] marketing materials catalog failed",
+          err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160),
+        );
+        marketingMaterialsBlock = buildMarketingMaterialsPromptBlock([]);
+      }
+    }
+
     const systemPrompt = this.buildSystemPrompt(
       businessKnowledge,
       settings,
@@ -416,6 +448,7 @@ export class AIService {
       },
       lastUserMessage,
       conversationHistory,
+      marketingMaterialsBlock,
     );
 
     const evaluateDraft = (draft: string, opts?: { skipCompleteness?: boolean }): GroundingCheck =>
@@ -582,15 +615,23 @@ export class AIService {
       const response = await aiProvider.complete("reply", messages, { jsonMode: true });
       const result = JSON.parse(response || "{}");
       const modelConfidence = typeof result.confidence === "number" ? result.confidence : null;
+      const replyText = stripApprovedAssetActionMarkup(sanitizeRoboticBuyerReply(result.reply || ""));
+      const fromField = parseSendApprovedAssetId(result.sendApprovedAssetId, marketingCatalogIds);
+      const fromMarkup = parseSendApprovedAssetId(
+        extractEmbeddedApprovedAssetId(String(result.reply || "")),
+        marketingCatalogIds,
+      );
       return {
-        suggestion: sanitizeRoboticBuyerReply(result.reply || ""),
+        suggestion: replyText,
         confidence: modelConfidence,
         confidenceProvided: modelConfidence !== null,
+        sendApprovedAssetId: fromField || fromMarkup,
       };
     };
 
     try {
-      let { suggestion, confidence: rawConfidence, confidenceProvided } = await runCompletion(systemPrompt);
+      let { suggestion, confidence: rawConfidence, confidenceProvided, sendApprovedAssetId } =
+        await runCompletion(systemPrompt);
       if ((visitorKind === "book_demo" || bookingLinkResend) && !bookingAcknowledgment) {
         suggestion = ensureVerifiedBookingUrlInDraft(suggestion, verifiedBookingUrl);
       }
@@ -621,6 +662,7 @@ export class AIService {
           const a = typeof rawConfidence === "number" ? rawConfidence : 1;
           const b = typeof retry.confidence === "number" ? retry.confidence : 1;
           rawConfidence = Math.min(a, b);
+          sendApprovedAssetId = retry.sendApprovedAssetId || sendApprovedAssetId;
           groundingCheck = evaluateDraft(suggestion);
         } catch (retryErr) {
           console.warn(
@@ -651,6 +693,7 @@ export class AIService {
           const a = typeof rawConfidence === "number" ? rawConfidence : 1;
           const b = typeof retry.confidence === "number" ? retry.confidence : 1;
           rawConfidence = Math.min(a, b);
+          sendApprovedAssetId = retry.sendApprovedAssetId || sendApprovedAssetId;
           groundingCheck = evaluateDraft(suggestion);
           if (
             groundingCheck.violations.some((v) => v.kind === "unsupported_amount") &&
@@ -770,8 +813,15 @@ export class AIService {
         suggestion = coerced.text;
         if (coerced.coerced) {
           knowledgeGrounded = false;
+          sendApprovedAssetId = null;
         }
       }
+
+      const allowedUrls = new Set<string>();
+      if (verifiedBookingUrl) allowedUrls.add(verifiedBookingUrl);
+      for (const url of liveCheckoutUrls) allowedUrls.add(url);
+      suggestion = stripInventedMarketingMediaUrls(suggestion, allowedUrls);
+      sendApprovedAssetId = parseSendApprovedAssetId(sendApprovedAssetId, marketingCatalogIds);
 
       return {
         suggestion,
@@ -793,6 +843,7 @@ export class AIService {
         paymentLinkApprovalReason: requiresPaymentLinkApproval
           ? PAYMENT_LINK_HUMAN_APPROVAL_REASON
           : undefined,
+        sendApprovedAssetId,
         // One successful suggestReply = one meter unit (internal retry does not double-count).
         modelGenerationSucceeded: true,
       };
@@ -1248,6 +1299,7 @@ Return JSON only: { "summary": "..." }`;
     evidenceWebsite?: { text: string; structuredPricesSelected: boolean },
     latestInbound?: string,
     conversationHistory?: Array<{ role: string; content?: string }>,
+    marketingMaterialsBlock?: string,
   ): string {
     const langInstruction = languageInstructionForConversation(
       language || contactContext?.conversationLanguage || "en",
@@ -1321,6 +1373,7 @@ BUSINESS CONTEXT:
 - Hours: ${businessKnowledge?.businessHours || "Standard hours"}${bookingContextLine}
 ${groundedFacts && groundedFacts.text ? `\n${groundedFacts.text}\n` : ""}
 ${liveBusinessDataBlock && liveBusinessDataBlock.trim() ? `\n${liveBusinessDataBlock.trim()}\n` : ""}
+${marketingMaterialsBlock && marketingMaterialsBlock.trim() ? `\n${marketingMaterialsBlock.trim()}\n` : ""}
 ${(() => {
   const cap = (evidenceWebsite?.text || "").trim();
   if (!cap) return "";
@@ -1507,7 +1560,7 @@ When replying, work through these qualification questions in order. Ask only ONE
       })}`;
     }
 
-    prompt += `\n\nRespond with valid JSON only: { "reply": "your reply in the correct language", "confidence": 0.0-1.0 }`;
+    prompt += `\n\nRespond with valid JSON only: { "reply": "your reply in the correct language", "confidence": 0.0-1.0, "sendApprovedAssetId": null }`;
 
     return prompt;
   }

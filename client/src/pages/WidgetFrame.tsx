@@ -4,6 +4,7 @@ import { Loader2, Paperclip, Send, X } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { loadOrRotateWebchatVisitorId } from "@shared/webchatVisitorId";
 import { WebchatMediaBubble } from "@/components/webchat/WebchatMediaBubble";
+import { WebchatDocumentBubble } from "@/components/webchat/WebchatDocumentBubble";
 import { WebchatFormCard } from "@/components/webchat/WebchatFormCard";
 import {
   WebchatMessageErrorBoundary,
@@ -70,6 +71,7 @@ interface ChatMessage {
   content: string | null;
   contentType: string;
   mediaUrl: string | null;
+  mediaFilename?: string | null;
   createdAt: string;
   status?: string | null;
   templateVariables?: {
@@ -1013,6 +1015,16 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
                 {msg.contentType === "image" && msg.mediaUrl ? (
                   <WebchatMediaBubble
                     src={msg.mediaUrl}
+                    caption={msg.content}
+                    isOutbound={isOutbound}
+                    sendFailed={sendFailed}
+                    widgetColor={accentColor}
+                    accentForeground={accentTextColor}
+                  />
+                ) : (msg.contentType === "document" || msg.contentType === "application/pdf") && msg.mediaUrl ? (
+                  <WebchatDocumentBubble
+                    src={msg.mediaUrl}
+                    filename={msg.mediaFilename}
                     caption={msg.content}
                     isOutbound={isOutbound}
                     sendFailed={sendFailed}
