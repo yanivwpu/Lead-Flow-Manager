@@ -90,8 +90,10 @@ import {
   buildMarketingMaterialsPromptBlock,
   extractEmbeddedApprovedAssetId,
   parseSendApprovedAssetId,
+  pickApprovedMarketingAssetForInbound,
   stripApprovedAssetActionMarkup,
   stripInventedMarketingMediaUrls,
+  type MarketingAssetCatalogItem,
 } from "@shared/marketingAssets";
 export type SupportedAiLanguage = "en" | "he" | "es" | "ar" | "zh";
 
@@ -412,6 +414,7 @@ export class AIService {
 
     let marketingMaterialsBlock = "";
     const marketingCatalogIds = new Set<string>();
+    let marketingCatalogItems: MarketingAssetCatalogItem[] = [];
     if (isWebchatChannel(channel) && !greetingTurn) {
       try {
         const { listEnabledMarketingAssetCatalog } = await import("./marketingAssets/assetStore");
@@ -420,6 +423,7 @@ export class AIService {
           contactContext?.conversationLanguage || detectedLanguage,
           lastUserMessage,
         );
+        marketingCatalogItems = catalog;
         for (const item of catalog) marketingCatalogIds.add(item.id);
         marketingMaterialsBlock = buildMarketingMaterialsPromptBlock(catalog);
       } catch (err) {
@@ -564,7 +568,12 @@ export class AIService {
       return groundedScriptedReturn(findScripted, "find_solution", { skipCompleteness: true });
     }
 
-    if (pricingCompareTurn) {
+    const matchedExplicitAsset = pickApprovedMarketingAssetForInbound(
+      lastUserMessage,
+      marketingCatalogItems,
+    );
+
+    if (pricingCompareTurn && !matchedExplicitAsset) {
       const locale = contactContext?.conversationLanguage || detectedLanguage;
       let realized = realizeTrustedFeaturesPricingReply({
         retrieved: grounding.retrieved,
@@ -822,7 +831,10 @@ export class AIService {
       if (verifiedBookingUrl) allowedUrls.add(verifiedBookingUrl);
       for (const url of liveCheckoutUrls) allowedUrls.add(url);
       suggestion = stripInventedMarketingMediaUrls(suggestion, allowedUrls);
-      sendApprovedAssetId = parseSendApprovedAssetId(sendApprovedAssetId, marketingCatalogIds);
+      sendApprovedAssetId = parseSendApprovedAssetId(
+        sendApprovedAssetId || matchedExplicitAsset?.id,
+        marketingCatalogIds,
+      );
 
       return {
         suggestion,
@@ -867,6 +879,22 @@ export class AIService {
         fallbackAttempted: pricingCompareTurn || greetingTurn,
         fallbackSucceeded: false,
       });
+      if (matchedExplicitAsset) {
+        return {
+          suggestion: stripInventedMarketingMediaUrls(
+            "Here is the file you asked for.",
+            new Set(),
+          ),
+          confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+          confidenceProvided: false,
+          knowledgeGrounded: false,
+          sendApprovedAssetId: parseSendApprovedAssetId(
+            matchedExplicitAsset.id,
+            marketingCatalogIds,
+          ),
+          modelGenerationSucceeded: false,
+        };
+      }
       if (pricingCompareTurn) {
         const locale = contactContext?.conversationLanguage || detectedLanguage;
         const realized = realizeTrustedFeaturesPricingReply({

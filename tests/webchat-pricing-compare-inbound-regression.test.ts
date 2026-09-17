@@ -396,7 +396,8 @@ test("reply path uses the formatter before the model and diagnoses generation_fa
   assert.match(ai, /formatterOutcome/);
   assert.match(ai, /stage: "formatter"/);
   assert.match(ai, /stage: "evidence"/);
-  assert.match(ai, /pricingCompareTurn/);
+  assert.match(ai, /pricingCompareTurn && !matchedExplicitAsset/);
+  assert.match(ai, /pickApprovedMarketingAssetForInbound/);
   assert.match(ai, /canonicalPricingCompareEvidence/);
   assert.match(ai, /Array\.isArray\(qualifyingSource\)/);
   const auto = read("server/webchatAiAutoReply.ts");

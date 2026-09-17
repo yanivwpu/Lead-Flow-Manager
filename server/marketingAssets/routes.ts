@@ -7,6 +7,7 @@ import type { Express, Request, Response } from "express";
 import multer from "multer";
 import {
   inspectMarketingAssetBuffer,
+  isMarketingAssetId,
   marketingAssetUploadErrorMessage,
   parseMarketingAssetWrite,
   sanitizeMarketingFilename,
@@ -15,6 +16,7 @@ import { WEBCHAT_PDF_MAX_BYTES, webchatMediaDeliveryHeaders } from "@shared/webc
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
 import { uploadOutboundUserMedia, readOwnedStoredMedia, deleteOwnedStoredMedia } from "../mediaStorageService";
 import { requireMarketingAssetsAdmin } from "./assetAccess";
+import { prepareWebchatVisitorImage } from "../webchatVisitorMedia";
 import {
   createMarketingAsset,
   getMarketingAsset,
@@ -101,6 +103,22 @@ export function registerMarketingAssetRoutes(app: Express): void {
             error: marketingAssetUploadErrorMessage(inspected.reason, inspected.maxBytes),
           });
         }
+        let persistBuffer = file.buffer;
+        let persistMime = inspected.mime;
+        if (inspected.kind === "image") {
+          const decoded = await prepareWebchatVisitorImage({
+            buffer: file.buffer,
+            declaredMime: inspected.mime,
+          });
+          if (!decoded.ok) {
+            const status = decoded.reason === "too_large" ? 413 : 400;
+            return res.status(status).json({
+              error: marketingAssetUploadErrorMessage(decoded.reason, WEBCHAT_IMAGE_MAX_BYTES),
+            });
+          }
+          persistBuffer = decoded.buffer;
+          persistMime = decoded.mime;
+        }
         const meta = parseMarketingAssetWrite({
           displayName: req.body?.displayName || req.body?.name || file.originalname,
           description: req.body?.description,
@@ -115,8 +133,8 @@ export function registerMarketingAssetRoutes(app: Express): void {
         try {
           uploaded = await uploadOutboundUserMedia({
             userId: auth.workspaceUserId,
-            buffer: file.buffer,
-            contentType: inspected.mime,
+            buffer: persistBuffer,
+            contentType: persistMime,
             originChannel: "marketing-assets",
           });
           const row = await createMarketingAsset({
@@ -127,11 +145,11 @@ export function registerMarketingAssetRoutes(app: Express): void {
             topics: meta.data.topics,
             enabled: meta.data.enabled,
             kind: inspected.kind,
-            mimeType: inspected.mime,
-            originalFilename: sanitizeMarketingFilename(file.originalname, inspected.mime),
+            mimeType: persistMime,
+            originalFilename: sanitizeMarketingFilename(file.originalname, persistMime),
             mediaUrl: uploaded.mediaUrl,
             mediaStorageKey: uploaded.mediaStorageKey,
-            mediaSize: file.buffer.length,
+            mediaSize: persistBuffer.length,
           });
           res.status(201).json({ asset: publicAsset(toMarketingAssetView(row)) });
         } catch (error) {
@@ -155,6 +173,9 @@ export function registerMarketingAssetRoutes(app: Express): void {
     try {
       const auth = await requireMarketingAssetsAdmin(req, res);
       if (!auth) return;
+      if (!isMarketingAssetId(req.params.id)) {
+        return res.status(404).json({ error: "Material not found" });
+      }
       const result = await updateMarketingAsset(auth.workspaceUserId, req.params.id, req.body);
       if (!result.ok) {
         return res.status(result.status).json({ error: result.error });
@@ -170,6 +191,9 @@ export function registerMarketingAssetRoutes(app: Express): void {
     try {
       const auth = await requireMarketingAssetsAdmin(req, res);
       if (!auth) return;
+      if (!isMarketingAssetId(req.params.id)) {
+        return res.status(404).json({ error: "Material not found" });
+      }
       const result = await softDeleteMarketingAsset(auth.workspaceUserId, req.params.id);
       if (!result.ok) {
         return res.status(result.status).json({ error: result.error });
@@ -185,6 +209,9 @@ export function registerMarketingAssetRoutes(app: Express): void {
     try {
       const auth = await requireMarketingAssetsAdmin(req, res);
       if (!auth) return;
+      if (!isMarketingAssetId(req.params.id)) {
+        return res.status(404).json({ error: "Material not found" });
+      }
       const row = await getMarketingAsset(auth.workspaceUserId, req.params.id);
       if (!row || row.deletedAt || row.userId !== auth.workspaceUserId) {
         return res.status(404).json({ error: "Material not found" });
@@ -213,5 +240,27 @@ export function registerMarketingAssetRoutes(app: Express): void {
       console.error("[MarketingAssets] file failed:", error);
       res.status(404).json({ error: "Material not found" });
     }
+  });
+
+  app.get("/api/marketing-assets/:id", async (req: Request, res: Response) => {
+    try {
+      const auth = await requireMarketingAssetsAdmin(req, res);
+      if (!auth) return;
+      if (!isMarketingAssetId(req.params.id)) {
+        return res.status(404).json({ error: "Material not found" });
+      }
+      const row = await getMarketingAsset(auth.workspaceUserId, req.params.id);
+      if (!row || row.deletedAt || row.userId !== auth.workspaceUserId) {
+        return res.status(404).json({ error: "Material not found" });
+      }
+      res.json({ asset: publicAsset(toMarketingAssetView(row)) });
+    } catch (error) {
+      console.error("[MarketingAssets] get failed:", error);
+      res.status(404).json({ error: "Material not found" });
+    }
+  });
+
+  app.all("/api/marketing-assets/:id/*", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Material not found" });
   });
 }

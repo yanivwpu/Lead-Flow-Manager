@@ -8,6 +8,8 @@
 
 export const WEBCHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const WEBCHAT_IMAGE_MAX_PIXELS = 40_000_000;
+/** Longest allowed edge after EXIF orientation. */
+export const WEBCHAT_IMAGE_MAX_EDGE = 8_192;
 export const WEBCHAT_VISITOR_UPLOAD_LIMIT_PER_WINDOW = 12;
 export const WEBCHAT_VISITOR_UPLOAD_WINDOW_MS = 15 * 60 * 1000;
 export const WEBCHAT_MEDIA_GET_LIMIT_VISITOR = 240;

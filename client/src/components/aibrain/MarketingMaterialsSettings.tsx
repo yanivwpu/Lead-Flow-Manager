@@ -3,7 +3,7 @@
  * the Website Chat AI may send. Files stay on existing tenant object storage.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
@@ -64,6 +64,286 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+type AssetSaveState = "idle" | "saving" | "saved" | "error";
+
+type AssetDraft = {
+  displayName: string;
+  description: string;
+  language: string;
+  topicsText: string;
+  enabled: boolean;
+};
+
+function MarketingAssetRow({
+  asset,
+  onPatch,
+  onDelete,
+}: {
+  asset: MarketingAsset;
+  onPatch: (id: string, body: Record<string, unknown>) => Promise<void>;
+  onDelete: (id: string) => void;
+}) {
+  const confirmedRef = useRef<AssetDraft>({
+    displayName: asset.displayName,
+    description: asset.description || "",
+    language: asset.language,
+    topicsText: asset.topics.join(", "),
+    enabled: asset.enabled,
+  });
+  const dirtyRef = useRef<Record<string, unknown>>({});
+  const [displayName, setDisplayName] = useState(asset.displayName);
+  const [description, setDescription] = useState(asset.description || "");
+  const [language, setLanguage] = useState(asset.language);
+  const [topicsText, setTopicsText] = useState(asset.topics.join(", "));
+  const [enabled, setEnabled] = useState(asset.enabled);
+  const [saveState, setSaveState] = useState<AssetSaveState>("idle");
+
+  useEffect(() => {
+    if (Object.keys(dirtyRef.current).length > 0) return;
+    setDisplayName(asset.displayName);
+    setDescription(asset.description || "");
+    setLanguage(asset.language);
+    setTopicsText(asset.topics.join(", "));
+    setEnabled(asset.enabled);
+    confirmedRef.current = {
+      displayName: asset.displayName,
+      description: asset.description || "",
+      language: asset.language,
+      topicsText: asset.topics.join(", "),
+      enabled: asset.enabled,
+    };
+  }, [asset.displayName, asset.description, asset.language, asset.topics, asset.enabled]);
+
+  const restoreConfirmed = () => {
+    const confirmed = confirmedRef.current;
+    setDisplayName(confirmed.displayName);
+    setDescription(confirmed.description);
+    setLanguage(confirmed.language);
+    setTopicsText(confirmed.topicsText);
+    setEnabled(confirmed.enabled);
+    dirtyRef.current = {};
+  };
+
+  const persist = async () => {
+    const body = { ...dirtyRef.current };
+    if (Object.keys(body).length === 0) return;
+    setSaveState("saving");
+    try {
+      await onPatch(asset.id, body);
+      for (const key of Object.keys(body)) {
+        if (dirtyRef.current[key] === body[key]) delete dirtyRef.current[key];
+      }
+      confirmedRef.current = {
+        displayName: typeof body.displayName === "string" ? body.displayName : confirmedRef.current.displayName,
+        description:
+          body.description !== undefined
+            ? String(body.description ?? "")
+            : confirmedRef.current.description,
+        language: typeof body.language === "string" ? body.language : confirmedRef.current.language,
+        topicsText:
+          body.topics !== undefined ? String(body.topics ?? "") : confirmedRef.current.topicsText,
+        enabled: typeof body.enabled === "boolean" ? body.enabled : confirmedRef.current.enabled,
+      };
+      setSaveState("saved");
+    } catch {
+      restoreConfirmed();
+      setSaveState("error");
+    }
+  };
+
+  const onPatchRef = useRef(onPatch);
+  onPatchRef.current = onPatch;
+
+  useEffect(() => {
+    const flush = () => {
+      const body = { ...dirtyRef.current };
+      if (Object.keys(body).length === 0) return;
+      dirtyRef.current = {};
+      void onPatchRef.current(asset.id, body);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [asset.id]);
+
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
+  const queuePatch = (body: Record<string, unknown>) => {
+    dirtyRef.current = { ...dirtyRef.current, ...body };
+    void persistRef.current();
+  };
+
+  const queuePatchRef = useRef(queuePatch);
+  queuePatchRef.current = queuePatch;
+
+  useEffect(() => {
+    const nextName = displayName.trim();
+    const nextDesc = description.trim();
+    const timer = window.setTimeout(() => {
+      const body: Record<string, unknown> = {};
+      if (nextName && nextName !== confirmedRef.current.displayName) {
+        body.displayName = nextName;
+      }
+      if (nextDesc !== confirmedRef.current.description) {
+        body.description = nextDesc;
+      }
+      if (topicsText !== confirmedRef.current.topicsText) {
+        body.topics = topicsText;
+      }
+      if (Object.keys(body).length === 0) return;
+      queuePatchRef.current(body);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [displayName, description, topicsText]);
+
+  const saveName = (event?: { target: { value: string } }) => {
+    const next = (event?.target.value ?? displayName).trim();
+    if (!next) {
+      setDisplayName(confirmedRef.current.displayName);
+      return;
+    }
+    setDisplayName(next);
+    if (next !== confirmedRef.current.displayName) {
+      queuePatch({ displayName: next });
+    }
+  };
+
+  const saveDescription = (event?: { target: { value: string } }) => {
+    const next = (event?.target.value ?? description).trim();
+    setDescription(next);
+    if (next !== confirmedRef.current.description) {
+      queuePatch({ description: next });
+    }
+  };
+
+  const saveTopics = (event?: { target: { value: string } }) => {
+    const next = event?.target.value ?? topicsText;
+    setTopicsText(next);
+    if (next !== confirmedRef.current.topicsText) {
+      queuePatch({ topics: next });
+    }
+  };
+
+  return (
+    <li
+      className={cn(
+        "rounded-xl border border-slate-200 p-3 sm:p-4",
+        !enabled && "opacity-70",
+      )}
+      data-testid={`marketing-asset-${asset.id}`}
+    >
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+          {asset.kind === "image" ? (
+            <img src={asset.fileUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <FileText className="h-6 w-6 text-rose-600" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <Input
+            value={displayName}
+            aria-label="Display name"
+            data-testid={`input-marketing-rename-${asset.id}`}
+            onChange={(e) => setDisplayName(e.target.value)}
+            onBlur={saveName}
+          />
+          <Textarea
+            value={description}
+            aria-label="Description"
+            className="min-h-[56px]"
+            data-testid={`input-marketing-describe-${asset.id}`}
+            onChange={(e) => setDescription(e.target.value)}
+            onBlur={saveDescription}
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Select
+              value={language}
+              onValueChange={(value) => {
+                setLanguage(value);
+                queuePatch({ language: value });
+              }}
+            >
+              <SelectTrigger data-testid={`select-marketing-lang-${asset.id}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={topicsText}
+              aria-label="Topics"
+              placeholder="topics, tags"
+              data-testid={`input-marketing-tags-${asset.id}`}
+              onChange={(e) => setTopicsText(e.target.value)}
+              onBlur={saveTopics}
+            />
+          </div>
+          <p
+            className="text-[11px] text-slate-500"
+            data-testid={`text-marketing-save-${asset.id}`}
+            aria-live="polite"
+          >
+            {saveState === "saving"
+              ? "Saving"
+              : saveState === "saved"
+                ? "Saved"
+                : saveState === "error"
+                  ? "Couldn't save"
+                  : "\u00a0"}
+          </p>
+          <p className="text-xs text-slate-500">
+            {asset.kind === "image" ? (
+              <ImageIcon className="mr-1 inline h-3 w-3" />
+            ) : (
+              <FileText className="mr-1 inline h-3 w-3" />
+            )}
+            {asset.originalFilename} · {formatSize(asset.size)}
+          </p>
+          <p className="text-[11px] text-slate-500" data-testid={`text-marketing-history-${asset.id}`}>
+            Disabling or deleting stops future AI sends. Past Website Chat messages keep their file.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`enabled-${asset.id}`} className="text-xs text-slate-600">
+              Enabled
+            </Label>
+            <Switch
+              id={`enabled-${asset.id}`}
+              checked={enabled}
+              onCheckedChange={(next) => {
+                setEnabled(next);
+                queuePatch({ enabled: next });
+              }}
+              data-testid={`switch-marketing-enabled-${asset.id}`}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-red-600 hover:text-red-700"
+            onClick={() => onDelete(asset.id)}
+            data-testid={`btn-marketing-delete-${asset.id}`}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
+      </div>
+    </li>
+  );
 }
 
 export function MarketingMaterialsSettings() {
@@ -248,119 +528,14 @@ export function MarketingMaterialsSettings() {
         ) : (
           <ul className="space-y-3">
             {assets.map((asset) => (
-              <li
+              <MarketingAssetRow
                 key={asset.id}
-                className={cn(
-                  "rounded-xl border border-slate-200 p-3 sm:p-4",
-                  !asset.enabled && "opacity-70",
-                )}
-                data-testid={`marketing-asset-${asset.id}`}
-              >
-                <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
-                    {asset.kind === "image" ? (
-                      <img
-                        src={asset.fileUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <FileText className="h-6 w-6 text-rose-600" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Input
-                      defaultValue={asset.displayName}
-                      aria-label="Display name"
-                      data-testid={`input-marketing-rename-${asset.id}`}
-                      onBlur={(e) => {
-                        const next = e.target.value.trim();
-                        if (next && next !== asset.displayName) {
-                          patchMutation.mutate({ id: asset.id, body: { displayName: next } });
-                        }
-                      }}
-                    />
-                    <Textarea
-                      defaultValue={asset.description || ""}
-                      aria-label="Description"
-                      className="min-h-[56px]"
-                      data-testid={`input-marketing-describe-${asset.id}`}
-                      onBlur={(e) => {
-                        const next = e.target.value.trim();
-                        if (next !== (asset.description || "")) {
-                          patchMutation.mutate({ id: asset.id, body: { description: next } });
-                        }
-                      }}
-                    />
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Select
-                        value={asset.language}
-                        onValueChange={(value) =>
-                          patchMutation.mutate({ id: asset.id, body: { language: value } })
-                        }
-                      >
-                        <SelectTrigger data-testid={`select-marketing-lang-${asset.id}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LANGUAGE_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        defaultValue={asset.topics.join(", ")}
-                        aria-label="Topics"
-                        placeholder="topics, tags"
-                        data-testid={`input-marketing-tags-${asset.id}`}
-                        onBlur={(e) => {
-                          const next = e.target.value;
-                          patchMutation.mutate({ id: asset.id, body: { topics: next } });
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      {asset.kind === "image" ? (
-                        <ImageIcon className="mr-1 inline h-3 w-3" />
-                      ) : (
-                        <FileText className="mr-1 inline h-3 w-3" />
-                      )}
-                      {asset.originalFilename} · {formatSize(asset.size)}
-                    </p>
-                    <p className="text-[11px] text-slate-500" data-testid={`text-marketing-history-${asset.id}`}>
-                      Disabling or deleting stops future AI sends. Past Website Chat messages keep their file.
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={`enabled-${asset.id}`} className="text-xs text-slate-600">
-                        Enabled
-                      </Label>
-                      <Switch
-                        id={`enabled-${asset.id}`}
-                        checked={asset.enabled}
-                        onCheckedChange={(enabled) =>
-                          patchMutation.mutate({ id: asset.id, body: { enabled } })
-                        }
-                        data-testid={`switch-marketing-enabled-${asset.id}`}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                      onClick={() => setDeleteId(asset.id)}
-                      data-testid={`btn-marketing-delete-${asset.id}`}
-                    >
-                      <Trash2 className="mr-1 h-4 w-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              </li>
+                asset={asset}
+                onPatch={async (id, body) => {
+                  await patchMutation.mutateAsync({ id, body });
+                }}
+                onDelete={setDeleteId}
+              />
             ))}
           </ul>
         )}

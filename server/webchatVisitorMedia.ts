@@ -7,6 +7,7 @@ import crypto from "crypto";
 import sharp from "sharp";
 import {
   inspectWebchatImageBuffer,
+  WEBCHAT_IMAGE_MAX_EDGE,
   WEBCHAT_IMAGE_MAX_PIXELS,
   webchatVisitorMediaPath,
   type WebchatSafeImageMime,
@@ -195,24 +196,45 @@ export function buildSignedWebchatVisitorMediaUrl(params: {
   return `${path}?exp=${expiresUnixSec}&sig=${encodeURIComponent(signature)}`;
 }
 
+function imageDecodeFailureReason(error: unknown): "too_large" | "undecodable" {
+  const msg = error instanceof Error ? error.message : String(error || "");
+  if (/pixel limit|exceeds pixel|too large|memory limit/i.test(msg)) return "too_large";
+  return "undecodable";
+}
+
 export async function sanitizeWebchatImageBuffer(
   buf: Buffer,
   mime: WebchatSafeImageMime,
-): Promise<{ buffer: Buffer; mime: WebchatSafeImageMime } | null> {
+): Promise<
+  | { ok: true; buffer: Buffer; mime: WebchatSafeImageMime }
+  | { ok: false; reason: "too_large" | "undecodable" }
+> {
   try {
-    const pipeline = sharp(buf, {
+    const image = sharp(buf, {
       failOn: "error",
       limitInputPixels: WEBCHAT_IMAGE_MAX_PIXELS,
-    }).rotate();
+      sequentialRead: true,
+    });
+    const meta = await image.metadata();
+    const width = meta.width || 0;
+    const height = meta.height || 0;
+    if (!width || !height) return { ok: false, reason: "undecodable" };
+    if (width > WEBCHAT_IMAGE_MAX_EDGE || height > WEBCHAT_IMAGE_MAX_EDGE) {
+      return { ok: false, reason: "too_large" };
+    }
+    if (width * height > WEBCHAT_IMAGE_MAX_PIXELS) {
+      return { ok: false, reason: "too_large" };
+    }
+    const pipeline = image.rotate();
     if (mime === "image/jpeg") {
-      return { buffer: await pipeline.jpeg({ quality: 88, mozjpeg: true }).toBuffer(), mime };
+      return { ok: true, buffer: await pipeline.jpeg({ quality: 88, mozjpeg: true }).toBuffer(), mime };
     }
     if (mime === "image/png") {
-      return { buffer: await pipeline.png({ compressionLevel: 9 }).toBuffer(), mime };
+      return { ok: true, buffer: await pipeline.png({ compressionLevel: 9 }).toBuffer(), mime };
     }
-    return { buffer: await pipeline.webp({ quality: 88 }).toBuffer(), mime };
-  } catch {
-    return null;
+    return { ok: true, buffer: await pipeline.webp({ quality: 88 }).toBuffer(), mime };
+  } catch (error) {
+    return { ok: false, reason: imageDecodeFailureReason(error) };
   }
 }
 
@@ -226,7 +248,7 @@ export async function prepareWebchatVisitorImage(params: {
   const inspected = inspectWebchatImageBuffer(params.buffer, params.declaredMime);
   if (!inspected.ok) return { ok: false, reason: inspected.reason };
   const sanitized = await sanitizeWebchatImageBuffer(params.buffer, inspected.mime);
-  if (!sanitized) return { ok: false, reason: "unsafe_type" };
+  if (!sanitized.ok) return { ok: false, reason: sanitized.reason };
   const again = inspectWebchatImageBuffer(sanitized.buffer, sanitized.mime);
   if (!again.ok) return { ok: false, reason: again.reason };
   return { ok: true, buffer: sanitized.buffer, mime: sanitized.mime };
@@ -253,7 +275,9 @@ export async function webchatVisitorMediaIsAvailable(params: {
     return inspectWebchatPdfBuffer(stored.buffer, stored.mimeType).ok;
   }
   const inspected = inspectWebchatImageBuffer(stored.buffer, stored.mimeType);
-  return inspected.ok;
+  if (!inspected.ok) return false;
+  const decoded = await sanitizeWebchatImageBuffer(stored.buffer, inspected.mime);
+  return decoded.ok;
 }
 
 export async function loadWebchatVisitorImageBytes(params: {

@@ -11,7 +11,7 @@ import {
 } from "@shared/schema";
 import {
   MARKETING_ASSET_CATALOG_MAX,
-  parseMarketingAssetWrite,
+  parseMarketingAssetPatch,
   rankMarketingAssetCatalog,
   sanitizeMarketingFilename,
   toMarketingAssetCatalogItem,
@@ -154,23 +154,17 @@ export async function updateMarketingAsset(
   if (!existing || existing.deletedAt) {
     return { ok: false, status: 404, error: "Material not found" };
   }
-  const parsed = parseMarketingAssetWrite({
-    displayName: existing.displayName,
-    description: existing.description,
-    language: existing.language,
-    topics: existing.topics,
-    enabled: existing.enabled,
-    ...(raw && typeof raw === "object" ? raw : {}),
-  });
+  const parsed = parseMarketingAssetPatch(raw);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   const [row] = await db
     .update(workspaceMarketingAssets)
     .set({
-      displayName: parsed.data.displayName,
-      description: parsed.data.description,
-      language: parsed.data.language,
-      topics: parsed.data.topics,
-      enabled: parsed.data.enabled,
+      displayName: parsed.patch.displayName ?? existing.displayName,
+      description:
+        parsed.patch.description !== undefined ? parsed.patch.description : existing.description,
+      language: parsed.patch.language ?? existing.language,
+      topics: parsed.patch.topics ?? existing.topics,
+      enabled: parsed.patch.enabled ?? existing.enabled,
       updatedAt: new Date(),
     })
     .where(

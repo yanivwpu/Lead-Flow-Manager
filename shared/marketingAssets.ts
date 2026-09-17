@@ -160,6 +160,36 @@ export function parseMarketingAssetWrite(raw: unknown):
   };
 }
 
+/** Partial PATCH — only provided fields. Empty display names are rejected. */
+export function parseMarketingAssetPatch(raw: unknown):
+  | { ok: true; patch: Partial<MarketingAssetWrite> }
+  | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "Invalid update" };
+  const input = raw as Record<string, unknown>;
+  const patch: Partial<MarketingAssetWrite> = {};
+  if ("displayName" in input || "name" in input) {
+    const displayName = sanitizeMarketingDisplayName(input.displayName ?? input.name);
+    if (!displayName) return { ok: false, error: "Display name is required" };
+    patch.displayName = displayName;
+  }
+  if ("description" in input) {
+    patch.description = sanitizeMarketingDescription(input.description);
+  }
+  if ("language" in input) {
+    const language = normalizeMarketingAssetLanguage(input.language);
+    if (!language) return { ok: false, error: "Invalid language" };
+    patch.language = language;
+  }
+  if ("topics" in input || "tags" in input) {
+    patch.topics = sanitizeMarketingTopics(input.topics ?? input.tags);
+  }
+  if ("enabled" in input) {
+    patch.enabled = Boolean(input.enabled);
+  }
+  if (Object.keys(patch).length === 0) return { ok: false, error: "No changes" };
+  return { ok: true, patch };
+}
+
 export function inspectMarketingAssetBuffer(
   buf: Uint8Array,
   declaredMime?: string | null,
@@ -222,6 +252,9 @@ export function toMarketingAssetCatalogItem(input: {
 const FILE_REQUEST_RE =
   /\b(flyer|flyers|brochure|brochures|pdf|pdfs|document|documents|file|files|image|images|photo|photos|picture|pictures|catalog|catalogue|price\s*list|pricing\s*sheet|promo|promotion|material|materials|attachment|attachments|folleto|folletos|archivo|archivos|imagen|imagenes|imágenes|documento|documentos|חוברת|קובץ|קבצים|תמונה|תמונות)\b/i;
 
+const FILE_TRANSFER_RE =
+  /\b(?:send|show|share|attach|download|forward|email|mail|text\s+me|give\s+me|pass\s+me|get\s+me)\b|\b(?:env[ií]a(?:r|me)?|manda(?:r|me)?|muestra(?:me)?|mostrar|descarga(?:r)?|adjunta(?:r)?|comparte(?:r)?)\b|שלח|תשלח|תשלחי|הצג|תראה|הורד|תוריד|צרף/i;
+
 function normalizeMatchText(value: unknown): string {
   return String(value || "")
     .toLowerCase()
@@ -233,6 +266,33 @@ function normalizeMatchText(value: unknown): string {
 
 export function inboundLooksLikeMarketingMaterialRequest(text: string): boolean {
   return FILE_REQUEST_RE.test(String(text || ""));
+}
+
+/** Transfer verb + file/brochure noun. "What are your prices?" is not this. */
+export function inboundLooksLikeExplicitApprovedFileRequest(text: string): boolean {
+  const raw = String(text || "");
+  return FILE_TRANSFER_RE.test(raw) && FILE_REQUEST_RE.test(raw);
+}
+
+export function pickApprovedMarketingAssetForInbound<T extends MarketingAssetCatalogItem>(
+  inboundText: string,
+  items: T[],
+): T | null {
+  if (!inboundLooksLikeExplicitApprovedFileRequest(inboundText)) return null;
+  const scored = items
+    .map((item) => ({ item, score: scoreMarketingAssetForInbound(inboundText, item) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!scored.length) return null;
+  const preferDocument =
+    /\b(pdf|pdfs|document|documents|brochure|brochures|flyer|flyers|folleto|folletos|archivo|archivos|documento|documentos|חוברת|קובץ|קבצים|מסמך)\b/i.test(
+      inboundText,
+    );
+  if (preferDocument) {
+    const doc = scored.find((row) => row.item.kind === "document");
+    if (doc) return doc.item;
+  }
+  return scored[0]!.item;
 }
 
 export function marketingAssetMatchesVisitorText(
@@ -388,5 +448,8 @@ export function marketingAssetUploadErrorMessage(reason: string, maxBytes?: numb
   }
   if (reason === "empty") return "No file provided";
   if (reason === "mismatch") return "File type does not match the uploaded contents.";
+  if (reason === "undecodable") {
+    return "This image could not be read. Upload a valid JPG, PNG, or WebP.";
+  }
   return "Only JPG, PNG, WebP, and PDF files are allowed.";
 }

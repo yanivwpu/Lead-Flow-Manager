@@ -10,6 +10,7 @@ import sharp from "sharp";
 import {
   inspectWebchatImageBuffer,
   WEBCHAT_IMAGE_MAX_BYTES,
+  WEBCHAT_IMAGE_MAX_EDGE,
   webchatVisitorMediaPath,
 } from "../shared/webchatImagePolicy";
 import {
@@ -30,6 +31,7 @@ import {
 import {
   buildSignedWebchatVisitorMediaUrl,
   classifyWebchatMediaError,
+  prepareWebchatVisitorImage,
   signWebchatVisitorMedia,
   verifyWebchatVisitorMedia,
   webchatInboundMediaErrorLog,
@@ -301,6 +303,63 @@ test("invalid oversized and disguised files are rejected by content inspection",
   assert.equal(inspectWebchatImageBuffer(huge).ok, false);
   const pdfBytes = Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
   assert.equal(inspectWebchatImageBuffer(pdfBytes).ok, false);
+});
+
+test("server-side decode rejects truncated, corrupt, and oversized images", async () => {
+  const jpeg = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: { r: 12, g: 80, b: 40 } },
+  })
+    .jpeg()
+    .toBuffer();
+  const png = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: { r: 200, g: 10, b: 10 } },
+  })
+    .png()
+    .toBuffer();
+  const webp = await sharp({
+    create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 10, b: 200 } },
+  })
+    .webp()
+    .toBuffer();
+
+  const truncatedJpeg = jpeg.subarray(0, 22);
+  const truncatedPng = png.subarray(0, 24);
+  const truncatedWebp = webp.subarray(0, 20);
+  const corruptJpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32, 0x00)]);
+  const corruptPng = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(24, 0x00),
+  ]);
+  const corruptWebp = Buffer.concat([
+    Buffer.from("RIFF"),
+    Buffer.alloc(4, 0x10),
+    Buffer.from("WEBP"),
+    Buffer.alloc(16, 0x00),
+  ]);
+
+  assert.equal(inspectWebchatImageBuffer(truncatedJpeg, "image/jpeg").ok, true);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: Buffer.from(truncatedJpeg), declaredMime: "image/jpeg" })).ok, false);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: Buffer.from(truncatedPng), declaredMime: "image/png" })).ok, false);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: Buffer.from(truncatedWebp), declaredMime: "image/webp" })).ok, false);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: corruptJpeg, declaredMime: "image/jpeg" })).ok, false);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: corruptPng, declaredMime: "image/png" })).ok, false);
+  assert.equal((await prepareWebchatVisitorImage({ buffer: corruptWebp, declaredMime: "image/webp" })).ok, false);
+
+  const valid = await prepareWebchatVisitorImage({ buffer: jpeg, declaredMime: "image/jpeg" });
+  assert.equal(valid.ok, true);
+
+  const oversized = await sharp({
+    create: { width: WEBCHAT_IMAGE_MAX_EDGE + 1, height: 8, channels: 3, background: "red" },
+  })
+    .jpeg()
+    .toBuffer();
+  const over = await prepareWebchatVisitorImage({ buffer: oversized, declaredMime: "image/jpeg" });
+  assert.equal(over.ok, false);
+  if (!over.ok) assert.equal(over.reason, "too_large");
+
+  const routes = read("server/marketingAssets/routes.ts");
+  assert.match(routes, /prepareWebchatVisitorImage/);
+  assert.match(routes, /decoded\.ok/);
 });
 
 test("webchat image policy is isomorphic and never references Node Buffer", () => {

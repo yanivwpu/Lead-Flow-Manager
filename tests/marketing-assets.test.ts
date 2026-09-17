@@ -12,9 +12,12 @@ import {
   extractEmbeddedApprovedAssetId,
   inspectMarketingAssetBuffer,
   inboundLooksLikeMarketingMaterialRequest,
+  inboundLooksLikeExplicitApprovedFileRequest,
+  pickApprovedMarketingAssetForInbound,
   isMarketingAssetId,
   marketingAssetMatchesLocale,
   marketingAssetUploadErrorMessage,
+  parseMarketingAssetPatch,
   parseMarketingAssetWrite,
   parseSendApprovedAssetId,
   sanitizeMarketingFilename,
@@ -308,6 +311,8 @@ test("reuses existing storage and never duplicates an upload system", () => {
   assert.match(routes, /uploadOutboundUserMedia/);
   assert.match(routes, /originChannel: "marketing-assets"/);
   assert.match(routes, /inspectMarketingAssetBuffer/);
+  assert.match(routes, /prepareWebchatVisitorImage/);
+  assert.match(routes, /persistBuffer/);
   const schema = read("shared/schema.ts");
   assert.match(schema, /workspaceMarketingAssets/);
   assert.match(schema, /workspace_marketing_assets/);
@@ -488,4 +493,88 @@ test("catalog ranks a matching older asset before the 12-item prompt cap", () =>
   assert.match(store, /inboundText/);
   const ai = read("server/aiService.ts");
   assert.match(ai, /lastUserMessage/);
+});
+
+test("partial PATCH persists name and description without requiring a full rewrite", () => {
+  const nameOnly = parseMarketingAssetPatch({ displayName: "  Listing photo PNG v2  " });
+  assert.equal(nameOnly.ok, true);
+  if (nameOnly.ok) {
+    assert.equal(nameOnly.patch.displayName, "Listing photo PNG v2");
+    assert.equal(nameOnly.patch.description, undefined);
+  }
+  const descOnly = parseMarketingAssetPatch({ description: "PNG listing photo, renamed" });
+  assert.equal(descOnly.ok, true);
+  if (descOnly.ok) {
+    assert.equal(descOnly.patch.description, "PNG listing photo, renamed");
+    assert.equal(descOnly.patch.displayName, undefined);
+  }
+  assert.equal(parseMarketingAssetPatch({ displayName: "   " }).ok, false);
+  const store = read("server/marketingAssets/assetStore.ts");
+  assert.match(store, /parseMarketingAssetPatch/);
+  assert.doesNotMatch(store, /parseMarketingAssetWrite\(\{/);
+  const ui = read("client/src/components/aibrain/MarketingMaterialsSettings.tsx");
+  assert.match(ui, /text-marketing-save-/);
+  assert.match(ui, /Saving/);
+  assert.match(ui, /Saved/);
+  assert.match(ui, /Couldn't save/);
+  assert.match(ui, /restoreConfirmed/);
+  assert.match(ui, /pagehide/);
+  assert.match(ui, /value=\{displayName\}/);
+  assert.match(ui, /value=\{description\}/);
+  assert.match(ui, /event\?\.target\.value/);
+  assert.match(ui, /setTimeout/);
+  assert.doesNotMatch(ui, /defaultValue=\{asset\.displayName\}/);
+});
+
+test("explicit document requests prefer an approved PDF over pricing_question text", () => {
+  const pricingPdf = toMarketingAssetCatalogItem({
+    id: EN_ID,
+    displayName: "Pricing PDF",
+    language: "all",
+    kind: "document",
+    topics: ["pricing", "pdf"],
+  })!;
+  const summer = toMarketingAssetCatalogItem({
+    id: ES_ID,
+    displayName: "Summer brochure",
+    language: "all",
+    kind: "image",
+    topics: ["brochure", "summer"],
+  })!;
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("What are your prices?"), false);
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Please send the pricing PDF"), true);
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("Envía el PDF de precios"), true);
+  assert.equal(inboundLooksLikeExplicitApprovedFileRequest("שלח את קובץ ה-PDF של המחירים"), true);
+  assert.equal(
+    pickApprovedMarketingAssetForInbound("Please send the pricing PDF", [summer, pricingPdf])?.id,
+    EN_ID,
+  );
+  assert.equal(
+    pickApprovedMarketingAssetForInbound("Envía el PDF de precios", [summer, pricingPdf])?.id,
+    EN_ID,
+  );
+  assert.equal(
+    pickApprovedMarketingAssetForInbound("שלח את קובץ ה-PDF של המחירים", [summer, pricingPdf])?.id,
+    EN_ID,
+  );
+  assert.equal(pickApprovedMarketingAssetForInbound("What are your prices?", [summer, pricingPdf]), null);
+  assert.equal(
+    pickApprovedMarketingAssetForInbound("Please send the pricing PDF", [summer])?.id,
+    undefined,
+  );
+  const ai = read("server/aiService.ts");
+  assert.match(ai, /pickApprovedMarketingAssetForInbound/);
+  assert.match(ai, /pricingCompareTurn && !matchedExplicitAsset/);
+  assert.match(ai, /sendApprovedAssetId \|\| matchedExplicitAsset\?\.id/);
+});
+
+test("GET by id returns JSON and unsupported file probes stay generic 404", () => {
+  const routes = read("server/marketingAssets/routes.ts");
+  assert.match(routes, /app\.get\("\/api\/marketing-assets\/:id"/);
+  assert.match(routes, /app\.get\("\/api\/marketing-assets\/:id\/file"/);
+  assert.match(routes, /app\.all\("\/api\/marketing-assets\/:id\/\*"/);
+  assert.match(routes, /isMarketingAssetId\(req\.params\.id\)/);
+  assert.doesNotMatch(routes, /Another workspace|tenant B|does not belong/);
+  const store = read("server/marketingAssets/assetStore.ts");
+  assert.match(store, /status: 404, error: "Material not found"/);
 });
