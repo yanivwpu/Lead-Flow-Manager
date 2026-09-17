@@ -133,6 +133,13 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
     windowMs: 60 * 60 * 1000,
   },
   {
+    id: "marketing-assets-write",
+    match: (path, method) =>
+      WRITE_METHODS.has(method.toUpperCase()) && path.startsWith("/api/marketing-assets"),
+    limit: 30,
+    windowMs: 15 * 60 * 1000,
+  },
+  {
     id: "campaigns",
     match: (path) =>
       path.startsWith("/api/campaign-enrollments") || path.startsWith("/api/preset-campaigns"),
@@ -332,6 +339,7 @@ export function listProtectedRateLimitPatterns(): string[] {
     "/widget.js",
     "/api/ai/*",
     "POST /api/templates/send",
+    "POST|PATCH|DELETE /api/marketing-assets*",
     "/api/campaign-enrollments/*",
     "/api/preset-campaigns/*",
     "/api/integrations/*/start",

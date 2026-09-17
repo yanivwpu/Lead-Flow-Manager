@@ -10,6 +10,7 @@ import {
   type WorkspaceMarketingAssetRow,
 } from "@shared/schema";
 import {
+  MARKETING_ASSET_CATALOG_MAX,
   parseMarketingAssetWrite,
   sanitizeMarketingFilename,
   toMarketingAssetCatalogItem,
@@ -86,6 +87,7 @@ export async function listEnabledMarketingAssetCatalog(
       kind: row.kind,
     });
     if (item) out.push(item);
+    if (out.length >= MARKETING_ASSET_CATALOG_MAX) break;
   }
   return out;
 }

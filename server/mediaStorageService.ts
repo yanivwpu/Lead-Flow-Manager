@@ -740,3 +740,47 @@ export async function readOwnedStoredMedia(params: {
   if (key.startsWith(tenantMediaPrefix(userId)) && r2Configured()) return null;
   return readFallbackObject(key);
 }
+
+/** Delete a tenant-owned stored object. Never deletes another workspace's key. */
+export async function deleteOwnedStoredMedia(params: {
+  userId: string;
+  mediaUrl?: string | null;
+  mediaStorageKey?: string | null;
+}): Promise<boolean> {
+  const userId = String(params.userId || "").trim();
+  if (!userId) return false;
+  let key = String(params.mediaStorageKey || "").trim().replace(/^\/+/, "");
+  if (key && !isOwnedStorageKey(userId, key)) return false;
+  if (!key) {
+    const inferred = inferOwnedStorageKey({ userId, mediaUrl: params.mediaUrl });
+    if (!inferred || !isOwnedStorageKey(userId, inferred)) return false;
+    key = inferred;
+  }
+  if (r2Configured() && key.startsWith(tenantMediaPrefix(userId))) {
+    try {
+      await r2Client().send(
+        new DeleteObjectCommand({
+          Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+          Key: key,
+        }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (key.startsWith("uploads/")) {
+    const filename = path.basename(key);
+    if (!filename || filename.includes("..")) return false;
+    const filePath = path.join(process.cwd(), "uploads", filename);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}

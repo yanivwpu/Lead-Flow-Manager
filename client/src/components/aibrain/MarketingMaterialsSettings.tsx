@@ -151,8 +151,8 @@ export function MarketingMaterialsSettings() {
     >
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold text-slate-900">Marketing Materials</CardTitle>
-        <CardDescription className="text-slate-600">
-          Upload approved flyers, brochures, images, and PDFs. Website Chat AI can send enabled files — it cannot invent a URL.
+        <CardDescription className="text-slate-600" data-testid="text-marketing-send-modes">
+          Upload approved flyers, brochures, images, and PDFs. In Auto mode, Website Chat AI may send an enabled file only when a visitor asks for it. Suggest and Manual never send a file automatically — review the draft in Inbox and send it yourself if you want.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -328,6 +328,9 @@ export function MarketingMaterialsSettings() {
                         <FileText className="mr-1 inline h-3 w-3" />
                       )}
                       {asset.originalFilename} · {formatSize(asset.size)}
+                    </p>
+                    <p className="text-[11px] text-slate-500" data-testid={`text-marketing-history-${asset.id}`}>
+                      Disabling or deleting stops future AI sends. Past Website Chat messages keep their file.
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center justify-between gap-3 sm:flex-col sm:items-end">

@@ -1,5 +1,13 @@
 -- Approved Marketing Materials library (Website Chat AI send, tenant-owned).
 -- Soft-delete keeps historical conversation media intact after an asset is removed.
+--
+-- Idempotent: CREATE TABLE/INDEX IF NOT EXISTS. Safe to re-run on an existing Neon DB.
+-- No DROP/ALTER/TRUNCATE. Existing message media columns are untouched.
+--
+-- Rollback: do not DROP this table in production. Disable or soft-delete rows instead.
+-- DROP TABLE workspace_marketing_assets would remove library metadata only; conversation
+-- messages keep media_url / media_storage_key, so visitor history continues to work.
+-- R2 objects are intentionally retained so historical transcripts keep loading.
 
 CREATE TABLE IF NOT EXISTS workspace_marketing_assets (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),

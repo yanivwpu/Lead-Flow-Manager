@@ -777,6 +777,10 @@ export async function maybeRunWebchatServerAi(
           holdReason: reasonCode,
           inboundMessageId: params.inboundMessageId,
           conversationId: conv.id,
+          proposedApprovedAssetId: suggestion.sendApprovedAssetId || null,
+          holdNote: suggestion.sendApprovedAssetId
+            ? "AI proposed a marketing material. It was not sent. Send it from Inbox if you want."
+            : undefined,
         },
         actorType: "ai",
       });
@@ -880,6 +884,8 @@ export async function maybeRunWebchatServerAi(
       assetId: approvedAssetId,
       caption: text,
       locale: generateLocale,
+      inboundText: params.inboundText,
+      greetingTurn: isCasualWebchatGreeting(params.inboundText),
       generatedBy: "ai_brain",
       generationMeta: {
         decision,
@@ -891,7 +897,7 @@ export async function maybeRunWebchatServerAi(
         approvedAssetId,
       },
     });
-    if (assetSend.ok || assetSend.reason === "skip_guard:duplicate") {
+    if (assetSend.ok) {
       const afterSend = (await storage.getConversation(conv.id)) || conv;
       const afterControl = readConversationAiControl(afterSend.aiControl);
       const completedLease = completeWebchatGenerationLease(afterControl, leaseId);
@@ -913,6 +919,39 @@ export async function maybeRunWebchatServerAi(
       });
       return { decision: "send_auto", sent: true };
     }
+    if (assetSend.reason === "skip_guard:duplicate") {
+      const recent = await storage.getMessages(conv.id, 40);
+      const alreadySent = inboundTurnAlreadyReplied(recent, params.inboundMessageId) &&
+        recent.some(
+          (m) =>
+            m.direction === "outbound" &&
+            (m.status === "sent" || m.status === "delivered") &&
+            (m.generationMeta as { inboundMessageId?: string } | null)?.inboundMessageId ===
+              params.inboundMessageId,
+        );
+      if (alreadySent) {
+        const afterSend = (await storage.getConversation(conv.id)) || conv;
+        const afterControl = readConversationAiControl(afterSend.aiControl);
+        await storage.updateConversation(conv.id, {
+          aiControl: completeWebchatGenerationLease(afterControl, leaseId),
+        });
+        report("send_auto", {
+          sent: true,
+          stage: "outbound",
+          outboundPersisted: true,
+          publicPollingEligible: true,
+        });
+        return { decision: "send_auto", sent: true };
+      }
+      await persistDraft("skip_guard:duplicate");
+      report("skip_guard:duplicate", {
+        hasDraft: true,
+        stage: "outbound",
+        outboundPersisted: false,
+        publicPollingEligible: false,
+      });
+      return { decision: "skip_guard:duplicate", sent: false };
+    }
     if (assetSend.reason === "send_failed" || assetSend.reason.startsWith("skip_guard:")) {
       await persistDraft(assetSend.reason === "send_failed" ? "send_failed" : assetSend.reason);
       report(assetSend.reason, {
@@ -923,7 +962,8 @@ export async function maybeRunWebchatServerAi(
       });
       return { decision: assetSend.reason, sent: false };
     }
-    // Disabled, deleted, locale mismatch, or invented id: answer in text only.
+    // Disabled, deleted, locale mismatch, invented id, greeting, or not relevant:
+    // answer in text only. Media unavailable also falls through so the visitor is not silent.
   }
   const guarded = await withAutomationSendGuard(
     {
@@ -940,6 +980,7 @@ export async function maybeRunWebchatServerAi(
         contactId: contact.id,
         content: text,
         forceChannel: "webchat",
+        suppressFallback: true,
         generatedBy: "ai_brain",
         generationMeta: {
           decision,

@@ -11,9 +11,9 @@ import {
   parseMarketingAssetWrite,
   sanitizeMarketingFilename,
 } from "@shared/marketingAssets";
-import { WEBCHAT_PDF_MAX_BYTES } from "@shared/webchatDocumentPolicy";
+import { WEBCHAT_PDF_MAX_BYTES, webchatMediaDeliveryHeaders } from "@shared/webchatDocumentPolicy";
 import { WEBCHAT_IMAGE_MAX_BYTES } from "@shared/webchatImagePolicy";
-import { uploadOutboundUserMedia, readOwnedStoredMedia } from "../mediaStorageService";
+import { uploadOutboundUserMedia, readOwnedStoredMedia, deleteOwnedStoredMedia } from "../mediaStorageService";
 import { requireMarketingAssetsAdmin } from "./assetAccess";
 import {
   createMarketingAsset,
@@ -111,27 +111,39 @@ export function registerMarketingAssetRoutes(app: Express): void {
         if (!meta.ok) {
           return res.status(400).json({ error: meta.error });
         }
-        const uploaded = await uploadOutboundUserMedia({
-          userId: auth.workspaceUserId,
-          buffer: file.buffer,
-          contentType: inspected.mime,
-          originChannel: "marketing-assets",
-        });
-        const row = await createMarketingAsset({
-          userId: auth.workspaceUserId,
-          displayName: meta.data.displayName,
-          description: meta.data.description,
-          language: meta.data.language,
-          topics: meta.data.topics,
-          enabled: meta.data.enabled,
-          kind: inspected.kind,
-          mimeType: inspected.mime,
-          originalFilename: sanitizeMarketingFilename(file.originalname, inspected.mime),
-          mediaUrl: uploaded.mediaUrl,
-          mediaStorageKey: uploaded.mediaStorageKey,
-          mediaSize: file.buffer.length,
-        });
-        res.status(201).json({ asset: publicAsset(toMarketingAssetView(row)) });
+        let uploaded: { mediaUrl: string; mediaStorageKey: string } | null = null;
+        try {
+          uploaded = await uploadOutboundUserMedia({
+            userId: auth.workspaceUserId,
+            buffer: file.buffer,
+            contentType: inspected.mime,
+            originChannel: "marketing-assets",
+          });
+          const row = await createMarketingAsset({
+            userId: auth.workspaceUserId,
+            displayName: meta.data.displayName,
+            description: meta.data.description,
+            language: meta.data.language,
+            topics: meta.data.topics,
+            enabled: meta.data.enabled,
+            kind: inspected.kind,
+            mimeType: inspected.mime,
+            originalFilename: sanitizeMarketingFilename(file.originalname, inspected.mime),
+            mediaUrl: uploaded.mediaUrl,
+            mediaStorageKey: uploaded.mediaStorageKey,
+            mediaSize: file.buffer.length,
+          });
+          res.status(201).json({ asset: publicAsset(toMarketingAssetView(row)) });
+        } catch (error) {
+          if (uploaded) {
+            await deleteOwnedStoredMedia({
+              userId: auth.workspaceUserId,
+              mediaUrl: uploaded.mediaUrl,
+              mediaStorageKey: uploaded.mediaStorageKey,
+            }).catch(() => false);
+          }
+          throw error;
+        }
       } catch (error) {
         console.error("[MarketingAssets] upload failed:", error);
         res.status(500).json({ error: "Failed to upload marketing material" });
@@ -187,13 +199,15 @@ export function registerMarketingAssetRoutes(app: Express): void {
       }
       const download = req.query.download === "1";
       const filename = sanitizeMarketingFilename(row.originalFilename, row.mimeType);
-      res.setHeader("Content-Type", row.mimeType);
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("Cache-Control", "private, no-store");
-      res.setHeader(
-        "Content-Disposition",
-        `${download ? "attachment" : "inline"}; filename="${filename.replace(/"/g, "")}"`,
-      );
+      const headers = webchatMediaDeliveryHeaders({
+        mime: row.mimeType,
+        filename,
+        isDocument: row.kind === "document" || row.mimeType === "application/pdf",
+        download,
+      });
+      for (const [name, value] of Object.entries(headers)) {
+        res.setHeader(name, value);
+      }
       return res.status(200).send(stored.buffer);
     } catch (error) {
       console.error("[MarketingAssets] file failed:", error);

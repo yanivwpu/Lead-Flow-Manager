@@ -1235,6 +1235,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
   WHERE webchat_id IS NOT NULL AND webchat_id <> '';
 `.trim(),
   },
+  // 0092 matches migrations/0092_workspace_marketing_assets.sql (CREATE IF NOT EXISTS).
+  // Rollback: do not DROP in production. Soft-delete/disable is the operational rollback.
+  // DROP TABLE would lose library metadata only; historical messages keep their own media keys.
   {
     tag: "0092_workspace_marketing_assets",
     sql: [

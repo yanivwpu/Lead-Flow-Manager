@@ -517,7 +517,7 @@ export function registerWebhookRoutes(app: Express): void {
       const { verifyWebchatVisitorMedia, loadWebchatVisitorMediaBytes } = await import(
         "../webchatVisitorMedia"
       );
-      const { isWebchatDeliverableMediaContentType, isWebchatDocumentContentType } = await import(
+      const { isWebchatDeliverableMediaContentType, isWebchatDocumentContentType, webchatMediaDeliveryHeaders } = await import(
         "@shared/webchatDocumentPolicy"
       );
       if (
@@ -548,14 +548,15 @@ export function registerWebhookRoutes(app: Express): void {
         .pop()
         ?.replace(/[^\w\u0590-\u05FF\u00C0-\u024F .-]/g, "_")
         .slice(0, 120) || "document.pdf";
-      const asAttachment = download && isWebchatDocumentContentType(message.contentType);
-      res.setHeader("Content-Type", bytes.mime);
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      res.setHeader(
-        "Content-Disposition",
-        `${asAttachment ? "attachment" : "inline"}; filename="${filename.replace(/"/g, "")}"`,
-      );
+      const headers = webchatMediaDeliveryHeaders({
+        mime: bytes.mime,
+        filename,
+        isDocument: isWebchatDocumentContentType(message.contentType),
+        download,
+      });
+      for (const [name, value] of Object.entries(headers)) {
+        res.setHeader(name, value);
+      }
       return res.status(200).send(bytes.buffer);
     } catch {
       return sendWebchatPublicJson(res, 404, WEBCHAT_GENERIC_NOT_FOUND);
