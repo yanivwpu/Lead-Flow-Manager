@@ -418,6 +418,7 @@ export class AIService {
         const catalog = await listEnabledMarketingAssetCatalog(
           userId,
           contactContext?.conversationLanguage || detectedLanguage,
+          lastUserMessage,
         );
         for (const item of catalog) marketingCatalogIds.add(item.id);
         marketingMaterialsBlock = buildMarketingMaterialsPromptBlock(catalog);

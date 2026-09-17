@@ -19,6 +19,7 @@ import {
   parseSendApprovedAssetId,
   sanitizeMarketingFilename,
   shouldAllowApprovedAssetSend,
+  rankMarketingAssetCatalog,
   stripApprovedAssetActionMarkup,
   stripInventedMarketingMediaUrls,
   toMarketingAssetCatalogItem,
@@ -461,4 +462,30 @@ test("Suggest and Manual UI never implies a silent send", () => {
   const persistDraftIdx = auto.indexOf('if (decision === "suggest_only")');
   const sendIdx = auto.indexOf("sendApprovedMarketingAsset");
   assert.ok(persistDraftIdx >= 0 && persistDraftIdx < sendIdx);
+});
+
+test("catalog ranks a matching older asset before the 12-item prompt cap", () => {
+  const items = Array.from({ length: 15 }, (_, i) =>
+    toMarketingAssetCatalogItem({
+      id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(i + 1).padStart(12, "0")}`,
+      displayName: i === 14 ? "Vintage listing flyer" : `Filler promo ${i + 1}`,
+      language: "all",
+      kind: "image",
+      topics: i === 14 ? ["vintage"] : ["filler"],
+    })!,
+  );
+  const recencyCap = items.slice(0, 12);
+  const oldestId = items[14]!.id;
+  assert.equal(recencyCap.some((item) => item.id === oldestId), false);
+  const ranked = rankMarketingAssetCatalog(items, "Please send the vintage listing flyer", 12);
+  assert.equal(ranked.length, 12);
+  assert.equal(ranked[0]!.id, oldestId);
+  assert.equal(ranked.some((item) => item.id === oldestId), true);
+  const unranked = rankMarketingAssetCatalog(items, "", 12);
+  assert.equal(unranked.some((item) => item.id === oldestId), false);
+  const store = read("server/marketingAssets/assetStore.ts");
+  assert.match(store, /rankMarketingAssetCatalog/);
+  assert.match(store, /inboundText/);
+  const ai = read("server/aiService.ts");
+  assert.match(ai, /lastUserMessage/);
 });

@@ -266,6 +266,48 @@ export function shouldAllowApprovedAssetSend(params: {
   return marketingAssetMatchesVisitorText(raw, params.asset);
 }
 
+export function scoreMarketingAssetForInbound(
+  inboundText: string,
+  asset: { displayName: string; topics: string[]; description?: string | null },
+): number {
+  const text = normalizeMatchText(inboundText);
+  if (!text) return 0;
+  const hay = ` ${text} `;
+  let score = 0;
+  const name = normalizeMatchText(asset.displayName);
+  if (name.length >= 3 && hay.includes(` ${name} `)) score += 100;
+  for (const part of name.split(" ").filter((word) => word.length >= 4)) {
+    if (hay.includes(` ${part} `)) score += 40;
+  }
+  for (const topic of asset.topics) {
+    const t = normalizeMatchText(topic);
+    if (t.length >= 3 && hay.includes(` ${t} `)) score += 30;
+  }
+  const desc = normalizeMatchText(asset.description);
+  for (const part of desc.split(" ").filter((word) => word.length >= 4)) {
+    if (hay.includes(` ${part} `)) score += 10;
+  }
+  return score;
+}
+
+/** Rank by inbound match, then original recency. Cap after ranking so a matching older asset is not dropped. */
+export function rankMarketingAssetCatalog<T extends MarketingAssetCatalogItem>(
+  items: T[],
+  inboundText: string,
+  limit = MARKETING_ASSET_CATALOG_MAX,
+): T[] {
+  const scored = items.map((item, index) => ({
+    item,
+    score: scoreMarketingAssetForInbound(inboundText, item),
+    index,
+  }));
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.index - b.index;
+  });
+  return scored.slice(0, Math.max(0, limit)).map((row) => row.item);
+}
+
 export function buildMarketingMaterialsPromptBlock(items: MarketingAssetCatalogItem[]): string {
   const bounded = items.slice(0, MARKETING_ASSET_CATALOG_MAX);
   if (!bounded.length) {

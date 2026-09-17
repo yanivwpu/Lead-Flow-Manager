@@ -12,6 +12,7 @@ import {
 import {
   MARKETING_ASSET_CATALOG_MAX,
   parseMarketingAssetWrite,
+  rankMarketingAssetCatalog,
   sanitizeMarketingFilename,
   toMarketingAssetCatalogItem,
   type MarketingAssetCatalogItem,
@@ -62,6 +63,7 @@ export async function listMarketingAssets(
 export async function listEnabledMarketingAssetCatalog(
   userId: string,
   locale?: unknown,
+  inboundText?: string,
 ): Promise<MarketingAssetCatalogItem[]> {
   const rows = await db
     .select()
@@ -87,9 +89,9 @@ export async function listEnabledMarketingAssetCatalog(
       kind: row.kind,
     });
     if (item) out.push(item);
-    if (out.length >= MARKETING_ASSET_CATALOG_MAX) break;
+    if (out.length >= 200) break;
   }
-  return out;
+  return rankMarketingAssetCatalog(out, inboundText || "", MARKETING_ASSET_CATALOG_MAX);
 }
 
 export async function getMarketingAsset(
