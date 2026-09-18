@@ -14,15 +14,22 @@ const aggregate = (rows: SeoMetricRow[]) => {
 
 export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInput: SeoMetricRow[], targets = SEO_TARGETS): SeoOpportunity[] {
   const current = aggregate(currentInput), previous = aggregate(previousInput);
+  const present = new Map(current.map((r) => [`${r.query}\0${r.page}`, r]));
   const prior = new Map(previous.map((r) => [`${r.query}\0${r.page}`, r]));
   const out: SeoOpportunity[] = [];
   for (const row of current) {
     const ctr = row.clicks / Math.max(1, row.impressions);
     if (row.impressions >= 100 && row.position >= 4 && row.position <= 20) out.push({ type: "striking_distance", priority: Math.round(row.impressions / Math.max(1, row.position)), query: row.query, page: row.page, evidence: { impressions: row.impressions, position: row.position, clicks: row.clicks } });
-    const old = prior.get(`${row.query}\0${row.page}`);
-    if (old && old.impressions >= 20 && (row.clicks < old.clicks * .8 || row.impressions < old.impressions * .8 || row.position > old.position + 2)) out.push({ type: "decline", priority: Math.round(Math.max(old.clicks - row.clicks, old.impressions - row.impressions)), query: row.query, page: row.page, evidence: { clicks: row.clicks, previousClicks: old.clicks, impressions: row.impressions, previousImpressions: old.impressions, position: row.position, previousPosition: old.position } });
     const expectedCtr = row.position <= 3 ? .12 : row.position <= 10 ? .04 : .015;
     if (row.impressions >= 100 && ctr < expectedCtr * .6) out.push({ type: "low_ctr", priority: Math.round((expectedCtr - ctr) * row.impressions), query: row.query, page: row.page, evidence: { ctr, expectedCtr, impressions: row.impressions, position: row.position } });
+  }
+  // Compare the union of keys. Missing current rows represent zero traffic rather
+  // than absence of evidence, so complete losses remain visible to admins.
+  for (const [key, old] of prior) {
+    const row = present.get(key) ?? { query: old.query, page: old.page, clicks: 0, impressions: 0, position: 0 };
+    if (old.impressions >= 20 && (row.clicks < old.clicks * .8 || row.impressions < old.impressions * .8 || (row.position > 0 && row.position > old.position + 2))) {
+      out.push({ type: "decline", priority: Math.round(Math.max(old.clicks - row.clicks, old.impressions - row.impressions)), query: row.query, page: row.page, evidence: { clicks: row.clicks, previousClicks: old.clicks, impressions: row.impressions, previousImpressions: old.impressions, position: row.position, previousPosition: old.position } });
+    }
   }
   const important = new Set(targets.map((t) => t.keyword.toLowerCase()));
   for (const query of important) {

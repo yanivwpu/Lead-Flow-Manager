@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities } from "../server/seo/opportunities";
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
+import { SEO_SNAPSHOT_INSERT_BATCH_SIZE, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { averagePositionImprovementPercent } from "../shared/seoMetrics";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -16,6 +18,17 @@ const opportunities = detectSeoOpportunities(current, previous, [
 ]);
 for (const type of ["striking_distance", "decline", "low_ctr", "cannibalization", "no_visibility"]) assert.ok(opportunities.some((o) => o.type === type), `classifies ${type}`);
 assert.equal(opportunities.find((o) => o.type === "decline")?.evidence.previousClicks, 30, "preceding-period comparison is retained");
+
+const disappeared = detectSeoOpportunities([], [{ query: "vanished", page: "/old", clicks: 25, impressions: 250, position: 6 }], []);
+assert.deepEqual(disappeared[0]?.evidence, { clicks: 0, previousClicks: 25, impressions: 0, previousImpressions: 250, position: 0, previousPosition: 6 });
+
+const oversized = Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE * 2 + 17 }, (_, id) => ({ id }));
+const batches = snapshotInsertBatches(oversized);
+assert.deepEqual(batches.map((batch) => batch.length), [5_000, 5_000, 17]);
+assert.deepEqual(batches.flat(), oversized, "batching neither drops nor duplicates rows");
+
+assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
+assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
 
 const missing = resolveSearchConsoleConfig({});
 assert.equal(missing.configured, false);
@@ -31,4 +44,15 @@ const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
 assert.match(service, /status: rowsImported \? "partial" : "failed"/, "partial failure is persisted");
 assert.match(service, /startRow < 500_000/, "pagination is bounded");
+assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
+const startup = readFileSync("server/startupSchemaPatches.ts", "utf8");
+assert.match(startup, /tag: "0093_seo_intelligence"/);
+assert.match(startup, /seoIntelligencePatchOk: patchResults\.get\("0093_seo_intelligence"\) === true/);
+const patchStart = startup.indexOf('tag: "0093_seo_intelligence"');
+const patchEnd = startup.indexOf('].join(";\\n"),', patchStart);
+const patchStatements = (startup.slice(patchStart, patchEnd).match(/`[^`]+`/g) ?? []).map((value) => value.slice(1, -1)).join(";\n");
+const normalizeSql = (sql: string) => sql.split(";").map((statement) => statement.replace(/\s+/g, " ").trim().toLowerCase()).filter(Boolean);
+assert.deepEqual(normalizeSql(patchStatements), normalizeSql(migration), "standalone migration and Railway startup patch stay in parity");
+const index = readFileSync("server/index.ts", "utf8");
+assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
 console.log("seo-intelligence.test.ts: all assertions passed");

@@ -3,6 +3,7 @@ import { db } from "../../drizzle/db";
 import { seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
 import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
+import { snapshotInsertBatches } from "./snapshotBatches";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -22,11 +23,15 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         const result = await fetchSearchPerformance({ startDate, endDate, startRow, rowLimit: pageSize });
         const rows = result.rows ?? [];
         if (rows.length) {
-          await db.insert(seoSearchSnapshots).values(rows.map((row) => ({ reportingDate: row.keys[0], query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
-            target: [seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
-            set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
-          });
-          rowsImported += rows.length; pagesCompleted += 1;
+          for (const batch of snapshotInsertBatches(rows)) {
+            await db.insert(seoSearchSnapshots).values(batch.map((row) => ({ reportingDate: row.keys[0], query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+              target: [seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
+              set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
+            });
+            rowsImported += batch.length;
+            await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
+          }
+          pagesCompleted += 1;
           await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
         }
         if (rows.length < pageSize) break;
