@@ -293,6 +293,7 @@ let lastCalendlyPollMinute = -1;
 let lastEmailPollAtMs = 0;
 let emailPollInFlight = false;
 let lastGmailWatchRenewalDay = "";
+let lastSeoSyncDay = "";
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -313,6 +314,13 @@ export function startCronJobs() {
     const now = new Date();
     const utcHour = now.getUTCHours();
     const utcMin  = now.getUTCMinutes();
+
+    // Read-only Search Console import, once daily. Never edits public content.
+    const seoDay = now.toISOString().slice(0, 10);
+    if (utcHour === 4 && utcMin === 20 && seoDay !== lastSeoSyncDay) {
+      lastSeoSyncDay = seoDay;
+      import("./seo/seoService").then(({ runSeoSync }) => runSeoSync("scheduled")).catch((err) => console.error("[SEO Sync] scheduled error:", err));
+    }
 
     if (utcHour === 14 && utcMin === 0) {
       runTrialCheckinEmails().catch(err => console.error('[Cron] Scheduled run error:', err));

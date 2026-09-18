@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -3162,3 +3162,35 @@ export const prospectEnrichmentJobs = pgTable(
 
 export type ProspectEnrichmentJobRow = typeof prospectEnrichmentJobs.$inferSelect;
 export type InsertProspectAiOutcome = typeof prospectAiOutcomes.$inferInsert;
+
+/** Read-only Google Search Console facts. One row per date/query/page. */
+export const seoSearchSnapshots = pgTable("seo_search_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportingDate: date("reporting_date", { mode: "string" }).notNull(),
+  query: text("query").notNull(),
+  page: text("page").notNull(),
+  clicks: doublePrecision("clicks").notNull().default(0),
+  impressions: doublePrecision("impressions").notNull().default(0),
+  ctr: doublePrecision("ctr").notNull().default(0),
+  position: doublePrecision("position").notNull().default(0),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("seo_search_snapshots_date_query_page_uidx").on(t.reportingDate, t.query, t.page),
+  dateIdx: index("seo_search_snapshots_date_idx").on(t.reportingDate),
+  queryIdx: index("seo_search_snapshots_query_idx").on(t.query),
+}));
+
+/** Durable diagnostics for complete and partially completed imports. */
+export const seoSyncRuns = pgTable("seo_sync_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  status: text("status").notNull().default("running"),
+  trigger: text("trigger").notNull().default("scheduled"),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }).notNull(),
+  rowsImported: integer("rows_imported").notNull().default(0),
+  pagesCompleted: integer("pages_completed").notNull().default(0),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (t) => ({ startedIdx: index("seo_sync_runs_started_idx").on(t.startedAt) }));
