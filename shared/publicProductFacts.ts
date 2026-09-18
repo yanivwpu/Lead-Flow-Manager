@@ -171,7 +171,7 @@ export const PUBLIC_REALTOR_GROWTH_ENGINE_REQUIREMENT = REALTOR_GROWTH_ENGINE_RE
  * billing period when available and otherwise the UTC calendar month.
  */
 export const ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION =
-  "A conversation counts when a new conversation thread is created in your workspace during the current usage period. Additional messages in that same thread do not add another conversation. The usage period follows your active billing period when available; otherwise it follows the UTC calendar month.";
+  "Active-conversation usage increases when WhachatCRM creates a new WhatsApp, Instagram, Facebook Messenger, SMS, Website Chat, or Telegram messaging thread; when a Calendly booking event creates a new thread through the same inbox handler; when a WhatsApp campaign or template send creates its thread; or when a legacy chat is created or imported. Additional messages in an existing thread do not add another conversation. Email mailbox threads, GoHighLevel sync conversations, and Shopify or WooCommerce event conversations do not increment this usage. The usage period follows your active billing period when available; otherwise it follows the UTC calendar month.";
 
 export function isGenerallyAvailableProduct(fact: PublicProductFact): boolean {
   return fact.implementation === "implemented" && fact.availability === "public";

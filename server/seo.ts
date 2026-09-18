@@ -1393,16 +1393,113 @@ export function generateBlogListHtml(): string {
   return html;
 }
 
-function markdownToHtml(markdown: string): string {
-  return markdown
-    .replace(/^## (.*$)/gim, '<h2 style="font-size:1.5rem;margin:24px 0 12px;font-weight:600;">$1</h2>')
-    .replace(/^### (.*$)/gim, '<h3 style="font-size:1.25rem;margin:20px 0 10px;font-weight:500;">$1</h3>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^\- (.*$)/gim, '<li style="margin-left:20px;">$1</li>')
-    .replace(/^\d+\. (.*$)/gim, '<li style="margin-left:20px;">$1</li>')
-    .replace(/\n\n/g, '</p><p style="margin:16px 0;">')
-    .replace(/\n/g, '<br/>')
-    .replace(/\| (.*) \|/g, (match) => `<div style="overflow-x:auto;font-size:14px;">${match}</div>`);
+function safeMarkdownHref(rawHref: string): string | null {
+  const href = rawHref.trim();
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  if (/^https:\/\//i.test(href)) return href;
+  return null;
+}
+
+function renderMarkdownInline(raw: string): string {
+  const links: string[] = [];
+  const withLinkTokens = raw.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
+    const safeHref = safeMarkdownHref(href);
+    const safeLabel = escapeHtmlText(label).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    const html = safeHref
+      ? `<a href="${escapeHtmlAttr(safeHref)}"${/^https:\/\//i.test(safeHref) ? ' rel="noopener noreferrer"' : ""}>${safeLabel}</a>`
+      : safeLabel;
+    const index = links.push(html) - 1;
+    return `\u0000LINK${index}\u0000`;
+  });
+  return escapeHtmlText(withLinkTokens)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\u0000LINK(\d+)\u0000/g, (_match, index: string) => links[Number(index)] || "");
+}
+
+/** Minimal safe Markdown renderer for the public SSR article subset. */
+export function markdownToHtml(markdown: string): string {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const html: string[] = [];
+  let paragraph: string[] = [];
+  let list: { type: "ul" | "ol"; items: string[] } | null = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p style="margin:16px 0;">${renderMarkdownInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    html.push(
+      `<${list.type} style="margin:16px 0;padding-left:24px;">${list.items
+        .map((item) => `<li style="margin:6px 0;">${renderMarkdownInline(item)}</li>`)
+        .join("")}</${list.type}>`,
+    );
+    list = null;
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] || "";
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = /^(##|###)\s+(.+)$/.exec(line);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1] === "##" ? "h2" : "h3";
+      const style = level === "h2"
+        ? "font-size:1.5rem;margin:24px 0 12px;font-weight:600;"
+        : "font-size:1.25rem;margin:20px 0 10px;font-weight:500;";
+      html.push(`<${level} style="${style}">${renderMarkdownInline(heading[2] || "")}</${level}>`);
+      continue;
+    }
+
+    const unordered = /^[-*]\s+(.+)$/.exec(line);
+    const ordered = /^\d+\.\s+(.+)$/.exec(line);
+    if (unordered || ordered) {
+      flushParagraph();
+      const type = unordered ? "ul" : "ol";
+      if (list?.type !== type) {
+        flushList();
+        list = { type, items: [] };
+      }
+      list.items.push((unordered || ordered)![1] || "");
+      continue;
+    }
+
+    if (line.trim().startsWith("|") && i + 1 < lines.length && /^\|?\s*:?-{3,}/.test(lines[i + 1] || "")) {
+      flushParagraph();
+      flushList();
+      const rows: string[][] = [];
+      const parseRow = (row: string) => row.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+      const headers = parseRow(line);
+      i += 2; // Skip the Markdown delimiter row.
+      while (i < lines.length && (lines[i] || "").trim().startsWith("|")) {
+        rows.push(parseRow(lines[i] || ""));
+        i += 1;
+      }
+      i -= 1;
+      html.push(
+        `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr>${headers
+          .map((cell) => `<th style="text-align:left;padding:8px;border-bottom:1px solid #d1d5db;">${renderMarkdownInline(cell)}</th>`)
+          .join("")}</tr></thead><tbody>${rows
+          .map((row) => `<tr>${row.map((cell) => `<td style="padding:8px;border-bottom:1px solid #e5e7eb;">${renderMarkdownInline(cell)}</td>`).join("")}</tr>`)
+          .join("")}</tbody></table></div>`,
+      );
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line.trim());
+  }
+
+  flushParagraph();
+  flushList();
+  return html.join("\n");
 }
 
 export const BLOG_CONTENT_SSR: Record<string, string> = {
@@ -1551,7 +1648,9 @@ export function generateBlogPostHtml(slug: string): string | null {
   if (!post) return null;
   
   const content = BLOG_CONTENT_SSR[slug];
-  const contentHtml = content ? markdownToHtml(content) : `<p style="font-size: 1.1rem; color: #555;">${post.excerpt}</p>`;
+  const contentHtml = content
+    ? markdownToHtml(content)
+    : `<p style="font-size: 1.1rem; color: #555;">${escapeHtmlText(post.excerpt)}</p>`;
   const featuredImageUrl = resolveBlogFeaturedImageUrl(post, BASE_URL);
   const featuredImageHtml = featuredImageUrl
     ? `<figure style="margin:0 0 24px;border-radius:16px;overflow:hidden;border:1px solid #f3f4f6;background:linear-gradient(180deg,#f8fafc,#f1f5f9);">
@@ -1566,15 +1665,15 @@ export function generateBlogPostHtml(slug: string): string | null {
       </nav>
       <article>
         <header style="margin-bottom: 32px;">
-          <span style="color: #22c55e; font-size: 14px; font-weight: 500;">${post.category}</span>
-          <h1 style="font-size: 2rem; margin: 12px 0 16px;">${post.title}</h1>
+          <span style="color: #22c55e; font-size: 14px; font-weight: 500;">${escapeHtmlText(post.category)}</span>
+          <h1 style="font-size: 2rem; margin: 12px 0 16px;">${escapeHtmlText(post.title)}</h1>
           <div style="color: #666; font-size: 14px; margin-bottom: 16px;">
             <span>${formatDate(post.date)}</span> · <span>${post.readTime}</span>
           </div>
           ${featuredImageHtml}
         </header>
         <div style="color: #333; line-height: 1.7;">
-          <p style="margin: 16px 0;">${contentHtml}</p>
+          ${contentHtml}
         </div>
       </article>
       <footer style="text-align: center; padding: 40px 0; margin-top: 40px; border-top: 1px solid #e5e7eb;">

@@ -78,10 +78,13 @@ export function findForbiddenPublicClaims(text: string): string[] {
       const prefix = text.slice(Math.max(0, start - 60), start);
       const suffix = text.slice(start + match[0].length, start + match[0].length + 30);
       const negatedBefore =
-        /\b(?:does not|doesn't|do not|don't|is not|isn't|are not|aren't|cannot|can't|never|no|without)\b[^.!?;,]{0,40}$/i.test(
+        /(?:\b(?:do|does|did|can|could|will|would|is|are|was|were)\s+not|\b(?:don't|doesn't|didn't|can't|couldn't|won't|wouldn't|isn't|aren't|wasn't|weren't)|\bnever|\bwithout)(?:\s+(?:mean|imply|promise|offer|provide|claim))?\s*$/i.test(
           prefix,
+        ) || /\bno(?:\s+(?:unsupported|absolute|automatic))?\s*$/i.test(prefix);
+      const negatedAfter =
+        /^\s+(?:(?:is|are|was|were)\s+)?(?:not|never)\s+(?:offered|provided|promised|made|available|supported|possible)\b/i.test(
+          suffix,
         );
-      const negatedAfter = /^\s+(?:(?:is|are|was|were)\s+)?(?:not|never)\b/i.test(suffix);
       if (!negatedBefore && !negatedAfter) return true;
     }
     return false;
