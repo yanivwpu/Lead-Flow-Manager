@@ -33,8 +33,16 @@ test("forbidden public claim policy covers Phase 1 guardrails", () => {
   assert.deepEqual(findForbiddenPublicClaims("Guaranteed conversions"), ["conversion-guarantee"]);
   assert.deepEqual(findForbiddenPublicClaims("Guaranteed rankings"), ["conversion-guarantee"]);
   assert.deepEqual(findForbiddenPublicClaims("Conversion guarantees"), ["conversion-guarantee"]);
+  assert.deepEqual(findForbiddenPublicClaims("We guarantee 20% more conversions."), ["conversion-guarantee"]);
+  assert.deepEqual(findForbiddenPublicClaims("We guarantee your sales."), ["conversion-guarantee"]);
+  assert.deepEqual(findForbiddenPublicClaims("Guaranteed higher rankings."), ["conversion-guarantee"]);
+  assert.deepEqual(findForbiddenPublicClaims("We guarantee at least 20% more qualified conversions."), [
+    "conversion-guarantee",
+  ]);
   assert.deepEqual(findForbiddenPublicClaims("No unsupported conversion guarantees"), []);
+  assert.deepEqual(findForbiddenPublicClaims("No conversion guarantees."), []);
   assert.deepEqual(findForbiddenPublicClaims("SEO-friendly does not mean guaranteed rankings."), []);
+  assert.deepEqual(findForbiddenPublicClaims("This does not mean guaranteed rankings."), []);
   assert.deepEqual(findForbiddenPublicClaims("We do not guarantee rankings."), []);
   assert.deepEqual(findForbiddenPublicClaims("We do not hesitate to guarantee conversions."), ["conversion-guarantee"]);
   assert.deepEqual(findForbiddenPublicClaims("Guaranteed conversions are not optional."), ["conversion-guarantee"]);

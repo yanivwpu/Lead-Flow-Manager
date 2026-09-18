@@ -34,8 +34,7 @@ export const SEO_FORBIDDEN_PUBLIC_CLAIMS = [
   { id: "mass-location-pages", pattern: /mass location pages?/i },
   {
     id: "conversion-guarantee",
-    pattern:
-      /guarantee(?:d|s)?\s+(?:conversion|lead|ranking|revenue|sale)s?|conversion guarantees?/i,
+    pattern: /\bguarantee(?:d|s)?\b|\b(?:conversion|lead|ranking|revenue|sale)s?\s+guarantees?\b/i,
   },
   { id: "current-starter-offer", pattern: /(?:buy|choose|upgrade to|start)\s+(?:the\s+)?Starter(?:\s+plan)?/i },
   { id: "current-ai-brain-addon", pattern: /(?:buy|purchase|add)\s+(?:the\s+)?AI Brain(?:\s+add-on)?\s+separately/i },
@@ -66,28 +65,68 @@ export function hreflangsForLocalizedSeoPath(path: Phase2LocalizedPath) {
   return getHreflangLinks(path);
 }
 
+const GUARANTEE_TERMS = new Set(["guarantee", "guaranteed", "guarantees"]);
+const GUARANTEE_RESULTS = new Set([
+  "conversion",
+  "conversions",
+  "lead",
+  "leads",
+  "ranking",
+  "rankings",
+  "revenue",
+  "sale",
+  "sales",
+]);
+const MAX_GUARANTEE_CLAIM_TOKEN_DISTANCE = 10;
+
+type ClaimToken = { value: string; start: number; end: number };
+
+function containsForbiddenGuaranteeClaim(text: string): boolean {
+  // Sentence and clause boundaries prevent a guarantee in one thought from being
+  // paired with an unrelated result in the next. Token distance permits ordinary
+  // quantities, possessives, and modifiers without depending on word adjacency.
+  const clauses = text.matchAll(/[^.!?;\n]+/g);
+
+  for (const clauseMatch of clauses) {
+    const clause = clauseMatch[0];
+    const clauseOffset = clauseMatch.index ?? 0;
+    const tokens: ClaimToken[] = Array.from(clause.matchAll(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu), (match) => ({
+      value: match[0].toLowerCase(),
+      start: clauseOffset + (match.index ?? 0),
+      end: clauseOffset + (match.index ?? 0) + match[0].length,
+    }));
+
+    for (let guaranteeIndex = 0; guaranteeIndex < tokens.length; guaranteeIndex += 1) {
+      if (!GUARANTEE_TERMS.has(tokens[guaranteeIndex].value)) continue;
+
+      for (let resultIndex = 0; resultIndex < tokens.length; resultIndex += 1) {
+        if (!GUARANTEE_RESULTS.has(tokens[resultIndex].value)) continue;
+        if (Math.abs(resultIndex - guaranteeIndex) > MAX_GUARANTEE_CLAIM_TOKEN_DISTANCE) continue;
+
+        const claimStart = Math.min(tokens[guaranteeIndex].start, tokens[resultIndex].start);
+        const claimEnd = Math.max(tokens[guaranteeIndex].end, tokens[resultIndex].end);
+        const prefix = text.slice(Math.max(0, claimStart - 60), claimStart);
+        const suffix = text.slice(claimEnd, claimEnd + 30);
+        const negatedBefore =
+          /(?:\b(?:do|does|did|can|could|will|would|is|are|was|were)\s+not|\b(?:don't|doesn't|didn't|can't|couldn't|won't|wouldn't|isn't|aren't|wasn't|weren't)|\bnever|\bwithout)(?:\s+(?:mean|imply|promise|offer|provide|claim))?\s*$/i.test(
+            prefix,
+          ) || /\bno(?:\s+(?:unsupported|absolute|automatic))?\s*$/i.test(prefix);
+        const negatedAfter =
+          /^\s+(?:(?:is|are|was|were)\s+)?(?:not|never)\s+(?:offered|provided|promised|made|available|supported|possible)\b/i.test(
+            suffix,
+          );
+        if (!negatedBefore && !negatedAfter) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function findForbiddenPublicClaims(text: string): string[] {
   return SEO_FORBIDDEN_PUBLIC_CLAIMS.filter(({ id, pattern }) => {
     if (id !== "conversion-guarantee") return pattern.test(text);
-
-    const matches = text.matchAll(
-      /guarantee(?:d|s)?\s+(?:conversion|lead|ranking|revenue|sale)s?|conversion guarantees?/gi,
-    );
-    for (const match of matches) {
-      const start = match.index ?? 0;
-      const prefix = text.slice(Math.max(0, start - 60), start);
-      const suffix = text.slice(start + match[0].length, start + match[0].length + 30);
-      const negatedBefore =
-        /(?:\b(?:do|does|did|can|could|will|would|is|are|was|were)\s+not|\b(?:don't|doesn't|didn't|can't|couldn't|won't|wouldn't|isn't|aren't|wasn't|weren't)|\bnever|\bwithout)(?:\s+(?:mean|imply|promise|offer|provide|claim))?\s*$/i.test(
-          prefix,
-        ) || /\bno(?:\s+(?:unsupported|absolute|automatic))?\s*$/i.test(prefix);
-      const negatedAfter =
-        /^\s+(?:(?:is|are|was|were)\s+)?(?:not|never)\s+(?:offered|provided|promised|made|available|supported|possible)\b/i.test(
-          suffix,
-        );
-      if (!negatedBefore && !negatedAfter) return true;
-    }
-    return false;
+    return containsForbiddenGuaranteeClaim(text);
   }).map(({ id }) => id);
 }
 
