@@ -3,11 +3,12 @@ import { db } from "../../drizzle/db";
 import { seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
 import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
-import { snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
+import { averageSeoPosition } from "@shared/seoMetrics";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
-export type SeoSyncResult = { runId: string; status: "success"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string };
+export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string };
 
 export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date()): Promise<SeoSyncResult> {
   if (syncInFlight) return syncInFlight;
@@ -18,8 +19,9 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
     const [run] = await db.insert(seoSyncRuns).values({ trigger, startDate, endDate }).returning({ id: seoSyncRuns.id });
     let rowsImported = 0, pagesCompleted = 0;
     try {
-      const pageSize = 25_000;
-      for (let startRow = 0; startRow < 500_000; startRow += pageSize) {
+      const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
+      let truncated = false;
+      for (let startRow = 0; startRow < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
         const result = await fetchSearchPerformance({ startDate, endDate, startRow, rowLimit: pageSize });
         const rows = result.rows ?? [];
         if (rows.length) {
@@ -34,7 +36,17 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
           pagesCompleted += 1;
           await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
         }
+        if (searchConsoleImportIsTruncated(startRow, rows.length)) {
+          truncated = true;
+          break;
+        }
         if (rows.length < pageSize) break;
+      }
+      if (truncated) {
+        const diagnostic = `Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row safety cap with a full final page; additional Search Console rows may exist`;
+        await db.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: "ROW_CAP_TRUNCATED", errorMessage: diagnostic, completedAt: new Date() }).where(eq(seoSyncRuns.id, run.id));
+        console.warn(`[SEO Sync] truncated run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
+        return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic };
       }
       await db.update(seoSyncRuns).set({ status: "success", rowsImported, pagesCompleted, completedAt: new Date() }).where(eq(seoSyncRuns.id, run.id));
       console.info(`[SEO Sync] completed run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
@@ -66,5 +78,5 @@ export async function getSeoDashboard(now = new Date()) {
   const group = (key: "query" | "page") => [...current.reduce((m, r) => { const k = r[key]; const v = m.get(k) ?? { name: k, clicks: 0, impressions: 0 }; v.clicks += r.clicks; v.impressions += r.impressions; m.set(k, v); return m; }, new Map<string, {name:string;clicks:number;impressions:number}>()).values()].sort((a,b) => b.clicks-a.clicks).slice(0,10);
   const [lastRun] = await db.select().from(seoSyncRuns).where(eq(seoSyncRuns.status, "success")).orderBy(desc(seoSyncRuns.completedAt)).limit(1);
   const config = resolveSearchConsoleConfig();
-  return { config: { configured: config.configured, missing: config.missing }, lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: isoDay(currentStart), endDate: isoDay(end), clicks: totals.clicks, impressions: totals.impressions, ctr: totals.clicks / Math.max(1, totals.impressions), position: totals.positionWeighted / Math.max(1, totals.impressions), previous: { clicks: previousTotals.clicks, impressions: previousTotals.impressions, ctr: previousTotals.clicks / Math.max(1, previousTotals.impressions), position: previousTotals.positionWeighted / Math.max(1, previousTotals.impressions) } }, topQueries: group("query"), topPages: group("page"), opportunities: detectSeoOpportunities(current, previous).slice(0,50) };
+  return { config: { configured: config.configured, missing: config.missing }, lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: isoDay(currentStart), endDate: isoDay(end), clicks: totals.clicks, impressions: totals.impressions, ctr: totals.clicks / Math.max(1, totals.impressions), position: averageSeoPosition(totals.positionWeighted, totals.impressions), previous: { clicks: previousTotals.clicks, impressions: previousTotals.impressions, ctr: previousTotals.clicks / Math.max(1, previousTotals.impressions), position: averageSeoPosition(previousTotals.positionWeighted, previousTotals.impressions) } }, topQueries: group("query"), topPages: group("page"), opportunities: detectSeoOpportunities(current, previous).slice(0,50) };
 }

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities } from "../server/seo/opportunities";
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_SNAPSHOT_INSERT_BATCH_SIZE, snapshotInsertBatches } from "../server/seo/snapshotBatches";
-import { averagePositionImprovementPercent } from "../shared/seoMetrics";
+import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -29,6 +29,20 @@ assert.deepEqual(batches.flat(), oversized, "batching neither drops nor duplicat
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
+assert.equal(averageSeoPosition(0, 0), null, "no current impressions means average position is unavailable");
+assert.equal(averagePositionImprovementPercent(null, 10), null, "missing current position is not a 100% improvement");
+assert.equal(formatSeoPercent(averagePositionImprovementPercent(null, 10)), "—");
+
+assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE), true, "a full final capped page is truncated");
+assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE - 1), false);
+
+const rankingOnlyDecline = detectSeoOpportunities(
+  [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
+  [{ query: "growing traffic worse rank", page: "/growth", clicks: 20, impressions: 200, position: 8 }],
+  [],
+).find((item) => item.type === "decline");
+assert.ok(rankingOnlyDecline);
+assert.equal(rankingOnlyDecline.priority, 0, "ranking decline priority is clamped when traffic grew");
 
 const missing = resolveSearchConsoleConfig({});
 assert.equal(missing.configured, false);
@@ -43,8 +57,14 @@ assert.match(migration, /UNIQUE INDEX[^;]+reporting_date, query, page/i, "natura
 const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
 assert.match(service, /status: rowsImported \? "partial" : "failed"/, "partial failure is persisted");
-assert.match(service, /startRow < 500_000/, "pagination is bounded");
+assert.match(service, /startRow < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is bounded");
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
+assert.match(service, /errorCode: "ROW_CAP_TRUNCATED"/, "full capped imports persist an explicit truncated diagnostic");
+assert.match(service, /status: "partial"/, "full capped imports cannot be recorded as successful");
+assert.match(service, /averageSeoPosition\(totals\.positionWeighted, totals\.impressions\)/, "service returns unavailable position without impressions");
+const ui = readFileSync("client/src/components/admin/AdminSeoIntelligenceTab.tsx", "utf8");
+assert.match(ui, /d\.period\.position === null \? "—"/);
+assert.match(ui, /sync\.data\.status === "partial"/);
 const startup = readFileSync("server/startupSchemaPatches.ts", "utf8");
 assert.match(startup, /tag: "0093_seo_intelligence"/);
 assert.match(startup, /seoIntelligencePatchOk: patchResults\.get\("0093_seo_intelligence"\) === true/);

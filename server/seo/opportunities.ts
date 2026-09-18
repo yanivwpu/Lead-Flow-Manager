@@ -28,7 +28,7 @@ export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInp
   for (const [key, old] of prior) {
     const row = present.get(key) ?? { query: old.query, page: old.page, clicks: 0, impressions: 0, position: 0 };
     if (old.impressions >= 20 && (row.clicks < old.clicks * .8 || row.impressions < old.impressions * .8 || (row.position > 0 && row.position > old.position + 2))) {
-      out.push({ type: "decline", priority: Math.round(Math.max(old.clicks - row.clicks, old.impressions - row.impressions)), query: row.query, page: row.page, evidence: { clicks: row.clicks, previousClicks: old.clicks, impressions: row.impressions, previousImpressions: old.impressions, position: row.position, previousPosition: old.position } });
+      out.push({ type: "decline", priority: Math.max(0, Math.round(Math.max(old.clicks - row.clicks, old.impressions - row.impressions))), query: row.query, page: row.page, evidence: { clicks: row.clicks, previousClicks: old.clicks, impressions: row.impressions, previousImpressions: old.impressions, position: row.position, previousPosition: old.position } });
     }
   }
   const important = new Set(targets.map((t) => t.keyword.toLowerCase()));

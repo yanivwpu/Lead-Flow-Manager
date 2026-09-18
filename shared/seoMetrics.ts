@@ -1,6 +1,11 @@
 /** Positive means ranking improved (a numerically lower average position). */
-export function averagePositionImprovementPercent(current: number, previous: number): number | null {
-  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return null;
+export function averageSeoPosition(weightedPosition: number, impressions: number): number | null {
+  if (!Number.isFinite(weightedPosition) || !Number.isFinite(impressions) || impressions <= 0) return null;
+  return weightedPosition / impressions;
+}
+
+export function averagePositionImprovementPercent(current: number | null, previous: number | null): number | null {
+  if (current === null || previous === null || !Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) return null;
   return ((previous - current) / previous) * 100;
 }
 
