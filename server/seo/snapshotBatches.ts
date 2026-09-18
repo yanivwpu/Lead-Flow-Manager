@@ -12,8 +12,9 @@ export function snapshotInsertBatches<T>(rows: readonly T[], size = SEO_SNAPSHOT
   return batches;
 }
 
-export function boundDashboardCandidates<T>(rows: readonly T[]): T[] {
-  return rows.slice(0, SEO_DASHBOARD_CANDIDATE_LIMIT);
+export function boundDashboardCandidates<T>(rows: readonly T[], priority?: (row: T) => number): T[] {
+  const candidates = priority ? [...rows].sort((a, b) => priority(b) - priority(a)) : rows;
+  return candidates.slice(0, SEO_DASHBOARD_CANDIDATE_LIMIT);
 }
 
 export function searchConsoleImportIsTruncated(importedRows: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {

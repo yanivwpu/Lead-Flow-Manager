@@ -1,7 +1,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
-import { fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
+import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
+import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
 import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
@@ -20,6 +20,14 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
     const [run] = await db.insert(seoSyncRuns).values({ trigger, startDate, endDate }).returning({ id: seoSyncRuns.id });
     let rowsImported = 0, pagesCompleted = 0;
     try {
+      const totalsResult = await fetchSearchDailyTotals(startDate, endDate);
+      const totalRows = totalsResult.rows ?? [];
+      if (totalRows.length) {
+        await db.insert(seoSearchDailyTotals).values(totalRows.map((row) => ({ reportingDate: row.keys[0], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+          target: seoSearchDailyTotals.reportingDate,
+          set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
+        });
+      }
       const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
       let truncated = false;
       for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
@@ -82,7 +90,7 @@ export async function getSeoDashboard(now = new Date()) {
       COALESCE(SUM(clicks) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_clicks,
       COALESCE(SUM(impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_impressions,
       COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_position_weighted
-      FROM seo_search_snapshots WHERE reporting_date BETWEEN ${previousStartDay} AND ${endDay}`),
+      FROM seo_search_daily_totals WHERE reporting_date BETWEEN ${previousStartDay} AND ${endDay}`),
     db.execute(sql`SELECT query AS name, SUM(clicks) AS clicks, SUM(impressions) AS impressions
       FROM seo_search_snapshots WHERE reporting_date BETWEEN ${currentStartDay} AND ${endDay}
       GROUP BY query ORDER BY SUM(clicks) DESC LIMIT 10`),
@@ -98,14 +106,27 @@ export async function getSeoDashboard(now = new Date()) {
         COALESCE(SUM(impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_impressions,
         COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_position_weighted
       FROM seo_search_snapshots WHERE reporting_date BETWEEN ${previousStartDay} AND ${endDay} GROUP BY query, page
-    ) SELECT * FROM metrics WHERE
+    ), normalized AS (
+      SELECT *, current_position_weighted / NULLIF(current_impressions, 0) AS current_position,
+        previous_position_weighted / NULLIF(previous_impressions, 0) AS previous_position
+      FROM metrics
+    ), scored AS (
+      SELECT *, GREATEST(
+        CASE WHEN current_impressions >= 100 AND current_position BETWEEN 4 AND 20 THEN current_impressions / current_position ELSE 0 END,
+        CASE WHEN current_impressions >= 100 AND current_clicks / NULLIF(current_impressions, 0) <
+          (CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) * .6
+          THEN ((CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) - current_clicks / current_impressions) * current_impressions ELSE 0 END,
+        CASE WHEN previous_impressions >= 20 THEN GREATEST(previous_clicks - current_clicks, previous_impressions - current_impressions, 0) ELSE 0 END,
+        CASE WHEN previous_impressions >= 20 AND current_position > previous_position + 2 THEN (current_position - previous_position) * previous_impressions ELSE 0 END
+      ) AS priority_evidence
+      FROM normalized
+    ) SELECT * FROM scored WHERE
       (current_impressions >= 100) OR
-      (previous_impressions >= 20 AND (current_clicks < previous_clicks * .8 OR current_impressions < previous_impressions * .8 OR
-        (current_impressions > 0 AND current_position_weighted / current_impressions > previous_position_weighted / NULLIF(previous_impressions, 0) + 2)))
-      ORDER BY GREATEST(current_impressions, previous_impressions) DESC LIMIT ${SEO_DASHBOARD_CANDIDATE_LIMIT}`),
+      (previous_impressions >= 20 AND (current_clicks < previous_clicks * .8 OR current_impressions < previous_impressions * .8 OR current_position > previous_position + 2))
+      ORDER BY priority_evidence DESC LIMIT ${SEO_DASHBOARD_CANDIDATE_LIMIT}`),
   ]);
   const totals = (totalsResult.rows[0] ?? {}) as Record<string, unknown>;
-  const candidateRows = boundDashboardCandidates(candidatesResult.rows as Record<string, unknown>[]);
+  const candidateRows = boundDashboardCandidates(candidatesResult.rows as Record<string, unknown>[], (row) => numberValue(row.priority_evidence));
   const current: SeoMetricRow[] = candidateRows.filter((r) => numberValue(r.current_impressions) > 0).map((r) => ({ query: String(r.query), page: String(r.page), clicks: numberValue(r.current_clicks), impressions: numberValue(r.current_impressions), position: numberValue(r.current_position_weighted) / numberValue(r.current_impressions) }));
   const previous: SeoMetricRow[] = candidateRows.filter((r) => numberValue(r.previous_impressions) > 0).map((r) => ({ query: String(r.query), page: String(r.page), clicks: numberValue(r.previous_clicks), impressions: numberValue(r.previous_impressions), position: numberValue(r.previous_position_weighted) / numberValue(r.previous_impressions) }));
   const targetKeywords = SEO_TARGETS.map((target) => target.keyword.toLowerCase());

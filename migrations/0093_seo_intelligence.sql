@@ -9,6 +9,12 @@ CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_idx ON seo_search_snapshots
 CREATE INDEX IF NOT EXISTS seo_search_snapshots_query_idx ON seo_search_snapshots(query);
 CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_query_idx ON seo_search_snapshots(reporting_date, query);
 CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_page_idx ON seo_search_snapshots(reporting_date, page);
+CREATE TABLE IF NOT EXISTS seo_search_daily_totals (
+  reporting_date date PRIMARY KEY, clicks double precision NOT NULL DEFAULT 0,
+  impressions double precision NOT NULL DEFAULT 0, ctr double precision NOT NULL DEFAULT 0,
+  position double precision NOT NULL DEFAULT 0, imported_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS seo_search_daily_totals_date_idx ON seo_search_daily_totals(reporting_date);
 CREATE TABLE IF NOT EXISTS seo_sync_runs (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(), status text NOT NULL DEFAULT 'running',
   trigger text NOT NULL DEFAULT 'scheduled', start_date date NOT NULL, end_date date NOT NULL,

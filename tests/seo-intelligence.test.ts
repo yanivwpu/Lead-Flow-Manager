@@ -29,6 +29,10 @@ assert.deepEqual(batches.flat(), oversized, "batching neither drops nor duplicat
 const largeDashboardResult = boundDashboardCandidates(Array.from({ length: 500_000 }, (_, id) => id));
 assert.equal(largeDashboardResult.length, SEO_DASHBOARD_CANDIDATE_LIMIT, "dashboard candidates remain bounded for cap-sized imports");
 assert.equal(largeDashboardResult.at(-1), SEO_DASHBOARD_CANDIDATE_LIMIT - 1);
+const priorityCandidates = Array.from({ length: 5_100 }, (_, id) => ({ id, priority: 10 }));
+priorityCandidates.push({ id: 99_999, priority: 10_000 });
+const boundedByPriority = boundDashboardCandidates(priorityCandidates, (row) => row.priority);
+assert.ok(boundedByPriority.some((row) => row.id === 99_999), "high-priority low-volume opportunity survives more than 5,000 candidates");
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
@@ -93,10 +97,16 @@ assert.match(service, /status: "partial"/, "full capped imports cannot be record
 assert.match(service, /averageSeoPosition\(numberValue\(totals\.current_position_weighted\), currentImpressions\)/, "service returns unavailable position without impressions");
 assert.doesNotMatch(service, /db\.select\(\)\.from\(seoSearchSnapshots\)/, "dashboard never materializes the raw 56-day window");
 assert.match(service, /LIMIT \$\{SEO_DASHBOARD_CANDIDATE_LIMIT\}/, "opportunity candidates are bounded in PostgreSQL");
+assert.match(service, /ORDER BY priority_evidence DESC LIMIT/, "database bounds candidates only after evidence-priority ordering");
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
+assert.match(service, /FROM seo_search_daily_totals WHERE reporting_date BETWEEN/, "aggregate cards use complete non-query daily totals");
+assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");
 const ui = readFileSync("client/src/components/admin/AdminSeoIntelligenceTab.tsx", "utf8");
 assert.match(ui, /d\.period\.position === null \? "—"/);
 assert.match(ui, /sync\.data\.status === "partial"/);
+assert.match(ui, /Detailed query reports exclude anonymized queries; aggregate cards above include them/);
+const searchConsole = readFileSync("server/seo/searchConsole.ts", "utf8");
+assert.match(searchConsole, /dimensions: \["date"\]/, "daily totals omit the query dimension");
 const startup = readFileSync("server/startupSchemaPatches.ts", "utf8");
 assert.match(startup, /tag: "0093_seo_intelligence"/);
 assert.match(startup, /seoIntelligencePatchOk: patchResults\.get\("0093_seo_intelligence"\) === true/);

@@ -3182,6 +3182,15 @@ export const seoSearchSnapshots = pgTable("seo_search_snapshots", {
   datePageIdx: index("seo_search_snapshots_date_page_idx").on(t.reportingDate, t.page),
 }));
 
+export const seoSearchDailyTotals = pgTable("seo_search_daily_totals", {
+  reportingDate: date("reporting_date", { mode: "string" }).primaryKey(),
+  clicks: doublePrecision("clicks").notNull().default(0),
+  impressions: doublePrecision("impressions").notNull().default(0),
+  ctr: doublePrecision("ctr").notNull().default(0),
+  position: doublePrecision("position").notNull().default(0),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+}, (t) => ({ dateIdx: index("seo_search_daily_totals_date_idx").on(t.reportingDate) }));
+
 /** Durable diagnostics for complete and partially completed imports. */
 export const seoSyncRuns = pgTable("seo_sync_runs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
