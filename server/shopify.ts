@@ -5,6 +5,7 @@ import * as jose from 'jose';
 import crypto from 'crypto';
 import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from '@shared/shopifyBilling';
 import { REALTOR_GROWTH_ENGINE_ONETIME_USD } from '@shared/pricingEntitlements';
+import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import { getAppOrigin } from './urlOrigins';
 import { storage } from './storage';
 
@@ -32,13 +33,13 @@ export const SHOPIFY_BILLING_PLANS = {
     amount: 19.0,
     currencyCode: 'USD',
     interval: BillingInterval.Every30Days,
-    trialDays: 14,
+    trialDays: PRO_AI_TRIAL_DAYS,
   },
   'Pro': {
     amount: 49.0,
     currencyCode: 'USD',
     interval: BillingInterval.Every30Days,
-    trialDays: 14,
+    trialDays: PRO_AI_TRIAL_DAYS,
   },
   /** Separate recurring charge — billed on top of Starter or Pro (App Store add-on disclosure). */
   'AI Brain Add-on': {

@@ -2,6 +2,10 @@
  * Public Pricing page content model (English base).
  * Descriptive copy only — brand/plan/channel names stay as approved.
  */
+import {
+  ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION,
+  PUBLIC_PRO_AI_TRIAL_DAYS,
+} from "./publicProductFacts";
 
 export type PricingFaqItem = { q: string; a: string };
 export type PricingCard = { id?: string; title: string; body: string };
@@ -119,11 +123,11 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     twitterDescription:
       "Prospect AI, multi-channel inbox, AI Chatbot, AI Brain, and sales automation—Free and Pro.",
   },
-  trialBanner: "Every new account includes a 14-day Pro trial with AI Brain.",
+  trialBanner: `Every new account includes a ${PUBLIC_PRO_AI_TRIAL_DAYS}-day Pro trial with AI Brain.`,
   hero: {
     h1: "Simple pricing. Everything you need to grow.",
     subtitle: "Start free. Upgrade when you’re ready to scale.",
-    trustLine: "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
+    trustLine: `${PUBLIC_PRO_AI_TRIAL_DAYS}-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees`,
   },
   billing: {
     monthly: "Monthly",
@@ -252,7 +256,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         q: "Can I try Pro before upgrading?",
-        a: "Every new account receives a 14-day Pro trial with AI Brain. No feature restrictions during the trial. After the trial, Free does not include AI Brain.",
+        a: `Every new account receives a ${PUBLIC_PRO_AI_TRIAL_DAYS}-day Pro trial with AI Brain. No feature restrictions during the trial. After the trial, Free does not include AI Brain.`,
       },
       {
         q: "What is Prospect AI?",
@@ -268,7 +272,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
       },
       {
         q: "What counts as an active conversation?",
-        a: "A conversation counts once when a customer actively messages you during the billing period. Multiple messages within that conversation do not create additional conversations.",
+        a: ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION,
       },
       {
         q: "What are Meta conversation fees?",
@@ -358,7 +362,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
     h1: "Simple pricing. Everything you need to grow.",
     lead: "Start free. Upgrade when you’re ready to scale.",
     bullets: [
-      "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
+      `${PUBLIC_PRO_AI_TRIAL_DAYS}-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees`,
       "Free and Pro plans with clear conversation and user limits",
       "Prospect AI included on every plan",
       "Integrations and basic WhatsApp templates on Free",

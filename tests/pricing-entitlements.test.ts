@@ -266,7 +266,10 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(content.includes("0% WhachatCRM markup"));
   assert.ok(content.includes("Simple pricing. Everything you need to grow."));
   assert.ok(content.includes("Start free. Upgrade when you’re ready to scale."));
-  assert.ok(content.includes("14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees"));
+  assert.equal(
+    getLocalizedPricingPage("en").hero.trustLine,
+    "14-day free Pro trial · AI Brain included · 0% markup on Meta fees · No setup fees",
+  );
   assert.ok(!content.includes("Everything you need to find, engage, and convert more customers"));
   assert.ok(!content.includes("Works with your customer channels"));
   assert.ok(content.includes("Transparent Pricing"));

@@ -10,9 +10,11 @@ import { storage } from "./storage";
 import { sendEmailVerificationEmail, sendWelcomeEmail } from "./email";
 import { isEmailVerified } from "./authSecurity";
 import { isExcludedFromActivationEmails, isShopifyLinkedAccount } from "@shared/activationEmailEligibility";
+import { PRO_AI_TRIAL_DAYS } from "@shared/trialPolicy";
 
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-export const TRIAL_DAYS = 14;
+/** @deprecated Import PRO_AI_TRIAL_DAYS from shared/trialPolicy in new code. */
+export const TRIAL_DAYS = PRO_AI_TRIAL_DAYS;
 
 function hashToken(rawToken: string): string {
   return crypto.createHash("sha256").update(rawToken).digest("hex");

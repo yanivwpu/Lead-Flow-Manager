@@ -25,9 +25,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useHideGrowthEngineForShopify, SHOPIFY_RGE_BLOCK_REDIRECT } from "@/lib/shopifyMerchantExperience";
 import { Helmet } from "react-helmet";
 import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { getCurrentLanguage, getDirection } from "@/lib/i18n";
 import { MARKETING_URL } from "@/lib/marketingUrl";
+import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingScreenshot } from "@/components/marketing/MarketingScreenshot";
@@ -35,13 +34,14 @@ import { RGE_LANDING, RGE_LANDING_SEO } from "@/content/realtorGrowthEngineLandi
 import {
   getLocalizedRgeLanding,
   getMarketingChrome,
-  normalizeMarketingLocale,
 } from "@shared/localizeMarketingContent";
 import { cn } from "@/lib/utils";
 import {
   REALTOR_GROWTH_ENGINE_ONETIME_USD,
+  REALTOR_GROWTH_ENGINE_PATH,
   REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
 } from "@shared/pricingEntitlements";
+import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
 
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
@@ -110,11 +110,12 @@ export function RealtorLanding() {
   const { user } = useAuth();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const [, setLocation] = useLocation();
-  const { i18n } = useTranslation();
-  const locale = normalizeMarketingLocale(i18n.language || getCurrentLanguage());
+  const locale = useMarketingUrlLocale();
   const chrome = getMarketingChrome(locale);
   const content = getLocalizedRgeLanding(RGE_LANDING, RGE_LANDING_SEO, locale);
-  const isRTL = getDirection() === "rtl";
+  const isRTL = locale === "he";
+  const canonicalUrl = getCanonicalUrl(REALTOR_GROWTH_ENGINE_PATH, locale, MARKETING_URL)!;
+  const hreflangs = getHreflangLinks(REALTOR_GROWTH_ENGINE_PATH, MARKETING_URL);
 
   useEffect(() => {
     if (user && hideGrowthEngine) {
@@ -145,10 +146,13 @@ export function RealtorLanding() {
         <title>{content.seo.title}</title>
         <meta name="description" content={content.seo.description} />
         <meta name="keywords" content={content.seo.keywords} />
-        <link rel="canonical" href={`${MARKETING_URL}/realtor-growth-engine`} />
+        <link rel="canonical" href={canonicalUrl} />
+        {hreflangs.map(({ hreflang, href }) => (
+          <link key={hreflang} rel="alternate" hrefLang={hreflang} href={href} />
+        ))}
         <meta property="og:title" content={content.seo.ogTitle} />
         <meta property="og:description" content={content.seo.ogDescription} />
-        <meta property="og:url" content={`${MARKETING_URL}/realtor-growth-engine`} />
+        <meta property="og:url" content={canonicalUrl} />
         <meta property="og:image" content={`${MARKETING_URL}/og/og-realtor-growth-engine.png`} />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
@@ -162,8 +166,8 @@ export function RealtorLanding() {
             name: "Realtor Growth Engine",
             applicationCategory: "BusinessApplication",
             operatingSystem: "Web",
-            url: `${MARKETING_URL}/realtor-growth-engine`,
-            description: RGE_LANDING_SEO.description,
+            url: canonicalUrl,
+            description: content.seo.description,
             offers: {
               "@type": "Offer",
               price: String(REALTOR_GROWTH_ENGINE_ONETIME_USD),

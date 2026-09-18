@@ -8,7 +8,7 @@ import path from "node:path";
 import {
   WHATSAPP_SERVICE_PRICING_OCT_2026_CONTENT,
   WHATSAPP_SERVICE_PRICING_OCT_2026_FAQ,
-} from "../client/src/content/blog/whatsapp-service-message-pricing-october-2026";
+} from "../shared/blog/whatsapp-service-message-pricing-october-2026";
 import { BLOG_POSTS } from "../shared/blogPosts";
 import { generateBlogListHtml, generateBlogPostHtml, injectSeoMeta } from "../server/seo";
 import { shouldServeSpaFallback } from "../server/spaRouting";

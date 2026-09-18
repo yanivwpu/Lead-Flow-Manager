@@ -34,6 +34,7 @@ import {
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
 import { claimShopifyShopTrialForInstall, deleteShopifyShopTrialLedgerForCanonicalShop, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
+import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -354,7 +355,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.redirect('/app/inbox');
     }
 
-    const trialDays = 14;
+    const trialDays = PRO_AI_TRIAL_DAYS;
     res.redirect(
       `/pricing?shopify_installed=1&shop=${encodeURIComponent(normalizedShop)}&trial_days=${String(trialDays)}`,
     );

@@ -5,6 +5,14 @@
 
 import type { MarketingLocale } from "./marketingLocale";
 import { mergeMarketingContent } from "./marketingLocale";
+import {
+  REALTOR_GROWTH_ENGINE_ONETIME_USD,
+  formatUsdDisplay,
+  getPaidPlanMonthlyPriceUsd,
+} from "./pricingEntitlements";
+
+const PRO_MONTHLY_PRICE = `${formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))}/mo`;
+const RGE_ONE_TIME_PRICE = formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD);
 
 export type RgeLandingSeoOverlay = {
   title: string;
@@ -640,7 +648,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "Plataforma core",
           name: "WhachatCRM Pro",
-          price: "$49/mo",
+          price: PRO_MONTHLY_PRICE,
           desc: "CRM core, mensajería y plataforma.",
         },
         {
@@ -652,7 +660,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "Sistema inmobiliario",
           name: "Realtor Growth Engine",
-          price: "$199",
+          price: RGE_ONE_TIME_PRICE,
           priceNote: "pago único",
           desc: "Flujos inmobiliarios especializados, calificación, campos, pipeline, recorrido del comprador basado en inventario, configuración de Agent Page y ajustes.",
         },
@@ -683,7 +691,7 @@ export const RGE_LANDING_LOCALES: Record<
       },
       {
         q: "¿Qué necesito para ejecutar Realtor Growth Engine?",
-        a: "WhachatCRM Pro (AI Brain incluido) y la licencia de pago único de $199 de Realtor Growth Engine. La conexión WhatsApp Business forma parte de la activación para flujos de mensajería.",
+        a: `WhachatCRM Pro (AI Brain incluido) y la licencia de pago único de ${RGE_ONE_TIME_PRICE} de Realtor Growth Engine. La conexión WhatsApp Business forma parte de la activación para flujos de mensajería.`,
       },
       {
         q: "¿Cómo funciona el seguimiento en WhatsApp?",
@@ -708,7 +716,7 @@ export const RGE_LANDING_LOCALES: Record<
         "Del primer mensaje a coincidencia de propiedad a visita, Realtor Growth Engine ayuda a manejar el trabajo repetitivo entre cada paso.",
       cta: "Instalar Realtor Growth Engine",
       viewPlans: "Ver todos los planes",
-      note: "Se requiere un plan Pro activo. Licencia RGE de $199 pago único. Sin garantías de conversión no soportadas.",
+      note: `Se requiere un plan Pro activo. Licencia RGE de ${RGE_ONE_TIME_PRICE} pago único. Sin garantías de conversión no soportadas.`,
     },
     screenshots: RGE_SCREENSHOTS_ES,
   },
@@ -1091,7 +1099,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "פלטפורמת core",
           name: "WhachatCRM Pro",
-          price: "$49/mo",
+          price: PRO_MONTHLY_PRICE,
           desc: "CRM core, הודעות ופלטפורמה.",
         },
         {
@@ -1103,7 +1111,7 @@ export const RGE_LANDING_LOCALES: Record<
         {
           label: "מערכת נדל\"ן",
           name: "Realtor Growth Engine",
-          price: "$199",
+          price: RGE_ONE_TIME_PRICE,
           priceNote: "חד-פעמי",
           desc: "זרימות נדל\"ן מיוחדות, סינון, שדות, pipeline, מסע קונה מונע מלאי, הגדרת Agent Page ותצורה.",
         },
@@ -1134,7 +1142,7 @@ export const RGE_LANDING_LOCALES: Record<
       },
       {
         q: "מה צריך כדי להריץ Realtor Growth Engine?",
-        a: "WhachatCRM Pro (AI Brain כלול) ורישיון Realtor Growth Engine חד-פעמי ב-$199. חיבור WhatsApp Business הוא חלק מההפעלה לזרימות הודעות.",
+        a: `WhachatCRM Pro (AI Brain כלול) ורישיון Realtor Growth Engine חד-פעמי ב-${RGE_ONE_TIME_PRICE}. חיבור WhatsApp Business הוא חלק מההפעלה לזרימות הודעות.`,
       },
       {
         q: "איך מעקב עובד ב-WhatsApp?",
@@ -1159,7 +1167,7 @@ export const RGE_LANDING_LOCALES: Record<
         "מההודעה הראשונה להתאמת נכס ועד סיור, Realtor Growth Engine עוזר לטפל בעבודה החוזרת בין כל שלב.",
       cta: "התקינו Realtor Growth Engine",
       viewPlans: "צפו בכל התוכניות",
-      note: "נדרש תוכנית Pro פעילה. רישיון RGE חד-פעמי $199. ללא ערבויות המרה לא נתמכות.",
+      note: `נדרש תוכנית Pro פעילה. רישיון RGE חד-פעמי ${RGE_ONE_TIME_PRICE}. ללא ערבויות המרה לא נתמכות.`,
     },
     screenshots: RGE_SCREENSHOTS_HE,
   },

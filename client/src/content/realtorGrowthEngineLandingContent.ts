@@ -3,6 +3,14 @@
  * Pricing and capability claims must stay aligned with live product packaging.
  */
 import { S } from "@shared/marketingScreenshots";
+import {
+  REALTOR_GROWTH_ENGINE_ONETIME_USD,
+  formatUsdDisplay,
+  getPaidPlanMonthlyPriceUsd,
+} from "@shared/pricingEntitlements";
+
+const PRO_MONTHLY_PRICE = `${formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))}/mo`;
+const RGE_ONE_TIME_PRICE = formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD);
 
 export const RGE_LANDING_SEO = {
   title: "Realtor Growth Engine | AI CRM for Real Estate Agents | WhachatCRM",
@@ -381,7 +389,7 @@ export const RGE_LANDING = {
       {
         label: "Core platform",
         name: "WhachatCRM Pro",
-        price: "$49/mo",
+        price: PRO_MONTHLY_PRICE,
         desc: "Core CRM, messaging, and platform.",
       },
       {
@@ -393,7 +401,7 @@ export const RGE_LANDING = {
       {
         label: "Real-estate system",
         name: "Realtor Growth Engine",
-        price: "$199",
+        price: RGE_ONE_TIME_PRICE,
         priceNote: "one-time",
         desc: "Specialized real-estate workflows, qualification, fields, pipeline, inventory-driven buyer journey, Agent Page setup, and configuration.",
       },
@@ -426,7 +434,7 @@ export const RGE_LANDING = {
     },
     {
       q: "What do I need to run the Realtor Growth Engine?",
-      a: "WhachatCRM Pro (AI Brain included) and the $199 one-time Realtor Growth Engine license. WhatsApp Business connection is part of activation for messaging workflows.",
+      a: `WhachatCRM Pro (AI Brain included) and the ${RGE_ONE_TIME_PRICE} one-time Realtor Growth Engine license. WhatsApp Business connection is part of activation for messaging workflows.`,
     },
     {
       q: "How does follow-up work on WhatsApp?",
@@ -452,7 +460,7 @@ export const RGE_LANDING = {
       "From first message to property match to showing, the Realtor Growth Engine helps handle the repetitive work between each step.",
     cta: "Install Realtor Growth Engine",
     viewPlans: "View all plans",
-    note: "Requires an active Pro plan. $199 one-time RGE license. No unsupported conversion guarantees.",
+    note: `Requires an active Pro plan. ${RGE_ONE_TIME_PRICE} one-time RGE license. No unsupported conversion guarantees.`,
   },
 
   screenshots: {

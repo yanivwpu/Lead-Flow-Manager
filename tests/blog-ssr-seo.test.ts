@@ -22,5 +22,14 @@ assert.match(injected, /realtor-growth-engine-complete-guide\.png/);
 const postHtml = generateBlogPostHtml("realtor-growth-engine-complete-guide");
 assert.ok(postHtml);
 assert.match(postHtml!, /realtor-growth-engine-complete-guide/);
+assert.match(postHtml!, /What Is the Realtor Growth Engine\?/);
+assert.match(postHtml!, /Unified Messaging Inbox/);
+assert.ok(postHtml!.length > 10_000, "RGE SSR renders the article body, not the excerpt fallback");
+
+const twilioHtml = generateBlogPostHtml("twilio-whatsapp-setup-guide");
+assert.ok(twilioHtml);
+assert.match(twilioHtml!, /Meta Embedded Signup/);
+assert.match(twilioHtml!, /Select your WhatsApp Business Account/);
+assert.doesNotMatch(twilioHtml!, /Create a Twilio Account|Get WhatsApp Sandbox/);
 
 console.log("PASS blog-ssr-seo.test.ts");

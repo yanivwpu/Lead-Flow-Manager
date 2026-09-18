@@ -19,8 +19,10 @@
 import { normalizeShopifyShopDomain } from "./shopifyBilling";
 import { hasActivePaidPlan, type PaidSourceOptions } from "./trialEntitlements";
 import type { User } from "./schema";
+import { PRO_AI_TRIAL_DAYS } from "./trialPolicy";
 
-export const SHOPIFY_SHOP_TRIAL_DAYS = 14;
+/** Shopify uses the same one-time Pro + AI Brain trial duration. */
+export const SHOPIFY_SHOP_TRIAL_DAYS = PRO_AI_TRIAL_DAYS;
 export const SHOPIFY_SHOP_TRIAL_PLAN = "pro_ai";
 
 export const SHOPIFY_SHOP_TRIAL_LEDGER_STATUSES = [

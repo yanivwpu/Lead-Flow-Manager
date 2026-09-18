@@ -3,7 +3,7 @@ import { storage } from "./storage";
 import { canStartInternalProAiTrial, hasActivePaidPlan, isProAiTrialActive } from "@shared/trialEntitlements";
 import { trialExpiryConversationUsageReset } from "@shared/conversationUsagePeriod";
 import { userHasActiveGhlMarketplacePro } from "./ghlMarketplaceGrant";
-import { TRIAL_DAYS } from "./emailVerification";
+import { PRO_AI_TRIAL_DAYS } from "@shared/trialPolicy";
 
 export type { TrialStatus } from "@shared/trialEntitlements";
 export {
@@ -78,7 +78,7 @@ export async function startInternalProAiTrialForUser(userId: string): Promise<St
   }
 
   const trialEndsAt = new Date(now);
-  trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
+  trialEndsAt.setDate(trialEndsAt.getDate() + PRO_AI_TRIAL_DAYS);
   const updated = await storage.updateUser(userId, {
     trialStartedAt: now,
     trialEndsAt,

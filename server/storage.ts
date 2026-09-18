@@ -55,6 +55,7 @@ import {
   templates as templatesTable, templateEntitlements, realtorOnboardingSubmissions,
   templateInstalls, templateAssets, userTemplateData, ghlEventDedup, calendlyCanceledEventTombstones
 } from "@shared/schema";
+import { PRO_AI_TRIAL_DAYS } from "@shared/trialPolicy";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import type { RetargetEligibleContactRow } from "@shared/retargetEligibleContact";
 import {
@@ -862,7 +863,7 @@ export class DbStorage implements IStorage {
       ? (() => {
           const trialStartedAt = now;
           const trialEndsAt = new Date(now);
-          trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+          trialEndsAt.setDate(trialEndsAt.getDate() + PRO_AI_TRIAL_DAYS);
           return {
             ...(insertUser as any),
             trialStartedAt,
