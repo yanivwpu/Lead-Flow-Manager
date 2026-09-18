@@ -78,6 +78,7 @@ import {
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
+import { formatUsdDisplay, getPaidPlanMonthlyPriceUsd } from "@shared/pricingEntitlements";
 import {
   getRgePurchaseBillingPayload,
   getSubscriptionApiUrl,
@@ -2222,7 +2223,7 @@ export function RealtorGrowthEngine() {
           <div className="p-3 bg-gray-50 rounded-lg">
             <p className="text-sm font-semibold text-gray-900">What you'll get:</p>
             <ul className="text-xs text-gray-600 mt-2 space-y-1">
-              <li>✓ WhachatCRM Pro platform ($49/mo)</li>
+              <li>✓ WhachatCRM Pro platform ({formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))}/mo)</li>
               <li>✓ AI Brain included with Pro</li>
               <li>✓ All workflows + templates included</li>
             </ul>

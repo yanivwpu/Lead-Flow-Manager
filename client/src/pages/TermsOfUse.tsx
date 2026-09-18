@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet";
 import { ArrowLeft } from "lucide-react";
 import { MARKETING_URL } from "@/lib/marketingUrl";
 import { SiteFooter } from "@/components/SiteFooter";
+import { ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION } from "@shared/publicProductFacts";
 
 export function TermsOfUse() {
   return (
@@ -94,7 +95,7 @@ export function TermsOfUse() {
           </p>
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>Subscription fees are billed monthly via Stripe</li>
-            <li>An "active conversation" is one unique WhatsApp contact within a rolling 30-day window</li>
+            <li>An "active conversation" follows this rule: {ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION}</li>
             <li>Unlimited messages can be sent within a conversation — the count stays the same</li>
             <li>When you reach your conversation limit, outbound messages are paused until you upgrade</li>
             <li>Plans can be upgraded or downgraded at any time</li>

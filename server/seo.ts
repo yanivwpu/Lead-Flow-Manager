@@ -6,6 +6,11 @@ import {
   type BlogPostMeta,
 } from "@shared/blogPosts";
 import { ALL_SOLUTION_PAGES } from "@shared/solutionPages";
+import {
+  REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
+  TWILIO_WHATSAPP_SETUP_GUIDE_CONTENT,
+  WHATSAPP_SERVICE_PRICING_OCT_2026_CONTENT,
+} from "@shared/blogContent";
 import { ALL_PRODUCT_PAGES } from "@shared/productPages";
 import {
   getCanonicalUrl,
@@ -1388,53 +1393,118 @@ export function generateBlogListHtml(): string {
   return html;
 }
 
-function markdownToHtml(markdown: string): string {
-  return markdown
-    .replace(/^## (.*$)/gim, '<h2 style="font-size:1.5rem;margin:24px 0 12px;font-weight:600;">$1</h2>')
-    .replace(/^### (.*$)/gim, '<h3 style="font-size:1.25rem;margin:20px 0 10px;font-weight:500;">$1</h3>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^\- (.*$)/gim, '<li style="margin-left:20px;">$1</li>')
-    .replace(/^\d+\. (.*$)/gim, '<li style="margin-left:20px;">$1</li>')
-    .replace(/\n\n/g, '</p><p style="margin:16px 0;">')
-    .replace(/\n/g, '<br/>')
-    .replace(/\| (.*) \|/g, (match) => `<div style="overflow-x:auto;font-size:14px;">${match}</div>`);
+function safeMarkdownHref(rawHref: string): string | null {
+  const href = rawHref.trim();
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  if (/^https:\/\//i.test(href)) return href;
+  return null;
 }
 
-const BLOG_CONTENT_SSR: Record<string, string> = {
-  "whatsapp-service-message-pricing-october-2026": `Beginning October 1, 2026, Meta is changing how messages sent through the WhatsApp Business Platform are priced.
+function renderMarkdownInline(raw: string): string {
+  const links: string[] = [];
+  const withLinkTokens = raw.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
+    const safeHref = safeMarkdownHref(href);
+    const safeLabel = escapeHtmlText(label).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    const html = safeHref
+      ? `<a href="${escapeHtmlAttr(safeHref)}"${/^https:\/\//i.test(safeHref) ? ' rel="noopener noreferrer"' : ""}>${safeLabel}</a>`
+      : safeLabel;
+    const index = links.push(html) - 1;
+    return `\u0000LINK${index}\u0000`;
+  });
+  return escapeHtmlText(withLinkTokens)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\u0000LINK(\d+)\u0000/g, (_match, index: string) => links[Number(index)] || "");
+}
 
-Businesses will begin paying for service messages—the normal replies sent by a team member, chatbot, or AI assistant during the 24-hour customer-service window. Meta will also begin charging for utility template messages sent during that window.
+/** Minimal safe Markdown renderer for the public SSR article subset. */
+export function markdownToHtml(markdown: string): string {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const html: string[] = [];
+  let paragraph: string[] = [];
+  let list: { type: "ul" | "ol"; items: string[] } | null = null;
 
-This change affects businesses using the WhatsApp Business Platform through WhachatCRM or another API-connected platform. It does not affect personal WhatsApp accounts or businesses that only use the free WhatsApp Business mobile app.
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p style="margin:16px 0;">${renderMarkdownInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    html.push(
+      `<${list.type} style="margin:16px 0;padding-left:24px;">${list.items
+        .map((item) => `<li style="margin:6px 0;">${renderMarkdownInline(item)}</li>`)
+        .join("")}</${list.type}>`,
+    );
+    list = null;
+  };
 
-## The key changes
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] || "";
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
 
-Starting October 1, 2026:
+    const heading = /^(##|###)\s+(.+)$/.exec(line);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1] === "##" ? "h2" : "h3";
+      const style = level === "h2"
+        ? "font-size:1.5rem;margin:24px 0 12px;font-weight:600;"
+        : "font-size:1.25rem;margin:20px 0 10px;font-weight:500;";
+      html.push(`<${level} style="${style}">${renderMarkdownInline(heading[2] || "")}</${level}>`);
+      continue;
+    }
 
-- Service messages will be charged per delivered message.
-- The first 1,000 service messages per business phone number each month will remain free.
-- Charges begin with the 1,001st service message.
-- Utility templates sent during an open 24-hour customer-service window will also become billable.
-- The 1,000-message allowance applies to service messages, not utility templates.
-- Messages received from customers remain free.
-- Meta’s rates vary according to the recipient’s country.
-- Marketing and authentication templates are already billable, so their billing treatment does not change.
+    const unordered = /^[-*]\s+(.+)$/.exec(line);
+    const ordered = /^\d+\.\s+(.+)$/.exec(line);
+    if (unordered || ordered) {
+      flushParagraph();
+      const type = unordered ? "ul" : "ol";
+      if (list?.type !== type) {
+        flushList();
+        list = { type, items: [] };
+      }
+      list.items.push((unordered || ordered)![1] || "");
+      continue;
+    }
 
-Meta has also instructed businesses to add a payment method to their WhatsApp Business Account by September 30, 2026, to prevent service-message delivery from being interrupted.
+    if (line.trim().startsWith("|") && i + 1 < lines.length && /^\|?\s*:?-{3,}/.test(lines[i + 1] || "")) {
+      flushParagraph();
+      flushList();
+      const rows: string[][] = [];
+      const parseRow = (row: string) => row.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+      const headers = parseRow(line);
+      i += 2; // Skip the Markdown delimiter row.
+      while (i < lines.length && (lines[i] || "").trim().startsWith("|")) {
+        rows.push(parseRow(lines[i] || ""));
+        i += 1;
+      }
+      i -= 1;
+      html.push(
+        `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr>${headers
+          .map((cell) => `<th style="text-align:left;padding:8px;border-bottom:1px solid #d1d5db;">${renderMarkdownInline(cell)}</th>`)
+          .join("")}</tr></thead><tbody>${rows
+          .map((row) => `<tr>${row.map((cell) => `<td style="padding:8px;border-bottom:1px solid #e5e7eb;">${renderMarkdownInline(cell)}</td>`).join("")}</tr>`)
+          .join("")}</tbody></table></div>`,
+      );
+      continue;
+    }
 
-## How much will it cost?
+    flushList();
+    paragraph.push(line.trim());
+  }
 
-Meta charges according to the country associated with the customer’s phone number—not the location of your business. Service messages will use Meta’s applicable country-specific rate. Each business phone number receives 1,000 free service messages every month.
+  flushParagraph();
+  flushList();
+  return html.join("\n");
+}
 
-Rates vary between countries and may be updated by Meta. Businesses should review the latest rates on Meta’s official WhatsApp Business Platform pricing page: https://whatsappbusiness.com/products/platform-pricing/
-
-## What this means for WhachatCRM customers
-
-This is a Meta WhatsApp Business Platform pricing change, not an increase to WhachatCRM’s published subscription price.
-
-These charges are set by Meta and are separate from your WhachatCRM subscription. Please confirm that your WhatsApp Business Account has a valid payment method.
-
-For the latest information, review Meta’s official service-message documentation (https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing/non-template-messages) and WhatsApp Business Platform pricing (https://whatsappbusiness.com/products/platform-pricing/).`,
+export const BLOG_CONTENT_SSR: Record<string, string> = {
+  "whatsapp-service-message-pricing-october-2026": WHATSAPP_SERVICE_PRICING_OCT_2026_CONTENT,
+  "realtor-growth-engine-complete-guide": REALTOR_GROWTH_ENGINE_GUIDE_CONTENT,
 
   "whatsapp-crm-complete-guide-2025": `WhatsApp has become the world's most popular messaging platform with over 2 billion users. For businesses, this presents an incredible opportunity to connect with customers where they already spend their time.
 
@@ -1547,23 +1617,7 @@ WhachatCRM offers zero message markup (you pay Twilio directly), a free plan, an
 
 Great customer service on WhatsApp builds loyalty and generates referrals.`,
 
-  "twilio-whatsapp-setup-guide": `A complete walkthrough for connecting your WhatsApp Business account to Twilio.
-
-## Setup Steps
-
-1. **Create a Twilio Account** - Sign up at twilio.com
-2. **Get WhatsApp Sandbox** - Start testing in the sandbox
-3. **Apply for Production** - Get your number approved
-4. **Configure Webhooks** - Set up message receiving
-5. **Connect to Your CRM** - Integrate with WhachatCRM
-
-## Common Issues and Solutions
-
-- Verification failed: Ensure your business is registered properly
-- Messages not sending: Check your Twilio balance
-- Webhooks not working: Verify URL is accessible
-
-The entire setup typically takes 15-30 minutes.`,
+  "twilio-whatsapp-setup-guide": TWILIO_WHATSAPP_SETUP_GUIDE_CONTENT,
 
   "whatsapp-drip-campaigns-examples": `Learn how to create automated WhatsApp message sequences that nurture leads and drive sales.
 
@@ -1594,7 +1648,9 @@ export function generateBlogPostHtml(slug: string): string | null {
   if (!post) return null;
   
   const content = BLOG_CONTENT_SSR[slug];
-  const contentHtml = content ? markdownToHtml(content) : `<p style="font-size: 1.1rem; color: #555;">${post.excerpt}</p>`;
+  const contentHtml = content
+    ? markdownToHtml(content)
+    : `<p style="font-size: 1.1rem; color: #555;">${escapeHtmlText(post.excerpt)}</p>`;
   const featuredImageUrl = resolveBlogFeaturedImageUrl(post, BASE_URL);
   const featuredImageHtml = featuredImageUrl
     ? `<figure style="margin:0 0 24px;border-radius:16px;overflow:hidden;border:1px solid #f3f4f6;background:linear-gradient(180deg,#f8fafc,#f1f5f9);">
@@ -1609,15 +1665,15 @@ export function generateBlogPostHtml(slug: string): string | null {
       </nav>
       <article>
         <header style="margin-bottom: 32px;">
-          <span style="color: #22c55e; font-size: 14px; font-weight: 500;">${post.category}</span>
-          <h1 style="font-size: 2rem; margin: 12px 0 16px;">${post.title}</h1>
+          <span style="color: #22c55e; font-size: 14px; font-weight: 500;">${escapeHtmlText(post.category)}</span>
+          <h1 style="font-size: 2rem; margin: 12px 0 16px;">${escapeHtmlText(post.title)}</h1>
           <div style="color: #666; font-size: 14px; margin-bottom: 16px;">
             <span>${formatDate(post.date)}</span> · <span>${post.readTime}</span>
           </div>
           ${featuredImageHtml}
         </header>
         <div style="color: #333; line-height: 1.7;">
-          <p style="margin: 16px 0;">${contentHtml}</p>
+          ${contentHtml}
         </div>
       </article>
       <footer style="text-align: center; padding: 40px 0; margin-top: 40px; border-top: 1px solid #e5e7eb;">

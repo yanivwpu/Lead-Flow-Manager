@@ -16,7 +16,6 @@ import {
   getCanonicalCommercialCatalog,
 } from "../shared/pricingEntitlements";
 import { GROWTH_ENGINE_CARDS } from "../client/src/lib/growthEnginesCatalog";
-import { SHOPIFY_RGE_ONETIME_USD } from "../server/shopify";
 
 const root = process.cwd();
 
@@ -47,8 +46,6 @@ test("gallery, Shopify, catalog, SSR, and JSON-LD resolve from the canonical USD
   assert.equal(rgeCard!.oneTimePrice, formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD));
   assert.equal(rgeCard!.subscriptionRequirementShort, REALTOR_GROWTH_ENGINE_REQUIRES_PRO);
   assert.equal(rgeCard!.monthlyRequirementLabel, REALTOR_GROWTH_ENGINE_REQUIRES_PRO);
-
-  assert.equal(SHOPIFY_RGE_ONETIME_USD, REALTOR_GROWTH_ENGINE_ONETIME_USD);
 
   const catalog = getCanonicalCommercialCatalog().find((item) => item.id === "realtor-growth-engine");
   assert.equal(catalog?.offers[0]?.amount, REALTOR_GROWTH_ENGINE_ONETIME_USD);

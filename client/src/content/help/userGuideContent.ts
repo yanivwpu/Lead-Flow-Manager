@@ -1,6 +1,7 @@
 import type { SeoFaqItem } from "@/content/seo/types";
 import type { MarketingScreenshotMeta } from "@shared/marketingScreenshots";
 import { S } from "@shared/marketingScreenshots";
+import { PRO_AI_TRIAL_DAYS } from "@shared/trialPolicy";
 import {
   PROSPECT_AI_BRAIN_FAQ,
   PROSPECT_AI_BRAIN_OPTIONAL_DETAIL,
@@ -51,7 +52,7 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
       {
         title: "AI Trial",
         paragraphs: [
-          "Eligible new workspaces receive a 14-day Pro trial with AI Brain to experience Copilot summaries, suggested replies, and lead scoring before committing to Pro.",
+          `Eligible new workspaces receive a ${PRO_AI_TRIAL_DAYS}-day Pro trial with AI Brain to experience Copilot summaries, suggested replies, and lead scoring before committing to Pro.`,
           "Trial limits appear in Settings → Billing. When the trial ends, AI features downgrade per your plan unless you upgrade.",
         ],
       },
@@ -422,8 +423,8 @@ export const USER_GUIDE_SECTIONS: HelpSection[] = [
 export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   { question: "How do I create a WhachatCRM account?", answer: "Click Start Free on the website, sign up with email or Google, and complete the onboarding wizard." },
   { question: "Is there a free plan?", answer: "Yes. Free includes Unified Inbox, Integrations, basic WhatsApp templates, Prospect AI, one user, and limited active conversations. Chatbot, campaign automation, and AI Brain are not included." },
-  { question: "What is the difference between Starter and Pro?", answer: "Starter supports up to 3 users and basic automations. Pro adds unlimited users, advanced Growth Engine workflows, and team assignment." },
-  { question: "What is the AI Trial?", answer: "A limited trial of AI Copilot features for eligible new workspaces before upgrading or purchasing AI Brain." },
+  { question: "What happened to the Starter plan?", answer: "Starter is a grandfathered legacy plan and is unavailable to new customers. Current public self-service plans are Free and Pro; AI Brain is included with Pro and is not sold as a separate current add-on." },
+  { question: "What is the AI Trial?", answer: `Eligible new workspaces receive the ${PRO_AI_TRIAL_DAYS}-day Pro trial with AI Brain before deciding whether to upgrade to Pro.` },
   { question: "How do I connect WhatsApp?", answer: "Go to Integrations → Meta (WhatsApp Cloud) and complete embedded signup with your Meta business portfolio." },
   { question: "Do I need a developer for WhatsApp setup?", answer: "No for standard embedded signup. Developers can extend via webhooks where offered." },
   { question: "Can I migrate my existing WhatsApp Business number?", answer: "Often yes — Meta guides migration or coexistence during embedded signup depending on eligibility." },
