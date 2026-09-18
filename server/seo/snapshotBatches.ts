@@ -3,12 +3,17 @@
 export const SEO_SNAPSHOT_INSERT_BATCH_SIZE = 5_000;
 export const SEO_SEARCH_CONSOLE_PAGE_SIZE = 25_000;
 export const SEO_SEARCH_CONSOLE_MAX_ROWS = 500_000;
+export const SEO_DASHBOARD_CANDIDATE_LIMIT = 5_000;
 
 export function snapshotInsertBatches<T>(rows: readonly T[], size = SEO_SNAPSHOT_INSERT_BATCH_SIZE): T[][] {
   if (!Number.isInteger(size) || size < 1) throw new Error("Snapshot batch size must be a positive integer");
   const batches: T[][] = [];
   for (let offset = 0; offset < rows.length; offset += size) batches.push(rows.slice(offset, offset + size));
   return batches;
+}
+
+export function boundDashboardCandidates<T>(rows: readonly T[]): T[] {
+  return rows.slice(0, SEO_DASHBOARD_CANDIDATE_LIMIT);
 }
 
 export function searchConsoleImportIsTruncated(importedRows: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {

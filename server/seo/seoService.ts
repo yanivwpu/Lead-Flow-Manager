@@ -1,10 +1,11 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
 import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
-import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
+import { SEO_TARGETS } from "@shared/seoTargets";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -67,20 +68,59 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
   return syncInFlight;
 }
 
-function summarize(rows: SeoMetricRow[]) {
-  return rows.reduce((a, r) => ({ clicks: a.clicks + r.clicks, impressions: a.impressions + r.impressions, positionWeighted: a.positionWeighted + r.position * r.impressions }), { clicks: 0, impressions: 0, positionWeighted: 0 });
-}
+const numberValue = (value: unknown) => Number(value ?? 0);
 export async function getSeoDashboard(now = new Date()) {
   const end = new Date(now); end.setUTCDate(end.getUTCDate() - 3);
   const currentStart = new Date(end); currentStart.setUTCDate(currentStart.getUTCDate() - 27);
   const previousStart = new Date(currentStart); previousStart.setUTCDate(previousStart.getUTCDate() - 28);
-  const rows = await db.select().from(seoSearchSnapshots).where(and(gte(seoSearchSnapshots.reportingDate, isoDay(previousStart)), lte(seoSearchSnapshots.reportingDate, isoDay(end))));
-  const metricRows = rows.map((r) => ({ query: r.query, page: r.page, clicks: r.clicks, impressions: r.impressions, position: r.position }));
-  const split = rows.map((r, i) => ({ date: r.reportingDate, row: metricRows[i] }));
-  const current = split.filter((r) => r.date >= isoDay(currentStart)).map((r) => r.row), previous = split.filter((r) => r.date < isoDay(currentStart)).map((r) => r.row);
-  const totals = summarize(current), previousTotals = summarize(previous);
-  const group = (key: "query" | "page") => [...current.reduce((m, r) => { const k = r[key]; const v = m.get(k) ?? { name: k, clicks: 0, impressions: 0 }; v.clicks += r.clicks; v.impressions += r.impressions; m.set(k, v); return m; }, new Map<string, {name:string;clicks:number;impressions:number}>()).values()].sort((a,b) => b.clicks-a.clicks).slice(0,10);
+  const currentStartDay = isoDay(currentStart), previousStartDay = isoDay(previousStart), endDay = isoDay(end);
+  const [totalsResult, topQueriesResult, topPagesResult, candidatesResult] = await Promise.all([
+    db.execute(sql`SELECT
+      COALESCE(SUM(clicks) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_clicks,
+      COALESCE(SUM(impressions) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_impressions,
+      COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_position_weighted,
+      COALESCE(SUM(clicks) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_clicks,
+      COALESCE(SUM(impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_impressions,
+      COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_position_weighted
+      FROM seo_search_snapshots WHERE reporting_date BETWEEN ${previousStartDay} AND ${endDay}`),
+    db.execute(sql`SELECT query AS name, SUM(clicks) AS clicks, SUM(impressions) AS impressions
+      FROM seo_search_snapshots WHERE reporting_date BETWEEN ${currentStartDay} AND ${endDay}
+      GROUP BY query ORDER BY SUM(clicks) DESC LIMIT 10`),
+    db.execute(sql`SELECT page AS name, SUM(clicks) AS clicks, SUM(impressions) AS impressions
+      FROM seo_search_snapshots WHERE reporting_date BETWEEN ${currentStartDay} AND ${endDay}
+      GROUP BY page ORDER BY SUM(clicks) DESC LIMIT 10`),
+    db.execute(sql`WITH metrics AS (
+      SELECT query, page,
+        COALESCE(SUM(clicks) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_clicks,
+        COALESCE(SUM(impressions) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_impressions,
+        COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date >= ${currentStartDay}), 0) AS current_position_weighted,
+        COALESCE(SUM(clicks) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_clicks,
+        COALESCE(SUM(impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_impressions,
+        COALESCE(SUM(position * impressions) FILTER (WHERE reporting_date < ${currentStartDay}), 0) AS previous_position_weighted
+      FROM seo_search_snapshots WHERE reporting_date BETWEEN ${previousStartDay} AND ${endDay} GROUP BY query, page
+    ) SELECT * FROM metrics WHERE
+      (current_impressions >= 100) OR
+      (previous_impressions >= 20 AND (current_clicks < previous_clicks * .8 OR current_impressions < previous_impressions * .8 OR
+        (current_impressions > 0 AND current_position_weighted / current_impressions > previous_position_weighted / NULLIF(previous_impressions, 0) + 2)))
+      ORDER BY GREATEST(current_impressions, previous_impressions) DESC LIMIT ${SEO_DASHBOARD_CANDIDATE_LIMIT}`),
+  ]);
+  const totals = (totalsResult.rows[0] ?? {}) as Record<string, unknown>;
+  const candidateRows = boundDashboardCandidates(candidatesResult.rows as Record<string, unknown>[]);
+  const current: SeoMetricRow[] = candidateRows.filter((r) => numberValue(r.current_impressions) > 0).map((r) => ({ query: String(r.query), page: String(r.page), clicks: numberValue(r.current_clicks), impressions: numberValue(r.current_impressions), position: numberValue(r.current_position_weighted) / numberValue(r.current_impressions) }));
+  const previous: SeoMetricRow[] = candidateRows.filter((r) => numberValue(r.previous_impressions) > 0).map((r) => ({ query: String(r.query), page: String(r.page), clicks: numberValue(r.previous_clicks), impressions: numberValue(r.previous_impressions), position: numberValue(r.previous_position_weighted) / numberValue(r.previous_impressions) }));
+  const targetKeywords = SEO_TARGETS.map((target) => target.keyword.toLowerCase());
+  const targetResult = targetKeywords.length ? await db.execute(sql`WITH page_visibility AS (
+    SELECT lower(query) AS query, page, SUM(impressions) AS impressions
+    FROM seo_search_snapshots WHERE reporting_date BETWEEN ${currentStartDay} AND ${endDay}
+      AND lower(query) IN (${sql.join(targetKeywords.map((keyword) => sql`${keyword}`), sql`, `)})
+    GROUP BY lower(query), page
+  ) SELECT query, SUM(impressions) AS impressions,
+      COUNT(*) FILTER (WHERE impressions >= 10) AS qualifying_pages
+    FROM page_visibility GROUP BY query LIMIT ${targetKeywords.length}`) : { rows: [] };
+  const targetVisibility = (targetResult.rows as Record<string, unknown>[]).map((r) => ({ query: String(r.query), impressions: numberValue(r.impressions), qualifyingPages: numberValue(r.qualifying_pages) }));
+  const topList = (rows: unknown[]) => (rows as Record<string, unknown>[]).map((r) => ({ name: String(r.name), clicks: numberValue(r.clicks), impressions: numberValue(r.impressions) }));
   const [lastRun] = await db.select().from(seoSyncRuns).where(eq(seoSyncRuns.status, "success")).orderBy(desc(seoSyncRuns.completedAt)).limit(1);
   const config = resolveSearchConsoleConfig();
-  return { config: { configured: config.configured, missing: config.missing }, lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: isoDay(currentStart), endDate: isoDay(end), clicks: totals.clicks, impressions: totals.impressions, ctr: totals.clicks / Math.max(1, totals.impressions), position: averageSeoPosition(totals.positionWeighted, totals.impressions), previous: { clicks: previousTotals.clicks, impressions: previousTotals.impressions, ctr: previousTotals.clicks / Math.max(1, previousTotals.impressions), position: averageSeoPosition(previousTotals.positionWeighted, previousTotals.impressions) } }, topQueries: group("query"), topPages: group("page"), opportunities: detectSeoOpportunities(current, previous).slice(0,50) };
+  const currentClicks = numberValue(totals.current_clicks), currentImpressions = numberValue(totals.current_impressions), previousClicks = numberValue(totals.previous_clicks), previousImpressions = numberValue(totals.previous_impressions);
+  return { config: { configured: config.configured, missing: config.missing }, lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: currentStartDay, endDate: endDay, clicks: currentClicks, impressions: currentImpressions, ctr: currentClicks / Math.max(1, currentImpressions), position: averageSeoPosition(numberValue(totals.current_position_weighted), currentImpressions), previous: { clicks: previousClicks, impressions: previousImpressions, ctr: previousClicks / Math.max(1, previousImpressions), position: averageSeoPosition(numberValue(totals.previous_position_weighted), previousImpressions) } }, topQueries: topList(topQueriesResult.rows), topPages: topList(topPagesResult.rows), opportunities: detectSeoOpportunities(current, previous, SEO_TARGETS, targetVisibility).slice(0,50) };
 }

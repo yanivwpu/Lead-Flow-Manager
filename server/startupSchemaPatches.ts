@@ -1279,6 +1279,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
       `CREATE UNIQUE INDEX IF NOT EXISTS seo_search_snapshots_date_query_page_uidx ON seo_search_snapshots(reporting_date, query, page)`,
       `CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_idx ON seo_search_snapshots(reporting_date)`,
       `CREATE INDEX IF NOT EXISTS seo_search_snapshots_query_idx ON seo_search_snapshots(query)`,
+      `CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_query_idx ON seo_search_snapshots(reporting_date, query)`,
+      `CREATE INDEX IF NOT EXISTS seo_search_snapshots_date_page_idx ON seo_search_snapshots(reporting_date, page)`,
       `CREATE TABLE IF NOT EXISTS seo_sync_runs (
         id varchar PRIMARY KEY DEFAULT gen_random_uuid(), status text NOT NULL DEFAULT 'running',
         trigger text NOT NULL DEFAULT 'scheduled', start_date date NOT NULL, end_date date NOT NULL,

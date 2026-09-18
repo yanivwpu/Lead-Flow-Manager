@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities } from "../server/seo/opportunities";
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 
 const current = [
@@ -26,6 +26,9 @@ const oversized = Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE * 2 + 17 }
 const batches = snapshotInsertBatches(oversized);
 assert.deepEqual(batches.map((batch) => batch.length), [5_000, 5_000, 17]);
 assert.deepEqual(batches.flat(), oversized, "batching neither drops nor duplicates rows");
+const largeDashboardResult = boundDashboardCandidates(Array.from({ length: 500_000 }, (_, id) => id));
+assert.equal(largeDashboardResult.length, SEO_DASHBOARD_CANDIDATE_LIMIT, "dashboard candidates remain bounded for cap-sized imports");
+assert.equal(largeDashboardResult.at(-1), SEO_DASHBOARD_CANDIDATE_LIMIT - 1);
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
@@ -57,6 +60,18 @@ const sortedWithRankingDecline = detectSeoOpportunities(
 const rankingDeclineIndex = sortedWithRankingDecline.findIndex((item) => item.type === "decline" && item.query === "important ranking loss");
 assert.ok(rankingDeclineIndex >= 0 && rankingDeclineIndex < 50, "ranking-only decline remains visible in a top-50 result set");
 
+const splitVisibility = detectSeoOpportunities(
+  [
+    { query: "split target", page: "/a", clicks: 0, impressions: 6, position: 30 },
+    { query: "split target", page: "/b", clicks: 0, impressions: 6, position: 31 },
+  ], [], [{ keyword: "split target", canonicalPage: "/canonical", priority: "primary" }],
+);
+assert.ok(!splitVisibility.some((item) => item.type === "no_visibility"), "all matching pages contribute to total target visibility");
+assert.ok(!splitVisibility.some((item) => item.type === "cannibalization"), "sub-threshold pages do not count toward cannibalization");
+assert.ok(detectSeoOpportunities([{ query: "boundary", page: "/a", clicks: 0, impressions: 9, position: 30 }], [], [{ keyword: "boundary", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "no_visibility"));
+assert.ok(!detectSeoOpportunities([{ query: "boundary", page: "/a", clicks: 0, impressions: 10, position: 30 }], [], [{ keyword: "boundary", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "no_visibility"));
+assert.ok(detectSeoOpportunities([{ query: "cannibal", page: "/a", clicks: 0, impressions: 10, position: 30 }, { query: "cannibal", page: "/b", clicks: 0, impressions: 10, position: 30 }], [], [{ keyword: "cannibal", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "cannibalization"));
+
 const missing = resolveSearchConsoleConfig({});
 assert.equal(missing.configured, false);
 assert.deepEqual(missing.missing, ["GSC_SITE_URL", "GSC_CLIENT_EMAIL", "GSC_PRIVATE_KEY"]);
@@ -75,7 +90,10 @@ assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
 assert.match(service, /errorCode: "ROW_CAP_TRUNCATED"/, "full capped imports persist an explicit truncated diagnostic");
 assert.match(service, /status: "partial"/, "full capped imports cannot be recorded as successful");
-assert.match(service, /averageSeoPosition\(totals\.positionWeighted, totals\.impressions\)/, "service returns unavailable position without impressions");
+assert.match(service, /averageSeoPosition\(numberValue\(totals\.current_position_weighted\), currentImpressions\)/, "service returns unavailable position without impressions");
+assert.doesNotMatch(service, /db\.select\(\)\.from\(seoSearchSnapshots\)/, "dashboard never materializes the raw 56-day window");
+assert.match(service, /LIMIT \$\{SEO_DASHBOARD_CANDIDATE_LIMIT\}/, "opportunity candidates are bounded in PostgreSQL");
+assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
 const ui = readFileSync("client/src/components/admin/AdminSeoIntelligenceTab.tsx", "utf8");
 assert.match(ui, /d\.period\.position === null \? "—"/);
 assert.match(ui, /sync\.data\.status === "partial"/);

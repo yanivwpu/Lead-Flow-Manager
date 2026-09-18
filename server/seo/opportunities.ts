@@ -2,6 +2,7 @@ import { SEO_TARGETS } from "@shared/seoTargets";
 
 export type SeoMetricRow = { query: string; page: string; clicks: number; impressions: number; position: number };
 export type SeoOpportunity = { type: "striking_distance" | "decline" | "low_ctr" | "cannibalization" | "no_visibility"; priority: number; query: string; page?: string; evidence: Record<string, number | string> };
+export type TargetVisibility = { query: string; impressions: number; qualifyingPages: number };
 const aggregate = (rows: SeoMetricRow[]) => {
   const map = new Map<string, SeoMetricRow>();
   for (const row of rows) {
@@ -12,7 +13,7 @@ const aggregate = (rows: SeoMetricRow[]) => {
   return [...map.values()];
 };
 
-export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInput: SeoMetricRow[], targets = SEO_TARGETS): SeoOpportunity[] {
+export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInput: SeoMetricRow[], targets = SEO_TARGETS, targetVisibility?: TargetVisibility[]): SeoOpportunity[] {
   const current = aggregate(currentInput), previous = aggregate(previousInput);
   const present = new Map(current.map((r) => [`${r.query}\0${r.page}`, r]));
   const prior = new Map(previous.map((r) => [`${r.query}\0${r.page}`, r]));
@@ -35,10 +36,13 @@ export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInp
     }
   }
   const important = new Set(targets.map((t) => t.keyword.toLowerCase()));
+  const visibility = new Map(targetVisibility?.map((row) => [row.query.toLowerCase(), row]));
   for (const query of important) {
     const pages = current.filter((r) => r.query.toLowerCase() === query && r.impressions >= 10);
-    if (pages.length > 1) out.push({ type: "cannibalization", priority: pages.reduce((n, r) => n + r.impressions, 0), query, evidence: { pages: pages.length, impressions: pages.reduce((n, r) => n + r.impressions, 0) } });
-    if (pages.reduce((n, r) => n + r.impressions, 0) < 10) out.push({ type: "no_visibility", priority: 50, query, page: targets.find((t) => t.keyword === query)?.canonicalPage, evidence: { impressions: pages.reduce((n, r) => n + r.impressions, 0) } });
+    const totalImpressions = visibility.get(query)?.impressions ?? current.filter((r) => r.query.toLowerCase() === query).reduce((n, r) => n + r.impressions, 0);
+    const qualifyingPages = visibility.get(query)?.qualifyingPages ?? pages.length;
+    if (qualifyingPages > 1) out.push({ type: "cannibalization", priority: Math.round(totalImpressions), query, evidence: { pages: qualifyingPages, impressions: totalImpressions } });
+    if (totalImpressions < 10) out.push({ type: "no_visibility", priority: 50, query, page: targets.find((t) => t.keyword === query)?.canonicalPage, evidence: { impressions: totalImpressions } });
   }
   return out.sort((a, b) => b.priority - a.priority);
 }

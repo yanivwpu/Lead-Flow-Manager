@@ -3178,6 +3178,8 @@ export const seoSearchSnapshots = pgTable("seo_search_snapshots", {
   naturalKey: uniqueIndex("seo_search_snapshots_date_query_page_uidx").on(t.reportingDate, t.query, t.page),
   dateIdx: index("seo_search_snapshots_date_idx").on(t.reportingDate),
   queryIdx: index("seo_search_snapshots_query_idx").on(t.query),
+  dateQueryIdx: index("seo_search_snapshots_date_query_idx").on(t.reportingDate, t.query),
+  datePageIdx: index("seo_search_snapshots_date_page_idx").on(t.reportingDate, t.page),
 }));
 
 /** Durable diagnostics for complete and partially completed imports. */
