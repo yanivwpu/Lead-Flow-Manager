@@ -35,7 +35,7 @@ export const SEO_FORBIDDEN_PUBLIC_CLAIMS = [
   {
     id: "conversion-guarantee",
     pattern:
-      /guarantee(?:d|s)?\s+(?:conversion|lead|ranking|revenue|sale)s?|(?<!no )(?<!no unsupported )conversion guarantees?/i,
+      /guarantee(?:d|s)?\s+(?:conversion|lead|ranking|revenue|sale)s?|conversion guarantees?/i,
   },
   { id: "current-starter-offer", pattern: /(?:buy|choose|upgrade to|start)\s+(?:the\s+)?Starter(?:\s+plan)?/i },
   { id: "current-ai-brain-addon", pattern: /(?:buy|purchase|add)\s+(?:the\s+)?AI Brain(?:\s+add-on)?\s+separately/i },
@@ -67,7 +67,25 @@ export function hreflangsForLocalizedSeoPath(path: Phase2LocalizedPath) {
 }
 
 export function findForbiddenPublicClaims(text: string): string[] {
-  return SEO_FORBIDDEN_PUBLIC_CLAIMS.filter(({ pattern }) => pattern.test(text)).map(({ id }) => id);
+  return SEO_FORBIDDEN_PUBLIC_CLAIMS.filter(({ id, pattern }) => {
+    if (id !== "conversion-guarantee") return pattern.test(text);
+
+    const matches = text.matchAll(
+      /guarantee(?:d|s)?\s+(?:conversion|lead|ranking|revenue|sale)s?|conversion guarantees?/gi,
+    );
+    for (const match of matches) {
+      const start = match.index ?? 0;
+      const prefix = text.slice(Math.max(0, start - 60), start);
+      const suffix = text.slice(start + match[0].length, start + match[0].length + 30);
+      const negatedBefore =
+        /\b(?:does not|doesn't|do not|don't|is not|isn't|are not|aren't|cannot|can't|never|no|without)\b[^.!?;,]{0,40}$/i.test(
+          prefix,
+        );
+      const negatedAfter = /^\s+(?:(?:is|are|was|were)\s+)?(?:not|never)\b/i.test(suffix);
+      if (!negatedBefore && !negatedAfter) return true;
+    }
+    return false;
+  }).map(({ id }) => id);
 }
 
 export const SEO_CURRENT_SELF_SERVICE_PRODUCTS = Object.values(PUBLIC_PRODUCT_FACTS).filter(

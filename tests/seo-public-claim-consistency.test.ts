@@ -31,8 +31,11 @@ test("forbidden public claim policy covers Phase 1 guardrails", () => {
   assert.deepEqual(findForbiddenPublicClaims("Create mass keyword pages"), ["mass-keyword-pages"]);
   assert.deepEqual(findForbiddenPublicClaims("Launch mass location pages"), ["mass-location-pages"]);
   assert.deepEqual(findForbiddenPublicClaims("Guaranteed conversions"), ["conversion-guarantee"]);
+  assert.deepEqual(findForbiddenPublicClaims("Guaranteed rankings"), ["conversion-guarantee"]);
   assert.deepEqual(findForbiddenPublicClaims("Conversion guarantees"), ["conversion-guarantee"]);
   assert.deepEqual(findForbiddenPublicClaims("No unsupported conversion guarantees"), []);
+  assert.deepEqual(findForbiddenPublicClaims("SEO-friendly does not mean guaranteed rankings."), []);
+  assert.deepEqual(findForbiddenPublicClaims("We do not guarantee rankings."), []);
   assert.deepEqual(findForbiddenPublicClaims("Buy Starter plan"), ["current-starter-offer"]);
   assert.deepEqual(findForbiddenPublicClaims("Purchase AI Brain separately"), ["current-ai-brain-addon"]);
   assert.deepEqual(findForbiddenPublicClaims("RGE Early Access $99"), ["rge-99"]);
