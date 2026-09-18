@@ -132,12 +132,15 @@ export function EmailAttachmentsSection({
     queryFn: async () => {
       const res = await fetch(`/api/messages/${messageId}/email-details`, {
         credentials: "include",
+        cache: "no-store",
       });
       if (!res.ok) throw new Error("Failed to load email details");
       return res.json();
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
 
   const attachments = listRegularEmailAttachments(data?.detail?.attachmentMetadata);

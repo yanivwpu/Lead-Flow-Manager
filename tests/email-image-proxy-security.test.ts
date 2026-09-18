@@ -166,6 +166,16 @@ describe("signed proxy URL expiry + timing-safe verify", () => {
     );
   });
 
+  it("very old expired URLs remain rejected", () => {
+    const url = "https://cdn.example.com/tenant-a/logo.png";
+    const expiresUnixSec = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60;
+    const signature = signEmailImageProxyRequest(url, expiresUnixSec);
+    assert.equal(
+      verifyEmailImageProxyRequest({ remoteUrl: url, expiresUnixSec, signature }),
+      false,
+    );
+  });
+
   it("HMAC covers url|expiry payload; timingSafeEqual used", () => {
     const url = "https://cdn.example.com/a.png";
     const exp = 2_000_000_000;
@@ -259,37 +269,13 @@ describe("DNS pin / rebinding SSRF hardening", () => {
     assert.equal((blockedErr as any).code, "pinned_ip_blocked");
   });
 
-  it("Node 20-style http.request with pinned lookup does not throw ERR_INVALID_IP_ADDRESS", async () => {
-    const http = await import("node:http");
-    await new Promise<void>((resolve, reject) => {
-      const req = http.request(
-        {
-          protocol: "http:",
-          hostname: "pin-test.example",
-          port: 80,
-          path: "/",
-          method: "GET",
-          lookup: createPinnedDnsLookup("203.0.113.10", 4) as any,
-          autoSelectFamily: true,
-          timeout: 400,
-        },
-        () => {
-          req.destroy();
-          resolve();
-        },
-      );
-      req.on("error", (err: NodeJS.ErrnoException) => {
-        if (err?.code === "ERR_INVALID_IP_ADDRESS") {
-          reject(err);
-          return;
-        }
-        resolve();
-      });
-      req.on("timeout", () => {
-        req.destroy();
-        resolve();
-      });
-      req.end();
+  it("Node 20-style all:true lookup returns the shape that avoids ERR_INVALID_IP_ADDRESS", () => {
+    const lookup = createPinnedDnsLookup("203.0.113.10", 4);
+    assert.doesNotThrow(() => {
+      lookup("pin-test.example", { all: true }, ((err: Error | null, addresses: unknown) => {
+        assert.equal(err, null);
+        assert.deepEqual(addresses, [{ address: "203.0.113.10", family: 4 }]);
+      }) as any);
     });
   });
 

@@ -26,9 +26,11 @@ function currentPageOrigin(): string | undefined {
 export function EmailHtmlFrame({
   html,
   className,
+  onImageError,
 }: {
   html: string;
   className?: string;
+  onImageError?: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
@@ -74,6 +76,7 @@ export function EmailHtmlFrame({
         if (doc.body) observer.observe(doc.body);
         doc.querySelectorAll("img").forEach((img) => {
           if (!img.complete) img.addEventListener("load", fit, { once: true });
+          if (onImageError) img.addEventListener("error", onImageError, { once: true });
         });
       } catch {
         /* ignore */
@@ -89,7 +92,7 @@ export function EmailHtmlFrame({
       frame.removeEventListener("load", onLoad);
       observer?.disconnect();
     };
-  }, [srcDoc]);
+  }, [srcDoc, onImageError]);
 
   return (
     <iframe
