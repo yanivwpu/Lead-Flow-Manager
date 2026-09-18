@@ -11,7 +11,21 @@ export function snapshotInsertBatches<T>(rows: readonly T[], size = SEO_SNAPSHOT
   return batches;
 }
 
-export function searchConsoleImportIsTruncated(startRow: number, fetchedRows: number): boolean {
-  return fetchedRows === SEO_SEARCH_CONSOLE_PAGE_SIZE &&
-    startRow + SEO_SEARCH_CONSOLE_PAGE_SIZE >= SEO_SEARCH_CONSOLE_MAX_ROWS;
+export function searchConsoleImportIsTruncated(importedRows: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {
+  return importedRows >= SEO_SEARCH_CONSOLE_MAX_ROWS && fetchedRows === requestedRows;
+}
+
+/** Search Console's default row ordering is not chronological. Querying one day
+ * at a time makes global-cap behavior deterministic and preserves recent data. */
+export function recentFirstReportingDates(startDate: string, endDate: string): string[] {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) {
+    throw new Error("Invalid Search Console reporting date range");
+  }
+  const dates: string[] = [];
+  for (const day = new Date(end); day >= start; day.setUTCDate(day.getUTCDate() - 1)) {
+    dates.push(day.toISOString().slice(0, 10));
+  }
+  return dates;
 }

@@ -3,7 +3,7 @@ import { db } from "../../drizzle/db";
 import { seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
 import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
-import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
@@ -21,26 +21,30 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
     try {
       const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
       let truncated = false;
-      for (let startRow = 0; startRow < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
-        const result = await fetchSearchPerformance({ startDate, endDate, startRow, rowLimit: pageSize });
-        const rows = result.rows ?? [];
-        if (rows.length) {
-          for (const batch of snapshotInsertBatches(rows)) {
-            await db.insert(seoSearchSnapshots).values(batch.map((row) => ({ reportingDate: row.keys[0], query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
-              target: [seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
-              set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
-            });
-            rowsImported += batch.length;
+      for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
+        for (let startRow = 0; rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
+          const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported);
+          const result = await fetchSearchPerformance({ startDate: reportingDate, endDate: reportingDate, startRow, rowLimit });
+          const rows = result.rows ?? [];
+          if (rows.length) {
+            for (const batch of snapshotInsertBatches(rows)) {
+              await db.insert(seoSearchSnapshots).values(batch.map((row) => ({ reportingDate: row.keys[0], query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+                target: [seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
+                set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
+              });
+              rowsImported += batch.length;
+              await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
+            }
+            pagesCompleted += 1;
             await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
           }
-          pagesCompleted += 1;
-          await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(eq(seoSyncRuns.id, run.id));
+          if (searchConsoleImportIsTruncated(rowsImported, rows.length, rowLimit)) {
+            truncated = true;
+            break;
+          }
+          if (rows.length < rowLimit) break;
         }
-        if (searchConsoleImportIsTruncated(startRow, rows.length)) {
-          truncated = true;
-          break;
-        }
-        if (rows.length < pageSize) break;
+        if (truncated) break;
       }
       if (truncated) {
         const diagnostic = `Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row safety cap with a full final page; additional Search Console rows may exist`;

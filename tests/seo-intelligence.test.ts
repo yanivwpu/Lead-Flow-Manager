@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities } from "../server/seo/opportunities";
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 
 const current = [
@@ -20,7 +20,7 @@ for (const type of ["striking_distance", "decline", "low_ctr", "cannibalization"
 assert.equal(opportunities.find((o) => o.type === "decline")?.evidence.previousClicks, 30, "preceding-period comparison is retained");
 
 const disappeared = detectSeoOpportunities([], [{ query: "vanished", page: "/old", clicks: 25, impressions: 250, position: 6 }], []);
-assert.deepEqual(disappeared[0]?.evidence, { clicks: 0, previousClicks: 25, impressions: 0, previousImpressions: 250, position: 0, previousPosition: 6 });
+assert.deepEqual(disappeared[0]?.evidence, { clicks: 0, previousClicks: 25, impressions: 0, previousImpressions: 250, position: 0, previousPosition: 6, positionDeterioration: 0 });
 
 const oversized = Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE * 2 + 17 }, (_, id) => ({ id }));
 const batches = snapshotInsertBatches(oversized);
@@ -33,8 +33,12 @@ assert.equal(averageSeoPosition(0, 0), null, "no current impressions means avera
 assert.equal(averagePositionImprovementPercent(null, 10), null, "missing current position is not a 100% improvement");
 assert.equal(formatSeoPercent(averagePositionImprovementPercent(null, 10)), "—");
 
-assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE), true, "a full final capped page is truncated");
-assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE - 1), false);
+assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE), true, "a full final capped page is truncated");
+assert.equal(searchConsoleImportIsTruncated(SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE - 1), false);
+const recentDates = recentFirstReportingDates("2026-07-01", "2026-08-31");
+assert.equal(recentDates.length, 62);
+assert.deepEqual(recentDates.slice(0, 3), ["2026-08-31", "2026-08-30", "2026-08-29"]);
+assert.equal(recentDates.slice(0, 28).at(-1), "2026-08-04", "the complete current 28-day window is planned before older dates");
 
 const rankingOnlyDecline = detectSeoOpportunities(
   [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
@@ -42,7 +46,16 @@ const rankingOnlyDecline = detectSeoOpportunities(
   [],
 ).find((item) => item.type === "decline");
 assert.ok(rankingOnlyDecline);
-assert.equal(rankingOnlyDecline.priority, 0, "ranking decline priority is clamped when traffic grew");
+assert.equal(rankingOnlyDecline.priority, 800, "ranking deterioration contributes positive evidence despite traffic growth");
+
+const unrelated = Array.from({ length: 60 }, (_, index) => ({ query: `unrelated ${index}`, page: `/u/${index}`, clicks: 10, impressions: 100, position: 10 }));
+const sortedWithRankingDecline = detectSeoOpportunities(
+  [...unrelated, { query: "important ranking loss", page: "/important", clicks: 40, impressions: 400, position: 12 }],
+  [{ query: "important ranking loss", page: "/important", clicks: 20, impressions: 200, position: 8 }],
+  [],
+);
+const rankingDeclineIndex = sortedWithRankingDecline.findIndex((item) => item.type === "decline" && item.query === "important ranking loss");
+assert.ok(rankingDeclineIndex >= 0 && rankingDeclineIndex < 50, "ranking-only decline remains visible in a top-50 result set");
 
 const missing = resolveSearchConsoleConfig({});
 assert.equal(missing.configured, false);
@@ -57,7 +70,8 @@ assert.match(migration, /UNIQUE INDEX[^;]+reporting_date, query, page/i, "natura
 const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
 assert.match(service, /status: rowsImported \? "partial" : "failed"/, "partial failure is persisted");
-assert.match(service, /startRow < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is bounded");
+assert.match(service, /rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is globally bounded");
+assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
 assert.match(service, /errorCode: "ROW_CAP_TRUNCATED"/, "full capped imports persist an explicit truncated diagnostic");
 assert.match(service, /status: "partial"/, "full capped imports cannot be recorded as successful");
