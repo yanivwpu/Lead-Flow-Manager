@@ -14,6 +14,7 @@ import {
   hardenEmailHtmlForFrame,
 } from "../shared/emailHtmlIsolation";
 import { sanitizeEmailHtml } from "../server/emailChannel/htmlSanitize";
+import { observeEmailFrameImageFailures } from "../client/src/components/inbox/emailFrameImageErrors";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -112,4 +113,40 @@ test("regression payload: global a{} style is only present inside isolated srcdo
   assert.match(srcDoc, /a \{ color: blue !important; \}/);
   assert.match(srcDoc, /<!DOCTYPE html>/i);
   assert.match(hardenEmailHtmlForFrame(leakPayload), /noopener noreferrer/);
+});
+
+test("reports an image that failed before iframe load only once", () => {
+  let reports = 0;
+  const alreadyFailed = {
+    complete: true,
+    naturalWidth: 0,
+    addEventListener: () => assert.fail("complete images need no listener"),
+    removeEventListener: () => {},
+  };
+  const alsoFailed = { ...alreadyFailed };
+  observeEmailFrameImageFailures([alreadyFailed, alsoFailed], () => reports++);
+  assert.equal(reports, 1);
+});
+
+test("reports an image that fails after iframe load and cleans up its listener", () => {
+  let reports = 0;
+  let errorListener: (() => void) | undefined;
+  let removed: (() => void) | undefined;
+  const loading = {
+    complete: false,
+    naturalWidth: 0,
+    addEventListener: (event: string, listener: EventListenerOrEventListenerObject) => {
+      if (event === "error") errorListener = listener as () => void;
+    },
+    removeEventListener: (event: string, listener: EventListenerOrEventListenerObject) => {
+      if (event === "error") removed = listener as () => void;
+    },
+  };
+  const cleanup = observeEmailFrameImageFailures([loading], () => reports++);
+  assert.ok(errorListener, "loading/lazy image receives an error listener");
+  errorListener!();
+  errorListener!();
+  assert.equal(reports, 1);
+  cleanup();
+  assert.equal(removed, errorListener);
 });

@@ -394,7 +394,18 @@ describe("CSP + wiring", () => {
     );
     assert.match(details, /email-details/);
     assert.match(details, /sanitizeEmailHtml/);
+    assert.match(details, /Cache-Control.*private, no-store, max-age=0/);
     assert.doesNotMatch(details, /app\.(get|post)\(["']\/api\/email\/sign/);
+
+    const body = fs.readFileSync(
+      path.join(process.cwd(), "client/src/components/inbox/EmailMessageBody.tsx"),
+      "utf8",
+    );
+    assert.match(body, /cache:\s*"no-store"/);
+    assert.match(body, /staleTime:\s*0/);
+    assert.match(body, /gcTime:\s*0/);
+    assert.match(body, /refetchOnMount:\s*"always"/);
+    assert.match(body, /onImageError=\{refreshAfterImageError\}/);
   });
 
   it("isEmailImageRequestPath matches proxy and inline only", () => {

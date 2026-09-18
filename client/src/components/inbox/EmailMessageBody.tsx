@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   WebsiteFormMessageCard,
@@ -46,18 +47,32 @@ export function EmailMessageBody({
   /** document = show subject/from meta above body (email reader) */
   layout?: "inline" | "document";
 }) {
-  const { data, isLoading } = useQuery<EmailDetailsResponse>({
+  const retriedFailedImage = useRef(false);
+  const { data, isLoading, refetch } = useQuery<EmailDetailsResponse>({
     queryKey: ["/api/messages", messageId, "email-details"],
     queryFn: async () => {
       const res = await fetch(`/api/messages/${messageId}/email-details`, {
         credentials: "include",
+        cache: "no-store",
       });
       if (!res.ok) throw new Error("Failed to load email details");
       return res.json();
     },
     enabled: !!messageId && !messageId.startsWith("optimistic-"),
-    staleTime: 60_000,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
   });
+
+  useEffect(() => {
+    retriedFailedImage.current = false;
+  }, [messageId]);
+
+  const refreshAfterImageError = useCallback(() => {
+    if (retriedFailedImage.current) return;
+    retriedFailedImage.current = true;
+    void refetch();
+  }, [refetch]);
 
   const detail = data?.detail;
   const formMeta = data?.formMeta || detail?.formMeta || null;
@@ -103,7 +118,11 @@ export function EmailMessageBody({
     return (
       <div className={cn("w-full max-w-full min-w-0", className)} data-testid="email-message-body">
         {meta}
-        <EmailHtmlFrame html={html} className="w-full max-w-full" />
+        <EmailHtmlFrame
+          html={html}
+          className="w-full max-w-full"
+          onImageError={refreshAfterImageError}
+        />
       </div>
     );
   }

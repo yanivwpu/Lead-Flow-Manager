@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { buildIsolatedEmailSrcDoc } from "@shared/emailHtmlIsolation";
+import { observeEmailFrameImageFailures } from "./emailFrameImageErrors";
 
 const IFRAME_SANDBOX = [
   // Height measurement only — never combine with allow-scripts.
@@ -26,9 +27,11 @@ function currentPageOrigin(): string | undefined {
 export function EmailHtmlFrame({
   html,
   className,
+  onImageError,
 }: {
   html: string;
   className?: string;
+  onImageError?: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(120);
@@ -42,7 +45,15 @@ export function EmailHtmlFrame({
     if (!frame) return;
 
     let observer: ResizeObserver | undefined;
+    let stopWatchingImageErrors: (() => void) | undefined;
     let cancelled = false;
+    let imageErrorReported = false;
+
+    const reportImageErrorOnce = () => {
+      if (cancelled || imageErrorReported || !onImageError) return;
+      imageErrorReported = true;
+      onImageError();
+    };
 
     const fit = () => {
       if (cancelled) return;
@@ -75,6 +86,11 @@ export function EmailHtmlFrame({
         doc.querySelectorAll("img").forEach((img) => {
           if (!img.complete) img.addEventListener("load", fit, { once: true });
         });
+        stopWatchingImageErrors?.();
+        stopWatchingImageErrors = observeEmailFrameImageFailures(
+          doc.querySelectorAll("img"),
+          reportImageErrorOnce,
+        );
       } catch {
         /* ignore */
       }
@@ -87,9 +103,10 @@ export function EmailHtmlFrame({
     return () => {
       cancelled = true;
       frame.removeEventListener("load", onLoad);
+      stopWatchingImageErrors?.();
       observer?.disconnect();
     };
-  }, [srcDoc]);
+  }, [srcDoc, onImageError]);
 
   return (
     <iframe

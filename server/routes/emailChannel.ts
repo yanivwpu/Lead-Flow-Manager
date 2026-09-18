@@ -379,6 +379,11 @@ export function registerEmailChannelRoutes(app: Express): void {
         emailSubject: detail.subject,
       });
 
+      // This response contains freshly signed, expiring image URLs. Never let an
+      // intermediary or browser HTTP cache replay it after those signatures age.
+      res.setHeader("Cache-Control", "private, no-store, max-age=0");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       res.json({
         detail: {
           ...detail,
