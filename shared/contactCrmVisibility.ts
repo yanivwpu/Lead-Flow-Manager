@@ -23,9 +23,12 @@ import {
 export const EMAIL_INBOX_IDENTITY_SOURCE = "email_inbox";
 export const CONTACT_LIFECYCLE_INBOX_ONLY = "inbox_only";
 export const CONTACT_LIFECYCLE_SAVED = "saved";
+/** Prospect AI working identity: usable by review/outreach, but not yet a CRM lead. */
+export const CONTACT_LIFECYCLE_PROSPECT_ONLY = "prospect_only";
 
 export type ContactLifecycleState =
   | typeof CONTACT_LIFECYCLE_INBOX_ONLY
+  | typeof CONTACT_LIFECYCLE_PROSPECT_ONLY
   | typeof CONTACT_LIFECYCLE_SAVED;
 
 /** Pass to storage.getContacts / searchContacts when matching identities (avoid duplicates). */
@@ -42,8 +45,45 @@ export function isEmailInboxIdentitySource(source: string | null | undefined): b
 export function contactLifecycleFromDetails(sourceDetails: unknown): ContactLifecycleState | null {
   const details = sourceDetails as { contactLifecycle?: unknown } | null | undefined;
   const raw = details?.contactLifecycle;
-  if (raw === CONTACT_LIFECYCLE_INBOX_ONLY || raw === CONTACT_LIFECYCLE_SAVED) return raw;
+  if (
+    raw === CONTACT_LIFECYCLE_INBOX_ONLY ||
+    raw === CONTACT_LIFECYCLE_PROSPECT_ONLY ||
+    raw === CONTACT_LIFECYCLE_SAVED
+  ) return raw;
   return null;
+}
+
+export function prospectOnlySourceDetails(
+  prev?: unknown,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  const base =
+    prev && typeof prev === "object" && !Array.isArray(prev)
+      ? { ...(prev as Record<string, unknown>) }
+      : {};
+  return {
+    ...base,
+    ...(extra || {}),
+    inboxIdentity: false,
+    contactLifecycle: CONTACT_LIFECYCLE_PROSPECT_ONLY,
+  };
+}
+
+export function isProspectOnlyContact(contact: { sourceDetails?: unknown }): boolean {
+  return contactLifecycleFromDetails(contact.sourceDetails) === CONTACT_LIFECYCLE_PROSPECT_ONLY;
+}
+
+/** Inbox may show inbox-only participants, but never pre-reply Prospect AI identities. */
+export function isInboxListedContact(contact: { sourceDetails?: unknown }): boolean {
+  return !isProspectOnlyContact(contact);
+}
+
+/** Promotion is intentionally one-way and inbound-only. */
+export function shouldPromoteProspectOnlyIdentity(input: {
+  contact: { sourceDetails?: unknown };
+  direction: "inbound" | "outbound";
+}): boolean {
+  return input.direction === "inbound" && isProspectOnlyContact(input.contact);
 }
 
 export function inboxOnlySourceDetails(extra?: Record<string, unknown>): Record<string, unknown> {
@@ -85,6 +125,7 @@ export function isCrmListedContact(contact: {
     | undefined;
   if (details && details.inboxIdentity === true) return false;
   if (details && details.contactLifecycle === CONTACT_LIFECYCLE_INBOX_ONLY) return false;
+  if (details && details.contactLifecycle === CONTACT_LIFECYCLE_PROSPECT_ONLY) return false;
   if (details && details.contactLifecycle === CONTACT_LIFECYCLE_SAVED) return true;
   // Query-time derivation for pre-lifecycle Website Chat rows. Other sources stay listed.
   if (contact.source === "webchat") {

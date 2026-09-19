@@ -68,7 +68,12 @@ import {
   shouldRepairReEngagementJsonFromLatestFailedTemplate,
   type ConversationReEngagement,
 } from "@shared/reEngagement";
-import { EMAIL_INBOX_IDENTITY_SOURCE, type GetContactsOptions } from "@shared/contactCrmVisibility";
+import {
+  CONTACT_LIFECYCLE_PROSPECT_ONLY,
+  EMAIL_INBOX_IDENTITY_SOURCE,
+  isInboxListedContact,
+  type GetContactsOptions,
+} from "@shared/contactCrmVisibility";
 import { sanitizeAiBusinessKnowledgeUpdates } from "@shared/businessProfileSchema";
 import { buildInboxItemsForContact } from "@shared/inboxRowModel";
 import { collectHiddenColdOutreachConversationIds } from "@shared/prospectColdOutreachInbox";
@@ -2309,6 +2314,9 @@ export class DbStorage implements IStorage {
     const conditions = [eq(contacts.userId, userId)];
     if (!options?.includeInboxIdentities) {
       conditions.push(ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE));
+      conditions.push(
+        sql`coalesce(${contacts.sourceDetails}->>'contactLifecycle', '') <> ${CONTACT_LIFECYCLE_PROSPECT_ONLY}`,
+      );
     }
     return await db.select().from(contacts)
       .where(and(...conditions))
@@ -2749,6 +2757,9 @@ export class DbStorage implements IStorage {
     ];
     if (!options?.includeInboxIdentities) {
       conditions.push(ne(contacts.source, EMAIL_INBOX_IDENTITY_SOURCE));
+      conditions.push(
+        sql`coalesce(${contacts.sourceDetails}->>'contactLifecycle', '') <> ${CONTACT_LIFECYCLE_PROSPECT_ONLY}`,
+      );
     }
     return await db.select().from(contacts)
       .where(and(...conditions))
@@ -3017,7 +3028,8 @@ export class DbStorage implements IStorage {
     const { recordInboxTiming } = await import("@shared/inboxListMerge");
     const t0 = Date.now();
     // Defense in depth: never emit contacts outside this workspace.
-    const scoped = userContacts.filter((c) => c.userId === userId);
+    // Prospect AI identities do not enter Inbox until first inbound promotion.
+    const scoped = userContacts.filter((c) => c.userId === userId && isInboxListedContact(c));
     const contactIds = scoped.map((c) => c.id);
     let hiddenColdOutreachConversationIds = new Set<string>();
 
