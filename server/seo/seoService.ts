@@ -6,6 +6,7 @@ import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLI
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
+import { serializeSeoSyncRun } from "./syncStatus";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -117,7 +118,7 @@ export async function getSeoDashboard(now = new Date()) {
           (CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) * .6
           THEN ((CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) - current_clicks / current_impressions) * current_impressions ELSE 0 END,
         CASE WHEN previous_impressions >= ${SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS} AND
-          (current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO} OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA})
+          ((previous_clicks > 0 AND current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO}) OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA})
           THEN GREATEST(previous_clicks - current_clicks, previous_impressions - current_impressions,
             GREATEST(COALESCE(current_position - previous_position, 0), 0) * previous_impressions, 0)
           ELSE 0 END
@@ -128,7 +129,7 @@ export async function getSeoDashboard(now = new Date()) {
       (current_impressions >= 100 AND current_clicks / NULLIF(current_impressions, 0) <
         (CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) * .6) OR
       (previous_impressions >= ${SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS} AND
-        (current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO} OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA}))
+        ((previous_clicks > 0 AND current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO}) OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA}))
       ORDER BY priority_evidence DESC LIMIT ${SEO_DASHBOARD_CANDIDATE_LIMIT}`),
   ]);
   const totals = (totalsResult.rows[0] ?? {}) as Record<string, unknown>;
@@ -146,8 +147,11 @@ export async function getSeoDashboard(now = new Date()) {
     FROM page_visibility GROUP BY query LIMIT ${targetKeywords.length}`) : { rows: [] };
   const targetVisibility = (targetResult.rows as Record<string, unknown>[]).map((r) => ({ query: String(r.query), impressions: numberValue(r.impressions), qualifyingPages: numberValue(r.qualifying_pages) }));
   const topList = (rows: unknown[]) => (rows as Record<string, unknown>[]).map((r) => ({ name: String(r.name), clicks: numberValue(r.clicks), impressions: numberValue(r.impressions) }));
-  const [lastRun] = await db.select().from(seoSyncRuns).where(eq(seoSyncRuns.status, "success")).orderBy(desc(seoSyncRuns.completedAt)).limit(1);
+  const [[latestRun], [lastRun]] = await Promise.all([
+    db.select().from(seoSyncRuns).orderBy(desc(seoSyncRuns.startedAt)).limit(1),
+    db.select().from(seoSyncRuns).where(eq(seoSyncRuns.status, "success")).orderBy(desc(seoSyncRuns.completedAt)).limit(1),
+  ]);
   const config = resolveSearchConsoleConfig();
   const currentClicks = numberValue(totals.current_clicks), currentImpressions = numberValue(totals.current_impressions), previousClicks = numberValue(totals.previous_clicks), previousImpressions = numberValue(totals.previous_impressions);
-  return { config: { configured: config.configured, missing: config.missing }, lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: currentStartDay, endDate: endDay, clicks: currentClicks, impressions: currentImpressions, ctr: currentClicks / Math.max(1, currentImpressions), position: averageSeoPosition(numberValue(totals.current_position_weighted), currentImpressions), previous: { clicks: previousClicks, impressions: previousImpressions, ctr: previousClicks / Math.max(1, previousImpressions), position: averageSeoPosition(numberValue(totals.previous_position_weighted), previousImpressions) } }, topQueries: topList(topQueriesResult.rows), topPages: topList(topPagesResult.rows), opportunities: detectSeoOpportunities(current, previous, SEO_TARGETS, targetVisibility).slice(0,50) };
+  return { config: { configured: config.configured, missing: config.missing }, latestSync: serializeSeoSyncRun(latestRun), lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: currentStartDay, endDate: endDay, clicks: currentClicks, impressions: currentImpressions, ctr: currentClicks / Math.max(1, currentImpressions), position: averageSeoPosition(numberValue(totals.current_position_weighted), currentImpressions), previous: { clicks: previousClicks, impressions: previousImpressions, ctr: previousClicks / Math.max(1, previousImpressions), position: averageSeoPosition(numberValue(totals.previous_position_weighted), previousImpressions) } }, topQueries: topList(topQueriesResult.rows), topPages: topList(topPagesResult.rows), opportunities: detectSeoOpportunities(current, previous, SEO_TARGETS, targetVisibility).slice(0,50) };
 }

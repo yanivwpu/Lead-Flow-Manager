@@ -5,6 +5,7 @@ import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportuni
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
+import { summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -59,6 +60,42 @@ const finalDeclines = detectSeoOpportunities(
   [],
 );
 assert.ok(finalDeclines.some((opportunity) => opportunity.type === "decline" && opportunity.query === "genuine"));
+
+const zeroBaselineStable = scoreSeoDecline(
+  { query: "zero", page: "/zero", clicks: 0, impressions: 100, position: 8 },
+  { query: "zero", page: "/zero", clicks: 0, impressions: 100, position: 8 },
+);
+assert.equal(zeroBaselineStable.qualifies, false, "zero-to-zero clicks do not create a click decline");
+assert.equal(scoreSeoDecline(
+  { query: "click-loss", page: "/click", clicks: 80, impressions: 100, position: 8 },
+  { query: "click-loss", page: "/click", clicks: 100, impressions: 100, position: 8 },
+).qualifies, true, "positive click baseline with a twenty-percent loss qualifies");
+assert.equal(scoreSeoDecline(
+  { query: "impression-loss", page: "/impression", clicks: 0, impressions: 80, position: 8 },
+  { query: "impression-loss", page: "/impression", clicks: 0, impressions: 100, position: 8 },
+).qualifies, true, "zero clicks do not block an independent impression decline");
+assert.equal(scoreSeoDecline(
+  { query: "ranking-loss", page: "/ranking", clicks: 0, impressions: 100, position: 11 },
+  { query: "ranking-loss", page: "/ranking", clicks: 0, impressions: 100, position: 8 },
+).qualifies, true, "zero clicks do not block an independent ranking decline");
+const zeroBaselineNoise = Array.from({ length: 5_100 }, (_, id) => ({ id, score: scoreSeoDecline(
+  { query: `zero-noise-${id}`, page: `/zero/${id}`, clicks: 0, impressions: 100_000, position: 30 },
+  { query: `zero-noise-${id}`, page: `/zero/${id}`, clicks: 0, impressions: 100_000, position: 30 },
+) }));
+const boundedZeroBaseline = boundDashboardCandidates([...zeroBaselineNoise, genuineDecline].filter((row) => row.score.qualifies), (row) => row.score.priority);
+assert.deepEqual(boundedZeroBaseline.map((row) => row.id), [999_999], "zero-baseline noise cannot crowd a genuine decline out of the cap");
+
+const successRun: PersistedSeoSyncRun = { id: "success", status: "success", trigger: "scheduled", rowsImported: 100, pagesCompleted: 2, errorCode: null, errorMessage: null, startedAt: new Date("2026-09-01T00:00:00Z"), completedAt: new Date("2026-09-01T00:05:00Z") };
+const partialRun: PersistedSeoSyncRun = { id: "partial", status: "partial", trigger: "manual", rowsImported: 50, pagesCompleted: 1, errorCode: "ROW_CAP_TRUNCATED", errorMessage: "additional rows may exist", startedAt: new Date("2026-09-02T00:00:00Z"), completedAt: new Date("2026-09-02T00:05:00Z") };
+const failedRun: PersistedSeoSyncRun = { id: "failed", status: "failed", trigger: "scheduled", rowsImported: 0, pagesCompleted: 0, errorCode: "API_ERROR", errorMessage: "quota unavailable", startedAt: new Date("2026-09-03T00:00:00Z"), completedAt: new Date("2026-09-03T00:01:00Z") };
+const afterPartial = summarizeSeoSyncHistory([successRun, partialRun]);
+assert.equal(afterPartial.latestSync?.status, "partial");
+assert.equal(afterPartial.latestSync?.errorCode, "ROW_CAP_TRUNCATED");
+assert.equal(afterPartial.lastSuccessfulSync?.toISOString(), successRun.completedAt?.toISOString());
+const afterFailure = summarizeSeoSyncHistory([successRun, failedRun]);
+assert.equal(afterFailure.latestSync?.status, "failed");
+assert.equal(afterFailure.latestSync?.errorMessage, "quota unavailable");
+assert.equal(afterFailure.lastSuccessfulSync?.toISOString(), successRun.completedAt?.toISOString(), "latest success remains separately available after failure");
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
@@ -125,13 +162,18 @@ assert.doesNotMatch(service, /db\.select\(\)\.from\(seoSearchSnapshots\)/, "dash
 assert.match(service, /LIMIT \$\{SEO_DASHBOARD_CANDIDATE_LIMIT\}/, "opportunity candidates are bounded in PostgreSQL");
 assert.match(service, /ORDER BY priority_evidence DESC LIMIT/, "database bounds candidates only after evidence-priority ordering");
 assert.match(service, /SEO_DECLINE_RETAINED_RATIO/, "SQL candidate eligibility uses the detector's shared decline threshold");
+assert.match(service, /previous_clicks > 0 AND current_clicks <= previous_clicks/, "SQL click decline requires a positive baseline");
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
 assert.match(service, /FROM seo_search_daily_totals WHERE reporting_date BETWEEN/, "aggregate cards use complete non-query daily totals");
 assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");
+assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
+assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
 const ui = readFileSync("client/src/components/admin/AdminSeoIntelligenceTab.tsx", "utf8");
 assert.match(ui, /d\.period\.position === null \? "—"/);
 assert.match(ui, /sync\.data\.status === "partial"/);
 assert.match(ui, /Detailed query reports exclude anonymized queries; aggregate cards above include them/);
+assert.match(ui, /Latest sync:/);
+assert.match(ui, /d\.latestSync\.status === "partial" \|\| d\.latestSync\.status === "failed"/);
 const searchConsole = readFileSync("server/seo/searchConsole.ts", "utf8");
 assert.match(searchConsole, /dimensions: \["date"\]/, "daily totals omit the query dimension");
 const startup = readFileSync("server/startupSchemaPatches.ts", "utf8");

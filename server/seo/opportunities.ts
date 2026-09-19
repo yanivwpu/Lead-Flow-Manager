@@ -10,7 +10,7 @@ export const SEO_DECLINE_POSITION_DELTA = 2;
 export function scoreSeoDecline(current: SeoMetricRow, previous: SeoMetricRow): { qualifies: boolean; priority: number; positionDeterioration: number } {
   const positionDeterioration = current.position > 0 ? Math.max(0, current.position - previous.position) : 0;
   const qualifies = previous.impressions >= SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS && (
-    current.clicks <= previous.clicks * SEO_DECLINE_RETAINED_RATIO ||
+    (previous.clicks > 0 && current.clicks <= previous.clicks * SEO_DECLINE_RETAINED_RATIO) ||
     current.impressions <= previous.impressions * SEO_DECLINE_RETAINED_RATIO ||
     positionDeterioration > SEO_DECLINE_POSITION_DELTA
   );

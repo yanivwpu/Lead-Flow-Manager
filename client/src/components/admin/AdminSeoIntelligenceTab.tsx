@@ -12,7 +12,8 @@ const request = async (url: string, init?: RequestInit) => {
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
 };
-type Dashboard = { config: { configured: boolean; missing: string[] }; lastSuccessfulSync: string | null; period: { clicks:number; impressions:number; ctr:number; position:number|null; previous:{clicks:number;impressions:number;ctr:number;position:number|null} }; topQueries:Array<{name:string;clicks:number;impressions:number}>; topPages:Array<{name:string;clicks:number;impressions:number}>; opportunities:Array<{type:string;priority:number;query:string;page?:string;evidence:Record<string,number|string>}> };
+type SyncRun = { id:string; status:string; trigger:string; rowsImported:number; pagesCompleted:number; errorCode:string|null; errorMessage:string|null; startedAt:string; completedAt:string|null };
+type Dashboard = { config: { configured: boolean; missing: string[] }; latestSync: SyncRun|null; lastSuccessfulSync: string | null; period: { clicks:number; impressions:number; ctr:number; position:number|null; previous:{clicks:number;impressions:number;ctr:number;position:number|null} }; topQueries:Array<{name:string;clicks:number;impressions:number}>; topPages:Array<{name:string;clicks:number;impressions:number}>; opportunities:Array<{type:string;priority:number;query:string;page?:string;evidence:Record<string,number|string>}> };
 const delta = (value:number, old:number) => old ? `${((value-old)/old*100).toFixed(1)}%` : "—";
 
 export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
@@ -24,10 +25,11 @@ export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
   const d = query.data;
   return <div className="space-y-5" data-testid="seo-intelligence">
     <div className="bg-white border rounded-xl p-5 flex flex-col sm:flex-row justify-between gap-4">
-      <div><h2 className="text-lg font-semibold flex items-center gap-2"><Search className="h-5 w-5" />SEO Intelligence</h2><p className="text-sm text-gray-500">Read-only Google Search Console monitoring</p><p className="text-sm mt-2">Last successful sync: <strong>{d.lastSuccessfulSync ? new Date(d.lastSuccessfulSync).toLocaleString() : "Never"}</strong></p></div>
+      <div><h2 className="text-lg font-semibold flex items-center gap-2"><Search className="h-5 w-5" />SEO Intelligence</h2><p className="text-sm text-gray-500">Read-only Google Search Console monitoring</p><p className="text-sm mt-2">Latest sync: <strong>{d.latestSync ? `${d.latestSync.status} · ${new Date(d.latestSync.startedAt).toLocaleString()}` : "Never"}</strong></p><p className="text-xs text-gray-500">Last successful sync: {d.lastSuccessfulSync ? new Date(d.lastSuccessfulSync).toLocaleString() : "Never"}</p></div>
       <Button onClick={() => sync.mutate()} disabled={sync.isPending || !d.config.configured}><RefreshCw className={`h-4 w-4 mr-2 ${sync.isPending ? "animate-spin" : ""}`} />{sync.isPending ? "Syncing…" : "Sync now"}</Button>
     </div>
     {!d.config.configured && <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 text-amber-900"><AlertCircle className="inline h-4 w-4 mr-2" />Configuration missing: {d.config.missing.join(", ")}</div>}
+    {d.latestSync && (d.latestSync.status === "partial" || d.latestSync.status === "failed") && <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 text-amber-900"><AlertCircle className="inline h-4 w-4 mr-2" />Latest {d.latestSync.trigger} sync {d.latestSync.status}: {d.latestSync.errorMessage || d.latestSync.errorCode || "import did not complete"} · {d.latestSync.rowsImported} rows, {d.latestSync.pagesCompleted} pages{d.latestSync.completedAt ? ` · finished ${new Date(d.latestSync.completedAt).toLocaleString()}` : ""}</div>}
     {sync.isSuccess && sync.data.status === "success" && <div className="text-emerald-700"><CheckCircle2 className="inline h-4 w-4 mr-2" />Synchronization completed.</div>}
     {sync.isSuccess && sync.data.status === "partial" && <div className="text-amber-700"><AlertCircle className="inline h-4 w-4 mr-2" />Synchronization was truncated: {sync.data.diagnostic}</div>}
     {sync.isError && <div className="text-red-700"><AlertCircle className="inline h-4 w-4 mr-2" />{sync.error.message}</div>}
