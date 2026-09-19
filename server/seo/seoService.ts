@@ -7,6 +7,7 @@ import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_S
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
+import { reconcileSearchConsoleDailyTotals } from "./dailyTotals";
 
 const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -29,12 +30,13 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
     try {
       const totalsResult = await fetchSearchDailyTotals(startDate, endDate);
       const totalRows = totalsResult.rows ?? [];
-      if (totalRows.length) {
-        await db.insert(seoSearchDailyTotals).values(totalRows.map((row) => ({ propertyId, reportingDate: row.keys[0], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+      const reconciledTotals = reconcileSearchConsoleDailyTotals(propertyId, startDate, endDate, totalRows);
+      await db.transaction(async (tx) => {
+        await tx.insert(seoSearchDailyTotals).values(reconciledTotals).onConflictDoUpdate({
           target: [seoSearchDailyTotals.propertyId, seoSearchDailyTotals.reportingDate],
           set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
         });
-      }
+      });
       const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
       let overallTruncated = false;
       const truncatedDays: string[] = [];
