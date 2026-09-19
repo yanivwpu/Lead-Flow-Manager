@@ -336,13 +336,21 @@ export function startCronJobs() {
           claims.renewScheduledSeoSyncLease(claim).catch((error) => console.error("[SEO Sync] lease heartbeat failed:", error));
         }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
         try {
-          const result = await service.runSeoSync("scheduled", now, executionLease);
-          await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic, result.errorCode);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
-          const errorCode = (error as { code?: string }).code;
-          if (errorCode !== "LEASE_LOST") await claims.finishScheduledSeoSync(claim, "failed", message, errorCode);
-          console.error("[SEO Sync] scheduled error (bounded database retry policy applies):", error);
+          let result;
+          try {
+            result = await service.runSeoSync("scheduled", now, executionLease);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
+            const errorCode = (error as { code?: string }).code;
+            if (errorCode !== "LEASE_LOST") {
+              try { await claims.finishScheduledSeoSync(claim, "failed", message, errorCode); }
+              catch (claimError) { console.error("[SEO Sync] failed to persist scheduled failure disposition:", claimError); }
+            }
+            console.error("[SEO Sync] scheduled import error (bounded database retry policy applies):", error);
+            return;
+          }
+          try { await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic, result.errorCode); }
+          catch (claimError) { console.error("[SEO Sync] import result persisted but scheduled-claim cleanup failed; it will not be re-imported:", claimError); }
         } finally {
           clearInterval(heartbeat);
         }

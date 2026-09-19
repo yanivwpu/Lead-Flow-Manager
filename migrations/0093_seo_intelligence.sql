@@ -39,6 +39,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS seo_scheduled_sync_claims_property_day_uidx ON
 CREATE INDEX IF NOT EXISTS seo_scheduled_sync_claims_lease_idx ON seo_scheduled_sync_claims(status, lease_expires_at);
 CREATE TABLE IF NOT EXISTS seo_sync_execution_leases (
   property_id text PRIMARY KEY, lease_token text NOT NULL, trigger text NOT NULL,
-  lease_expires_at timestamp NOT NULL, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
+  lease_expires_at timestamp NOT NULL, run_id varchar, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
 );
+ALTER TABLE seo_sync_execution_leases ADD COLUMN IF NOT EXISTS run_id varchar;
 CREATE INDEX IF NOT EXISTS seo_sync_execution_leases_expiry_idx ON seo_sync_execution_leases(lease_expires_at);

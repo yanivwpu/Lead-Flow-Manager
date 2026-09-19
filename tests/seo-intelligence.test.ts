@@ -8,6 +8,7 @@ import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledCl
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
+import { bestEffortExecutionCleanup, SEO_SYNC_STATE_TRANSITIONS } from "../server/seo/executionLifecycle";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -15,6 +16,15 @@ const current = [
   { query: "falling", page: "https://www.whachatcrm.com/a", clicks: 10, impressions: 100, position: 12 },
   { query: "missing target", page: "https://www.whachatcrm.com/missing", clicks: 0, impressions: 5, position: 40 },
 ];
+assert.deepEqual(SEO_SYNC_STATE_TRANSITIONS.map(([from, to]) => `${from}->${to}`), [
+  "importing->finalizing", "finalizing->finalized", "finalized->cleanup",
+  "importing->aborted", "aborted->finalized", "aborted->abandoned",
+], "the execution state table covers every import, finalization, cleanup, abort, and reclaim path");
+const finalizedSuccess = { status: "success" as const };
+const finalizedCap = { status: "partial" as const, errorCode: "DAILY_ROW_CAP_TRUNCATED" };
+assert.equal(await bestEffortExecutionCleanup(async () => { throw new Error("release unavailable"); }, () => {}), false);
+assert.equal(finalizedSuccess.status, "success", "lease cleanup failure cannot replace a successful result");
+assert.equal(seoScheduledRetryDisposition(finalizedCap.status, finalizedCap.errorCode), "complete", "lease cleanup failure cannot make a capped partial retryable");
 
 const reconciledTotals = reconcileSearchConsoleDailyTotals("sc-domain:example.com", "2026-08-01", "2026-08-03", [
   { keys: ["2026-08-02"], clicks: 7, impressions: 70, ctr: 0.1, position: 5 },
@@ -315,7 +325,7 @@ assert.match(service, /fetchSearchDailyTotals\(startDate, endDate, abortControll
 assert.match(service, /applySearchConsoleDailyTotalsReconciliation\(\{\s*propertyId,\s*startDate,\s*endDate/, "a complete totals response fills the entire property/date range");
 assert.match(service, /persist: async \(reconciledTotals\) => fencedMutation\(async \(tx\) => \{\s*await tx\.insert\(seoSearchDailyTotals\)\.values\(reconciledTotals\)/, "daily-total reconciliation is atomically fenced by lease ownership");
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
-assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
+assert.match(service, /latestSync: serializeSeoSyncRun\(visibleLatestRun\)/, "expired abandoned runs are not displayed as active");
 assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
 assert.match(service, /inFlightKey = propertyId/, "manual and scheduled calls share property-wide in-process coalescing");
 assert.match(service, /ownedLease \?\? await claimSeoExecutionLease\(trigger\)/, "every direct sync entry acquires the durable property lease");
@@ -324,7 +334,10 @@ assert.match(service, /const abortController = new AbortController\(\)/, "lease 
 assert.match(service, /if \(!await renewSeoExecutionLease\(executionLease\)\) loseLease\(\)/, "a rejected heartbeat immediately fences the former owner");
 assert.match(service, /signal: abortController\.signal/, "all detailed Search Console requests carry the lease abort signal");
 assert.match(service, /fencedMutation\(/, "database mutations use an owner-token and expiry fence");
-assert.match(service, /if \(leaseLost \|\| error instanceof SeoExecutionLeaseLostError/, "a lease-lost worker cannot finalize its run");
+assert.match(service, /const lost = leaseLost \|\| error instanceof SeoExecutionLeaseLostError/, "a lease-lost worker follows the explicit aborted-finalization path");
+assert.match(service, /LEASE_HEARTBEAT_ABORTED/, "heartbeat aborts receive an explicit persisted diagnostic");
+assert.match(service, /bestEffortExecutionCleanup/, "post-finalization cleanup cannot replace the business result");
+assert.match(service, /if \(!activeLease\.length\) visibleLatestRun = [^;]+LEASE_ABANDONED/, "dashboard masks expired abandoned runs as failed");
 assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.query, seoSearchSnapshots\.page\]/);
 assert.match(service, /target: \[seoSearchDailyTotals\.propertyId, seoSearchDailyTotals\.reportingDate\]/);
 assert.ok((service.match(/property_id = \$\{propertyId\}/g) ?? []).length >= 5, "totals, detail, comparison, opportunity, and target queries filter property");
@@ -357,6 +370,7 @@ assert.match(cron, /renewScheduledSeoSyncLease\(claim\)/, "long-running schedule
 assert.match(cron, /SEO_SCHEDULED_HEARTBEAT_MINUTES \* 60_000/, "heartbeat timing uses the shared policy constant");
 assert.match(cron, /clearInterval\(heartbeat\)/, "heartbeat stops when the claimed run finishes");
 assert.match(cron, /runSeoSync\("scheduled", now, executionLease\)/);
+assert.match(cron, /import result persisted but scheduled-claim cleanup failed; it will not be re-imported/, "scheduled-claim cleanup failure cannot replace a persisted result");
 const scheduled = readFileSync("server/seo/scheduledSync.ts", "utf8");
 assert.match(scheduled, /ON CONFLICT \(property_id, reporting_day\) DO UPDATE/, "claim is atomic rather than check-then-insert");
 assert.match(scheduled, /status IN \('failed', 'partial'\)/, "failed and partial claims follow explicit retry policy");
@@ -364,7 +378,9 @@ assert.match(scheduled, /lease_expires_at <= NOW\(\)/, "stale leases are recover
 assert.match(scheduled, /property_id, reporting_day/, "claims are property/day scoped");
 assert.match(scheduled, /isWithinScheduledSeoRecoveryWindow\(now\)/, "database claims also enforce the shared recovery window");
 assert.match(scheduled, /eq\(seoScheduledSyncClaims\.leaseToken, claim\.leaseToken\)/, "only the current owner can renew its lease");
-assert.match(scheduled, /ON CONFLICT \(property_id\) DO UPDATE SET[\s\S]+lease_expires_at <= NOW\(\)/, "manual and scheduled processes atomically recover only stale property leases");
+assert.match(scheduled, /FROM seo_sync_execution_leases WHERE property_id = \$\{config\.siteUrl\} FOR UPDATE[\s\S]+if \(row\?\.active\) return null/, "manual and scheduled processes serialize active-property claims");
+assert.match(scheduled, /LEASE_ABANDONED[\s\S]+status = 'running'/, "expired-lease reclaim reconciles an abandoned running run");
+assert.match(scheduled, /NOT EXISTS \(SELECT 1 FROM seo_sync_runs[\s\S]+DAILY_ROW_CAP_TRUNCATED/, "persisted success and capped partial results prevent scheduled re-import");
 assert.match(scheduled, /eq\(seoSyncExecutionLeases\.leaseToken, claim\.leaseToken\)/, "non-owners cannot heartbeat or release an execution lease");
 assert.match(scheduled, /SELECT property_id FROM seo_sync_execution_leases[\s\S]+lease_token = \$\{claim\.leaseToken\}[\s\S]+lease_expires_at > NOW\(\)[\s\S]+FOR UPDATE/, "paused former owners are fenced in the same transaction as writes");
 assert.match(scheduled, /seoScheduledRetryDisposition\(status, errorCode\)/, "scheduled finalization uses the centralized retry disposition");

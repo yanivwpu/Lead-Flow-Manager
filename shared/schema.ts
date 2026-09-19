@@ -3233,6 +3233,7 @@ export const seoSyncExecutionLeases = pgTable("seo_sync_execution_leases", {
   leaseToken: text("lease_token").notNull(),
   trigger: text("trigger").notNull(),
   leaseExpiresAt: timestamp("lease_expires_at").notNull(),
+  runId: varchar("run_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => ({ expiryIdx: index("seo_sync_execution_leases_expiry_idx").on(t.leaseExpiresAt) }));

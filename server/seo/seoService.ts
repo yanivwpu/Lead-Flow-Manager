@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
+import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncExecutionLeases, seoSyncRuns } from "@shared/schema";
 import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError } from "./searchConsole";
 import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, snapshotInsertBatches } from "./snapshotBatches";
@@ -10,6 +10,7 @@ import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation } from "./dailyTotals";
 import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, SeoExecutionLeaseLostError, withSeoExecutionLease, type SeoExecutionLease } from "./scheduledSync";
 import { SEO_SCHEDULED_HEARTBEAT_MINUTES } from "./scheduledPolicy";
+import { bestEffortExecutionCleanup } from "./executionLifecycle";
 
 const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -50,11 +51,24 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       if (leaseLost) throw new SeoExecutionLeaseLostError("SEO synchronization lease ownership was lost");
       return withSeoExecutionLease(executionLease, work);
     };
+    /** Execution lifecycle:
+     * importing -> finalizing -> finalized -> cleanup(best effort)
+     * importing/finalizing -> aborted -> fenced failure finalization -> cleanup
+     * failed finalization -> lease retained -> expired reclaim marks abandoned. */
+    let runCreated = false;
+    let runFinalized = false;
     try {
     const end = new Date(now); end.setUTCDate(end.getUTCDate() - 3);
     const start = new Date(end); start.setUTCDate(start.getUTCDate() - 61);
     const startDate = isoDay(start), endDate = isoDay(end);
-    const [run] = await fencedMutation((tx) => tx.insert(seoSyncRuns).values({ propertyId, trigger, startDate, endDate }).returning({ id: seoSyncRuns.id }));
+    const [run] = await fencedMutation(async (tx) => {
+      const rows = await tx.insert(seoSyncRuns).values({ propertyId, trigger, startDate, endDate }).returning({ id: seoSyncRuns.id });
+      await tx.update(seoSyncExecutionLeases).set({ runId: rows[0].id, updatedAt: new Date() }).where(and(
+        eq(seoSyncExecutionLeases.propertyId, executionLease.propertyId), eq(seoSyncExecutionLeases.leaseToken, executionLease.leaseToken),
+      ));
+      return rows;
+    });
+    runCreated = true;
     let rowsImported = 0, pagesCompleted = 0;
     try {
       await applySearchConsoleDailyTotalsReconciliation({
@@ -119,22 +133,35 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         const diagnostic = `${dailyDiagnostic}${overallDiagnostic}`.trim();
         const truncationCode = overallTruncated ? "OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED";
         await fencedMutation((tx) => tx.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: truncationCode, errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
+        runFinalized = true;
         console.warn(`[SEO Sync] truncated run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
         return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic, errorCode: truncationCode };
       }
       await fencedMutation((tx) => tx.update(seoSyncRuns).set({ status: "success", rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
+      runFinalized = true;
       console.info(`[SEO Sync] completed run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
       return { runId: run.id, status: "success" as const, rowsImported, pagesCompleted, startDate, endDate };
     } catch (error) {
-      if (leaseLost || error instanceof SeoExecutionLeaseLostError || (error as { code?: string }).code === "LEASE_LOST") throw error;
-      const failure = describeSeoSyncFailure(error, rowsImported);
-      await fencedMutation((tx) => tx.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
+      const lost = leaseLost || error instanceof SeoExecutionLeaseLostError || (error as { code?: string }).code === "LEASE_LOST";
+      const failure = lost
+        ? { status: "failed" as const, errorCode: "LEASE_HEARTBEAT_ABORTED", errorMessage: "SEO import aborted after execution lease heartbeat or ownership was lost" }
+        : describeSeoSyncFailure(error, rowsImported);
+      try {
+        await withSeoExecutionLease(executionLease, (tx) => tx.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
+        runFinalized = true;
+      } catch (finalizeError) {
+        console.error(`[SEO Sync] could not finalize run=${run.id}; expired-lease reclaim will reconcile it:`, finalizeError);
+      }
       console.error(`[SEO Sync] failed run=${run.id} code=${failure.errorCode} rows=${rowsImported}: ${failure.errorMessage}`);
       throw error;
     }
     } finally {
       clearInterval(heartbeat);
-      await releaseSeoExecutionLease(executionLease);
+      if (!runCreated || runFinalized) {
+        await bestEffortExecutionCleanup(async () => {
+          if (!await releaseSeoExecutionLease(executionLease)) console.warn("[SEO Sync] execution lease cleanup skipped; ownership already changed");
+        }, (cleanupError) => console.error("[SEO Sync] execution lease cleanup failed; finalized result is preserved and lease will expire:", cleanupError));
+      }
     }
   })();
   const tracked = task.finally(() => { syncInFlight.delete(inFlightKey); });
@@ -218,6 +245,14 @@ export async function getSeoDashboard(now = new Date()) {
     db.select().from(seoSyncRuns).where(eq(seoSyncRuns.propertyId, propertyId)).orderBy(desc(seoSyncRuns.startedAt)).limit(1),
     db.select().from(seoSyncRuns).where(sql`${seoSyncRuns.propertyId} = ${propertyId} AND ${seoSyncRuns.status} = 'success'`).orderBy(desc(seoSyncRuns.completedAt)).limit(1),
   ]);
+  let visibleLatestRun = latestRun;
+  if (latestRun?.status === "running") {
+    const activeLease = await db.select({ runId: seoSyncExecutionLeases.runId }).from(seoSyncExecutionLeases).where(and(
+      eq(seoSyncExecutionLeases.propertyId, propertyId), eq(seoSyncExecutionLeases.runId, latestRun.id),
+      sql`${seoSyncExecutionLeases.leaseExpiresAt} > NOW()`,
+    )).limit(1);
+    if (!activeLease.length) visibleLatestRun = { ...latestRun, status: "failed", errorCode: "LEASE_ABANDONED", errorMessage: "Execution lease expired before the worker finalized the run", completedAt: latestRun.completedAt ?? new Date() };
+  }
   const currentClicks = numberValue(totals.current_clicks), currentImpressions = numberValue(totals.current_impressions), previousClicks = numberValue(totals.previous_clicks), previousImpressions = numberValue(totals.previous_impressions);
-  return { config: { configured: config.configured, missing: config.missing }, latestSync: serializeSeoSyncRun(latestRun), lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: currentStartDay, endDate: endDay, clicks: currentClicks, impressions: currentImpressions, ctr: currentClicks / Math.max(1, currentImpressions), position: averageSeoPosition(numberValue(totals.current_position_weighted), currentImpressions), previous: { clicks: previousClicks, impressions: previousImpressions, ctr: previousClicks / Math.max(1, previousImpressions), position: averageSeoPosition(numberValue(totals.previous_position_weighted), previousImpressions) } }, topQueries: topList(topQueriesResult.rows), topPages: topList(topPagesResult.rows), opportunities: detectSeoOpportunities(current, previous, SEO_TARGETS, targetVisibility).slice(0,50) };
+  return { config: { configured: config.configured, missing: config.missing }, latestSync: serializeSeoSyncRun(visibleLatestRun), lastSuccessfulSync: lastRun?.completedAt ?? null, period: { startDate: currentStartDay, endDate: endDay, clicks: currentClicks, impressions: currentImpressions, ctr: currentClicks / Math.max(1, currentImpressions), position: averageSeoPosition(numberValue(totals.current_position_weighted), currentImpressions), previous: { clicks: previousClicks, impressions: previousImpressions, ctr: previousClicks / Math.max(1, previousImpressions), position: averageSeoPosition(numberValue(totals.previous_position_weighted), previousImpressions) } }, topQueries: topList(topQueriesResult.rows), topPages: topList(topPagesResult.rows), opportunities: detectSeoOpportunities(current, previous, SEO_TARGETS, targetVisibility).slice(0,50) };
 }

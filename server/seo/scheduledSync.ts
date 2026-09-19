@@ -12,17 +12,25 @@ export async function claimSeoExecutionLease(trigger: "manual" | "scheduled"): P
   const config = resolveSearchConsoleConfig();
   if (!config.configured || !config.siteUrl) return null;
   const leaseToken = crypto.randomUUID();
-  const result = await db.execute(sql`
-    INSERT INTO seo_sync_execution_leases (property_id, lease_token, trigger, lease_expires_at, created_at, updated_at)
-    VALUES (${config.siteUrl}, ${leaseToken}, ${trigger}, NOW() + (${SEO_SCHEDULED_LEASE_MINUTES} * INTERVAL '1 minute'), NOW(), NOW())
-    ON CONFLICT (property_id) DO UPDATE SET
-      lease_token = EXCLUDED.lease_token, trigger = EXCLUDED.trigger,
-      lease_expires_at = EXCLUDED.lease_expires_at, updated_at = NOW()
-    WHERE seo_sync_execution_leases.lease_expires_at <= NOW()
-    RETURNING property_id, lease_token, trigger
-  `);
-  const row = result.rows[0] as { property_id: string; lease_token: string; trigger: "manual" | "scheduled" } | undefined;
-  return row ? { propertyId: row.property_id, leaseToken: row.lease_token, trigger: row.trigger } : null;
+  return db.transaction(async (tx) => {
+    const existing = await tx.execute(sql`SELECT lease_token, lease_expires_at > NOW() AS active, run_id
+      FROM seo_sync_execution_leases WHERE property_id = ${config.siteUrl} FOR UPDATE`);
+    const row = existing.rows[0] as { active: boolean; run_id: string | null } | undefined;
+    if (row?.active) return null;
+    if (row?.run_id) {
+      await tx.execute(sql`UPDATE seo_sync_runs SET status = 'failed', error_code = 'LEASE_ABANDONED',
+        error_message = 'Execution lease expired before the worker finalized the run', completed_at = NOW()
+        WHERE id = ${row.run_id} AND property_id = ${config.siteUrl} AND status = 'running'`);
+    }
+    const result = await tx.execute(sql`INSERT INTO seo_sync_execution_leases
+      (property_id, lease_token, trigger, lease_expires_at, run_id, created_at, updated_at)
+      VALUES (${config.siteUrl}, ${leaseToken}, ${trigger}, NOW() + (${SEO_SCHEDULED_LEASE_MINUTES} * INTERVAL '1 minute'), NULL, NOW(), NOW())
+      ON CONFLICT (property_id) DO UPDATE SET lease_token = EXCLUDED.lease_token, trigger = EXCLUDED.trigger,
+        lease_expires_at = EXCLUDED.lease_expires_at, run_id = NULL, updated_at = NOW()
+      RETURNING property_id, lease_token, trigger`);
+    const claimed = result.rows[0] as { property_id: string; lease_token: string; trigger: "manual" | "scheduled" };
+    return { propertyId: claimed.property_id, leaseToken: claimed.lease_token, trigger: claimed.trigger };
+  });
 }
 
 export async function renewSeoExecutionLease(claim: SeoExecutionLease): Promise<boolean> {
@@ -68,6 +76,9 @@ export async function claimScheduledSeoSync(reportingDay: string, now = new Date
     WHERE seo_scheduled_sync_claims.attempts < ${SEO_SCHEDULED_MAX_ATTEMPTS}
       AND (seo_scheduled_sync_claims.status IN ('failed', 'partial')
         OR (seo_scheduled_sync_claims.status = 'running' AND seo_scheduled_sync_claims.lease_expires_at <= NOW()))
+      AND NOT EXISTS (SELECT 1 FROM seo_sync_runs
+        WHERE property_id = ${config.siteUrl} AND trigger = 'scheduled' AND started_at::date = ${reportingDay}
+          AND (status = 'success' OR (status = 'partial' AND error_code IN ('DAILY_ROW_CAP_TRUNCATED', 'OVERALL_AND_DAILY_ROW_CAP_TRUNCATED'))))
     RETURNING property_id, reporting_day, lease_token, attempts
   `);
   const row = result.rows[0] as { property_id: string; reporting_day: string; lease_token: string; attempts: number } | undefined;
