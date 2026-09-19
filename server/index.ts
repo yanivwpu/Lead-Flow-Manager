@@ -490,6 +490,11 @@ app.use((req, res, next) => {
       "[StartupSchema] FATAL: Shopify shop trial ledger is not ready (patch 0084) — refusing to listen so OAuth cannot grant trials",
     );
   }
+  if (!schemaPatches.seoIntelligencePatchOk) {
+    throw new Error(
+      "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patch 0093) — refusing to serve or schedule SEO sync",
+    );
+  }
 
   // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
   // Production always starts them. Local Inbox debugging skips unless opted in —

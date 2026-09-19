@@ -10,6 +10,7 @@ import { runVerificationReminders } from './verificationReminderService';
 import { loadVerificationReminderRolloutActiveAfter } from './verificationReminderRollout';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
+import { isWithinScheduledSeoRecoveryWindow, SEO_SCHEDULED_HEARTBEAT_MINUTES } from './seo/scheduledPolicy';
 
 const GRAPH = "https://graph.facebook.com/v19.0";
 
@@ -313,6 +314,40 @@ export function startCronJobs() {
     const now = new Date();
     const utcHour = now.getUTCHours();
     const utcMin  = now.getUTCMinutes();
+
+    // Read-only Search Console import, once daily. Never edits public content.
+    const seoDay = now.toISOString().slice(0, 10);
+    if (isWithinScheduledSeoRecoveryWindow(now)) {
+      Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]).then(async ([claims, service]) => {
+        const executionLease = await claims.claimSeoExecutionLease("scheduled");
+        if (!executionLease) return;
+        let claim;
+        try {
+          claim = await claims.claimScheduledSeoSync(seoDay, now);
+        } catch (error) {
+          await claims.releaseSeoExecutionLease(executionLease);
+          throw error;
+        }
+        if (!claim) {
+          await claims.releaseSeoExecutionLease(executionLease);
+          return;
+        }
+        const heartbeat = setInterval(() => {
+          claims.renewScheduledSeoSyncLease(claim).catch((error) => console.error("[SEO Sync] lease heartbeat failed:", error));
+        }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
+        try {
+          const result = await service.runSeoSync("scheduled", now, executionLease);
+          await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic, result.errorCode);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
+          const errorCode = (error as { code?: string }).code;
+          if (errorCode !== "LEASE_LOST") await claims.finishScheduledSeoSync(claim, "failed", message, errorCode);
+          console.error("[SEO Sync] scheduled error (bounded database retry policy applies):", error);
+        } finally {
+          clearInterval(heartbeat);
+        }
+      }).catch((err) => console.error("[SEO Sync] scheduled claim error:", err));
+    }
 
     if (utcHour === 14 && utcMin === 0) {
       runTrialCheckinEmails().catch(err => console.error('[Cron] Scheduled run error:', err));

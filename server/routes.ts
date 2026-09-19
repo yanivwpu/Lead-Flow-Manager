@@ -31,6 +31,7 @@ import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitem
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
 import { registerBusinessProfileLogoRoutes } from "./routes/businessProfileLogo";
 import { registerProspectAiRoutes } from "./routes/prospectAI";
+import { registerSeoIntelligenceRoutes } from "./routes/seoIntelligence";
 import {
   getWhatsAppAvailability,
   sendWhatsAppMessage,
@@ -522,6 +523,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerSeoIntelligenceRoutes(app, requireSalesAdmin);
 
   // Object storage routes for file uploads
   registerObjectStorageRoutes(app);

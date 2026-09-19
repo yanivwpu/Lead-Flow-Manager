@@ -36,12 +36,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AdminSeoIntelligenceTab } from "@/components/admin/AdminSeoIntelligenceTab";
 
 import { 
   Users, Calendar, DollarSign, Plus, Edit2, Trash2, 
   LogOut, Loader2, CheckCircle, XCircle, Lock, UserCircle,
   AlertCircle, MessageCircle, ArrowUpDown, Link2, Percent,
-  Eye, EyeOff, ClipboardList, BarChart3,
+  Eye, EyeOff, ClipboardList, BarChart3, Search,
 } from "lucide-react";
 import { NoIndexHelmet } from "@/components/NoIndexHelmet";
 import { toast } from "@/hooks/use-toast";
@@ -1116,6 +1117,9 @@ export function Admin() {
                 <Lock className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Email crypto</span>
                 <span className="sm:hidden">Crypto</span>
+              </TabsTrigger>
+              <TabsTrigger value="seo-intelligence" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-seo-intelligence">
+                <Search className="h-4 w-4" /> SEO
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2254,6 +2258,9 @@ export function Admin() {
 
           <TabsContent value="email-crypto">
             <AdminEmailCryptoTab />
+          </TabsContent>
+          <TabsContent value="seo-intelligence">
+            <AdminSeoIntelligenceTab enabled={isLoggedIn} />
           </TabsContent>
         </Tabs>
       </main>
