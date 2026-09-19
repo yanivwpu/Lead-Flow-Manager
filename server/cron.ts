@@ -10,6 +10,7 @@ import { runVerificationReminders } from './verificationReminderService';
 import { loadVerificationReminderRolloutActiveAfter } from './verificationReminderRollout';
 import { runCampaignSchedulerTick } from './campaignExecution';
 import { EMAIL_POLL_FALLBACK_INTERVAL_MS } from './emailChannel/gmailPushConfig';
+import { isWithinScheduledSeoRecoveryWindow, SEO_SCHEDULED_HEARTBEAT_MINUTES } from './seo/scheduledPolicy';
 
 const GRAPH = "https://graph.facebook.com/v19.0";
 
@@ -316,10 +317,13 @@ export function startCronJobs() {
 
     // Read-only Search Console import, once daily. Never edits public content.
     const seoDay = now.toISOString().slice(0, 10);
-    if (utcHour === 4 && utcMin >= 20 && utcMin <= 25) {
+    if (isWithinScheduledSeoRecoveryWindow(now)) {
       Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]).then(async ([claims, service]) => {
-        const claim = await claims.claimScheduledSeoSync(seoDay);
+        const claim = await claims.claimScheduledSeoSync(seoDay, now);
         if (!claim) return;
+        const heartbeat = setInterval(() => {
+          claims.renewScheduledSeoSyncLease(claim).catch((error) => console.error("[SEO Sync] lease heartbeat failed:", error));
+        }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
         try {
           const result = await service.runSeoSync("scheduled");
           await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic);
@@ -327,6 +331,8 @@ export function startCronJobs() {
           const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
           await claims.finishScheduledSeoSync(claim, "failed", message);
           console.error("[SEO Sync] scheduled error (bounded database retry policy applies):", error);
+        } finally {
+          clearInterval(heartbeat);
         }
       }).catch((err) => console.error("[SEO Sync] scheduled claim error:", err));
     }

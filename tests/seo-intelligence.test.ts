@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
-import { scheduledClaimCanRetry } from "../server/seo/scheduledPolicy";
+import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 
@@ -134,12 +134,21 @@ assert.equal(searchConsoleDayIsTruncated(SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS - SEO
 }
 
 const policyNow = new Date("2026-09-19T04:21:00Z");
+assert.equal(SEO_SCHEDULED_LEASE_MINUTES, 30);
+assert.ok(SEO_SCHEDULED_HEARTBEAT_MINUTES < SEO_SCHEDULED_LEASE_MINUTES, "healthy workers renew before the lease can expire");
+assert.equal(isWithinScheduledSeoRecoveryWindow(new Date("2026-09-19T04:19:59Z")), false);
+assert.equal(isWithinScheduledSeoRecoveryWindow(new Date("2026-09-19T04:20:00Z")), true);
+assert.equal(isWithinScheduledSeoRecoveryWindow(new Date("2026-09-19T06:30:00Z")), true);
+assert.equal(isWithinScheduledSeoRecoveryWindow(new Date("2026-09-19T06:31:00Z")), false, "claims stop after the recovery window");
+assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T04:51:00Z") }, new Date("2026-09-19T04:50:00Z")), false, "a crashed 04:21 claim remains exclusive for its full lease");
+assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T04:51:00Z") }, new Date("2026-09-19T04:52:00Z")), true, "a crashed 04:21 claim can be recovered after lease expiry");
+assert.equal(isWithinScheduledSeoRecoveryWindow(new Date("2026-09-19T04:52:00Z")), true, "the recovery window remains open after a 30-minute lease expires");
+assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T05:20:00Z") }, new Date("2026-09-19T05:00:00Z")), false, "a long-running healthy sync's renewed lease cannot be reclaimed");
 assert.equal(scheduledClaimCanRetry({ status: "success", attempts: 1, leaseExpiresAt: new Date(0) }, policyNow), false, "successful claim remains deduplicated after restart");
-assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T05:00:00Z") }, policyNow), false, "concurrent instance cannot take an active lease");
-assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T04:00:00Z") }, policyNow), true, "stale running lease is recoverable");
 assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: 1, leaseExpiresAt: new Date(0) }, policyNow), true);
 assert.equal(scheduledClaimCanRetry({ status: "partial", attempts: 2, leaseExpiresAt: new Date(0) }, policyNow), true);
-assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: 3, leaseExpiresAt: new Date(0) }, policyNow), false, "retry policy is bounded");
+assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: SEO_SCHEDULED_MAX_ATTEMPTS, leaseExpiresAt: new Date(0) }, policyNow), false, "three exhausted attempts prevent further retries");
+assert.notEqual(scheduledClaimKey("sc-domain:one.example", "2026-09-19"), scheduledClaimKey("sc-domain:two.example", "2026-09-19"), "scheduled claims are isolated by property");
 
 const rankingOnlyDecline = detectSeoOpportunities(
   [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
@@ -275,13 +284,18 @@ assert.deepEqual(normalizeSql(patchStatements), normalizeSql(migration), "standa
 const index = readFileSync("server/index.ts", "utf8");
 assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
 const cron = readFileSync("server/cron.ts", "utf8");
-assert.match(cron, /utcMin >= 20 && utcMin <= 25/, "scheduled failures have a bounded same-day retry window");
-assert.match(cron, /claimScheduledSeoSync\(seoDay\)/, "scheduled runs require an atomic database claim");
+assert.match(cron, /isWithinScheduledSeoRecoveryWindow\(now\)/, "cron uses the shared 04:20-06:30 recovery window");
+assert.match(cron, /claimScheduledSeoSync\(seoDay, now\)/, "scheduled runs require an atomic database claim");
+assert.match(cron, /renewScheduledSeoSyncLease\(claim\)/, "long-running scheduled imports heartbeat their database lease");
+assert.match(cron, /SEO_SCHEDULED_HEARTBEAT_MINUTES \* 60_000/, "heartbeat timing uses the shared policy constant");
+assert.match(cron, /clearInterval\(heartbeat\)/, "heartbeat stops when the claimed run finishes");
 assert.match(cron, /runSeoSync\("scheduled"\)/);
 const scheduled = readFileSync("server/seo/scheduledSync.ts", "utf8");
 assert.match(scheduled, /ON CONFLICT \(property_id, reporting_day\) DO UPDATE/, "claim is atomic rather than check-then-insert");
 assert.match(scheduled, /status IN \('failed', 'partial'\)/, "failed and partial claims follow explicit retry policy");
 assert.match(scheduled, /lease_expires_at <= NOW\(\)/, "stale leases are recoverable");
 assert.match(scheduled, /property_id, reporting_day/, "claims are property/day scoped");
+assert.match(scheduled, /isWithinScheduledSeoRecoveryWindow\(now\)/, "database claims also enforce the shared recovery window");
+assert.match(scheduled, /eq\(seoScheduledSyncClaims\.leaseToken, claim\.leaseToken\)/, "only the current owner can renew its lease");
 assert.match(routes, /runSeoSync\("manual"\)/, "manual sync bypasses scheduled claims");
 console.log("seo-intelligence.test.ts: all assertions passed");

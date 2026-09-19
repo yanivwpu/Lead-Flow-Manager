@@ -3,9 +3,10 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { seoScheduledSyncClaims } from "@shared/schema";
 import { resolveSearchConsoleConfig } from "./searchConsole";
-import { SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "./scheduledPolicy";
+import { isWithinScheduledSeoRecoveryWindow, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "./scheduledPolicy";
 
-export async function claimScheduledSeoSync(reportingDay: string) {
+export async function claimScheduledSeoSync(reportingDay: string, now = new Date()) {
+  if (!isWithinScheduledSeoRecoveryWindow(now)) return null;
   const config = resolveSearchConsoleConfig();
   if (!config.configured || !config.siteUrl) return null;
   const leaseToken = crypto.randomUUID();
@@ -25,6 +26,19 @@ export async function claimScheduledSeoSync(reportingDay: string) {
   `);
   const row = result.rows[0] as { property_id: string; reporting_day: string; lease_token: string; attempts: number } | undefined;
   return row ? { propertyId: row.property_id, reportingDay: row.reporting_day, leaseToken: row.lease_token, attempts: Number(row.attempts) } : null;
+}
+
+export async function renewScheduledSeoSyncLease(claim: { propertyId: string; reportingDay: string; leaseToken: string }) {
+  const result = await db.update(seoScheduledSyncClaims).set({
+    leaseExpiresAt: sql`NOW() + (${SEO_SCHEDULED_LEASE_MINUTES} * INTERVAL '1 minute')`,
+    updatedAt: new Date(),
+  }).where(and(
+    eq(seoScheduledSyncClaims.propertyId, claim.propertyId),
+    eq(seoScheduledSyncClaims.reportingDay, claim.reportingDay),
+    eq(seoScheduledSyncClaims.leaseToken, claim.leaseToken),
+    eq(seoScheduledSyncClaims.status, "running"),
+  )).returning({ leaseToken: seoScheduledSyncClaims.leaseToken });
+  return result.length === 1;
 }
 
 export async function finishScheduledSeoSync(claim: { propertyId: string; reportingDay: string; leaseToken: string }, status: "success" | "partial" | "failed", error?: string) {
