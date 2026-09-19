@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
-import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
+import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, seoScheduledRetryDisposition, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
@@ -179,6 +179,14 @@ assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: 1, leaseExpire
 assert.equal(scheduledClaimCanRetry({ status: "partial", attempts: 2, leaseExpiresAt: new Date(0) }, policyNow), true);
 assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: SEO_SCHEDULED_MAX_ATTEMPTS, leaseExpiresAt: new Date(0) }, policyNow), false, "three exhausted attempts prevent further retries");
 assert.notEqual(scheduledClaimKey("sc-domain:one.example", "2026-09-19"), scheduledClaimKey("sc-domain:two.example", "2026-09-19"), "scheduled claims are isolated by property");
+assert.equal(seoScheduledRetryDisposition("partial", "DAILY_ROW_CAP_TRUNCATED"), "complete", "daily-cap partials do not retry");
+assert.equal(seoScheduledRetryDisposition("partial", "OVERALL_AND_DAILY_ROW_CAP_TRUNCATED"), "complete", "overall-cap partials do not retry");
+assert.equal(seoScheduledRetryDisposition("partial", "TRANSIENT_IMPORT"), "retryable");
+assert.equal(seoScheduledRetryDisposition("failed", "TRANSPORT_ERROR"), "retryable");
+assert.equal(seoScheduledRetryDisposition("failed", "QUOTA_EXCEEDED"), "retryable");
+assert.equal(seoScheduledRetryDisposition("failed", "AUTHENTICATION_FAILED"), "non_retryable");
+assert.equal(seoScheduledRetryDisposition("failed", "PERMISSION_DENIED"), "non_retryable");
+assert.equal(seoScheduledRetryDisposition("failed", "MISSING_CONFIGURATION"), "non_retryable");
 
 const rankingOnlyDecline = detectSeoOpportunities(
   [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
@@ -255,6 +263,17 @@ const okResponse = () => new Response(JSON.stringify({ rows: [] }), { status: 20
   try { await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async () => {}, fetchImpl: (async () => { attempts += 1; const cause = new TypeError(`body failure ${attempts}`); causes.push(cause); return { ok: true, status: 200, json: async () => { throw cause; } } as Response; }) as typeof fetch }); } catch (error) { exhausted = error; }
   assert.ok(exhausted instanceof SearchConsoleError); assert.equal(attempts, 4); assert.equal(exhausted.cause, causes[3]);
 }
+{
+  const controller = new AbortController();
+  controller.abort(new Error("lease replaced"));
+  let attempts = 0;
+  await assert.rejects(() => fetchSearchPerformance({
+    startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1,
+    env: configuredEnv, getAccessToken: async () => "token", signal: controller.signal,
+    fetchImpl: (async () => { attempts += 1; return okResponse(); }) as typeof fetch,
+  }), (error: unknown) => error instanceof SearchConsoleError && error.code === "LEASE_LOST");
+  assert.equal(attempts, 0, "a lease-lost worker cannot begin another Search Console request");
+}
 
 assert.equal(normalizeSearchConsoleProperty(" SC-DOMAIN:Example.COM "), "sc-domain:example.com");
 assert.equal(normalizeSearchConsoleProperty("https://example.com"), "https://example.com/");
@@ -275,10 +294,10 @@ assert.match(service, /rowsImported \+ dayRows\.length < SEO_SEARCH_CONSOLE_MAX_
 assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
 assert.match(service, /snapshotInsertBatches\(dayRows\)/, "replacement upserts use parameter-safe batches");
 assert.match(service, /const dayRows: SearchPerformanceRow\[\] = \[\]/, "each reporting day's complete bounded response is staged before replacement");
-assert.match(service, /if \(dayFetched\) \{\s*await db\.transaction/, "even an affirmative empty response atomically clears stale rows for that day");
+assert.match(service, /if \(dayFetched\) \{\s*await fencedMutation\(async \(tx\)/, "even an affirmative empty response atomically clears stale rows under the lease fence");
 assert.match(service, /tx\.delete\(seoSearchSnapshots\)\.where\(and\(\s*eq\(seoSearchSnapshots\.propertyId, propertyId\),\s*eq\(seoSearchSnapshots\.reportingDate, reportingDate\)/, "replacement deletes only the current property/day slice");
 assert.match(service, /for \(const batch of snapshotInsertBatches\(dayRows\)\) \{\s*await tx\.insert/, "the delete and parameter-safe replacement inserts share one transaction");
-assert.ok(service.indexOf("rowsImported += dayRows.length") > service.indexOf("await db.transaction"), "committed-row progress advances only after atomic replacement");
+assert.ok(service.indexOf("rowsImported += dayRows.length") > service.indexOf("await fencedMutation(async (tx)"), "committed-row progress advances only after fenced atomic replacement");
 assert.match(service, /"OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED"/, "daily and overall ceilings persist explicit truncated diagnostics");
 assert.match(service, /if \(overallTruncated \|\| rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS\) break/, "outer date loop stops only for the overall cap");
 assert.match(service, /truncatedDays\.push\(reportingDate\)/, "daily truncation is accumulated without ending the whole import");
@@ -292,15 +311,20 @@ assert.match(service, /SEO_DECLINE_RETAINED_RATIO/, "SQL candidate eligibility u
 assert.match(service, /previous_clicks > 0 AND current_clicks <= previous_clicks/, "SQL click decline requires a positive baseline");
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
 assert.match(service, /FROM seo_search_daily_totals WHERE property_id = \$\{propertyId\} AND reporting_date BETWEEN/, "aggregate cards use only current-property daily totals");
-assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");
+assert.match(service, /fetchSearchDailyTotals\(startDate, endDate, abortController\.signal\)/, "sync imports aggregate totals separately with lease-loss cancellation");
 assert.match(service, /applySearchConsoleDailyTotalsReconciliation\(\{\s*propertyId,\s*startDate,\s*endDate/, "a complete totals response fills the entire property/date range");
-assert.match(service, /persist: async \(reconciledTotals\) => db\.transaction\(async \(tx\) => \{\s*await tx\.insert\(seoSearchDailyTotals\)\.values\(reconciledTotals\)/, "daily-total reconciliation is committed atomically");
+assert.match(service, /persist: async \(reconciledTotals\) => fencedMutation\(async \(tx\) => \{\s*await tx\.insert\(seoSearchDailyTotals\)\.values\(reconciledTotals\)/, "daily-total reconciliation is atomically fenced by lease ownership");
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
 assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
 assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
 assert.match(service, /inFlightKey = propertyId/, "manual and scheduled calls share property-wide in-process coalescing");
 assert.match(service, /ownedLease \?\? await claimSeoExecutionLease\(trigger\)/, "every direct sync entry acquires the durable property lease");
 assert.match(service, /releaseSeoExecutionLease\(executionLease\)/, "the execution lease is released after completion");
+assert.match(service, /const abortController = new AbortController\(\)/, "lease loss can abort outstanding Search Console work");
+assert.match(service, /if \(!await renewSeoExecutionLease\(executionLease\)\) loseLease\(\)/, "a rejected heartbeat immediately fences the former owner");
+assert.match(service, /signal: abortController\.signal/, "all detailed Search Console requests carry the lease abort signal");
+assert.match(service, /fencedMutation\(/, "database mutations use an owner-token and expiry fence");
+assert.match(service, /if \(leaseLost \|\| error instanceof SeoExecutionLeaseLostError/, "a lease-lost worker cannot finalize its run");
 assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.query, seoSearchSnapshots\.page\]/);
 assert.match(service, /target: \[seoSearchDailyTotals\.propertyId, seoSearchDailyTotals\.reportingDate\]/);
 assert.ok((service.match(/property_id = \$\{propertyId\}/g) ?? []).length >= 5, "totals, detail, comparison, opportunity, and target queries filter property");
@@ -342,6 +366,8 @@ assert.match(scheduled, /isWithinScheduledSeoRecoveryWindow\(now\)/, "database c
 assert.match(scheduled, /eq\(seoScheduledSyncClaims\.leaseToken, claim\.leaseToken\)/, "only the current owner can renew its lease");
 assert.match(scheduled, /ON CONFLICT \(property_id\) DO UPDATE SET[\s\S]+lease_expires_at <= NOW\(\)/, "manual and scheduled processes atomically recover only stale property leases");
 assert.match(scheduled, /eq\(seoSyncExecutionLeases\.leaseToken, claim\.leaseToken\)/, "non-owners cannot heartbeat or release an execution lease");
+assert.match(scheduled, /SELECT property_id FROM seo_sync_execution_leases[\s\S]+lease_token = \$\{claim\.leaseToken\}[\s\S]+lease_expires_at > NOW\(\)[\s\S]+FOR UPDATE/, "paused former owners are fenced in the same transaction as writes");
+assert.match(scheduled, /seoScheduledRetryDisposition\(status, errorCode\)/, "scheduled finalization uses the centralized retry disposition");
 assert.match(routes, /runSeoSync\("manual"\)/, "manual sync uses the shared execution guard without consuming a scheduled claim");
 assert.match(routes, /code === "SYNC_IN_PROGRESS" \? 409/, "cross-process manual contention returns a clear conflict response");
 console.log("seo-intelligence.test.ts: all assertions passed");

@@ -41,6 +41,7 @@ export async function fetchSearchPerformance(params: {
   startDate: string; endDate: string; startRow: number; rowLimit: number;
   fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv; dimensions?: readonly ("date" | "query" | "page")[];
   getAccessToken?: () => Promise<string | null>; sleepImpl?: (ms: number) => Promise<unknown>;
+  signal?: AbortSignal;
 }) {
   const config = resolveSearchConsoleConfig(params.env);
   if (!config.configured) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
@@ -54,18 +55,25 @@ export async function fetchSearchPerformance(params: {
   const wait = params.sleepImpl ?? sleep;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
+      if (params.signal?.aborted) throw new SearchConsoleError("LEASE_LOST", "SEO synchronization lease was lost", undefined, params.signal.reason);
       const response = await fetcher(url, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ startDate: params.startDate, endDate: params.endDate, dimensions: params.dimensions ?? ["date", "query", "page"], rowLimit: Math.min(params.rowLimit, 25_000), startRow: params.startRow, dataState: "final" }),
+        signal: params.signal,
       });
       if (response.ok) return (await response.json()) as { rows?: Array<{ keys: string[]; clicks: number; impressions: number; ctr: number; position: number }> };
       const body = await response.text();
       const retryable = response.status === 429 || response.status >= 500;
       if (retryable && attempt < 3) { await wait(500 * (2 ** attempt)); continue; }
-      const code = response.status === 429 ? "QUOTA_EXCEEDED" : "API_ERROR";
+      const code = response.status === 429 ? "QUOTA_EXCEEDED"
+        : response.status === 401 ? "AUTHENTICATION_FAILED"
+        : response.status === 403 ? "PERMISSION_DENIED"
+        : response.status >= 400 && response.status < 500 ? "VALIDATION_ERROR"
+        : "API_ERROR";
       throw new SearchConsoleError(code, `Search Console request failed (${response.status}): ${body.slice(0, 300)}`, response.status);
     } catch (error) {
+      if (params.signal?.aborted) throw new SearchConsoleError("LEASE_LOST", "SEO synchronization lease was lost", undefined, error);
       if (error instanceof SearchConsoleError || !isTransientSearchConsoleTransportError(error)) throw error;
       if (attempt < 3) { await wait(500 * (2 ** attempt)); continue; }
       throw new SearchConsoleError("TRANSPORT_ERROR", `Search Console transport or response body failed after ${attempt + 1} attempts`, undefined, error);
@@ -76,6 +84,6 @@ export async function fetchSearchPerformance(params: {
 
 /** Daily property totals deliberately omit query/page, so anonymized-query traffic
  * remains represented in aggregate dashboard metrics. */
-export function fetchSearchDailyTotals(startDate: string, endDate: string) {
-  return fetchSearchPerformance({ startDate, endDate, startRow: 0, rowLimit: 1_000, dimensions: ["date"] });
+export function fetchSearchDailyTotals(startDate: string, endDate: string, signal?: AbortSignal) {
+  return fetchSearchPerformance({ startDate, endDate, startRow: 0, rowLimit: 1_000, dimensions: ["date"], signal });
 }

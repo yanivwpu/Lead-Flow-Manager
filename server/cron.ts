@@ -337,10 +337,11 @@ export function startCronJobs() {
         }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
         try {
           const result = await service.runSeoSync("scheduled", now, executionLease);
-          await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic);
+          await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic, result.errorCode);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
-          await claims.finishScheduledSeoSync(claim, "failed", message);
+          const errorCode = (error as { code?: string }).code;
+          if (errorCode !== "LEASE_LOST") await claims.finishScheduledSeoSync(claim, "failed", message, errorCode);
           console.error("[SEO Sync] scheduled error (bounded database retry policy applies):", error);
         } finally {
           clearInterval(heartbeat);

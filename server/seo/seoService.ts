@@ -8,12 +8,12 @@ import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation } from "./dailyTotals";
-import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, type SeoExecutionLease } from "./scheduledSync";
+import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, SeoExecutionLeaseLostError, withSeoExecutionLease, type SeoExecutionLease } from "./scheduledSync";
 import { SEO_SCHEDULED_HEARTBEAT_MINUTES } from "./scheduledPolicy";
 
 const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
-export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string };
+export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string; errorCode?: string };
 type SearchPerformanceRow = NonNullable<Awaited<ReturnType<typeof fetchSearchPerformance>>["rows"]>[number];
 export class SeoSyncInProgressError extends Error { code = "SYNC_IN_PROGRESS"; }
 
@@ -31,22 +31,38 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       await releaseSeoExecutionLease(executionLease);
       throw new Error("SEO execution lease does not match the requested property and trigger");
     }
-    const heartbeat = setInterval(() => {
-      renewSeoExecutionLease(executionLease).catch((error) => console.error("[SEO Sync] execution lease heartbeat failed:", error));
+    const abortController = new AbortController();
+    let leaseLost = false;
+    const loseLease = (cause?: unknown) => {
+      if (leaseLost) return;
+      leaseLost = true;
+      abortController.abort(cause ?? new SeoExecutionLeaseLostError("SEO synchronization lease ownership was lost"));
+    };
+    const heartbeat = setInterval(async () => {
+      try {
+        if (!await renewSeoExecutionLease(executionLease)) loseLease();
+      } catch (error) {
+        console.error("[SEO Sync] execution lease heartbeat failed; fencing worker:", error);
+        loseLease(error);
+      }
     }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
+    const fencedMutation = <T>(work: (tx: typeof db) => Promise<T>) => {
+      if (leaseLost) throw new SeoExecutionLeaseLostError("SEO synchronization lease ownership was lost");
+      return withSeoExecutionLease(executionLease, work);
+    };
     try {
     const end = new Date(now); end.setUTCDate(end.getUTCDate() - 3);
     const start = new Date(end); start.setUTCDate(start.getUTCDate() - 61);
     const startDate = isoDay(start), endDate = isoDay(end);
-    const [run] = await db.insert(seoSyncRuns).values({ propertyId, trigger, startDate, endDate }).returning({ id: seoSyncRuns.id });
+    const [run] = await fencedMutation((tx) => tx.insert(seoSyncRuns).values({ propertyId, trigger, startDate, endDate }).returning({ id: seoSyncRuns.id }));
     let rowsImported = 0, pagesCompleted = 0;
     try {
       await applySearchConsoleDailyTotalsReconciliation({
         propertyId,
         startDate,
         endDate,
-        fetchRows: async () => (await fetchSearchDailyTotals(startDate, endDate)).rows ?? [],
-        persist: async (reconciledTotals) => db.transaction(async (tx) => {
+        fetchRows: async () => (await fetchSearchDailyTotals(startDate, endDate, abortController.signal)).rows ?? [],
+        persist: async (reconciledTotals) => fencedMutation(async (tx) => {
           await tx.insert(seoSearchDailyTotals).values(reconciledTotals).onConflictDoUpdate({
             target: [seoSearchDailyTotals.propertyId, seoSearchDailyTotals.reportingDate],
             set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
@@ -61,12 +77,12 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         let dayFetched = false;
         for (let startRow = 0; rowsImported + dayRows.length < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
           const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported - dayRows.length);
-          const result = await fetchSearchPerformance({ startDate: reportingDate, endDate: reportingDate, startRow, rowLimit });
+          const result = await fetchSearchPerformance({ startDate: reportingDate, endDate: reportingDate, startRow, rowLimit, signal: abortController.signal });
           const rows = result.rows ?? [];
           dayFetched = true;
           dayRows.push(...rows);
           pagesCompleted += 1;
-          await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+          await fencedMutation((tx) => tx.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
           const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalImported: rowsImported + dayRows.length });
           if (pageState.dayTruncated) {
             truncatedDays.push(reportingDate);
@@ -80,7 +96,7 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
           if (rows.length < rowLimit) break;
         }
         if (dayFetched) {
-          await db.transaction(async (tx) => {
+          await fencedMutation(async (tx) => {
             await tx.delete(seoSearchSnapshots).where(and(
               eq(seoSearchSnapshots.propertyId, propertyId),
               eq(seoSearchSnapshots.reportingDate, reportingDate),
@@ -93,7 +109,7 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
             }
           });
           rowsImported += dayRows.length;
-          await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+          await fencedMutation((tx) => tx.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
         }
         if (overallTruncated || rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS) break;
       }
@@ -102,16 +118,17 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         const overallDiagnostic = overallTruncated ? ` Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row overall safety cap; older reporting dates may be incomplete.` : "";
         const diagnostic = `${dailyDiagnostic}${overallDiagnostic}`.trim();
         const truncationCode = overallTruncated ? "OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED";
-        await db.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: truncationCode, errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+        await fencedMutation((tx) => tx.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: truncationCode, errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
         console.warn(`[SEO Sync] truncated run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
-        return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic };
+        return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic, errorCode: truncationCode };
       }
-      await db.update(seoSyncRuns).set({ status: "success", rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+      await fencedMutation((tx) => tx.update(seoSyncRuns).set({ status: "success", rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
       console.info(`[SEO Sync] completed run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
       return { runId: run.id, status: "success" as const, rowsImported, pagesCompleted, startDate, endDate };
     } catch (error) {
+      if (leaseLost || error instanceof SeoExecutionLeaseLostError || (error as { code?: string }).code === "LEASE_LOST") throw error;
       const failure = describeSeoSyncFailure(error, rowsImported);
-      await db.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+      await fencedMutation((tx) => tx.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
       console.error(`[SEO Sync] failed run=${run.id} code=${failure.errorCode} rows=${rowsImported}: ${failure.errorMessage}`);
       throw error;
     }

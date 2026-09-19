@@ -3,9 +3,10 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { seoScheduledSyncClaims, seoSyncExecutionLeases } from "@shared/schema";
 import { resolveSearchConsoleConfig } from "./searchConsole";
-import { isWithinScheduledSeoRecoveryWindow, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "./scheduledPolicy";
+import { isWithinScheduledSeoRecoveryWindow, seoScheduledRetryDisposition, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "./scheduledPolicy";
 
 export type SeoExecutionLease = { propertyId: string; leaseToken: string; trigger: "manual" | "scheduled" };
+export class SeoExecutionLeaseLostError extends Error { code = "LEASE_LOST"; }
 
 export async function claimSeoExecutionLease(trigger: "manual" | "scheduled"): Promise<SeoExecutionLease | null> {
   const config = resolveSearchConsoleConfig();
@@ -36,6 +37,18 @@ export async function releaseSeoExecutionLease(claim: SeoExecutionLease): Promis
     eq(seoSyncExecutionLeases.propertyId, claim.propertyId), eq(seoSyncExecutionLeases.leaseToken, claim.leaseToken),
   )).returning({ token: seoSyncExecutionLeases.leaseToken });
   return rows.length === 1;
+}
+
+/** Locks the current lease row while a mutation commits. An expired or replaced
+ * token cannot pass this fence, even if its worker resumes after a long pause. */
+export async function withSeoExecutionLease<T>(claim: SeoExecutionLease, work: (tx: typeof db) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    const owned = await tx.execute(sql`SELECT property_id FROM seo_sync_execution_leases
+      WHERE property_id = ${claim.propertyId} AND lease_token = ${claim.leaseToken} AND lease_expires_at > NOW()
+      FOR UPDATE`);
+    if (!owned.rows.length) throw new SeoExecutionLeaseLostError("SEO synchronization lease ownership was lost");
+    return work(tx as typeof db);
+  });
 }
 
 export async function claimScheduledSeoSync(reportingDay: string, now = new Date()) {
@@ -74,8 +87,10 @@ export async function renewScheduledSeoSyncLease(claim: { propertyId: string; re
   return result.length === 1;
 }
 
-export async function finishScheduledSeoSync(claim: { propertyId: string; reportingDay: string; leaseToken: string }, status: "success" | "partial" | "failed", error?: string) {
-  await db.update(seoScheduledSyncClaims).set({ status, lastError: error?.slice(0, 500) ?? null, leaseExpiresAt: new Date(), updatedAt: new Date() }).where(and(
+export async function finishScheduledSeoSync(claim: { propertyId: string; reportingDay: string; leaseToken: string }, status: "success" | "partial" | "failed", error?: string, errorCode?: string) {
+  const disposition = seoScheduledRetryDisposition(status, errorCode);
+  const claimStatus = disposition === "complete" ? "success" : disposition === "non_retryable" ? "terminal" : status;
+  await db.update(seoScheduledSyncClaims).set({ status: claimStatus, lastError: error?.slice(0, 500) ?? null, leaseExpiresAt: new Date(), updatedAt: new Date() }).where(and(
     eq(seoScheduledSyncClaims.propertyId, claim.propertyId),
     eq(seoScheduledSyncClaims.reportingDay, claim.reportingDay),
     eq(seoScheduledSyncClaims.leaseToken, claim.leaseToken),
