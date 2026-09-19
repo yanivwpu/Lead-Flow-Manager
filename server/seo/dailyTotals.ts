@@ -40,3 +40,18 @@ export function reconcileSearchConsoleDailyTotals(
     };
   });
 }
+
+/** Fetch must finish before persistence begins. This boundary makes an API
+ * failure incapable of clearing or zeroing the last successfully stored range. */
+export async function applySearchConsoleDailyTotalsReconciliation(params: {
+  propertyId: string;
+  startDate: string;
+  endDate: string;
+  fetchRows: () => Promise<readonly SearchConsoleDailyTotal[]>;
+  persist: (rows: ReturnType<typeof reconcileSearchConsoleDailyTotals>) => Promise<void>;
+}) {
+  const rows = await params.fetchRows();
+  const reconciled = reconcileSearchConsoleDailyTotals(params.propertyId, params.startDate, params.endDate, rows);
+  await params.persist(reconciled);
+  return reconciled;
+}

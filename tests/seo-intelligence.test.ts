@@ -7,7 +7,7 @@ import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_S
 import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
-import { reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
+import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -26,6 +26,24 @@ assert.deepEqual(reconciledTotals, [
 ], "omitted dates replace earlier totals with zero while returned dates retain their new values");
 assert.ok(reconciledTotals.every((row) => row.propertyId === "sc-domain:example.com"), "reconciliation remains scoped to the selected property");
 assert.equal(reconciledTotals.filter((row) => row.reportingDate !== "2026-08-02").reduce((sum, row) => sum + row.clicks, 0), 0, "period comparisons cannot include stale values for omitted dates");
+{
+  const stored = new Map<string, number>([["sc-domain:example.com:2026-08-01", 99], ["sc-domain:other.example:2026-08-01", 41]]);
+  const persist = async (rows: ReturnType<typeof reconcileSearchConsoleDailyTotals>) => {
+    for (const row of rows) stored.set(`${row.propertyId}:${row.reportingDate}`, row.clicks);
+  };
+  await applySearchConsoleDailyTotalsReconciliation({
+    propertyId: "sc-domain:example.com", startDate: "2026-08-01", endDate: "2026-08-02",
+    fetchRows: async () => [{ keys: ["2026-08-02"], clicks: 8, impressions: 80, ctr: 0.1, position: 4 }], persist,
+  });
+  assert.equal(stored.get("sc-domain:example.com:2026-08-01"), 0, "a successful omission replaces an earlier nonzero total");
+  assert.equal(stored.get("sc-domain:example.com:2026-08-02"), 8, "a returned date retains its updated total");
+  assert.equal(stored.get("sc-domain:other.example:2026-08-01"), 41, "reconciliation cannot alter another property");
+  await assert.rejects(() => applySearchConsoleDailyTotalsReconciliation({
+    propertyId: "sc-domain:example.com", startDate: "2026-08-01", endDate: "2026-08-02",
+    fetchRows: async () => { throw new Error("interrupted totals response"); }, persist,
+  }));
+  assert.equal(stored.get("sc-domain:example.com:2026-08-02"), 8, "a failed totals request preserves the last stored range");
+}
 const previous = [{ query: "falling", page: "https://www.whachatcrm.com/a", clicks: 30, impressions: 300, position: 7 }];
 const opportunities = detectSeoOpportunities(current, previous, [
   { keyword: "whatsapp crm", canonicalPage: "https://www.whachatcrm.com", priority: "primary" },
@@ -274,9 +292,8 @@ assert.match(service, /previous_clicks > 0 AND current_clicks <= previous_clicks
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
 assert.match(service, /FROM seo_search_daily_totals WHERE property_id = \$\{propertyId\} AND reporting_date BETWEEN/, "aggregate cards use only current-property daily totals");
 assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");
-assert.match(service, /reconcileSearchConsoleDailyTotals\(propertyId, startDate, endDate, totalRows\)/, "a complete totals response fills the entire property/date range");
-assert.match(service, /await db\.transaction\(async \(tx\) => \{\s*await tx\.insert\(seoSearchDailyTotals\)\.values\(reconciledTotals\)/, "daily-total reconciliation is committed atomically");
-assert.ok(service.indexOf("await fetchSearchDailyTotals") < service.indexOf("tx.insert(seoSearchDailyTotals)"), "a failed or interrupted totals request cannot modify stored totals");
+assert.match(service, /applySearchConsoleDailyTotalsReconciliation\(\{\s*propertyId,\s*startDate,\s*endDate/, "a complete totals response fills the entire property/date range");
+assert.match(service, /persist: async \(reconciledTotals\) => db\.transaction\(async \(tx\) => \{\s*await tx\.insert\(seoSearchDailyTotals\)\.values\(reconciledTotals\)/, "daily-total reconciliation is committed atomically");
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
 assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
 assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
