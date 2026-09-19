@@ -33,3 +33,14 @@ export function summarizeSeoSyncHistory(runs: PersistedSeoSyncRun[]) {
     lastSuccessfulSync: newestFirst.find((run) => run.status === "success")?.completedAt ?? null,
   };
 }
+
+export function describeSeoSyncFailure(error: unknown, rowsImported: number) {
+  const code = typeof error === "object" && error !== null && "code" in error && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : "IMPORT_FAILED";
+  return {
+    status: rowsImported > 0 ? "partial" as const : "failed" as const,
+    errorCode: code,
+    errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown import failure",
+  };
+}

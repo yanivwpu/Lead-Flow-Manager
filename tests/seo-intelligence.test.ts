@@ -2,10 +2,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
-import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
+import { resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
-import { summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
+import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -144,6 +144,31 @@ assert.equal(missing.configured, false);
 assert.deepEqual(missing.missing, ["GSC_SITE_URL", "GSC_CLIENT_EMAIL", "GSC_PRIVATE_KEY"]);
 await assert.rejects(() => fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-02", startRow: 0, rowLimit: 1, env: {} }), SeoConfigurationError);
 
+const configuredEnv = { GSC_SITE_URL: "sc-domain:example.com", GSC_CLIENT_EMAIL: "seo@example.test", GSC_PRIVATE_KEY: "fake-key" } as NodeJS.ProcessEnv;
+const okResponse = () => new Response(JSON.stringify({ rows: [] }), { status: 200, headers: { "content-type": "application/json" } });
+{
+  let attempts = 0; const delays: number[] = [];
+  const result = await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; if (attempts === 1) throw new TypeError("fetch failed"); return okResponse(); }) as typeof fetch });
+  assert.deepEqual(result.rows, []); assert.equal(attempts, 2); assert.deepEqual(delays, [500]);
+}
+{
+  let attempts = 0; const delays: number[] = []; const finalCause = new TypeError("socket reset");
+  let exhausted: unknown;
+  try { await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; throw finalCause; }) as typeof fetch }); } catch (error) { exhausted = error; }
+  assert.ok(exhausted instanceof SearchConsoleError); assert.equal(attempts, 4); assert.deepEqual(delays, [500, 1_000, 2_000]); assert.equal(exhausted.code, "TRANSPORT_ERROR"); assert.equal(exhausted.cause, finalCause);
+  assert.deepEqual(describeSeoSyncFailure(exhausted, 0), { status: "failed", errorCode: "TRANSPORT_ERROR", errorMessage: "Search Console transport failed after 4 attempts" });
+}
+{
+  let attempts = 0; const delays: number[] = []; const statuses = [429, 503, 200];
+  await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { const status = statuses[attempts++]; return status === 200 ? okResponse() : new Response("retry", { status }); }) as typeof fetch });
+  assert.equal(attempts, 3); assert.deepEqual(delays, [500, 1_000]);
+}
+{
+  let attempts = 0; const delays: number[] = [];
+  await assert.rejects(() => fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; return new Response("bad request", { status: 400 }); }) as typeof fetch }), (error: unknown) => error instanceof SearchConsoleError && error.status === 400);
+  assert.equal(attempts, 1); assert.deepEqual(delays, []);
+}
+
 const routes = readFileSync("server/routes/seoIntelligence.ts", "utf8");
 assert.match(routes, /app\.get\([^\n]+requireAdmin/);
 assert.match(routes, /app\.post\([^\n]+requireAdmin/);
@@ -151,7 +176,8 @@ const migration = readFileSync("migrations/0093_seo_intelligence.sql", "utf8");
 assert.match(migration, /UNIQUE INDEX[^;]+reporting_date, query, page/i, "natural key makes re-imports idempotent");
 const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
-assert.match(service, /status: rowsImported \? "partial" : "failed"/, "partial failure is persisted");
+assert.match(service, /describeSeoSyncFailure\(error, rowsImported\)/, "failed and partial diagnostics are derived before persistence");
+assert.match(service, /set\(\{ \.\.\.failure, rowsImported, pagesCompleted, completedAt:/, "sync failure diagnostics and progress are persisted");
 assert.match(service, /rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is globally bounded");
 assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
@@ -186,4 +212,7 @@ const normalizeSql = (sql: string) => sql.split(";").map((statement) => statemen
 assert.deepEqual(normalizeSql(patchStatements), normalizeSql(migration), "standalone migration and Railway startup patch stay in parity");
 const index = readFileSync("server/index.ts", "utf8");
 assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
+const cron = readFileSync("server/cron.ts", "utf8");
+assert.match(cron, /utcMin >= 20 && utcMin <= 25/, "scheduled failures have a bounded same-day retry window");
+assert.match(cron, /if \(shouldMarkScheduledSeoSyncComplete\(result\.status\)\) lastSeoSyncDay = seoDay/, "only successful scheduled sync blocks another daily attempt");
 console.log("seo-intelligence.test.ts: all assertions passed");

@@ -1,12 +1,12 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
-import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
+import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig } from "./searchConsole";
 import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
-import { serializeSeoSyncRun } from "./syncStatus";
+import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 
 let syncInFlight: Promise<SeoSyncResult> | null = null;
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -66,10 +66,9 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       console.info(`[SEO Sync] completed run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
       return { runId: run.id, status: "success" as const, rowsImported, pagesCompleted, startDate, endDate };
     } catch (error) {
-      const code = error instanceof SeoConfigurationError ? error.code : error instanceof SearchConsoleError ? error.code : "IMPORT_FAILED";
-      const message = error instanceof Error ? error.message.slice(0, 500) : "Unknown import failure";
-      await db.update(seoSyncRuns).set({ status: rowsImported ? "partial" : "failed", rowsImported, pagesCompleted, errorCode: code, errorMessage: message, completedAt: new Date() }).where(eq(seoSyncRuns.id, run.id));
-      console.error(`[SEO Sync] failed run=${run.id} code=${code} rows=${rowsImported}: ${message}`);
+      const failure = describeSeoSyncFailure(error, rowsImported);
+      await db.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(eq(seoSyncRuns.id, run.id));
+      console.error(`[SEO Sync] failed run=${run.id} code=${failure.errorCode} rows=${rowsImported}: ${failure.errorMessage}`);
       throw error;
     }
   })();

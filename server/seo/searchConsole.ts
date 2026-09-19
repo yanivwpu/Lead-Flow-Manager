@@ -2,7 +2,12 @@ import { GoogleAuth } from "google-auth-library";
 
 export class SeoConfigurationError extends Error { code = "MISSING_CONFIGURATION"; }
 export class SearchConsoleError extends Error {
-  constructor(public code: string, message: string, public status?: number) { super(message); }
+  cause?: unknown;
+  constructor(public code: string, message: string, public status?: number, cause?: unknown) {
+    super(message);
+    this.name = "SearchConsoleError";
+    this.cause = cause;
+  }
 }
 
 export function resolveSearchConsoleConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -15,9 +20,20 @@ export function resolveSearchConsoleConfig(env: NodeJS.ProcessEnv = process.env)
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const TRANSIENT_NETWORK_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENETUNREACH", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_SOCKET"]);
+export function isTransientSearchConsoleTransportError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  if (error.name === "AbortError" || error.name === "TimeoutError") return true;
+  const directCode = (error as Error & { code?: string }).code;
+  const causeCode = (error as Error & { cause?: { code?: string } }).cause?.code;
+  return TRANSIENT_NETWORK_CODES.has(directCode ?? "") || TRANSIENT_NETWORK_CODES.has(causeCode ?? "");
+}
+
 export async function fetchSearchPerformance(params: {
   startDate: string; endDate: string; startRow: number; rowLimit: number;
   fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv; dimensions?: readonly ("date" | "query" | "page")[];
+  getAccessToken?: () => Promise<string | null>; sleepImpl?: (ms: number) => Promise<unknown>;
 }) {
   const config = resolveSearchConsoleConfig(params.env);
   if (!config.configured) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
@@ -25,19 +41,27 @@ export async function fetchSearchPerformance(params: {
     credentials: { client_email: config.clientEmail, private_key: config.privateKey },
     scopes: ["https://www.googleapis.com/auth/webmasters.readonly"],
   });
-  const token = await auth.getAccessToken();
+  const token = params.getAccessToken ? await params.getAccessToken() : await auth.getAccessToken();
   const url = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(config.siteUrl!)}/searchAnalytics/query`;
   const fetcher = params.fetchImpl ?? fetch;
+  const wait = params.sleepImpl ?? sleep;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const response = await fetcher(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ startDate: params.startDate, endDate: params.endDate, dimensions: params.dimensions ?? ["date", "query", "page"], rowLimit: Math.min(params.rowLimit, 25_000), startRow: params.startRow, dataState: "final" }),
-    });
+    let response: Response;
+    try {
+      response = await fetcher(url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ startDate: params.startDate, endDate: params.endDate, dimensions: params.dimensions ?? ["date", "query", "page"], rowLimit: Math.min(params.rowLimit, 25_000), startRow: params.startRow, dataState: "final" }),
+      });
+    } catch (error) {
+      if (!isTransientSearchConsoleTransportError(error)) throw error;
+      if (attempt < 3) { await wait(500 * (2 ** attempt)); continue; }
+      throw new SearchConsoleError("TRANSPORT_ERROR", `Search Console transport failed after ${attempt + 1} attempts`, undefined, error);
+    }
     if (response.ok) return (await response.json()) as { rows?: Array<{ keys: string[]; clicks: number; impressions: number; ctr: number; position: number }> };
     const body = await response.text();
     const retryable = response.status === 429 || response.status >= 500;
-    if (retryable && attempt < 3) { await sleep(500 * (2 ** attempt)); continue; }
+    if (retryable && attempt < 3) { await wait(500 * (2 ** attempt)); continue; }
     const code = response.status === 429 ? "QUOTA_EXCEEDED" : "API_ERROR";
     throw new SearchConsoleError(code, `Search Console request failed (${response.status}): ${body.slice(0, 300)}`, response.status);
   }

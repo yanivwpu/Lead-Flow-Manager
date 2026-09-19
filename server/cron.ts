@@ -294,6 +294,9 @@ let lastEmailPollAtMs = 0;
 let emailPollInFlight = false;
 let lastGmailWatchRenewalDay = "";
 let lastSeoSyncDay = "";
+export function shouldMarkScheduledSeoSyncComplete(status: string): boolean {
+  return status === "success";
+}
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -317,9 +320,10 @@ export function startCronJobs() {
 
     // Read-only Search Console import, once daily. Never edits public content.
     const seoDay = now.toISOString().slice(0, 10);
-    if (utcHour === 4 && utcMin === 20 && seoDay !== lastSeoSyncDay) {
-      lastSeoSyncDay = seoDay;
-      import("./seo/seoService").then(({ runSeoSync }) => runSeoSync("scheduled")).catch((err) => console.error("[SEO Sync] scheduled error:", err));
+    if (utcHour === 4 && utcMin >= 20 && utcMin <= 25 && seoDay !== lastSeoSyncDay) {
+      import("./seo/seoService").then(({ runSeoSync }) => runSeoSync("scheduled")).then((result) => {
+        if (shouldMarkScheduledSeoSyncComplete(result.status)) lastSeoSyncDay = seoDay;
+      }).catch((err) => console.error("[SEO Sync] scheduled error (will retry during the bounded window):", err));
     }
 
     if (utcHour === 14 && utcMin === 0) {
