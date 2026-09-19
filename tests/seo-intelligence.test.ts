@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 
@@ -11,6 +11,7 @@ const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/pricing", clicks: 2, impressions: 200, position: 11 },
   { query: "falling", page: "https://www.whachatcrm.com/a", clicks: 10, impressions: 100, position: 12 },
+  { query: "missing target", page: "https://www.whachatcrm.com/missing", clicks: 0, impressions: 5, position: 40 },
 ];
 const previous = [{ query: "falling", page: "https://www.whachatcrm.com/a", clicks: 30, impressions: 300, position: 7 }];
 const opportunities = detectSeoOpportunities(current, previous, [
@@ -111,6 +112,8 @@ const recentDates = recentFirstReportingDates("2026-07-01", "2026-08-31");
 assert.equal(recentDates.length, 62);
 assert.deepEqual(recentDates.slice(0, 3), ["2026-08-31", "2026-08-30", "2026-08-29"]);
 assert.equal(recentDates.slice(0, 28).at(-1), "2026-08-04", "the complete current 28-day window is planned before older dates");
+assert.equal(searchConsoleDayIsTruncated(SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE), true, "a full second page reaches the per-day ceiling");
+assert.equal(searchConsoleDayIsTruncated(SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE - 1), false, "a short second page proves the day completed");
 
 const rankingOnlyDecline = detectSeoOpportunities(
   [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
@@ -140,6 +143,7 @@ assert.ok(!splitVisibility.some((item) => item.type === "cannibalization"), "sub
 assert.ok(detectSeoOpportunities([{ query: "boundary", page: "/a", clicks: 0, impressions: 9, position: 30 }], [], [{ keyword: "boundary", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "no_visibility"));
 assert.ok(!detectSeoOpportunities([{ query: "boundary", page: "/a", clicks: 0, impressions: 10, position: 30 }], [], [{ keyword: "boundary", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "no_visibility"));
 assert.ok(detectSeoOpportunities([{ query: "cannibal", page: "/a", clicks: 0, impressions: 10, position: 30 }, { query: "cannibal", page: "/b", clicks: 0, impressions: 10, position: 30 }], [], [{ keyword: "cannibal", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "cannibalization"));
+assert.ok(!detectSeoOpportunities([], [], [{ keyword: "anonymized-or-absent", canonicalPage: "/", priority: "primary" }]).some((item) => item.type === "no_visibility"), "an absent query row is unknown, not affirmative zero visibility");
 
 const missing = resolveSearchConsoleConfig({});
 assert.equal(missing.configured, false);
@@ -203,7 +207,8 @@ assert.match(service, /set\(\{ \.\.\.failure, rowsImported, pagesCompleted, comp
 assert.match(service, /rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is globally bounded");
 assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
-assert.match(service, /errorCode: "ROW_CAP_TRUNCATED"/, "full capped imports persist an explicit truncated diagnostic");
+assert.match(service, /truncationCode = "DAILY_ROW_CAP_TRUNCATED"/, "daily ceiling persists an explicit truncated diagnostic");
+assert.match(service, /errorCode: truncationCode/, "capped imports persist the selected truncation diagnostic");
 assert.match(service, /status: "partial"/, "full capped imports cannot be recorded as successful");
 assert.match(service, /averageSeoPosition\(numberValue\(totals\.current_position_weighted\), currentImpressions\)/, "service returns unavailable position without impressions");
 assert.doesNotMatch(service, /db\.select\(\)\.from\(seoSearchSnapshots\)/, "dashboard never materializes the raw 56-day window");

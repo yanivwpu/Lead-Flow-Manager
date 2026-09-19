@@ -3,6 +3,7 @@
 export const SEO_SNAPSHOT_INSERT_BATCH_SIZE = 5_000;
 export const SEO_SEARCH_CONSOLE_PAGE_SIZE = 25_000;
 export const SEO_SEARCH_CONSOLE_MAX_ROWS = 500_000;
+export const SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS = 50_000;
 export const SEO_DASHBOARD_CANDIDATE_LIMIT = 5_000;
 
 export function snapshotInsertBatches<T>(rows: readonly T[], size = SEO_SNAPSHOT_INSERT_BATCH_SIZE): T[][] {
@@ -19,6 +20,10 @@ export function boundDashboardCandidates<T>(rows: readonly T[], priority?: (row:
 
 export function searchConsoleImportIsTruncated(importedRows: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {
   return importedRows >= SEO_SEARCH_CONSOLE_MAX_ROWS && fetchedRows === requestedRows;
+}
+
+export function searchConsoleDayIsTruncated(startRow: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {
+  return fetchedRows === requestedRows && startRow + fetchedRows >= SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS;
 }
 
 /** Search Console's default row ordering is not chronological. Querying one day

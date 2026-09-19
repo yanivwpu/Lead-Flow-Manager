@@ -3,7 +3,7 @@ import { db } from "../../drizzle/db";
 import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError } from "./searchConsole";
 import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
@@ -34,6 +34,8 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       }
       const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
       let truncated = false;
+      let truncationCode = "ROW_CAP_TRUNCATED";
+      let truncationDiagnostic = "";
       for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
         for (let startRow = 0; rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
           const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported);
@@ -51,8 +53,15 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
             pagesCompleted += 1;
             await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
           }
+          if (searchConsoleDayIsTruncated(startRow, rows.length, rowLimit)) {
+            truncated = true;
+            truncationCode = "DAILY_ROW_CAP_TRUNCATED";
+            truncationDiagnostic = `Search Console returned the ${SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS}-row daily ceiling for ${reportingDate}; additional rows for that day may be unavailable`;
+            break;
+          }
           if (searchConsoleImportIsTruncated(rowsImported, rows.length, rowLimit)) {
             truncated = true;
+            truncationDiagnostic = `Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row overall safety cap with a full final page; additional Search Console rows may exist`;
             break;
           }
           if (rows.length < rowLimit) break;
@@ -60,8 +69,8 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         if (truncated) break;
       }
       if (truncated) {
-        const diagnostic = `Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row safety cap with a full final page; additional Search Console rows may exist`;
-        await db.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: "ROW_CAP_TRUNCATED", errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+        const diagnostic = truncationDiagnostic;
+        await db.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: truncationCode, errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
         console.warn(`[SEO Sync] truncated run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
         return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic };
       }
