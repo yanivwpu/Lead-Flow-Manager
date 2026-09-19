@@ -378,7 +378,8 @@ assert.match(scheduled, /lease_expires_at <= NOW\(\)/, "stale leases are recover
 assert.match(scheduled, /property_id, reporting_day/, "claims are property/day scoped");
 assert.match(scheduled, /isWithinScheduledSeoRecoveryWindow\(now\)/, "database claims also enforce the shared recovery window");
 assert.match(scheduled, /eq\(seoScheduledSyncClaims\.leaseToken, claim\.leaseToken\)/, "only the current owner can renew its lease");
-assert.match(scheduled, /FROM seo_sync_execution_leases WHERE property_id = \$\{config\.siteUrl\} FOR UPDATE[\s\S]+if \(row\?\.active\) return null/, "manual and scheduled processes serialize active-property claims");
+assert.match(scheduled, /ON CONFLICT \(property_id\) DO UPDATE SET[\s\S]+WHERE seo_sync_execution_leases\.lease_expires_at IS NULL OR seo_sync_execution_leases\.lease_expires_at <= NOW\(\)[\s\S]+RETURNING property_id, lease_token/, "the property claim is one conditional atomic upsert");
+assert.match(scheduled, /if \(!claimed \|\| claimed\.lease_token !== leaseToken\) return null/, "a losing claimant receives no ownership");
 assert.match(scheduled, /LEASE_ABANDONED[\s\S]+status = 'running'/, "expired-lease reclaim reconciles an abandoned running run");
 assert.match(scheduled, /NOT EXISTS \(SELECT 1 FROM seo_sync_runs[\s\S]+DAILY_ROW_CAP_TRUNCATED/, "persisted success and capped partial results prevent scheduled re-import");
 assert.match(scheduled, /eq\(seoSyncExecutionLeases\.leaseToken, claim\.leaseToken\)/, "non-owners cannot heartbeat or release an execution lease");
