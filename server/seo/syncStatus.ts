@@ -1,5 +1,6 @@
 export type PersistedSeoSyncRun = {
   id: string;
+  propertyId: string;
   status: string;
   trigger: string;
   rowsImported: number;
@@ -14,6 +15,7 @@ export function serializeSeoSyncRun(run: PersistedSeoSyncRun | null | undefined)
   if (!run) return null;
   return {
     id: run.id,
+    propertyId: run.propertyId,
     status: run.status,
     trigger: run.trigger,
     rowsImported: run.rowsImported,
@@ -26,8 +28,8 @@ export function serializeSeoSyncRun(run: PersistedSeoSyncRun | null | undefined)
 }
 
 /** Pure equivalent of the dashboard's newest-run and newest-success queries. */
-export function summarizeSeoSyncHistory(runs: PersistedSeoSyncRun[]) {
-  const newestFirst = [...runs].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+export function summarizeSeoSyncHistory(runs: PersistedSeoSyncRun[], propertyId: string) {
+  const newestFirst = runs.filter((run) => run.propertyId === propertyId).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
   return {
     latestSync: serializeSeoSyncRun(newestFirst[0]),
     lastSuccessfulSync: newestFirst.find((run) => run.status === "success")?.completedAt ?? null,

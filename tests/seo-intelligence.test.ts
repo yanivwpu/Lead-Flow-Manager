@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
-import { resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
+import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
@@ -85,17 +85,19 @@ const zeroBaselineNoise = Array.from({ length: 5_100 }, (_, id) => ({ id, score:
 const boundedZeroBaseline = boundDashboardCandidates([...zeroBaselineNoise, genuineDecline].filter((row) => row.score.qualifies), (row) => row.score.priority);
 assert.deepEqual(boundedZeroBaseline.map((row) => row.id), [999_999], "zero-baseline noise cannot crowd a genuine decline out of the cap");
 
-const successRun: PersistedSeoSyncRun = { id: "success", status: "success", trigger: "scheduled", rowsImported: 100, pagesCompleted: 2, errorCode: null, errorMessage: null, startedAt: new Date("2026-09-01T00:00:00Z"), completedAt: new Date("2026-09-01T00:05:00Z") };
-const partialRun: PersistedSeoSyncRun = { id: "partial", status: "partial", trigger: "manual", rowsImported: 50, pagesCompleted: 1, errorCode: "ROW_CAP_TRUNCATED", errorMessage: "additional rows may exist", startedAt: new Date("2026-09-02T00:00:00Z"), completedAt: new Date("2026-09-02T00:05:00Z") };
-const failedRun: PersistedSeoSyncRun = { id: "failed", status: "failed", trigger: "scheduled", rowsImported: 0, pagesCompleted: 0, errorCode: "API_ERROR", errorMessage: "quota unavailable", startedAt: new Date("2026-09-03T00:00:00Z"), completedAt: new Date("2026-09-03T00:01:00Z") };
-const afterPartial = summarizeSeoSyncHistory([successRun, partialRun]);
+const successRun: PersistedSeoSyncRun = { id: "success", propertyId: "sc-domain:example.com", status: "success", trigger: "scheduled", rowsImported: 100, pagesCompleted: 2, errorCode: null, errorMessage: null, startedAt: new Date("2026-09-01T00:00:00Z"), completedAt: new Date("2026-09-01T00:05:00Z") };
+const partialRun: PersistedSeoSyncRun = { id: "partial", propertyId: "sc-domain:example.com", status: "partial", trigger: "manual", rowsImported: 50, pagesCompleted: 1, errorCode: "ROW_CAP_TRUNCATED", errorMessage: "additional rows may exist", startedAt: new Date("2026-09-02T00:00:00Z"), completedAt: new Date("2026-09-02T00:05:00Z") };
+const failedRun: PersistedSeoSyncRun = { id: "failed", propertyId: "sc-domain:example.com", status: "failed", trigger: "scheduled", rowsImported: 0, pagesCompleted: 0, errorCode: "API_ERROR", errorMessage: "quota unavailable", startedAt: new Date("2026-09-03T00:00:00Z"), completedAt: new Date("2026-09-03T00:01:00Z") };
+const afterPartial = summarizeSeoSyncHistory([successRun, partialRun], "sc-domain:example.com");
 assert.equal(afterPartial.latestSync?.status, "partial");
 assert.equal(afterPartial.latestSync?.errorCode, "ROW_CAP_TRUNCATED");
 assert.equal(afterPartial.lastSuccessfulSync?.toISOString(), successRun.completedAt?.toISOString());
-const afterFailure = summarizeSeoSyncHistory([successRun, failedRun]);
+const afterFailure = summarizeSeoSyncHistory([successRun, failedRun], "sc-domain:example.com");
 assert.equal(afterFailure.latestSync?.status, "failed");
 assert.equal(afterFailure.latestSync?.errorMessage, "quota unavailable");
 assert.equal(afterFailure.lastSuccessfulSync?.toISOString(), successRun.completedAt?.toISOString(), "latest success remains separately available after failure");
+const otherPropertyRun = { ...failedRun, id: "other", propertyId: "sc-domain:other.example", startedAt: new Date("2026-09-04T00:00:00Z") };
+assert.equal(summarizeSeoSyncHistory([successRun, otherPropertyRun], "sc-domain:example.com").latestSync?.id, "success", "latest-run diagnostics cannot cross properties");
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
@@ -156,7 +158,7 @@ const okResponse = () => new Response(JSON.stringify({ rows: [] }), { status: 20
   let exhausted: unknown;
   try { await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; throw finalCause; }) as typeof fetch }); } catch (error) { exhausted = error; }
   assert.ok(exhausted instanceof SearchConsoleError); assert.equal(attempts, 4); assert.deepEqual(delays, [500, 1_000, 2_000]); assert.equal(exhausted.code, "TRANSPORT_ERROR"); assert.equal(exhausted.cause, finalCause);
-  assert.deepEqual(describeSeoSyncFailure(exhausted, 0), { status: "failed", errorCode: "TRANSPORT_ERROR", errorMessage: "Search Console transport failed after 4 attempts" });
+  assert.deepEqual(describeSeoSyncFailure(exhausted, 0), { status: "failed", errorCode: "TRANSPORT_ERROR", errorMessage: "Search Console transport or response body failed after 4 attempts" });
 }
 {
   let attempts = 0; const delays: number[] = []; const statuses = [429, 503, 200];
@@ -168,12 +170,32 @@ const okResponse = () => new Response(JSON.stringify({ rows: [] }), { status: 20
   await assert.rejects(() => fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; return new Response("bad request", { status: 400 }); }) as typeof fetch }), (error: unknown) => error instanceof SearchConsoleError && error.status === 400);
   assert.equal(attempts, 1); assert.deepEqual(delays, []);
 }
+{
+  let attempts = 0; const delays: number[] = [];
+  await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; return attempts === 1 ? { ok: true, status: 200, json: async () => { throw new TypeError("body stream reset"); } } as Response : okResponse(); }) as typeof fetch });
+  assert.equal(attempts, 2); assert.deepEqual(delays, [500]);
+}
+{
+  let attempts = 0; const delays: number[] = [];
+  await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async (ms) => { delays.push(ms); }, fetchImpl: (async () => { attempts += 1; return attempts === 1 ? { ok: false, status: 503, text: async () => { throw new TypeError("error body reset"); } } as Response : okResponse(); }) as typeof fetch });
+  assert.equal(attempts, 2); assert.deepEqual(delays, [500]);
+}
+{
+  let attempts = 0; const causes: TypeError[] = [];
+  let exhausted: unknown;
+  try { await fetchSearchPerformance({ startDate: "2026-01-01", endDate: "2026-01-01", startRow: 0, rowLimit: 1, env: configuredEnv, getAccessToken: async () => "token", sleepImpl: async () => {}, fetchImpl: (async () => { attempts += 1; const cause = new TypeError(`body failure ${attempts}`); causes.push(cause); return { ok: true, status: 200, json: async () => { throw cause; } } as Response; }) as typeof fetch }); } catch (error) { exhausted = error; }
+  assert.ok(exhausted instanceof SearchConsoleError); assert.equal(attempts, 4); assert.equal(exhausted.cause, causes[3]);
+}
+
+assert.equal(normalizeSearchConsoleProperty(" SC-DOMAIN:Example.COM "), "sc-domain:example.com");
+assert.equal(normalizeSearchConsoleProperty("https://example.com"), "https://example.com/");
 
 const routes = readFileSync("server/routes/seoIntelligence.ts", "utf8");
 assert.match(routes, /app\.get\([^\n]+requireAdmin/);
 assert.match(routes, /app\.post\([^\n]+requireAdmin/);
 const migration = readFileSync("migrations/0093_seo_intelligence.sql", "utf8");
-assert.match(migration, /UNIQUE INDEX[^;]+reporting_date, query, page/i, "natural key makes re-imports idempotent");
+assert.match(migration, /UNIQUE INDEX[^;]+property_id, reporting_date, query, page/i, "property-scoped natural key makes re-imports idempotent");
+assert.match(migration, /seo_search_daily_totals_property_date_uidx[^;]+property_id, reporting_date/i);
 const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
 assert.match(service, /describeSeoSyncFailure\(error, rowsImported\)/, "failed and partial diagnostics are derived before persistence");
@@ -190,10 +212,15 @@ assert.match(service, /ORDER BY priority_evidence DESC LIMIT/, "database bounds 
 assert.match(service, /SEO_DECLINE_RETAINED_RATIO/, "SQL candidate eligibility uses the detector's shared decline threshold");
 assert.match(service, /previous_clicks > 0 AND current_clicks <= previous_clicks/, "SQL click decline requires a positive baseline");
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
-assert.match(service, /FROM seo_search_daily_totals WHERE reporting_date BETWEEN/, "aggregate cards use complete non-query daily totals");
+assert.match(service, /FROM seo_search_daily_totals WHERE property_id = \$\{propertyId\} AND reporting_date BETWEEN/, "aggregate cards use only current-property daily totals");
 assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
 assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
+assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
+assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.query, seoSearchSnapshots\.page\]/);
+assert.match(service, /target: \[seoSearchDailyTotals\.propertyId, seoSearchDailyTotals\.reportingDate\]/);
+assert.ok((service.match(/property_id = \$\{propertyId\}/g) ?? []).length >= 5, "totals, detail, comparison, opportunity, and target queries filter property");
+assert.match(service, /where\(eq\(seoSyncRuns\.propertyId, propertyId\)\)/, "latest run is isolated to selected property");
 const ui = readFileSync("client/src/components/admin/AdminSeoIntelligenceTab.tsx", "utf8");
 assert.match(ui, /d\.period\.position === null \? "—"/);
 assert.match(ui, /sync\.data\.status === "partial"/);

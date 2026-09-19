@@ -12,7 +12,7 @@ const request = async (url: string, init?: RequestInit) => {
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
 };
-type SyncRun = { id:string; status:string; trigger:string; rowsImported:number; pagesCompleted:number; errorCode:string|null; errorMessage:string|null; startedAt:string; completedAt:string|null };
+type SyncRun = { id:string; propertyId:string; status:string; trigger:string; rowsImported:number; pagesCompleted:number; errorCode:string|null; errorMessage:string|null; startedAt:string; completedAt:string|null };
 type Dashboard = { config: { configured: boolean; missing: string[] }; latestSync: SyncRun|null; lastSuccessfulSync: string | null; period: { clicks:number; impressions:number; ctr:number; position:number|null; previous:{clicks:number;impressions:number;ctr:number;position:number|null} }; topQueries:Array<{name:string;clicks:number;impressions:number}>; topPages:Array<{name:string;clicks:number;impressions:number}>; opportunities:Array<{type:string;priority:number;query:string;page?:string;evidence:Record<string,number|string>}> };
 const delta = (value:number, old:number) => old ? `${((value-old)/old*100).toFixed(1)}%` : "—";
 
