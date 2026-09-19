@@ -27,8 +27,11 @@ import {
 } from "@shared/prospectAiDiscoveryBatch";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
-import { INCLUDE_INBOX_IDENTITIES, isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
-import { promoteInboxIdentityToCrm } from "../emailChannel/contactMatch";
+import {
+  INCLUDE_INBOX_IDENTITIES,
+  isCrmListedContact,
+  prospectOnlySourceDetails,
+} from "@shared/contactCrmVisibility";
 import { subscriptionService } from "../subscriptionService";
 import { getBusinessProfileForUser } from "../businessProfileService";
 import { getProspectDiscoveryProvider } from "./providers";
@@ -931,9 +934,6 @@ export async function sendDiscoverResultsToReview(
     };
 
     if (contact && contact.userId === workspaceUserId) {
-      if (isEmailInboxIdentitySource(contact.source)) {
-        contact = await promoteInboxIdentityToCrm(contact, "import");
-      }
       const sd = { ...(contact.sourceDetails as Record<string, unknown> | null) };
       const cf = { ...(contact.customFields as Record<string, unknown> | null) };
       const mergedSd = {
@@ -954,7 +954,9 @@ export async function sendDiscoverResultsToReview(
         prospectAi: prospectMeta,
       };
       const patch: Record<string, unknown> = {
-        sourceDetails: mergedSd,
+        sourceDetails: isCrmListedContact(contact)
+          ? mergedSd
+          : prospectOnlySourceDetails(mergedSd),
         customFields: mergedCf,
       };
       if (!contact.phone && row.phone) patch.phone = row.phone;
@@ -976,11 +978,11 @@ export async function sendDiscoverResultsToReview(
         tag: PROSPECT_AI_INTERNAL_TAG,
         pipelineStage: "Imported",
         notes: buildContactNotes(row),
-        sourceDetails: {
+        sourceDetails: prospectOnlySourceDetails(undefined, {
           prospectImportProvider: PROSPECT_AI_IMPORT_PROVIDER,
           prospectAi: prospectMeta,
           prospectImport: prospectMeta,
-        },
+        }),
         customFields: {
           prospectAi: prospectMeta,
           prospectImport: prospectMeta,

@@ -1322,6 +1322,11 @@ class ChannelService {
       }
     } else {
       console.log(`[Inbox Worker] Contact matched — contactId: ${contact.id}, name: "${contact.name}"`);
+      const { shouldPromoteProspectOnlyIdentity } = await import("@shared/contactCrmVisibility");
+      if (shouldPromoteProspectOnlyIdentity({ contact, direction: "inbound" })) {
+        const { promoteInboxIdentityToCrm } = await import("./emailChannel/contactMatch");
+        contact = await promoteInboxIdentityToCrm(contact, channel === "email" ? "email" : "import");
+      }
       const contactUpdates: Partial<Contact> = {
         lastIncomingChannel: channel,
         lastIncomingAt: new Date(),

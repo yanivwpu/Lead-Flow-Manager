@@ -11,6 +11,7 @@ import {
   isCrmListedContact,
   isEmailInboxIdentitySource,
   savedContactSourceDetails,
+  shouldPromoteProspectOnlyIdentity,
 } from "@shared/contactCrmVisibility";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
@@ -182,7 +183,9 @@ export async function resolveEmailContact(params: {
       isWebsiteForm: params.isWebsiteForm,
       isLeadCapture: params.isLeadCapture,
     });
-    if (shouldPromote) {
+    // A genuine inbound reply is the promotion boundary for a Prospect AI
+    // working identity. Reuse the same row so attribution and dedupe survive.
+    if (shouldPromote || shouldPromoteProspectOnlyIdentity({ contact, direction: params.direction })) {
       contact = await promoteInboxIdentityToCrm(
         contact,
         params.isWebsiteForm ? "website_form" : "email",
