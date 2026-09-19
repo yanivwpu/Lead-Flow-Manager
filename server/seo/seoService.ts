@@ -11,6 +11,7 @@ import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string };
+type SearchPerformanceRow = NonNullable<Awaited<ReturnType<typeof fetchSearchPerformance>>["rows"]>[number];
 
 export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date()): Promise<SeoSyncResult> {
   const config = resolveSearchConsoleConfig();
@@ -38,23 +39,17 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       let overallTruncated = false;
       const truncatedDays: string[] = [];
       for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
-        for (let startRow = 0; rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
-          const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported);
+        const dayRows: SearchPerformanceRow[] = [];
+        let dayFetched = false;
+        for (let startRow = 0; rowsImported + dayRows.length < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
+          const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported - dayRows.length);
           const result = await fetchSearchPerformance({ startDate: reportingDate, endDate: reportingDate, startRow, rowLimit });
           const rows = result.rows ?? [];
-          if (rows.length) {
-            for (const batch of snapshotInsertBatches(rows)) {
-              await db.insert(seoSearchSnapshots).values(batch.map((row) => ({ propertyId, reportingDate: row.keys[0], query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
-                target: [seoSearchSnapshots.propertyId, seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
-                set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
-              });
-              rowsImported += batch.length;
-              await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
-            }
-            pagesCompleted += 1;
-            await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
-          }
-          const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalImported: rowsImported });
+          dayFetched = true;
+          dayRows.push(...rows);
+          pagesCompleted += 1;
+          await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
+          const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalImported: rowsImported + dayRows.length });
           if (pageState.dayTruncated) {
             truncatedDays.push(reportingDate);
             if (pageState.overallTruncated) overallTruncated = true;
@@ -65,6 +60,22 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
             break;
           }
           if (rows.length < rowLimit) break;
+        }
+        if (dayFetched) {
+          await db.transaction(async (tx) => {
+            await tx.delete(seoSearchSnapshots).where(and(
+              eq(seoSearchSnapshots.propertyId, propertyId),
+              eq(seoSearchSnapshots.reportingDate, reportingDate),
+            ));
+            for (const batch of snapshotInsertBatches(dayRows)) {
+              await tx.insert(seoSearchSnapshots).values(batch.map((row) => ({ propertyId, reportingDate, query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+                target: [seoSearchSnapshots.propertyId, seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
+                set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
+              });
+            }
+          });
+          rowsImported += dayRows.length;
+          await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
         }
         if (overallTruncated || rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS) break;
       }
