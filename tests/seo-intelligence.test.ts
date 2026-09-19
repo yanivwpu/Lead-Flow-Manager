@@ -1,7 +1,7 @@
 /** Run: npx tsx tests/seo-intelligence.test.ts */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { detectSeoOpportunities } from "../server/seo/opportunities";
+import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { resolveSearchConsoleConfig, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
@@ -33,6 +33,32 @@ const priorityCandidates = Array.from({ length: 5_100 }, (_, id) => ({ id, prior
 priorityCandidates.push({ id: 99_999, priority: 10_000 });
 const boundedByPriority = boundDashboardCandidates(priorityCandidates, (row) => row.priority);
 assert.ok(boundedByPriority.some((row) => row.id === 99_999), "high-priority low-volume opportunity survives more than 5,000 candidates");
+
+const minorDeclines = Array.from({ length: 5_100 }, (_, id) => ({
+  id,
+  score: scoreSeoDecline(
+    { query: `minor-${id}`, page: `/minor/${id}`, clicks: 9_900, impressions: 99_000, position: 30 },
+    { query: `minor-${id}`, page: `/minor/${id}`, clicks: 10_000, impressions: 100_000, position: 30 },
+  ),
+}));
+assert.ok(minorDeclines.every((candidate) => !candidate.score.qualifies && candidate.score.priority === 0), "one-percent declines receive no decline priority");
+const genuineDecline = {
+  id: 999_999,
+  score: scoreSeoDecline(
+    { query: "genuine", page: "/genuine", clicks: 80, impressions: 800, position: 30 },
+    { query: "genuine", page: "/genuine", clicks: 100, impressions: 1_000, position: 30 },
+  ),
+};
+assert.ok(genuineDecline.score.qualifies, "an exact twenty-percent loss qualifies");
+const sqlEligibleCandidates = [...minorDeclines, genuineDecline].filter((candidate) => candidate.score.qualifies);
+const boundedEligibleCandidates = boundDashboardCandidates(sqlEligibleCandidates, (candidate) => candidate.score.priority);
+assert.deepEqual(boundedEligibleCandidates.map((candidate) => candidate.id), [999_999], "genuine lower-impression decline survives the cap after shared eligibility filtering");
+const finalDeclines = detectSeoOpportunities(
+  [{ query: "genuine", page: "/genuine", clicks: 80, impressions: 800, position: 30 }],
+  [{ query: "genuine", page: "/genuine", clicks: 100, impressions: 1_000, position: 30 }],
+  [],
+);
+assert.ok(finalDeclines.some((opportunity) => opportunity.type === "decline" && opportunity.query === "genuine"));
 
 assert.equal(averagePositionImprovementPercent(5, 10), 50, "10 to 5 is a positive 50% improvement");
 assert.equal(averagePositionImprovementPercent(15, 10), -50, "10 to 15 is a negative 50% deterioration");
@@ -98,6 +124,7 @@ assert.match(service, /averageSeoPosition\(numberValue\(totals\.current_position
 assert.doesNotMatch(service, /db\.select\(\)\.from\(seoSearchSnapshots\)/, "dashboard never materializes the raw 56-day window");
 assert.match(service, /LIMIT \$\{SEO_DASHBOARD_CANDIDATE_LIMIT\}/, "opportunity candidates are bounded in PostgreSQL");
 assert.match(service, /ORDER BY priority_evidence DESC LIMIT/, "database bounds candidates only after evidence-priority ordering");
+assert.match(service, /SEO_DECLINE_RETAINED_RATIO/, "SQL candidate eligibility uses the detector's shared decline threshold");
 assert.match(service, /LIMIT 10/, "top query and page lists are bounded in PostgreSQL");
 assert.match(service, /FROM seo_search_daily_totals WHERE reporting_date BETWEEN/, "aggregate cards use complete non-query daily totals");
 assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync imports aggregate totals separately from query details");

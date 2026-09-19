@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError, SearchConsoleError } from "./searchConsole";
-import { detectSeoOpportunities, type SeoMetricRow } from "./opportunities";
+import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
 import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
@@ -116,13 +116,19 @@ export async function getSeoDashboard(now = new Date()) {
         CASE WHEN current_impressions >= 100 AND current_clicks / NULLIF(current_impressions, 0) <
           (CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) * .6
           THEN ((CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) - current_clicks / current_impressions) * current_impressions ELSE 0 END,
-        CASE WHEN previous_impressions >= 20 THEN GREATEST(previous_clicks - current_clicks, previous_impressions - current_impressions, 0) ELSE 0 END,
-        CASE WHEN previous_impressions >= 20 AND current_position > previous_position + 2 THEN (current_position - previous_position) * previous_impressions ELSE 0 END
+        CASE WHEN previous_impressions >= ${SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS} AND
+          (current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO} OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA})
+          THEN GREATEST(previous_clicks - current_clicks, previous_impressions - current_impressions,
+            GREATEST(COALESCE(current_position - previous_position, 0), 0) * previous_impressions, 0)
+          ELSE 0 END
       ) AS priority_evidence
       FROM normalized
     ) SELECT * FROM scored WHERE
-      (current_impressions >= 100) OR
-      (previous_impressions >= 20 AND (current_clicks < previous_clicks * .8 OR current_impressions < previous_impressions * .8 OR current_position > previous_position + 2))
+      (current_impressions >= 100 AND current_position BETWEEN 4 AND 20) OR
+      (current_impressions >= 100 AND current_clicks / NULLIF(current_impressions, 0) <
+        (CASE WHEN current_position <= 3 THEN .12 WHEN current_position <= 10 THEN .04 ELSE .015 END) * .6) OR
+      (previous_impressions >= ${SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS} AND
+        (current_clicks <= previous_clicks * ${SEO_DECLINE_RETAINED_RATIO} OR current_impressions <= previous_impressions * ${SEO_DECLINE_RETAINED_RATIO} OR current_position > previous_position + ${SEO_DECLINE_POSITION_DELTA}))
       ORDER BY priority_evidence DESC LIMIT ${SEO_DASHBOARD_CANDIDATE_LIMIT}`),
   ]);
   const totals = (totalsResult.rows[0] ?? {}) as Record<string, unknown>;
