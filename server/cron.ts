@@ -319,13 +319,24 @@ export function startCronJobs() {
     const seoDay = now.toISOString().slice(0, 10);
     if (isWithinScheduledSeoRecoveryWindow(now)) {
       Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]).then(async ([claims, service]) => {
-        const claim = await claims.claimScheduledSeoSync(seoDay, now);
-        if (!claim) return;
+        const executionLease = await claims.claimSeoExecutionLease("scheduled");
+        if (!executionLease) return;
+        let claim;
+        try {
+          claim = await claims.claimScheduledSeoSync(seoDay, now);
+        } catch (error) {
+          await claims.releaseSeoExecutionLease(executionLease);
+          throw error;
+        }
+        if (!claim) {
+          await claims.releaseSeoExecutionLease(executionLease);
+          return;
+        }
         const heartbeat = setInterval(() => {
           claims.renewScheduledSeoSyncLease(claim).catch((error) => console.error("[SEO Sync] lease heartbeat failed:", error));
         }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
         try {
-          const result = await service.runSeoSync("scheduled");
+          const result = await service.runSeoSync("scheduled", now, executionLease);
           await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";

@@ -1309,6 +1309,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS seo_scheduled_sync_claims_property_day_uidx ON seo_scheduled_sync_claims(property_id, reporting_day)`,
       `CREATE INDEX IF NOT EXISTS seo_scheduled_sync_claims_lease_idx ON seo_scheduled_sync_claims(status, lease_expires_at)`,
+      `CREATE TABLE IF NOT EXISTS seo_sync_execution_leases (
+        property_id text PRIMARY KEY, lease_token text NOT NULL, trigger text NOT NULL,
+        lease_expires_at timestamp NOT NULL, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS seo_sync_execution_leases_expiry_idx ON seo_sync_execution_leases(lease_expires_at)`,
     ].join(";\n"),
   },
 ];

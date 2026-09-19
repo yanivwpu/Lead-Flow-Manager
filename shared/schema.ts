@@ -3226,3 +3226,13 @@ export const seoScheduledSyncClaims = pgTable("seo_scheduled_sync_claims", {
   naturalKey: uniqueIndex("seo_scheduled_sync_claims_property_day_uidx").on(t.propertyId, t.reportingDay),
   leaseIdx: index("seo_scheduled_sync_claims_lease_idx").on(t.status, t.leaseExpiresAt),
 }));
+
+/** Property-wide lease shared by manual and scheduled SEO imports. */
+export const seoSyncExecutionLeases = pgTable("seo_sync_execution_leases", {
+  propertyId: text("property_id").primaryKey(),
+  leaseToken: text("lease_token").notNull(),
+  trigger: text("trigger").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({ expiryIdx: index("seo_sync_execution_leases_expiry_idx").on(t.leaseExpiresAt) }));

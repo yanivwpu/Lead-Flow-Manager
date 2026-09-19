@@ -8,20 +8,33 @@ import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation } from "./dailyTotals";
+import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, type SeoExecutionLease } from "./scheduledSync";
+import { SEO_SCHEDULED_HEARTBEAT_MINUTES } from "./scheduledPolicy";
 
 const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string };
 type SearchPerformanceRow = NonNullable<Awaited<ReturnType<typeof fetchSearchPerformance>>["rows"]>[number];
+export class SeoSyncInProgressError extends Error { code = "SYNC_IN_PROGRESS"; }
 
-export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date()): Promise<SeoSyncResult> {
+export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date(), ownedLease?: SeoExecutionLease): Promise<SeoSyncResult> {
   const config = resolveSearchConsoleConfig();
   if (!config.configured || !config.siteUrl) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
   const propertyId = config.siteUrl;
-  const inFlightKey = `${propertyId}:${trigger}`;
+  const inFlightKey = propertyId;
   const existing = syncInFlight.get(inFlightKey);
   if (existing) return existing;
   const task: Promise<SeoSyncResult> = (async () => {
+    const executionLease = ownedLease ?? await claimSeoExecutionLease(trigger);
+    if (!executionLease) throw new SeoSyncInProgressError(`SEO synchronization is already in progress for ${propertyId}`);
+    if (executionLease.propertyId !== propertyId || executionLease.trigger !== trigger) {
+      await releaseSeoExecutionLease(executionLease);
+      throw new Error("SEO execution lease does not match the requested property and trigger");
+    }
+    const heartbeat = setInterval(() => {
+      renewSeoExecutionLease(executionLease).catch((error) => console.error("[SEO Sync] execution lease heartbeat failed:", error));
+    }, SEO_SCHEDULED_HEARTBEAT_MINUTES * 60_000);
+    try {
     const end = new Date(now); end.setUTCDate(end.getUTCDate() - 3);
     const start = new Date(end); start.setUTCDate(start.getUTCDate() - 61);
     const startDate = isoDay(start), endDate = isoDay(end);
@@ -101,6 +114,10 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       await db.update(seoSyncRuns).set({ ...failure, rowsImported, pagesCompleted, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
       console.error(`[SEO Sync] failed run=${run.id} code=${failure.errorCode} rows=${rowsImported}: ${failure.errorMessage}`);
       throw error;
+    }
+    } finally {
+      clearInterval(heartbeat);
+      await releaseSeoExecutionLease(executionLease);
     }
   })();
   const tracked = task.finally(() => { syncInFlight.delete(inFlightKey); });

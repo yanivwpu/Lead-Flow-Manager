@@ -8,6 +8,6 @@ export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: Reques
   });
   app.post("/api/admin/seo-intelligence/sync", requireAdmin, async (_req, res) => {
     try { res.json(await runSeoSync("manual")); }
-    catch (error) { const code = (error as { code?: string }).code; res.status(code === "MISSING_CONFIGURATION" ? 503 : code === "QUOTA_EXCEEDED" ? 429 : 502).json({ error: error instanceof Error ? error.message : "SEO sync failed", code: code ?? "SYNC_FAILED" }); }
+    catch (error) { const code = (error as { code?: string }).code; res.status(code === "SYNC_IN_PROGRESS" ? 409 : code === "MISSING_CONFIGURATION" ? 503 : code === "QUOTA_EXCEEDED" ? 429 : 502).json({ error: error instanceof Error ? error.message : "SEO sync failed", code: code ?? "SYNC_FAILED" }); }
   });
 }
