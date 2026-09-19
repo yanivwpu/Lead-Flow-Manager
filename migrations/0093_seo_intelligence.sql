@@ -30,3 +30,10 @@ CREATE TABLE IF NOT EXISTS seo_sync_runs (
 ALTER TABLE seo_sync_runs ADD COLUMN IF NOT EXISTS property_id text NOT NULL DEFAULT '__legacy_unscoped__';
 DROP INDEX IF EXISTS seo_sync_runs_started_idx;
 CREATE INDEX IF NOT EXISTS seo_sync_runs_property_started_idx ON seo_sync_runs(property_id, started_at);
+CREATE TABLE IF NOT EXISTS seo_scheduled_sync_claims (
+  property_id text NOT NULL, reporting_day date NOT NULL, status text NOT NULL DEFAULT 'running',
+  lease_token text NOT NULL, lease_expires_at timestamp NOT NULL, attempts integer NOT NULL DEFAULT 1,
+  last_error text, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_scheduled_sync_claims_property_day_uidx ON seo_scheduled_sync_claims(property_id, reporting_day);
+CREATE INDEX IF NOT EXISTS seo_scheduled_sync_claims_lease_idx ON seo_scheduled_sync_claims(status, lease_expires_at);

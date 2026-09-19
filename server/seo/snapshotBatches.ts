@@ -26,6 +26,13 @@ export function searchConsoleDayIsTruncated(startRow: number, fetchedRows: numbe
   return fetchedRows === requestedRows && startRow + fetchedRows >= SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS;
 }
 
+export function evaluateSearchConsolePage(params: { startRow: number; fetchedRows: number; requestedRows: number; totalImported: number }) {
+  return {
+    dayTruncated: searchConsoleDayIsTruncated(params.startRow, params.fetchedRows, params.requestedRows),
+    overallTruncated: searchConsoleImportIsTruncated(params.totalImported, params.fetchedRows, params.requestedRows),
+  };
+}
+
 /** Search Console's default row ordering is not chronological. Querying one day
  * at a time makes global-cap behavior deterministic and preserves recent data. */
 export function recentFirstReportingDates(startDate: string, endDate: string): string[] {

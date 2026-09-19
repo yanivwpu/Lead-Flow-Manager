@@ -3,21 +3,23 @@ import { db } from "../../drizzle/db";
 import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncRuns } from "@shared/schema";
 import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError } from "./searchConsole";
 import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, snapshotInsertBatches } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 
-let syncInFlight: Promise<SeoSyncResult> | null = null;
+const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string };
 
 export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date()): Promise<SeoSyncResult> {
-  if (syncInFlight) return syncInFlight;
+  const config = resolveSearchConsoleConfig();
+  if (!config.configured || !config.siteUrl) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
+  const propertyId = config.siteUrl;
+  const inFlightKey = `${propertyId}:${trigger}`;
+  const existing = syncInFlight.get(inFlightKey);
+  if (existing) return existing;
   const task: Promise<SeoSyncResult> = (async () => {
-    const config = resolveSearchConsoleConfig();
-    if (!config.configured || !config.siteUrl) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
-    const propertyId = config.siteUrl;
     const end = new Date(now); end.setUTCDate(end.getUTCDate() - 3);
     const start = new Date(end); start.setUTCDate(start.getUTCDate() - 61);
     const startDate = isoDay(start), endDate = isoDay(end);
@@ -33,9 +35,8 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         });
       }
       const pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE;
-      let truncated = false;
-      let truncationCode = "ROW_CAP_TRUNCATED";
-      let truncationDiagnostic = "";
+      let overallTruncated = false;
+      const truncatedDays: string[] = [];
       for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
         for (let startRow = 0; rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
           const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported);
@@ -53,23 +54,25 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
             pagesCompleted += 1;
             await db.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
           }
-          if (searchConsoleDayIsTruncated(startRow, rows.length, rowLimit)) {
-            truncated = true;
-            truncationCode = "DAILY_ROW_CAP_TRUNCATED";
-            truncationDiagnostic = `Search Console returned the ${SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS}-row daily ceiling for ${reportingDate}; additional rows for that day may be unavailable`;
+          const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalImported: rowsImported });
+          if (pageState.dayTruncated) {
+            truncatedDays.push(reportingDate);
+            if (pageState.overallTruncated) overallTruncated = true;
             break;
           }
-          if (searchConsoleImportIsTruncated(rowsImported, rows.length, rowLimit)) {
-            truncated = true;
-            truncationDiagnostic = `Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row overall safety cap with a full final page; additional Search Console rows may exist`;
+          if (pageState.overallTruncated) {
+            overallTruncated = true;
             break;
           }
           if (rows.length < rowLimit) break;
         }
-        if (truncated) break;
+        if (overallTruncated || rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS) break;
       }
-      if (truncated) {
-        const diagnostic = truncationDiagnostic;
+      if (truncatedDays.length || overallTruncated) {
+        const dailyDiagnostic = truncatedDays.length ? `${truncatedDays.length} reporting day(s) reached the ${SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS}-row daily ceiling (${truncatedDays.join(", ")}); additional rows for those days may be unavailable.` : "";
+        const overallDiagnostic = overallTruncated ? ` Import reached the ${SEO_SEARCH_CONSOLE_MAX_ROWS}-row overall safety cap; older reporting dates may be incomplete.` : "";
+        const diagnostic = `${dailyDiagnostic}${overallDiagnostic}`.trim();
+        const truncationCode = overallTruncated ? "OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED";
         await db.update(seoSyncRuns).set({ status: "partial", rowsImported, pagesCompleted, errorCode: truncationCode, errorMessage: diagnostic, completedAt: new Date() }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId)));
         console.warn(`[SEO Sync] truncated run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
         return { runId: run.id, status: "partial" as const, rowsImported, pagesCompleted, startDate, endDate, diagnostic };
@@ -84,8 +87,9 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
       throw error;
     }
   })();
-  syncInFlight = task.finally(() => { syncInFlight = null; });
-  return syncInFlight;
+  const tracked = task.finally(() => { syncInFlight.delete(inFlightKey); });
+  syncInFlight.set(inFlightKey, tracked);
+  return tracked;
 }
 
 const numberValue = (value: unknown) => Number(value ?? 0);

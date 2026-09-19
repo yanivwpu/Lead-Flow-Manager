@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { scheduledClaimCanRetry } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 
@@ -114,6 +115,31 @@ assert.deepEqual(recentDates.slice(0, 3), ["2026-08-31", "2026-08-30", "2026-08-
 assert.equal(recentDates.slice(0, 28).at(-1), "2026-08-04", "the complete current 28-day window is planned before older dates");
 assert.equal(searchConsoleDayIsTruncated(SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE), true, "a full second page reaches the per-day ceiling");
 assert.equal(searchConsoleDayIsTruncated(SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS - SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SEARCH_CONSOLE_PAGE_SIZE - 1), false, "a short second page proves the day completed");
+{
+  let rows = 0; let pages = 0; const truncatedDays: string[] = []; let overall = false;
+  for (const day of ["2026-08-31", "2026-08-30", "2026-08-29"]) {
+    const pageSizes = day === "2026-08-29" ? [100] : [25_000, 25_000];
+    for (let page = 0; page < pageSizes.length; page += 1) {
+      rows += pageSizes[page]; pages += 1;
+      const state = evaluateSearchConsolePage({ startRow: page * 25_000, fetchedRows: pageSizes[page], requestedRows: 25_000, totalImported: rows });
+      if (state.dayTruncated) { truncatedDays.push(day); overall ||= state.overallTruncated; break; }
+    }
+    if (overall) break;
+  }
+  assert.deepEqual(truncatedDays, ["2026-08-31", "2026-08-30"]);
+  assert.equal(rows, 100_100, "older dates continue after capped days"); assert.equal(pages, 5, "page progress includes capped and older-day pages"); assert.equal(overall, false);
+  let cappedRows = 0; let cappedDays = 0;
+  for (let day = 0; day < 10; day += 1) for (let page = 0; page < 2; page += 1) { cappedRows += 25_000; const state = evaluateSearchConsolePage({ startRow: page * 25_000, fetchedRows: 25_000, requestedRows: 25_000, totalImported: cappedRows }); if (state.dayTruncated) cappedDays += 1; if (state.overallTruncated) overall = true; }
+  assert.equal(cappedRows, 500_000); assert.equal(cappedDays, 10); assert.equal(overall, true, "multiple daily caps continue until the overall budget is exhausted");
+}
+
+const policyNow = new Date("2026-09-19T04:21:00Z");
+assert.equal(scheduledClaimCanRetry({ status: "success", attempts: 1, leaseExpiresAt: new Date(0) }, policyNow), false, "successful claim remains deduplicated after restart");
+assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T05:00:00Z") }, policyNow), false, "concurrent instance cannot take an active lease");
+assert.equal(scheduledClaimCanRetry({ status: "running", attempts: 1, leaseExpiresAt: new Date("2026-09-19T04:00:00Z") }, policyNow), true, "stale running lease is recoverable");
+assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: 1, leaseExpiresAt: new Date(0) }, policyNow), true);
+assert.equal(scheduledClaimCanRetry({ status: "partial", attempts: 2, leaseExpiresAt: new Date(0) }, policyNow), true);
+assert.equal(scheduledClaimCanRetry({ status: "failed", attempts: 3, leaseExpiresAt: new Date(0) }, policyNow), false, "retry policy is bounded");
 
 const rankingOnlyDecline = detectSeoOpportunities(
   [{ query: "growing traffic worse rank", page: "/growth", clicks: 40, impressions: 400, position: 12 }],
@@ -200,6 +226,7 @@ assert.match(routes, /app\.post\([^\n]+requireAdmin/);
 const migration = readFileSync("migrations/0093_seo_intelligence.sql", "utf8");
 assert.match(migration, /UNIQUE INDEX[^;]+property_id, reporting_date, query, page/i, "property-scoped natural key makes re-imports idempotent");
 assert.match(migration, /seo_search_daily_totals_property_date_uidx[^;]+property_id, reporting_date/i);
+assert.match(migration, /seo_scheduled_sync_claims_property_day_uidx[^;]+property_id, reporting_day/i);
 const service = readFileSync("server/seo/seoService.ts", "utf8");
 assert.match(service, /onConflictDoUpdate/, "imports upsert duplicates");
 assert.match(service, /describeSeoSyncFailure\(error, rowsImported\)/, "failed and partial diagnostics are derived before persistence");
@@ -207,7 +234,9 @@ assert.match(service, /set\(\{ \.\.\.failure, rowsImported, pagesCompleted, comp
 assert.match(service, /rowsImported < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is globally bounded");
 assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
 assert.match(service, /snapshotInsertBatches\(rows\)/, "upserts use parameter-safe batches");
-assert.match(service, /truncationCode = "DAILY_ROW_CAP_TRUNCATED"/, "daily ceiling persists an explicit truncated diagnostic");
+assert.match(service, /"OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED"/, "daily and overall ceilings persist explicit truncated diagnostics");
+assert.match(service, /if \(overallTruncated \|\| rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS\) break/, "outer date loop stops only for the overall cap");
+assert.match(service, /truncatedDays\.push\(reportingDate\)/, "daily truncation is accumulated without ending the whole import");
 assert.match(service, /errorCode: truncationCode/, "capped imports persist the selected truncation diagnostic");
 assert.match(service, /status: "partial"/, "full capped imports cannot be recorded as successful");
 assert.match(service, /averageSeoPosition\(numberValue\(totals\.current_position_weighted\), currentImpressions\)/, "service returns unavailable position without impressions");
@@ -222,6 +251,7 @@ assert.match(service, /fetchSearchDailyTotals\(startDate, endDate\)/, "sync impo
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
 assert.match(service, /latestSync: serializeSeoSyncRun\(latestRun\)/);
 assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
+assert.match(service, /inFlightKey = `\$\{propertyId\}:\$\{trigger\}`/, "manual and scheduled in-flight guards are independent");
 assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.query, seoSearchSnapshots\.page\]/);
 assert.match(service, /target: \[seoSearchDailyTotals\.propertyId, seoSearchDailyTotals\.reportingDate\]/);
 assert.ok((service.match(/property_id = \$\{propertyId\}/g) ?? []).length >= 5, "totals, detail, comparison, opportunity, and target queries filter property");
@@ -246,5 +276,12 @@ const index = readFileSync("server/index.ts", "utf8");
 assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
 const cron = readFileSync("server/cron.ts", "utf8");
 assert.match(cron, /utcMin >= 20 && utcMin <= 25/, "scheduled failures have a bounded same-day retry window");
-assert.match(cron, /if \(shouldMarkScheduledSeoSyncComplete\(result\.status\)\) lastSeoSyncDay = seoDay/, "only successful scheduled sync blocks another daily attempt");
+assert.match(cron, /claimScheduledSeoSync\(seoDay\)/, "scheduled runs require an atomic database claim");
+assert.match(cron, /runSeoSync\("scheduled"\)/);
+const scheduled = readFileSync("server/seo/scheduledSync.ts", "utf8");
+assert.match(scheduled, /ON CONFLICT \(property_id, reporting_day\) DO UPDATE/, "claim is atomic rather than check-then-insert");
+assert.match(scheduled, /status IN \('failed', 'partial'\)/, "failed and partial claims follow explicit retry policy");
+assert.match(scheduled, /lease_expires_at <= NOW\(\)/, "stale leases are recoverable");
+assert.match(scheduled, /property_id, reporting_day/, "claims are property/day scoped");
+assert.match(routes, /runSeoSync\("manual"\)/, "manual sync bypasses scheduled claims");
 console.log("seo-intelligence.test.ts: all assertions passed");

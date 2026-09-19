@@ -293,10 +293,6 @@ let lastCalendlyPollMinute = -1;
 let lastEmailPollAtMs = 0;
 let emailPollInFlight = false;
 let lastGmailWatchRenewalDay = "";
-let lastSeoSyncDay = "";
-export function shouldMarkScheduledSeoSyncComplete(status: string): boolean {
-  return status === "success";
-}
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
@@ -320,10 +316,19 @@ export function startCronJobs() {
 
     // Read-only Search Console import, once daily. Never edits public content.
     const seoDay = now.toISOString().slice(0, 10);
-    if (utcHour === 4 && utcMin >= 20 && utcMin <= 25 && seoDay !== lastSeoSyncDay) {
-      import("./seo/seoService").then(({ runSeoSync }) => runSeoSync("scheduled")).then((result) => {
-        if (shouldMarkScheduledSeoSyncComplete(result.status)) lastSeoSyncDay = seoDay;
-      }).catch((err) => console.error("[SEO Sync] scheduled error (will retry during the bounded window):", err));
+    if (utcHour === 4 && utcMin >= 20 && utcMin <= 25) {
+      Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]).then(async ([claims, service]) => {
+        const claim = await claims.claimScheduledSeoSync(seoDay);
+        if (!claim) return;
+        try {
+          const result = await service.runSeoSync("scheduled");
+          await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Scheduled SEO sync failed";
+          await claims.finishScheduledSeoSync(claim, "failed", message);
+          console.error("[SEO Sync] scheduled error (bounded database retry policy applies):", error);
+        }
+      }).catch((err) => console.error("[SEO Sync] scheduled claim error:", err));
     }
 
     if (utcHour === 14 && utcMin === 0) {

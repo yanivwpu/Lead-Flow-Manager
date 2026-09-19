@@ -3211,3 +3211,18 @@ export const seoSyncRuns = pgTable("seo_sync_runs", {
   startedAt: timestamp("started_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 }, (t) => ({ startedIdx: index("seo_sync_runs_property_started_idx").on(t.propertyId, t.startedAt) }));
+
+export const seoScheduledSyncClaims = pgTable("seo_scheduled_sync_claims", {
+  propertyId: text("property_id").notNull(),
+  reportingDay: date("reporting_day", { mode: "string" }).notNull(),
+  status: text("status").notNull().default("running"),
+  leaseToken: text("lease_token").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(1),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("seo_scheduled_sync_claims_property_day_uidx").on(t.propertyId, t.reportingDay),
+  leaseIdx: index("seo_scheduled_sync_claims_lease_idx").on(t.status, t.leaseExpiresAt),
+}));
