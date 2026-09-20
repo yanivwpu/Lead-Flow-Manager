@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, prepareSnapshotInsertBatches, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
 import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, seoScheduledRetryDisposition, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
-import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
+import { describeSeoSyncFailure, extractSanitizedDatabaseError, safeSeoSyncHttpFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
 import { bestEffortExecutionCleanup, SEO_SYNC_STATE_TRANSITIONS } from "../server/seo/executionLifecycle";
 import { createPropertySyncCoordinator } from "../server/seo/syncCoordinator";
@@ -100,6 +100,24 @@ const oversized = Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE * 2 + 17 }
 const batches = snapshotInsertBatches(oversized);
 assert.deepEqual(batches.map((batch) => batch.length), [5_000, 5_000, 17]);
 assert.deepEqual(batches.flat(), oversized, "batching neither drops nor duplicates rows");
+const preparedDuplicates = prepareSnapshotInsertBatches([
+  { propertyId: "sc-domain:one.example", reportingDate: "2026-09-01", query: "same", page: "/page", clicks: 1 },
+  { propertyId: "sc-domain:one.example", reportingDate: "2026-09-01", query: "same", page: "/page", clicks: 2 },
+  { propertyId: "sc-domain:two.example", reportingDate: "2026-09-01", query: "same", page: "/page", clicks: 3 },
+]);
+assert.deepEqual({ rowsReceived: preparedDuplicates.rowsReceived, uniqueNaturalKeys: preparedDuplicates.uniqueNaturalKeys, duplicateRowsRemoved: preparedDuplicates.duplicateRowsRemoved }, { rowsReceived: 3, uniqueNaturalKeys: 2, duplicateRowsRemoved: 1 });
+assert.deepEqual(preparedDuplicates.batches.flat().map((row) => [row.propertyId, row.clicks]), [["sc-domain:one.example", 1], ["sc-domain:two.example", 3]], "only one same-property natural key reaches INSERT, the first metrics win deterministically, and another property remains isolated");
+assert.equal(new Set(preparedDuplicates.batches.flat().map((row) => JSON.stringify([row.propertyId, row.reportingDate, row.query, row.page]))).size, preparedDuplicates.uniqueNaturalKeys, "one INSERT input cannot contain a key that would affect a row twice");
+assert.deepEqual(prepareSnapshotInsertBatches(Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE + 1 }, (_, id) => ({ propertyId: "sc-domain:one.example", reportingDate: "2026-09-01", query: `q-${id}`, page: `/p-${id}` }))).batches.map((batch) => batch.length), [SEO_SNAPSHOT_INSERT_BATCH_SIZE, 1], "deduplication precedes and retains safe chunking for inputs larger than one insert");
+
+const nestedDriverError = Object.assign(new Error("Failed query: insert into seo_search_snapshots ... params: secret"), {
+  cause: Object.assign(new Error("ON CONFLICT command cannot affect row a second time"), { code: "21000", detail: "Key (query)=(private search) was repeated", table: "seo_search_snapshots", column: "query", constraint: "seo_search_snapshots_property_date_query_page_uidx" }),
+});
+assert.deepEqual(extractSanitizedDatabaseError(nestedDriverError), {
+  code: "21000", category: "DATABASE_DUPLICATE_BATCH_KEY", message: "The import contained a duplicate snapshot key.",
+  detail: "Database detail available (values redacted).", table: "seo_search_snapshots", column: "query", constraint: "seo_search_snapshots_property_date_query_page_uidx",
+}, "nested PostgreSQL metadata is actionable while bound values and outer Drizzle SQL are discarded");
+assert.deepEqual(safeSeoSyncHttpFailure(nestedDriverError), { status: 502, body: { error: "The import contained a duplicate snapshot key.", code: "DATABASE_DUPLICATE_BATCH_KEY" } }, "admin endpoint failures expose only an actionable safe category");
 const largeDashboardResult = boundDashboardCandidates(Array.from({ length: 500_000 }, (_, id) => id));
 assert.equal(largeDashboardResult.length, SEO_DASHBOARD_CANDIDATE_LIMIT, "dashboard candidates remain bounded for cap-sized imports");
 assert.equal(largeDashboardResult.at(-1), SEO_DASHBOARD_CANDIDATE_LIMIT - 1);
@@ -333,12 +351,14 @@ assert.match(service, /describeSeoSyncFailure\(error, rowsImported\)/, "failed a
 assert.match(service, /set\(\{ \.\.\.failure, rowsImported, pagesCompleted, completedAt:/, "sync failure diagnostics and progress are persisted");
 assert.match(service, /rowsImported \+ dayRows\.length < SEO_SEARCH_CONSOLE_MAX_ROWS/, "pagination is globally bounded including the staged day");
 assert.match(service, /recentFirstReportingDates\(startDate, endDate\)/, "capped imports query newest reporting dates first");
-assert.match(service, /snapshotInsertBatches\(dayRows\)/, "replacement upserts use parameter-safe batches");
+assert.match(service, /prepareSnapshotInsertBatches\(dayRows\.map/, "natural keys are deduplicated before parameter-safe batches are prepared");
 assert.match(service, /const dayRows: SearchPerformanceRow\[\] = \[\]/, "each reporting day's complete bounded response is staged before replacement");
-assert.match(service, /if \(dayFetched\) \{\s*await fencedMutation\(async \(tx\)/, "even an affirmative empty response atomically clears stale rows under the lease fence");
+assert.match(service, /if \(dayFetched\) \{\s*const prepared = prepareSnapshotInsertBatches[\s\S]+await fencedMutation\(async \(tx\)/, "even an affirmative empty response atomically clears stale rows under the lease fence");
 assert.match(service, /tx\.delete\(seoSearchSnapshots\)\.where\(and\(\s*eq\(seoSearchSnapshots\.propertyId, propertyId\),\s*eq\(seoSearchSnapshots\.reportingDate, reportingDate\)/, "replacement deletes only the current property/day slice");
-assert.match(service, /for \(const batch of snapshotInsertBatches\(dayRows\)\) \{\s*await tx\.insert/, "the delete and parameter-safe replacement inserts share one transaction");
-assert.ok(service.indexOf("rowsImported += dayRows.length") > service.indexOf("await fencedMutation(async (tx)"), "committed-row progress advances only after fenced atomic replacement");
+assert.match(service, /for \(const \[batchIndex, batch\] of prepared\.batches\.entries\(\)\)[\s\S]+await tx\.insert\(seoSearchSnapshots\)\.values\(batch\)/, "only deduplicated parameter-safe batches reach INSERT in the replacement transaction");
+assert.ok(service.indexOf("rowsImported += prepared.uniqueNaturalKeys") > service.indexOf("await fencedMutation(async (tx)"), "committed-row progress advances only after fenced atomic replacement");
+assert.match(service, /rowsReceived: prepared\.rowsReceived[\s\S]+uniqueNaturalKeys: prepared\.uniqueNaturalKeys[\s\S]+duplicateRowsRemoved: prepared\.duplicateRowsRemoved[\s\S]+batchCount: prepared\.batches\.length/, "snapshot preparation logs count-only diagnostics");
+assert.match(service, /batchNumber: batchIndex \+ 1, batchSize: batch\.length/, "each insert logs only its ordinal and size");
 assert.match(service, /"OVERALL_AND_DAILY_ROW_CAP_TRUNCATED" : "DAILY_ROW_CAP_TRUNCATED"/, "daily and overall ceilings persist explicit truncated diagnostics");
 assert.match(service, /if \(overallTruncated \|\| rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS\) break/, "outer date loop stops only for the overall cap");
 assert.match(service, /truncatedDays\.push\(reportingDate\)/, "daily truncation is accumulated without ending the whole import");
@@ -415,5 +435,7 @@ assert.match(scheduled, /eq\(seoSyncExecutionLeases\.leaseToken, claim\.leaseTok
 assert.match(scheduled, /SELECT property_id FROM seo_sync_execution_leases[\s\S]+lease_token = \$\{claim\.leaseToken\}[\s\S]+lease_expires_at > NOW\(\)[\s\S]+FOR UPDATE/, "paused former owners are fenced in the same transaction as writes");
 assert.match(scheduled, /seoScheduledRetryDisposition\(status, errorCode\)/, "scheduled finalization uses the centralized retry disposition");
 assert.match(routes, /runSeoSync\("manual"\)/, "manual sync uses the shared execution guard without consuming a scheduled claim");
-assert.match(routes, /code === "SYNC_IN_PROGRESS" \? 409/, "cross-process manual contention returns a clear conflict response");
+assert.match(routes, /safeSeoSyncHttpFailure\(error\)/, "admin sync failures use the centralized sanitized response mapping");
+const syncStatusSource = readFileSync("server/seo/syncStatus.ts", "utf8");
+assert.match(syncStatusSource, /code === "SYNC_IN_PROGRESS" \? 409/, "cross-process manual contention returns a clear conflict response");
 console.log("seo-intelligence.test.ts: all assertions passed");

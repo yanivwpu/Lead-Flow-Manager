@@ -13,6 +13,36 @@ export function snapshotInsertBatches<T>(rows: readonly T[], size = SEO_SNAPSHOT
   return batches;
 }
 
+export type SnapshotNaturalKey = {
+  propertyId: string;
+  reportingDate: string;
+  query: string;
+  page: string;
+};
+
+/** Search Console pagination is not snapshot-isolated. If rows move between pages,
+ * the API can repeat a natural key; PostgreSQL rejects duplicate conflict targets
+ * in one INSERT with SQLSTATE 21000. Keep the first observation: the API does not
+ * promise that a later repeated row is newer or more authoritative. */
+export function deduplicateSnapshotRows<T extends SnapshotNaturalKey>(rows: readonly T[]): T[] {
+  const byNaturalKey = new Map<string, T>();
+  for (const row of rows) {
+    const key = JSON.stringify([row.propertyId, row.reportingDate, row.query, row.page]);
+    if (!byNaturalKey.has(key)) byNaturalKey.set(key, row);
+  }
+  return [...byNaturalKey.values()];
+}
+
+export function prepareSnapshotInsertBatches<T extends SnapshotNaturalKey>(rows: readonly T[], size = SEO_SNAPSHOT_INSERT_BATCH_SIZE) {
+  const uniqueRows = deduplicateSnapshotRows(rows);
+  return {
+    rowsReceived: rows.length,
+    uniqueNaturalKeys: uniqueRows.length,
+    duplicateRowsRemoved: rows.length - uniqueRows.length,
+    batches: snapshotInsertBatches(uniqueRows, size),
+  };
+}
+
 export function boundDashboardCandidates<T>(rows: readonly T[], priority?: (row: T) => number): T[] {
   const candidates = priority ? [...rows].sort((a, b) => priority(b) - priority(a)) : rows;
   return candidates.slice(0, SEO_DASHBOARD_CANDIDATE_LIMIT);
