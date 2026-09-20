@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -3162,3 +3162,78 @@ export const prospectEnrichmentJobs = pgTable(
 
 export type ProspectEnrichmentJobRow = typeof prospectEnrichmentJobs.$inferSelect;
 export type InsertProspectAiOutcome = typeof prospectAiOutcomes.$inferInsert;
+
+/** Read-only Google Search Console facts. One row per date/query/page. */
+export const seoSearchSnapshots = pgTable("seo_search_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull(),
+  reportingDate: date("reporting_date", { mode: "string" }).notNull(),
+  query: text("query").notNull(),
+  page: text("page").notNull(),
+  clicks: doublePrecision("clicks").notNull().default(0),
+  impressions: doublePrecision("impressions").notNull().default(0),
+  ctr: doublePrecision("ctr").notNull().default(0),
+  position: doublePrecision("position").notNull().default(0),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("seo_search_snapshots_property_date_query_page_uidx").on(t.propertyId, t.reportingDate, t.query, t.page),
+  propertyDateIdx: index("seo_search_snapshots_property_date_idx").on(t.propertyId, t.reportingDate),
+  queryIdx: index("seo_search_snapshots_property_query_idx").on(t.propertyId, t.query),
+  dateQueryIdx: index("seo_search_snapshots_property_date_query_idx").on(t.propertyId, t.reportingDate, t.query),
+  datePageIdx: index("seo_search_snapshots_property_date_page_idx").on(t.propertyId, t.reportingDate, t.page),
+}));
+
+export const seoSearchDailyTotals = pgTable("seo_search_daily_totals", {
+  propertyId: text("property_id").notNull(),
+  reportingDate: date("reporting_date", { mode: "string" }).notNull(),
+  clicks: doublePrecision("clicks").notNull().default(0),
+  impressions: doublePrecision("impressions").notNull().default(0),
+  ctr: doublePrecision("ctr").notNull().default(0),
+  position: doublePrecision("position").notNull().default(0),
+  importedAt: timestamp("imported_at").notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("seo_search_daily_totals_property_date_uidx").on(t.propertyId, t.reportingDate),
+  dateIdx: index("seo_search_daily_totals_property_date_idx").on(t.propertyId, t.reportingDate),
+}));
+
+/** Durable diagnostics for complete and partially completed imports. */
+export const seoSyncRuns = pgTable("seo_sync_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  propertyId: text("property_id").notNull(),
+  status: text("status").notNull().default("running"),
+  trigger: text("trigger").notNull().default("scheduled"),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }).notNull(),
+  rowsImported: integer("rows_imported").notNull().default(0),
+  pagesCompleted: integer("pages_completed").notNull().default(0),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (t) => ({ startedIdx: index("seo_sync_runs_property_started_idx").on(t.propertyId, t.startedAt) }));
+
+export const seoScheduledSyncClaims = pgTable("seo_scheduled_sync_claims", {
+  propertyId: text("property_id").notNull(),
+  reportingDay: date("reporting_day", { mode: "string" }).notNull(),
+  status: text("status").notNull().default("running"),
+  leaseToken: text("lease_token").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(1),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("seo_scheduled_sync_claims_property_day_uidx").on(t.propertyId, t.reportingDay),
+  leaseIdx: index("seo_scheduled_sync_claims_lease_idx").on(t.status, t.leaseExpiresAt),
+}));
+
+/** Property-wide lease shared by manual and scheduled SEO imports. */
+export const seoSyncExecutionLeases = pgTable("seo_sync_execution_leases", {
+  propertyId: text("property_id").primaryKey(),
+  leaseToken: text("lease_token").notNull(),
+  trigger: text("trigger").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at").notNull(),
+  runId: varchar("run_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({ expiryIdx: index("seo_sync_execution_leases_expiry_idx").on(t.leaseExpiresAt) }));
