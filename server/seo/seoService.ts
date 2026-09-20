@@ -8,25 +8,23 @@ import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
 import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation } from "./dailyTotals";
-import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, SeoExecutionLeaseLostError, withSeoExecutionLease, type SeoExecutionLease } from "./scheduledSync";
+import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, SeoExecutionLeaseLostError, withSeoExecutionLease } from "./scheduledSync";
 import { SEO_SCHEDULED_HEARTBEAT_MINUTES } from "./scheduledPolicy";
 import { bestEffortExecutionCleanup } from "./executionLifecycle";
+import { createPropertySyncCoordinator } from "./syncCoordinator";
 
-const syncInFlight = new Map<string, Promise<SeoSyncResult>>();
+const syncCoordinator = createPropertySyncCoordinator<SeoSyncResult>();
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 export type SeoSyncResult = { runId: string; status: "success" | "partial"; rowsImported: number; pagesCompleted: number; startDate: string; endDate: string; diagnostic?: string; errorCode?: string };
 type SearchPerformanceRow = NonNullable<Awaited<ReturnType<typeof fetchSearchPerformance>>["rows"]>[number];
 export class SeoSyncInProgressError extends Error { code = "SYNC_IN_PROGRESS"; }
 
-export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date(), ownedLease?: SeoExecutionLease): Promise<SeoSyncResult> {
+export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = new Date()): Promise<SeoSyncResult> {
   const config = resolveSearchConsoleConfig();
   if (!config.configured || !config.siteUrl) throw new SeoConfigurationError(`Search Console is not configured; missing ${config.missing.join(", ")}`);
   const propertyId = config.siteUrl;
-  const inFlightKey = propertyId;
-  const existing = syncInFlight.get(inFlightKey);
-  if (existing) return existing;
-  const task: Promise<SeoSyncResult> = (async () => {
-    const executionLease = ownedLease ?? await claimSeoExecutionLease(trigger);
+  return syncCoordinator.run(propertyId, async () => {
+    const executionLease = await claimSeoExecutionLease(trigger);
     if (!executionLease) throw new SeoSyncInProgressError(`SEO synchronization is already in progress for ${propertyId}`);
     if (executionLease.propertyId !== propertyId || executionLease.trigger !== trigger) {
       await releaseSeoExecutionLease(executionLease);
@@ -163,10 +161,7 @@ export async function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", 
         }, (cleanupError) => console.error("[SEO Sync] execution lease cleanup failed; finalized result is preserved and lease will expire:", cleanupError));
       }
     }
-  })();
-  const tracked = task.finally(() => { syncInFlight.delete(inFlightKey); });
-  syncInFlight.set(inFlightKey, tracked);
-  return tracked;
+  });
 }
 
 const numberValue = (value: unknown) => Number(value ?? 0);

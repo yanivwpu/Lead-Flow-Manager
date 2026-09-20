@@ -9,6 +9,7 @@ import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent
 import { describeSeoSyncFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
 import { bestEffortExecutionCleanup, SEO_SYNC_STATE_TRANSITIONS } from "../server/seo/executionLifecycle";
+import { createPropertySyncCoordinator } from "../server/seo/syncCoordinator";
 
 const current = [
   { query: "whatsapp crm", page: "https://www.whachatcrm.com/", clicks: 5, impressions: 500, position: 8 },
@@ -25,6 +26,36 @@ const finalizedCap = { status: "partial" as const, errorCode: "DAILY_ROW_CAP_TRU
 assert.equal(await bestEffortExecutionCleanup(async () => { throw new Error("release unavailable"); }, () => {}), false);
 assert.equal(finalizedSuccess.status, "success", "lease cleanup failure cannot replace a successful result");
 assert.equal(seoScheduledRetryDisposition(finalizedCap.status, finalizedCap.errorCode), "complete", "lease cleanup failure cannot make a capped partial retryable");
+{
+  const local = createPropertySyncCoordinator<{ status: "success" }>();
+  const otherProcess = createPropertySyncCoordinator<{ status: "success" }>();
+  let openAcquisition!: () => void, finishImport!: () => void;
+  const acquisitionGate = new Promise<void>((resolve) => { openAcquisition = resolve; });
+  const importGate = new Promise<void>((resolve) => { finishImport = resolve; });
+  let leaseOwned = false, acquisitions = 0, releases = 0, scheduledClaim = "running";
+  const execute = async () => {
+    await acquisitionGate;
+    acquisitions += 1;
+    if (leaseOwned) throw Object.assign(new Error("busy"), { code: "SYNC_IN_PROGRESS" });
+    leaseOwned = true;
+    try { await importGate; return { status: "success" as const }; }
+    finally { leaseOwned = false; releases += 1; }
+  };
+  const manual = local.run("sc-domain:coordinator.example", execute);
+  await Promise.resolve(); // executor is paused before database acquisition
+  const scheduled = local.run("sc-domain:coordinator.example", execute);
+  assert.equal(manual, scheduled, "local manual and scheduled followers share the exact registered promise");
+  assert.equal(acquisitions, 0, "the local promise is registered before lease acquisition begins");
+  openAcquisition(); await Promise.resolve(); await Promise.resolve();
+  assert.equal(acquisitions, 1, "only the promise creator acquires the execution lease");
+  await assert.rejects(() => otherProcess.run("sc-domain:coordinator.example", execute), (error: unknown) => (error as { code?: string }).code === "SYNC_IN_PROGRESS");
+  finishImport();
+  const [manualResult, scheduledResult] = await Promise.all([manual, scheduled]);
+  scheduledClaim = scheduledResult.status;
+  assert.equal(manualResult, scheduledResult); assert.equal(scheduledClaim, "success"); assert.equal(releases, 1, "one used lease is released without an orphan");
+  const rerun = await local.run("sc-domain:coordinator.example", async () => { acquisitions += 1; return { status: "success" }; });
+  assert.equal(rerun.status, "success"); assert.equal(acquisitions, 3, "a new synchronization starts immediately after completion");
+}
 
 const reconciledTotals = reconcileSearchConsoleDailyTotals("sc-domain:example.com", "2026-08-01", "2026-08-03", [
   { keys: ["2026-08-02"], clicks: 7, impressions: 70, ctr: 0.1, position: 5 },
@@ -327,8 +358,8 @@ assert.match(service, /persist: async \(reconciledTotals\) => fencedMutation\(as
 assert.match(service, /orderBy\(desc\(seoSyncRuns\.startedAt\)\)\.limit\(1\)/, "dashboard reload fetches the newest persisted run regardless of status");
 assert.match(service, /latestSync: serializeSeoSyncRun\(visibleLatestRun\)/, "expired abandoned runs are not displayed as active");
 assert.match(service, /values\(\{ propertyId, trigger, startDate, endDate \}\)/, "sync diagnostics are property scoped");
-assert.match(service, /inFlightKey = propertyId/, "manual and scheduled calls share property-wide in-process coalescing");
-assert.match(service, /ownedLease \?\? await claimSeoExecutionLease\(trigger\)/, "every direct sync entry acquires the durable property lease");
+assert.match(service, /return syncCoordinator\.run\(propertyId, async \(\) => \{\s*const executionLease = await claimSeoExecutionLease\(trigger\)/, "the shared coordinator registers locally before its creator acquires the lease");
+assert.doesNotMatch(service, /ownedLease|preclaimed/i, "runSeoSync cannot accept a lease acquired before local coalescing");
 assert.match(service, /releaseSeoExecutionLease\(executionLease\)/, "the execution lease is released after completion");
 assert.match(service, /const abortController = new AbortController\(\)/, "lease loss can abort outstanding Search Console work");
 assert.match(service, /if \(!await renewSeoExecutionLease\(executionLease\)\) loseLease\(\)/, "a rejected heartbeat immediately fences the former owner");
@@ -362,14 +393,12 @@ const index = readFileSync("server/index.ts", "utf8");
 assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
 const cron = readFileSync("server/cron.ts", "utf8");
 assert.match(cron, /isWithinScheduledSeoRecoveryWindow\(now\)/, "cron uses the shared 04:20-06:30 recovery window");
-assert.match(cron, /claimSeoExecutionLease\("scheduled"\)[\s\S]+claimScheduledSeoSync\(seoDay, now\)/, "scheduler obtains the property lease before consuming a daily attempt");
-assert.match(cron, /if \(!executionLease\) return/, "a manual or scheduled owner blocks a concurrent scheduled import");
-assert.match(cron, /if \(!claim\) \{\s*await claims\.releaseSeoExecutionLease\(executionLease\)/, "an unused scheduled execution lease is owner-released");
+assert.doesNotMatch(cron, /claimSeoExecutionLease/, "scheduler never preclaims the property execution lease outside the coordinator");
 assert.match(cron, /claimScheduledSeoSync\(seoDay, now\)/, "scheduled runs require an atomic database claim");
 assert.match(cron, /renewScheduledSeoSyncLease\(claim\)/, "long-running scheduled imports heartbeat their database lease");
 assert.match(cron, /SEO_SCHEDULED_HEARTBEAT_MINUTES \* 60_000/, "heartbeat timing uses the shared policy constant");
 assert.match(cron, /clearInterval\(heartbeat\)/, "heartbeat stops when the claimed run finishes");
-assert.match(cron, /runSeoSync\("scheduled", now, executionLease\)/);
+assert.match(cron, /runSeoSync\("scheduled", now\)/);
 assert.match(cron, /import result persisted but scheduled-claim cleanup failed; it will not be re-imported/, "scheduled-claim cleanup failure cannot replace a persisted result");
 const scheduled = readFileSync("server/seo/scheduledSync.ts", "utf8");
 assert.match(scheduled, /ON CONFLICT \(property_id, reporting_day\) DO UPDATE/, "claim is atomic rather than check-then-insert");
