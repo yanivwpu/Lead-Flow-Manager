@@ -3,10 +3,10 @@ import { db } from "../../drizzle/db";
 import { seoSearchDailyTotals, seoSearchSnapshots, seoSyncExecutionLeases, seoSyncRuns } from "@shared/schema";
 import { fetchSearchDailyTotals, fetchSearchPerformance, resolveSearchConsoleConfig, SeoConfigurationError } from "./searchConsole";
 import { detectSeoOpportunities, SEO_DECLINE_MIN_PREVIOUS_IMPRESSIONS, SEO_DECLINE_POSITION_DELTA, SEO_DECLINE_RETAINED_RATIO, type SeoMetricRow } from "./opportunities";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, recentFirstReportingDates, snapshotInsertBatches } from "./snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, prepareSnapshotInsertBatches, recentFirstReportingDates, searchConsoleFetchRowLimit } from "./snapshotBatches";
 import { averageSeoPosition } from "@shared/seoMetrics";
 import { SEO_TARGETS } from "@shared/seoTargets";
-import { describeSeoSyncFailure, serializeSeoSyncRun } from "./syncStatus";
+import { describeSeoSyncFailure, extractSanitizedDatabaseError, serializeSeoSyncRun } from "./syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation } from "./dailyTotals";
 import { claimSeoExecutionLease, releaseSeoExecutionLease, renewSeoExecutionLease, SeoExecutionLeaseLostError, withSeoExecutionLease } from "./scheduledSync";
 import { SEO_SCHEDULED_HEARTBEAT_MINUTES } from "./scheduledPolicy";
@@ -67,7 +67,7 @@ export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = 
       return rows;
     });
     runCreated = true;
-    let rowsImported = 0, pagesCompleted = 0;
+    let rowsImported = 0, rawRowsFetched = 0, pagesCompleted = 0;
     try {
       await applySearchConsoleDailyTotalsReconciliation({
         propertyId,
@@ -87,15 +87,16 @@ export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = 
       for (const reportingDate of recentFirstReportingDates(startDate, endDate)) {
         const dayRows: SearchPerformanceRow[] = [];
         let dayFetched = false;
-        for (let startRow = 0; rowsImported + dayRows.length < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
-          const rowLimit = Math.min(pageSize, SEO_SEARCH_CONSOLE_MAX_ROWS - rowsImported - dayRows.length);
+        for (let startRow = 0; rawRowsFetched < SEO_SEARCH_CONSOLE_MAX_ROWS; startRow += pageSize) {
+          const rowLimit = searchConsoleFetchRowLimit(rawRowsFetched);
           const result = await fetchSearchPerformance({ startDate: reportingDate, endDate: reportingDate, startRow, rowLimit, signal: abortController.signal });
           const rows = result.rows ?? [];
           dayFetched = true;
           dayRows.push(...rows);
+          rawRowsFetched += rows.length;
           pagesCompleted += 1;
           await fencedMutation((tx) => tx.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
-          const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalImported: rowsImported + dayRows.length });
+          const pageState = evaluateSearchConsolePage({ startRow, fetchedRows: rows.length, requestedRows: rowLimit, totalFetched: rawRowsFetched });
           if (pageState.dayTruncated) {
             truncatedDays.push(reportingDate);
             if (pageState.overallTruncated) overallTruncated = true;
@@ -108,22 +109,39 @@ export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = 
           if (rows.length < rowLimit) break;
         }
         if (dayFetched) {
+          const prepared = prepareSnapshotInsertBatches(dayRows.map((row) => ({
+            propertyId,
+            reportingDate,
+            query: row.keys[1],
+            page: row.keys[2],
+            clicks: row.clicks,
+            impressions: row.impressions,
+            ctr: row.ctr,
+            position: row.position,
+          })));
+          console.info("[SEO Sync] snapshot preparation", {
+            rowsReceived: prepared.rowsReceived,
+            uniqueNaturalKeys: prepared.uniqueNaturalKeys,
+            duplicateRowsRemoved: prepared.duplicateRowsRemoved,
+            batchCount: prepared.batches.length,
+          });
           await fencedMutation(async (tx) => {
             await tx.delete(seoSearchSnapshots).where(and(
               eq(seoSearchSnapshots.propertyId, propertyId),
               eq(seoSearchSnapshots.reportingDate, reportingDate),
             ));
-            for (const batch of snapshotInsertBatches(dayRows)) {
-              await tx.insert(seoSearchSnapshots).values(batch.map((row) => ({ propertyId, reportingDate, query: row.keys[1], page: row.keys[2], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position }))).onConflictDoUpdate({
+            for (const [batchIndex, batch] of prepared.batches.entries()) {
+              console.info("[SEO Sync] snapshot insert batch", { batchNumber: batchIndex + 1, batchSize: batch.length });
+              await tx.insert(seoSearchSnapshots).values(batch).onConflictDoUpdate({
                 target: [seoSearchSnapshots.propertyId, seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
                 set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
               });
             }
           });
-          rowsImported += dayRows.length;
+          rowsImported += prepared.uniqueNaturalKeys;
           await fencedMutation((tx) => tx.update(seoSyncRuns).set({ rowsImported, pagesCompleted }).where(and(eq(seoSyncRuns.id, run.id), eq(seoSyncRuns.propertyId, propertyId))));
         }
-        if (overallTruncated || rowsImported >= SEO_SEARCH_CONSOLE_MAX_ROWS) break;
+        if (overallTruncated || rawRowsFetched >= SEO_SEARCH_CONSOLE_MAX_ROWS) break;
       }
       if (truncatedDays.length || overallTruncated) {
         const dailyDiagnostic = truncatedDays.length ? `${truncatedDays.length} reporting day(s) reached the ${SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS}-row daily ceiling (${truncatedDays.join(", ")}); additional rows for those days may be unavailable.` : "";
@@ -140,6 +158,8 @@ export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = 
       console.info(`[SEO Sync] completed run=${run.id} rows=${rowsImported} pages=${pagesCompleted}`);
       return { runId: run.id, status: "success" as const, rowsImported, pagesCompleted, startDate, endDate };
     } catch (error) {
+      const databaseError = extractSanitizedDatabaseError(error);
+      if (databaseError) console.error("[SEO Sync] database failure", databaseError);
       const lost = leaseLost || error instanceof SeoExecutionLeaseLostError || (error as { code?: string }).code === "LEASE_LOST";
       const failure = lost
         ? { status: "failed" as const, errorCode: "LEASE_HEARTBEAT_ABORTED", errorMessage: "SEO import aborted after execution lease heartbeat or ownership was lost" }

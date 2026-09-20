@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { RequestHandler } from "express";
 import { getSeoDashboard, runSeoSync } from "../seo/seoService";
+import { extractSanitizedDatabaseError, safeSeoSyncHttpFailure } from "../seo/syncStatus";
 
 export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: RequestHandler) {
   app.get("/api/admin/seo-intelligence", requireAdmin, async (_req, res) => {
@@ -8,6 +9,11 @@ export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: Reques
   });
   app.post("/api/admin/seo-intelligence/sync", requireAdmin, async (_req, res) => {
     try { res.json(await runSeoSync("manual")); }
-    catch (error) { const code = (error as { code?: string }).code; res.status(code === "SYNC_IN_PROGRESS" ? 409 : code === "MISSING_CONFIGURATION" ? 503 : code === "QUOTA_EXCEEDED" ? 429 : 502).json({ error: error instanceof Error ? error.message : "SEO sync failed", code: code ?? "SYNC_FAILED" }); }
+    catch (error) {
+      const databaseError = extractSanitizedDatabaseError(error);
+      if (databaseError) console.error("[SEO Sync API] database failure", databaseError);
+      const failure = safeSeoSyncHttpFailure(error);
+      res.status(failure.status).json(failure.body);
+    }
   });
 }
