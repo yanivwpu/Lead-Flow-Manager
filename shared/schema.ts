@@ -3170,17 +3170,15 @@ export const seoSearchSnapshots = pgTable("seo_search_snapshots", {
   reportingDate: date("reporting_date", { mode: "string" }).notNull(),
   query: text("query").notNull(),
   page: text("page").notNull(),
+  naturalKeyHash: text("natural_key_hash").notNull(),
   clicks: doublePrecision("clicks").notNull().default(0),
   impressions: doublePrecision("impressions").notNull().default(0),
   ctr: doublePrecision("ctr").notNull().default(0),
   position: doublePrecision("position").notNull().default(0),
   importedAt: timestamp("imported_at").notNull().defaultNow(),
 }, (t) => ({
-  naturalKey: uniqueIndex("seo_search_snapshots_property_date_query_page_uidx").on(t.propertyId, t.reportingDate, t.query, t.page),
+  naturalKey: uniqueIndex("seo_search_snapshots_property_date_hash_uidx").on(t.propertyId, t.reportingDate, t.naturalKeyHash),
   propertyDateIdx: index("seo_search_snapshots_property_date_idx").on(t.propertyId, t.reportingDate),
-  queryIdx: index("seo_search_snapshots_property_query_idx").on(t.propertyId, t.query),
-  dateQueryIdx: index("seo_search_snapshots_property_date_query_idx").on(t.propertyId, t.reportingDate, t.query),
-  datePageIdx: index("seo_search_snapshots_property_date_page_idx").on(t.propertyId, t.reportingDate, t.page),
 }));
 
 export const seoSearchDailyTotals = pgTable("seo_search_daily_totals", {

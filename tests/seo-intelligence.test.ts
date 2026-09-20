@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { detectSeoOpportunities, scoreSeoDecline } from "../server/seo/opportunities";
 import { normalizeSearchConsoleProperty, resolveSearchConsoleConfig, SearchConsoleError, SeoConfigurationError, fetchSearchPerformance } from "../server/seo/searchConsole";
-import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, prepareSnapshotInsertBatches, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleFetchRowLimit, searchConsoleImportIsTruncated, snapshotInsertBatches } from "../server/seo/snapshotBatches";
+import { SEO_DASHBOARD_CANDIDATE_LIMIT, SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS, SEO_SEARCH_CONSOLE_MAX_ROWS, SEO_SEARCH_CONSOLE_PAGE_SIZE, SEO_SNAPSHOT_INSERT_BATCH_SIZE, boundDashboardCandidates, evaluateSearchConsolePage, prepareSnapshotInsertBatches, recentFirstReportingDates, searchConsoleDayIsTruncated, searchConsoleFetchRowLimit, searchConsoleImportIsTruncated, snapshotInsertBatches, snapshotNaturalKeyHash } from "../server/seo/snapshotBatches";
 import { isWithinScheduledSeoRecoveryWindow, scheduledClaimCanRetry, scheduledClaimKey, seoScheduledRetryDisposition, SEO_SCHEDULED_HEARTBEAT_MINUTES, SEO_SCHEDULED_LEASE_MINUTES, SEO_SCHEDULED_MAX_ATTEMPTS } from "../server/seo/scheduledPolicy";
 import { averagePositionImprovementPercent, averageSeoPosition, formatSeoPercent } from "../shared/seoMetrics";
-import { describeSeoSyncFailure, extractSanitizedDatabaseError, safeSeoSyncHttpFailure, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
+import { describeSeoSyncFailure, extractSanitizedDatabaseError, safeSeoSyncHttpFailure, serializeSeoSyncRun, summarizeSeoSyncHistory, type PersistedSeoSyncRun } from "../server/seo/syncStatus";
 import { applySearchConsoleDailyTotalsReconciliation, reconcileSearchConsoleDailyTotals } from "../server/seo/dailyTotals";
 import { bestEffortExecutionCleanup, SEO_SYNC_STATE_TRANSITIONS } from "../server/seo/executionLifecycle";
 import { createPropertySyncCoordinator } from "../server/seo/syncCoordinator";
@@ -109,6 +109,16 @@ assert.deepEqual({ rowsReceived: preparedDuplicates.rowsReceived, uniqueNaturalK
 assert.deepEqual(preparedDuplicates.batches.flat().map((row) => [row.propertyId, row.clicks]), [["sc-domain:one.example", 1], ["sc-domain:two.example", 3]], "only one same-property natural key reaches INSERT, the first metrics win deterministically, and another property remains isolated");
 assert.equal(new Set(preparedDuplicates.batches.flat().map((row) => JSON.stringify([row.propertyId, row.reportingDate, row.query, row.page]))).size, preparedDuplicates.uniqueNaturalKeys, "one INSERT input cannot contain a key that would affect a row twice");
 assert.deepEqual(prepareSnapshotInsertBatches(Array.from({ length: SEO_SNAPSHOT_INSERT_BATCH_SIZE + 1 }, (_, id) => ({ propertyId: "sc-domain:one.example", reportingDate: "2026-09-01", query: `q-${id}`, page: `/p-${id}` }))).batches.map((batch) => batch.length), [SEO_SNAPSHOT_INSERT_BATCH_SIZE, 1], "deduplication precedes and retains safe chunking for inputs larger than one insert");
+const fortyDistinct = prepareSnapshotInsertBatches(Array.from({ length: 40 }, (_, id) => ({ propertyId: "sc-domain:production.example", reportingDate: "2026-09-20", query: `query-${id}`, page: `/page-${id}` })));
+assert.deepEqual({ rowsReceived: fortyDistinct.rowsReceived, uniqueNaturalKeys: fortyDistinct.uniqueNaturalKeys, duplicateRowsRemoved: fortyDistinct.duplicateRowsRemoved }, { rowsReceived: 40, uniqueNaturalKeys: 40, duplicateRowsRemoved: 0 }, "the confirmed production shape is not misdiagnosed as duplicate input");
+const hashVectors = [
+  ["", "", "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"],
+  ["こんにちは🌍", "https://例え.テスト/道", "ec2c3c6b1bf6a29ca440f85802927fef708f3e63244655ce1dfab5126335dd1c"],
+  ["a|b::c", "d|e::f", "5bc961cd425a477d9eb26c49bd4b141ee2800c007bd33f61645f6f04ade9792b"],
+] as const;
+for (const [query, page, expected] of hashVectors) assert.equal(snapshotNaturalKeyHash(query, page), expected, "application SHA-256 matches the UTF-8 query-NUL-page test vector");
+assert.notEqual(snapshotNaturalKeyHash("a|b", "c"), snapshotNaturalKeyHash("a", "b|c"), "delimiter-like characters do not create ambiguous boundaries");
+assert.equal(snapshotNaturalKeyHash("q".repeat(100_000), `https://example.test/${"p".repeat(100_000)}`).length, 64, "very long full values produce a bounded key while remaining stored separately");
 {
   let rawRowsFetched = 0, committedUniqueRows = 0, requests = 0;
   while (rawRowsFetched < 7) {
@@ -129,6 +139,12 @@ assert.deepEqual(extractSanitizedDatabaseError(nestedDriverError), {
   detail: "Database detail available (values redacted).", table: "seo_search_snapshots", column: "query", constraint: "seo_search_snapshots_property_date_query_page_uidx",
 }, "nested PostgreSQL metadata is actionable while bound values and outer Drizzle SQL are discarded");
 assert.deepEqual(safeSeoSyncHttpFailure(nestedDriverError), { status: 502, body: { error: "The import contained a duplicate snapshot key.", code: "DATABASE_DUPLICATE_BATCH_KEY" } }, "admin endpoint failures expose only an actionable safe category");
+const oversizedIndexError = Object.assign(new Error("Failed query: insert into seo_search_snapshots; params: private"), { cause: Object.assign(new Error("index row requires too many bytes"), { code: "54000", severity: "ERROR", table: "seo_search_snapshots", constraint: "seo_search_snapshots_property_date_query_page_uidx" }) });
+assert.deepEqual(describeSeoSyncFailure(oversizedIndexError, 0), { status: "failed", errorCode: "DATABASE_INDEX_VALUE_TOO_LARGE", errorMessage: "The SEO snapshot key exceeded a database limit." });
+assert.deepEqual(safeSeoSyncHttpFailure(oversizedIndexError), { status: 502, body: { error: "The SEO snapshot key exceeded a database limit.", code: "DATABASE_INDEX_VALUE_TOO_LARGE" } });
+const historical = serializeSeoSyncRun({ id: "old", propertyId: "sc-domain:example.test", status: "failed", trigger: "scheduled", rowsImported: 0, pagesCompleted: 1, errorCode: "IMPORT_FAILED", errorMessage: "Failed query: insert into seo_search_snapshots (query,page) values ($1,$2); params: private query,https://private.example", startedAt: new Date(0), completedAt: new Date(1) });
+assert.equal(historical?.errorMessage, "SEO synchronization failed. Database details were redacted.", "historical raw SQL and parameters are sanitized during API serialization");
+assert.doesNotMatch(JSON.stringify(historical), /insert into|params|private\.example|private query/i);
 for (const transportCode of ["EPIPE", "ECONNRESET"]) {
   const transportError = Object.assign(new Error(`upstream failed with credential=private and params=private-row`), { code: transportCode });
   assert.equal(extractSanitizedDatabaseError(transportError), null, `${transportCode} is not misclassified as PostgreSQL`);
@@ -360,7 +376,13 @@ const routes = readFileSync("server/routes/seoIntelligence.ts", "utf8");
 assert.match(routes, /app\.get\([^\n]+requireAdmin/);
 assert.match(routes, /app\.post\([^\n]+requireAdmin/);
 const migration = readFileSync("migrations/0093_seo_intelligence.sql", "utf8");
-assert.match(migration, /UNIQUE INDEX[^;]+property_id, reporting_date, query, page/i, "property-scoped natural key makes re-imports idempotent");
+assert.match(migration, /UNIQUE INDEX[^;]+property_id, reporting_date, query, page/i, "the original migration documents the replaced natural key");
+const boundedKeyMigration = readFileSync("migrations/0094_seo_snapshot_bounded_key.sql", "utf8");
+assert.match(boundedKeyMigration, /digest\(convert_to\(query, 'UTF8'\) \|\| decode\('00', 'hex'\) \|\| convert_to\(page, 'UTF8'\), 'sha256'\)/i);
+assert.match(boundedKeyMigration, /CREATE UNIQUE INDEX IF NOT EXISTS seo_search_snapshots_property_date_hash_uidx[\s\S]+property_id, reporting_date, natural_key_hash/i);
+assert.ok(boundedKeyMigration.indexOf("CREATE UNIQUE INDEX") < boundedKeyMigration.indexOf("DROP INDEX IF EXISTS seo_search_snapshots_property_date_query_page_uidx"), "new uniqueness protection precedes removal of the old index");
+assert.ok(boundedKeyMigration.indexOf("UPDATE seo_search_snapshots") < boundedKeyMigration.indexOf("ALTER COLUMN natural_key_hash SET NOT NULL"), "nullability is enforced only after backfill");
+assert.match(boundedKeyMigration, /COUNT\(DISTINCT \(query, page\)\) > 1/, "migration aborts on a hash collision before changing uniqueness protection");
 assert.match(migration, /seo_search_daily_totals_property_date_uidx[^;]+property_id, reporting_date/i);
 assert.match(migration, /seo_scheduled_sync_claims_property_day_uidx[^;]+property_id, reporting_day/i);
 assert.match(migration, /seo_sync_execution_leases[\s\S]+property_id text PRIMARY KEY/, "one durable execution lease exists per normalized property");
@@ -409,7 +431,7 @@ assert.match(service, /const lost = leaseLost \|\| error instanceof SeoExecution
 assert.match(service, /LEASE_HEARTBEAT_ABORTED/, "heartbeat aborts receive an explicit persisted diagnostic");
 assert.match(service, /bestEffortExecutionCleanup/, "post-finalization cleanup cannot replace the business result");
 assert.match(service, /if \(!activeLease\.length\) visibleLatestRun = [^;]+LEASE_ABANDONED/, "dashboard masks expired abandoned runs as failed");
-assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.query, seoSearchSnapshots\.page\]/);
+assert.match(service, /target: \[seoSearchSnapshots\.propertyId, seoSearchSnapshots\.reportingDate, seoSearchSnapshots\.naturalKeyHash\]/);
 assert.match(service, /target: \[seoSearchDailyTotals\.propertyId, seoSearchDailyTotals\.reportingDate\]/);
 assert.ok((service.match(/property_id = \$\{propertyId\}/g) ?? []).length >= 5, "totals, detail, comparison, opportunity, and target queries filter property");
 assert.match(service, /where\(eq\(seoSyncRuns\.propertyId, propertyId\)\)/, "latest run is isolated to selected property");
@@ -423,12 +445,12 @@ const searchConsole = readFileSync("server/seo/searchConsole.ts", "utf8");
 assert.match(searchConsole, /dimensions: \["date"\]/, "daily totals omit the query dimension");
 const startup = readFileSync("server/startupSchemaPatches.ts", "utf8");
 assert.match(startup, /tag: "0093_seo_intelligence"/);
-assert.match(startup, /seoIntelligencePatchOk: patchResults\.get\("0093_seo_intelligence"\) === true/);
-const patchStart = startup.indexOf('tag: "0093_seo_intelligence"');
+assert.match(startup, /patchResults\.get\("0094_seo_snapshot_bounded_key"\) === true/);
+const patchStart = startup.indexOf('tag: "0094_seo_snapshot_bounded_key"');
 const patchEnd = startup.indexOf('].join(";\\n"),', patchStart);
 const patchStatements = (startup.slice(patchStart, patchEnd).match(/`[^`]+`/g) ?? []).map((value) => value.slice(1, -1)).join(";\n");
 const normalizeSql = (sql: string) => sql.split(";").map((statement) => statement.replace(/\s+/g, " ").trim().toLowerCase()).filter(Boolean);
-assert.deepEqual(normalizeSql(patchStatements), normalizeSql(migration), "standalone migration and Railway startup patch stay in parity");
+assert.deepEqual(normalizeSql(patchStatements), normalizeSql(boundedKeyMigration), "standalone bounded-key migration and Railway startup patch stay in parity");
 const index = readFileSync("server/index.ts", "utf8");
 assert.match(index, /if \(!schemaPatches\.seoIntelligencePatchOk\)/, "startup fails closed before listen/workers");
 const cron = readFileSync("server/cron.ts", "utf8");
