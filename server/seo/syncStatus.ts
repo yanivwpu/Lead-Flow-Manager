@@ -31,6 +31,29 @@ const DATABASE_MESSAGES: Record<string, [string, string]> = {
 };
 
 const safeIdentifier = (value: unknown) => typeof value === "string" && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value) ? value : undefined;
+const POSTGRES_METADATA_FIELDS = ["severity", "schema", "table", "column", "dataType", "constraint", "file", "line", "routine"] as const;
+const TRANSPORT_ERROR_CODES = new Set(["EPIPE", "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN"]);
+const SAFE_TRANSPORT_MESSAGE = "Search Console could not be reached. Try again later.";
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : undefined;
+}
+
+function publicFailureCode(error: unknown, fallback: string): string {
+  let cursor: unknown = error;
+  const visited = new Set<unknown>();
+  let outerCode: string | undefined;
+  for (let depth = 0; depth < 8 && cursor && typeof cursor === "object" && !visited.has(cursor); depth += 1) {
+    visited.add(cursor);
+    const code = errorCode(cursor);
+    outerCode ??= code;
+    if (code && TRANSPORT_ERROR_CODES.has(code)) return "TRANSPORT_ERROR";
+    cursor = (cursor as { cause?: unknown }).cause;
+  }
+  return outerCode ?? fallback;
+}
 
 /** Walk Drizzle's nested `cause` chain without retaining query text or params. */
 export function extractSanitizedDatabaseError(error: unknown): SanitizedDatabaseError | null {
@@ -39,7 +62,8 @@ export function extractSanitizedDatabaseError(error: unknown): SanitizedDatabase
   for (let depth = 0; depth < 8 && cursor && typeof cursor === "object" && !visited.has(cursor); depth += 1) {
     visited.add(cursor);
     const candidate = cursor as Record<string, unknown>;
-    if (typeof candidate.code === "string" && /^[0-9A-Z]{5}$/.test(candidate.code)) {
+    const hasPostgresMetadata = POSTGRES_METADATA_FIELDS.some((field) => typeof candidate[field] === "string");
+    if (typeof candidate.code === "string" && /^[0-9A-Z]{5}$/.test(candidate.code) && hasPostgresMetadata) {
       const [category, message] = DATABASE_MESSAGES[candidate.code] ?? ["DATABASE_ERROR", "The SEO database rejected the synchronization."];
       return {
         code: candidate.code,
@@ -90,21 +114,20 @@ export function describeSeoSyncFailure(error: unknown, rowsImported: number) {
       errorMessage: databaseError.message,
     };
   }
-  const code = typeof error === "object" && error !== null && "code" in error && typeof (error as { code?: unknown }).code === "string"
-    ? (error as { code: string }).code
-    : "IMPORT_FAILED";
+  const code = publicFailureCode(error, "IMPORT_FAILED");
   return {
     status: rowsImported > 0 ? "partial" as const : "failed" as const,
     errorCode: code,
-    errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown import failure",
+    errorMessage: code === "TRANSPORT_ERROR" && errorCode(error) !== "TRANSPORT_ERROR"
+      ? SAFE_TRANSPORT_MESSAGE
+      : error instanceof Error ? error.message.slice(0, 500) : "Unknown import failure",
   };
 }
 
 export function safeSeoSyncHttpFailure(error: unknown) {
   const databaseError = extractSanitizedDatabaseError(error);
   if (databaseError) return { status: 502, body: { error: databaseError.message, code: databaseError.category } };
-  const code = typeof error === "object" && error !== null && typeof (error as { code?: unknown }).code === "string"
-    ? (error as { code: string }).code : "SYNC_FAILED";
+  const code = publicFailureCode(error, "SYNC_FAILED");
   const status = code === "SYNC_IN_PROGRESS" ? 409 : code === "MISSING_CONFIGURATION" ? 503 : code === "QUOTA_EXCEEDED" ? 429 : 502;
   const safeMessages: Record<string, string> = {
     SYNC_IN_PROGRESS: "SEO synchronization is already in progress.",
@@ -112,6 +135,7 @@ export function safeSeoSyncHttpFailure(error: unknown) {
     QUOTA_EXCEEDED: "Search Console quota was exceeded. Try again later.",
     AUTHENTICATION_FAILED: "Search Console authentication failed.",
     PERMISSION_DENIED: "Search Console access was denied.",
+    TRANSPORT_ERROR: SAFE_TRANSPORT_MESSAGE,
   };
   return { status, body: { error: safeMessages[code] ?? "SEO synchronization failed. Check the latest run for details.", code } };
 }

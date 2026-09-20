@@ -52,14 +52,22 @@ export function searchConsoleImportIsTruncated(importedRows: number, fetchedRows
   return importedRows >= SEO_SEARCH_CONSOLE_MAX_ROWS && fetchedRows === requestedRows;
 }
 
+export function searchConsoleFetchRowLimit(
+  totalFetched: number,
+  maxRows = SEO_SEARCH_CONSOLE_MAX_ROWS,
+  pageSize = SEO_SEARCH_CONSOLE_PAGE_SIZE,
+): number {
+  return Math.max(0, Math.min(pageSize, maxRows - totalFetched));
+}
+
 export function searchConsoleDayIsTruncated(startRow: number, fetchedRows: number, requestedRows = SEO_SEARCH_CONSOLE_PAGE_SIZE): boolean {
   return fetchedRows === requestedRows && startRow + fetchedRows >= SEO_SEARCH_CONSOLE_DAILY_MAX_ROWS;
 }
 
-export function evaluateSearchConsolePage(params: { startRow: number; fetchedRows: number; requestedRows: number; totalImported: number }) {
+export function evaluateSearchConsolePage(params: { startRow: number; fetchedRows: number; requestedRows: number; totalFetched: number }) {
   return {
     dayTruncated: searchConsoleDayIsTruncated(params.startRow, params.fetchedRows, params.requestedRows),
-    overallTruncated: searchConsoleImportIsTruncated(params.totalImported, params.fetchedRows, params.requestedRows),
+    overallTruncated: searchConsoleImportIsTruncated(params.totalFetched, params.fetchedRows, params.requestedRows),
   };
 }
 
