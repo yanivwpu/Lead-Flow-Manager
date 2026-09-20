@@ -1,0 +1,26 @@
+/** Run: npx tsx tests/seo-action-planner.test.ts */
+import assert from "node:assert/strict";
+import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, safeFetchHtml } from "../server/seo/competitorResearch";
+import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, validateRecommendationOutput } from "../server/seo/actionPlanner";
+import { clusterAndScoreOpportunities } from "../server/seo/opportunityPlanner";
+const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
+await assert.rejects(()=>assertSafePublicUrl("http://127.0.0.1/private"));
+await assert.rejects(()=>assertSafePublicUrl("file:///etc/passwd"));
+assert.equal((await assertSafePublicUrl("https://example.com/page",resolvePublic)).hostname,"example.com");
+assert.deepEqual(filterCompetitorResults([{url:"https://whachatcrm.com/a"},{url:"https://competitor.test/a"}], ["whachatcrm.com"]).map(r=>r.url),["https://competitor.test/a"]);
+assert.deepEqual(filterCompetitorResults([{url:"https://one.test"},{url:"https://two.test"}], [], ["two.test"]).map(r=>r.url),["https://two.test"]);
+const htmlResponse=(body:string,headers:Record<string,string>={"content-type":"text/html"})=>new Response(body,{status:200,headers});
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,fetchImpl:async()=>htmlResponse("x",{"content-type":"application/json"})}),/INVALID_CONTENT_TYPE/);
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,fetchImpl:async()=>htmlResponse("x",{"content-type":"text/html","content-length":"2000000"})}),/RESPONSE_TOO_LARGE/);
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,robotsAllowed:async()=>false}),/ROBOTS_DISALLOWED/);
+const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
+const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
+const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
+const proposal={actionType:"title_tag",proposedTitle:"A useful WhatsApp CRM workflow guide",insertionLocation:"head title",explanation:"Search performance supports a clearer and more relevant title.",expectedBenefit:"Improve qualified click-through potential.",confidence:.8,risk:"low",automaticExecutionEligible:false,rollbackConcept:"Restore the fingerprinted prior title.",evidenceIds:["e1"]};
+assert.equal(validateRecommendationOutput(proposal).actionType,"title_tag");assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Guaranteed #1 WhatsApp CRM"}),/unsupported/);
+const copied="these twelve exact competitor words must never appear together inside our generated recommendation text";assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Safe original title",proposedContent:copied},[copied]),/overlaps/);
+assert.equal(contentFingerprint({title:"one"}),contentFingerprint({title:"one"}));assert.notEqual(contentFingerprint({title:"one"}),contentFingerprint({title:"two"}));
+assert.equal(recommendationIdempotencyKey("p","/",["B","a"],"title"),recommendationIdempotencyKey("p","/",["a","b"],"title"));
+assert.equal(mayTransitionSeoAction("proposed","approved"),true);assert.equal(mayTransitionSeoAction("approved","executing"),false,"Phase 2B cannot execute");
+console.log("SEO action planner tests passed");
+const {readFileSync}=await import("node:fs");const migration=readFileSync(new URL("../migrations/0095_seo_action_planner.sql",import.meta.url),"utf8");const startup=readFileSync(new URL("../server/startupSchemaPatches.ts",import.meta.url),"utf8");for(const table of ["seo_analysis_runs","seo_opportunities","seo_page_snapshots","seo_competitor_config","seo_competitor_snapshots","seo_actions","seo_action_versions","seo_action_evidence","seo_action_events"]){assert.match(migration,new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`));assert.match(startup,new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`),`${table} has startup/migration parity`);}assert.doesNotMatch(migration,/seo_search_snapshots\([^)]*(query|page)/,"Phase 2B does not restore an unbounded snapshot index");
