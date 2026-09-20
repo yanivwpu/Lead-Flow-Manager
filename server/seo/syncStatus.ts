@@ -22,6 +22,7 @@ export type SanitizedDatabaseError = {
 };
 
 const DATABASE_MESSAGES: Record<string, [string, string]> = {
+  "54000": ["DATABASE_INDEX_VALUE_TOO_LARGE", "The SEO snapshot key exceeded a database limit."],
   "21000": ["DATABASE_DUPLICATE_BATCH_KEY", "The import contained a duplicate snapshot key."],
   "23502": ["DATABASE_SCHEMA_MISMATCH", "The SEO database schema rejected a required value."],
   "23503": ["DATABASE_REFERENCE_ERROR", "The SEO database rejected a related record."],
@@ -90,10 +91,23 @@ export function serializeSeoSyncRun(run: PersistedSeoSyncRun | null | undefined)
     rowsImported: run.rowsImported,
     pagesCompleted: run.pagesCompleted,
     errorCode: run.errorCode,
-    errorMessage: run.errorMessage,
+    errorMessage: sanitizePersistedSeoError(run.errorCode, run.errorMessage),
     startedAt: run.startedAt,
     completedAt: run.completedAt,
   };
+}
+
+const LEGACY_DATABASE_ERROR = /failed\s+query\s*:|\bparams?\s*:|\b(?:insert|update|delete|select)\s+(?:into|from|\S+\s+set)\b/i;
+
+/** Persisted rows predate response sanitization. Do not mutate history, but never
+ * serialize recognizable SQL/parameter text to an administrator's browser. */
+export function sanitizePersistedSeoError(errorCode: string | null, message: string | null): string | null {
+  if (!message) return null;
+  if (LEGACY_DATABASE_ERROR.test(message)) {
+    const safeDatabaseMessage = Object.values(DATABASE_MESSAGES).find(([category]) => category === errorCode)?.[1];
+    return safeDatabaseMessage ?? "SEO synchronization failed. Database details were redacted.";
+  }
+  return message.slice(0, 500);
 }
 
 /** Pure equivalent of the dashboard's newest-run and newest-success queries. */

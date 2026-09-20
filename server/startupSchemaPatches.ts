@@ -1278,11 +1278,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
       )`,
       `ALTER TABLE seo_search_snapshots ADD COLUMN IF NOT EXISTS property_id text NOT NULL DEFAULT '__legacy_unscoped__'`,
       `DROP INDEX IF EXISTS seo_search_snapshots_date_query_page_uidx`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS seo_search_snapshots_property_date_query_page_uidx ON seo_search_snapshots(property_id, reporting_date, query, page)`,
       `CREATE INDEX IF NOT EXISTS seo_search_snapshots_property_date_idx ON seo_search_snapshots(property_id, reporting_date)`,
-      `CREATE INDEX IF NOT EXISTS seo_search_snapshots_property_query_idx ON seo_search_snapshots(property_id, query)`,
-      `CREATE INDEX IF NOT EXISTS seo_search_snapshots_property_date_query_idx ON seo_search_snapshots(property_id, reporting_date, query)`,
-      `CREATE INDEX IF NOT EXISTS seo_search_snapshots_property_date_page_idx ON seo_search_snapshots(property_id, reporting_date, page)`,
       `CREATE TABLE IF NOT EXISTS seo_search_daily_totals (
         property_id text NOT NULL DEFAULT '__legacy_unscoped__', reporting_date date NOT NULL, clicks double precision NOT NULL DEFAULT 0,
         impressions double precision NOT NULL DEFAULT 0, ctr double precision NOT NULL DEFAULT 0,
@@ -1315,6 +1311,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
       )`,
       `ALTER TABLE seo_sync_execution_leases ADD COLUMN IF NOT EXISTS run_id varchar`,
       `CREATE INDEX IF NOT EXISTS seo_sync_execution_leases_expiry_idx ON seo_sync_execution_leases(lease_expires_at)`,
+    ].join(";\n"),
+  },
+  // 0094 replaces every B-tree containing unbounded query/page text. The old
+  // unique index remains in place until backfill, collision validation, and the
+  // bounded unique index have all succeeded.
+  {
+    tag: "0094_seo_snapshot_bounded_key",
+    sql: [
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `ALTER TABLE seo_search_snapshots ADD COLUMN IF NOT EXISTS natural_key_hash text`,
+      `UPDATE seo_search_snapshots
+        SET natural_key_hash = encode(digest(convert_to(query, 'UTF8') || decode('00', 'hex') || convert_to(page, 'UTF8'), 'sha256'), 'hex')
+        WHERE natural_key_hash IS NULL`,
+      `DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM seo_search_snapshots
+          GROUP BY property_id, reporting_date, natural_key_hash
+          HAVING COUNT(DISTINCT (query, page)) > 1
+        ) THEN
+          RAISE EXCEPTION 'seo_search_snapshots natural key hash collision detected';
+        END IF;
+      END $$`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS seo_search_snapshots_property_date_hash_uidx
+        ON seo_search_snapshots(property_id, reporting_date, natural_key_hash)`,
+      `ALTER TABLE seo_search_snapshots ALTER COLUMN natural_key_hash SET NOT NULL`,
+      `DROP INDEX IF EXISTS seo_search_snapshots_property_date_query_page_uidx`,
+      `DROP INDEX IF EXISTS seo_search_snapshots_property_query_idx`,
+      `DROP INDEX IF EXISTS seo_search_snapshots_property_date_query_idx`,
+      `DROP INDEX IF EXISTS seo_search_snapshots_property_date_page_idx`,
     ].join(";\n"),
   },
 ];
@@ -1411,6 +1437,8 @@ export async function applyStartupSchemaPatches(): Promise<{
       patchResults.get("0085_verification_reminder") === true &&
       patchResults.get("0086_verification_reminder_last_sent_and_rollout") === true,
     shopifyShopTrialLedgerPatchOk,
-    seoIntelligencePatchOk: patchResults.get("0093_seo_intelligence") === true,
+    seoIntelligencePatchOk:
+      patchResults.get("0093_seo_intelligence") === true &&
+      patchResults.get("0094_seo_snapshot_bounded_key") === true,
   };
 }

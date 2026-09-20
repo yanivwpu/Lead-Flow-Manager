@@ -1,4 +1,6 @@
-/** Seven bound values per snapshot means 5,000 rows stays well below PostgreSQL's
+import { createHash } from "node:crypto";
+
+/** Ten bound values per snapshot means 5,000 rows stays well below PostgreSQL's
  * 65,535-parameter extended-query limit, with room for ORM-added parameters. */
 export const SEO_SNAPSHOT_INSERT_BATCH_SIZE = 5_000;
 export const SEO_SEARCH_CONSOLE_PAGE_SIZE = 25_000;
@@ -20,6 +22,12 @@ export type SnapshotNaturalKey = {
   page: string;
 };
 
+/** SHA-256 of the exact UTF-8 bytes `query + NUL + page`. PostgreSQL text cannot
+ * contain NUL, so this encoding cannot confuse a query/page boundary. */
+export function snapshotNaturalKeyHash(query: string, page: string): string {
+  return createHash("sha256").update(query, "utf8").update(Buffer.from([0])).update(page, "utf8").digest("hex");
+}
+
 /** Search Console pagination is not snapshot-isolated. If rows move between pages,
  * the API can repeat a natural key; PostgreSQL rejects duplicate conflict targets
  * in one INSERT with SQLSTATE 21000. Keep the first observation: the API does not
@@ -34,7 +42,10 @@ export function deduplicateSnapshotRows<T extends SnapshotNaturalKey>(rows: read
 }
 
 export function prepareSnapshotInsertBatches<T extends SnapshotNaturalKey>(rows: readonly T[], size = SEO_SNAPSHOT_INSERT_BATCH_SIZE) {
-  const uniqueRows = deduplicateSnapshotRows(rows);
+  const uniqueRows = deduplicateSnapshotRows(rows).map((row) => ({
+    ...row,
+    naturalKeyHash: snapshotNaturalKeyHash(row.query, row.page),
+  }));
   return {
     rowsReceived: rows.length,
     uniqueNaturalKeys: uniqueRows.length,

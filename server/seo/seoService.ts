@@ -133,7 +133,7 @@ export function runSeoSync(trigger: "manual" | "scheduled" = "scheduled", now = 
             for (const [batchIndex, batch] of prepared.batches.entries()) {
               console.info("[SEO Sync] snapshot insert batch", { batchNumber: batchIndex + 1, batchSize: batch.length });
               await tx.insert(seoSearchSnapshots).values(batch).onConflictDoUpdate({
-                target: [seoSearchSnapshots.propertyId, seoSearchSnapshots.reportingDate, seoSearchSnapshots.query, seoSearchSnapshots.page],
+                target: [seoSearchSnapshots.propertyId, seoSearchSnapshots.reportingDate, seoSearchSnapshots.naturalKeyHash],
                 set: { clicks: sql`excluded.clicks`, impressions: sql`excluded.impressions`, ctr: sql`excluded.ctr`, position: sql`excluded.position`, importedAt: new Date() },
               });
             }
