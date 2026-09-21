@@ -56,3 +56,4 @@ export function proposedMetaDescriptionForQuery(query: string) {
   const conciseQuery = truncateAtWord(query.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
   return truncateAtWord(`${prefix}${conciseQuery}${suffix}`, SEO_META_DESCRIPTION_MAX);
 }
+export function selectStaleCheckCandidates<T extends {id:string;status:string;staleCheckedAt:Date|null;staleCheckRetryAt:Date|null}>(actions:T[],now:Date,limit:number){return actions.filter(row=>(row.status==="proposed"||row.status==="approved")&&(!row.staleCheckRetryAt||row.staleCheckRetryAt<=now)).sort((a,b)=>(a.staleCheckedAt?.getTime()??0)-(b.staleCheckedAt?.getTime()??0)||a.id.localeCompare(b.id)).slice(0,limit);}

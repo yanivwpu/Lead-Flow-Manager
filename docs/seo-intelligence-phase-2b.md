@@ -47,7 +47,7 @@ Creation of a recommendation is atomic: its action, initial immutable version, o
 
 ## Refresh recovery and action selection
 
-Refresh is a five-minute database lease (`SEO_ACTION_REFRESH_LEASE_MS` may configure 1–30 minutes). Claim and audit persistence are brief and atomic; network retrieval occurs after commit. Completion is fenced by the token and unexpired lease. A later request may reclaim only an expired claim, while migration 0098 recovers pre-lease `researching` rows. Handled failure restores the prior proposal with a sanitized category.
+Refresh is a five-minute database lease (`SEO_ACTION_REFRESH_LEASE_MS` may configure 1–30 minutes). Claim and audit persistence are brief and atomic; network retrieval occurs after commit. Completion is fenced by the token and unexpired lease. A later request may reclaim only an expired claim, while patch 0100 conservatively recovers abandoned claims and old pre-lease `researching` rows. Handled failure restores the prior proposal with a sanitized category.
 
 Analysis scores the complete 2,000-candidate bounded pool, loads only matching valid open-action identities, excludes those identities, and then attempts up to ten successful creations. A post-filter uniqueness race is counted and the loop continues to a lower-ranked candidate. Cannibalization takes precedence whenever normalized distinct pages coexist; evidence retains each page's current and previous metrics and any simultaneous decline.
 
@@ -58,3 +58,9 @@ Public-page retrieval uses Node 20's native `http`/`https` request stack with a 
 Cannibalization requires at least two normalized pages with current-period visibility. Previous-only pages remain in historical evidence but cannot trigger active cannibalization. Since migration 0099, opportunities are append-only and every recommendation version owns a JSON evidence snapshot; legacy rows receive only a best-effort baseline because evidence overwritten before this migration cannot be reconstructed honestly.
 
 Each analysis checks at most ten matching proposed/approved pages for content staleness before open-action exclusion. A changed fingerprint atomically moves the action to `revision_required` and appends fingerprint/version references. Fetch failure leaves the action open and increments a safe failure counter; it is never treated as unchanged. Regeneration is required before the action can return to `proposed`.
+
+## Cross-replica recovery and stale-check rotation
+
+Patch 0100 persists the refresh return state and stale-check scheduling timestamps. Recovery touches only an expired tokenized lease or a lease-less legacy row older than 30 minutes; an active token and recent legacy-looking row remain untouched. Recovery restores `proposed` or `revision_required` from the durable return state, falling back to `revision_required` when stale evidence exists.
+
+Stale checks order unchecked actions first and then the least recently checked, with ID tie-breaking. Unchanged checks update only `stale_checked_at`; failures set a 15-minute `stale_check_retry_at` without modifying lifecycle or evidence. This durable rotation avoids offset pagination and prevents a failing URL or the oldest unchanged actions from monopolizing the ten-check budget.

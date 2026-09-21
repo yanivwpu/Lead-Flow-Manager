@@ -1,7 +1,7 @@
 /** Run: npx tsx tests/seo-action-planner.test.ts */
 import assert from "node:assert/strict";
 import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
-import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, validateRecommendationOutput } from "../server/seo/actionPlanner";
+import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
 import { clusterAndScoreOpportunities } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
 await assert.rejects(()=>assertSafePublicUrl("http://127.0.0.1/private"));
@@ -135,7 +135,7 @@ assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).exclud
 assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+recommendationsCreated>=MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
-const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.match(leaseMigration,/LEGACY_REFRESH_RECOVERED/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
+const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
 assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);
 
 // Historical pages explain migrations but only concurrent current visibility triggers cannibalization.
@@ -149,3 +149,26 @@ const immutableMigration=readFileSync(new URL("../migrations/0099_seo_immutable_
 
 // Open proposed/approved actions receive bounded, fingerprint-fenced stale reconciliation.
 assert.match(actionServiceSource,/SEO_STALE_CHECK_LIMIT=10/);assert.match(actionServiceSource,/status:'revision_required'/);assert.match(actionServiceSource,/previousFingerprint[\s\S]+currentFingerprint[\s\S]+pageSnapshotId/);assert.match(actionServiceSource,/staleChecksAttempted[\s\S]+staleChecksUnchanged[\s\S]+staleChecksMarked[\s\S]+staleChecksFailed/);assert.match(actionServiceSource,/originalContentFingerprint,action\.contentFingerprint/);assert.match(actionServiceSource,/status} IN \('proposed','approved'\)/);assert.match(actionServiceSource,/\["proposed","revision_required"\]/,"stale actions can regenerate but cannot approve directly");
+
+// Patch 0100 recovers only expired leases or conservatively old lease-less rows and restores durable return state.
+const recoveryMigration=readFileSync(new URL("../migrations/0100_seo_refresh_return_and_stale_rotation.sql",import.meta.url),"utf8");
+assert.match(recoveryMigration,/refresh_lease_token IS NOT NULL AND a\.refresh_lease_expires_at<=NOW\(\)/);
+assert.match(recoveryMigration,/refresh_lease_token IS NULL[\s\S]+updated_at<=NOW\(\)-INTERVAL '30 minutes'/);
+assert.match(recoveryMigration,/refresh_return_status IN \('proposed','revision_required'\)/);
+assert.doesNotMatch(recoveryMigration,/WHERE status='researching';/);
+assert.match(recoveryMigration,/claimTokenHash/);
+assert.match(startup,/0100_seo_refresh_return_and_stale_rotation/);
+assert.match(actionServiceSource,/refreshReturnStatus:returnStatus/);
+assert.match(actionServiceSource,/status:claim\.returnStatus[\s\S]+refreshReturnStatus:null/);
+assert.match(actionServiceSource,/toStatus:claim\.returnStatus/);
+assert.match(actionServiceSource,/to==="approved"&&action\.staleAt/);
+
+// Persistent stale_checked_at rotation advances beyond ten and backs off failures.
+const rotationNow=new Date("2026-09-21T12:00:00Z");
+const rotation=Array.from({length:25},(_,i)=>({id:`a${String(i).padStart(2,"0")}`,status:"proposed",staleCheckedAt:null as Date|null,staleCheckRetryAt:null as Date|null}));
+const firstRotation=selectStaleCheckCandidates(rotation,rotationNow,10);assert.deepEqual(firstRotation.map(x=>x.id),rotation.slice(0,10).map(x=>x.id));firstRotation.forEach(x=>x.staleCheckedAt=rotationNow);
+const secondRotation=selectStaleCheckCandidates(rotation,new Date(rotationNow.getTime()+1),10);assert.deepEqual(secondRotation.map(x=>x.id),rotation.slice(10,20).map(x=>x.id));secondRotation.forEach(x=>x.staleCheckedAt=new Date(rotationNow.getTime()+1));
+const thirdRotation=selectStaleCheckCandidates(rotation,new Date(rotationNow.getTime()+2),10);assert.ok(rotation.every(row=>[...firstRotation,...secondRotation,...thirdRotation].includes(row)),"repeated bounded runs eventually check all actions");
+rotation[0].staleCheckRetryAt=new Date(rotationNow.getTime()+60_000);assert.ok(!selectStaleCheckCandidates(rotation,rotationNow,10).some(x=>x.id===rotation[0].id),"failing page backs off");
+rotation.push({id:"a-new",status:"proposed",staleCheckedAt:null,staleCheckRetryAt:null});assert.ok(selectStaleCheckCandidates(rotation,rotationNow,10).some(x=>x.id==="a-new"),"new unchecked action receives timely checking");
+assert.match(actionServiceSource,/staleCheckedAt:now,staleCheckRetryAt:null/);assert.match(actionServiceSource,/SEO_STALE_RETRY_MS=15\*60_000/);

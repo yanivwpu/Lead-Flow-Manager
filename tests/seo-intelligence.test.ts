@@ -451,6 +451,7 @@ assert.match(startup, /0096_seo_action_refresh_snapshots/);
 assert.match(startup, /0097_seo_action_orphan_repair/);
 assert.match(startup, /0098_seo_action_refresh_leases/);
 assert.match(startup, /0099_seo_immutable_evidence/);
+assert.match(startup, /0100_seo_refresh_return_and_stale_rotation/);
 const patchStart = startup.indexOf('tag: "0094_seo_snapshot_bounded_key"');
 const patchEnd = startup.indexOf('].join(";\\n"),', patchStart);
 const patchStatements = (startup.slice(patchStart, patchEnd).match(/`[^`]+`/g) ?? []).map((value) => value.slice(1, -1)).join(";\n");
