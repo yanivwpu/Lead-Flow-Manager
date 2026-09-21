@@ -29,6 +29,8 @@ assert.equal(validateRecommendationOutput(proposal).actionType,"title_tag");asse
 for(const prohibited of ["#1 WhatsApp CRM choice","Choose WhachatCRM: # 1.","100% better workflows","Useful CRM, 100%!","✨#1✨ WhatsApp CRM"]){assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:prohibited.padEnd(12," useful")}),/unsupported/,prohibited);}
 for(const allowed of ["Manage 100 contacts clearly","Ranked 1 of 10 internal tasks","Version 100.1 workflow"]){assert.doesNotThrow(()=>validateRecommendationOutput({...proposal,proposedTitle:allowed}));}
 const copied="these twelve exact competitor words must never appear together inside our generated recommendation text";assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Safe original title",proposedContent:copied},[copied]),/overlaps/);
+assert.throws(()=>validateRecommendationOutput({...proposal,contentBrief:"Build the #1 WhatsApp CRM guide"}),/unsupported/,"content briefs receive prohibited-claim validation");
+assert.throws(()=>validateRecommendationOutput({...proposal,contentBrief:copied},[copied]),/overlaps/,"content briefs receive competitor-overlap validation");
 assert.equal(contentFingerprint({title:"one"}),contentFingerprint({title:"one"}));assert.notEqual(contentFingerprint({title:"one"}),contentFingerprint({title:"two"}));
 assert.equal(recommendationIdempotencyKey("p","/",["B","a"],"title"),recommendationIdempotencyKey("p","/",["a","b"],"title"));
 assert.equal(mayTransitionSeoAction("proposed","approved"),true);assert.equal(mayTransitionSeoAction("approved","executing"),false,"Phase 2B cannot execute");
@@ -87,7 +89,10 @@ assert.match(actionServiceSource, /pageSnapshotId:snapshot\.id/, "recommendation
 assert.match(actionServiceSource, /status:"researching"[\s\S]+version:next[\s\S]+status:"proposed"/, "refresh claims, versions, and restores the action");
 assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "refresh failure remains recoverable");
 assert.match(actionServiceSource,/freshMetrics=await loadPlannerMetrics[\s\S]+competitorCount[\s\S]+buildProposal\(freshItem,\{fingerprint:snapshot\.contentFingerprint,title:snapshot\.title,metaDescription:snapshot\.metaDescription,headings:snapshot\.headings/,"refresh derives the new validated proposal from fresh page, Search Console, and available competitor evidence");
-assert.match(actionServiceSource,/promptVersion:"seo-action-v3-fresh-evidence"[\s\S]+evidenceSnapshot:immutableEvidence\(opportunity\.id,freshItem,snapshot\)/);
+assert.match(actionServiceSource,/promptVersion:"seo-action-v3-fresh-evidence"[\s\S]+evidenceSnapshot:immutableEvidence\(refreshedOpportunity\.id,freshItem,snapshot\)/);
+assert.doesNotMatch(actionServiceSource,/freshItem=.*\?\?item/,"an unqualified refreshed opportunity cannot fall back to stale evidence");
+assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus:"failed"[\s\S]+versionCreated:false/,"no-longer-qualifying refreshes close without a new version");
+assert.match(actionServiceSource,/REFRESH_IDENTITY_CONFLICT[\s\S]+opportunityId:refreshedOpportunity\.id[\s\S]+idempotencyKey:refreshedKey[\s\S]+queryCluster:freshItem\.queryCluster[\s\S]+actionType:proposal\.actionType[\s\S]+risk:proposal\.risk[\s\S]+confidence:proposal\.confidence/,"refreshed classification and identity metadata update atomically after collision fencing");
 
 const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_planner.sql", import.meta.url), "utf8");
 const refreshMigration = readFileSync(new URL("../migrations/0096_seo_action_refresh_snapshots.sql", import.meta.url), "utf8");

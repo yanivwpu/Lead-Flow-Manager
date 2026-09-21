@@ -26,7 +26,7 @@ export type SeoRecommendationOutput = z.infer<typeof seoRecommendationOutputSche
 const prohibitedClaims = /(?:^|[^\p{L}\p{N}_])(?:guarantee(?:d)?|#\s*1(?!\d)|number one|best in the world|100\s*%(?!\p{N})|double(?:d)? (?:your|their) (?:sales|revenue)|trusted by \d+)(?=$|[^\p{L}\p{N}_])/iu;
 export function validateRecommendationOutput(input: unknown, competitorTexts: string[] = []): SeoRecommendationOutput {
   const value = seoRecommendationOutputSchema.parse(input);
-  const generated = [value.proposedTitle, value.proposedMetaDescription, value.proposedContent].filter(Boolean).join(" ");
+  const generated = [value.proposedTitle, value.proposedMetaDescription, value.proposedContent, value.contentBrief].filter(Boolean).join(" ");
   if (prohibitedClaims.test(generated)) throw new Error("Recommendation contains an unsupported promotional claim");
   const normalized = generated.toLowerCase().replace(/\s+/g, " ");
   for (const source of competitorTexts) {
