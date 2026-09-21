@@ -40,7 +40,7 @@ export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInp
     const ctr = row.clicks / Math.max(1, row.impressions);
     if (row.impressions >= 100 && row.position >= 4 && row.position <= 20) out.push({ type: "striking_distance", priority: Math.round(row.impressions / Math.max(1, row.position)), query: row.query, page: row.page, evidence: { impressions: row.impressions, position: row.position, clicks: row.clicks } });
     const expectedCtr = row.position <= 3 ? .12 : row.position <= 10 ? .04 : .015;
-    if (row.impressions >= 100 && ctr < expectedCtr * .6) out.push({ type: "low_ctr", priority: Math.round((expectedCtr - ctr) * row.impressions), query: row.query, page: row.page, evidence: { ctr, expectedCtr, impressions: row.impressions, position: row.position } });
+    if (row.impressions >= 100 && ctr < expectedCtr * .6) out.push({ type: "low_ctr", priority: Math.round((expectedCtr - ctr) * row.impressions), query: row.query, page: row.page, evidence: { clicks: row.clicks, ctr, expectedCtr, impressions: row.impressions, position: row.position } });
   }
   // Compare the union of keys. Missing current rows represent zero traffic rather
   // than absence of evidence, so complete losses remain visible to admins.
@@ -59,7 +59,10 @@ export function detectSeoOpportunities(currentInput: SeoMetricRow[], previousInp
     const hasReportedVisibility = visibility.has(query) || reportedRows.length > 0;
     const totalImpressions = visibility.get(query)?.impressions ?? reportedRows.reduce((n, r) => n + r.impressions, 0);
     const qualifyingPages = visibility.get(query)?.qualifyingPages ?? pages.length;
-    if (qualifyingPages > 1) out.push({ type: "cannibalization", priority: Math.round(totalImpressions), query, evidence: { pages: qualifyingPages, impressions: totalImpressions } });
+    if (qualifyingPages > 1) {
+      const competingPages = reportedRows.filter((row) => row.impressions >= 10).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions || a.position - b.position || a.page.localeCompare(b.page));
+      out.push({ type: "cannibalization", priority: Math.round(totalImpressions), query, page: competingPages[0]?.page, evidence: { pages: qualifyingPages, impressions: totalImpressions, competingPages: JSON.stringify(competingPages) } });
+    }
     if (hasReportedVisibility && totalImpressions < 10) out.push({ type: "no_visibility", priority: 50, query, page: targets.find((t) => t.keyword === query)?.canonicalPage, evidence: { impressions: totalImpressions } });
   }
   return out.sort((a, b) => b.priority - a.priority);

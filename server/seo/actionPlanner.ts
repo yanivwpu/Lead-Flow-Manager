@@ -41,3 +41,18 @@ export function contentFingerprint(content: unknown): string {
 export function recommendationIdempotencyKey(propertyId: string, page: string, cluster: string[], actionType: string) {
   return createHash("sha256").update([propertyId, page, [...cluster].map(q => q.trim().toLowerCase()).sort().join("\0"), actionType].join("\0")).digest("hex");
 }
+export const SEO_META_DESCRIPTION_MAX = 170;
+function truncateAtWord(value: string, maximum: number) {
+  if (value.length <= maximum) return value;
+  let candidate = "";
+  for (const point of value) { if ((candidate + point).length > maximum - 1) break; candidate += point; }
+  const boundary = candidate.search(/\s+\S*$/u);
+  return `${(boundary >= Math.floor(maximum * .55) ? candidate.slice(0, boundary) : candidate).trimEnd()}…`;
+}
+/** Bounds untrusted GSC query text before it enters a fixed-size metadata field. */
+export function proposedMetaDescriptionForQuery(query: string) {
+  const prefix = "Explore WhachatCRM for ", suffix = ": organize conversations, follow up consistently, and manage customer relationships in one workspace.";
+  const queryBudget = SEO_META_DESCRIPTION_MAX - prefix.length - suffix.length;
+  const conciseQuery = truncateAtWord(query.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
+  return truncateAtWord(`${prefix}${conciseQuery}${suffix}`, SEO_META_DESCRIPTION_MAX);
+}

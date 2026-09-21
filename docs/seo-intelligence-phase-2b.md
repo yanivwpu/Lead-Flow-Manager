@@ -32,3 +32,9 @@ Do not run integration tests unless `TEST_DATABASE_URL` identifies a disposable 
 ## Phase 2C handoff
 
 Phase 2C should add a separately permissioned executor with repository/page adapters, fingerprint preconditions, preview diffs, two-person approval for medium/high risk, allowlisted mutation types, atomic version capture, canary rollout, and immediate rollback. It should record Search Console baselines and evaluate 7/14/28-day click, impression, CTR, and position deltas against controls; only then may actions become `kept`, `revision_required`, or `rolled_back`. Execution must use a distinct lease, budgets, kill switch, tenant/property fencing, and never infer success from publishing alone.
+
+## Review corrections
+
+Production planning now reads raw current/previous Search Console rows and passes them through the canonical-page cluster scorer. Before a proposal is created, the target page is safely retrieved and normalized into canonical URL, title, description, H1–H3 headings, indexable body text, JSON-LD, and internal links. Each immutable recommendation version references that snapshot. A later analysis marks an open action stale when the current fingerprint differs.
+
+Metadata templates bound untrusted query text before validation and each opportunity has its own sanitized failure boundary. Refresh atomically claims a proposed action, captures fresh page evidence, creates exactly one new version, and returns it to proposed; a failed refresh restores the prior proposed state. Cannibalization remains high-risk human review and retains every competing page—no redirects, canonicals, merges, or deletions are performed.

@@ -1401,6 +1401,13 @@ CREATE TABLE IF NOT EXISTS seo_action_events (
 CREATE INDEX IF NOT EXISTS seo_action_events_action_created_idx ON seo_action_events(action_id, created_at);
 `
   },
+  {
+    tag: "0096_seo_action_refresh_snapshots",
+    sql: [
+      `ALTER TABLE seo_action_versions ADD COLUMN IF NOT EXISTS page_snapshot_id varchar REFERENCES seo_page_snapshots(id)`,
+      `CREATE INDEX IF NOT EXISTS seo_action_versions_page_snapshot_idx ON seo_action_versions(page_snapshot_id)`,
+    ].join(";\n"),
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1449,6 +1456,8 @@ export async function applyStartupSchemaPatches(): Promise<{
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
           { code, message },
         );
+      } else if (/^009[3-6]_seo/.test(patch.tag)) {
+        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
       } else {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
       }
@@ -1495,8 +1504,10 @@ export async function applyStartupSchemaPatches(): Promise<{
       patchResults.get("0085_verification_reminder") === true &&
       patchResults.get("0086_verification_reminder_last_sent_and_rollout") === true,
     shopifyShopTrialLedgerPatchOk,
-    seoIntelligencePatchOk:
-      patchResults.get("0093_seo_intelligence") === true &&
-      patchResults.get("0094_seo_snapshot_bounded_key") === true,
+    seoIntelligencePatchOk: seoIntelligencePatchesReady(patchResults),
   };
+}
+
+export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots"].every(tag => results.get(tag) === true);
 }
