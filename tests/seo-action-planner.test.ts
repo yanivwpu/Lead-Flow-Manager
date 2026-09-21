@@ -73,10 +73,46 @@ const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_pla
 const refreshMigration = readFileSync(new URL("../migrations/0096_seo_action_refresh_snapshots.sql", import.meta.url), "utf8");
 assert.match(refreshMigration, /page_snapshot_id varchar REFERENCES seo_page_snapshots\(id\)/);
 assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
-for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots"]) assert.match(startup, new RegExp(tag));
+for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"]) assert.match(startup, new RegExp(tag));
 assert.match(startup, /SEO schema patch failed; database details redacted/);
 assert.match(phase2bMigration, /UNIQUE\(action_id, version\)/, "concurrent refresh cannot create duplicate versions");
 assert.equal(proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX)).length, SEO_META_DESCRIPTION_MAX, "at-limit input produces an exactly valid destination value");
 const unsafePrimary = clusterAndScoreOpportunities([{query:"whatsapp crm software",page:"",clicks:1,impressions:100,position:8}],[]);
-assert.equal(unsafePrimary[0].targetPage, "", "unsafe missing-page evidence is represented for a sanitized skip rather than silently reassigned");
+assert.equal(unsafePrimary[0].targetPage, null, "unsafe missing-page evidence is represented for a sanitized skip rather than silently reassigned");
 assert.equal(unsafePrimary[0].competingPages.length, 1);
+
+// Opportunity predicates: no fallback low-CTR classification.
+const metric=(clicks:number,impressions:number,position:number,query="query",page="/page")=>({query,page,clicks,impressions,position});
+assert.equal(clusterAndScoreOpportunities([metric(20,100,1)],[]).length,0,"position-one healthy CTR is not an opportunity");
+assert.equal(clusterAndScoreOpportunities([metric(1,100,1)],[])[0].type,"low_ctr","position-one weak CTR qualifies");
+assert.equal(clusterAndScoreOpportunities([metric(10,100,8)],[])[0].type,"striking_distance","positions 4-20 remain striking distance even with healthy CTR");
+assert.equal(clusterAndScoreOpportunities([metric(0,49,1)],[]).length,0,"low-impression noise is excluded");
+assert.equal(clusterAndScoreOpportunities([metric(0,0,1)],[]).length,0,"zero impressions are excluded");
+assert.equal(clusterAndScoreOpportunities([metric(7.2,100,1)],[]).length,0,"CTR exactly at the sixty-percent tolerance is healthy");
+assert.equal(clusterAndScoreOpportunities([metric(7.21,100,1)],[]).length,0,"CTR above tolerance is healthy");
+assert.equal(clusterAndScoreOpportunities([metric(7.19,100,1)],[])[0].type,"low_ctr","CTR below tolerance qualifies");
+assert.equal(clusterAndScoreOpportunities([metric(1,50,1,"crm software","/p"),metric(2,50,1,"software crm","/p")],[])[0].current.ctr,.03,"cluster CTR uses aggregate raw clicks and impressions");
+
+// Current/previous union retains meaningful prior-only and below-threshold declines.
+const vanished=clusterAndScoreOpportunities([], [metric(20,200,6,"vanished query","/stable")]);
+assert.equal(vanished[0].type,"decline");assert.deepEqual(vanished[0].current,{clicks:0,impressions:0,ctr:0,position:0});assert.equal(vanished[0].previous.impressions,200);assert.equal(vanished[0].targetPage,"/stable");
+const belowThreshold=clusterAndScoreOpportunities([metric(1,20,7,"falling query","/stable")],[metric(10,100,5,"falling query","/stable")]);assert.equal(belowThreshold[0].type,"decline");assert.equal(belowThreshold[0].current.impressions,20);
+assert.equal(clusterAndScoreOpportunities([], [metric(1,20,6,"tiny vanished","/tiny")]).length,0,"insignificant disappearance is excluded");
+assert.equal(clusterAndScoreOpportunities([metric(1,100,1,"new weak","/new")],[])[0].type,"low_ctr","new current query needs no prior row");
+const relatedVanished=clusterAndScoreOpportunities([], [metric(9,100,7,"whatsapp crm software","/stable"),metric(8,90,8,"crm software whatsapp","/stable")]);assert.equal(relatedVanished.length,1);assert.equal(relatedVanished[0].previous.clicks,17);assert.equal(relatedVanished[0].current.clicks,0);
+
+// Production selection is hard-bounded in SQL before in-process clustering.
+assert.match(actionServiceSource,/export const SEO_PLANNER_CANDIDATE_LIMIT=2_000/);
+assert.match(actionServiceSource,/COUNT\(\*\) OVER\(\) eligible_count/);
+assert.match(actionServiceSource,/ORDER BY priority_evidence DESC,previous_impressions DESC,current_impressions DESC,natural_key_hash ASC LIMIT \$\{candidateLimit\}/);
+assert.doesNotMatch(actionServiceSource,/result\.rows[\s\S]*\.slice\(0,candidateLimit\)/,"the hard cap is not an application-memory slice");
+const huge=Array.from({length:100_000},(_,i)=>metric(i===99_999?0:7,100,1,`query ${i}`,`/p/${i}`));
+const sqlBoundedStrongest=huge.filter(r=>r.clicks/r.impressions<.12*.6).sort((a,b)=>(.12-b.clicks/b.impressions)*b.impressions-(.12-a.clicks/a.impressions)*a.impressions).slice(0,2_000);
+assert.equal(sqlBoundedStrongest.length,2_000,"a realistic eligible set is bounded before clustering");assert.equal(sqlBoundedStrongest[0].query,"query 99999","the strongest candidate survives the safety cap");
+
+// Initial action/version/evidence/event share one database transaction; malformed history is quarantined, not deleted.
+assert.match(actionServiceSource,/createInitialActionAtomically[\s\S]+return db\.transaction\(async tx=>[\s\S]+INSERT INTO seo_actions[\s\S]+tx\.insert\(seoActionVersions\)[\s\S]+INSERT INTO seo_action_evidence[\s\S]+tx\.insert\(seoActionEvents\)/);
+assert.match(actionServiceSource,/ON CONFLICT \(property_id,idempotency_key\)[\s\S]+DO NOTHING RETURNING id/);
+assert.match(actionServiceSource,/LEFT JOIN seo_action_versions/,"malformed rows are visible with diagnostics rather than hidden by an inner join");
+const repairMigration=readFileSync(new URL("../migrations/0097_seo_action_orphan_repair.sql",import.meta.url),"utf8");assert.match(repairMigration,/ORPHANED_INITIAL_VERSION_REPAIRED/);assert.doesNotMatch(repairMigration,/DELETE FROM/i);
+assert.match(startup,/0097_seo_action_orphan_repair/);

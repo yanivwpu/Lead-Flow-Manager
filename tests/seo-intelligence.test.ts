@@ -448,6 +448,7 @@ assert.match(startup, /tag: "0093_seo_intelligence"/);
 assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
 assert.match(startup, /0095_seo_action_planner/);
 assert.match(startup, /0096_seo_action_refresh_snapshots/);
+assert.match(startup, /0097_seo_action_orphan_repair/);
 const patchStart = startup.indexOf('tag: "0094_seo_snapshot_bounded_key"');
 const patchEnd = startup.indexOf('].join(";\\n"),', patchStart);
 const patchStatements = (startup.slice(patchStart, patchEnd).match(/`[^`]+`/g) ?? []).map((value) => value.slice(1, -1)).join(";\n");

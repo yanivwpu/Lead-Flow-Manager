@@ -1408,6 +1408,19 @@ CREATE INDEX IF NOT EXISTS seo_action_events_action_created_idx ON seo_action_ev
       `CREATE INDEX IF NOT EXISTS seo_action_versions_page_snapshot_idx ON seo_action_versions(page_snapshot_id)`,
     ].join(";\n"),
   },
+  {
+    tag: "0097_seo_action_orphan_repair",
+    sql: `
+-- Preserve but quarantine legacy actions that committed before version/event creation.
+INSERT INTO seo_action_events (action_id, from_status, to_status, reason, safe_metadata)
+SELECT a.id, a.status, 'failed', 'Initial recommendation version was not committed', '{"failureCategory":"ORPHANED_INITIAL_VERSION_REPAIRED"}'::jsonb
+FROM seo_actions a
+WHERE NOT EXISTS (SELECT 1 FROM seo_action_versions v WHERE v.action_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM seo_action_events e WHERE e.action_id = a.id AND e.safe_metadata->>'failureCategory' = 'ORPHANED_INITIAL_VERSION_REPAIRED');
+UPDATE seo_actions a SET status = 'failed', updated_at = NOW()
+WHERE NOT EXISTS (SELECT 1 FROM seo_action_versions v WHERE v.action_id = a.id);
+`
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1456,7 +1469,7 @@ export async function applyStartupSchemaPatches(): Promise<{
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
           { code, message },
         );
-      } else if (/^009[3-6]_seo/.test(patch.tag)) {
+      } else if (/^009[3-7]_seo/.test(patch.tag)) {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
       } else {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
@@ -1509,5 +1522,5 @@ export async function applyStartupSchemaPatches(): Promise<{
 }
 
 export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
-  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots"].every(tag => results.get(tag) === true);
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"].every(tag => results.get(tag) === true);
 }

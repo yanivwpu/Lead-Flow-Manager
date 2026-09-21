@@ -38,3 +38,9 @@ Phase 2C should add a separately permissioned executor with repository/page adap
 Production planning now reads raw current/previous Search Console rows and passes them through the canonical-page cluster scorer. Before a proposal is created, the target page is safely retrieved and normalized into canonical URL, title, description, H1–H3 headings, indexable body text, JSON-LD, and internal links. Each immutable recommendation version references that snapshot. A later analysis marks an open action stale when the current fingerprint differs.
 
 Metadata templates bound untrusted query text before validation and each opportunity has its own sanitized failure boundary. Refresh atomically claims a proposed action, captures fresh page evidence, creates exactly one new version, and returns it to proposed; a failed refresh restores the prior proposed state. Cannibalization remains high-risk human review and retains every competing page—no redirects, canonicals, merges, or deletions are performed.
+
+## Candidate and commit safety
+
+Planner input is bounded in PostgreSQL before Node materializes or clusters it. The current hard ceiling is 2,000 query/page identities per property and analysis run. SQL aggregates the 56-day window, applies striking-distance, low-CTR, and meaningful-decline predicates over the current/previous union, orders by deterministic evidence strength plus the bounded natural-key hash, and only then applies `LIMIT`. Diagnostics retain eligible, loaded, and cap-omitted counts.
+
+Creation of a recommendation is atomic: its action, initial immutable version, opportunity evidence reference, and initial lifecycle event commit in one transaction. A duplicate open-action key performs an idempotent skip. Migration 0097 preserves but quarantines any legacy action without a version as `failed` and appends a repair audit event; it never deletes recommendation history.
