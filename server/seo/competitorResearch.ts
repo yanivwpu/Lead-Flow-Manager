@@ -1,57 +1,28 @@
 import { isIP } from "node:net";
 import { lookup } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
 
-export type SearchResult = { url: string; position?: number };
-export interface OrganicSearchProvider { readonly name: string; readonly configured: boolean; search(query: string, signal?: AbortSignal): Promise<SearchResult[]>; }
-export class DisabledSearchProvider implements OrganicSearchProvider {
-  readonly name = "disabled"; readonly configured = false;
-  async search(): Promise<SearchResult[]> { return []; }
-}
-export const COMPETITOR_FETCH_LIMITS = { redirects: 3, timeoutMs: 8_000, responseBytes: 1_500_000, concurrency: 3, perRun: 15 } as const;
-export class HostRateLimiter {
-  private readonly next = new Map<string, number>();
-  constructor(private readonly intervalMs = 1_000) {}
-  async wait(url: URL, now = () => Date.now(), sleep = (ms:number) => new Promise(resolve => setTimeout(resolve, ms))) {
-    const due=this.next.get(url.hostname)??0, delay=Math.max(0,due-now()); if(delay) await sleep(delay); this.next.set(url.hostname,now()+this.intervalMs);
-  }
-}
-const blockedV4 = /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|224\.|255\.)/;
-function isPublicIp(ip: string) {
-  if (isIP(ip) === 4) return !blockedV4.test(ip);
-  if (isIP(ip) === 6) return !/^(::|::1|fc|fd|fe[89ab]|ff)/i.test(ip);
-  return false;
-}
-export async function assertSafePublicUrl(raw: string, resolver = lookup): Promise<URL> {
-  const url = new URL(raw);
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("UNSAFE_URL_SCHEME");
-  if (url.username || url.password || url.port) throw new Error("UNSAFE_URL_AUTH_OR_PORT");
-  const records = await resolver(url.hostname, { all: true, verbatim: true });
-  if (!records.length || records.some(record => !isPublicIp(record.address))) throw new Error("UNSAFE_URL_ADDRESS");
-  return url;
-}
-export function filterCompetitorResults(results: SearchResult[], ownedDomains: string[], manualDomains: string[] = []) {
-  const owned = ownedDomains.map(d => d.toLowerCase().replace(/^www\./, ""));
-  const manual = new Set(manualDomains.map(d => d.toLowerCase().replace(/^www\./, "")));
-  return results.filter(({ url }) => { try { const host = new URL(url).hostname.toLowerCase().replace(/^www\./, ""); return !owned.some(d => host === d || host.endsWith(`.${d}`)) && (!manual.size || manual.has(host) || [...manual].some(d => host.endsWith(`.${d}`))); } catch { return false; } });
-}
-export async function safeFetchHtml(raw: string, options: { fetchImpl?: typeof fetch; resolver?: typeof lookup; signal?: AbortSignal; robotsAllowed?: (url:URL)=>Promise<boolean>; rateLimiter?:HostRateLimiter } = {}) {
-  let url = await assertSafePublicUrl(raw, options.resolver); const fetchImpl = options.fetchImpl ?? fetch;
-  if (options.robotsAllowed && !await options.robotsAllowed(url)) throw new Error("ROBOTS_DISALLOWED");
-  await options.rateLimiter?.wait(url);
-  for (let redirects = 0; redirects <= COMPETITOR_FETCH_LIMITS.redirects; redirects += 1) {
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), COMPETITOR_FETCH_LIMITS.timeoutMs);
-    const onAbort = () => controller.abort(); options.signal?.addEventListener("abort", onAbort, { once: true });
-    try {
-      const response = await fetchImpl(url, { redirect: "manual", signal: controller.signal, headers: { accept: "text/html", "user-agent": "WhachatCRM-SEOResearch/1.0" } });
-      if ([301,302,303,307,308].includes(response.status)) { const location = response.headers.get("location"); if (!location || redirects === COMPETITOR_FETCH_LIMITS.redirects) throw new Error("REDIRECT_LIMIT"); url = await assertSafePublicUrl(new URL(location, url).toString(), options.resolver); continue; }
-      if (!response.ok) throw new Error(`HTTP_${response.status}`);
-      if (!(response.headers.get("content-type") ?? "").toLowerCase().includes("text/html")) throw new Error("INVALID_CONTENT_TYPE");
-      const declared = Number(response.headers.get("content-length") ?? 0); if (declared > COMPETITOR_FETCH_LIMITS.responseBytes) throw new Error("RESPONSE_TOO_LARGE");
-      const reader = response.body?.getReader(); if (!reader) return { url: url.toString(), html: "" };
-      const chunks: Uint8Array[] = []; let size = 0;
-      while (true) { const part = await reader.read(); if (part.done) break; size += part.value.byteLength; if (size > COMPETITOR_FETCH_LIMITS.responseBytes) { await reader.cancel(); throw new Error("RESPONSE_TOO_LARGE"); } chunks.push(part.value); }
-      return { url: url.toString(), html: new TextDecoder().decode(Buffer.concat(chunks)) };
-    } finally { clearTimeout(timer); options.signal?.removeEventListener("abort", onAbort); }
-  }
-  throw new Error("REDIRECT_LIMIT");
-}
+export type SearchResult={url:string;position?:number};
+export interface OrganicSearchProvider{readonly name:string;readonly configured:boolean;search(query:string,signal?:AbortSignal):Promise<SearchResult[]>;}
+export class DisabledSearchProvider implements OrganicSearchProvider{readonly name="disabled";readonly configured=false;async search(){return[];}}
+export const COMPETITOR_FETCH_LIMITS={redirects:3,timeoutMs:8_000,responseBytes:1_500_000,concurrency:3,perRun:15} as const;
+export class HostRateLimiter{private readonly next=new Map<string,number>();constructor(private readonly intervalMs=1_000){}async wait(url:URL,now=()=>Date.now(),sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))){const due=this.next.get(url.hostname)??0,delay=Math.max(0,due-now());if(delay)await sleep(delay);this.next.set(url.hostname,now()+this.intervalMs);}}
+export type ResolvedAddress={address:string;family:number};
+export type PinnedResponse={status:number;headers:Headers;body:AsyncIterable<Uint8Array>;remoteAddress:string};
+export type PinnedTransport=(url:URL,addresses:ResolvedAddress[],options:{signal:AbortSignal;headers:Record<string,string>})=>Promise<PinnedResponse>;
+
+const blockedV4:[[string,number]]|Array<[string,number]>=[["0.0.0.0",8],["10.0.0.0",8],["100.64.0.0",10],["127.0.0.0",8],["169.254.0.0",16],["172.16.0.0",12],["192.0.0.0",24],["192.0.2.0",24],["192.88.99.0",24],["192.168.0.0",16],["198.18.0.0",15],["198.51.100.0",24],["203.0.113.0",24],["224.0.0.0",4],["240.0.0.0",4]];
+const blockedV6:Array<[string,number]>=[["::",128],["::1",128],["100::",64],["64:ff9b:1::",48],["2001::",23],["2001:db8::",32],["2001:10::",28],["2002::",16],["3fff::",20],["5f00::",16],["fc00::",7],["fe80::",10],["ff00::",8]];
+const bytes4=(ip:string)=>ip.split(".").map(Number);
+const inV4=(ip:string,base:string,bits:number)=>{const a=bytes4(ip),b=bytes4(base),full=Math.floor(bits/8),remain=bits%8;for(let i=0;i<full;i++)if(a[i]!==b[i])return false;if(!remain)return true;const mask=(0xff<<(8-remain))&0xff;return(a[full]&mask)===(b[full]&mask);};
+const expandV6=(ip:string)=>{const mapped=/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);if(mapped)return{mapped:mapped[1],parts:[] as number[]};const [left,right]=ip.toLowerCase().split("::"),l=left?left.split(":"):[],r=right?right.split(":"):[],fill=Array(Math.max(0,8-l.length-r.length)).fill("0"),raw=ip.includes("::")?[...l,...fill,...r]:l;if(raw.length!==8||raw.some(x=>!/^[0-9a-f]{1,4}$/i.test(x)))throw new Error("UNSAFE_URL_ADDRESS");return{parts:raw.map(x=>parseInt(x,16))};};
+const inV6=(ip:string,base:string,bits:number)=>{const a=expandV6(ip).parts,b=expandV6(base).parts,full=Math.floor(bits/16),remain=bits%16;for(let i=0;i<full;i++)if(a[i]!==b[i])return false;if(!remain)return true;const mask=(0xffff<<(16-remain))&0xffff;return(a[full]&mask)===(b[full]&mask);};
+export function isPublicAddress(ip:string){const family=isIP(ip);if(family===4)return !blockedV4.some(([base,bits])=>inV4(ip,base,bits));if(family===6){const parsed=expandV6(ip);if(parsed.mapped)return isPublicAddress(parsed.mapped);if(parsed.parts.slice(0,5).every(x=>x===0)&&parsed.parts[5]===0xffff){const v4=`${parsed.parts[6]>>8}.${parsed.parts[6]&255}.${parsed.parts[7]>>8}.${parsed.parts[7]&255}`;return isPublicAddress(v4);}return !blockedV6.some(([base,bits])=>inV6(ip,base,bits));}return false;}
+function validateUrl(raw:string){const url=new URL(raw);if(!["http:","https:"].includes(url.protocol))throw new Error("UNSAFE_URL_SCHEME");if(url.username||url.password||url.port)throw new Error("UNSAFE_URL_AUTH_OR_PORT");if(!url.hostname||url.hostname.includes("%"))throw new Error("UNSAFE_URL_HOST");return url;}
+export async function resolveSafePublicUrl(raw:string,resolver=lookup){const url=validateUrl(raw);const literal=isIP(url.hostname.replace(/^\[|\]$/g,""));const records=literal?[{address:url.hostname.replace(/^\[|\]$/g,""),family:literal}]:await resolver(url.hostname,{all:true,verbatim:true});if(!records.length||records.some(record=>!isPublicAddress(record.address)))throw new Error("UNSAFE_URL_ADDRESS");return{url,addresses:records.map(record=>({address:record.address,family:record.family}))};}
+export async function assertSafePublicUrl(raw:string,resolver=lookup){return(await resolveSafePublicUrl(raw,resolver)).url;}
+export function filterCompetitorResults(results:SearchResult[],ownedDomains:string[],manualDomains:string[]=[]){const owned=ownedDomains.map(d=>d.toLowerCase().replace(/^www\./,"")),manual=new Set(manualDomains.map(d=>d.toLowerCase().replace(/^www\./,"")));return results.filter(({url})=>{try{const host=new URL(url).hostname.toLowerCase().replace(/^www\./,"");return!owned.some(d=>host===d||host.endsWith(`.${d}`))&&(!manual.size||manual.has(host)||[...manual].some(d=>host.endsWith(`.${d}`)));}catch{return false;}});}
+
+export const nativePinnedTransport:PinnedTransport=(url,addresses,{signal,headers})=>new Promise((resolve,reject)=>{const selected=addresses[0],approved=new Set(addresses.map(x=>x.address.toLowerCase())),request=(url.protocol==="https:"?https:http).request(url,{method:"GET",headers,signal,servername:url.protocol==="https:"?url.hostname:undefined,lookup:(_host,_options,callback)=>callback(null,selected.address,selected.family)},response=>{const remote=(response.socket.remoteAddress??"").replace(/^::ffff:/,"").toLowerCase();if(!approved.has(remote)&&!approved.has(response.socket.remoteAddress?.toLowerCase()??"")){response.destroy();reject(new Error("REMOTE_ADDRESS_MISMATCH"));return;}resolve({status:response.statusCode??0,headers:new Headers(Object.entries(response.headers).flatMap(([key,value])=>value===undefined?[]:[[key,Array.isArray(value)?value.join(", "):value]])),body:response,remoteAddress:remote});});request.once("error",reject);request.end();});
+export async function safeFetchHtml(raw:string,options:{transport?:PinnedTransport;resolver?:typeof lookup;signal?:AbortSignal;robotsAllowed?:(url:URL)=>Promise<boolean>;rateLimiter?:HostRateLimiter;timeoutMs?:number}={}){let next=raw;const transport=options.transport??nativePinnedTransport;for(let redirects=0;redirects<=COMPETITOR_FETCH_LIMITS.redirects;redirects++){const {url,addresses}=await resolveSafePublicUrl(next,options.resolver);if(options.robotsAllowed&&!await options.robotsAllowed(url))throw new Error("ROBOTS_DISALLOWED");await options.rateLimiter?.wait(url);const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(COMPETITOR_FETCH_LIMITS.timeoutMs,Math.max(1,options.timeoutMs??COMPETITOR_FETCH_LIMITS.timeoutMs))),onAbort=()=>controller.abort();options.signal?.addEventListener("abort",onAbort,{once:true});if(options.signal?.aborted)controller.abort();try{const response=await transport(url,addresses,{signal:controller.signal,headers:{accept:"text/html","user-agent":"WhachatCRM-SEOResearch/1.0"}});if(!addresses.some(record=>response.remoteAddress.replace(/^::ffff:/,"").toLowerCase()===record.address.toLowerCase()))throw new Error("REMOTE_ADDRESS_MISMATCH");if([301,302,303,307,308].includes(response.status)){const location=response.headers.get("location");if(!location||redirects===COMPETITOR_FETCH_LIMITS.redirects)throw new Error("REDIRECT_LIMIT");next=new URL(location,url).toString();continue;}if(response.status<200||response.status>=300)throw new Error(`HTTP_${response.status}`);if(!(response.headers.get("content-type")??"").toLowerCase().includes("text/html"))throw new Error("INVALID_CONTENT_TYPE");const declared=Number(response.headers.get("content-length")??0);if(declared>COMPETITOR_FETCH_LIMITS.responseBytes)throw new Error("RESPONSE_TOO_LARGE");const chunks:Uint8Array[]=[];let size=0;for await(const chunk of response.body){size+=chunk.byteLength;if(size>COMPETITOR_FETCH_LIMITS.responseBytes)throw new Error("RESPONSE_TOO_LARGE");chunks.push(chunk);}return{url:url.toString(),html:new TextDecoder().decode(Buffer.concat(chunks))};}finally{clearTimeout(timer);options.signal?.removeEventListener("abort",onAbort);}}throw new Error("REDIRECT_LIMIT");}

@@ -1,6 +1,6 @@
 /** Run: npx tsx tests/seo-action-planner.test.ts */
 import assert from "node:assert/strict";
-import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, safeFetchHtml } from "../server/seo/competitorResearch";
+import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
 import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, validateRecommendationOutput } from "../server/seo/actionPlanner";
 import { clusterAndScoreOpportunities } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
@@ -9,10 +9,10 @@ await assert.rejects(()=>assertSafePublicUrl("file:///etc/passwd"));
 assert.equal((await assertSafePublicUrl("https://example.com/page",resolvePublic)).hostname,"example.com");
 assert.deepEqual(filterCompetitorResults([{url:"https://whachatcrm.com/a"},{url:"https://competitor.test/a"}], ["whachatcrm.com"]).map(r=>r.url),["https://competitor.test/a"]);
 assert.deepEqual(filterCompetitorResults([{url:"https://one.test"},{url:"https://two.test"}], [], ["two.test"]).map(r=>r.url),["https://two.test"]);
-const htmlResponse=(body:string,headers:Record<string,string>={"content-type":"text/html"})=>new Response(body,{status:200,headers});
-await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,fetchImpl:async()=>htmlResponse("x",{"content-type":"application/json"})}),/INVALID_CONTENT_TYPE/);
-await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,fetchImpl:async()=>htmlResponse("x",{"content-type":"text/html","content-length":"2000000"})}),/RESPONSE_TOO_LARGE/);
-await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,robotsAllowed:async()=>false}),/ROBOTS_DISALLOWED/);
+const pinned=(response:{status?:number;headers?:Record<string,string>;body?:string;remoteAddress?:string}={}):PinnedTransport=>async(_url,addresses)=>({status:response.status??200,headers:new Headers(response.headers??{"content-type":"text/html"}),body:(async function*(){yield new TextEncoder().encode(response.body??"x")})(),remoteAddress:response.remoteAddress??addresses[0].address});
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,transport:pinned({headers:{"content-type":"application/json"}})}),/INVALID_CONTENT_TYPE/);
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,transport:pinned({headers:{"content-type":"text/html","content-length":"2000000"}})}),/RESPONSE_TOO_LARGE/);
+await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,robotsAllowed:async()=>false,transport:pinned()}),/ROBOTS_DISALLOWED/);
 const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
 const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
 const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
@@ -132,8 +132,20 @@ assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is expl
 const rankedKeys=Array.from({length:25},(_,i)=>({key:`k${i}`,rank:i}));
 assert.deepEqual(excludeOpenActionCandidates(rankedKeys,new Set(rankedKeys.slice(0,10).map(x=>x.key))).eligible.slice(0,10).map(x=>x.key),rankedKeys.slice(10,20).map(x=>x.key),"top-ten open actions cannot starve the next ten");
 assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).excluded,2);assert.equal(excludeOpenActionCandidates(rankedKeys,new Set()).eligible.length,25,"closed actions do not block new work");
-assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActionKeys[\s\S]+excludeOpenActionCandidates[\s\S]+recommendationsCreated>=MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
+assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+recommendationsCreated>=MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.match(leaseMigration,/LEGACY_REFRESH_RECOVERED/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
 assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);
+
+// Historical pages explain migrations but only concurrent current visibility triggers cannibalization.
+const migratedStable=clusterAndScoreOpportunities([metric(10,100,5,"migration query","https://example.com/new")],[metric(10,100,5,"migration query","https://example.com/old")]);assert.notEqual(migratedStable[0]?.type,"cannibalization");
+const migratedDecline=clusterAndScoreOpportunities([metric(2,50,8,"migration decline","https://example.com/new")],[metric(20,200,5,"migration decline","https://example.com/old")]);assert.equal(migratedDecline[0].type,"decline");assert.equal((migratedDecline[0].evidence.historicalPages as unknown[]).length,1);
+const currentAndHistory=clusterAndScoreOpportunities([metric(3,80,8,"multi current query","https://example.com/a"),metric(2,70,9,"current query multi","https://example.com/b")],[metric(9,100,5,"multi current query","https://example.com/old")]);assert.equal(currentAndHistory[0].type,"cannibalization");assert.equal((currentAndHistory[0].evidence.currentVisiblePages as unknown[]).length,2);assert.equal((currentAndHistory[0].evidence.historicalPages as unknown[]).length,1);
+const languages=clusterAndScoreOpportunities([metric(3,80,8,"localized crm query","https://example.com/en/page"),metric(2,70,9,"crm query localized","https://example.com/es/page")],[]);assert.equal(languages[0].type,"cannibalization");
+
+// Opportunities are append-only evidence snapshots; versions own their immutable evidence.
+const immutableMigration=readFileSync(new URL("../migrations/0099_seo_immutable_evidence.sql",import.meta.url),"utf8");assert.match(immutableMigration,/evidence_snapshot jsonb/);assert.match(immutableMigration,/DROP INDEX IF EXISTS seo_opportunities_property_cluster_uidx/);assert.doesNotMatch(immutableMigration,/DELETE FROM/i);assert.match(actionServiceSource,/persistOpportunity[\s\S]+\.values\([\s\S]+\.returning\(\)/);assert.doesNotMatch(actionServiceSource,/persistOpportunity[\s\S]{0,1200}onConflictDoUpdate/);assert.match(actionServiceSource,/evidenceSnapshot:immutableEvidence/);assert.match(actionServiceSource,/v\.evidence_snapshot->'currentMetrics'/);assert.match(startup,/0099_seo_immutable_evidence/);
+
+// Open proposed/approved actions receive bounded, fingerprint-fenced stale reconciliation.
+assert.match(actionServiceSource,/SEO_STALE_CHECK_LIMIT=10/);assert.match(actionServiceSource,/status:'revision_required'/);assert.match(actionServiceSource,/previousFingerprint[\s\S]+currentFingerprint[\s\S]+pageSnapshotId/);assert.match(actionServiceSource,/staleChecksAttempted[\s\S]+staleChecksUnchanged[\s\S]+staleChecksMarked[\s\S]+staleChecksFailed/);assert.match(actionServiceSource,/originalContentFingerprint,action\.contentFingerprint/);assert.match(actionServiceSource,/status} IN \('proposed','approved'\)/);assert.match(actionServiceSource,/\["proposed","revision_required"\]/,"stale actions can regenerate but cannot approve directly");

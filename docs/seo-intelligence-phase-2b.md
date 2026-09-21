@@ -50,3 +50,11 @@ Creation of a recommendation is atomic: its action, initial immutable version, o
 Refresh is a five-minute database lease (`SEO_ACTION_REFRESH_LEASE_MS` may configure 1–30 minutes). Claim and audit persistence are brief and atomic; network retrieval occurs after commit. Completion is fenced by the token and unexpired lease. A later request may reclaim only an expired claim, while migration 0098 recovers pre-lease `researching` rows. Handled failure restores the prior proposal with a sanitized category.
 
 Analysis scores the complete 2,000-candidate bounded pool, loads only matching valid open-action identities, excludes those identities, and then attempts up to ten successful creations. A post-filter uniqueness race is counted and the loop continues to a lower-ranked candidate. Cannibalization takes precedence whenever normalized distinct pages coexist; evidence retains each page's current and previous metrics and any simultaneous decline.
+
+## DNS pinning, immutable evidence, and stale review
+
+Public-page retrieval uses Node 20's native `http`/`https` request stack with a custom `lookup` callback that returns only the already validated address. The request URL retains the original hostname, so TLS SNI and certificate verification remain hostname-based. Every DNS answer must be public, the connected socket address must match the approved set, and each redirect is independently resolved, validated, and pinned.
+
+Cannibalization requires at least two normalized pages with current-period visibility. Previous-only pages remain in historical evidence but cannot trigger active cannibalization. Since migration 0099, opportunities are append-only and every recommendation version owns a JSON evidence snapshot; legacy rows receive only a best-effort baseline because evidence overwritten before this migration cannot be reconstructed honestly.
+
+Each analysis checks at most ten matching proposed/approved pages for content staleness before open-action exclusion. A changed fingerprint atomically moves the action to `revision_required` and appends fingerprint/version references. Fetch failure leaves the action open and increments a safe failure counter; it is never treated as unchanged. Regeneration is required before the action can return to `proposed`.

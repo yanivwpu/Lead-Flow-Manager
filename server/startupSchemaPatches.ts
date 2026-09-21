@@ -1438,6 +1438,23 @@ UPDATE seo_actions SET status='proposed', refresh_failure_category='LEGACY_REFRE
 WHERE status='researching';
 `
   },
+  {
+    tag: "0099_seo_immutable_evidence",
+    sql: `
+ALTER TABLE seo_action_versions ADD COLUMN IF NOT EXISTS evidence_snapshot jsonb;
+-- Best-effort legacy baseline: exact pre-0099 evidence may already have been overwritten and cannot be reconstructed.
+UPDATE seo_action_versions v SET evidence_snapshot=jsonb_build_object(
+  'opportunityId',o.id,'opportunityType',o.opportunity_type,'queryCluster',o.query_cluster,'targetPage',o.target_page,
+  'currentMetrics',o.current_metrics,'previousMetrics',o.previous_metrics,'priorityScore',o.priority_score,
+  'confidenceScore',o.confidence_score,'estimatedUpside',o.estimated_upside,'reason',o.reason,'evidence',o.evidence,
+  'contentFingerprint',a.original_content_fingerprint,'pageSnapshotId',v.page_snapshot_id)
+FROM seo_actions a JOIN seo_opportunities o ON o.id=a.opportunity_id
+WHERE v.action_id=a.id AND v.evidence_snapshot IS NULL;
+ALTER TABLE seo_action_versions ALTER COLUMN evidence_snapshot SET NOT NULL;
+DROP INDEX IF EXISTS seo_opportunities_property_cluster_uidx;
+CREATE INDEX IF NOT EXISTS seo_opportunities_property_cluster_idx ON seo_opportunities(property_id,cluster_key,detected_at);
+`
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1486,7 +1503,7 @@ export async function applyStartupSchemaPatches(): Promise<{
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
           { code, message },
         );
-      } else if (/^009[3-8]_seo/.test(patch.tag)) {
+      } else if (/^009[3-9]_seo/.test(patch.tag)) {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
       } else {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
@@ -1539,5 +1556,5 @@ export async function applyStartupSchemaPatches(): Promise<{
 }
 
 export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
-  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases"].every(tag => results.get(tag) === true);
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases", "0099_seo_immutable_evidence"].every(tag => results.get(tag) === true);
 }
