@@ -59,6 +59,8 @@ Cannibalization requires at least two normalized pages with current-period visib
 
 Each analysis checks at most ten matching proposed/approved pages for content staleness before open-action exclusion. A changed fingerprint atomically moves the action to `revision_required` and appends fingerprint/version references. Fetch failure leaves the action open and increments a safe failure counter; it is never treated as unchanged. Regeneration is required before the action can return to `proposed`.
 
+`revision_required` continues to reserve the action's property-scoped idempotency identity. Analysis cannot create a replacement beside stale history; regeneration creates the next immutable version on the original action, while rejection or another genuinely closed state releases the identity.
+
 ## Cross-replica recovery and stale-check rotation
 
 Patch 0100 persists the refresh return state and stale-check scheduling timestamps. Recovery touches only an expired tokenized lease or a lease-less legacy row older than 30 minutes; an active token and recent legacy-looking row remain untouched. Recovery restores `proposed` or `revision_required` from the durable return state, falling back to `revision_required` when stale evidence exists.

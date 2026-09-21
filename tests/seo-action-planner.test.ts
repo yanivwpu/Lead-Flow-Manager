@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
 import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
-import { clusterAndScoreOpportunities } from "../server/seo/opportunityPlanner";
+import { clusterAndScoreOpportunities, processCandidatesUntil } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
 await assert.rejects(()=>assertSafePublicUrl("http://127.0.0.1/private"));
 await assert.rejects(()=>assertSafePublicUrl("file:///etc/passwd"));
@@ -16,6 +16,7 @@ await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePu
 const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
 const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
 const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
+const processed:string[]=[];const isolated=await processCandidatesUntil(["poisoned","valid-one","valid-two"],2,async candidate=>{if(candidate==="poisoned")throw new Error("malformed proposal");processed.push(candidate);return true;},()=>processed.push("skipped"));assert.deepEqual(processed,["skipped","valid-one","valid-two"]);assert.deepEqual(isolated,{successes:2,attempted:3},"a poisoned proposal cannot abort the run or consume the success limit");
 const proposal={actionType:"title_tag",proposedTitle:"A useful WhatsApp CRM workflow guide",insertionLocation:"head title",explanation:"Search performance supports a clearer and more relevant title.",expectedBenefit:"Improve qualified click-through potential.",confidence:.8,risk:"low",automaticExecutionEligible:false,rollbackConcept:"Restore the fingerprinted prior title.",evidenceIds:["e1"]};
 assert.equal(validateRecommendationOutput(proposal).actionType,"title_tag");assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Guaranteed #1 WhatsApp CRM"}),/unsupported/);
 const copied="these twelve exact competitor words must never appear together inside our generated recommendation text";assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Safe original title",proposedContent:copied},[copied]),/overlaps/);
@@ -64,7 +65,9 @@ assert.equal(isSnapshotStale(fingerprintSeoPage(normalized), changed), true);
 
 const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts", import.meta.url), "utf8");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
-assert.match(actionServiceSource, /catch\(error\)[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
+assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
+assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
+assert.match(actionServiceSource,/processCandidatesUntil\(eligible,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item\)/,"proposal construction occurs inside the isolated per-candidate worker");
 assert.match(actionServiceSource, /pageSnapshotId:snapshot\.id/, "recommendation versions reference the actual page snapshot");
 assert.match(actionServiceSource, /status:"researching"[\s\S]+version:next[\s\S]+status:"proposed"/, "refresh claims, versions, and restores the action");
 assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "refresh failure remains recoverable");
@@ -104,7 +107,7 @@ const relatedVanished=clusterAndScoreOpportunities([], [metric(9,100,7,"whatsapp
 // Production selection is hard-bounded in SQL before in-process clustering.
 assert.match(actionServiceSource,/export const SEO_PLANNER_CANDIDATE_LIMIT=2_000/);
 assert.match(actionServiceSource,/COUNT\(\*\) OVER\(\) eligible_count/);
-assert.match(actionServiceSource,/ORDER BY priority_evidence DESC,previous_impressions DESC,current_impressions DESC,natural_key_hash ASC LIMIT \$\{candidateLimit\}/);
+assert.match(actionServiceSource,/SEO_COMPETING_PAGES_PER_QUERY=8[\s\S]+selected_queries[\s\S]+Math\.floor\(candidateLimit\/SEO_COMPETING_PAGES_PER_QUERY\)[\s\S]+page_rank<=\$\{SEO_COMPETING_PAGES_PER_QUERY\}[\s\S]+LIMIT \$\{candidateLimit\}/);
 assert.doesNotMatch(actionServiceSource,/result\.rows[\s\S]*\.slice\(0,candidateLimit\)/,"the hard cap is not an application-memory slice");
 const huge=Array.from({length:100_000},(_,i)=>metric(i===99_999?0:7,100,1,`query ${i}`,`/p/${i}`));
 const sqlBoundedStrongest=huge.filter(r=>r.clicks/r.impressions<.12*.6).sort((a,b)=>(.12-b.clicks/b.impressions)*b.impressions-(.12-a.clicks/a.impressions)*a.impressions).slice(0,2_000);
@@ -125,6 +128,7 @@ const multiDecline=clusterAndScoreOpportunities([
 assert.equal(multiDecline[0].type,"cannibalization");assert.equal((multiDecline[0].evidence.decline as {qualifies:boolean}).qualifies,true);assert.equal(multiDecline[0].competingPages.length,2);assert.equal(multiDecline[0].competingPages[0].previous.impressions>0,true);
 const multiStriking=clusterAndScoreOpportunities([metric(5,100,8,"shared crm query","/a"),metric(4,90,9,"crm query shared","/b")],[]);assert.equal(multiStriking[0].type,"cannibalization");
 const multiLowCtr=clusterAndScoreOpportunities([metric(1,100,2,"shared crm query","/a"),metric(1,100,2,"crm query shared","/b")],[]);assert.equal(multiLowCtr[0].type,"cannibalization");
+const healthyMultiPage=clusterAndScoreOpportunities([metric(20,100,1,"healthy shared query","/a"),metric(18,90,1,"healthy shared query","/b")],[]);assert.equal(healthyMultiPage[0].type,"cannibalization","all current pages survive eligibility even when each row is healthy");assert.equal((healthyMultiPage[0].evidence.currentVisiblePages as unknown[]).length,2);
 const harmless=clusterAndScoreOpportunities([metric(5,100,8,"same query","https://EXAMPLE.com/page/"),metric(4,90,9,"same query","https://example.com/page?utm_source=x#part")],[]);assert.notEqual(harmless[0].type,"cannibalization");assert.equal(harmless[0].competingPages.length,1);assert.equal(normalizeSeoPageIdentity("https://EXAMPLE.com/page/?utm_source=x#x"),"https://example.com/page");
 assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is explicitly ambiguous");assert.equal(multiDecline[0].recommendedPrimaryPage,"https://example.com/a","stronger evidence supports a possible primary");
 
@@ -132,7 +136,9 @@ assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is expl
 const rankedKeys=Array.from({length:25},(_,i)=>({key:`k${i}`,rank:i}));
 assert.deepEqual(excludeOpenActionCandidates(rankedKeys,new Set(rankedKeys.slice(0,10).map(x=>x.key))).eligible.slice(0,10).map(x=>x.key),rankedKeys.slice(10,20).map(x=>x.key),"top-ten open actions cannot starve the next ten");
 assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).excluded,2);assert.equal(excludeOpenActionCandidates(rankedKeys,new Set()).eligible.length,25,"closed actions do not block new work");
-assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+recommendationsCreated>=MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
+assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+processCandidatesUntil\(eligible,MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
+assert.match(actionServiceSource,/current_visible_pages>1/,"SQL eligibility retains healthy multi-page current queries");
+assert.match(actionServiceSource,/JOIN selected_queries[\s\S]+n\.current_impressions>0[\s\S]+page_rank<=\$\{SEO_COMPETING_PAGES_PER_QUERY\}/,"selected query clusters receive a per-query bounded current-page expansion");
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
@@ -172,3 +178,10 @@ const thirdRotation=selectStaleCheckCandidates(rotation,new Date(rotationNow.get
 rotation[0].staleCheckRetryAt=new Date(rotationNow.getTime()+60_000);assert.ok(!selectStaleCheckCandidates(rotation,rotationNow,10).some(x=>x.id===rotation[0].id),"failing page backs off");
 rotation.push({id:"a-new",status:"proposed",staleCheckedAt:null,staleCheckRetryAt:null});assert.ok(selectStaleCheckCandidates(rotation,rotationNow,10).some(x=>x.id==="a-new"),"new unchecked action receives timely checking");
 assert.match(actionServiceSource,/staleCheckedAt:now,staleCheckRetryAt:null/);assert.match(actionServiceSource,/SEO_STALE_RETRY_MS=15\*60_000/);
+
+// revision_required reserves the original identity until refresh succeeds or the action is explicitly closed.
+const identityReservationMigration=readFileSync(new URL("../migrations/0101_seo_revision_identity_reservation.sql",import.meta.url),"utf8");
+assert.match(identityReservationMigration,/CREATE UNIQUE INDEX IF NOT EXISTS seo_actions_reserved_idempotency_uidx[\s\S]+revision_required/);
+assert.ok(identityReservationMigration.indexOf("CREATE UNIQUE INDEX")<identityReservationMigration.indexOf("DROP INDEX"),"replacement uniqueness is established before the old index is removed");
+assert.match(startup,/0101_seo_revision_identity_reservation/);assert.match(actionServiceSource,/status IN \('detected','researching','proposed','approved','revision_required'\) DO NOTHING/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+revision_required/);
+const startup0101=startup.match(/tag: "0101_seo_revision_identity_reservation",\s+sql: `([\s\S]*?)`/)?.[1]??"";const normalizeStatements=(value:string)=>value.split(";").map(statement=>statement.replace(/\s+/g," ").trim().toLowerCase()).filter(Boolean);assert.deepEqual(normalizeStatements(startup0101),normalizeStatements(identityReservationMigration),"migration and startup provisioning remain equivalent");

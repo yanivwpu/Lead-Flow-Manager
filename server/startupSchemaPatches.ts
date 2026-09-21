@@ -1470,6 +1470,14 @@ WHERE status='researching' AND ((refresh_lease_token IS NOT NULL AND refresh_lea
  (refresh_lease_token IS NULL AND refresh_lease_expires_at IS NULL AND updated_at<=NOW()-INTERVAL '30 minutes'));
 `
   },
+  {
+    tag: "0101_seo_revision_identity_reservation",
+    sql: `
+CREATE UNIQUE INDEX IF NOT EXISTS seo_actions_reserved_idempotency_uidx ON seo_actions(property_id,idempotency_key)
+WHERE status IN ('detected','researching','proposed','approved','revision_required');
+DROP INDEX IF EXISTS seo_actions_open_idempotency_uidx;
+`
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1571,5 +1579,5 @@ export async function applyStartupSchemaPatches(): Promise<{
 }
 
 export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
-  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases", "0099_seo_immutable_evidence", "0100_seo_refresh_return_and_stale_rotation"].every(tag => results.get(tag) === true);
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases", "0099_seo_immutable_evidence", "0100_seo_refresh_return_and_stale_rotation", "0101_seo_revision_identity_reservation"].every(tag => results.get(tag) === true);
 }

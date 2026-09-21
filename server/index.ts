@@ -492,7 +492,7 @@ app.use((req, res, next) => {
   }
   if (!schemaPatches.seoIntelligencePatchOk) {
     throw new Error(
-      "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0100) — refusing to serve or schedule SEO sync",
+      "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0101) — refusing to serve or schedule SEO sync",
     );
   }
 
