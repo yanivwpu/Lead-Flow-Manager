@@ -116,3 +116,24 @@ assert.match(actionServiceSource,/ON CONFLICT \(property_id,idempotency_key\)[\s
 assert.match(actionServiceSource,/LEFT JOIN seo_action_versions/,"malformed rows are visible with diagnostics rather than hidden by an inner join");
 const repairMigration=readFileSync(new URL("../migrations/0097_seo_action_orphan_repair.sql",import.meta.url),"utf8");assert.match(repairMigration,/ORPHANED_INITIAL_VERSION_REPAIRED/);assert.doesNotMatch(repairMigration,/DELETE FROM/i);
 assert.match(startup,/0097_seo_action_orphan_repair/);
+
+// Cannibalization owns classification before decline/striking/CTR and retains both periods.
+const {normalizeSeoPageIdentity,excludeOpenActionCandidates}=await import("../server/seo/opportunityPlanner");
+const multiDecline=clusterAndScoreOpportunities([
+ metric(2,80,10,"shared crm query","https://example.com/a"),metric(1,60,12,"crm query shared","https://example.com/b")
+],[metric(20,200,5,"shared crm query","https://example.com/a"),metric(10,150,6,"crm query shared","https://example.com/b")]);
+assert.equal(multiDecline[0].type,"cannibalization");assert.equal((multiDecline[0].evidence.decline as {qualifies:boolean}).qualifies,true);assert.equal(multiDecline[0].competingPages.length,2);assert.equal(multiDecline[0].competingPages[0].previous.impressions>0,true);
+const multiStriking=clusterAndScoreOpportunities([metric(5,100,8,"shared crm query","/a"),metric(4,90,9,"crm query shared","/b")],[]);assert.equal(multiStriking[0].type,"cannibalization");
+const multiLowCtr=clusterAndScoreOpportunities([metric(1,100,2,"shared crm query","/a"),metric(1,100,2,"crm query shared","/b")],[]);assert.equal(multiLowCtr[0].type,"cannibalization");
+const harmless=clusterAndScoreOpportunities([metric(5,100,8,"same query","https://EXAMPLE.com/page/"),metric(4,90,9,"same query","https://example.com/page?utm_source=x#part")],[]);assert.notEqual(harmless[0].type,"cannibalization");assert.equal(harmless[0].competingPages.length,1);assert.equal(normalizeSeoPageIdentity("https://EXAMPLE.com/page/?utm_source=x#x"),"https://example.com/page");
+assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is explicitly ambiguous");assert.equal(multiDecline[0].recommendedPrimaryPage,"https://example.com/a","stronger evidence supports a possible primary");
+
+// Open identities are removed before the creation limit; closed identities are absent from the supplied open set.
+const rankedKeys=Array.from({length:25},(_,i)=>({key:`k${i}`,rank:i}));
+assert.deepEqual(excludeOpenActionCandidates(rankedKeys,new Set(rankedKeys.slice(0,10).map(x=>x.key))).eligible.slice(0,10).map(x=>x.key),rankedKeys.slice(10,20).map(x=>x.key),"top-ten open actions cannot starve the next ten");
+assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).excluded,2);assert.equal(excludeOpenActionCandidates(rankedKeys,new Set()).eligible.length,25,"closed actions do not block new work");
+assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActionKeys[\s\S]+excludeOpenActionCandidates[\s\S]+recommendationsCreated>=MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
+
+// Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
+const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.match(leaseMigration,/LEGACY_REFRESH_RECOVERED/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
+assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);

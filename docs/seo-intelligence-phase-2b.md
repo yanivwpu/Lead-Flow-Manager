@@ -44,3 +44,9 @@ Metadata templates bound untrusted query text before validation and each opportu
 Planner input is bounded in PostgreSQL before Node materializes or clusters it. The current hard ceiling is 2,000 query/page identities per property and analysis run. SQL aggregates the 56-day window, applies striking-distance, low-CTR, and meaningful-decline predicates over the current/previous union, orders by deterministic evidence strength plus the bounded natural-key hash, and only then applies `LIMIT`. Diagnostics retain eligible, loaded, and cap-omitted counts.
 
 Creation of a recommendation is atomic: its action, initial immutable version, opportunity evidence reference, and initial lifecycle event commit in one transaction. A duplicate open-action key performs an idempotent skip. Migration 0097 preserves but quarantines any legacy action without a version as `failed` and appends a repair audit event; it never deletes recommendation history.
+
+## Refresh recovery and action selection
+
+Refresh is a five-minute database lease (`SEO_ACTION_REFRESH_LEASE_MS` may configure 1–30 minutes). Claim and audit persistence are brief and atomic; network retrieval occurs after commit. Completion is fenced by the token and unexpired lease. A later request may reclaim only an expired claim, while migration 0098 recovers pre-lease `researching` rows. Handled failure restores the prior proposal with a sanitized category.
+
+Analysis scores the complete 2,000-candidate bounded pool, loads only matching valid open-action identities, excludes those identities, and then attempts up to ten successful creations. A post-filter uniqueness race is counted and the loop continues to a lower-ranked candidate. Cannibalization takes precedence whenever normalized distinct pages coexist; evidence retains each page's current and previous metrics and any simultaneous decline.

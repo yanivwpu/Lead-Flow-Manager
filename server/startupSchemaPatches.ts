@@ -1421,6 +1421,23 @@ UPDATE seo_actions a SET status = 'failed', updated_at = NOW()
 WHERE NOT EXISTS (SELECT 1 FROM seo_action_versions v WHERE v.action_id = a.id);
 `
   },
+  {
+    tag: "0098_seo_action_refresh_leases",
+    sql: `
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_lease_token text;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_started_at timestamp;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_lease_expires_at timestamp;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_failure_category text;
+CREATE INDEX IF NOT EXISTS seo_actions_refresh_lease_idx ON seo_actions(property_id, status, refresh_lease_expires_at);
+-- Pre-lease deployments could strand researching actions. Restore them once, preserving history.
+INSERT INTO seo_action_events (action_id, from_status, to_status, reason, safe_metadata)
+SELECT a.id, 'researching', 'proposed', 'Interrupted refresh recovered during lease migration', '{"refreshRecovery":true,"failureCategory":"LEGACY_REFRESH_RECOVERED"}'::jsonb
+FROM seo_actions a WHERE a.status='researching'
+  AND NOT EXISTS (SELECT 1 FROM seo_action_events e WHERE e.action_id=a.id AND e.safe_metadata->>'failureCategory'='LEGACY_REFRESH_RECOVERED');
+UPDATE seo_actions SET status='proposed', refresh_failure_category='LEGACY_REFRESH_RECOVERED', updated_at=NOW()
+WHERE status='researching';
+`
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1469,7 +1486,7 @@ export async function applyStartupSchemaPatches(): Promise<{
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
           { code, message },
         );
-      } else if (/^009[3-7]_seo/.test(patch.tag)) {
+      } else if (/^009[3-8]_seo/.test(patch.tag)) {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
       } else {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
@@ -1522,5 +1539,5 @@ export async function applyStartupSchemaPatches(): Promise<{
 }
 
 export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
-  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"].every(tag => results.get(tag) === true);
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases"].every(tag => results.get(tag) === true);
 }
