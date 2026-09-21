@@ -23,7 +23,7 @@ export const seoRecommendationOutputSchema = z.object({
 });
 export type SeoRecommendationOutput = z.infer<typeof seoRecommendationOutputSchema>;
 
-const prohibitedClaims = /\b(guarantee(?:d)?|#1|number one|best in the world|100%|double(?:d)? (?:your|their) (?:sales|revenue)|trusted by \d+)\b/i;
+const prohibitedClaims = /(?:^|[^\p{L}\p{N}_])(?:guarantee(?:d)?|#\s*1(?!\d)|number one|best in the world|100\s*%(?!\p{N})|double(?:d)? (?:your|their) (?:sales|revenue)|trusted by \d+)(?=$|[^\p{L}\p{N}_])/iu;
 export function validateRecommendationOutput(input: unknown, competitorTexts: string[] = []): SeoRecommendationOutput {
   const value = seoRecommendationOutputSchema.parse(input);
   const generated = [value.proposedTitle, value.proposedMetaDescription, value.proposedContent].filter(Boolean).join(" ");

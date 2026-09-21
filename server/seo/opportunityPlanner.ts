@@ -32,5 +32,6 @@ export function clusterAndScoreOpportunities(current:SeoMetricRow[],previous:Seo
  return out.sort((a,b)=>b.priorityScore-a.priorityScore||a.clusterKey.localeCompare(b.clusterKey)).slice(0,config.maxPerRun);
 }
 export function excludeOpenActionCandidates<T extends {key:string}>(ranked:T[],openKeys:ReadonlySet<string>){return{eligible:ranked.filter(row=>!openKeys.has(row.key)),excluded:ranked.filter(row=>openKeys.has(row.key)).length};}
+export function selectCompleteQueryGroups<T extends {rowCount:number}>(ranked:T[],rowLimit:number){let used=0;const selected:T[]=[];for(const group of ranked){const size=Math.max(0,Math.floor(group.rowCount));if(used+size>rowLimit)continue;selected.push(group);used+=size;}return{selected,used};}
 /** Runs bounded successful work while isolating a malformed candidate from the rest of the ranked pool. */
 export async function processCandidatesUntil<T>(candidates:T[],successLimit:number,work:(candidate:T)=>Promise<boolean>,onFailure:(error:unknown)=>void){let successes=0,attempted=0;for(const candidate of candidates){if(successes>=successLimit)break;attempted++;try{if(await work(candidate))successes++;}catch(error){onFailure(error);}}return{successes,attempted};}
