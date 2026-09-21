@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
-import { isPublicAddress, resolveSafePublicUrl, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
+import { isPublicAddress, resolveSafePublicUrl, safeFetchHtml, tryValidatedAddresses, type PinnedTransport } from "../server/seo/competitorResearch";
 const publicA={address:"93.184.216.34",family:4},publicB={address:"142.250.72.14",family:4};
+const publicV6={address:"2606:2800:220:1:248:1893:25c8:1946",family:6};
+const fallbackCalls:string[]=[];const fallback=await tryValidatedAddresses([publicV6,publicA],new AbortController().signal,async address=>{fallbackCalls.push(address.address);if(address.family===6)throw new Error("unreachable");return address.address;});assert.equal(fallback,publicA.address);assert.deepEqual(fallbackCalls,[publicV6.address,publicA.address],"unreachable IPv6 falls back to pinned IPv4");
+await assert.rejects(()=>tryValidatedAddresses([publicA,publicB],new AbortController().signal,async()=>{throw new Error("connect failed");}),/connect failed/);
+const fallbackAbort=new AbortController();let attempts=0;await assert.rejects(()=>tryValidatedAddresses([publicA,publicB],fallbackAbort.signal,async()=>{attempts++;fallbackAbort.abort();throw new Error("aborted");}));assert.equal(attempts,1,"abort prevents later address attempts");
+const attemptedAddresses:string[]=[];await tryValidatedAddresses([{address:"127.0.0.1",family:4},publicA],new AbortController().signal,async address=>{attemptedAddresses.push(address.address);return true;});assert.deepEqual(attemptedAddresses,[publicA.address],"rejected private addresses are never attempted");
+
 const resolver=(answers:Record<string,Array<{address:string;family:number}>>,calls:string[]=[])=>async(host:string)=>{calls.push(host);return answers[host]??[];};
 const transport=(responses:Array<{status?:number;location?:string;remote?:string;body?:string}>):PinnedTransport=>async(url,addresses,options)=>{const item=responses.shift()??{};assert.equal(options.signal.aborted,false);return{status:item.status??200,headers:new Headers({"content-type":"text/html",...(item.location?{location:item.location}:{})}),body:(async function*(){yield new TextEncoder().encode(item.body??"ok")})(),remoteAddress:item.remote??addresses[0].address};};
 for(const address of ["127.0.0.1","10.0.0.1","172.16.1.1","192.168.1.1","100.64.0.1","169.254.169.254","0.0.0.0","224.0.0.1","192.0.2.1","::1","fc00::1","fe80::1","2001:db8::1","::ffff:127.0.0.1","::ffff:10.0.0.1"])assert.equal(isPublicAddress(address),false,address);

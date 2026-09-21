@@ -76,12 +76,18 @@ const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
 assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
-assert.match(actionServiceSource,/processCandidatesUntil\(eligible,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item\)/,"proposal construction occurs inside the isolated per-candidate worker");
+assert.match(actionServiceSource,/processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item,\{/,"proposal construction occurs inside the isolated per-candidate worker");
 assert.match(actionServiceSource,/createAnalysisLeaseHeartbeat[\s\S]+lease_expires_at>NOW\(\)[\s\S]+SEO analysis completion was fenced/,"analysis heartbeats and completion are token/status/expiry fenced");
 assert.match(actionServiceSource,/loadStaleCheckQueue\(propertyId\)[\s\S]+reconcileStaleOpenActions[\s\S]+loadPlannerMetrics/,"stale reconciliation is independent of current ranking keys");
+assert.match(actionServiceSource,/SEO_PAGE_CAPTURE_ATTEMPT_DEFAULT=20,SEO_PAGE_CAPTURE_FAILURE_DEFAULT=8/);
+assert.match(actionServiceSource,/captureCandidates=eligible\.slice\(0,remainingCaptureAttempts\)[\s\S]+pageCapturesFailed>=captureLimits\.failures/,"all-failure and timeout paths stop issuing captures at configured bounds");
+assert.match(actionServiceSource,/snapshot=await snapshotPage[\s\S]+const proposal=buildProposal[\s\S]+const opportunity=await persistOpportunity/,"snapshot and validated proposal precede opportunity persistence so capture failures cannot orphan opportunities");
+assert.match(actionServiceSource,/pageCapturesAttempted[\s\S]+pageCapturesSucceeded[\s\S]+pageCapturesFailed[\s\S]+pageCapturesSkipped[\s\S]+pageCaptureLimitReached/);
 assert.match(actionServiceSource, /pageSnapshotId:snapshot\.id/, "recommendation versions reference the actual page snapshot");
 assert.match(actionServiceSource, /status:"researching"[\s\S]+version:next[\s\S]+status:"proposed"/, "refresh claims, versions, and restores the action");
 assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "refresh failure remains recoverable");
+assert.match(actionServiceSource,/freshMetrics=await loadPlannerMetrics[\s\S]+competitorCount[\s\S]+buildProposal\(freshItem,\{fingerprint:snapshot\.contentFingerprint,title:snapshot\.title,metaDescription:snapshot\.metaDescription,headings:snapshot\.headings/,"refresh derives the new validated proposal from fresh page, Search Console, and available competitor evidence");
+assert.match(actionServiceSource,/promptVersion:"seo-action-v3-fresh-evidence"[\s\S]+evidenceSnapshot:immutableEvidence\(opportunity\.id,freshItem,snapshot\)/);
 
 const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_planner.sql", import.meta.url), "utf8");
 const refreshMigration = readFileSync(new URL("../migrations/0096_seo_action_refresh_snapshots.sql", import.meta.url), "utf8");
@@ -152,7 +158,7 @@ assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is expl
 const rankedKeys=Array.from({length:25},(_,i)=>({key:`k${i}`,rank:i}));
 assert.deepEqual(excludeOpenActionCandidates(rankedKeys,new Set(rankedKeys.slice(0,10).map(x=>x.key))).eligible.slice(0,10).map(x=>x.key),rankedKeys.slice(10,20).map(x=>x.key),"top-ten open actions cannot starve the next ten");
 assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).excluded,2);assert.equal(excludeOpenActionCandidates(rankedKeys,new Set()).eligible.length,25,"closed actions do not block new work");
-assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+processCandidatesUntil\(eligible,MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
+assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
 assert.match(actionServiceSource,/current_visible_pages>1/,"SQL eligibility retains healthy multi-page current queries");
 assert.match(actionServiceSource,/JOIN selected_queries[\s\S]+n\.current_impressions>0[\s\S]+page_rank<=\$\{SEO_COMPETING_PAGES_PER_QUERY\}/,"selected query clusters receive a per-query bounded current-page expansion");
 assert.match(actionServiceSource,/canonicalized[\s\S]+lower\(trim\(query\)\)[\s\S]+utm_[\s\S]+GROUP BY query,page/,"SQL aggregates canonical query/page variants before visibility counts");
