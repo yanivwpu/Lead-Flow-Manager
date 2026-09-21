@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
 import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
-import { clusterAndScoreOpportunities, processCandidatesUntil } from "../server/seo/opportunityPlanner";
+import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, processCandidatesUntil } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
 await assert.rejects(()=>assertSafePublicUrl("http://127.0.0.1/private"));
 await assert.rejects(()=>assertSafePublicUrl("file:///etc/passwd"));
@@ -16,6 +16,13 @@ await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePu
 const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
 const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
 const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
+const normalizedCollisions=aggregateNormalizedMetricRows([
+ {query:"  WhatsApp CRM ",page:"https://EXAMPLE.com/page/",clicks:2,impressions:20,position:2},
+ {query:"whatsapp crm",page:"https://example.com/page?utm_source=test#part",clicks:3,impressions:30,position:8},
+ {query:"WHATSAPP CRM",page:"https://example.com/page?gclid=x",clicks:1,impressions:0,position:99},
+]);assert.equal(normalizedCollisions.length,1);assert.deepEqual({clicks:normalizedCollisions[0].clicks,impressions:normalizedCollisions[0].impressions,position:normalizedCollisions[0].position},{clicks:6,impressions:50,position:5.6});assert.equal(normalizedCollisions[0].sourceQueries.length,3);assert.equal(normalizedCollisions[0].sourcePages.length,3);
+assert.equal(aggregateNormalizedMetricRows([{query:"ZERO",page:"/zero/",clicks:0,impressions:0,position:12},{query:"zero",page:"/zero",clicks:0,impressions:0,position:3}])[0].position,0,"zero-impression identities use the documented zero-position fallback");
+assert.equal(clusterAndScoreOpportunities([{query:"Threshold",page:"/p/",clicks:4,impressions:25,position:8},{query:"threshold",page:"/p?utm_source=x",clicks:1,impressions:25,position:8}],[])[0].current.impressions,50,"eligibility is evaluated after normalized metric aggregation");
 const processed:string[]=[];const isolated=await processCandidatesUntil(["poisoned","valid-one","valid-two"],2,async candidate=>{if(candidate==="poisoned")throw new Error("malformed proposal");processed.push(candidate);return true;},()=>processed.push("skipped"));assert.deepEqual(processed,["skipped","valid-one","valid-two"]);assert.deepEqual(isolated,{successes:2,attempted:3},"a poisoned proposal cannot abort the run or consume the success limit");
 const proposal={actionType:"title_tag",proposedTitle:"A useful WhatsApp CRM workflow guide",insertionLocation:"head title",explanation:"Search performance supports a clearer and more relevant title.",expectedBenefit:"Improve qualified click-through potential.",confidence:.8,risk:"low",automaticExecutionEligible:false,rollbackConcept:"Restore the fingerprinted prior title.",evidenceIds:["e1"]};
 assert.equal(validateRecommendationOutput(proposal).actionType,"title_tag");assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Guaranteed #1 WhatsApp CRM"}),/unsupported/);
@@ -68,6 +75,8 @@ assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOppor
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
 assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
 assert.match(actionServiceSource,/processCandidatesUntil\(eligible,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item\)/,"proposal construction occurs inside the isolated per-candidate worker");
+assert.match(actionServiceSource,/createAnalysisLeaseHeartbeat[\s\S]+lease_expires_at>NOW\(\)[\s\S]+SEO analysis completion was fenced/,"analysis heartbeats and completion are token/status/expiry fenced");
+assert.match(actionServiceSource,/loadStaleCheckQueue\(propertyId\)[\s\S]+reconcileStaleOpenActions[\s\S]+loadPlannerMetrics/,"stale reconciliation is independent of current ranking keys");
 assert.match(actionServiceSource, /pageSnapshotId:snapshot\.id/, "recommendation versions reference the actual page snapshot");
 assert.match(actionServiceSource, /status:"researching"[\s\S]+version:next[\s\S]+status:"proposed"/, "refresh claims, versions, and restores the action");
 assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "refresh failure remains recoverable");
