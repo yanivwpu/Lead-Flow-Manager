@@ -1,9 +1,12 @@
 /** Run: npx tsx tests/seo-action-planner.test.ts */
 import assert from "node:assert/strict";
-import { assertSafePublicUrl, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
+import { assertSafePublicUrl, createPinnedLookup, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
 import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
 import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, processCandidatesUntil, selectCompleteQueryGroups } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
+const pinnedLookup=createPinnedLookup({address:"93.184.216.34",family:4});
+await new Promise<void>((resolve,reject)=>pinnedLookup("example.com",{all:true},(error,address)=>{try{assert.ifError(error);assert.deepEqual(address,[{address:"93.184.216.34",family:4}]);resolve();}catch(assertion){reject(assertion);}}));
+await new Promise<void>((resolve,reject)=>pinnedLookup("example.com",{all:false},(error,address,family)=>{try{assert.ifError(error);assert.equal(address,"93.184.216.34");assert.equal(family,4);resolve();}catch(assertion){reject(assertion);}}));
 await assert.rejects(()=>assertSafePublicUrl("http://127.0.0.1/private"));
 await assert.rejects(()=>assertSafePublicUrl("file:///etc/passwd"));
 assert.equal((await assertSafePublicUrl("https://example.com/page",resolvePublic)).hostname,"example.com");
@@ -85,6 +88,8 @@ assert.match(actionServiceSource,/SEO_PAGE_CAPTURE_ATTEMPT_DEFAULT=20,SEO_PAGE_C
 assert.match(actionServiceSource,/captureCandidates=eligible\.slice\(0,remainingCaptureAttempts\)[\s\S]+pageCapturesFailed>=captureLimits\.failures/,"all-failure and timeout paths stop issuing captures at configured bounds");
 assert.match(actionServiceSource,/snapshot=await snapshotPage[\s\S]+const proposal=buildProposal[\s\S]+const opportunity=await persistOpportunity/,"snapshot and validated proposal precede opportunity persistence so capture failures cannot orphan opportunities");
 assert.match(actionServiceSource,/pageCapturesAttempted[\s\S]+pageCapturesSucceeded[\s\S]+pageCapturesFailed[\s\S]+pageCapturesSkipped[\s\S]+pageCaptureLimitReached/);
+assert.match(actionServiceSource,/PAGE_FETCH_FAILED[\s\S]+PAGE_SNAPSHOT_PERSIST_FAILED[\s\S]+safePageCaptureDiagnostic/,"capture diagnostics distinguish network/parsing failures from snapshot persistence failures");
+assert.match(actionServiceSource,/console\.warn\("\[SEO Page Capture\] failed",\{runId:run\.id,context:"candidate",diagnostic\}\)/,"candidate capture failures emit only the sanitized diagnostic");
 assert.match(actionServiceSource, /pageSnapshotId:snapshot\.id/, "recommendation versions reference the actual page snapshot");
 assert.match(actionServiceSource, /status:"researching"[\s\S]+version:next[\s\S]+status:"proposed"/, "refresh claims, versions, and restores the action");
 assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "refresh failure remains recoverable");
