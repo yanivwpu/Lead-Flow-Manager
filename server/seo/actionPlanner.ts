@@ -50,7 +50,15 @@ function truncateAtWord(value: string, maximum: number) {
   return `${(boundary >= Math.floor(maximum * .55) ? candidate.slice(0, boundary) : candidate).trimEnd()}…`;
 }
 /** Bounds untrusted GSC query text before it enters a fixed-size metadata field. */
-export function proposedMetaDescriptionForQuery(query: string) {
+type RecommendationLanguage="en"|"es"|"he";
+export function recommendationLanguageForPage(targetPage:string):RecommendationLanguage{try{const path=new URL(targetPage,"https://seo-language.invalid").pathname;return path==="/es"||path.startsWith("/es/")?"es":path==="/he"||path.startsWith("/he/")?"he":"en";}catch{return "en";}}
+const SCRIPT_PATTERN:Record<RecommendationLanguage,RegExp>={en:/\p{Script=Latin}/u,es:/\p{Script=Latin}/u,he:/\p{Script=Hebrew}/u};
+const FOREIGN_SCRIPT=/[\p{Script=Thai}\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+const QUERY_FALLBACK:Record<RecommendationLanguage,string>={en:"the target search intent",es:"la intención de búsqueda objetivo",he:"כוונת החיפוש של העמוד"};
+/** Prevent raw GSC text in a different writing system from leaking into generated copy. */
+export function queryForTargetPage(query:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=query.replace(/[\u0000-\u001f\u007f]+/gu," ").replace(/\s+/gu," ").trim();if(!clean)return QUERY_FALLBACK[language];const hasExpected=SCRIPT_PATTERN[language].test(clean),hasForeign=FOREIGN_SCRIPT.test(clean);return hasExpected&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean)))?clean:QUERY_FALLBACK[language];}
+export function proposedMetaDescriptionForQuery(query: string,targetPage="/") {
+  query=queryForTargetPage(query,targetPage);
   const prefix = "Explore WhachatCRM for ", suffix = ": organize conversations, follow up consistently, and manage customer relationships in one workspace.";
   const queryBudget = SEO_META_DESCRIPTION_MAX - prefix.length - suffix.length;
   const conciseQuery = truncateAtWord(query.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);

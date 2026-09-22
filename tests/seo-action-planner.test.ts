@@ -1,8 +1,8 @@
 /** Run: npx tsx tests/seo-action-planner.test.ts */
 import assert from "node:assert/strict";
 import { assertSafePublicUrl, createPinnedLookup, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
-import { contentFingerprint, mayTransitionSeoAction, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
-import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, processCandidatesUntil, selectCompleteQueryGroups } from "../server/seo/opportunityPlanner";
+import { contentFingerprint, mayTransitionSeoAction, queryForTargetPage, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
+import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, hasMatchingQueryIntent, processCandidatesUntil, selectCompleteQueryGroups } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
 const pinnedLookup=createPinnedLookup({address:"93.184.216.34",family:4});
 await new Promise<void>((resolve,reject)=>pinnedLookup("example.com",{all:true},(error,address)=>{try{assert.ifError(error);assert.deepEqual(address,[{address:"93.184.216.34",family:4}]);resolve();}catch(assertion){reject(assertion);}}));
@@ -49,6 +49,11 @@ for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".re
   assert.equal(validateRecommendationOutput({ ...proposal, actionType: "meta_description", proposedTitle: null, proposedMetaDescription: description }).proposedMetaDescription, description);
 }
 assert.doesNotMatch(proposedMetaDescriptionForQuery("word ".repeat(100)), /wor…:/, "long queries truncate at a word boundary");
+const thaiQuery="ระบบ crm สำหรับอสังหาริมทรัพย์";
+assert.equal(queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),"the target search intent");
+const englishDescription=proposedMetaDescriptionForQuery(thaiQuery,"https://whachatcrm.com/real-estate-crm");
+assert.doesNotMatch(englishDescription,/\p{Script=Thai}/u,"English metadata never embeds a Thai Search Console query");
+assert.match(englishDescription,/target search intent/,"mismatched query text is replaced with an English intent description");
 
 // Canonical-page clustering is the production scorer's source of truth and retains exact clicks.
 const clustered = clusterAndScoreOpportunities([
@@ -65,6 +70,17 @@ const cannibalized = clusterAndScoreOpportunities([
 assert.equal(cannibalized[0].type, "cannibalization");
 assert.equal(cannibalized[0].targetPage, "https://whachatcrm.com/a", "equal metrics use stable URL tie-breaking");
 assert.equal(cannibalized[0].competingPages.length, 2);
+assert.equal(hasMatchingQueryIntent("whatsapp crm for zoko", "zoko crm whatsapp"), true, "word order and filler words preserve intent");
+assert.equal(hasMatchingQueryIntent("zoko whatsapp crm", "wati whatsapp crm"), false, "competitor names are intent-bearing");
+const competitorIntentPages = clusterAndScoreOpportunities([
+  { query: "zoko whatsapp crm", page: "/zoko-alternative", clicks: 5, impressions: 100, position: 9 },
+  { query: "wati whatsapp crm", page: "/wati-alternative", clicks: 5, impressions: 100, position: 9 },
+  { query: "interakt whatsapp crm", page: "/interakt-alternative", clicks: 5, impressions: 100, position: 9 },
+  { query: "respond io whatsapp crm", page: "/respond-io-alternative", clicks: 5, impressions: 100, position: 9 },
+  { query: "360dialog whatsapp crm", page: "/360dialog-alternative", clicks: 5, impressions: 100, position: 9 },
+], []);
+assert.equal(competitorIntentPages.length, 5);
+assert.ok(competitorIntentPages.every(item => item.type !== "cannibalization"), "distinct competitor intent cannot propose consolidation");
 assert.equal(clusterAndScoreOpportunities([{query:"q",page:"/missing",clicks:0,impressions:0,position:0}],[]).length,0,"missing evidence cannot invent a primary page");
 
 const { parseSeoPage, fingerprintSeoPage, isSnapshotStale } = await import("../server/seo/firstPartyPage");
@@ -78,6 +94,8 @@ assert.notEqual(fingerprintSeoPage(normalized), fingerprintSeoPage(changed));
 assert.equal(isSnapshotStale(fingerprintSeoPage(normalized), changed), true);
 
 const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts", import.meta.url), "utf8");
+const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8");
+assert.match(adminSeoSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
 assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
