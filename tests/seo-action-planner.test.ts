@@ -166,7 +166,11 @@ assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).exclud
 assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
 assert.match(actionServiceSource,/current_visible_pages>1/,"SQL eligibility retains healthy multi-page current queries");
 assert.match(actionServiceSource,/JOIN selected_queries[\s\S]+n\.current_impressions>0[\s\S]+page_rank<=\$\{SEO_COMPETING_PAGES_PER_QUERY\}/,"selected query clusters receive a per-query bounded current-page expansion");
-assert.match(actionServiceSource,/canonicalized[\s\S]+lower\(trim\(query\)\)[\s\S]+utm_[\s\S]+GROUP BY query,page/,"SQL aggregates canonical query/page variants before visibility counts");
+assert.match(actionServiceSource,/canonical_hosts[\s\S]+lower\(trim\(query\)\)[\s\S]+utm_[\s\S]+canonicalized[\s\S]+GROUP BY query,page/,"SQL aggregates canonical query/page variants before visibility counts");
+assert.doesNotMatch(actionServiceSource,/\(\?<!\^\)/,"planner SQL avoids unsupported PostgreSQL lookbehind syntax");
+assert.ok(actionServiceSource.includes("CASE WHEN page ~* '^https?://[^/]+/$' THEN page ELSE regexp_replace(page,'/+$','','g') END page"),"root URLs and non-root trailing slashes are normalized without lookbehind");
+assert.match(actionServiceSource,/safeSeoAnalysisError\(error\)[\s\S]+console\.error\("\[SEO Action Analysis\] failed",\{runId:run\.id,failureCategory,error:safeError\}\)/,"analysis failures log only a bounded sanitized error summary");
+assert.doesNotMatch(actionServiceSource,/console\.error\([^\n]+(?:stack|query|params|connectionString)/,"analysis failure logs exclude stacks, SQL, parameters, and connection strings");
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
