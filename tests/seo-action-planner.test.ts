@@ -166,6 +166,7 @@ assert.equal(excludeOpenActionCandidates(rankedKeys,new Set(["k0","k2"])).exclud
 assert.match(actionServiceSource,/maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+excludeOpenActionCandidates[\s\S]+processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES/);assert.match(actionServiceSource,/raceConditionConflicts\+\+/,"post-filter uniqueness races are counted and iteration continues");
 assert.match(actionServiceSource,/current_visible_pages>1/,"SQL eligibility retains healthy multi-page current queries");
 assert.match(actionServiceSource,/JOIN selected_queries[\s\S]+n\.current_impressions>0[\s\S]+page_rank<=\$\{SEO_COMPETING_PAGES_PER_QUERY\}/,"selected query clusters receive a per-query bounded current-page expansion");
+assert.ok(actionServiceSource.includes("'\\\\1','gi'"),"the tagged SQL template uses a valid escaped replacement backreference");
 assert.match(actionServiceSource,/canonical_hosts[\s\S]+lower\(trim\(query\)\)[\s\S]+utm_[\s\S]+canonicalized[\s\S]+GROUP BY query,page/,"SQL aggregates canonical query/page variants before visibility counts");
 assert.doesNotMatch(actionServiceSource,/\(\?<!\^\)/,"planner SQL avoids unsupported PostgreSQL lookbehind syntax");
 assert.ok(actionServiceSource.includes("CASE WHEN page ~* '^https?://[^/]+/$' THEN page ELSE regexp_replace(page,'/+$','','g') END page"),"root URLs and non-root trailing slashes are normalized without lookbehind");

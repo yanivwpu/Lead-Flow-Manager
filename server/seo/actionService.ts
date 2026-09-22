@@ -34,7 +34,7 @@ export async function loadPlannerMetrics(propertyId:string,now=new Date(),candid
   FROM seo_search_snapshots WHERE property_id=${propertyId} AND reporting_date BETWEEN ${day(previousStart)} AND ${day(end)} GROUP BY query,page
  ), canonical_hosts AS (
   SELECT natural_key_hash,lower(trim(query)) query,
-   regexp_replace(regexp_replace(regexp_replace(split_part(page,'#',1),'^https?://[^/]+',lower(substring(split_part(page,'#',1) from '^https?://[^/]+')),'i'),'([?&])(utm_[^=&]+|gclid|fbclid)=[^&]*&?','\1','gi'),'[?&]$','','g') page,
+   regexp_replace(regexp_replace(regexp_replace(split_part(page,'#',1),'^https?://[^/]+',lower(substring(split_part(page,'#',1) from '^https?://[^/]+')),'i'),'([?&])(utm_[^=&]+|gclid|fbclid)=[^&]*&?','\\1','gi'),'[?&]$','','g') page,
    current_clicks,current_impressions,current_weighted,previous_clicks,previous_impressions,previous_weighted FROM raw_aggregated
  ), canonicalized AS (
   SELECT natural_key_hash,query,CASE WHEN page ~* '^https?://[^/]+/$' THEN page ELSE regexp_replace(page,'/+$','','g') END page,
