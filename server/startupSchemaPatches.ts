@@ -9,12 +9,16 @@ import {
   ensureUsersShopifyShopUniqueIndex,
   logShopifyShopTrialLedgerCounts,
 } from "./shopifyShopTrialService";
+import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 
 /**
  * Idempotent ADD COLUMN patches for production DBs that lag behind shared/schema.
  * Safe to run on every startup (IF NOT EXISTS). Does not replace full migration history.
  */
-const STARTUP_COLUMN_PATCHES: { tag: string; sql: string }[] = [
+type StartupPatchStep = { step: string; sql: string };
+type StartupPatch = { tag: string; sql: string | StartupPatchStep[] };
+
+const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
   {
     tag: "0030_contacts_buyer_preference_profile",
     sql: `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS buyer_preference_profile jsonb NOT NULL DEFAULT '{}'::jsonb`,
@@ -1345,38 +1349,60 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
   },
   {
     tag: "0095_seo_action_planner",
-    sql: `
--- Phase 2B is research and approval only. No table below can publish site content.
+    sql: [
+      { step: "create-analysis-runs-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_analysis_runs (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, status text NOT NULL DEFAULT 'running', trigger text NOT NULL DEFAULT 'manual',
  lease_token text NOT NULL, lease_expires_at timestamp NOT NULL, diagnostics jsonb NOT NULL DEFAULT '{}'::jsonb,
  failure_category text, started_at timestamp NOT NULL DEFAULT now(), completed_at timestamp
 );
+` },
+      { step: "index-analysis-runs-active-property", sql: `
 CREATE UNIQUE INDEX IF NOT EXISTS seo_analysis_runs_active_property_uidx ON seo_analysis_runs(property_id) WHERE status = 'running';
+` },
+      { step: "index-analysis-runs-property-started", sql: `
 CREATE INDEX IF NOT EXISTS seo_analysis_runs_property_started_idx ON seo_analysis_runs(property_id, started_at);
+` },
+      { step: "create-opportunities-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_opportunities (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, cluster_key varchar(64) NOT NULL, target_page text NOT NULL,
  query_cluster jsonb NOT NULL, opportunity_type text NOT NULL, current_metrics jsonb NOT NULL, previous_metrics jsonb NOT NULL,
  priority_score double precision NOT NULL, confidence_score double precision NOT NULL, estimated_upside double precision NOT NULL,
  reason text NOT NULL, evidence jsonb NOT NULL, detected_at timestamp NOT NULL DEFAULT now(), refreshed_at timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS seo_opportunities_property_cluster_uidx ON seo_opportunities(property_id, cluster_key);
+` },
+      { step: "index-opportunities-property-cluster", sql: `
+CREATE INDEX IF NOT EXISTS seo_opportunities_property_cluster_idx ON seo_opportunities(property_id, cluster_key, detected_at);
+` },
+      { step: "create-page-snapshots-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_page_snapshots (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, page_url text NOT NULL, content_fingerprint varchar(64) NOT NULL,
  title text, meta_description text, canonical_url text, headings jsonb NOT NULL DEFAULT '[]'::jsonb, sections jsonb NOT NULL DEFAULT '[]'::jsonb,
  structured_data jsonb NOT NULL DEFAULT '[]'::jsonb, internal_links jsonb NOT NULL DEFAULT '[]'::jsonb, deficiencies jsonb NOT NULL DEFAULT '[]'::jsonb,
  metrics jsonb NOT NULL DEFAULT '{}'::jsonb, captured_at timestamp NOT NULL DEFAULT now()
 );
+` },
+      { step: "index-page-snapshots-property-fingerprint", sql: `
 CREATE INDEX IF NOT EXISTS seo_page_snapshots_property_page_hash_idx ON seo_page_snapshots(property_id, content_fingerprint);
+` },
+      { step: "create-competitor-config-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_competitor_config (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, domain text NOT NULL, page_url text, enabled boolean NOT NULL DEFAULT true, created_at timestamp NOT NULL DEFAULT now()
 );
+` },
+      { step: "index-competitor-config-identity", sql: `
 CREATE UNIQUE INDEX IF NOT EXISTS seo_competitor_config_property_domain_page_uidx ON seo_competitor_config(property_id, domain, COALESCE(page_url, ''));
+` },
+      { step: "create-competitor-snapshots-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_competitor_snapshots (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, query_hash varchar(64) NOT NULL, page_hash varchar(64) NOT NULL, url text NOT NULL, domain text NOT NULL,
  result_position integer, signals jsonb NOT NULL, status text NOT NULL, failure_category text, fetched_at timestamp NOT NULL DEFAULT now(), expires_at timestamp NOT NULL
 );
+` },
+      { step: "index-competitor-snapshots-cache", sql: `
 CREATE UNIQUE INDEX IF NOT EXISTS seo_competitor_snapshots_cache_uidx ON seo_competitor_snapshots(property_id, query_hash, page_hash);
+` },
+      { step: "create-actions-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_actions (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, opportunity_id varchar NOT NULL REFERENCES seo_opportunities(id), idempotency_key varchar(64) NOT NULL,
  target_page text NOT NULL, query_cluster jsonb NOT NULL, action_type text NOT NULL, status text NOT NULL DEFAULT 'detected', risk text NOT NULL,
@@ -1384,22 +1410,36 @@ CREATE TABLE IF NOT EXISTS seo_actions (
  current_version integer NOT NULL DEFAULT 1, approved_by varchar, approved_at timestamp, rejected_by varchar, rejected_at timestamp, rejection_reason text,
  stale_at timestamp, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
 );
+` },
+      { step: "index-actions-open-idempotency", sql: `
 CREATE UNIQUE INDEX IF NOT EXISTS seo_actions_open_idempotency_uidx ON seo_actions(property_id, idempotency_key) WHERE status IN ('detected','researching','proposed','approved');
+` },
+      { step: "index-actions-property-status", sql: `
 CREATE INDEX IF NOT EXISTS seo_actions_property_status_idx ON seo_actions(property_id, status, updated_at);
+` },
+      { step: "create-action-versions-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_action_versions (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), action_id varchar NOT NULL REFERENCES seo_actions(id), version integer NOT NULL, proposal jsonb NOT NULL,
  ai_provider text NOT NULL, ai_model text NOT NULL, prompt_version text NOT NULL, created_at timestamp NOT NULL DEFAULT now(), UNIQUE(action_id, version)
 );
+` },
+      { step: "create-action-evidence-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_action_evidence (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), action_id varchar NOT NULL REFERENCES seo_actions(id), evidence_type text NOT NULL, reference_id varchar NOT NULL,
  summary text NOT NULL, created_at timestamp NOT NULL DEFAULT now()
 );
+` },
+      { step: "create-action-events-table", sql: `
 CREATE TABLE IF NOT EXISTS seo_action_events (
  id bigserial PRIMARY KEY, action_id varchar NOT NULL REFERENCES seo_actions(id), from_status text, to_status text NOT NULL, actor_id varchar,
  reason text, safe_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamp NOT NULL DEFAULT now()
 );
+` },
+      { step: "index-action-events-action-created", sql: `
 CREATE INDEX IF NOT EXISTS seo_action_events_action_created_idx ON seo_action_events(action_id, created_at);
-`
+` },
+    ],
+
   },
   {
     tag: "0096_seo_action_refresh_snapshots",
@@ -1513,23 +1553,33 @@ export async function applyStartupSchemaPatches(): Promise<{
   const patchResults = new Map<string, boolean>();
 
   for (const patch of STARTUP_COLUMN_PATCHES) {
+    let failingStep = "apply-patch";
     try {
-      await db.execute(sql.raw(patch.sql));
+      const steps = typeof patch.sql === "string"
+        ? [{ step: "apply-patch", sql: patch.sql }]
+        : patch.sql;
+      for (const step of steps) {
+        failingStep = step.step;
+        await db.execute(sql.raw(step.sql));
+      }
       console.log(`[StartupSchema] OK ${patch.tag}`);
       patchResults.set(patch.tag, true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const code = (err as { code?: string })?.code;
+      const diagnostic = safeDatabaseErrorDiagnostic(err, failingStep);
       patchResults.set(patch.tag, false);
       if (REQUIRED_PUBLIC_LISTING_PATCH_TAGS.has(patch.tag)) {
         console.error(
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
-          { code, message },
+          { code: diagnostic.code, message },
         );
-      } else if (/^009[3-9]_seo/.test(patch.tag)) {
-        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
+      } else if (/^0(?:09[3-9]|10[01])_seo/.test(patch.tag)) {
+        console.error(`[StartupSchema] FAILED ${patch.tag}`, {
+          ...diagnostic,
+          message: "SEO schema patch failed; database details redacted",
+        });
       } else {
-        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
+        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code: diagnostic.code, message });
       }
     }
   }

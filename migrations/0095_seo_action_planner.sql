@@ -12,7 +12,10 @@ CREATE TABLE IF NOT EXISTS seo_opportunities (
  priority_score double precision NOT NULL, confidence_score double precision NOT NULL, estimated_upside double precision NOT NULL,
  reason text NOT NULL, evidence jsonb NOT NULL, detected_at timestamp NOT NULL DEFAULT now(), refreshed_at timestamp NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS seo_opportunities_property_cluster_uidx ON seo_opportunities(property_id, cluster_key);
+-- 0099 deliberately permits historical opportunities for the same cluster. Using
+-- the final non-unique index here keeps this startup migration repeatable once
+-- those rows exist, rather than trying to recreate the retired unique index.
+CREATE INDEX IF NOT EXISTS seo_opportunities_property_cluster_idx ON seo_opportunities(property_id, cluster_key, detected_at);
 CREATE TABLE IF NOT EXISTS seo_page_snapshots (
  id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, page_url text NOT NULL, content_fingerprint varchar(64) NOT NULL,
  title text, meta_description text, canonical_url text, headings jsonb NOT NULL DEFAULT '[]'::jsonb, sections jsonb NOT NULL DEFAULT '[]'::jsonb,
