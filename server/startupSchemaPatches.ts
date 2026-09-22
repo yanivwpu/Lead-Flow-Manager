@@ -1343,6 +1343,141 @@ CREATE UNIQUE INDEX IF NOT EXISTS contacts_user_id_webchat_id_uidx
       `DROP INDEX IF EXISTS seo_search_snapshots_property_date_page_idx`,
     ].join(";\n"),
   },
+  {
+    tag: "0095_seo_action_planner",
+    sql: `
+-- Phase 2B is research and approval only. No table below can publish site content.
+CREATE TABLE IF NOT EXISTS seo_analysis_runs (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, status text NOT NULL DEFAULT 'running', trigger text NOT NULL DEFAULT 'manual',
+ lease_token text NOT NULL, lease_expires_at timestamp NOT NULL, diagnostics jsonb NOT NULL DEFAULT '{}'::jsonb,
+ failure_category text, started_at timestamp NOT NULL DEFAULT now(), completed_at timestamp
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_analysis_runs_active_property_uidx ON seo_analysis_runs(property_id) WHERE status = 'running';
+CREATE INDEX IF NOT EXISTS seo_analysis_runs_property_started_idx ON seo_analysis_runs(property_id, started_at);
+CREATE TABLE IF NOT EXISTS seo_opportunities (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, cluster_key varchar(64) NOT NULL, target_page text NOT NULL,
+ query_cluster jsonb NOT NULL, opportunity_type text NOT NULL, current_metrics jsonb NOT NULL, previous_metrics jsonb NOT NULL,
+ priority_score double precision NOT NULL, confidence_score double precision NOT NULL, estimated_upside double precision NOT NULL,
+ reason text NOT NULL, evidence jsonb NOT NULL, detected_at timestamp NOT NULL DEFAULT now(), refreshed_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_opportunities_property_cluster_uidx ON seo_opportunities(property_id, cluster_key);
+CREATE TABLE IF NOT EXISTS seo_page_snapshots (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, page_url text NOT NULL, content_fingerprint varchar(64) NOT NULL,
+ title text, meta_description text, canonical_url text, headings jsonb NOT NULL DEFAULT '[]'::jsonb, sections jsonb NOT NULL DEFAULT '[]'::jsonb,
+ structured_data jsonb NOT NULL DEFAULT '[]'::jsonb, internal_links jsonb NOT NULL DEFAULT '[]'::jsonb, deficiencies jsonb NOT NULL DEFAULT '[]'::jsonb,
+ metrics jsonb NOT NULL DEFAULT '{}'::jsonb, captured_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS seo_page_snapshots_property_page_hash_idx ON seo_page_snapshots(property_id, content_fingerprint);
+CREATE TABLE IF NOT EXISTS seo_competitor_config (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, domain text NOT NULL, page_url text, enabled boolean NOT NULL DEFAULT true, created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_competitor_config_property_domain_page_uidx ON seo_competitor_config(property_id, domain, COALESCE(page_url, ''));
+CREATE TABLE IF NOT EXISTS seo_competitor_snapshots (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, query_hash varchar(64) NOT NULL, page_hash varchar(64) NOT NULL, url text NOT NULL, domain text NOT NULL,
+ result_position integer, signals jsonb NOT NULL, status text NOT NULL, failure_category text, fetched_at timestamp NOT NULL DEFAULT now(), expires_at timestamp NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_competitor_snapshots_cache_uidx ON seo_competitor_snapshots(property_id, query_hash, page_hash);
+CREATE TABLE IF NOT EXISTS seo_actions (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), property_id text NOT NULL, opportunity_id varchar NOT NULL REFERENCES seo_opportunities(id), idempotency_key varchar(64) NOT NULL,
+ target_page text NOT NULL, query_cluster jsonb NOT NULL, action_type text NOT NULL, status text NOT NULL DEFAULT 'detected', risk text NOT NULL,
+ confidence double precision NOT NULL, expected_benefit text NOT NULL, original_content_fingerprint varchar(64) NOT NULL,
+ current_version integer NOT NULL DEFAULT 1, approved_by varchar, approved_at timestamp, rejected_by varchar, rejected_at timestamp, rejection_reason text,
+ stale_at timestamp, created_at timestamp NOT NULL DEFAULT now(), updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS seo_actions_open_idempotency_uidx ON seo_actions(property_id, idempotency_key) WHERE status IN ('detected','researching','proposed','approved');
+CREATE INDEX IF NOT EXISTS seo_actions_property_status_idx ON seo_actions(property_id, status, updated_at);
+CREATE TABLE IF NOT EXISTS seo_action_versions (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), action_id varchar NOT NULL REFERENCES seo_actions(id), version integer NOT NULL, proposal jsonb NOT NULL,
+ ai_provider text NOT NULL, ai_model text NOT NULL, prompt_version text NOT NULL, created_at timestamp NOT NULL DEFAULT now(), UNIQUE(action_id, version)
+);
+CREATE TABLE IF NOT EXISTS seo_action_evidence (
+ id varchar PRIMARY KEY DEFAULT gen_random_uuid(), action_id varchar NOT NULL REFERENCES seo_actions(id), evidence_type text NOT NULL, reference_id varchar NOT NULL,
+ summary text NOT NULL, created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS seo_action_events (
+ id bigserial PRIMARY KEY, action_id varchar NOT NULL REFERENCES seo_actions(id), from_status text, to_status text NOT NULL, actor_id varchar,
+ reason text, safe_metadata jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS seo_action_events_action_created_idx ON seo_action_events(action_id, created_at);
+`
+  },
+  {
+    tag: "0096_seo_action_refresh_snapshots",
+    sql: [
+      `ALTER TABLE seo_action_versions ADD COLUMN IF NOT EXISTS page_snapshot_id varchar REFERENCES seo_page_snapshots(id)`,
+      `CREATE INDEX IF NOT EXISTS seo_action_versions_page_snapshot_idx ON seo_action_versions(page_snapshot_id)`,
+    ].join(";\n"),
+  },
+  {
+    tag: "0097_seo_action_orphan_repair",
+    sql: `
+-- Preserve but quarantine legacy actions that committed before version/event creation.
+INSERT INTO seo_action_events (action_id, from_status, to_status, reason, safe_metadata)
+SELECT a.id, a.status, 'failed', 'Initial recommendation version was not committed', '{"failureCategory":"ORPHANED_INITIAL_VERSION_REPAIRED"}'::jsonb
+FROM seo_actions a
+WHERE NOT EXISTS (SELECT 1 FROM seo_action_versions v WHERE v.action_id = a.id)
+  AND NOT EXISTS (SELECT 1 FROM seo_action_events e WHERE e.action_id = a.id AND e.safe_metadata->>'failureCategory' = 'ORPHANED_INITIAL_VERSION_REPAIRED');
+UPDATE seo_actions a SET status = 'failed', updated_at = NOW()
+WHERE NOT EXISTS (SELECT 1 FROM seo_action_versions v WHERE v.action_id = a.id);
+`
+  },
+  {
+    tag: "0098_seo_action_refresh_leases",
+    sql: `
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_lease_token text;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_started_at timestamp;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_lease_expires_at timestamp;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_failure_category text;
+CREATE INDEX IF NOT EXISTS seo_actions_refresh_lease_idx ON seo_actions(property_id, status, refresh_lease_expires_at);
+-- Recovery is intentionally deferred to 0100, which distinguishes active, expired, and conservatively abandoned legacy claims.
+`
+  },
+  {
+    tag: "0099_seo_immutable_evidence",
+    sql: `
+ALTER TABLE seo_action_versions ADD COLUMN IF NOT EXISTS evidence_snapshot jsonb;
+-- Best-effort legacy baseline: exact pre-0099 evidence may already have been overwritten and cannot be reconstructed.
+UPDATE seo_action_versions v SET evidence_snapshot=jsonb_build_object(
+  'opportunityId',o.id,'opportunityType',o.opportunity_type,'queryCluster',o.query_cluster,'targetPage',o.target_page,
+  'currentMetrics',o.current_metrics,'previousMetrics',o.previous_metrics,'priorityScore',o.priority_score,
+  'confidenceScore',o.confidence_score,'estimatedUpside',o.estimated_upside,'reason',o.reason,'evidence',o.evidence,
+  'contentFingerprint',a.original_content_fingerprint,'pageSnapshotId',v.page_snapshot_id)
+FROM seo_actions a JOIN seo_opportunities o ON o.id=a.opportunity_id
+WHERE v.action_id=a.id AND v.evidence_snapshot IS NULL;
+ALTER TABLE seo_action_versions ALTER COLUMN evidence_snapshot SET NOT NULL;
+DROP INDEX IF EXISTS seo_opportunities_property_cluster_uidx;
+CREATE INDEX IF NOT EXISTS seo_opportunities_property_cluster_idx ON seo_opportunities(property_id,cluster_key,detected_at);
+`
+  },
+  {
+    tag: "0100_seo_refresh_return_and_stale_rotation",
+    sql: `
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS refresh_return_status text;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS stale_checked_at timestamp;
+ALTER TABLE seo_actions ADD COLUMN IF NOT EXISTS stale_check_retry_at timestamp;
+CREATE INDEX IF NOT EXISTS seo_actions_stale_rotation_idx ON seo_actions(property_id,status,stale_check_retry_at,stale_checked_at,id);
+-- Recover only expired leased claims or conservative 30-minute-old pre-lease rows. Never touch active leases.
+INSERT INTO seo_action_events (action_id,from_status,to_status,reason,safe_metadata)
+SELECT a.id,'researching',CASE WHEN a.refresh_return_status IN ('proposed','revision_required') THEN a.refresh_return_status WHEN a.stale_at IS NOT NULL THEN 'revision_required' ELSE 'proposed' END,
+ 'Abandoned refresh claim recovered',jsonb_build_object('refreshRecovery',true,'failureCategory','ABANDONED_REFRESH_RECOVERED','claimTokenHash',CASE WHEN a.refresh_lease_token IS NULL THEN 'legacy' ELSE encode(digest(a.refresh_lease_token,'sha256'),'hex') END)
+FROM seo_actions a WHERE a.status='researching' AND (
+ (a.refresh_lease_token IS NOT NULL AND a.refresh_lease_expires_at<=NOW()) OR
+ (a.refresh_lease_token IS NULL AND a.refresh_lease_expires_at IS NULL AND a.updated_at<=NOW()-INTERVAL '30 minutes'))
+AND NOT EXISTS (SELECT 1 FROM seo_action_events e WHERE e.action_id=a.id AND e.safe_metadata->>'failureCategory'='ABANDONED_REFRESH_RECOVERED' AND e.safe_metadata->>'claimTokenHash'=CASE WHEN a.refresh_lease_token IS NULL THEN 'legacy' ELSE encode(digest(a.refresh_lease_token,'sha256'),'hex') END);
+UPDATE seo_actions a SET status=CASE WHEN refresh_return_status IN ('proposed','revision_required') THEN refresh_return_status WHEN stale_at IS NOT NULL THEN 'revision_required' ELSE 'proposed' END,
+ refresh_failure_category='ABANDONED_REFRESH_RECOVERED',refresh_lease_token=NULL,refresh_started_at=NULL,refresh_lease_expires_at=NULL,refresh_return_status=NULL,updated_at=NOW()
+WHERE status='researching' AND ((refresh_lease_token IS NOT NULL AND refresh_lease_expires_at<=NOW()) OR
+ (refresh_lease_token IS NULL AND refresh_lease_expires_at IS NULL AND updated_at<=NOW()-INTERVAL '30 minutes'));
+`
+  },
+  {
+    tag: "0101_seo_revision_identity_reservation",
+    sql: `
+CREATE UNIQUE INDEX IF NOT EXISTS seo_actions_reserved_idempotency_uidx ON seo_actions(property_id,idempotency_key)
+WHERE status IN ('detected','researching','proposed','approved','revision_required');
+DROP INDEX IF EXISTS seo_actions_open_idempotency_uidx;
+`
+  },
 ];
 
 async function probePublicListingSchemaColumns(): Promise<boolean> {
@@ -1391,6 +1526,8 @@ export async function applyStartupSchemaPatches(): Promise<{
           `[StartupSchema] FATAL: required public listing patch failed: ${patch.tag}`,
           { code, message },
         );
+      } else if (/^009[3-9]_seo/.test(patch.tag)) {
+        console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message: "SEO schema patch failed; database details redacted" });
       } else {
         console.error(`[StartupSchema] FAILED ${patch.tag}`, { code, message });
       }
@@ -1437,8 +1574,10 @@ export async function applyStartupSchemaPatches(): Promise<{
       patchResults.get("0085_verification_reminder") === true &&
       patchResults.get("0086_verification_reminder_last_sent_and_rollout") === true,
     shopifyShopTrialLedgerPatchOk,
-    seoIntelligencePatchOk:
-      patchResults.get("0093_seo_intelligence") === true &&
-      patchResults.get("0094_seo_snapshot_bounded_key") === true,
+    seoIntelligencePatchOk: seoIntelligencePatchesReady(patchResults),
   };
+}
+
+export function seoIntelligencePatchesReady(results: ReadonlyMap<string, boolean>) {
+  return ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases", "0099_seo_immutable_evidence", "0100_seo_refresh_return_and_stale_rotation", "0101_seo_revision_identity_reservation"].every(tag => results.get(tag) === true);
 }
