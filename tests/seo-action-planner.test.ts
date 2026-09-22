@@ -118,6 +118,29 @@ assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus
 assert.match(actionServiceSource,/REFRESH_IDENTITY_CONFLICT[\s\S]+opportunityId:refreshedOpportunity\.id[\s\S]+idempotencyKey:refreshedKey[\s\S]+queryCluster:freshItem\.queryCluster[\s\S]+actionType:proposal\.actionType[\s\S]+risk:proposal\.risk[\s\S]+confidence:proposal\.confidence/,"refreshed classification and identity metadata update atomically after collision fencing");
 
 const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_planner.sql", import.meta.url), "utf8");
+const readOnlyDiagnostic = readFileSync(new URL("../scripts/diagnose-0095-read-only.sql", import.meta.url), "utf8");
+const { safeDatabaseErrorDiagnostic } = await import("../server/startupSchemaDiagnostics");
+for (const source of [phase2bMigration, startup]) {
+  assert.doesNotMatch(source, /CREATE UNIQUE INDEX IF NOT EXISTS seo_opportunities_property_cluster_uidx/, "0095 must not recreate the unique index retired by 0099 after duplicate historical clusters exist");
+  assert.match(source, /CREATE INDEX IF NOT EXISTS seo_opportunities_property_cluster_idx ON seo_opportunities\(property_id, cluster_key, detected_at\)/, "0095 uses the repeatable final-state opportunity index");
+}
+assert.deepEqual(
+  safeDatabaseErrorDiagnostic({ cause: { code: "23505", detail: "sensitive row values" } }, "index-seo-opportunities-property-cluster"),
+  { code: "23505", category: "INTEGRITY_CONSTRAINT", step: "index-seo-opportunities-property-cluster" },
+  "nested driver SQLSTATE is retained without leaking database detail",
+);
+assert.deepEqual(
+  safeDatabaseErrorDiagnostic({ code: "not-safe", message: "sensitive SQL" }, "x".repeat(100)),
+  { code: "UNAVAILABLE", category: "UNKNOWN", step: "x".repeat(80) },
+  "unknown errors and step labels remain redacted and bounded",
+);
+for (const step of ["index-analysis-runs-active-property", "index-opportunities-property-cluster", "index-competitor-config-identity", "index-competitor-snapshots-cache", "index-actions-open-idempotency"]) {
+  assert.match(startup, new RegExp(`step: "${step}"`), `0095 identifies potentially data-dependent failure step ${step}`);
+}
+assert.match(startup, /\^0\(\?:09\[3-9\]\|10\[01\]\)_seo/, "all fail-closed SEO startup patches retain redacted diagnostics");
+assert.match(readOnlyDiagnostic, /^BEGIN TRANSACTION READ ONLY;/m);
+assert.match(readOnlyDiagnostic, /opportunity-history-duplicates/);
+assert.doesNotMatch(readOnlyDiagnostic, /\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE)\b/i, "production diagnostic cannot mutate schema or data");
 const refreshMigration = readFileSync(new URL("../migrations/0096_seo_action_refresh_snapshots.sql", import.meta.url), "utf8");
 assert.match(refreshMigration, /page_snapshot_id varchar REFERENCES seo_page_snapshots\(id\)/);
 assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
