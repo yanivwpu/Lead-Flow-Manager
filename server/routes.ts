@@ -1232,7 +1232,7 @@ export async function registerRoutes(
       const {
         classifyWidgetSettings,
         mergeNeutralWidgetSettings,
-        resolveWidgetActivationState,
+        resolveWebchatProductionReadiness,
       } = await import("@shared/webchatWidgetSettings");
       const classified = classifyWidgetSettings(user.widgetSettings);
       let merged = mergeNeutralWidgetSettings(user.widgetSettings) as Record<string, unknown>;
@@ -1240,7 +1240,8 @@ export async function registerRoutes(
         await storage.updateUser(req.user.id, { widgetSettings: merged });
       }
       const widgetPublicId = await getWidgetPublicIdForUser(req.user.id);
-      const activation = resolveWidgetActivationState(merged);
+      // Settings and readiness are loaded for the authenticated workspace only.
+      const webchatReadiness = resolveWebchatProductionReadiness(merged, widgetPublicId);
       const { normalizeAllowedOriginsList } = await import("@shared/webchatOriginPolicy");
       const originCount = normalizeAllowedOriginsList(merged.allowedOrigins).length;
       const { publicWebchatServerAiRollout } = await import("./webchatServerAiRollout");
@@ -1252,8 +1253,8 @@ export async function registerRoutes(
         agentName: names.agentName,
         widgetPublicId,
         originDiagnostics: {
-          canPubliclyEmbed: activation.effectivePublic,
-          reason: activation.reason,
+          canPubliclyEmbed: webchatReadiness.effectivePublic,
+          reason: webchatReadiness.reason,
           allowedOriginCount: originCount,
           allowAnyOrigin: merged.allowAnyOrigin === true,
           httpsRequiredInProduction: true,
@@ -1261,6 +1262,7 @@ export async function registerRoutes(
           apexAndWwwArePaired: true,
           subdomainsAreExactMatchOnly: true,
         },
+        webchatReadiness,
         webchatServerAi: publicWebchatServerAiRollout(req.user.id),
       });
     } catch (error) {

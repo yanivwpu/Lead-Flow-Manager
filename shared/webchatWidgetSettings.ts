@@ -21,6 +21,7 @@ import {
   sanitizePageRuleUrlAliases,
 } from "./webchatPageRuleMatch";
 import { sanitizePageRuleActionKinds } from "./webchatPageRuleAction";
+import { isWidgetPublicId } from "./opaquePublicToken";
 
 export const NEUTRAL_WIDGET_COLOR = "#10b981";
 export const NEUTRAL_WIDGET_WELCOME = "Hi! How can we help you today?";
@@ -142,6 +143,27 @@ export type WidgetActivationState = {
   effectivePublic: boolean;
   reason: WidgetActivationReason;
 };
+
+export type WebchatReadinessReason = WidgetActivationReason | "invalid_public_token";
+
+/** Canonical production readiness consumed by every authenticated Web Chat surface. */
+export type WebchatProductionReadiness = WidgetActivationState & {
+  hasValidPublicToken: boolean;
+  reason: WebchatReadinessReason;
+};
+
+export function resolveWebchatProductionReadiness(
+  settings: WidgetSettingsShape | null | undefined,
+  widgetPublicId: unknown,
+): WebchatProductionReadiness {
+  const activation = resolveWidgetActivationState(settings);
+  const hasValidPublicToken =
+    typeof widgetPublicId === "string" && isWidgetPublicId(widgetPublicId);
+  if (!hasValidPublicToken) {
+    return { ...activation, hasValidPublicToken, effectivePublic: false, reason: "invalid_public_token" };
+  }
+  return { ...activation, hasValidPublicToken };
+}
 
 export function resolveWidgetActivationState(
   settings: WidgetSettingsShape | null | undefined,

@@ -58,7 +58,7 @@ import { isEmailMailboxUiConnected } from "@shared/emailMailboxAvailability";
 import { sanitizeWhatsappCustomerFacingError } from "@shared/whatsappEmbeddedSignupFailures";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { buildWebchatScriptSnippet } from "@shared/webchatWidgetSnippet";
-import { resolveWidgetActivationState, widgetSurfaceStatus } from "@shared/webchatWidgetSettings";
+import { widgetSurfaceStatus, type WebchatProductionReadiness } from "@shared/webchatWidgetSettings";
 
 type UnifiedPillKind = "connected" | "needs_attention" | "not_connected" | "test_number" | "error" | "loading";
 
@@ -470,6 +470,7 @@ export function ChannelSettings() {
     allowedOrigins?: string[];
     allowAnyOrigin?: boolean;
     originDiagnostics?: { canPubliclyEmbed?: boolean; reason?: string };
+    webchatReadiness?: WebchatProductionReadiness;
   }>({
     queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
     enabled: !!user?.id && sessionAligned,
@@ -819,8 +820,12 @@ export function ChannelSettings() {
     const baseErr = "bg-red-50/50 border-red-200";
 
     if (channel === "webchat") {
-      const activation = resolveWidgetActivationState(widgetInstall);
-      const surface = widgetSurfaceStatus(activation);
+      const surface = widgetSurfaceStatus(widgetInstall?.webchatReadiness ?? {
+        requestedEnabled: false,
+        hasOriginPrerequisite: false,
+        effectivePublic: false,
+        reason: "disabled",
+      });
       const openWidget = () => setLocation("/app/widget");
       return {
         pill: surface.channelPill,
