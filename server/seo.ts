@@ -591,7 +591,7 @@ const MARKETING_SSR_PAGES: Record<string, MarketingSsrPage> = {
       "MLS / live inventory property matching where connected",
       "Personalized property flyers and presentations",
       "Unified Inbox with AI Copilot for messaging channels",
-      "Requires an appropriate WhachatCRM plan and AI Brain where applicable",
+      "Included with Pro at no additional charge",
     ],
     linksHtml:
       '<a href="/pricing">View WhachatCRM plans</a> · <a href="/auth">Start free</a> · <a href="/real-estate-crm">Real estate CRM overview</a>',
@@ -800,6 +800,7 @@ function resolveMarketingSsrPage(
       lead: pricing.hero.subtitle,
       bullets: [
         ...buildCanonicalPricingCrawlableLines(),
+        pricing.proCallout.body,
         pricing.hero.trustLine,
         ...pricing.ssr.bullets.filter((b) => b !== pricing.hero.trustLine),
       ],

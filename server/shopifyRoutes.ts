@@ -370,35 +370,6 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/billing/rge-onetime-callback', async (req: Request, res: Response) => {
-  const shop = typeof req.query.shop === 'string' ? req.query.shop.trim() : '';
-  const chargeRaw =
-    (typeof req.query.charge_id === 'string' && req.query.charge_id.trim()) ||
-    (typeof req.query.chargeId === 'string' && req.query.chargeId.trim()) ||
-    '';
-
-  if (!shop || !chargeRaw) {
-    return res.status(400).json({ error: 'Missing shop or charge id' });
-  }
-
-  try {
-    const user = await storage.getUserByShopifyShop(shop);
-    if (!user || !user.shopifyAccessToken) {
-      return res.status(404).json({ error: 'Shop not found' });
-    }
-
-    console.warn('[Shopify RGE callback] Blocked — RGE not available for Shopify-installed accounts', {
-      shop,
-      userId: user.id,
-      chargeRaw,
-    });
-    return res.redirect('/app/inbox');
-  } catch (error) {
-    console.error('[Shopify RGE callback] error:', error);
-    res.status(500).json({ error: 'RGE billing verification failed' });
-  }
-});
-
 router.get('/billing/callback', async (req: Request, res: Response) => {
   console.log("[Shopify Billing Callback] Host:", {
     host: req.get("host"),

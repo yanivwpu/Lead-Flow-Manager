@@ -315,21 +315,18 @@ export function getProspectAiQuotaLabel(plan: SubscriptionPlan): string {
 
 /**
  * Public commercial catalog used by visible cards, crawlable SSR, and Product/Offer JSON-LD.
- * Amounts come from PLAN_LIMITS / yearly Stripe prices / the RGE one-time license — never
- * a second hardcoded price list.
+ * Amounts come from PLAN_LIMITS / yearly Stripe prices; Growth Engines are Pro capabilities.
  */
 export const REALTOR_GROWTH_ENGINE_NAME = "Realtor Growth Engine";
 export const REALTOR_GROWTH_ENGINE_PATH = "/realtor-growth-engine";
-export const REALTOR_GROWTH_ENGINE_ONETIME_USD = 199;
-export const REALTOR_GROWTH_ENGINE_ONETIME_CENTS = REALTOR_GROWTH_ENGINE_ONETIME_USD * 100;
-export const REALTOR_GROWTH_ENGINE_REQUIRES_PRO = "Requires an active Pro plan.";
+export const REALTOR_GROWTH_ENGINE_REQUIRES_PRO = "Included with Pro.";
 
 export type CanonicalOfferBillingPeriod = "month" | "year" | "once";
 
 export type CanonicalCommercialOffer = {
   id: "free" | "pro" | "realtor-growth-engine";
   name: string;
-  kind: "subscription_plan" | "one_time_product";
+  kind: "subscription_plan" | "included_capability";
   urlPath: string;
   description: string;
   offers: Array<{
@@ -375,16 +372,10 @@ export function getCanonicalCommercialCatalog(): CanonicalCommercialOffer[] {
     {
       id: "realtor-growth-engine",
       name: REALTOR_GROWTH_ENGINE_NAME,
-      kind: "one_time_product",
+      kind: "included_capability",
       urlPath: REALTOR_GROWTH_ENGINE_PATH,
-      description: `One-time product. ${REALTOR_GROWTH_ENGINE_REQUIRES_PRO} Not a Free or Pro subscription tier.`,
-      offers: [
-        {
-          amount: REALTOR_GROWTH_ENGINE_ONETIME_USD,
-          currency: "USD",
-          billingPeriod: "once",
-        },
-      ],
+      description: "Included with Pro at no additional charge.",
+      offers: [],
     },
   ];
 }

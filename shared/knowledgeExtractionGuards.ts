@@ -196,7 +196,7 @@ function growthEnginePath(data: Record<string, unknown>): boolean {
 }
 
 /**
- * Growth Engine is a distinct one-time product. Name, URL, and description may say so;
+ * Growth Engine is an included Pro capability. Name, URL, and description may say so;
  * “requires Pro” and feature bullets that merely mention Pro must not rename it to Pro.
  */
 export function looksLikeGrowthEngineOffer(data: Record<string, unknown>, prices?: FactMoney[]): boolean {

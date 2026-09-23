@@ -1189,39 +1189,6 @@ export async function sendFollowUpReminderEmail(
   });
 }
 
-export async function sendRealtorPaymentConfirmationEmail(
-  name: string,
-  email: string
-): Promise<boolean> {
-  const onboardingUrl = `${APP_URL}/app/templates/realtor-growth-engine/onboarding`;
-
-  const body = [
-    emailParagraph(`Hi ${escapeHtml(name || "there")},`),
-    emailParagraph(
-      "Thank you for purchasing the <strong>Realtor Growth Engine</strong>. Your payment has been received and your template is ready to activate."
-    ),
-    emailParagraph(
-      "Your next step is to complete a short onboarding form so we can configure your system."
-    ),
-    emailButton(onboardingUrl, "Complete onboarding"),
-    emailSubheading("Before you start (2 minutes)"),
-    emailOrderedList([
-      "<strong>Pro</strong> — active on your account (required for the Growth Engine; AI Brain is included)",
-      "<strong>WhatsApp</strong> — connect in Settings with guided embedded signup",
-      "<strong>Business basics</strong> — name, country, and optional website for your launch profile",
-      "<strong>Calendar (optional)</strong> — connect Calendly so leads can self-book showings",
-    ]),
-    emailParagraph(
-      'Questions? Reply to this email or contact <a href="mailto:support@whachatcrm.com" style="color: #059669; text-decoration: none;">support@whachatcrm.com</a>.'
-    ),
-  ].join("");
-
-  return sendEmail({
-    to: email,
-    subject: "Your Realtor Growth Engine is ready to set up",
-    html: renderBrandedEmail({ title: "Payment confirmed", bodyHtml: body }),
-  });
-}
 
 export type GrowthEngineOnboardingEmailContext = {
   whatsappConnected: boolean;

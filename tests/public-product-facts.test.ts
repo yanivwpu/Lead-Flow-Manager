@@ -5,7 +5,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { planIncludesAIBrain, growthEngineEligibleForPlan } from "../shared/aiBrainEntitlement";
 import {
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
   REALTOR_GROWTH_ENGINE_PATH,
   getFreePlanMonthlyPriceUsd,
   getPaidPlanMonthlyPriceUsd,
@@ -36,7 +35,8 @@ test("public facts reference canonical prices, limits, host, route, and trial", 
   assert.equal(amount("free", "month"), PLAN_LIMITS.free.price);
   assert.equal(amount("pro", "month"), getPaidPlanMonthlyPriceUsd("pro"));
   assert.equal(amount("pro", "year"), getPaidPlanYearlyPriceUsd("pro"));
-  assert.equal(amount("realtorGrowthEngine", "once"), REALTOR_GROWTH_ENGINE_ONETIME_USD);
+  assert.deepEqual(PUBLIC_PRODUCT_FACTS.realtorGrowthEngine.prices, []);
+  assert.equal(PUBLIC_PRODUCT_FACTS.realtorGrowthEngine.currentPurchasableOffer, false);
   assert.equal(PUBLIC_PRODUCT_FACTS.realtorGrowthEngine.publicRoute, REALTOR_GROWTH_ENGINE_PATH);
   assert.equal(PUBLIC_PRODUCT_CANONICAL_HOST, CANONICAL_HOST);
   assert.equal(PUBLIC_PRO_AI_TRIAL_DAYS, PRO_AI_TRIAL_DAYS);
@@ -60,7 +60,8 @@ test("AI Brain and RGE facts match entitlement enforcement", () => {
   assert.equal(planIncludesAIBrain("pro"), true);
   assert.equal(planIncludesAIBrain("free"), false);
   assert.equal(growthEngineEligibleForPlan("pro"), true);
-  assert.match(PUBLIC_REALTOR_GROWTH_ENGINE_REQUIREMENT, /active Pro plan/i);
+  assert.match(PUBLIC_REALTOR_GROWTH_ENGINE_REQUIREMENT, /Included with Pro/i);
+  assert.deepEqual(PUBLIC_PRODUCT_FACTS.realtorGrowthEngine.includedWith, ["pro"]);
   assert.deepEqual(PUBLIC_PRODUCT_FACTS.realtorGrowthEngine.requires, ["pro"]);
 });
 
