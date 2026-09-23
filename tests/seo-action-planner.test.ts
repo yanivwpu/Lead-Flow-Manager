@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { assertSafePublicUrl, createPinnedLookup, filterCompetitorResults, HostRateLimiter, isPublicAddress, safeFetchHtml, type PinnedTransport } from "../server/seo/competitorResearch";
 import { contentFingerprint, mayTransitionSeoAction, queryForTargetPage, recommendationIdempotencyKey, selectStaleCheckCandidates, validateRecommendationOutput } from "../server/seo/actionPlanner";
-import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, hasMatchingQueryIntent, processCandidatesUntil, selectCompleteQueryGroups } from "../server/seo/opportunityPlanner";
+import { aggregateNormalizedMetricRows, clusterAndScoreOpportunities, hasMatchingQueryIntent, hasMaterialCannibalizationEvidence, processCandidatesUntil, selectCompleteQueryGroups } from "../server/seo/opportunityPlanner";
 const resolvePublic=async()=>[{address:"93.184.216.34",family:4}] as any;
 const pinnedLookup=createPinnedLookup({address:"93.184.216.34",family:4});
 await new Promise<void>((resolve,reject)=>pinnedLookup("example.com",{all:true},(error,address)=>{try{assert.ifError(error);assert.deepEqual(address,[{address:"93.184.216.34",family:4}]);resolve();}catch(assertion){reject(assertion);}}));
@@ -46,14 +46,18 @@ for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".re
   const description = proposedMetaDescriptionForQuery(query);
   assert.ok([...description].length <= SEO_META_DESCRIPTION_MAX, "metadata always fits the destination schema");
   assert.ok(description.length >= 30);
-  assert.equal(validateRecommendationOutput({ ...proposal, actionType: "meta_description", proposedTitle: null, proposedMetaDescription: description }).proposedMetaDescription, description);
+  assert.equal(validateRecommendationOutput({ ...proposal, actionType: "meta_description", proposedTitle: null, proposedMetaDescription: description, insertionLocation:"Replace the existing meta description in the page head" }).proposedMetaDescription, description);
 }
 assert.doesNotMatch(proposedMetaDescriptionForQuery("word ".repeat(100)), /wor…:/, "long queries truncate at a word boundary");
 const thaiQuery="ระบบ crm สำหรับอสังหาริมทรัพย์";
-assert.equal(queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),"the target search intent");
-const englishDescription=proposedMetaDescriptionForQuery(thaiQuery,"https://whachatcrm.com/real-estate-crm");
+assert.equal(queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),"WhatsApp CRM");
+const englishDescription=proposedMetaDescriptionForQuery(thaiQuery,"https://whachatcrm.com/real-estate-crm","Real Estate CRM | WhachatCRM");
 assert.doesNotMatch(englishDescription,/\p{Script=Thai}/u,"English metadata never embeds a Thai Search Console query");
-assert.match(englishDescription,/target search intent/,"mismatched query text is replaced with an English intent description");
+assert.match(englishDescription,/Real Estate CRM/,"mismatched query text uses reliable first-party page intent");
+assert.doesNotMatch(englishDescription,/target search intent/,"metadata does not use a generic intent placeholder");
+assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_description",proposedTitle:null,proposedMetaDescription:englishDescription,insertionLocation:"After the existing primary product overview"}),/replace\/update metadata instruction/,"meta descriptions cannot emit body insertion instructions");
+assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_description",proposedTitle:null,proposedMetaDescription:englishDescription,contentBrief:"Insert this paragraph into the body.",insertionLocation:"Replace the existing meta description"}),/cannot propose body content/);
+assert.doesNotThrow(()=>validateRecommendationOutput({...proposal,actionType:"content_expansion",proposedTitle:null,contentBrief:"Add a section grounded in verified product facts.",insertionLocation:"Insert after the existing primary product overview"}),"content expansion retains insertion semantics");
 
 // Canonical-page clustering is the production scorer's source of truth and retains exact clicks.
 const clustered = clusterAndScoreOpportunities([
@@ -203,7 +207,12 @@ const multiStriking=clusterAndScoreOpportunities([metric(5,100,8,"shared crm que
 const multiLowCtr=clusterAndScoreOpportunities([metric(1,100,2,"shared crm query","/a"),metric(1,100,2,"crm query shared","/b")],[]);assert.equal(multiLowCtr[0].type,"cannibalization");
 const healthyMultiPage=clusterAndScoreOpportunities([metric(20,100,1,"healthy shared query","/a"),metric(18,90,1,"healthy shared query","/b")],[]);assert.equal(healthyMultiPage[0].type,"cannibalization","all current pages survive eligibility even when each row is healthy");assert.equal((healthyMultiPage[0].evidence.currentVisiblePages as unknown[]).length,2);
 const incidentalHomepage=clusterAndScoreOpportunities([metric(40,959,8,"zoko alternative","/zoko-alternative"),metric(0,3,30,"zoko alternative","/")],[]);assert.notEqual(incidentalHomepage[0].type,"cannibalization","three incidental impressions cannot make the homepage a competing page");assert.equal((incidentalHomepage[0].evidence.materialCurrentPages as unknown[]).length,1);
+const productionExample=clusterAndScoreOpportunities([metric(8,113,8,"best whatsapp crm with ai automation and omnichannel team inbox in 2026","/best-whatsapp-crm-2026"),metric(0,2,30,"best whatsapp crm with ai automation and omnichannel team inbox in 2026","/")],[]);assert.notEqual(productionExample[0].type,"cannibalization","113 versus 2 impressions is not cannibalization");assert.equal((productionExample[0].evidence.currentVisiblePages as unknown[]).length,2,"immaterial pages remain visible for diagnostics");assert.equal((productionExample[0].evidence.competingPages as unknown[]).length,1,"only material pages enter ownership evidence");
+assert.equal(hasMaterialCannibalizationEvidence({...productionExample[0],type:"cannibalization",competingPages:productionExample[0].evidence.currentVisiblePages as typeof productionExample[0]["competingPages"]}),false,"raw visible-page reconstruction cannot bypass the action boundary");
 const materialTwoPageCompetition=clusterAndScoreOpportunities([metric(8,100,8,"material alternative","/alternative"),metric(2,20,10,"material alternative","/comparison")],[]);assert.equal(materialTwoPageCompetition[0].type,"cannibalization","a secondary page with a meaningful impression share still competes below the absolute threshold");assert.equal((materialTwoPageCompetition[0].evidence.materialCurrentPages as unknown[]).length,2);
+const absoluteCompetition=clusterAndScoreOpportunities([metric(5,60,8,"absolute threshold query","/a"),metric(4,50,9,"absolute threshold query","/b")],[]);assert.equal(absoluteCompetition[0].type,"cannibalization","two pages at or above the absolute threshold remain valid");
+const expandedDiagnostics=clusterAndScoreOpportunities([metric(5,100,8,"diagnostic query","/a"),metric(4,80,9,"diagnostic query","/b"),metric(0,1,40,"diagnostic query","/incidental")],[]);assert.equal(expandedDiagnostics[0].type,"cannibalization");assert.equal(expandedDiagnostics[0].competingPages.length,2);assert.equal((expandedDiagnostics[0].evidence.currentVisiblePages as unknown[]).length,3,"expanded evidence retains an immaterial page without counting it");
+assert.equal(hasMaterialCannibalizationEvidence(expandedDiagnostics[0]),true,"material action evidence survives boundary revalidation");
 const harmless=clusterAndScoreOpportunities([metric(5,100,8,"same query","https://EXAMPLE.com/page/"),metric(4,90,9,"same query","https://example.com/page?utm_source=x#part")],[]);assert.notEqual(harmless[0].type,"cannibalization");assert.equal(harmless[0].competingPages.length,1);assert.equal(normalizeSeoPageIdentity("https://EXAMPLE.com/page/?utm_source=x#x"),"https://example.com/page");
 assert.equal(cannibalized[0].recommendedPrimaryPage,null,"equal evidence is explicitly ambiguous");assert.equal(multiDecline[0].recommendedPrimaryPage,"https://example.com/a","stronger evidence supports a possible primary");
 

@@ -19,6 +19,8 @@ export const seoRecommendationOutputSchema = z.object({
 }).superRefine((value, ctx) => {
   if (value.actionType === "title_tag" && !value.proposedTitle) ctx.addIssue({ code: "custom", message: "Title actions require exact proposedTitle" });
   if (value.actionType === "meta_description" && !value.proposedMetaDescription) ctx.addIssue({ code: "custom", message: "Meta actions require exact proposedMetaDescription" });
+  if (value.actionType === "meta_description" && (value.proposedContent || value.contentBrief)) ctx.addIssue({ code: "custom", message: "Meta actions cannot propose body content" });
+  if (value.actionType === "meta_description" && !/\b(replace|update)\b/i.test(value.insertionLocation)) ctx.addIssue({ code: "custom", message: "Meta actions require a replace/update metadata instruction" });
   if (["content_expansion", "content_rewrite", "faq"].includes(value.actionType) && !value.proposedContent && !value.contentBrief) ctx.addIssue({ code: "custom", message: "Content actions require proposed content or a detailed brief" });
 });
 export type SeoRecommendationOutput = z.infer<typeof seoRecommendationOutputSchema>;
@@ -54,14 +56,15 @@ type RecommendationLanguage="en"|"es"|"he";
 export function recommendationLanguageForPage(targetPage:string):RecommendationLanguage{try{const path=new URL(targetPage,"https://seo-language.invalid").pathname;return path==="/es"||path.startsWith("/es/")?"es":path==="/he"||path.startsWith("/he/")?"he":"en";}catch{return "en";}}
 const SCRIPT_PATTERN:Record<RecommendationLanguage,RegExp>={en:/\p{Script=Latin}/u,es:/\p{Script=Latin}/u,he:/\p{Script=Hebrew}/u};
 const FOREIGN_SCRIPT=/[\p{Script=Thai}\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-const QUERY_FALLBACK:Record<RecommendationLanguage,string>={en:"the target search intent",es:"la intención de búsqueda objetivo",he:"כוונת החיפוש של העמוד"};
+const QUERY_FALLBACK:Record<RecommendationLanguage,string>={en:"WhatsApp CRM",es:"CRM de WhatsApp",he:"מערכת CRM ל-WhatsApp"};
 /** Prevent raw GSC text in a different writing system from leaking into generated copy. */
 export function queryForTargetPage(query:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=query.replace(/[\u0000-\u001f\u007f]+/gu," ").replace(/\s+/gu," ").trim();if(!clean)return QUERY_FALLBACK[language];const hasExpected=SCRIPT_PATTERN[language].test(clean),hasForeign=FOREIGN_SCRIPT.test(clean);return hasExpected&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean)))?clean:QUERY_FALLBACK[language];}
-export function proposedMetaDescriptionForQuery(query: string,targetPage="/") {
-  query=queryForTargetPage(query,targetPage);
+function safeFirstPartyIntent(value:string|undefined,targetPage:string){if(value){const language=recommendationLanguageForPage(targetPage),clean=value.replace(/\s*[|–—-]\s*Whachat(?:CRM)?\b.*$/iu,"").replace(/\s+/gu," ").trim(),hasForeign=FOREIGN_SCRIPT.test(clean);if(clean&&SCRIPT_PATTERN[language].test(clean)&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean))))return clean;}try{const slug=new URL(targetPage,"https://seo-language.invalid").pathname.split("/").filter(Boolean).at(-1)?.replace(/[-_]+/g," ").trim();return slug||undefined;}catch{return undefined;}}
+export function proposedMetaDescriptionForQuery(query: string,targetPage="/",firstPartyIntent?:string) {
+  const safeQuery=queryForTargetPage(query,targetPage),intent=safeQuery===QUERY_FALLBACK[recommendationLanguageForPage(targetPage)]?safeFirstPartyIntent(firstPartyIntent,targetPage)??safeQuery:safeQuery;
   const prefix = "Explore WhachatCRM for ", suffix = ": organize conversations, follow up consistently, and manage customer relationships in one workspace.";
   const queryBudget = SEO_META_DESCRIPTION_MAX - prefix.length - suffix.length;
-  const conciseQuery = truncateAtWord(query.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
+  const conciseQuery = truncateAtWord(intent.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
   return truncateAtWord(`${prefix}${conciseQuery}${suffix}`, SEO_META_DESCRIPTION_MAX);
 }
 export function selectStaleCheckCandidates<T extends {id:string;status:string;staleCheckedAt:Date|null;staleCheckRetryAt:Date|null}>(actions:T[],now:Date,limit:number){return actions.filter(row=>(row.status==="proposed"||row.status==="approved")&&(!row.staleCheckRetryAt||row.staleCheckRetryAt<=now)).sort((a,b)=>(a.staleCheckedAt?.getTime()??0)-(b.staleCheckedAt?.getTime()??0)||a.id.localeCompare(b.id)).slice(0,limit);}
