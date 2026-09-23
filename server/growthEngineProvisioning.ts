@@ -9,6 +9,28 @@ export const GROWTH_ENGINE_PROVISIONING_LOG = "[Growth Engine Provisioning]";
 export const GROWTH_ENGINE_INSTALL_LOG = "[Growth Engine Install]";
 export const GROWTH_ENGINE_LEGACY_WEBHOOK_LOG = "[Growth Engine Legacy Webhook]";
 
+/**
+ * Emit a best-effort, structured provisioning audit event. Observability must
+ * never be allowed to change the outcome of an otherwise valid installation.
+ */
+export function logGrowthEngineProvisioningEvent(
+  event: string,
+  fields: Record<string, unknown>,
+): void {
+  try {
+    console.info(
+      GROWTH_ENGINE_PROVISIONING_LOG,
+      JSON.stringify({ event, ...fields, loggedAt: new Date().toISOString() }),
+    );
+  } catch (error) {
+    try {
+      console.error(GROWTH_ENGINE_PROVISIONING_LOG, "audit event logging failed", error);
+    } catch {
+      // Logging is deliberately non-blocking, including when the logger itself fails.
+    }
+  }
+}
+
 export type ProvisionGrowthEngineResult = {
   entitlement: TemplateEntitlement;
   installCreated: boolean;
@@ -63,7 +85,7 @@ export async function provisionGrowthEngine(
     purchasedAt: prior?.purchasedAt ?? new Date(),
   });
 
-  logGrowthEngineInstallEvent("entitlement_created", {
+  logGrowthEngineProvisioningEvent("entitlement_upserted", {
     userId,
     templateId: RGE_TEMPLATE_ID,
     source: opts?.source ?? "pro_included",
@@ -96,7 +118,7 @@ export async function provisionGrowthEngine(
   }
 
   if (progressInitialized) {
-    logGrowthEngineInstallEvent("onboarding_progress_initialized", {
+    logGrowthEngineProvisioningEvent("onboarding_progress_initialized", {
       userId,
         source: opts?.source ?? "pro_included",
     });

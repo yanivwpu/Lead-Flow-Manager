@@ -28,6 +28,74 @@ import {
 
 const TEMPLATE_ID = "realtor-growth-engine";
 
+type GrowthEngineInstallDependencies = {
+  getUser: typeof storage.getUser;
+  getTemplateEntitlement: typeof storage.getTemplateEntitlement;
+  evaluateAccess: typeof evaluateGrowthEngineAccess;
+  reconcileEntitlement: typeof reconcileGrowthEngineEntitlement;
+  provision: typeof provisionGrowthEngine;
+};
+
+const defaultGrowthEngineInstallDependencies: GrowthEngineInstallDependencies = {
+  getUser: storage.getUser.bind(storage),
+  getTemplateEntitlement: storage.getTemplateEntitlement.bind(storage),
+  evaluateAccess: evaluateGrowthEngineAccess,
+  reconcileEntitlement: reconcileGrowthEngineEntitlement,
+  provision: provisionGrowthEngine,
+};
+
+/** Exported for a route-level regression test; production uses the defaults above. */
+export function createGrowthEngineInstallHandler(
+  deps: GrowthEngineInstallDependencies = defaultGrowthEngineInstallDependencies,
+) {
+  return async (req: any, res: any) => {
+    try {
+      const userId = req.user.id;
+      const user = await deps.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      // Repair legacy state before access evaluation. For an entitled Pro user,
+      // provisioning below also fills any records missing from a partial attempt.
+      const reconciled = await deps.reconcileEntitlement(userId);
+      const existing = reconciled.entitlement ?? (await deps.getTemplateEntitlement(userId, TEMPLATE_ID));
+
+      const ge = await deps.evaluateAccess(userId);
+      if (!ge.ok) {
+        if (existing && existing.status !== "locked") {
+          return res.json({
+            success: true,
+            alreadyInstalled: true,
+            entitlementStatus: existing.status,
+            onboardingComplete: Boolean(existing.onboardingSubmittedAt),
+          });
+        }
+        return res.status(403).json({
+          error: ge.message,
+          code: "growth_engine_pro_required",
+          reason: ge.reason,
+          hasPro: ge.hasProTier,
+          workflowsEnabled: ge.workflowsEnabled,
+        });
+      }
+
+      // provisionGrowthEngine is idempotent and completes records that may be
+      // missing because a prior request stopped after writing the entitlement.
+      const result = await deps.provision(userId, { source: "pro_included" });
+      return res.json({
+        success: true,
+        includedWithPro: true,
+        alreadyInstalled: !result.entitlementCreated && !result.installCreated && !result.progressInitialized,
+        entitlementStatus: result.entitlement.status,
+        onboardingComplete: Boolean(result.entitlement.onboardingSubmittedAt),
+        redirectTo: RGE_TEMPLATE_ONBOARDING_PATH,
+      });
+    } catch (error: any) {
+      console.error("[Template] Growth Engine install error:", error);
+      return res.status(500).json({ error: "Failed to install Growth Engine", code: "growth_engine_install_failed" });
+    }
+  };
+}
+
 function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowthEngineAccess>>) {
   const limits = ge.ok ? ge.limits : ge.limits;
   const hasPro = ge.ok
@@ -146,49 +214,11 @@ export function registerTemplateRoutes(app: Express) {
     }
   });
 
-  app.post("/api/templates/realtor-growth-engine/install", requireAuth, async (req, res) => {
-    try {
-      const userId = (req.user as any).id;
-      const user = await storage.getUser(userId);
-      if (!user) return res.status(404).json({ error: "User not found" });
-
-      // Preserve every legacy installation and entitlement. Access controls runtime,
-      // not the customer's saved Growth Engine configuration.
-      const reconciled = await reconcileGrowthEngineEntitlement(userId);
-      const existing = reconciled.entitlement ?? (await storage.getTemplateEntitlement(userId, TEMPLATE_ID));
-      if (existing && existing.status !== "locked") {
-        return res.json({
-          success: true,
-          alreadyInstalled: true,
-          entitlementStatus: existing.status,
-          onboardingComplete: Boolean(existing.onboardingSubmittedAt),
-        });
-      }
-
-      const ge = await evaluateGrowthEngineAccess(userId);
-      if (!ge.ok) {
-        return res.status(403).json({
-          error: ge.message,
-          code: "growth_engine_pro_required",
-          reason: ge.reason,
-          hasPro: ge.hasProTier,
-          workflowsEnabled: ge.workflowsEnabled,
-        });
-      }
-
-      const { entitlement } = await provisionGrowthEngine(userId, { source: "pro_included" });
-      res.json({
-        success: true,
-        includedWithPro: true,
-        entitlementStatus: entitlement.status,
-        onboardingComplete: Boolean(entitlement.onboardingSubmittedAt),
-        redirectTo: RGE_TEMPLATE_ONBOARDING_PATH,
-      });
-    } catch (error: any) {
-      console.error("[Template] Growth Engine install error:", error);
-      res.status(500).json({ error: "Failed to install Growth Engine", code: "growth_engine_install_failed" });
-    }
-  });
+  app.post(
+    "/api/templates/realtor-growth-engine/install",
+    requireAuth,
+    createGrowthEngineInstallHandler(),
+  );
 
   app.post("/api/templates/realtor-growth-engine/onboarding/submit", requireAuth, async (req, res) => {
     try {
