@@ -1,20 +1,12 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 import { requireAuth } from "./auth";
-import { sendRealtorOnboardingEmail, sendRealtorPaymentConfirmationEmail } from "./email";
-import { getUncachableStripeClient } from "./stripeClient";
-import { resolveStripeCheckoutRedirectOrigin } from "./stripeCheckoutRedirectBase";
+import { sendRealtorOnboardingEmail } from "./email";
 import { subscriptionService } from "./subscriptionService";
-import { createShopifyRgeOneTimePurchase } from "./shopify";
 import { z } from "zod";
-import { getAppOrigin } from "./urlOrigins";
-import { buildPostCheckoutSuccessUrl, buildStripeCancelUrl, sanitizeStripeReturnPath } from "./checkoutReturnPath";
 import {
-  RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
-  normalizeRgePostPurchaseRedirect,
 } from "@shared/rgePaths";
-import { REALTOR_GROWTH_ENGINE_ONETIME_CENTS } from "@shared/pricingEntitlements";
 import { isUserCalendlyBookingConnected } from "./calendlyBookingConnected";
 import { evaluateGrowthEngineAccess } from "./growthEngineEntitlements";
 import { isUserWhatsAppConnectedForActivation } from "./whatsappService";
@@ -28,19 +20,13 @@ import {
 } from "./growthEngineSetupService";
 import { getRgeOnboardingProgress, saveRgeOnboardingProgress } from "./rgeOnboardingProgress";
 import {
-  fulfillRgePurchaseAfterPayment,
-  logRgeCheckoutSuccess,
-  logRgePurchaseEvent,
-  reconcileRgeEntitlementForPurchase,
-  resolveRgePurchaseBillingChannel,
+  provisionGrowthEngine,
+  reconcileGrowthEngineEntitlement,
   ensureAdminOverrideGrowthEngineEntitlement,
   shouldAutoGrantGrowthEngineViaAdminOverride,
-} from "./rgePurchase";
-import { rejectRgeForShopifyAccount } from "./shopifyBillingGuard";
+} from "./growthEngineProvisioning";
 
 const TEMPLATE_ID = "realtor-growth-engine";
-/** Canonical RGE amount in cents — derived from shared/pricingEntitlements.ts, not a second price. */
-export const TEMPLATE_PRICE_CENTS = REALTOR_GROWTH_ENGINE_ONETIME_CENTS;
 
 function buildRgeSubscriptionPayload(ge: Awaited<ReturnType<typeof evaluateGrowthEngineAccess>>) {
   const limits = ge.ok ? ge.limits : ge.limits;
@@ -160,29 +146,20 @@ export function registerTemplateRoutes(app: Express) {
     }
   });
 
-  app.post("/api/templates/realtor-growth-engine/purchase", requireAuth, async (req, res) => {
+  app.post("/api/templates/realtor-growth-engine/install", requireAuth, async (req, res) => {
     try {
-      if (await rejectRgeForShopifyAccount(req, res, "templates/rge/purchase", storage.getUser.bind(storage))) {
-        return;
-      }
-
-      const { redirectTo, cancelTo } = (req.body || {}) as { redirectTo?: string; cancelTo?: string };
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ error: "User not found" });
 
-      const reconciled = await reconcileRgeEntitlementForPurchase(userId);
+      // Preserve every legacy installation and entitlement. Access controls runtime,
+      // not the customer's saved Growth Engine configuration.
+      const reconciled = await reconcileGrowthEngineEntitlement(userId);
       const existing = reconciled.entitlement ?? (await storage.getTemplateEntitlement(userId, TEMPLATE_ID));
-
       if (existing && existing.status !== "locked") {
-        logRgePurchaseEvent("already_purchased", {
-          userId,
-          status: existing.status,
-          reconciled: reconciled.reconciled,
-        });
         return res.json({
           success: true,
-          alreadyPurchased: true,
+          alreadyInstalled: true,
           entitlementStatus: existing.status,
           onboardingComplete: Boolean(existing.onboardingSubmittedAt),
         });
@@ -190,191 +167,26 @@ export function registerTemplateRoutes(app: Express) {
 
       const ge = await evaluateGrowthEngineAccess(userId);
       if (!ge.ok) {
-        logRgePurchaseEvent("ge_access_denied", {
-          userId,
-          reason: ge.reason,
-          hasPro: ge.hasProTier,
-          hasAI: ge.hasAIBrainAddon,
-          workflowsEnabled: ge.workflowsEnabled,
-        });
         return res.status(403).json({
           error: ge.message,
-          code: "rge_ge_access_denied",
+          code: "growth_engine_pro_required",
           reason: ge.reason,
           hasPro: ge.hasProTier,
-          hasAI: ge.hasAIBrainAddon,
           workflowsEnabled: ge.workflowsEnabled,
         });
       }
 
-      if (shouldAutoGrantGrowthEngineViaAdminOverride(ge.limits)) {
-        const entitlement = await ensureAdminOverrideGrowthEngineEntitlement(userId, ge.limits);
-        return res.json({
-          success: true,
-          adminOverride: true,
-          alreadyPurchased: true,
-          entitlementStatus: entitlement?.status ?? "purchased",
-          onboardingComplete: Boolean(entitlement?.onboardingSubmittedAt),
-        });
-      }
-
-      const billingChannel = await resolveRgePurchaseBillingChannel(userId, req);
-      if (billingChannel.channel === "blocked") {
-        logRgePurchaseEvent("blocked_shopify_account", { userId, reason: billingChannel.reason });
-        return res.status(403).json({
-          error: "Realtor Growth Engine is not available for Shopify-installed accounts.",
-          code: "RGE_NOT_AVAILABLE_SHOPIFY",
-        });
-      }
-      logRgePurchaseEvent("purchase_started", {
-        userId,
-        templateId: TEMPLATE_ID,
-        channel: billingChannel.channel,
-        reconciledEntitlement: reconciled.reconciled,
-      });
-
-      if (billingChannel.channel === "shopify") {
-        const { shop, accessToken } = billingChannel.merchant;
-        const base = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
-        const returnUrl = `${base}/api/shopify/billing/rge-onetime-callback?shop=${encodeURIComponent(shop)}`;
-        const billing = await createShopifyRgeOneTimePurchase(
-          shop,
-          accessToken,
-          returnUrl,
-          process.env.NODE_ENV !== "production",
-        );
-        if (!billing?.confirmationUrl) {
-          logRgePurchaseEvent("shopify_onetime_failed", { userId, shop });
-          return res.status(500).json({
-            error: "Failed to start Shopify billing for this purchase",
-            code: "rge_shopify_billing_unavailable",
-          });
-        }
-        return res.json({ shopifyConfirmationUrl: billing.confirmationUrl });
-      }
-
-      const stripe = await getUncachableStripeClient();
-
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email,
-          metadata: { userId },
-        });
-        await storage.updateUser(userId, { stripeCustomerId: customer.id });
-        customerId = customer.id;
-      }
-
-      const baseUrl = resolveStripeCheckoutRedirectOrigin(getAppOrigin());
-      const successPath = normalizeRgePostPurchaseRedirect(
-        sanitizeStripeReturnPath(redirectTo, `${RGE_TEMPLATE_ONBOARDING_PATH}?paid=true`)
-      );
-      const cancelPath = sanitizeStripeReturnPath(cancelTo ?? redirectTo, RGE_TEMPLATE_DETAIL_PATH);
-      const priceId = process.env.STRIPE_RGE_ONE_TIME_PRICE_ID;
-      if (!priceId) {
-        logRgePurchaseEvent("stripe_price_missing", { userId });
-        return res.status(400).json({
-          error:
-            "Growth Engine checkout is not configured (missing Stripe price). Contact support@whachatcrm.com.",
-          code: "rge_stripe_price_missing",
-        });
-      }
-
-      const successInterstitial = buildPostCheckoutSuccessUrl(baseUrl, successPath);
-      const success_url = `${successInterstitial}&session_id={CHECKOUT_SESSION_ID}`;
-
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ["card"],
-        line_items: [{ price: priceId, quantity: 1 }],
-        mode: "payment",
-        success_url,
-        cancel_url: buildStripeCancelUrl(baseUrl, cancelPath),
-        metadata: { userId, templateId: TEMPLATE_ID },
-      });
-
-      if (!session.url) {
-        logRgePurchaseEvent("stripe_session_no_url", { userId });
-        return res.status(500).json({
-          error: "Failed to create checkout session",
-          code: "rge_stripe_checkout_failed",
-        });
-      }
-
-      logRgePurchaseEvent("stripe_checkout_created", {
-        userId,
-        templateId: TEMPLATE_ID,
-        sessionId: session.id,
-        successPath,
-        oneTimePriceCents: TEMPLATE_PRICE_CENTS,
-      });
-      res.json({ success: true, url: session.url });
-    } catch (error: any) {
-      console.error("[Template] Purchase error:", error);
-      logRgePurchaseEvent("unhandled_error", {
-        userId: (req.user as any)?.id,
-        message: error?.message,
-      });
-      res.status(500).json({ error: "Failed to process purchase", code: "rge_purchase_server_error" });
-    }
-  });
-
-  app.post("/api/templates/realtor-growth-engine/verify-payment", requireAuth, async (req, res) => {
-    try {
-      if (await rejectRgeForShopifyAccount(req, res, "templates/rge/verify-payment", storage.getUser.bind(storage))) {
-        return;
-      }
-
-      const userId = (req.user as any).id;
-      const { sessionId } = req.body;
-
-      if (!sessionId) {
-        return res.status(400).json({ error: "Session ID required" });
-      }
-
-      logRgeCheckoutSuccess("verify_started", { userId, sessionId });
-
-      const stripe = await getUncachableStripeClient();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (session.payment_status !== "paid") {
-        return res.status(400).json({ error: "Payment not completed" });
-      }
-
-      if (session.metadata?.userId !== userId) {
-        return res.status(403).json({ error: "Session does not belong to this user" });
-      }
-
-      if (session.metadata?.templateId && session.metadata.templateId !== TEMPLATE_ID) {
-        return res.status(400).json({ error: "Not a Growth Engine checkout session" });
-      }
-
-      const { entitlement } = await fulfillRgePurchaseAfterPayment(userId, {
-        sessionId,
-        source: "verify",
-      });
-
-      const user = await storage.getUser(userId);
-      if (user?.email) {
-        sendRealtorPaymentConfirmationEmail(user.name || "", user.email).catch((err) =>
-          console.error("[Template] Failed to send payment confirmation email:", err)
-        );
-      }
-
-      logRgeCheckoutSuccess("redirect_to_onboarding", { userId, sessionId });
-
+      const { entitlement } = await provisionGrowthEngine(userId, { source: "pro_included" });
       res.json({
         success: true,
-        entitlement,
+        includedWithPro: true,
+        entitlementStatus: entitlement.status,
+        onboardingComplete: Boolean(entitlement.onboardingSubmittedAt),
         redirectTo: RGE_TEMPLATE_ONBOARDING_PATH,
       });
     } catch (error: any) {
-      console.error("[Template] Verify payment error:", error);
-      logRgeCheckoutSuccess("verify_failed", {
-        userId: (req.user as any)?.id,
-        message: error?.message,
-      });
-      res.status(500).json({ error: "Failed to verify payment" });
+      console.error("[Template] Growth Engine install error:", error);
+      res.status(500).json({ error: "Failed to install Growth Engine", code: "growth_engine_install_failed" });
     }
   });
 
@@ -390,7 +202,7 @@ export function registerTemplateRoutes(app: Express) {
 
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
-        return res.status(403).json({ error: "Template not purchased" });
+        return res.status(403).json({ error: "Growth Engine is not installed" });
       }
 
       if (!user) {
@@ -554,7 +366,7 @@ export function registerTemplateRoutes(app: Express) {
 
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
-        return res.status(403).json({ error: "Template not purchased" });
+        return res.status(403).json({ error: "Growth Engine is not installed" });
       }
 
       if (!user) {
@@ -659,7 +471,7 @@ export function registerTemplateRoutes(app: Express) {
       const userId = (req.user as any).id;
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
-        return res.status(403).json({ error: "Template not purchased" });
+        return res.status(403).json({ error: "Growth Engine is not installed" });
       }
       const progress = await getRgeOnboardingProgress(userId);
       res.json({
@@ -677,7 +489,7 @@ export function registerTemplateRoutes(app: Express) {
       const userId = (req.user as any).id;
       const entitlement = await storage.getTemplateEntitlement(userId, TEMPLATE_ID);
       if (!entitlement || entitlement.status === "locked") {
-        return res.status(403).json({ error: "Template not purchased" });
+        return res.status(403).json({ error: "Growth Engine is not installed" });
       }
       if (entitlement.onboardingSubmittedAt) {
         return res.status(400).json({ error: "Onboarding already completed" });

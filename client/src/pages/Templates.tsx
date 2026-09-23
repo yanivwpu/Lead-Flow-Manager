@@ -494,6 +494,7 @@ function GrowthEngineGalleryCard({
   setLocation,
   rgeEntitlement,
   prospectAiActivated,
+  hasPro,
 }: {
   engine: GrowthEngineCardModel;
   setLocation: (path: string, opts?: { replace?: boolean }) => void;
@@ -503,6 +504,7 @@ function GrowthEngineGalleryCard({
     onboardingSubmittedAt?: string | null;
   } | null;
   prospectAiActivated?: boolean;
+  hasPro?: boolean;
 }) {
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug === "realtor-growth-engine";
@@ -517,7 +519,11 @@ function GrowthEngineGalleryCard({
       ? PROSPECT_AI_PATH
       : engine.detailHref;
   const ctaLabel = isRge
-    ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
+    ? rgeOwned
+      ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
+      : hasPro
+        ? "Install Growth Engine"
+        : "Upgrade to Pro"
     : isProspectAi && prospectAiActivated
       ? "Open"
       : engine.ctaLabel;
@@ -627,11 +633,8 @@ function GrowthEngineGalleryCard({
           }
           return (
             <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2 shadow-sm">
-              {engine.oneTimePrice ? (
-                <p className="text-sm font-semibold tabular-nums leading-snug text-gray-900">
-                  {engine.oneTimePrice} one-time license
-                </p>
-              ) : null}
+              <p className="text-sm font-semibold leading-snug text-emerald-900">Included with Pro</p>
+              <p className="mt-0.5 text-xs text-gray-600">No additional charge with Pro</p>
             </div>
           );
         })()}
@@ -691,6 +694,7 @@ function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
   const { data: rgeTemplate } = useQuery<{
     entitlement?: { status?: RgeEntitlementStatus; purchasedAt?: string | null; onboardingSubmittedAt?: string | null };
+    subscription?: { hasPro?: boolean; accessOk?: boolean };
   } | null>({
     queryKey: ["/api/templates/realtor-growth-engine"],
     queryFn: async () => {
@@ -712,7 +716,7 @@ function GrowthEnginesTab() {
           Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM follow-up logic.
         </p>
         <p className="w-full max-w-none overflow-visible text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
-          Premium engines require an active Pro plan because they use advanced automation and intelligence capacity.
+          Every current and future Growth Engine is included with Pro at no additional charge. Free users can preview each engine before upgrading.
         </p>
       </div>
 
@@ -725,6 +729,7 @@ function GrowthEnginesTab() {
               setLocation={setLocation}
               rgeEntitlement={engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined}
               prospectAiActivated={engine.slug === "prospect-ai" ? prospectAiActivated : undefined}
+              hasPro={engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.hasPro : undefined}
             />
           ))}
         </div>

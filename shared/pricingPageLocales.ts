@@ -314,7 +314,7 @@ const HE: DeepPartial<PricingPageContent> = {
   },
   proCallout: {
     title: "מוכן ל-Growth Engines",
-    body: "הפעילו Growth Engines תעשייתיים תואמים כמו Realtor Growth Engine. ייתכן ש-Growth Engines ידרשו רכישה נפרדת.",
+    body: "הפעילו Growth Engines תעשייתיים תואמים כמו Realtor Growth Engine. כל Growth Engines הנוכחיים והעתידיים כלולים ב-Pro ללא חיוב נוסף.",
   },
   agency: {
     title: "צריכים כמה חשבונות לקוח או נפח הודעות גבוה יותר?",

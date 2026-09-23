@@ -6,7 +6,6 @@
  * import anything from client/src.
  */
 import {
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
   REALTOR_GROWTH_ENGINE_PATH,
   REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
   getFreePlanMonthlyPriceUsd,
@@ -125,14 +124,15 @@ export const PUBLIC_PRODUCT_FACTS = {
   realtorGrowthEngine: {
     id: "realtor-growth-engine",
     name: "Realtor Growth Engine",
-    kind: "one_time_product",
+    kind: "included_capability",
     implementation: "implemented",
     availability: "public",
     lifecycle: ["implemented", "public"],
     publicRoute: REALTOR_GROWTH_ENGINE_PATH,
     publicSelfService: false,
-    currentPurchasableOffer: true,
-    prices: [{ amount: REALTOR_GROWTH_ENGINE_ONETIME_USD, currency: "USD", billingPeriod: "once" }],
+    currentPurchasableOffer: false,
+    prices: [],
+    includedWith: ["pro"],
     requires: ["pro"],
   },
   starter: {

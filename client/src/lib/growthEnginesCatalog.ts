@@ -3,8 +3,6 @@
  * Add new rows here; wire `detailHref` when an engine ships. Backend install / gating stays on engine-specific routes + APIs.
  */
 import {
-  formatUsdDisplay,
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
   REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
 } from "@shared/pricingEntitlements";
 
@@ -43,7 +41,7 @@ export interface GrowthEngineCardModel {
    * When `status === "coming_soon"` and no `image`, picks gradient + icon for the media area.
    */
   placeholderKey?: "wellness" | "capital" | "trades" | "property";
-  /** Displayed on gallery as the canonical one-time license amount when set */
+  /** Legacy optional secondary display row; Growth Engines must not carry a separate price. */
   oneTimePrice?: string | null;
   /** Shown on the RGE detail “Pricing & access” block (not on the gallery pricing strip). */
   subscriptionRequirementShort?: string | null;
@@ -96,7 +94,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     title: "Realtor Growth Engine",
     industry: "Real estate",
     image: "/og/og-realtor-growth-engine.png",
-    badges: ["Premium", "AI Automation", "WhatsApp-first"],
+    badges: ["Included with Pro", "AI Automation", "WhatsApp-first"],
     summary: "Turn inbound chats into qualified tours — automatically.",
     benefits: [
       "Instant AI replies and qualification",
@@ -105,13 +103,13 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     ],
     status: "available",
     detailHref: "/app/templates/realtor-growth-engine",
-    ctaLabel: "View & Activate",
-    oneTimePrice: formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD),
+    ctaLabel: "Install Growth Engine",
+    oneTimePrice: null,
     subscriptionRequirementShort: REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
     monthlyRequirementLabel: REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
     monthlyRequirementBreakdown: null,
     requirements: [
-      "Pro plan required",
+      "Included with Pro — no additional charge",
       "WhatsApp Business connected before activation",
     ],
     metaFeesNote: "WhatsApp / Meta messaging fees are billed separately by Meta.",
@@ -122,7 +120,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     slug: "property-management-growth-engine",
     title: "Property Management Growth Engine",
     industry: "Property management",
-    badges: ["Premium", "AI Automation", "WhatsApp-first"],
+    badges: ["Included with Pro", "AI Automation", "WhatsApp-first"],
     summary:
       "Automate tenant communication, leasing follow-ups, maintenance requests, and more — directly through WhatsApp.",
     benefits: [
@@ -146,7 +144,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     slug: "med-spa-growth-engine",
     title: "Med Spa Growth Engine",
     industry: "Aesthetic & wellness",
-    badges: ["Premium", "AI Automation"],
+    badges: ["Included with Pro", "AI Automation"],
     summary: "Consultation booking, treatment routing, and VIP follow-up — tuned for clinics.",
     benefits: ["Lead capture across channels", "Treatment-intent scoring", "Retention sequences"],
     status: "coming_soon",
@@ -161,7 +159,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     slug: "investor-capital-engine",
     title: "Investor / Capital Raise Engine",
     industry: "Capital & syndication",
-    badges: ["Premium", "AI Automation"],
+    badges: ["Included with Pro", "AI Automation"],
     summary: "Screen investor interest, route decks, and keep diligence moving without dropping threads.",
     benefits: ["Investor qualification", "Document / call scheduling", "Long-cycle nurture"],
     status: "coming_soon",
@@ -176,7 +174,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     slug: "home-services-engine",
     title: "Home Services Engine",
     industry: "Trades & field service",
-    badges: ["Premium", "WhatsApp-first"],
+    badges: ["Included with Pro", "WhatsApp-first"],
     summary: "Dispatch-ready intake: job type, urgency, service area, and booked estimates from chat.",
     benefits: ["Job triage and routing", "Estimate booking", "Review / upsell follow-ups"],
     status: "coming_soon",

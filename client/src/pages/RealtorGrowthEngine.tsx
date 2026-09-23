@@ -69,7 +69,6 @@ import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import {
-  getRgeCheckoutReturnPaths,
   getRgeDetailCtaLabel,
   isRgeOnboardingComplete,
   isRgePurchased,
@@ -80,7 +79,6 @@ import {
 } from "@shared/rgePaths";
 import { formatUsdDisplay, getPaidPlanMonthlyPriceUsd } from "@shared/pricingEntitlements";
 import {
-  getRgePurchaseBillingPayload,
   getSubscriptionApiUrl,
   useShopifyShopHint,
 } from "@/lib/shopifyBillingHint";
@@ -509,7 +507,7 @@ function RGEOnboardingWizard({
               </a>
             </p>
             <p className="text-sm text-gray-700 pt-1">
-              Thank you for your purchase and we wish you lots of business.
+              Your Growth Engine is included with Pro. We wish you lots of business.
             </p>
             <div className="flex justify-center pt-2">
               <Button className="bg-brand-green hover:bg-brand-green/90" asChild data-testid="button-open-automations">
@@ -1000,133 +998,40 @@ export function RealtorGrowthEngine() {
     retry: 1,
   });
 
-  const pendingStripeVerify = React.useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("paid") === "true" && !!params.get("session_id");
-  }, [location]);
-
-  const verifyPaymentMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      const res = await apiRequest("POST", "/api/templates/realtor-growth-engine/verify-payment", { sessionId });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine/onboarding/progress"] });
-      toast({
-        title: "Payment confirmed",
-        description: "Continue guided setup: align channels and book your concierge launch session.",
-      });
-      setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
-      window.history.replaceState({}, "", RGE_TEMPLATE_ONBOARDING_PATH);
-    },
-  });
-
-  const stripeVerifySessionRef = React.useRef<string | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const paid = params.get("paid");
-    const sessionId = params.get("session_id");
-    if (paid === "true" && sessionId && !isShopify) {
-      if (stripeVerifySessionRef.current !== sessionId) {
-        stripeVerifySessionRef.current = sessionId;
-        verifyPaymentMutation.mutate(sessionId);
-      }
-    }
-    if (params.get("shopify_rge") === "success") {
-      queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      toast({
-        title: "Shopify purchase approved",
-        description: "Continue with your guided Realtor Growth Engine setup.",
-      });
-      const url = new URL(window.location.href);
-      url.searchParams.delete("shopify_rge");
-      window.history.replaceState({}, "", url.pathname + url.search);
-      if (!isOnboardingPath) {
-        setLocation(RGE_TEMPLATE_ONBOARDING_PATH);
-      }
-    }
-  }, [isShopify, isOnboardingPath, setLocation]);
-
-  const purchaseMutation = useMutation({
+  const installMutation = useMutation({
     mutationFn: async () => {
-      const billing = getRgePurchaseBillingPayload(billingAccount?.subscription);
-      if (billing.billingChannel === "blocked") {
-        throw Object.assign(new Error("Realtor Growth Engine is not available for Shopify-installed accounts."), {
-          code: "RGE_NOT_AVAILABLE_SHOPIFY",
-          status: 403,
-        });
-      }
-      const res = await fetch("/api/templates/realtor-growth-engine/purchase", {
+      const res = await fetch("/api/templates/realtor-growth-engine/install", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...getRgeCheckoutReturnPaths(),
-          ...getRgePurchaseBillingPayload(billingAccount?.subscription),
-        }),
       });
       if (res.status === 401) {
-        window.location.href = `/auth?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`;
+        window.location.href = `/auth?redirect=${encodeURIComponent(window.location.pathname)}`;
         throw new Error("session_expired");
       }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const msg = typeof body?.error === "string" ? body.error : "Purchase failed";
-        const err = new Error(msg) as Error & { code?: string; reason?: string; status?: number };
-        err.code = typeof body?.code === "string" ? body.code : undefined;
-        err.reason = typeof body?.reason === "string" ? body.reason : undefined;
+        const err = new Error(body?.error || "Installation failed") as Error & { code?: string; status?: number };
+        err.code = body?.code;
         err.status = res.status;
         throw err;
       }
       return body;
     },
-    onSuccess: (data: {
-      url?: string;
-      shopifyConfirmationUrl?: string;
-      alreadyPurchased?: boolean;
-      adminOverride?: boolean;
-      onboardingComplete?: boolean;
-    }) => {
-      if (data.shopifyConfirmationUrl) {
-        window.location.href = data.shopifyConfirmationUrl;
-        return;
-      }
-      if (data.url) {
-        window.location.href = data.url;
-        return;
-      }
+    onSuccess: (data: { alreadyInstalled?: boolean; onboardingComplete?: boolean }) => {
       void queryClient.invalidateQueries({ queryKey: ["/api/templates/realtor-growth-engine"] });
-      if (data.alreadyPurchased || data.adminOverride) {
-        toast({
-          title: data.adminOverride ? "Growth Engine access granted" : "Growth Engine already purchased",
-          description: data.onboardingComplete
-            ? "Opening your Growth Engine."
-            : "Continue your guided launch setup.",
-        });
-        setLocation(
-          data.onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH,
-        );
-        return;
-      }
-      toast({ title: "Template Unlocked", description: "Continue with your guided launch setup." });
-    },
-    onError: (err: Error & { code?: string; reason?: string; status?: number }) => {
-      if (err.message === "session_expired") return;
-      if (err.status === 403 || err.code === "rge_ge_access_denied") {
-        setSubscriptionGate({
-          show: true,
-          hasPro: templateData?.subscription?.hasPro !== false,
-          hasAI: templateData?.subscription?.hasAI !== false,
-        });
-      }
-      const title = err.code === "rge_stripe_price_missing" ? "Checkout unavailable" : "Could not start purchase";
       toast({
-        title,
-        description: err.message,
-        variant: "destructive",
+        title: data.alreadyInstalled ? "Growth Engine already installed" : "Growth Engine installed",
+        description: data.onboardingComplete ? "Opening your Growth Engine." : "Continue your guided launch setup.",
       });
+      setLocation(data.onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH);
+    },
+    onError: (err: Error & { code?: string; status?: number }) => {
+      if (err.message === "session_expired") return;
+      if (err.status === 403 || err.code === "growth_engine_pro_required") {
+        setSubscriptionGate({ show: true, hasPro: false, hasAI: true });
+      }
+      toast({ title: "Could not install Growth Engine", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1179,7 +1084,6 @@ export function RealtorGrowthEngine() {
 
   React.useEffect(() => {
     if (!isOnboardingPath) return;
-    if (pendingStripeVerify || verifyPaymentMutation.isPending) return;
     if (!hasPurchased) {
       setLocation(RGE_TEMPLATE_DETAIL_PATH);
     }
@@ -1187,8 +1091,6 @@ export function RealtorGrowthEngine() {
     isOnboardingPath,
     hasPurchased,
     setLocation,
-    pendingStripeVerify,
-    verifyPaymentMutation.isPending,
   ]);
 
   const { data: assetsData } = useQuery<{ assets?: Array<{ assetType?: string; definition?: Record<string, unknown> }> }>({
@@ -1222,12 +1124,12 @@ export function RealtorGrowthEngine() {
 
   const primaryMarketingCta = React.useMemo(() => {
     if (isPaused) {
-      return { label: "Resume when your plan is active", disabled: true as const };
+      return { label: "Restore Pro to resume", disabled: true as const };
     }
     if (!hasPurchased) {
       return {
-        label: "Activate Engine",
-        disabled: purchaseMutation.isPending || checkingSubscription,
+        label: templateData?.subscription?.accessOk === false ? "Upgrade to Pro" : "Install Growth Engine",
+        disabled: installMutation.isPending || checkingSubscription,
       };
     }
     if (!onboardingComplete) {
@@ -1244,8 +1146,9 @@ export function RealtorGrowthEngine() {
     status,
     entitlement,
     onboardingStep,
-    purchaseMutation.isPending,
+    installMutation.isPending,
     checkingSubscription,
+    templateData?.subscription?.accessOk,
   ]);
 
   React.useEffect(() => {
@@ -1303,7 +1206,7 @@ export function RealtorGrowthEngine() {
 
   // --- Views ---
 
-  const handlePurchaseContinue = async () => {
+  const handleInstallContinue = async () => {
     if (hasPurchased) {
       setLocation(onboardingComplete ? RGE_TEMPLATE_DETAIL_PATH : RGE_TEMPLATE_ONBOARDING_PATH);
       return;
@@ -1318,7 +1221,7 @@ export function RealtorGrowthEngine() {
       return;
     }
     if (templateSub?.accessOk && templateSub?.templateAccessGranted) {
-      purchaseMutation.mutate();
+      installMutation.mutate();
       return;
     }
     setCheckingSubscription(true);
@@ -1336,11 +1239,11 @@ export function RealtorGrowthEngine() {
       }
       if (data.templateAccessGranted) {
         setCheckingSubscription(false);
-        purchaseMutation.mutate();
+        installMutation.mutate();
         return;
       }
       setCheckingSubscription(false);
-      purchaseMutation.mutate();
+      installMutation.mutate();
     } catch {
       setCheckingSubscription(false);
       toast({ title: "Error", description: "Could not verify your subscription. Please try again.", variant: "destructive" });
@@ -1349,7 +1252,7 @@ export function RealtorGrowthEngine() {
 
   const handlePrimaryCta = () => {
     if (!hasPurchased) {
-      void handlePurchaseContinue();
+      void handleInstallContinue();
       return;
     }
     if (isPaused) return;
@@ -1496,7 +1399,7 @@ export function RealtorGrowthEngine() {
                     Continue your <RealtorMark /> Growth Engine launch
                   </h2>
                   <p className="text-sm leading-relaxed text-gray-600">
-                    Your purchase is saved. Resume guided onboarding to book your concierge session and finish activation.
+                    Your installation is saved. Resume guided onboarding to book your concierge session and finish activation.
                     WhatsApp can be connected anytime — it is not required to continue setup.
                   </p>
                   {onboardingStep && onboardingStep > 1 ? (
@@ -1526,7 +1429,7 @@ export function RealtorGrowthEngine() {
                   Your <RealtorMark /> Growth Engine requires an active Pro plan to run automations and handle conversations.
                   Reactivate your plan to resume your system instantly.
                 </p>
-                <p className="mt-1 text-[11px] text-amber-700">Your purchase and configuration are saved — nothing is lost.</p>
+                <p className="mt-1 text-[11px] text-amber-700">Your installation and configuration are saved — nothing is lost.</p>
                 <div className="mt-2.5 flex flex-wrap gap-2">
                   {!templateData?.subscription?.hasPro && (
                     <Button
@@ -2106,7 +2009,7 @@ export function RealtorGrowthEngine() {
                 "Requires AI Brain",
                 "WhatsApp Business connected for live automations",
                 "Approved templates may be needed for re-engagement outside the customer service window",
-                "Concierge onboarding included with purchase",
+                "Concierge onboarding included with Pro",
               ].map((line) => (
                 <div key={line} className="flex items-start gap-2.5">
                   <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-100">
@@ -2117,7 +2020,7 @@ export function RealtorGrowthEngine() {
               ))}
             </div>
             <p className="mt-4 text-[10px] leading-relaxed text-gray-400">
-              WhatsApp messaging fees are billed by Meta. Premium add-ons follow your billing provider&apos;s checkout rules (including Shopify confirmation flows where applicable).
+              WhatsApp messaging fees are billed separately by Meta. The Growth Engine has no additional charge with Pro.
             </p>
           </section>
 
@@ -2152,16 +2055,16 @@ export function RealtorGrowthEngine() {
             <p className="mx-auto mb-6 max-w-md text-sm leading-relaxed text-gray-600">
               {isPaused
                 ? "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."
-                : "Activate the Realtor Growth Engine to unlock checkout and guided concierge onboarding."}
+                : "Install the Realtor Growth Engine with Pro and continue to guided concierge onboarding."}
             </p>
             <Button
               size="lg"
               className={cn(
                 "min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800",
-                (primaryMarketingCta.disabled || purchaseMutation.isPending) && "pointer-events-none opacity-50",
+                (primaryMarketingCta.disabled || installMutation.isPending) && "pointer-events-none opacity-50",
               )}
               onClick={handlePrimaryCta}
-              disabled={purchaseMutation.isPending || primaryMarketingCta.disabled}
+              disabled={installMutation.isPending || primaryMarketingCta.disabled}
               data-testid="button-bottom-cta"
             >
               {checkingSubscription ? (
@@ -2169,10 +2072,10 @@ export function RealtorGrowthEngine() {
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Checking…
                 </>
-              ) : purchaseMutation.isPending ? (
+              ) : installMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Redirecting…
+                  Installing…
                 </>
               ) : (
                 <>
@@ -2181,7 +2084,7 @@ export function RealtorGrowthEngine() {
                 </>
               )}
             </Button>
-            <p className="mt-4 text-xs text-gray-500">One-time template license · Requires an active Pro plan.</p>
+            <p className="mt-4 text-xs text-gray-500">Included with Pro · No additional charge with Pro.</p>
           </section>
         ) : hasPurchased && !onboardingComplete ? (
           <section

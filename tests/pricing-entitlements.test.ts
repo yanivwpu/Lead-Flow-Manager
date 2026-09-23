@@ -287,7 +287,8 @@ test("Pricing page uses shared entitlements and avoids competitor names", () => 
   assert.ok(content.includes("What are Meta conversation fees?"));
   assert.ok(content.includes("FULL_PRO_AI_TRIAL_COPY"));
   assert.ok(content.includes("Growth Engine Ready"));
-  assert.ok(content.includes("Growth Engines may require a separate purchase"));
+  assert.ok(content.includes("every current or future Growth Engine") || content.includes("any current or future Growth Engine"));
+  assert.ok(content.includes("at no additional charge"));
 
   const marketing = readFileSync(
     join(process.cwd(), "client/src/components/pricing/PricingMarketingSections.tsx"),

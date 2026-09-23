@@ -151,7 +151,7 @@ export const PRICING_PAGE_CONTENT_EN: PricingPageContent = {
   },
   proCallout: {
     title: "Growth Engine Ready",
-    body: "Activate compatible industry Growth Engines such as Realtor Growth Engine. Growth Engines may require a separate purchase.",
+    body: "Install any current or future Growth Engine with Pro at no additional charge. Free users can preview Growth Engines before upgrading.",
   },
   agency: {
     title: "Need multiple client accounts or higher messaging volume?",

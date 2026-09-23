@@ -37,9 +37,7 @@ import {
 } from "@shared/localizeMarketingContent";
 import { cn } from "@/lib/utils";
 import {
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
   REALTOR_GROWTH_ENGINE_PATH,
-  REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
 } from "@shared/pricingEntitlements";
 import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
 
@@ -168,12 +166,6 @@ export function RealtorLanding() {
             operatingSystem: "Web",
             url: canonicalUrl,
             description: content.seo.description,
-            offers: {
-              "@type": "Offer",
-              price: String(REALTOR_GROWTH_ENGINE_ONETIME_USD),
-              priceCurrency: "USD",
-              description: `One-time Realtor Growth Engine license. ${REALTOR_GROWTH_ENGINE_REQUIRES_PRO}`,
-            },
             provider: {
               "@type": "Organization",
               name: "WhachatCRM",

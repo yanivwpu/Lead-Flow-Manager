@@ -7,12 +7,14 @@ import {
 import { getShopifyShopHint, useShopifyShopHint } from "@/lib/shopifyBillingHint";
 import { useSubscription } from "@/lib/subscription-context";
 
-/** Shopify-installed merchants: hide Growth Engine / RGE from all in-app UI. */
+/** Growth Engines use plan entitlements and are available to Shopify-installed Pro merchants too. */
 export function hideGrowthEngineForShopify(
   subscription: BillingSubscriptionFlags | null | undefined,
   shopHint?: string | null,
 ): boolean {
-  return mustUseShopifyBilling(subscription, shopHint);
+  void subscription;
+  void shopHint;
+  return false;
 }
 
 export function useHideGrowthEngineForShopify(): boolean {

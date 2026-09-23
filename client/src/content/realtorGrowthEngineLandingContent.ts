@@ -4,13 +4,11 @@
  */
 import { S } from "@shared/marketingScreenshots";
 import {
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
   formatUsdDisplay,
   getPaidPlanMonthlyPriceUsd,
 } from "@shared/pricingEntitlements";
 
 const PRO_MONTHLY_PRICE = `${formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))}/mo`;
-const RGE_ONE_TIME_PRICE = formatUsdDisplay(REALTOR_GROWTH_ENGINE_ONETIME_USD);
 
 export const RGE_LANDING_SEO = {
   title: "Realtor Growth Engine | AI CRM for Real Estate Agents | WhachatCRM",
@@ -401,8 +399,7 @@ export const RGE_LANDING = {
       {
         label: "Real-estate system",
         name: "Realtor Growth Engine",
-        price: RGE_ONE_TIME_PRICE,
-        priceNote: "one-time",
+        price: "Included with Pro",
         desc: "Specialized real-estate workflows, qualification, fields, pipeline, inventory-driven buyer journey, Agent Page setup, and configuration.",
       },
     ],
@@ -416,7 +413,7 @@ export const RGE_LANDING = {
   whiteGlove: {
     title: "White-glove setup — not DIY guesswork",
     subtitle:
-      "RGE is not “buy a template and figure it out.” Guided launch helps you go live with confidence.",
+      "RGE is not “install a template and figure it out.” Guided launch helps you go live with confidence.",
     items: [
       "Live session with a setup specialist",
       "WhatsApp Business API / Meta verification assistance",
@@ -434,7 +431,7 @@ export const RGE_LANDING = {
     },
     {
       q: "What do I need to run the Realtor Growth Engine?",
-      a: `WhachatCRM Pro (AI Brain included) and the ${RGE_ONE_TIME_PRICE} one-time Realtor Growth Engine license. WhatsApp Business connection is part of activation for messaging workflows.`,
+      a: `WhachatCRM Pro, which includes AI Brain and the Realtor Growth Engine at no additional charge. WhatsApp Business connection is part of activation for messaging workflows.`,
     },
     {
       q: "How does follow-up work on WhatsApp?",
@@ -460,7 +457,7 @@ export const RGE_LANDING = {
       "From first message to property match to showing, the Realtor Growth Engine helps handle the repetitive work between each step.",
     cta: "Install Realtor Growth Engine",
     viewPlans: "View all plans",
-    note: `Requires an active Pro plan. ${RGE_ONE_TIME_PRICE} one-time RGE license. No unsupported conversion guarantees.`,
+    note: `Included with an active Pro plan at no additional charge. No unsupported conversion guarantees.`,
   },
 
   screenshots: {

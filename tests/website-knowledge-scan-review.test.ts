@@ -21,7 +21,6 @@ import {
   getPaidPlanMonthlyPriceUsd,
   getPaidPlanYearlyPriceUsd,
   REALTOR_GROWTH_ENGINE_NAME,
-  REALTOR_GROWTH_ENGINE_ONETIME_USD,
 } from "../shared/pricingEntitlements";
 import {
   extractDeterministicFacts,
@@ -507,6 +506,7 @@ function productionShapedHomepageHtml(): string {
 const CANONICAL_FREE = formatCanonicalAmountWithPeriod(getFreePlanMonthlyPriceUsd(), "month");
 const CANONICAL_PRO_MONTH = formatCanonicalAmountWithPeriod(getPaidPlanMonthlyPriceUsd("pro"), "month");
 const CANONICAL_PRO_YEAR = formatCanonicalAmountWithPeriod(getPaidPlanYearlyPriceUsd("pro"), "year");
+const REALTOR_GROWTH_ENGINE_ONETIME_USD = 199; // Historical malformed-site extraction fixture only.
 const CANONICAL_RGE = formatCanonicalAmountWithPeriod(REALTOR_GROWTH_ENGINE_ONETIME_USD, "once");
 
 async function scanProductionHtml(id: string, url: string, html: string, extra?: {
