@@ -66,6 +66,7 @@ import { InventorySidebarSummary } from "@/components/inventory/InventorySidebar
 import { PublicAgentPageSettingsCard } from "@/components/agentPage/PublicAgentPageSettingsCard";
 import { AgentPageSidebarSummary } from "@/components/agentPage/AgentPageSidebarSummary";
 import type { ActivationStatusPayload } from "@/lib/activationStatus";
+import type { WebchatProductionReadiness } from "@shared/webchatWidgetSettings";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
 import {
@@ -224,8 +225,6 @@ type RgeEngineStatusPayload = {
   calendlyConnected?: boolean;
 };
 
-type ChannelSettingRow = { channel: string; isConnected?: boolean | null };
-
 function formatLaunchSessionWhen(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
@@ -308,8 +307,8 @@ function RGEOnboardingWizard({
     enabled: !!user?.id,
   });
 
-  const { data: channelSettings } = useQuery<ChannelSettingRow[]>({
-    queryKey: withUserQueryScope(["/api/channels"], user?.id),
+  const { data: widgetSettings } = useQuery<{ webchatReadiness?: WebchatProductionReadiness }>({
+    queryKey: withUserQueryScope(["/api/widget-settings"], user?.id),
     staleTime: 15_000,
     refetchInterval: 20_000,
     enabled: !!user?.id,
@@ -400,7 +399,7 @@ function RGEOnboardingWizard({
     }
   }, [setStep, totalSteps, refetchEngineStatus, toast]);
 
-  const webchatConnected = !!channelSettings?.some((s) => s.channel === "webchat" && !!s.isConnected);
+  const webchatConnected = widgetSettings?.webchatReadiness?.effectivePublic === true;
   const calendlyConnected = !!engineStatusData?.calendlyConnected;
   const whatsappReady = !!activationStatus?.whatsappConnected;
 

@@ -290,7 +290,8 @@ const exactLegacyStored = {
   assert.doesNotMatch(website, /user\.id/);
 
   const channels = read("client/src/components/ChannelSettings.tsx");
-  assert.match(channels, /resolveWidgetActivationState/);
+  assert.match(channels, /widgetInstall\?\.webchatReadiness/);
+  assert.doesNotMatch(channels, /resolveWidgetActivationState/);
   assert.match(channels, /widgetSurfaceStatus/);
   assert.match(channels, /text-webchat-effective-status/);
   assert.match(channels, /icon-webchat-neutral/);
