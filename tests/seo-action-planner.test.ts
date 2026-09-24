@@ -251,7 +251,7 @@ assert.match(actionServiceSource,/SEO_STALE_CHECK_LIMIT=10/);assert.match(action
 const recoveryMigration=readFileSync(new URL("../migrations/0100_seo_refresh_return_and_stale_rotation.sql",import.meta.url),"utf8");
 assert.match(recoveryMigration,/refresh_lease_token IS NOT NULL AND a\.refresh_lease_expires_at<=NOW\(\)/);
 assert.match(recoveryMigration,/refresh_lease_token IS NULL[\s\S]+updated_at<=NOW\(\)-INTERVAL '30 minutes'/);
-assert.match(recoveryMigration,/refresh_return_status IN \('proposed','revision_required'\)/);
+assert.match(recoveryMigration,/refresh_return_status IN \('proposed','revision_required','rejected'\)/);
 assert.doesNotMatch(recoveryMigration,/WHERE status='researching';/);
 assert.match(recoveryMigration,/claimTokenHash/);
 assert.match(startup,/0100_seo_refresh_return_and_stale_rotation/);
