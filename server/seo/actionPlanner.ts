@@ -4,7 +4,7 @@ import { z } from "zod";
 export const SEO_ACTION_STATES = ["detected", "researching", "proposed", "approved", "rejected", "executing", "measuring", "kept", "revision_required", "rolled_back", "failed"] as const;
 export const PHASE_2B_TRANSITIONS: Record<string, readonly string[]> = {
   detected: ["researching", "failed"], researching: ["proposed", "failed"], proposed: ["approved", "rejected", "researching"],
-  approved: [], rejected: ["researching"],
+  approved: [], rejected: ["researching"], revision_required: ["researching", "rejected"],
 };
 export function mayTransitionSeoAction(from: string, to: string) { return PHASE_2B_TRANSITIONS[from]?.includes(to) ?? false; }
 
