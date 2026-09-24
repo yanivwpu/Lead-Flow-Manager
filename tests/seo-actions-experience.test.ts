@@ -33,9 +33,14 @@ assert.match(serviceSource,/\["proposed","revision_required","rejected"\]/,"reje
 assert.match(serviceSource,/published:false/,"approval and refresh never publish website content");
 assert.match(serviceSource,/a\.property_id=\$\{propertyId\}/,"action reads are workspace scoped");
 const staleApproved=seoActionRefreshDisposition({status:"approved",stale_at:"2026-09-24T00:00:00Z"});assert.deepEqual(staleApproved,{allowed:true,expired:false,returnStatus:"revision_required"},"stale approval can be re-evaluated but cannot carry approval forward");
-assert.equal(seoActionRefreshDisposition({status:"approved",stale_at:null}).allowed,false,"unchanged approved actions cannot be rewritten");
+const validApprovedProposal={...proposal};
+assert.equal(seoActionRefreshDisposition({status:"approved",stale_at:null,proposal:validApprovedProposal,version_missing:false}).allowed,false,"valid unchanged approved actions cannot be rewritten");
+const legacyApproved={status:"approved",stale_at:null,proposal:{legacySchema:true},version_missing:false};
+assert.deepEqual(storedProposalReviewability(legacyApproved),{approvalBlocked:true,invalidReason:"This proposal predates or fails the current recommendation rules"},"listing marks a legacy approved proposal for re-evaluation");
+assert.deepEqual(seoActionRefreshDisposition(legacyApproved),{allowed:true,expired:false,returnStatus:"revision_required"},"the refresh claim applies the same persisted-proposal validation as listing");
 assert.deepEqual(seoActionRefreshDisposition({status:"researching",refresh_lease_expires_at:"2026-09-23T00:00:00Z",refresh_return_status:"revision_required"},new Date("2026-09-24T00:00:00Z")),{allowed:true,expired:true,returnStatus:"revision_required"});
 assert.match(serviceSource,/status:"proposed"[\s\S]+approvedBy:null,approvedAt:null/,"a revised version returns to review and clears current approval fields");
+assert.match(serviceSource,/LEFT JOIN seo_action_versions v[\s\S]+a\.property_id=\$\{propertyId\}[\s\S]+FOR UPDATE OF a/,"refresh eligibility is derived from the workspace-scoped persisted proposal while locking the action");
 assert.match(serviceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+status:"revision_required"|status:"revision_required"[\s\S]+OPPORTUNITY_NO_LONGER_QUALIFIES/,"insufficient refreshed evidence remains recoverable");
 assert.match(serviceSource,/status:claim\.returnStatus[\s\S]+prior proposal restored/,"refresh failure restores a retryable state and prior version");
 assert.match(serviceSource,/INSUFFICIENT_EVIDENCE[\s\S]+versionCreated:false,recoverable:true/,"insufficient evidence returns a non-publishing recoverable result without a duplicate version");
