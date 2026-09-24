@@ -118,7 +118,7 @@ assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "re
 assert.match(actionServiceSource,/freshMetrics=await loadPlannerMetrics[\s\S]+competitorCount[\s\S]+buildProposal\(freshItem,\{fingerprint:snapshot\.contentFingerprint,title:snapshot\.title,metaDescription:snapshot\.metaDescription,headings:snapshot\.headings/,"refresh derives the new validated proposal from fresh page, Search Console, and available competitor evidence");
 assert.match(actionServiceSource,/promptVersion:"seo-action-v3-fresh-evidence"[\s\S]+evidenceSnapshot:immutableEvidence\(refreshedOpportunity\.id,freshItem,snapshot\)/);
 assert.doesNotMatch(actionServiceSource,/freshItem=.*\?\?item/,"an unqualified refreshed opportunity cannot fall back to stale evidence");
-assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus:"failed"[\s\S]+versionCreated:false/,"no-longer-qualifying refreshes close without a new version");
+assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus:"revision_required"[\s\S]+versionCreated:false/,"no-longer-qualifying refreshes remain recoverable without a new version");
 assert.match(actionServiceSource,/REFRESH_IDENTITY_CONFLICT[\s\S]+opportunityId:refreshedOpportunity\.id[\s\S]+idempotencyKey:refreshedKey[\s\S]+queryCluster:freshItem\.queryCluster[\s\S]+actionType:proposal\.actionType[\s\S]+risk:proposal\.risk[\s\S]+confidence:proposal\.confidence/,"refreshed classification and identity metadata update atomically after collision fencing");
 
 const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_planner.sql", import.meta.url), "utf8");
@@ -233,7 +233,7 @@ assert.doesNotMatch(actionServiceSource,/console\.error\([^\n]+(?:stack|query|pa
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
-assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);
+assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:failureCategory/);assert.match(startup,/0098_seo_action_refresh_leases/);
 
 // Historical pages explain migrations but only concurrent current visibility triggers cannibalization.
 const migratedStable=clusterAndScoreOpportunities([metric(10,100,5,"migration query","https://example.com/new")],[metric(10,100,5,"migration query","https://example.com/old")]);assert.notEqual(migratedStable[0]?.type,"cannibalization");
@@ -256,7 +256,7 @@ assert.doesNotMatch(recoveryMigration,/WHERE status='researching';/);
 assert.match(recoveryMigration,/claimTokenHash/);
 assert.match(startup,/0100_seo_refresh_return_and_stale_rotation/);
 assert.match(actionServiceSource,/recoverAbandonedLegacyRefreshes[\s\S]+refresh_lease_token IS NULL[\s\S]+INTERVAL '30 minutes'[\s\S]+FOR UPDATE SKIP LOCKED/);assert.match(actionServiceSource,/SEO_LEGACY_REFRESH_RECOVERY_LIMIT=50/);assert.match(actionServiceSource,/analyzeSeoOpportunities[\s\S]+await recoverAbandonedLegacyRefreshes/);assert.match(actionServiceSource,/refreshSeoAction[\s\S]+await recoverAbandonedLegacyRefreshes/);
-assert.match(actionServiceSource,/refreshReturnStatus:returnStatus/);
+assert.match(actionServiceSource,/refreshReturnStatus:disposition\.returnStatus/);
 assert.match(actionServiceSource,/status:claim\.returnStatus[\s\S]+refreshReturnStatus:null/);
 assert.match(actionServiceSource,/toStatus:claim\.returnStatus/);
 assert.match(actionServiceSource,/action\.stale_at\|\|action\.status==="revision_required"/);

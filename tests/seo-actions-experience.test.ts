@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { buildProposal, InsufficientSeoEvidenceError, normalizeActionListInput, seoActionViewStatuses, storedProposalReviewability } from "../server/seo/actionService";
-import { validateRecommendationOutput } from "../server/seo/actionPlanner";
+import { buildProposal, InsufficientSeoEvidenceError, normalizeActionListInput, seoActionViewStatuses, storedProposalReviewability, seoActionRefreshDisposition } from "../server/seo/actionService";
+import { mayTransitionSeoAction, validateRecommendationOutput } from "../server/seo/actionPlanner";
 import type { ScoredOpportunity } from "../server/seo/opportunityPlanner";
 
 assert.deepEqual(seoActionViewStatuses("review"),["proposed","revision_required","researching"]);
@@ -22,9 +22,18 @@ assert.throws(()=>validateRecommendationOutput({...proposal,proposedMetaDescript
 assert.throws(()=>validateRecommendationOutput({...proposal,proposedMetaDescription:"Guaranteed #1 real estate CRM for every agent."}),/unsupported/);
 const expansion=buildProposal(item({type:"striking_distance",queryCluster:["how quickly can automation route new property leads"],current:{clicks:4,impressions:90,ctr:4/90,position:9}}),snapshot);assert.equal(expansion.actionType,"content_expansion");assert.match(expansion.proposedContent!,/automation route new property leads/i);assert.match(expansion.insertionLocation,/Follow up with every property lead/);
 assert.throws(()=>buildProposal(item({type:"striking_distance",queryCluster:["property inquiries assign leads agents track follow up"]}),snapshot),InsufficientSeoEvidenceError,"covered topics do not get filler");
-console.log("SEO actions experience tests passed");
 const serviceSource=(await import("node:fs")).readFileSync(new URL("../server/seo/actionService.ts",import.meta.url),"utf8");
 assert.match(serviceSource,/status IN \('detected','researching','proposed','approved','revision_required','rejected'\)/,"unchanged rejected identities remain deduplicated");
 assert.match(serviceSource,/\["proposed","revision_required","rejected"\]/,"rejected records can be re-evaluated in place with history preserved");
 assert.match(serviceSource,/published:false/,"approval and refresh never publish website content");
 assert.match(serviceSource,/a\.property_id=\$\{propertyId\}/,"action reads are workspace scoped");
+const staleApproved=seoActionRefreshDisposition({status:"approved",stale_at:"2026-09-24T00:00:00Z"});assert.deepEqual(staleApproved,{allowed:true,expired:false,returnStatus:"revision_required"},"stale approval can be re-evaluated but cannot carry approval forward");
+assert.equal(seoActionRefreshDisposition({status:"approved",stale_at:null}).allowed,false,"unchanged approved actions cannot be rewritten");
+assert.deepEqual(seoActionRefreshDisposition({status:"researching",refresh_lease_expires_at:"2026-09-23T00:00:00Z",refresh_return_status:"revision_required"},new Date("2026-09-24T00:00:00Z")),{allowed:true,expired:true,returnStatus:"revision_required"});
+assert.match(serviceSource,/status:"proposed"[\s\S]+approvedBy:null,approvedAt:null/,"a revised version returns to review and clears current approval fields");
+assert.match(serviceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+status:"revision_required"|status:"revision_required"[\s\S]+OPPORTUNITY_NO_LONGER_QUALIFIES/,"insufficient refreshed evidence remains recoverable");
+assert.match(serviceSource,/status:claim\.returnStatus[\s\S]+prior proposal restored/,"refresh failure restores a retryable state and prior version");
+assert.match(serviceSource,/INSUFFICIENT_EVIDENCE[\s\S]+versionCreated:false,recoverable:true/,"insufficient evidence returns a non-publishing recoverable result without a duplicate version");
+
+const lifecycle={status:"proposed",currentVersion:1,approvedAt:null as string|null,staleAt:null as string|null,history:[] as string[]};assert.equal(mayTransitionSeoAction(lifecycle.status,"approved"),true);lifecycle.status="approved";lifecycle.approvedAt="2026-09-24T09:00:00Z";lifecycle.history.push("approved:v1");lifecycle.staleAt="2026-09-24T10:00:00Z";const approvedRefresh=seoActionRefreshDisposition({status:lifecycle.status,stale_at:lifecycle.staleAt});assert.equal(approvedRefresh.returnStatus,"revision_required");lifecycle.status="researching";lifecycle.history.push("refresh-started:v1");lifecycle.currentVersion++;lifecycle.status="proposed";lifecycle.approvedAt=null;lifecycle.staleAt=null;lifecycle.history.push("proposed:v2");assert.deepEqual(lifecycle.history,["approved:v1","refresh-started:v1","proposed:v2"],"original approval history survives the revised version");assert.equal(lifecycle.approvedAt,null,"the revised proposal does not inherit approval");assert.equal(mayTransitionSeoAction(lifecycle.status,"approved"),true);lifecycle.status="approved";lifecycle.approvedAt="2026-09-24T11:00:00Z";lifecycle.history.push("approved:v2");assert.equal(lifecycle.currentVersion,2);assert.equal(lifecycle.history.at(-1),"approved:v2");
+console.log("SEO actions experience tests passed");
