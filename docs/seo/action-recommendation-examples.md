@@ -39,3 +39,21 @@ These are **local synthetic fixture results**, produced by `scripts/seo-action-f
 **Why:** The fixture reproduces the 959-impression versus 3-impression materiality scenario. The captured heading and body already directly cover “Zoko alternative,” so the generator does not manufacture an expansion. The incidental homepage impressions remain diagnostic evidence and do not become a cannibalization proposal.
 
 In every case, approval remains non-publishing. A review-ready result carries the URL, current and proposed values, exact target, acceptance checks, snapshot rollback reference, and an unresolved repository target unless source mapping is established separately.
+
+## Supported content-expansion fixture
+
+The production generation path produces the following complete draft when a question is absent but the snapshot contains directly relevant, verified workflow facts:
+
+> ## What happens after a property inquiry arrives
+>
+> The verified workflow described on this page is: Capture property inquiries from WhatsApp, assign leads to agents, and record follow-up in one shared inbox.
+
+This answer selects the relevant workflow evidence rather than copying the first 180 characters of the page.
+
+## Unsupported content-expansion fixture
+
+For the fixture query `whatsapp crm pricing`, the snapshot contains only conversation-routing evidence. The production path rejects the proposal with:
+
+> The snapshot does not contain verified facts that answer “whatsapp crm pricing”
+
+No pricing, product, or competitor claim is inferred.
