@@ -16,6 +16,11 @@ export const seoRecommendationOutputSchema = z.object({
   internalLinkSource: z.string().url().nullable().optional(), internalLinkDestination: z.string().url().nullable().optional(), structuredDataProposal: z.record(z.unknown()).nullable().optional(),
   explanation: z.string().trim().min(20).max(2_000), expectedBenefit: z.string().trim().min(10).max(1_000), confidence: z.number().min(0).max(1),
   risk: z.enum(["low", "medium", "high"]), automaticExecutionEligible: z.boolean(), rollbackConcept: z.string().trim().min(10).max(1_000), evidenceIds: z.array(z.string().min(1)).min(1).max(30),
+  observedProblem: z.string().trim().min(20).max(2_000), currentValue: z.string().trim().min(1).max(12_000),
+  rationale: z.string().trim().min(20).max(2_000), evidenceSummary: z.string().trim().min(20).max(3_000),
+  evidenceDateRange: z.string().trim().min(5).max(200), evidenceLimitations: z.string().trim().min(10).max(1_000),
+  implementationTarget: z.string().trim().min(3).max(500), acceptanceChecks: z.array(z.string().trim().min(3).max(500)).min(1).max(10),
+  repositoryTarget: z.string().trim().max(500).nullable(),
 }).superRefine((value, ctx) => {
   if (value.actionType === "title_tag" && !value.proposedTitle) ctx.addIssue({ code: "custom", message: "Title actions require exact proposedTitle" });
   if (value.actionType === "meta_description" && !value.proposedMetaDescription) ctx.addIssue({ code: "custom", message: "Meta actions require exact proposedMetaDescription" });
@@ -30,6 +35,10 @@ export function validateRecommendationOutput(input: unknown, competitorTexts: st
   const value = seoRecommendationOutputSchema.parse(input);
   const generated = [value.proposedTitle, value.proposedMetaDescription, value.proposedContent, value.contentBrief].filter(Boolean).join(" ");
   if (prohibitedClaims.test(generated)) throw new Error("Recommendation contains an unsupported promotional claim");
+  if (/explore whachatcrm for|manage customer relationships in one workspace|unlock (?:growth|success)|take your .* to the next level/i.test(generated)) throw new Error("Recommendation contains generic boilerplate");
+  const normalize=(text:string)=>text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+  const proposed=value.proposedMetaDescription??value.proposedTitle??value.proposedContent??"";
+  if(proposed&&normalize(proposed)===normalize(value.currentValue))throw new Error("Recommendation does not materially change the current value");
   const normalized = generated.toLowerCase().replace(/\s+/g, " ");
   for (const source of competitorTexts) {
     const words = source.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
@@ -62,7 +71,7 @@ export function queryForTargetPage(query:string,targetPage:string){const languag
 function safeFirstPartyIntent(value:string|undefined,targetPage:string){if(value){const language=recommendationLanguageForPage(targetPage),clean=value.replace(/\s*[|–—-]\s*Whachat(?:CRM)?\b.*$/iu,"").replace(/\s+/gu," ").trim(),hasForeign=FOREIGN_SCRIPT.test(clean);if(clean&&SCRIPT_PATTERN[language].test(clean)&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean))))return clean;}try{const slug=new URL(targetPage,"https://seo-language.invalid").pathname.split("/").filter(Boolean).at(-1)?.replace(/[-_]+/g," ").trim();return slug||undefined;}catch{return undefined;}}
 export function proposedMetaDescriptionForQuery(query: string,targetPage="/",firstPartyIntent?:string) {
   const safeQuery=queryForTargetPage(query,targetPage),intent=safeQuery===QUERY_FALLBACK[recommendationLanguageForPage(targetPage)]?safeFirstPartyIntent(firstPartyIntent,targetPage)??safeQuery:safeQuery;
-  const prefix = "Explore WhachatCRM for ", suffix = ": organize conversations, follow up consistently, and manage customer relationships in one workspace.";
+  const prefix = "", suffix = ": coordinate WhatsApp conversations, lead ownership, and follow-up from a shared team inbox.";
   const queryBudget = SEO_META_DESCRIPTION_MAX - prefix.length - suffix.length;
   const conciseQuery = truncateAtWord(intent.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
   return truncateAtWord(`${prefix}${conciseQuery}${suffix}`, SEO_META_DESCRIPTION_MAX);

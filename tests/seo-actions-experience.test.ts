@@ -1,0 +1,28 @@
+import assert from "node:assert/strict";
+import { buildProposal, InsufficientSeoEvidenceError, normalizeActionListInput, seoActionViewStatuses } from "../server/seo/actionService";
+import { validateRecommendationOutput } from "../server/seo/actionPlanner";
+import type { ScoredOpportunity } from "../server/seo/opportunityPlanner";
+
+assert.deepEqual(seoActionViewStatuses("review"),["proposed","revision_required","researching"]);
+assert.deepEqual(seoActionViewStatuses("approved"),["approved"]);
+assert.ok(seoActionViewStatuses("history").includes("rejected"));
+assert.deepEqual(normalizeActionListInput({view:"bogus",search:"  zoko ",page:-4,limit:999}),{view:"review",search:"zoko",type:undefined,page:1,limit:50,offset:0});
+assert.equal(normalizeActionListInput({view:"history",page:3,limit:20}).offset,40);
+
+const item=(overrides:Partial<ScoredOpportunity>={}):ScoredOpportunity=>({clusterKey:"fixture-cluster",queryCluster:["real estate crm follow up"],targetPage:"https://whachatcrm.com/real-estate-crm",recommendedPrimaryPage:"https://whachatcrm.com/real-estate-crm",competingPages:[],type:"low_ctr",current:{clicks:2,impressions:113,ctr:2/113,position:8},previous:{clicks:3,impressions:100,ctr:.03,position:7},priorityScore:80,confidenceScore:.7,estimatedUpside:2.5,reason:"CTR is below the documented threshold at a first-page average position.",evidence:{},...overrides});
+const snapshot={fingerprint:"a".repeat(64),title:"Real Estate CRM | WhachatCRM",metaDescription:"Keep property leads organized.",headings:["Real Estate CRM","Follow up with every property lead"],sections:["Capture property inquiries from WhatsApp, assign leads to agents, and track follow-up in one shared inbox."],competitorCount:0};
+const proposal=buildProposal(item(),snapshot);
+assert.equal(proposal.actionType,"meta_description");assert.equal(proposal.insertionLocation,"Replace meta description");assert.equal(proposal.currentValue,snapshot.metaDescription);assert.match(proposal.proposedMetaDescription!,/Real Estate CRM/);assert.match(proposal.proposedMetaDescription!,/property inquiries/);assert.match(proposal.evidenceLimitations,/No competitor research/);assert.doesNotMatch(proposal.expectedBenefit,/\d+%/);assert.match(proposal.expectedBenefit,/no uplift is estimated/i);assert.equal(proposal.automaticExecutionEligible,false);
+assert.throws(()=>buildProposal(item({current:{clicks:0,impressions:100,ctr:0,position:80}}),snapshot),InsufficientSeoEvidenceError,"low rank plus low CTR is not a snippet recommendation");
+assert.throws(()=>buildProposal(item(),{...snapshot,title:"",sections:[]}),InsufficientSeoEvidenceError);
+assert.throws(()=>validateRecommendationOutput({...proposal,proposedMetaDescription:"Explore WhachatCRM for real estate CRM: manage customer relationships in one workspace."}),/generic boilerplate/);
+assert.throws(()=>validateRecommendationOutput({...proposal,proposedMetaDescription:snapshot.metaDescription}),/does not materially change/);
+assert.throws(()=>validateRecommendationOutput({...proposal,proposedMetaDescription:"Guaranteed #1 real estate CRM for every agent."}),/unsupported/);
+const expansion=buildProposal(item({type:"striking_distance",queryCluster:["how quickly can automation route new property leads"],current:{clicks:4,impressions:90,ctr:4/90,position:9}}),snapshot);assert.equal(expansion.actionType,"content_expansion");assert.match(expansion.proposedContent!,/automation route new property leads/i);assert.match(expansion.insertionLocation,/Follow up with every property lead/);
+assert.throws(()=>buildProposal(item({type:"striking_distance",queryCluster:["property inquiries assign leads agents track follow up"]}),snapshot),InsufficientSeoEvidenceError,"covered topics do not get filler");
+console.log("SEO actions experience tests passed");
+const serviceSource=(await import("node:fs")).readFileSync(new URL("../server/seo/actionService.ts",import.meta.url),"utf8");
+assert.match(serviceSource,/status IN \('detected','researching','proposed','approved','revision_required','rejected'\)/,"unchanged rejected identities remain deduplicated");
+assert.match(serviceSource,/\["proposed","revision_required","rejected"\]/,"rejected records can be re-evaluated in place with history preserved");
+assert.match(serviceSource,/published:false/,"approval and refresh never publish website content");
+assert.match(serviceSource,/a\.property_id=\$\{propertyId\}/,"action reads are workspace scoped");
