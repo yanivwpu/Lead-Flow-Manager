@@ -161,6 +161,7 @@ const metric=(clicks:number,impressions:number,position:number,query="query",pag
 assert.equal(clusterAndScoreOpportunities([metric(20,100,1)],[]).length,0,"position-one healthy CTR is not an opportunity");
 assert.equal(clusterAndScoreOpportunities([metric(1,100,1)],[])[0].type,"low_ctr","position-one weak CTR qualifies");
 assert.equal(clusterAndScoreOpportunities([metric(10,100,8)],[])[0].type,"striking_distance","positions 4-20 remain striking distance even with healthy CTR");
+assert.equal(clusterAndScoreOpportunities([metric(1,100,8)],[])[0].type,"low_ctr","documented low CTR at a visible rank reaches metadata review rather than generic expansion");
 assert.equal(clusterAndScoreOpportunities([metric(0,49,1)],[]).length,0,"low-impression noise is excluded");
 assert.equal(clusterAndScoreOpportunities([metric(0,0,1)],[]).length,0,"zero impressions are excluded");
 assert.equal(clusterAndScoreOpportunities([metric(7.2,100,1)],[]).length,0,"CTR exactly at the sixty-percent tolerance is healthy");

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildProposal, InsufficientSeoEvidenceError, normalizeActionListInput, seoActionViewStatuses } from "../server/seo/actionService";
+import { buildProposal, InsufficientSeoEvidenceError, normalizeActionListInput, seoActionViewStatuses, storedProposalReviewability } from "../server/seo/actionService";
 import { validateRecommendationOutput } from "../server/seo/actionPlanner";
 import type { ScoredOpportunity } from "../server/seo/opportunityPlanner";
 
@@ -8,6 +8,8 @@ assert.deepEqual(seoActionViewStatuses("approved"),["approved"]);
 assert.ok(seoActionViewStatuses("history").includes("rejected"));
 assert.deepEqual(normalizeActionListInput({view:"bogus",search:"  zoko ",page:-4,limit:999}),{view:"review",search:"zoko",type:undefined,page:1,limit:50,offset:0});
 assert.equal(normalizeActionListInput({view:"history",page:3,limit:20}).offset,40);
+assert.deepEqual(storedProposalReviewability({status:"proposed",proposal:{legacy:true}}),{approvalBlocked:true,invalidReason:"This proposal predates or fails the current recommendation rules"});
+assert.deepEqual(storedProposalReviewability({status:"approved",proposal:{legacy:true}}),{approvalBlocked:false,invalidReason:null},"approved history is not silently rewritten");
 
 const item=(overrides:Partial<ScoredOpportunity>={}):ScoredOpportunity=>({clusterKey:"fixture-cluster",queryCluster:["real estate crm follow up"],targetPage:"https://whachatcrm.com/real-estate-crm",recommendedPrimaryPage:"https://whachatcrm.com/real-estate-crm",competingPages:[],type:"low_ctr",current:{clicks:2,impressions:113,ctr:2/113,position:8},previous:{clicks:3,impressions:100,ctr:.03,position:7},priorityScore:80,confidenceScore:.7,estimatedUpside:2.5,reason:"CTR is below the documented threshold at a first-page average position.",evidence:{},...overrides});
 const snapshot={fingerprint:"a".repeat(64),title:"Real Estate CRM | WhachatCRM",metaDescription:"Keep property leads organized.",headings:["Real Estate CRM","Follow up with every property lead"],sections:["Capture property inquiries from WhatsApp, assign leads to agents, and track follow-up in one shared inbox."],competitorCount:0};
