@@ -62,10 +62,7 @@ import {
 } from "@shared/metaTemplateSend";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  getRgeGalleryCtaLabel,
-  getRgeGalleryStatusLabel,
   getRgeHubPath,
-  isRgeOwnedStatus,
   type RgeEntitlementStatus,
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
@@ -76,6 +73,7 @@ import {
   useProspectAiStatus,
 } from "@/lib/prospectAi";
 import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineStoryArt";
+import { resolveRgeGalleryState } from "@/lib/growthEngineGalleryState";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
@@ -495,6 +493,9 @@ function GrowthEngineGalleryCard({
   rgeEntitlement,
   prospectAiActivated,
   hasPro,
+  accessOk,
+  entitlementLoading,
+  entitlementError,
 }: {
   engine: GrowthEngineCardModel;
   setLocation: (path: string, opts?: { replace?: boolean }) => void;
@@ -505,41 +506,50 @@ function GrowthEngineGalleryCard({
   } | null;
   prospectAiActivated?: boolean;
   hasPro?: boolean;
+  accessOk?: boolean;
+  entitlementLoading?: boolean;
+  entitlementError?: boolean;
 }) {
   const isComingSoon = engine.status === "coming_soon";
-  const showRealtorMark = engine.slug === "realtor-growth-engine";
+  const showRealtorMark = engine.slug.startsWith("realtor-growth-engine");
   const isProspectAi = engine.slug === "prospect-ai";
-  const isRge = engine.slug === "realtor-growth-engine";
+  const isRge = engine.slug.startsWith("realtor-growth-engine");
   const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
-  const rgeOwned = isRge && isRgeOwnedStatus(rgeEntitlementStatus);
   // Prospect AI must open the authenticated workspace — never the public /prospect-ai landing.
   const hubHref = isRge
     ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement)
     : isProspectAi
       ? PROSPECT_AI_PATH
       : engine.detailHref;
+  const rgeState = isRge
+    ? resolveRgeGalleryState({
+        catalogStatus: engine.status,
+        entitlementStatus: rgeEntitlementStatus,
+        onboardingSubmittedAt: rgeEntitlement?.onboardingSubmittedAt,
+        accessOk,
+        hasPro,
+        loading: entitlementLoading,
+        error: entitlementError,
+      })
+    : null;
   const ctaLabel = isRge
-    ? rgeOwned
-      ? getRgeGalleryCtaLabel(rgeEntitlementStatus, engine.ctaLabel)
-      : hasPro
-        ? "Install Growth Engine"
-        : "Upgrade to Pro"
+    ? rgeState!.label
     : isProspectAi && prospectAiActivated
       ? "Open"
       : engine.ctaLabel;
-  const statusLabel = isRge ? getRgeGalleryStatusLabel(rgeEntitlementStatus, rgeEntitlement) : null;
+  const statusLabel = isRge ? rgeState!.statusLabel : null;
   const storyVariant = engine.placeholderKey ?? "wellness";
   const catalogQuota = prospectDiscoveriesCatalogLines();
 
   return (
     <Card
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-[box-shadow,border-color,transform] duration-200",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-[box-shadow,border-color] duration-200",
         isComingSoon
           ? "border-gray-200/75 text-gray-800 hover:border-gray-200"
           : isProspectAi
-            ? "border-sky-200/90 ring-1 ring-sky-100/80 hover:-translate-y-0.5 hover:border-cyan-300/90 hover:shadow-lg"
-            : "border-gray-200/90 hover:-translate-y-0.5 hover:border-gray-300/90 hover:shadow-lg",
+            ? "border-sky-200/90 hover:border-sky-300 hover:shadow-md"
+            : "border-gray-200/90 hover:border-gray-300 hover:shadow-md",
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
@@ -547,7 +557,7 @@ function GrowthEngineGalleryCard({
         className={cn(
           // Shared strip height so Prospect AI / Realtor / placeholders align edge-to-edge.
           // Prospect AI PNG is 1536×1024 (taller AR) — contain + inset so title/caption clear the rounded crop.
-          "relative isolate h-52 w-full shrink-0 overflow-hidden rounded-t-xl sm:h-56",
+          "relative isolate h-36 w-full shrink-0 overflow-hidden rounded-t-xl sm:h-40",
           isProspectAi ? "bg-[#0B1F3A]" : "bg-gray-100",
         )}
       >
@@ -584,7 +594,7 @@ function GrowthEngineGalleryCard({
           </div>
         ) : null}
       </div>
-      <CardContent className="flex flex-1 flex-col gap-4 p-5 pt-4">
+      <CardContent className="flex flex-1 flex-col gap-3.5 p-5 pt-4">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
           <h3
@@ -602,7 +612,7 @@ function GrowthEngineGalleryCard({
         </div>
         <p className="text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {(() => {
-          if (rgeOwned) return null;
+          if (isRge || isComingSoon) return null;
           if (isProspectAi) {
             return (
               <div className="rounded-lg border border-sky-100/90 bg-gradient-to-br from-sky-50/80 to-cyan-50/40 px-2 py-2 shadow-sm sm:px-2.5">
@@ -624,13 +634,7 @@ function GrowthEngineGalleryCard({
             engine.galleryPricingMode ??
             (engine.oneTimePrice ? "show" : engine.status === "coming_soon" ? "coming_soon" : "hidden");
           if (mode === "hidden") return null;
-          if (mode === "coming_soon") {
-            return (
-              <div className="rounded-lg border border-gray-200/80 bg-gray-50/80 px-3 py-2 text-sm text-gray-600">
-                Pricing coming soon
-              </div>
-            );
-          }
+          if (mode === "coming_soon") return null;
           return (
             <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2 shadow-sm">
               <p className="text-sm font-semibold leading-snug text-emerald-900">Included with Pro</p>
@@ -638,17 +642,6 @@ function GrowthEngineGalleryCard({
             </div>
           );
         })()}
-        <div className="flex flex-wrap gap-1.5">
-          {engine.badges.map((b) => (
-            <Badge
-              key={b}
-              variant="outline"
-              className="border-violet-200/80 bg-violet-50/60 text-[11px] font-medium text-violet-900/80 shadow-none"
-            >
-              {b}
-            </Badge>
-          ))}
-        </div>
         <ul className="flex flex-1 flex-col gap-2.5 text-sm leading-relaxed text-gray-700">
           {engine.benefits.slice(0, 3).map((b) => (
             <li key={b} className="flex gap-2.5">
@@ -657,6 +650,19 @@ function GrowthEngineGalleryCard({
             </li>
           ))}
         </ul>
+        {engine.requirements?.length ? (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+            <p className="font-semibold text-gray-900">Required before activation</p>
+            <p className="mt-1">{engine.requirements.join(" · ")}</p>
+          </div>
+        ) : null}
+        {engine.optionalIntegrations?.length ? (
+          <p className="text-xs text-gray-500"><span className="font-medium text-gray-700">Optional:</span> {engine.optionalIntegrations.join(", ")}</p>
+        ) : null}
+        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
+          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Included with Pro
+        </div>
+        {rgeState?.note ? <p className="text-xs font-medium text-amber-800" role="status">{rgeState.note}</p> : null}
         <div className="mt-auto border-t border-gray-100 pt-4">
           {isComingSoon ? (
             <Button
@@ -671,7 +677,14 @@ function GrowthEngineGalleryCard({
           ) : (
             <Button
               className="w-full bg-brand-green text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-600/20 hover:bg-brand-green/90"
-              onClick={() => hubHref && setLocation(hubHref)}
+              disabled={rgeState?.disabled}
+              onClick={() => {
+                if (rgeState?.action === "upgrade" || rgeState?.action === "restore") {
+                  setLocation("/app/settings?tab=billing");
+                  return;
+                }
+                if (hubHref) setLocation(hubHref);
+              }}
               data-testid={
                 engine.slug === "realtor-growth-engine"
                   ? "button-view-activate-engine"
@@ -684,6 +697,15 @@ function GrowthEngineGalleryCard({
               <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
             </Button>
           )}
+          {!isComingSoon && engine.detailHref ? (
+            <button
+              type="button"
+              className="mt-2 w-full rounded-md px-3 py-2 text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+              onClick={() => setLocation(engine.detailHref!)}
+            >
+              View details
+            </button>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -692,7 +714,8 @@ function GrowthEngineGalleryCard({
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
-  const { data: rgeTemplate } = useQuery<{
+  const showSyntheticPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("growthEnginePreview") === "1";
+  const rgeQuery = useQuery<{
     entitlement?: { status?: RgeEntitlementStatus; purchasedAt?: string | null; onboardingSubmittedAt?: string | null };
     subscription?: { hasPro?: boolean; accessOk?: boolean };
   } | null>({
@@ -704,32 +727,67 @@ function GrowthEnginesTab() {
     },
     staleTime: 30_000,
   });
+  const rgeTemplate = rgeQuery.data;
   const rgeEntitlement = rgeTemplate?.entitlement ?? null;
   const prospectAiStatus = useProspectAiStatus();
   const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
+  const previewEngine = GROWTH_ENGINE_CARDS.find((engine) => engine.slug === "realtor-growth-engine")!;
+  const syntheticFixtures: Array<{
+    label: string;
+    entitlement: { status: RgeEntitlementStatus; purchasedAt?: string; onboardingSubmittedAt?: string | null };
+    accessOk?: boolean;
+    hasPro?: boolean;
+    loading?: boolean;
+    error?: boolean;
+  }> = [
+    { label: "Free", entitlement: { status: "locked" as const }, accessOk: false, hasPro: false },
+    { label: "Eligible Pro", entitlement: { status: "locked" as const }, accessOk: true, hasPro: true },
+    { label: "Installed", entitlement: { status: "installed" as const, onboardingSubmittedAt: "2026-01-01" }, accessOk: true, hasPro: true },
+    { label: "Incomplete setup", entitlement: { status: "purchased" as const, purchasedAt: "2026-01-01", onboardingSubmittedAt: null }, accessOk: true, hasPro: true },
+    { label: "Paused", entitlement: { status: "installed" as const, onboardingSubmittedAt: "2026-01-01" }, accessOk: false, hasPro: false },
+    { label: "Loading", entitlement: { status: "locked" }, loading: true },
+    { label: "Access error", entitlement: { status: "locked" }, error: true },
+  ];
 
   return (
     <div className="w-full max-w-none space-y-4 overflow-visible md:space-y-5">
-      <div className="w-full max-w-none space-y-1.5 overflow-visible text-left">
-        <h2 className="text-lg font-semibold tracking-tight text-gray-900 md:text-xl">Growth Engines</h2>
+      <div className="w-full max-w-3xl space-y-1.5 overflow-visible text-start">
+        <h2 className="text-xl font-semibold tracking-tight text-gray-950 md:text-2xl">Ready-to-run Growth Engines</h2>
         <p className="w-full max-w-none overflow-visible text-sm leading-relaxed text-gray-600 md:text-[15px] md:leading-snug">
-          Growth Engines are industry-specific automation systems powered by templates, workflows, AI qualification, and CRM follow-up logic.
+          Launch proven automation systems for prospecting, qualification, follow-up, and industry-specific customer journeys.
         </p>
         <p className="w-full max-w-none overflow-visible text-xs leading-relaxed text-gray-500 md:text-sm md:leading-snug">
           Every current and future Growth Engine is included with Pro at no additional charge. Free users can preview each engine before upgrading.
         </p>
       </div>
 
-      <div className="w-full max-w-none rounded-2xl border border-gray-200/70 bg-gray-50/40 p-4 shadow-sm sm:p-5 md:p-6">
-        <div className="grid w-full auto-rows-fr gap-5 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
-          {sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => (
+      <div className="w-full max-w-none">
+        <div className="grid w-full auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {showSyntheticPreview ? (
+            <div className="col-span-full rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="note">
+              <strong>Local preview — synthetic fixtures.</strong> These states are for layout and interaction testing only and are never shown in production.
+            </div>
+          ) : null}
+          {(showSyntheticPreview
+            ? [
+                ...syntheticFixtures.map((fixture, index) => ({
+                  engine: { ...previewEngine, slug: `realtor-growth-engine-preview-${index}`, title: `${fixture.label}: Realtor Growth Engine for Growing Multi-Office Teams` },
+                  fixture,
+                })),
+                { engine: GROWTH_ENGINE_CARDS.find((engine) => engine.status === "coming_soon")!, fixture: null },
+              ]
+            : sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => ({ engine, fixture: null })))
+            .map(({ engine, fixture }) => (
             <GrowthEngineGalleryCard
               key={engine.slug}
               engine={engine}
               setLocation={setLocation}
-              rgeEntitlement={engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined}
+              rgeEntitlement={fixture?.entitlement ?? (engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined)}
               prospectAiActivated={engine.slug === "prospect-ai" ? prospectAiActivated : undefined}
-              hasPro={engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.hasPro : undefined}
+              hasPro={fixture?.hasPro ?? (engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.hasPro : undefined)}
+              accessOk={fixture?.accessOk ?? (engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.accessOk : undefined)}
+              entitlementLoading={fixture?.loading ?? (engine.slug === "realtor-growth-engine" ? rgeQuery.isLoading : undefined)}
+              entitlementError={fixture?.error ?? (engine.slug === "realtor-growth-engine" ? rgeQuery.isError : undefined)}
             />
           ))}
         </div>
