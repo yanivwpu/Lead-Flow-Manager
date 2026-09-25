@@ -18,7 +18,7 @@ export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: Reques
     }
   });
   app.get("/api/admin/seo-intelligence/actions", requireAdmin, async (req, res) => {
-    try { res.json(await listSeoActions({ status: String(req.query.status ?? "") || undefined, risk: String(req.query.risk ?? "") || undefined, type: String(req.query.type ?? "") || undefined, page: String(req.query.page ?? "") || undefined })); }
+    try { res.json(await listSeoActions({ view: String(req.query.view ?? "") || undefined, type: String(req.query.type ?? "") || undefined, search: String(req.query.search ?? "") || undefined, page: Number(req.query.page ?? 1), limit: Number(req.query.limit ?? 20) })); }
     catch { res.status(500).json({ error: "Unable to load SEO actions", code: "ACTION_LIST_FAILED" }); }
   });
   app.post("/api/admin/seo-intelligence/actions/analyze", requireAdmin, async (_req, res) => {

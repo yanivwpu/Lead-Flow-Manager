@@ -27,7 +27,7 @@ const normalizedCollisions=aggregateNormalizedMetricRows([
 assert.equal(aggregateNormalizedMetricRows([{query:"ZERO",page:"/zero/",clicks:0,impressions:0,position:12},{query:"zero",page:"/zero",clicks:0,impressions:0,position:3}])[0].position,0,"zero-impression identities use the documented zero-position fallback");
 assert.equal(clusterAndScoreOpportunities([{query:"Threshold",page:"/p/",clicks:4,impressions:25,position:8},{query:"threshold",page:"/p?utm_source=x",clicks:1,impressions:25,position:8}],[])[0].current.impressions,50,"eligibility is evaluated after normalized metric aggregation");
 const processed:string[]=[];const isolated=await processCandidatesUntil(["poisoned","valid-one","valid-two"],2,async candidate=>{if(candidate==="poisoned")throw new Error("malformed proposal");processed.push(candidate);return true;},()=>processed.push("skipped"));assert.deepEqual(processed,["skipped","valid-one","valid-two"]);assert.deepEqual(isolated,{successes:2,attempted:3},"a poisoned proposal cannot abort the run or consume the success limit");
-const proposal={actionType:"title_tag",proposedTitle:"A useful WhatsApp CRM workflow guide",insertionLocation:"head title",explanation:"Search performance supports a clearer and more relevant title.",expectedBenefit:"Improve qualified click-through potential.",confidence:.8,risk:"low",automaticExecutionEligible:false,rollbackConcept:"Restore the fingerprinted prior title.",evidenceIds:["e1"]};
+const proposal={actionType:"title_tag",proposedTitle:"A useful WhatsApp CRM workflow guide",insertionLocation:"head title",explanation:"Search performance supports a clearer and more relevant title.",expectedBenefit:"Improve qualified click-through potential.",confidence:.8,risk:"low",automaticExecutionEligible:false,rollbackConcept:"Restore the fingerprinted prior title.",evidenceIds:["e1"],observedProblem:"The current title does not describe the verified page topic.",currentValue:"Old page title",rationale:"The proposed title describes the verified topic more precisely.",evidenceSummary:"A first-party snapshot and Search Console metrics support this review.",evidenceDateRange:"Current 28-day period",evidenceLimitations:"Search data is observational.",implementationTarget:"HTML head title",acceptanceChecks:["Title matches proposal"],repositoryTarget:null};
 assert.equal(validateRecommendationOutput(proposal).actionType,"title_tag");assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:"Guaranteed #1 WhatsApp CRM"}),/unsupported/);
 for(const prohibited of ["#1 WhatsApp CRM choice","Choose WhachatCRM: # 1.","100% better workflows","Useful CRM, 100%!","✨#1✨ WhatsApp CRM"]){assert.throws(()=>validateRecommendationOutput({...proposal,proposedTitle:prohibited.padEnd(12," useful")}),/unsupported/,prohibited);}
 for(const allowed of ["Manage 100 contacts clearly","Ranked 1 of 10 internal tasks","Version 100.1 workflow"]){assert.doesNotThrow(()=>validateRecommendationOutput({...proposal,proposedTitle:allowed}));}
@@ -88,7 +88,7 @@ assert.ok(competitorIntentPages.every(item => item.type !== "cannibalization"), 
 assert.equal(clusterAndScoreOpportunities([{query:"q",page:"/missing",clicks:0,impressions:0,position:0}],[]).length,0,"missing evidence cannot invent a primary page");
 
 const { parseSeoPage, fingerprintSeoPage, isSnapshotStale } = await import("../server/seo/firstPartyPage");
-const baseHtml = `<html><head><title> CRM   Page </title><meta name="description" content="Useful CRM page"><link rel="canonical" href="https://example.com/crm"><script type="application/ld+json">{"b":2,"a":1}</script></head><body class="build-123"><h1>WhatsApp CRM</h1><h2>Workflow</h2><p>Useful copy</p><a href="/pricing">Pricing</a><script>volatile()</script></body></html>`;
+const baseHtml = `<html><head><title> CRM   Page </title><meta name="description" content="Useful CRM page"><link rel="canonical" href="https://example.com/crm"><script type="application/ld+json">{"b":2,"a":1}</script></head><body class="build-123"><main><h1>WhatsApp CRM</h1><h2>Workflow</h2><p>Useful copy</p><a href="/pricing">Pricing</a><script>volatile()</script></main></body></html>`;
 const normalized = parseSeoPage(baseHtml, "https://example.com/crm");
 assert.equal(normalized.title, "CRM Page");
 assert.deepEqual(normalized.internalLinks, ["/pricing"]);
@@ -98,7 +98,7 @@ assert.notEqual(fingerprintSeoPage(normalized), fingerprintSeoPage(changed));
 assert.equal(isSnapshotStale(fingerprintSeoPage(normalized), changed), true);
 
 const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts", import.meta.url), "utf8");
-const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8");
+const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8") + readFileSync(new URL("../client/src/components/admin/SeoActionsPanel.tsx", import.meta.url), "utf8");
 assert.match(adminSeoSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
@@ -118,7 +118,7 @@ assert.match(actionServiceSource, /Refresh failed; prior proposal restored/, "re
 assert.match(actionServiceSource,/freshMetrics=await loadPlannerMetrics[\s\S]+competitorCount[\s\S]+buildProposal\(freshItem,\{fingerprint:snapshot\.contentFingerprint,title:snapshot\.title,metaDescription:snapshot\.metaDescription,headings:snapshot\.headings/,"refresh derives the new validated proposal from fresh page, Search Console, and available competitor evidence");
 assert.match(actionServiceSource,/promptVersion:"seo-action-v3-fresh-evidence"[\s\S]+evidenceSnapshot:immutableEvidence\(refreshedOpportunity\.id,freshItem,snapshot\)/);
 assert.doesNotMatch(actionServiceSource,/freshItem=.*\?\?item/,"an unqualified refreshed opportunity cannot fall back to stale evidence");
-assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus:"failed"[\s\S]+versionCreated:false/,"no-longer-qualifying refreshes close without a new version");
+assert.match(actionServiceSource,/OPPORTUNITY_NO_LONGER_QUALIFIES[\s\S]+toStatus:"revision_required"[\s\S]+versionCreated:false/,"no-longer-qualifying refreshes remain recoverable without a new version");
 assert.match(actionServiceSource,/REFRESH_IDENTITY_CONFLICT[\s\S]+opportunityId:refreshedOpportunity\.id[\s\S]+idempotencyKey:refreshedKey[\s\S]+queryCluster:freshItem\.queryCluster[\s\S]+actionType:proposal\.actionType[\s\S]+risk:proposal\.risk[\s\S]+confidence:proposal\.confidence/,"refreshed classification and identity metadata update atomically after collision fencing");
 
 const phase2bMigration = readFileSync(new URL("../migrations/0095_seo_action_planner.sql", import.meta.url), "utf8");
@@ -151,7 +151,7 @@ assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
 for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"]) assert.match(startup, new RegExp(tag));
 assert.match(startup, /SEO schema patch failed; database details redacted/);
 assert.match(phase2bMigration, /UNIQUE\(action_id, version\)/, "concurrent refresh cannot create duplicate versions");
-assert.equal(proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX)).length, SEO_META_DESCRIPTION_MAX, "at-limit input produces an exactly valid destination value");
+const uncertainMeta=proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX));assert.ok(uncertainMeta.length<=SEO_META_DESCRIPTION_MAX,"uncertain input remains within the destination limit");assert.doesNotMatch(uncertainMeta,/x{20}/,"uncertain Latin text is not copied into metadata");
 const unsafePrimary = clusterAndScoreOpportunities([{query:"whatsapp crm software",page:"",clicks:1,impressions:100,position:8}],[]);
 assert.equal(unsafePrimary[0].targetPage, null, "unsafe missing-page evidence is represented for a sanitized skip rather than silently reassigned");
 assert.equal(unsafePrimary[0].competingPages.length, 1);
@@ -161,6 +161,7 @@ const metric=(clicks:number,impressions:number,position:number,query="query",pag
 assert.equal(clusterAndScoreOpportunities([metric(20,100,1)],[]).length,0,"position-one healthy CTR is not an opportunity");
 assert.equal(clusterAndScoreOpportunities([metric(1,100,1)],[])[0].type,"low_ctr","position-one weak CTR qualifies");
 assert.equal(clusterAndScoreOpportunities([metric(10,100,8)],[])[0].type,"striking_distance","positions 4-20 remain striking distance even with healthy CTR");
+assert.equal(clusterAndScoreOpportunities([metric(1,100,8)],[])[0].type,"low_ctr","documented low CTR at a visible rank reaches metadata review rather than generic expansion");
 assert.equal(clusterAndScoreOpportunities([metric(0,49,1)],[]).length,0,"low-impression noise is excluded");
 assert.equal(clusterAndScoreOpportunities([metric(0,0,1)],[]).length,0,"zero impressions are excluded");
 assert.equal(clusterAndScoreOpportunities([metric(7.2,100,1)],[]).length,0,"CTR exactly at the sixty-percent tolerance is healthy");
@@ -232,7 +233,7 @@ assert.doesNotMatch(actionServiceSource,/console\.error\([^\n]+(?:stack|query|pa
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
-assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);
+assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:failureCategory/);assert.match(startup,/0098_seo_action_refresh_leases/);
 
 // Historical pages explain migrations but only concurrent current visibility triggers cannibalization.
 const migratedStable=clusterAndScoreOpportunities([metric(10,100,5,"migration query","https://example.com/new")],[metric(10,100,5,"migration query","https://example.com/old")]);assert.notEqual(migratedStable[0]?.type,"cannibalization");
@@ -244,21 +245,21 @@ const languages=clusterAndScoreOpportunities([metric(3,80,8,"localized crm query
 const immutableMigration=readFileSync(new URL("../migrations/0099_seo_immutable_evidence.sql",import.meta.url),"utf8");assert.match(immutableMigration,/evidence_snapshot jsonb/);assert.match(immutableMigration,/DROP INDEX IF EXISTS seo_opportunities_property_cluster_uidx/);assert.doesNotMatch(immutableMigration,/DELETE FROM/i);assert.match(actionServiceSource,/persistOpportunity[\s\S]+\.values\([\s\S]+\.returning\(\)/);assert.doesNotMatch(actionServiceSource,/persistOpportunity[\s\S]{0,1200}onConflictDoUpdate/);assert.match(actionServiceSource,/evidenceSnapshot:immutableEvidence/);assert.match(actionServiceSource,/v\.evidence_snapshot->'currentMetrics'/);assert.match(startup,/0099_seo_immutable_evidence/);
 
 // Open proposed/approved actions receive bounded, fingerprint-fenced stale reconciliation.
-assert.match(actionServiceSource,/SEO_STALE_CHECK_LIMIT=10/);assert.match(actionServiceSource,/status:'revision_required'/);assert.match(actionServiceSource,/previousFingerprint[\s\S]+currentFingerprint[\s\S]+pageSnapshotId/);assert.match(actionServiceSource,/staleChecksAttempted[\s\S]+staleChecksUnchanged[\s\S]+staleChecksMarked[\s\S]+staleChecksFailed/);assert.match(actionServiceSource,/originalContentFingerprint,action\.contentFingerprint/);assert.match(actionServiceSource,/status} IN \('proposed','approved'\)/);assert.match(actionServiceSource,/\["proposed","revision_required"\]/,"stale actions can regenerate but cannot approve directly");
+assert.match(actionServiceSource,/SEO_STALE_CHECK_LIMIT=10/);assert.match(actionServiceSource,/nextStatus=action.status==='approved'\?'approved':'revision_required'/);assert.match(actionServiceSource,/previousFingerprint[\s\S]+currentFingerprint[\s\S]+pageSnapshotId/);assert.match(actionServiceSource,/staleChecksAttempted[\s\S]+staleChecksUnchanged[\s\S]+staleChecksMarked[\s\S]+staleChecksFailed/);assert.match(actionServiceSource,/originalContentFingerprint,action\.contentFingerprint/);assert.match(actionServiceSource,/status} IN \('proposed','approved'\)/);assert.match(actionServiceSource,/\["proposed","revision_required","rejected"\]/,"stale and rejected actions can regenerate but cannot approve directly");
 
 // Patch 0100 recovers only expired leases or conservatively old lease-less rows and restores durable return state.
 const recoveryMigration=readFileSync(new URL("../migrations/0100_seo_refresh_return_and_stale_rotation.sql",import.meta.url),"utf8");
 assert.match(recoveryMigration,/refresh_lease_token IS NOT NULL AND a\.refresh_lease_expires_at<=NOW\(\)/);
 assert.match(recoveryMigration,/refresh_lease_token IS NULL[\s\S]+updated_at<=NOW\(\)-INTERVAL '30 minutes'/);
-assert.match(recoveryMigration,/refresh_return_status IN \('proposed','revision_required'\)/);
+assert.match(recoveryMigration,/refresh_return_status IN \('proposed','revision_required','rejected'\)/);
 assert.doesNotMatch(recoveryMigration,/WHERE status='researching';/);
 assert.match(recoveryMigration,/claimTokenHash/);
 assert.match(startup,/0100_seo_refresh_return_and_stale_rotation/);
 assert.match(actionServiceSource,/recoverAbandonedLegacyRefreshes[\s\S]+refresh_lease_token IS NULL[\s\S]+INTERVAL '30 minutes'[\s\S]+FOR UPDATE SKIP LOCKED/);assert.match(actionServiceSource,/SEO_LEGACY_REFRESH_RECOVERY_LIMIT=50/);assert.match(actionServiceSource,/analyzeSeoOpportunities[\s\S]+await recoverAbandonedLegacyRefreshes/);assert.match(actionServiceSource,/refreshSeoAction[\s\S]+await recoverAbandonedLegacyRefreshes/);
-assert.match(actionServiceSource,/refreshReturnStatus:returnStatus/);
+assert.match(actionServiceSource,/refreshReturnStatus:disposition\.returnStatus/);
 assert.match(actionServiceSource,/status:claim\.returnStatus[\s\S]+refreshReturnStatus:null/);
 assert.match(actionServiceSource,/toStatus:claim\.returnStatus/);
-assert.match(actionServiceSource,/to==="approved"&&action\.staleAt/);
+assert.match(actionServiceSource,/action\.stale_at\|\|action\.status==="revision_required"/);
 
 // Persistent stale_checked_at rotation advances beyond ten and backs off failures.
 const rotationNow=new Date("2026-09-21T12:00:00Z");

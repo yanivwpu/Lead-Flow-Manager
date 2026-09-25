@@ -4,7 +4,7 @@ import { z } from "zod";
 export const SEO_ACTION_STATES = ["detected", "researching", "proposed", "approved", "rejected", "executing", "measuring", "kept", "revision_required", "rolled_back", "failed"] as const;
 export const PHASE_2B_TRANSITIONS: Record<string, readonly string[]> = {
   detected: ["researching", "failed"], researching: ["proposed", "failed"], proposed: ["approved", "rejected", "researching"],
-  approved: [], rejected: ["researching"],
+  approved: [], rejected: ["researching"], revision_required: ["researching", "rejected"],
 };
 export function mayTransitionSeoAction(from: string, to: string) { return PHASE_2B_TRANSITIONS[from]?.includes(to) ?? false; }
 
@@ -16,6 +16,11 @@ export const seoRecommendationOutputSchema = z.object({
   internalLinkSource: z.string().url().nullable().optional(), internalLinkDestination: z.string().url().nullable().optional(), structuredDataProposal: z.record(z.unknown()).nullable().optional(),
   explanation: z.string().trim().min(20).max(2_000), expectedBenefit: z.string().trim().min(10).max(1_000), confidence: z.number().min(0).max(1),
   risk: z.enum(["low", "medium", "high"]), automaticExecutionEligible: z.boolean(), rollbackConcept: z.string().trim().min(10).max(1_000), evidenceIds: z.array(z.string().min(1)).min(1).max(30),
+  observedProblem: z.string().trim().min(20).max(2_000), currentValue: z.string().trim().min(1).max(12_000),
+  rationale: z.string().trim().min(20).max(2_000), evidenceSummary: z.string().trim().min(20).max(3_000),
+  evidenceDateRange: z.string().trim().min(5).max(200), evidenceLimitations: z.string().trim().min(10).max(1_000),
+  implementationTarget: z.string().trim().min(3).max(500), acceptanceChecks: z.array(z.string().trim().min(3).max(500)).min(1).max(10),
+  repositoryTarget: z.string().trim().max(500).nullable(),
 }).superRefine((value, ctx) => {
   if (value.actionType === "title_tag" && !value.proposedTitle) ctx.addIssue({ code: "custom", message: "Title actions require exact proposedTitle" });
   if (value.actionType === "meta_description" && !value.proposedMetaDescription) ctx.addIssue({ code: "custom", message: "Meta actions require exact proposedMetaDescription" });
@@ -30,6 +35,10 @@ export function validateRecommendationOutput(input: unknown, competitorTexts: st
   const value = seoRecommendationOutputSchema.parse(input);
   const generated = [value.proposedTitle, value.proposedMetaDescription, value.proposedContent, value.contentBrief].filter(Boolean).join(" ");
   if (prohibitedClaims.test(generated)) throw new Error("Recommendation contains an unsupported promotional claim");
+  if (/explore whachatcrm for|manage customer relationships in one workspace|unlock (?:growth|success)|take your .* to the next level/i.test(generated)) throw new Error("Recommendation contains generic boilerplate");
+  const normalize=(text:string)=>text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+  const proposed=value.proposedMetaDescription??value.proposedTitle??value.proposedContent??"";
+  if(proposed&&normalize(proposed)===normalize(value.currentValue))throw new Error("Recommendation does not materially change the current value");
   const normalized = generated.toLowerCase().replace(/\s+/g, " ");
   for (const source of competitorTexts) {
     const words = source.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
@@ -57,12 +66,16 @@ export function recommendationLanguageForPage(targetPage:string):RecommendationL
 const SCRIPT_PATTERN:Record<RecommendationLanguage,RegExp>={en:/\p{Script=Latin}/u,es:/\p{Script=Latin}/u,he:/\p{Script=Hebrew}/u};
 const FOREIGN_SCRIPT=/[\p{Script=Thai}\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const QUERY_FALLBACK:Record<RecommendationLanguage,string>={en:"WhatsApp CRM",es:"CRM de WhatsApp",he:"מערכת CRM ל-WhatsApp"};
+const SPANISH_LANGUAGE_SIGNAL=/(?:\b(?:el|la|los|las|una?|para|con|sin|cómo|qué|cuándo|dónde|después|página|equipo|cliente|clientes|precio|precios|consulta|consultas|inmobiliaria|inmobiliarias|automatización|gestión|seguimiento)\b|\p{L}+(?:ción|ciones|miento|amientos|ización|izaciones)\b|[¿¡])/iu;
+const ENGLISH_LANGUAGE_SIGNAL=/\b(?:what|how|why|when|where|which|can|does|is|are|the|for|with|from|after|before|pricing|price|cost|property|inquiry|arrives|happens|best|alternative|versus|compare|comparison|setup|works?)\b/iu;
+export function queryLanguageMatchesTargetPage(value:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=value.replace(/\s+/gu," ").trim();if(!clean)return false;if(language==="he")return /\p{Script=Hebrew}/u.test(clean)&&!/[\p{Script=Thai}\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(clean);if(FOREIGN_SCRIPT.test(clean))return false;const spanish=SPANISH_LANGUAGE_SIGNAL.test(clean),english=ENGLISH_LANGUAGE_SIGNAL.test(clean);return language==="es"?spanish&&!english:english&&!spanish;}
 /** Prevent raw GSC text in a different writing system from leaking into generated copy. */
-export function queryForTargetPage(query:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=query.replace(/[\u0000-\u001f\u007f]+/gu," ").replace(/\s+/gu," ").trim();if(!clean)return QUERY_FALLBACK[language];const hasExpected=SCRIPT_PATTERN[language].test(clean),hasForeign=FOREIGN_SCRIPT.test(clean);return hasExpected&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean)))?clean:QUERY_FALLBACK[language];}
+export function queryForTargetPage(query:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=query.replace(/[\u0000-\u001f\u007f]+/gu," ").replace(/\s+/gu," ").trim();if(!clean)return QUERY_FALLBACK[language];return SCRIPT_PATTERN[language].test(clean)&&queryLanguageMatchesTargetPage(clean,targetPage)?clean:QUERY_FALLBACK[language];}
+export function recommendationTextMatchesPageLanguage(value:string,targetPage:string){const language=recommendationLanguageForPage(targetPage),clean=value.replace(/\s+/gu," ").trim();if(!clean)return false;if(language==="he")return /\p{Script=Hebrew}/u.test(clean)&&!/[\p{Script=Thai}\p{Script=Arabic}\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(clean);if(FOREIGN_SCRIPT.test(clean))return false;if(language==="es")return /(?:\b(?:el|la|los|las|un|una|para|con|cómo|qué|cuando|después|página|equipo|cliente|clientes|precio|precios|consulta|consultas|inmobiliaria|inmobiliarias)\b|[áéíóúñ¿¡])/iu.test(clean);return !/(?:\b(?:cómo|qué|cuando|después|página|equipo|clientes)\b|[¿¡])/iu.test(clean);}
 function safeFirstPartyIntent(value:string|undefined,targetPage:string){if(value){const language=recommendationLanguageForPage(targetPage),clean=value.replace(/\s*[|–—-]\s*Whachat(?:CRM)?\b.*$/iu,"").replace(/\s+/gu," ").trim(),hasForeign=FOREIGN_SCRIPT.test(clean);if(clean&&SCRIPT_PATTERN[language].test(clean)&&(!hasForeign||(language==="he"&&/\p{Script=Hebrew}/u.test(clean))))return clean;}try{const slug=new URL(targetPage,"https://seo-language.invalid").pathname.split("/").filter(Boolean).at(-1)?.replace(/[-_]+/g," ").trim();return slug||undefined;}catch{return undefined;}}
 export function proposedMetaDescriptionForQuery(query: string,targetPage="/",firstPartyIntent?:string) {
   const safeQuery=queryForTargetPage(query,targetPage),intent=safeQuery===QUERY_FALLBACK[recommendationLanguageForPage(targetPage)]?safeFirstPartyIntent(firstPartyIntent,targetPage)??safeQuery:safeQuery;
-  const prefix = "Explore WhachatCRM for ", suffix = ": organize conversations, follow up consistently, and manage customer relationships in one workspace.";
+  const language=recommendationLanguageForPage(targetPage),prefix="",suffix={en:": coordinate WhatsApp conversations, lead ownership, and follow-up from a shared team inbox.",es:": coordina conversaciones de WhatsApp, responsables de leads y seguimiento en una bandeja compartida.",he:": ניהול שיחות WhatsApp, שיוך לידים ומעקב בתיבת צוות משותפת."}[language];
   const queryBudget = SEO_META_DESCRIPTION_MAX - prefix.length - suffix.length;
   const conciseQuery = truncateAtWord(intent.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim() || "WhatsApp CRM", queryBudget);
   return truncateAtWord(`${prefix}${conciseQuery}${suffix}`, SEO_META_DESCRIPTION_MAX);
