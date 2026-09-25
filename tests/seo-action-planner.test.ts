@@ -151,7 +151,7 @@ assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
 for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"]) assert.match(startup, new RegExp(tag));
 assert.match(startup, /SEO schema patch failed; database details redacted/);
 assert.match(phase2bMigration, /UNIQUE\(action_id, version\)/, "concurrent refresh cannot create duplicate versions");
-assert.equal(proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX)).length, SEO_META_DESCRIPTION_MAX, "at-limit input produces an exactly valid destination value");
+const uncertainMeta=proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX));assert.ok(uncertainMeta.length<=SEO_META_DESCRIPTION_MAX,"uncertain input remains within the destination limit");assert.doesNotMatch(uncertainMeta,/x{20}/,"uncertain Latin text is not copied into metadata");
 const unsafePrimary = clusterAndScoreOpportunities([{query:"whatsapp crm software",page:"",clicks:1,impressions:100,position:8}],[]);
 assert.equal(unsafePrimary[0].targetPage, null, "unsafe missing-page evidence is represented for a sanitized skip rather than silently reassigned");
 assert.equal(unsafePrimary[0].competingPages.length, 1);
