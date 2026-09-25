@@ -54,6 +54,34 @@ This answer selects the relevant workflow evidence rather than copying the first
 
 For the fixture query `whatsapp crm pricing`, the snapshot contains only conversation-routing evidence. The production path rejects the proposal with:
 
-> The snapshot does not contain verified facts that answer “whatsapp crm pricing”
+> The snapshot does not contain a verified pricing answer for “whatsapp crm pricing”
 
 No pricing, product, or competitor claim is inferred.
+
+## Decisive-intent fixtures
+
+These synthetic fixtures run through the production `buildProposal` path. Inquiry-routing copy without a price is withheld with:
+
+> The snapshot does not contain a verified pricing answer for “property inquiry pricing”
+
+When the first-party main content contains an actual answer, the complete drafts are:
+
+**English**
+
+> ## Property inquiry pricing
+>
+> The verified workflow described on this page is: Routing property inquiries costs $29 per month and includes assignment to agents in the shared inbox.
+
+**Spanish**
+
+> ## Precio de consultas inmobiliarias
+>
+> El flujo verificado descrito en esta página es: El enrutamiento de consultas inmobiliarias cuesta 29 € al mes e incluye la asignación a agentes.
+
+**Hebrew**
+
+> ## מחיר טיפול בפניית נדלן
+>
+> התהליך המאומת המתואר בעמוד הוא: טיפול בפניית נדלן עולה 29 ₪ לחודש וכולל שיוך הפנייה לסוכן בתיבה המשותפת.
+
+Metadata fixtures use text extracted from `<main>`, `<article>`, or an explicit `role="main"`. Navigation, headers, footers, cookie notices, and pages with no reliable main-content region are not used as recommendation facts.

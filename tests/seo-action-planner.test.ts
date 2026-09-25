@@ -88,7 +88,7 @@ assert.ok(competitorIntentPages.every(item => item.type !== "cannibalization"), 
 assert.equal(clusterAndScoreOpportunities([{query:"q",page:"/missing",clicks:0,impressions:0,position:0}],[]).length,0,"missing evidence cannot invent a primary page");
 
 const { parseSeoPage, fingerprintSeoPage, isSnapshotStale } = await import("../server/seo/firstPartyPage");
-const baseHtml = `<html><head><title> CRM   Page </title><meta name="description" content="Useful CRM page"><link rel="canonical" href="https://example.com/crm"><script type="application/ld+json">{"b":2,"a":1}</script></head><body class="build-123"><h1>WhatsApp CRM</h1><h2>Workflow</h2><p>Useful copy</p><a href="/pricing">Pricing</a><script>volatile()</script></body></html>`;
+const baseHtml = `<html><head><title> CRM   Page </title><meta name="description" content="Useful CRM page"><link rel="canonical" href="https://example.com/crm"><script type="application/ld+json">{"b":2,"a":1}</script></head><body class="build-123"><main><h1>WhatsApp CRM</h1><h2>Workflow</h2><p>Useful copy</p><a href="/pricing">Pricing</a><script>volatile()</script></main></body></html>`;
 const normalized = parseSeoPage(baseHtml, "https://example.com/crm");
 assert.equal(normalized.title, "CRM Page");
 assert.deepEqual(normalized.internalLinks, ["/pricing"]);
