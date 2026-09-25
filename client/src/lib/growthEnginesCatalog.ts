@@ -51,6 +51,8 @@ export interface GrowthEngineCardModel {
   monthlyRequirementBreakdown?: string | null;
   /** Detail page: checklist (pricing / access requirements) */
   requirements?: string[];
+  /** Optional integrations, shown separately from required setup. */
+  optionalIntegrations?: string[];
   /** Detail page: Meta / WhatsApp pass-through fees disclaimer */
   metaFeesNote?: string | null;
   /** Gallery second pricing line when oneTimePrice is not set yet */
@@ -85,6 +87,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     monthlyRequirementLabel: null,
     monthlyRequirementBreakdown: null,
     requirements: [],
+    optionalIntegrations: [],
     metaFeesNote: null,
     galleryPricingMode: "show",
   },
@@ -109,9 +112,10 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     monthlyRequirementLabel: REALTOR_GROWTH_ENGINE_REQUIRES_PRO,
     monthlyRequirementBreakdown: null,
     requirements: [
-      "Included with Pro — no additional charge",
-      "WhatsApp Business connected before activation",
+      "Active Pro plan or Pro trial",
+      "WhatsApp Business before activation",
     ],
+    optionalIntegrations: ["Calendar booking link"],
     metaFeesNote: "WhatsApp / Meta messaging fees are billed separately by Meta.",
     galleryPricingMode: "show",
   },

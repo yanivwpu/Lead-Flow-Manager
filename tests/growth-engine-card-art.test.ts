@@ -36,16 +36,15 @@ test("Prospect AI uses approved V2B PNG; Included badge stays in card body only"
   assert.ok(!art.includes("DISCOVER • QUALIFY • OUTREACH"));
 });
 
-test("Growth Engines intro spans full gallery width", () => {
+test("Growth Engines intro is concise and keeps the grid close to the heading", () => {
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   const introStart = templates.indexOf("function GrowthEnginesTab()");
   assert.ok(introStart >= 0);
-  const introSlice = templates.slice(introStart, introStart + 2200);
-  assert.ok(introSlice.includes("w-full max-w-none"), "intro must span full gallery width");
+  const introSlice = templates.slice(introStart, introStart + 5000);
+  assert.ok(introSlice.includes("Ready-to-run Growth Engines"));
   assert.ok(!introSlice.includes("max-w-2xl"), "intro must not use max-w-2xl");
-  assert.ok(!introSlice.includes("max-w-3xl"), "intro must not use max-w-3xl");
   assert.ok(!introSlice.includes("max-w-xl"), "intro must not use max-w-xl");
-  assert.ok(introSlice.includes("Growth Engines are industry-specific"));
+  assert.ok(introSlice.includes("Every current and future Growth Engine is included with Pro"));
   assert.ok(introSlice.includes("overflow-visible"));
 });
 
@@ -54,7 +53,7 @@ test("Prospect AI artwork uses contain + shared strip height (no title/caption c
   const cardStart = templates.indexOf("function GrowthEngineGalleryCard(");
   assert.ok(cardStart >= 0);
   const cardSlice = templates.slice(cardStart, cardStart + 3500);
-  assert.ok(cardSlice.includes("h-52") && cardSlice.includes("sm:h-56"), "shared art strip height");
+  assert.ok(cardSlice.includes("h-36") && cardSlice.includes("sm:h-40"), "compact shared art strip height");
   assert.ok(cardSlice.includes("object-contain"), "Prospect AI must use object-contain");
   assert.ok(
     cardSlice.includes("object-contain p-3 sm:p-3.5"),
