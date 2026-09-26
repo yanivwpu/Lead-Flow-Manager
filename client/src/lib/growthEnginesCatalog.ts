@@ -40,7 +40,7 @@ export interface GrowthEngineCardModel {
   /**
    * When `status === "coming_soon"` and no `image`, picks gradient + icon for the media area.
    */
-  placeholderKey?: "wellness" | "capital" | "trades" | "property";
+  placeholderKey?: "wellness" | "commerce" | "trades" | "property";
   /** Legacy optional secondary display row; Growth Engines must not carry a separate price. */
   oneTimePrice?: string | null;
   /** Shown on the RGE detail “Pricing & access” block (not on the gallery pricing strip). */
@@ -160,15 +160,16 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
   },
   {
     sortOrder: 40,
-    slug: "investor-capital-engine",
-    title: "Investor / Capital Raise Engine",
-    industry: "Capital & syndication",
+    slug: "ecommerce-growth-engine",
+    title: "E-commerce Growth Engine",
+    industry: "E-commerce",
     badges: ["Included with Pro", "AI Automation"],
-    summary: "Screen investor interest, route decks, and keep diligence moving without dropping threads.",
-    benefits: ["Investor qualification", "Document / call scheduling", "Long-cycle nurture"],
+    summary:
+      "Automate Shopify customer conversations, abandoned-cart follow-up, order-event support, re-engagement, and conversion journeys.",
+    benefits: ["Built for Shopify first", "Cart and order-event journeys", "Support, re-engagement, and conversion"],
     status: "coming_soon",
     ctaLabel: "Coming soon",
-    placeholderKey: "capital",
+    placeholderKey: "commerce",
     oneTimePrice: null,
     subscriptionRequirementShort: null,
     galleryPricingMode: "coming_soon",
