@@ -81,7 +81,6 @@ import {
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
 } from "@shared/rgePaths";
-import { formatUsdDisplay, getPaidPlanMonthlyPriceUsd } from "@shared/pricingEntitlements";
 import {
   getSubscriptionApiUrl,
   useShopifyShopHint,
@@ -102,7 +101,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
@@ -966,7 +965,6 @@ export function RealtorGrowthEngine() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const totalSteps = 5;
-  const [subscriptionGate, setSubscriptionGate] = useState<{ show: boolean; hasPro: boolean; hasAI: boolean }>({ show: false, hasPro: true, hasAI: true });
   const [checkingSubscription, setCheckingSubscription] = useState(false);
   const shopHint = useShopifyShopHint();
   const { data: billingAccount } = useQuery<{
@@ -1031,9 +1029,6 @@ export function RealtorGrowthEngine() {
     },
     onError: (err: Error & { code?: string; status?: number }) => {
       if (err.message === "session_expired") return;
-      if (err.status === 403 || err.code === "growth_engine_pro_required") {
-        setSubscriptionGate({ show: true, hasPro: false, hasAI: true });
-      }
       toast({ title: "Could not install Growth Engine", description: err.message, variant: "destructive" });
     },
   });
@@ -1216,11 +1211,6 @@ export function RealtorGrowthEngine() {
     }
     const templateSub = templateData?.subscription;
     if (templateSub?.accessOk === false) {
-      setSubscriptionGate({
-        show: true,
-        hasPro: templateSub.hasPro,
-        hasAI: templateSub.hasAI,
-      });
       return;
     }
     if (templateSub?.accessOk && templateSub?.templateAccessGranted) {
@@ -1232,11 +1222,6 @@ export function RealtorGrowthEngine() {
       const res = await apiRequest("GET", "/api/templates/realtor-growth-engine/check-subscription");
       const data = await res.json();
       if (data.accessOk === false || !data.hasPro || !data.hasAI) {
-        setSubscriptionGate({
-          show: true,
-          hasPro: data.hasPro ?? false,
-          hasAI: data.hasAI ?? false,
-        });
         setCheckingSubscription(false);
         return;
       }
@@ -2062,16 +2047,25 @@ export function RealtorGrowthEngine() {
                 ? "Your plan must be active for this engine to run. Reactivate Pro and AI above, then continue."
                 : "Install the Realtor Growth Engine with Pro and continue to guided concierge onboarding."}
             </p>
-            <Button
-              size="lg"
-              className={cn(
-                "min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800",
-                (primaryMarketingCta.disabled || installMutation.isPending) && "pointer-events-none opacity-50",
-              )}
-              onClick={handlePrimaryCta}
-              disabled={installMutation.isPending || primaryMarketingCta.disabled}
-              data-testid="button-bottom-cta"
-            >
+            {templateData?.subscription?.accessOk === false ? (
+              <InAppProUpgradeButton
+                canStartInternalTrial={!!billingAccount?.subscription?.canStartInternalTrial}
+                isShopify={isShopify}
+                className="min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800"
+                testId="button-bottom-cta"
+                onStartedTrial={() => window.location.reload()}
+              />
+            ) : (
+              <Button
+                size="lg"
+                className={cn(
+                  "min-w-[200px] rounded-xl bg-gray-900 px-8 text-white shadow-sm hover:bg-gray-800",
+                  (primaryMarketingCta.disabled || installMutation.isPending) && "pointer-events-none opacity-50",
+                )}
+                onClick={handlePrimaryCta}
+                disabled={installMutation.isPending || primaryMarketingCta.disabled}
+                data-testid="button-bottom-cta"
+              >
               {checkingSubscription ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -2088,7 +2082,8 @@ export function RealtorGrowthEngine() {
                   {!primaryMarketingCta.disabled && <ChevronRight className="ml-1.5 h-5 w-5" />}
                 </>
               )}
-            </Button>
+              </Button>
+            )}
             <p className="mt-4 text-xs text-gray-500">Included with Pro · No additional charge with Pro.</p>
           </section>
         ) : hasPurchased && !onboardingComplete ? (
@@ -2118,48 +2113,6 @@ export function RealtorGrowthEngine() {
       </div>
     );
   };
-  const SubscriptionGateDialog = () => (
-    <Dialog open={subscriptionGate.show} onOpenChange={(open) => { if (!open) setSubscriptionGate({ ...subscriptionGate, show: false }); }}>
-      <DialogContent className="max-w-sm" data-testid="dialog-subscription-gate">
-        <DialogHeader>
-          <DialogTitle>Pro plan required</DialogTitle>
-          <DialogDescription>
-            The <RealtorMark /> Growth Engine requires an active Pro plan.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 py-4">
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm font-semibold text-gray-900">What you'll get:</p>
-            <ul className="text-xs text-gray-600 mt-2 space-y-1">
-              <li>✓ WhachatCRM Pro platform ({formatUsdDisplay(getPaidPlanMonthlyPriceUsd("pro"))}/mo)</li>
-              <li>✓ AI Brain included with Pro</li>
-              <li>✓ All workflows + templates included</li>
-            </ul>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button 
-            variant="outline" 
-            onClick={() => setSubscriptionGate({ ...subscriptionGate, show: false })}
-            data-testid="button-subscription-cancel"
-          >
-            Cancel
-          </Button>
-          <InAppProUpgradeButton
-            canStartInternalTrial={!!billingAccount?.subscription?.canStartInternalTrial}
-            isShopify={isShopify}
-            className="bg-brand-green hover:bg-brand-green/90"
-            testId="button-upgrade-plan"
-            onStartedTrial={() => {
-              setSubscriptionGate({ ...subscriptionGate, show: false });
-              window.location.reload();
-            }}
-          />
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-
   const WORKFLOW_DESCRIPTIONS: Record<string, { summary: string; triggers: string; timing: string; qualificationLogic?: string }> = {
     W1: {
       summary: "Instantly replies to every new inquiry with a personalized greeting. Creates a lead record, tags as 'New', sets pipeline to 'New Lead', and creates a review task.",
@@ -3047,7 +3000,6 @@ export function RealtorGrowthEngine() {
         ) : (
           <DetailPage />
         )}
-        <SubscriptionGateDialog />
       </>
     </RealtorEngineErrorBoundary>
   );
