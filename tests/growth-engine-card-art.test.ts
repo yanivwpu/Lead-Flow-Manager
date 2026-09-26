@@ -59,6 +59,24 @@ test("gallery cards use compact icons instead of image banners", () => {
   assert.ok(!cardSlice.includes("GrowthEngineStoryArt"), "compact cards must not render decorative art");
 });
 
+test("gallery card metadata does not constrain the engine title width", () => {
+  const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
+  const cardStart = templates.indexOf("function GrowthEngineGalleryCard(");
+  const cardSlice = templates.slice(cardStart, cardStart + 7000);
+  const metadataStart = cardSlice.indexOf('<div className="flex items-center justify-between gap-3">');
+  const titleStart = cardSlice.indexOf("<h3", metadataStart);
+
+  assert.ok(metadataStart >= 0, "icon/category and status should share a compact metadata row");
+  assert.ok(titleStart > metadataStart, "title should follow the metadata row");
+  assert.ok(
+    cardSlice.lastIndexOf("</div>", titleStart) > metadataStart,
+    "metadata row should close before the full-width title",
+  );
+  assert.ok(!cardSlice.slice(titleStart, titleStart + 250).includes("truncate"));
+  assert.ok(!cardSlice.slice(titleStart, titleStart + 250).includes("whitespace-nowrap"));
+  assert.ok(!cardSlice.slice(titleStart, titleStart + 250).includes("max-w-"));
+});
+
 test("Coming-soon engines use neutral icon treatment and stay non-installable", () => {
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   assert.ok(templates.includes('isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500"'));
