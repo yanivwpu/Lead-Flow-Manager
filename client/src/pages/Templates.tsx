@@ -33,6 +33,7 @@ import {
   Users, Target,   Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
   ChevronDown,
+  Building2, Bot, Stethoscope, Landmark, Wrench,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -69,10 +70,8 @@ import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
 import {
   PROSPECT_AI_PATH,
-  prospectDiscoveriesCatalogLines,
   useProspectAiStatus,
 } from "@/lib/prospectAi";
-import { GrowthEngineStoryArt } from "@/components/growthEngines/GrowthEngineStoryArt";
 import { resolveRgeGalleryState } from "@/lib/growthEngineGalleryState";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 import { useToast } from "@/hooks/use-toast";
@@ -487,7 +486,7 @@ const STATUS_ICONS: Record<string, any> = {
   rejected: { icon: XCircle, color: "text-red-500" },
 };
 
-function GrowthEngineGalleryCard({
+export function GrowthEngineGalleryCard({
   engine,
   setLocation,
   rgeEntitlement,
@@ -538,8 +537,17 @@ function GrowthEngineGalleryCard({
       ? "Open"
       : engine.ctaLabel;
   const statusLabel = isRge ? rgeState!.statusLabel : null;
-  const storyVariant = engine.placeholderKey ?? "wellness";
-  const catalogQuota = prospectDiscoveriesCatalogLines();
+  const EngineIcon = isProspectAi
+    ? Bot
+    : isRge
+      ? Building2
+      : engine.placeholderKey === "wellness"
+        ? Stethoscope
+        : engine.placeholderKey === "capital"
+          ? Landmark
+          : engine.placeholderKey === "trades"
+            ? Wrench
+            : Building2;
 
   return (
     <Card
@@ -553,54 +561,17 @@ function GrowthEngineGalleryCard({
       )}
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
-      <div
-        className={cn(
-          // Shared strip height so Prospect AI / Realtor / placeholders align edge-to-edge.
-          // Prospect AI PNG is 1536×1024 (taller AR) — contain + inset so title/caption clear the rounded crop.
-          "relative isolate h-36 w-full shrink-0 overflow-hidden rounded-t-xl sm:h-40",
-          isProspectAi ? "bg-[#0B1F3A]" : "bg-gray-100",
-        )}
-      >
-        {engine.image ? (
-          <img
-            src={engine.image}
-            alt=""
-            className={cn(
-              "h-full w-full object-center",
-              isProspectAi
-                ? "object-contain p-3 sm:p-3.5"
-                : "object-cover object-[center_22%]",
-            )}
-            loading="lazy"
-          />
-        ) : (
-          <GrowthEngineStoryArt variant={storyVariant} className="h-full w-full" />
-        )}
-        {!isComingSoon && engine.image && statusLabel && !isProspectAi ? (
-          <div className="pointer-events-none absolute left-4 top-4 z-[1]">
-            <Badge
-              variant="outline"
-              className="border-gray-200/90 bg-white/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600 shadow-sm backdrop-blur-[2px]"
-            >
-              {statusLabel}
-            </Badge>
-          </div>
-        ) : null}
-        {isComingSoon ? (
-          <div className="pointer-events-none absolute right-4 top-4 z-[1]">
-            <Badge className="border border-white/30 bg-gray-900/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm backdrop-blur-sm">
-              Coming soon
-            </Badge>
-          </div>
-        ) : null}
-      </div>
-      <CardContent className="flex flex-1 flex-col gap-3.5 p-5 pt-4">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
-          <h3
-            className="text-base font-semibold leading-snug tracking-tight text-gray-900 text-pretty"
+      <CardContent className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500" : isProspectAi ? "border-sky-200 bg-sky-50 text-sky-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
+            <EngineIcon className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
+            <h3
+            className="mt-0.5 text-base font-semibold leading-snug tracking-tight text-gray-900 text-pretty"
             data-testid={engine.slug === "realtor-growth-engine" ? "text-engine-title" : undefined}
-          >
+            >
             {showRealtorMark ? (
               <>
                 <RealtorMark /> Growth Engine
@@ -608,66 +579,19 @@ function GrowthEngineGalleryCard({
             ) : (
               engine.title
             )}
-          </h3>
-        </div>
-        <p className="text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
-        {(() => {
-          if (isRge || isComingSoon) return null;
-          if (isProspectAi) {
-            return (
-              <div className="rounded-lg border border-sky-100/90 bg-gradient-to-br from-sky-50/80 to-cyan-50/40 px-2 py-2 shadow-sm sm:px-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-900/80">
-                  {catalogQuota.title}
-                </p>
-                <ul className="mt-1 space-y-0.5 text-left text-[12px] leading-snug text-gray-700 sm:text-[12.5px]">
-                  {catalogQuota.rows.map((row) => (
-                    <li key={row.plan} className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
-                      <span className="min-w-[3.75rem] font-semibold text-gray-900">{row.plan}</span>
-                      <span className="tabular-nums text-gray-600">{row.allowance}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          }
-          const mode =
-            engine.galleryPricingMode ??
-            (engine.oneTimePrice ? "show" : engine.status === "coming_soon" ? "coming_soon" : "hidden");
-          if (mode === "hidden") return null;
-          if (mode === "coming_soon") return null;
-          return (
-            <div className="rounded-lg border border-emerald-100/90 bg-gradient-to-br from-emerald-50/70 to-violet-50/40 px-3 py-2 shadow-sm">
-              <p className="text-sm font-semibold leading-snug text-emerald-900">Included with Pro</p>
-              <p className="mt-0.5 text-xs text-gray-600">No additional charge with Pro</p>
-            </div>
-          );
-        })()}
-        <ul className="flex flex-1 flex-col gap-2.5 text-sm leading-relaxed text-gray-700">
-          {engine.benefits.slice(0, 3).map((b) => (
-            <li key={b} className="flex gap-2.5">
-              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-              <span className="min-w-0 flex-1 text-pretty [overflow-wrap:anywhere]">{b}</span>
-            </li>
-          ))}
-        </ul>
-        {engine.requirements?.length ? (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-            <p className="font-semibold text-gray-900">Required before activation</p>
-            <p className="mt-1">{engine.requirements.join(" · ")}</p>
+            </h3>
           </div>
-        ) : null}
-        {engine.optionalIntegrations?.length ? (
-          <p className="text-xs text-gray-500"><span className="font-medium text-gray-700">Optional:</span> {engine.optionalIntegrations.join(", ")}</p>
-        ) : null}
-        <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Included with Pro
+          <Badge variant="outline" className={cn("shrink-0 px-2 py-0.5 text-[10px] font-medium", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-600" : "border-emerald-200 bg-emerald-50 text-emerald-800")}>
+            {isComingSoon ? "Coming soon" : isProspectAi ? (prospectAiActivated ? "Active" : "Available") : statusLabel}
+          </Badge>
         </div>
+        <p className="min-h-10 text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {rgeState?.note ? <p className="text-xs font-medium text-amber-800" role="status">{rgeState.note}</p> : null}
-        <div className="mt-auto border-t border-gray-100 pt-4">
+        <div className="mt-auto flex flex-col gap-1 border-t border-gray-100 pt-3 sm:flex-row sm:items-center">
           {isComingSoon ? (
             <Button
               variant="outline"
-              className="w-full cursor-not-allowed border-gray-200 bg-gray-50/80 text-gray-500 hover:bg-gray-50/80"
+              className="w-full cursor-not-allowed border-gray-200 bg-gray-50/80 text-gray-500 hover:bg-gray-50/80 sm:flex-1"
               disabled
               aria-disabled
             >
@@ -676,7 +600,7 @@ function GrowthEngineGalleryCard({
             </Button>
           ) : (
             <Button
-              className="w-full bg-brand-green text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-600/20 hover:bg-brand-green/90"
+              className="w-full bg-brand-green text-white shadow-sm hover:bg-brand-green/90 sm:flex-1"
               disabled={rgeState?.disabled}
               onClick={() => {
                 if (rgeState?.action === "upgrade" || rgeState?.action === "restore") {
@@ -700,7 +624,7 @@ function GrowthEngineGalleryCard({
           {!isComingSoon && engine.detailHref ? (
             <button
               type="button"
-              className="mt-2 w-full rounded-md px-3 py-2 text-sm font-medium text-gray-600 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+              className="w-full rounded-md px-3 py-2 text-sm font-medium text-gray-500 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 sm:w-auto"
               onClick={() => setLocation(engine.detailHref!)}
             >
               View details
