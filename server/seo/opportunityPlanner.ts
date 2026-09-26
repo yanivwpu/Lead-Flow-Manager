@@ -6,8 +6,8 @@ export type PageEvidence={page:string;urls:string[];current:AggregateMetrics;pre
 export type ScoredOpportunity={clusterKey:string;queryCluster:string[];targetPage:string|null;recommendedPrimaryPage:string|null;competingPages:PageEvidence[];type:"striking_distance"|"low_ctr"|"decline"|"cannibalization";current:AggregateMetrics;previous:AggregateMetrics;priorityScore:number;confidenceScore:number;estimatedUpside:number;reason:string;evidence:Record<string,unknown>};
 export type OpportunityScoringConfig={minImpressions:number;maxPerRun:number;commercialTerms:string[];lowCtrRatio:number;declineRetainedRatio:number;declinePositionDelta:number;cannibalizationMinPageImpressions:number;cannibalizationMinPageShare:number};
 export const DEFAULT_OPPORTUNITY_CONFIG:OpportunityScoringConfig={minImpressions:50,maxPerRun:10,commercialTerms:["crm","software","pricing","automation","platform","tool","business"],lowCtrRatio:.6,declineRetainedRatio:.8,declinePositionDelta:2,cannibalizationMinPageImpressions:50,cannibalizationMinPageShare:.1};
-const INTENT_STOP_WORDS=new Set(["a","an","and","for","in","of","on","the","to","with"]);
-const tokens=(q:string)=>new Set(q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>2&&!INTENT_STOP_WORDS.has(w)));
+/** Keep every non-trivial query term; English stopword lists erase short entities and do not generalize across languages. */
+const tokens=(q:string)=>new Set(q.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w=>[...w].length>1));
 /** Shared category words alone must never drive page-consolidation advice. */
 export const hasMatchingQueryIntent=(a:string,b:string)=>{const x=tokens(a),y=tokens(b);return x.size>0&&x.size===y.size&&[...x].every(token=>y.has(token));};
 const aggregate=(rows:SeoMetricRow[]):AggregateMetrics=>{const impressions=rows.reduce((n,r)=>n+r.impressions,0),clicks=rows.reduce((n,r)=>n+r.clicks,0);return{clicks,impressions,ctr:clicks/Math.max(1,impressions),position:rows.reduce((n,r)=>n+r.position*r.impressions,0)/Math.max(1,impressions)}};
