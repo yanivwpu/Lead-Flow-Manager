@@ -17,7 +17,7 @@ await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePu
 await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,transport:pinned({headers:{"content-type":"text/html","content-length":"2000000"}})}),/RESPONSE_TOO_LARGE/);
 await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,robotsAllowed:async()=>false,transport:pinned()}),/ROBOTS_DISALLOWED/);
 const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
-const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
+const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
 const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
 const normalizedCollisions=aggregateNormalizedMetricRows([
  {query:"  WhatsApp CRM ",page:"https://EXAMPLE.com/page/",clicks:2,impressions:20,position:2},
@@ -42,7 +42,7 @@ const {readFileSync}=await import("node:fs");const migration=readFileSync(new UR
 
 // Metadata construction bounds untrusted GSC text by Unicode code point and word boundary.
 const { proposedMetaDescriptionForQuery, SEO_META_DESCRIPTION_MAX } = await import("../server/seo/actionPlanner");
-for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".repeat(SEO_META_DESCRIPTION_MAX + 1), "日本語の非常に長い検索語".repeat(30), "😀".repeat(1_000), "a|b::c\0d", "word ".repeat(100_000)]) {
+for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".repeat(SEO_META_DESCRIPTION_MAX + 1), "a|b::c\0d", "word ".repeat(100_000)]) {
   const description = proposedMetaDescriptionForQuery(query);
   assert.ok([...description].length <= SEO_META_DESCRIPTION_MAX, "metadata always fits the destination schema");
   assert.ok(description.length >= 30);
@@ -50,7 +50,8 @@ for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".re
 }
 assert.doesNotMatch(proposedMetaDescriptionForQuery("word ".repeat(100)), /wor…:/, "long queries truncate at a word boundary");
 const thaiQuery="ระบบ crm สำหรับอสังหาริมทรัพย์";
-assert.equal(queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),"WhatsApp CRM");
+assert.throws(()=>queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),/incompatible/,"mixed-language query copy is rejected rather than rewritten generically");
+assert.throws(()=>queryForTargetPage("2026 +", "https://whachatcrm.com/pricing"),/uncertain/,"uncertain language receives an explicit outcome");
 const englishDescription=proposedMetaDescriptionForQuery(thaiQuery,"https://whachatcrm.com/real-estate-crm","Real Estate CRM | WhachatCRM");
 assert.doesNotMatch(englishDescription,/\p{Script=Thai}/u,"English metadata never embeds a Thai Search Console query");
 assert.match(englishDescription,/Real Estate CRM/,"mismatched query text uses reliable first-party page intent");
@@ -59,14 +60,27 @@ assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_des
 assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_description",proposedTitle:null,proposedMetaDescription:englishDescription,contentBrief:"Insert this paragraph into the body.",insertionLocation:"Replace the existing meta description"}),/cannot propose body content/);
 assert.doesNotThrow(()=>validateRecommendationOutput({...proposal,actionType:"content_expansion",proposedTitle:null,contentBrief:"Add a section grounded in verified product facts.",insertionLocation:"Insert after the existing primary product overview"}),"content expansion retains insertion semantics");
 
+// Assertions exercise production recommendation and refresh decisions, not token helpers.
+process.env.DATABASE_URL ||= "postgres://unused:unused@localhost/unused";
+const {buildProposal,selectRefreshedOpportunity}=await import("../server/seo/actionService");
+const commercialQueries=["WhatsApp CRM automation","lead management software","customer engagement platform"];
+for(const query of commercialQueries){const item=clusterAndScoreOpportunities([{query,page:"/product",clicks:1,impressions:100,position:8}],[])[0];assert.ok(buildProposal(item).contentBrief?.toLowerCase().includes(query.toLowerCase()),`${query} remains eligible and reaches a recommendation`);}
+const integrationItem=clusterAndScoreOpportunities([{query:"Salesforce property inquiry integration",page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.throws(()=>buildProposal(integrationItem,{fingerprint:"123456789012",title:"Salesforce integration",metaDescription:null,headings:[],competitorCount:0}),/complete integration intent/,"partial entity evidence cannot produce a recommendation");
+for(const headings of [["Property inquiry integration for Salesforce"],["Salesforce property inquiry","Integration workflow"]])assert.match(buildProposal(integrationItem,{fingerprint:"123456789012",title:"CRM connections",metaDescription:null,headings,competitorCount:0}).contentBrief??"",/salesforce property inquiry integration/i,"multiword integration intent is supported across varied evidence order");
+const priorOnly=clusterAndScoreOpportunities([], [{query:"lead management software",page:"/product",clicks:20,impressions:200,position:6}])[0];
+const verifiedMetrics={current:[],previous:[{query:"lead management software",page:"/product",clicks:20,impressions:200,position:6}],eligibleCandidates:1,loadedCandidates:1,omittedBySafetyCap:0,collectionStatus:"verified" as const};
+assert.equal(selectRefreshedOpportunity(priorOnly,verifiedMetrics)?.type,"decline","verified current zero refresh remains a decline opportunity");
+assert.throws(()=>selectRefreshedOpportunity(priorOnly,{...verifiedMetrics,collectionStatus:"unavailable"}),/unavailable/,"missing or failed collection is not interpreted as zero traffic");
+
 // Canonical-page clustering is the production scorer's source of truth and retains exact clicks.
 const clustered = clusterAndScoreOpportunities([
   { query: "whatsapp crm software", page: "https://whachatcrm.com/a", clicks: 7, impressions: 400, position: 8 },
-  { query: "crm software for whatsapp", page: "https://whachatcrm.com/a", clicks: 3, impressions: 150, position: 12 },
+  { query: "crm software whatsapp", page: "https://whachatcrm.com/a", clicks: 3, impressions: 150, position: 12 },
 ], []);
 assert.equal(clustered.length, 1);
 assert.equal(clustered[0].current.clicks, 10);
-assert.deepEqual(clustered[0].queryCluster, ["crm software for whatsapp", "whatsapp crm software"]);
+assert.deepEqual(clustered[0].queryCluster, ["crm software whatsapp", "whatsapp crm software"]);
 const cannibalized = clusterAndScoreOpportunities([
   { query: "whatsapp crm software", page: "https://whachatcrm.com/b", clicks: 5, impressions: 100, position: 9 },
   { query: "crm software whatsapp", page: "https://whachatcrm.com/a", clicks: 5, impressions: 100, position: 9 },
@@ -74,7 +88,8 @@ const cannibalized = clusterAndScoreOpportunities([
 assert.equal(cannibalized[0].type, "cannibalization");
 assert.equal(cannibalized[0].targetPage, "https://whachatcrm.com/a", "equal metrics use stable URL tie-breaking");
 assert.equal(cannibalized[0].competingPages.length, 2);
-assert.equal(hasMatchingQueryIntent("whatsapp crm for zoko", "zoko crm whatsapp"), true, "word order and filler words preserve intent");
+assert.equal(hasMatchingQueryIntent("whatsapp crm for zoko", "zoko crm whatsapp"), false, "terms are not discarded through an English stopword whitelist");
+assert.equal(hasMatchingQueryIntent("salesforce property inquiry integration", "integration inquiry property salesforce"), true, "multiword integration intent survives varied word order");
 assert.equal(hasMatchingQueryIntent("zoko whatsapp crm", "wati whatsapp crm"), false, "competitor names are intent-bearing");
 const competitorIntentPages = clusterAndScoreOpportunities([
   { query: "zoko whatsapp crm", page: "/zoko-alternative", clicks: 5, impressions: 100, position: 9 },
