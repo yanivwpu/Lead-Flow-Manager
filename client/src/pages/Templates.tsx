@@ -675,7 +675,7 @@ function GrowthEnginesTab() {
 
   return (
     <div className="w-full max-w-none space-y-4 overflow-visible md:space-y-5">
-      <div className="w-full max-w-3xl space-y-1.5 overflow-visible text-start">
+      <div className="w-full max-w-none space-y-1.5 overflow-visible text-start">
         <h2 className="text-xl font-semibold tracking-tight text-gray-950 md:text-2xl">Ready-to-run Growth Engines</h2>
         <p className="w-full max-w-none overflow-visible text-sm leading-relaxed text-gray-600 md:text-[15px] md:leading-snug">
           Launch proven automation systems for prospecting, qualification, follow-up, and industry-specific customer journeys.

@@ -42,6 +42,11 @@ test("Growth Engines intro is concise and keeps the grid close to the heading", 
   assert.ok(introStart >= 0);
   const introSlice = templates.slice(introStart, introStart + 5000);
   assert.ok(introSlice.includes("Ready-to-run Growth Engines"));
+  assert.ok(
+    introSlice.includes('<div className="w-full max-w-none space-y-1.5 overflow-visible text-start">'),
+    "intro container should use the full gallery width",
+  );
+  assert.ok(!introSlice.includes("max-w-3xl"), "intro must not be capped below the gallery width");
   assert.ok(!introSlice.includes("max-w-2xl"), "intro must not use max-w-2xl");
   assert.ok(!introSlice.includes("max-w-xl"), "intro must not use max-w-xl");
   assert.ok(introSlice.includes("Every current and future Growth Engine is included with Pro"));
