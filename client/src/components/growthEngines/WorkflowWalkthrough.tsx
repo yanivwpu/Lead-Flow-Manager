@@ -18,6 +18,19 @@ const copy = {
   he: { eyebrow: "איך זה עובד", title: "עקבו אחר ליד בתוך מנוע הצמיחה", intro: "בחרו מסלול לדוגמה והפעילו את ההמחשה שלב אחר שלב.", illustrative: "דוגמה להמחשה — לא פעילות בזמן אמת", play: "הפעלת דוגמה", pause: "השהיה", replay: "הפעלה מחדש", select: "מסלול לדוגמה", support: "ידע המחובר לסוכן ה-AI", static: "מופעלת הפחתת תנועה. השתמשו בהפעלה מחדש כדי להתקדם במסלול." },
 } satisfies Record<WorkflowLocale, Record<string, string>>;
 
+export type WalkthroughPlaybackAction = "play" | "pause" | "resume" | "replay";
+
+export function getWalkthroughPlaybackAction(
+  step: number,
+  stepCount: number,
+  playing: boolean,
+): WalkthroughPlaybackAction {
+  if (playing) return "pause";
+  if (step === 0) return "play";
+  if (step >= stepCount - 1) return "replay";
+  return "resume";
+}
+
 export function WorkflowWalkthrough({ config, locale = "en" }: { config: WorkflowWalkthroughConfig; locale?: WorkflowLocale }) {
   const [routeId, setRouteId] = useState(config.routes[0]?.id ?? "");
   const [step, setStep] = useState(0);
@@ -29,6 +42,7 @@ export function WorkflowWalkthrough({ config, locale = "en" }: { config: Workflo
   const activeIds = new Set(route.nodeIds.slice(0, step + 1));
   const activeNode = nodes.get(route.nodeIds[step]);
   const t = copy[locale];
+  const playbackAction = getWalkthroughPlaybackAction(step, route.nodeIds.length, playing);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -49,7 +63,14 @@ export function WorkflowWalkthrough({ config, locale = "en" }: { config: Workflo
   }, [playing, step, route.nodeIds.length, reducedMotion]);
 
   const selectRoute = (id: string) => { setRouteId(id); setStep(0); setPlaying(false); };
-  const replay = () => { setStep(0); setPlaying(true); };
+  const handlePlayback = () => {
+    if (playbackAction === "pause") {
+      setPlaying(false);
+      return;
+    }
+    if (playbackAction === "replay") setStep(0);
+    setPlaying(true);
+  };
 
   return (
     <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 md:p-8" aria-labelledby="workflow-walkthrough-title" data-testid="workflow-walkthrough">
@@ -61,12 +82,12 @@ export function WorkflowWalkthrough({ config, locale = "en" }: { config: Workflo
           <p className="mt-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">{t.illustrative}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t.select}>
-          {route.id && step === 0 && !playing ? (
-            <Button size="sm" onClick={() => setPlaying(true)} data-testid="workflow-play"><Play className="me-1.5 h-3.5 w-3.5" />{t.play}</Button>
-          ) : playing ? (
-            <Button size="sm" variant="outline" onClick={() => setPlaying(false)} data-testid="workflow-pause"><Pause className="me-1.5 h-3.5 w-3.5" />{t.pause}</Button>
+          {playbackAction === "play" || playbackAction === "resume" ? (
+            <Button size="sm" onClick={handlePlayback} data-testid="workflow-play"><Play className="me-1.5 h-3.5 w-3.5" />{t.play}</Button>
+          ) : playbackAction === "pause" ? (
+            <Button size="sm" variant="outline" onClick={handlePlayback} data-testid="workflow-pause"><Pause className="me-1.5 h-3.5 w-3.5" />{t.pause}</Button>
           ) : (
-            <Button size="sm" variant="outline" onClick={replay} data-testid="workflow-replay"><RotateCcw className="me-1.5 h-3.5 w-3.5" />{t.replay}</Button>
+            <Button size="sm" variant="outline" onClick={handlePlayback} data-testid="workflow-replay"><RotateCcw className="me-1.5 h-3.5 w-3.5" />{t.replay}</Button>
           )}
         </div>
       </div>
