@@ -51,7 +51,7 @@ export function resolveRgeGalleryState(input: {
     };
   }
   if (installed) {
-    return { action: "manage", label: "Manage Growth Engine", statusLabel: "Installed", disabled: false };
+    return { action: "manage", label: "Open", statusLabel: "Installed", disabled: false };
   }
   if (setupStarted && !input.onboardingSubmittedAt) {
     return { action: "continue_setup", label: "Continue setup", statusLabel: "Setup incomplete", disabled: false };

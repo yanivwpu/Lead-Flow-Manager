@@ -69,6 +69,9 @@ import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import type { WebchatProductionReadiness } from "@shared/webchatWidgetSettings";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { TEMPLATES_GROWTH_ENGINES_TAB_PATH } from "@/lib/growthEnginesCatalog";
+import { WorkflowWalkthrough } from "@/components/growthEngines/WorkflowWalkthrough";
+import { realtorWorkflowWalkthrough, workflowLocale } from "@/components/growthEngines/workflowWalkthroughConfig";
+import { useTranslation } from "react-i18next";
 import {
   getRgeDetailCtaLabel,
   isRgeOnboardingComplete,
@@ -958,6 +961,7 @@ function RGEOnboardingWizard({
 // --- Components ---
 
 export function RealtorGrowthEngine() {
+  const { i18n } = useTranslation();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [step, setStep] = useState(1);
@@ -1600,6 +1604,8 @@ export function RealtorGrowthEngine() {
             </div>
           </div>
         </section>
+
+        <WorkflowWalkthrough config={realtorWorkflowWalkthrough} locale={workflowLocale(i18n.resolvedLanguage ?? i18n.language)} />
 
         <section id="rge-whats-included" className="mb-6 scroll-mt-24 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm md:p-8">
           <h2 className="mb-1 text-xl font-bold text-gray-900 md:text-2xl">What&apos;s included</h2>

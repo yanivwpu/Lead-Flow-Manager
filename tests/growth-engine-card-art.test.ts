@@ -48,33 +48,22 @@ test("Growth Engines intro is concise and keeps the grid close to the heading", 
   assert.ok(introSlice.includes("overflow-visible"));
 });
 
-test("Prospect AI artwork uses contain + shared strip height (no title/caption crop)", () => {
+test("gallery cards use compact icons instead of image banners", () => {
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
   const cardStart = templates.indexOf("function GrowthEngineGalleryCard(");
   assert.ok(cardStart >= 0);
-  const cardSlice = templates.slice(cardStart, cardStart + 3500);
-  assert.ok(cardSlice.includes("h-36") && cardSlice.includes("sm:h-40"), "compact shared art strip height");
-  assert.ok(cardSlice.includes("object-contain"), "Prospect AI must use object-contain");
-  assert.ok(
-    cardSlice.includes("object-contain p-3 sm:p-3.5"),
-    "Prospect AI inset keeps title/caption clear of rounded crop",
-  );
-  assert.ok(cardSlice.includes("object-cover"), "Realtor / cover engines still fill the strip");
-  assert.ok(cardSlice.includes("bg-[#0B1F3A]"), "Prospect AI letterbox matches artwork navy");
+  const cardSlice = templates.slice(cardStart, cardStart + 7000);
+  assert.ok(cardSlice.includes("const EngineIcon"));
+  assert.ok(cardSlice.includes('<EngineIcon className="h-5 w-5"'));
+  assert.ok(!cardSlice.includes("<img"), "compact cards must not render catalog image banners");
+  assert.ok(!cardSlice.includes("GrowthEngineStoryArt"), "compact cards must not render decorative art");
 });
 
-test("Coming-soon engines use neutral slate placeholder art", () => {
-  const story = readFileSync(
-    join(root, "client/src/components/growthEngines/GrowthEngineStoryArt.tsx"),
-    "utf8",
-  );
+test("Coming-soon engines use neutral icon treatment and stay non-installable", () => {
   const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
-  assert.ok(story.includes("Neutral placeholder") || story.includes("slate"));
-  assert.ok(story.includes("#475569") || story.includes("#64748B"));
-  assert.ok(!story.includes("#059669"), "placeholders must not use Realtor emerald");
-  assert.ok(!story.includes("#064e3b"));
-  assert.ok(story.includes("TENANTS • LEASING • FOLLOW-UP"));
-  assert.ok(templates.includes("GrowthEngineStoryArt"));
+  assert.ok(templates.includes('isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500"'));
+  assert.ok(templates.includes("disabled\n              aria-disabled"));
+  assert.ok(templates.includes("Coming soon"));
 });
 
 test("Design system color hierarchy is documented in gallery wiring", () => {

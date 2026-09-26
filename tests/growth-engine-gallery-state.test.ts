@@ -7,6 +7,7 @@ test("maps server-backed Growth Engine states to honest actions", () => {
   assert.equal(resolveRgeGalleryState({ catalogStatus: "available", accessOk: false, hasPro: false }).action, "upgrade");
   assert.equal(resolveRgeGalleryState({ catalogStatus: "available", entitlementStatus: "purchased", accessOk: true }).action, "continue_setup");
   assert.equal(resolveRgeGalleryState({ catalogStatus: "available", entitlementStatus: "installed", accessOk: true }).action, "manage");
+  assert.equal(resolveRgeGalleryState({ catalogStatus: "available", entitlementStatus: "submitted", onboardingSubmittedAt: "2026-01-01", accessOk: true }).statusLabel, "Launch in progress");
 });
 
 test("paused installations keep their configuration and ask the user to restore Pro", () => {
