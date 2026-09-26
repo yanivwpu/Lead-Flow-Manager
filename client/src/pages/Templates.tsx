@@ -33,7 +33,7 @@ import {
   Users, Target,   Sparkles, Rocket, ArrowRight,
   Search, MessageCircle, Facebook, Instagram,
   ChevronDown,
-  Building2, Bot, Stethoscope, Landmark, Wrench,
+  Building2, Bot, Stethoscope, ShoppingBag, Wrench,
 } from "lucide-react";
 import {
   WhatsAppTemplateRichPreview,
@@ -543,8 +543,8 @@ export function GrowthEngineGalleryCard({
       ? Building2
       : engine.placeholderKey === "wellness"
         ? Stethoscope
-        : engine.placeholderKey === "capital"
-          ? Landmark
+        : engine.placeholderKey === "commerce"
+          ? ShoppingBag
           : engine.placeholderKey === "trades"
             ? Wrench
             : Building2;
@@ -562,14 +562,14 @@ export function GrowthEngineGalleryCard({
       data-testid={engine.slug === "realtor-growth-engine" ? "card-realtor-growth-engine" : `card-engine-${engine.slug}`}
     >
       <CardContent className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500" : isProspectAi ? "border-sky-200 bg-sky-50 text-sky-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
             <EngineIcon className="h-5 w-5" aria-hidden />
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
             <h3
-            className="mt-0.5 text-base font-semibold leading-snug tracking-tight text-gray-900 text-pretty"
+            className="mt-0.5 text-base font-semibold leading-snug tracking-tight text-gray-900"
             data-testid={engine.slug === "realtor-growth-engine" ? "text-engine-title" : undefined}
             >
             {showRealtorMark ? (
