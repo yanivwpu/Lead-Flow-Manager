@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearch } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -370,6 +371,7 @@ function ActivationScreen({
 }
 
 function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
+  const { t, i18n } = useTranslation();
   const statusQuery = useProspectAiStatus();
   const status = statusQuery.data ?? initialStatus;
   const [, setNavLocation] = useLocation();
@@ -532,6 +534,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
       radiusKm?: number;
       targetCount?: number;
       locationExpansion?: "exact" | "nearby" | "metro";
+      locale?: string;
       replaceActiveBatch?: boolean;
       idempotencyKey?: string;
       signal?: AbortSignal;
@@ -540,6 +543,7 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
       location: location.trim(),
       targetCount,
       locationExpansion,
+      locale: i18n.resolvedLanguage || i18n.language,
       idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       signal: controller.signal,
     };
@@ -706,11 +710,11 @@ function DiscoverTab({ status: initialStatus }: { status: ProspectAiStatus }) {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="min-w-0">
-            <Label htmlFor="pai-business-type">Business Type</Label>
+            <Label htmlFor="pai-business-type">{t("prospectAiDiscovery.businessType")}</Label>
             <Input
               id="pai-business-type"
               className="mt-1.5 h-10"
-              placeholder="e.g. Dental clinics"
+              placeholder={t("prospectAiDiscovery.businessTypePlaceholder")}
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
             />

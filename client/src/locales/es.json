@@ -41,6 +41,10 @@
     "and": "y",
     "signedInAs": "Conectado como"
   },
+  "prospectAiDiscovery": {
+    "businessType": "Tipo de negocio",
+    "businessTypePlaceholder": "Ingresa un tipo de negocio en tu idioma, por ejemplo: plomeros, dentistas, agentes inmobiliarios"
+  },
   "nav": {
     "main": "Principal",
     "automationAi": "Automatización e IA",

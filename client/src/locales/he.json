@@ -41,6 +41,10 @@
     "and": "ו",
     "signedInAs": "מחובר כ"
   },
+  "prospectAiDiscovery": {
+    "businessType": "סוג עסק",
+    "businessTypePlaceholder": "הזן סוג עסק בשפה שלך, לדוגמה: אינסטלטורים, רופאי שיניים, סוכני נדל״ן"
+  },
   "nav": {
     "main": "ראשי",
     "automationAi": "אוטומציה ו-AI",
