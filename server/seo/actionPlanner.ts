@@ -62,7 +62,7 @@ export function assessQueryLanguage(query:string,targetPage:string):QueryLanguag
 /** Prevent raw GSC text in a different writing system from leaking into generated copy. */
 export function queryForTargetPage(query:string,targetPage:string){const assessment=assessQueryLanguage(query,targetPage);if(assessment.status!=="compatible")throw Object.assign(new Error(assessment.status==="uncertain"?"Query language is uncertain":"Query language is incompatible with the target page"),{category:assessment.status==="uncertain"?"QUERY_LANGUAGE_UNCERTAIN":"QUERY_LANGUAGE_MISMATCH"});return assessment.clean;}
 const QUERY_RELATION_CONNECTORS=new Set(["and","between","for","of","to","with"]);
-const lexicalTerms=(value:string)=>value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[];
+const lexicalTerms=(value:string)=>(value.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu)??[]).map(term=>term==="integrations"?"integration":term);
 /** Preserve every entity and modifier, including one-character names; omit only connectors used between query terms. */
 export function materialQueryTerms(query:string){const terms=lexicalTerms(query);return terms.filter((term,index)=>!(QUERY_RELATION_CONNECTORS.has(term)&&index>0&&index<terms.length-1));}
 /** Generation and evidence validation share exact Unicode term matching rather than substring or length heuristics. */
