@@ -126,7 +126,11 @@ assert.equal(isSnapshotStale(fingerprintSeoPage(normalized), changed), true);
 
 const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts", import.meta.url), "utf8");
 const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8");
-assert.match(adminSeoSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
+const seoActionsPanelSource = readFileSync(new URL("../client/src/components/admin/SeoActionsPanel.tsx", import.meta.url), "utf8");
+assert.match(adminSeoSource,/SeoActionsPanel/,"the routed admin SEO view renders the action panel");
+assert.match(seoActionsPanelSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
+assert.match(seoActionsPanelSource,/Needs review[\s\S]+Approved[\s\S]+History/,"actions are separated into review, approved, and history tabs");
+assert.match(seoActionsPanelSource,/HISTORY_STATES = new Set\(\["rejected"/,"rejected actions remain visible in history");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
 const metricLoaderSource=actionServiceSource.slice(actionServiceSource.indexOf("export async function loadPlannerMetrics"),actionServiceSource.indexOf("type FreshProposalEvidence"));assert.equal((metricLoaderSource.match(/db\.execute/g)??[]).length,1,"planner metrics and collection coverage share one PostgreSQL statement snapshot");assert.ok(metricLoaderSource.includes("generate_series")&&metricLoaderSource.includes("latest.status='success'")&&metricLoaderSource.includes("ORDER BY started_at DESC,id DESC"),"coverage is determined per requested date from its latest producing run");assert.match(metricLoaderSource,/FROM coverage LEFT JOIN expanded[\s\S]*planner_row/,"coverage survives an empty opportunity result without creating a planner row");
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
