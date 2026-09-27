@@ -41,6 +41,10 @@
     "and": "and",
     "signedInAs": "Signed in as"
   },
+  "prospectAiDiscovery": {
+    "businessType": "Business Type",
+    "businessTypePlaceholder": "Enter a business type in your language, for example: plumbers, dentists, real estate agents"
+  },
   "nav": {
     "main": "Main",
     "automationAi": "Automation & AI",

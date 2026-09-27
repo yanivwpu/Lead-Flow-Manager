@@ -90,8 +90,10 @@ export function registerProspectAiRoutes(app: Express): void {
       try {
         // Client abort disconnects the socket; check between provider pages.
         const isCancelled = () => Boolean(req.aborted || req.socket?.destroyed);
+        const user = await storage.getUser(workspaceUserId(req));
         const result = await discoverProspects(workspaceUserId(req), req.body, undefined, {
           isCancelled,
+          preferredLocale: user?.language,
         });
         res.json(result);
       } catch (err) {

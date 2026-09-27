@@ -37,6 +37,7 @@ import { getBusinessProfileForUser } from "../businessProfileService";
 import { getProspectDiscoveryProvider } from "./providers";
 import type { ProspectDiscoveryProvider } from "./providers/types";
 import { validateDiscoverInput } from "./normalize";
+import { normalizeProspectDiscoveryQuery } from "./discoveryQueryNormalizer";
 import {
   startOfUtcMonth,
   resolveUsagePeriodFromDates,
@@ -531,7 +532,7 @@ export async function discoverProspects(
   workspaceUserId: string,
   body: unknown,
   provider?: ProspectDiscoveryProvider,
-  opts?: { isCancelled?: () => boolean },
+  opts?: { isCancelled?: () => boolean; preferredLocale?: string | null },
 ): Promise<{
   search: {
     id: string;
@@ -581,6 +582,16 @@ export async function discoverProspects(
 
     const { plan, quota } = await assertActivatedAndEligible(workspaceUserId);
     const discoveryProvider = provider ?? getProspectDiscoveryProvider();
+    const requestedLocale =
+      body && typeof body === "object" && !Array.isArray(body)
+        ? (body as { locale?: unknown }).locale
+        : undefined;
+    const normalizedQuery = await normalizeProspectDiscoveryQuery({
+      businessType: validated.businessType,
+      location: validated.location,
+      preferredLocale:
+        typeof requestedLocale === "string" ? requestedLocale : opts?.preferredLocale,
+    });
 
     type SavedProspect = {
       providerPlaceId: string;
@@ -612,8 +623,8 @@ export async function discoverProspects(
       if (provider) {
         // Tests / injected providers — single discover() call (may ignore expansion).
         const result = await provider.discover({
-          businessType: validated.businessType,
-          location: validated.location,
+          businessType: normalizedQuery.providerBusinessType,
+          location: normalizedQuery.providerLocation,
           radiusKm: validated.radiusKm,
           targetCount: validated.targetCount,
           locationExpansion: validated.locationExpansion,
@@ -630,8 +641,8 @@ export async function discoverProspects(
         const { loadDiscoveryWorkspaceIndex } = await import("./discoveryWorkspaceIndex");
         const workspaceIndex = await loadDiscoveryWorkspaceIndex(workspaceUserId);
         const orchestrated = await runProspectAiDiscoveryOrchestrator({
-          businessType: validated.businessType,
-          location: validated.location,
+          businessType: normalizedQuery.providerBusinessType,
+          location: normalizedQuery.providerLocation,
           radiusKm: validated.radiusKm,
           targetCount: validated.targetCount,
           locationExpansion: validated.locationExpansion,

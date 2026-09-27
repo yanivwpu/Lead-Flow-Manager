@@ -295,6 +295,7 @@ export function useProspectAiDiscover() {
       radiusKm?: number;
       targetCount?: number;
       locationExpansion?: "exact" | "nearby" | "metro";
+      locale?: string;
       replaceActiveBatch?: boolean;
       idempotencyKey?: string;
       signal?: AbortSignal;

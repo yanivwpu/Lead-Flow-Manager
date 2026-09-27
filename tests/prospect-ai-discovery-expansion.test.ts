@@ -160,7 +160,7 @@ import { runProspectAiDiscoveryOrchestrator } from "../server/prospectAI/discove
   assert.ok(ui.includes("prospect-discover-diagnostics"));
   assert.ok(ui.includes("Search Radius (miles)"));
   assert.ok(ui.includes("Nearby cities (Recommended)"));
-  assert.ok(ui.includes("Find net-new businesses ready for Review"));
+  assert.ok(ui.includes("Find net-new businesses for Review"));
   assert.ok(!ui.includes("Uses your monthly Prospect Discoveries quota"));
 }
 
