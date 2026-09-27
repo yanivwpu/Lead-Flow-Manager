@@ -128,6 +128,7 @@ const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts
 const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8");
 assert.match(adminSeoSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
+const metricLoaderSource=actionServiceSource.slice(actionServiceSource.indexOf("export async function loadPlannerMetrics"),actionServiceSource.indexOf("type FreshProposalEvidence"));assert.equal((metricLoaderSource.match(/db\.execute/g)??[]).length,1,"planner metrics and collection coverage share one PostgreSQL statement snapshot");assert.match(metricLoaderSource,/coverage AS[\s\S]+collection_verified[\s\S]+expanded CROSS JOIN coverage/);
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
 assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
 assert.match(actionServiceSource,/processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item,\{/,"proposal construction occurs inside the isolated per-candidate worker");
