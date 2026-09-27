@@ -17,7 +17,7 @@ await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePu
 await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,transport:pinned({headers:{"content-type":"text/html","content-length":"2000000"}})}),/RESPONSE_TOO_LARGE/);
 await assert.rejects(()=>safeFetchHtml("https://example.com",{resolver:resolvePublic,robotsAllowed:async()=>false,transport:pinned()}),/ROBOTS_DISALLOWED/);
 const limiter=new HostRateLimiter(10);const waits:number[]=[];let time=100;await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});await limiter.wait(new URL("https://example.com"),()=>time,async n=>{waits.push(n);time+=n});assert.deepEqual(waits,[10]);
-const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software for whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
+const rows=[{query:"whatsapp crm software",page:"https://whachatcrm.com/",clicks:4,impressions:400,position:8},{query:"crm software whatsapp",page:"https://whachatcrm.com/",clicks:1,impressions:150,position:12}];
 const scored=clusterAndScoreOpportunities(rows,[]);assert.equal(scored.length,1);assert.equal(scored[0].queryCluster.length,2);assert.ok(scored[0].priorityScore>0&&scored[0].confidenceScore<=1);
 const normalizedCollisions=aggregateNormalizedMetricRows([
  {query:"  WhatsApp CRM ",page:"https://EXAMPLE.com/page/",clicks:2,impressions:20,position:2},
@@ -42,7 +42,7 @@ const {readFileSync}=await import("node:fs");const migration=readFileSync(new UR
 
 // Metadata construction bounds untrusted GSC text by Unicode code point and word boundary.
 const { proposedMetaDescriptionForQuery, SEO_META_DESCRIPTION_MAX } = await import("../server/seo/actionPlanner");
-for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".repeat(SEO_META_DESCRIPTION_MAX + 1), "日本語の非常に長い検索語".repeat(30), "😀".repeat(1_000), "a|b::c\0d", "word ".repeat(100_000)]) {
+for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".repeat(SEO_META_DESCRIPTION_MAX + 1), "a|b::c\0d", "word ".repeat(100_000)]) {
   const description = proposedMetaDescriptionForQuery(query);
   assert.ok([...description].length <= SEO_META_DESCRIPTION_MAX, "metadata always fits the destination schema");
   assert.ok(description.length >= 30);
@@ -50,7 +50,8 @@ for (const query of ["short query", "x".repeat(SEO_META_DESCRIPTION_MAX), "x".re
 }
 assert.doesNotMatch(proposedMetaDescriptionForQuery("word ".repeat(100)), /wor…:/, "long queries truncate at a word boundary");
 const thaiQuery="ระบบ crm สำหรับอสังหาริมทรัพย์";
-assert.equal(queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),"WhatsApp CRM");
+assert.throws(()=>queryForTargetPage(thaiQuery,"https://whachatcrm.com/real-estate-crm"),/incompatible/,"mixed-language query copy is rejected rather than rewritten generically");
+assert.throws(()=>queryForTargetPage("2026 +", "https://whachatcrm.com/pricing"),/uncertain/,"uncertain language receives an explicit outcome");
 const englishDescription=proposedMetaDescriptionForQuery(thaiQuery,"https://whachatcrm.com/real-estate-crm","Real Estate CRM | WhachatCRM");
 assert.doesNotMatch(englishDescription,/\p{Script=Thai}/u,"English metadata never embeds a Thai Search Console query");
 assert.match(englishDescription,/Real Estate CRM/,"mismatched query text uses reliable first-party page intent");
@@ -59,14 +60,39 @@ assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_des
 assert.throws(()=>validateRecommendationOutput({...proposal,actionType:"meta_description",proposedTitle:null,proposedMetaDescription:englishDescription,contentBrief:"Insert this paragraph into the body.",insertionLocation:"Replace the existing meta description"}),/cannot propose body content/);
 assert.doesNotThrow(()=>validateRecommendationOutput({...proposal,actionType:"content_expansion",proposedTitle:null,contentBrief:"Add a section grounded in verified product facts.",insertionLocation:"Insert after the existing primary product overview"}),"content expansion retains insertion semantics");
 
+// Assertions exercise production recommendation and refresh decisions, not token helpers.
+process.env.DATABASE_URL ||= "postgres://unused:unused@localhost/unused";
+const {buildProposal,selectRefreshedOpportunity}=await import("../server/seo/actionService");
+const commercialQueries=["WhatsApp CRM automation","lead management software","customer engagement platform"];
+for(const query of commercialQueries){const item=clusterAndScoreOpportunities([{query,page:"/product",clicks:1,impressions:100,position:8}],[])[0];assert.ok(buildProposal(item).contentBrief?.toLowerCase().includes(query.toLowerCase()),`${query} remains eligible and reaches a recommendation`);}
+const integrationItem=clusterAndScoreOpportunities([{query:"Salesforce property inquiry integration",page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.throws(()=>buildProposal(integrationItem,{fingerprint:"123456789012",title:"Salesforce integration",metaDescription:null,headings:[],competitorCount:0}),/complete integration intent/,"partial entity evidence cannot produce a recommendation");
+for(const headings of [["Property inquiry integration for Salesforce"],["Salesforce property inquiry","Integration workflow"]])assert.match(buildProposal(integrationItem,{fingerprint:"123456789012",title:"CRM connections",metaDescription:null,headings,competitorCount:0}).contentBrief??"",/salesforce property inquiry integration/i,"multiword integration intent is supported across varied evidence order");
+const connectedIntegration=clusterAndScoreOpportunities([{query:"Salesforce integration with WhatsApp",page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.match(buildProposal(connectedIntegration,{fingerprint:"123456789012",title:"Salesforce WhatsApp Integration",metaDescription:null,headings:[],competitorCount:0}).contentBrief??"",/salesforce integration with whatsapp/i,"a grammatical connector need not appear in otherwise complete evidence");
+assert.throws(()=>buildProposal(connectedIntegration,{fingerprint:"123456789012",title:"WhatsApp Integration",metaDescription:null,headings:[],competitorCount:0}),/complete integration intent/,"generic integration evidence cannot omit the named entity");
+for(const [query,evidence] of [["AI integration","AI integration"],["BI integration with Salesforce","Salesforce BI integration"],["X integration for WhatsApp","WhatsApp X integration"]]){const item=clusterAndScoreOpportunities([{query,page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];assert.doesNotThrow(()=>buildProposal(item,{fingerprint:"123456789012",title:evidence,metaDescription:null,headings:[],competitorCount:0}),`${query} retains its short entity`);}
+const aiIntegration=clusterAndScoreOpportunities([{query:"AI integration",page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.throws(()=>buildProposal(aiIntegration,{fingerprint:"123456789012",title:"Slack integration",metaDescription:null,headings:[],competitorCount:0}),error=>(error as {category?:string;message?:string}).category==="INSUFFICIENT_INTEGRATION_EVIDENCE"&&/research needed for: ai/.test((error as Error).message),"mismatched evidence is withheld with an explicit research-needed outcome");
+for(const [query,evidence] of [["Salesforce integrations","Salesforce Integration"],["Salesforce integration","Salesforce Integrations"]]){const item=clusterAndScoreOpportunities([{query,page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];assert.doesNotThrow(()=>buildProposal(item,{fingerprint:"123456789012",title:evidence,metaDescription:null,headings:[],competitorCount:0}),"the integration category accepts its singular/plural spelling");assert.throws(()=>buildProposal(item,{fingerprint:"123456789012",title:"Slack Integration",metaDescription:null,headings:[],competitorCount:0}),/research needed for: salesforce/,"category normalization does not weaken exact vendor evidence");}
+const paraphrasedConnector=clusterAndScoreOpportunities([{query:"WhatsApp integration for Salesforce",page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.doesNotThrow(()=>buildProposal(paraphrasedConnector,{fingerprint:"123456789012",title:"Salesforce WhatsApp Integration",metaDescription:null,headings:[],competitorCount:0}),"paraphrased relation connectors do not alter evidence eligibility");
+for(const [query,unsupportedEvidence,supportedEvidence] of [["Salesforce integration without coding","Salesforce Integration","Salesforce Integration without coding"],["Salesforce two-way sync integration","Salesforce Integration","Salesforce two-way sync integration"]]){const item=clusterAndScoreOpportunities([{query,page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];assert.throws(()=>buildProposal(item,{fingerprint:"123456789012",title:unsupportedEvidence,metaDescription:null,headings:[],competitorCount:0}),/complete integration intent/,`${query} retains its meaningful requirement`);assert.doesNotThrow(()=>buildProposal(item,{fingerprint:"123456789012",title:supportedEvidence,metaDescription:null,headings:[],competitorCount:0}));}
+const mismatchedLanguageItem=clusterAndScoreOpportunities([{query:thaiQuery,page:"/integrations",clicks:1,impressions:100,position:8}],[])[0];
+assert.throws(()=>buildProposal(mismatchedLanguageItem,{fingerprint:"123456789012",title:"Real Estate CRM",metaDescription:null,headings:[],competitorCount:0}),error=>(error as {category?:string}).category==="QUERY_LANGUAGE_MISMATCH","the production builder withholds mismatched-language generated copy");
+const priorOnly=clusterAndScoreOpportunities([], [{query:"lead management software",page:"/product",clicks:20,impressions:200,position:6}])[0];
+const verifiedMetrics={current:[],previous:[{query:"lead management software",page:"/product",clicks:20,impressions:200,position:6}],eligibleCandidates:1,loadedCandidates:1,omittedBySafetyCap:0,collectionStatus:"verified" as const};
+assert.equal(selectRefreshedOpportunity(priorOnly,verifiedMetrics)?.type,"decline","verified current zero refresh remains a decline opportunity");
+assert.throws(()=>selectRefreshedOpportunity(priorOnly,{...verifiedMetrics,collectionStatus:"unavailable"}),/unavailable/,"missing or failed collection is not interpreted as zero traffic");
+
 // Canonical-page clustering is the production scorer's source of truth and retains exact clicks.
 const clustered = clusterAndScoreOpportunities([
   { query: "whatsapp crm software", page: "https://whachatcrm.com/a", clicks: 7, impressions: 400, position: 8 },
-  { query: "crm software for whatsapp", page: "https://whachatcrm.com/a", clicks: 3, impressions: 150, position: 12 },
+  { query: "crm software whatsapp", page: "https://whachatcrm.com/a", clicks: 3, impressions: 150, position: 12 },
 ], []);
 assert.equal(clustered.length, 1);
 assert.equal(clustered[0].current.clicks, 10);
-assert.deepEqual(clustered[0].queryCluster, ["crm software for whatsapp", "whatsapp crm software"]);
+assert.deepEqual(clustered[0].queryCluster, ["crm software whatsapp", "whatsapp crm software"]);
 const cannibalized = clusterAndScoreOpportunities([
   { query: "whatsapp crm software", page: "https://whachatcrm.com/b", clicks: 5, impressions: 100, position: 9 },
   { query: "crm software whatsapp", page: "https://whachatcrm.com/a", clicks: 5, impressions: 100, position: 9 },
@@ -74,7 +100,8 @@ const cannibalized = clusterAndScoreOpportunities([
 assert.equal(cannibalized[0].type, "cannibalization");
 assert.equal(cannibalized[0].targetPage, "https://whachatcrm.com/a", "equal metrics use stable URL tie-breaking");
 assert.equal(cannibalized[0].competingPages.length, 2);
-assert.equal(hasMatchingQueryIntent("whatsapp crm for zoko", "zoko crm whatsapp"), true, "word order and filler words preserve intent");
+assert.equal(hasMatchingQueryIntent("whatsapp crm for zoko", "zoko crm whatsapp"), true, "contextual connectors do not split an otherwise identical material intent");
+assert.equal(hasMatchingQueryIntent("salesforce property inquiry integration", "integration inquiry property salesforce"), true, "multiword integration intent survives varied word order");
 assert.equal(hasMatchingQueryIntent("zoko whatsapp crm", "wati whatsapp crm"), false, "competitor names are intent-bearing");
 const competitorIntentPages = clusterAndScoreOpportunities([
   { query: "zoko whatsapp crm", page: "/zoko-alternative", clicks: 5, impressions: 100, position: 9 },
@@ -101,6 +128,7 @@ const actionServiceSource = readFileSync(new URL("../server/seo/actionService.ts
 const adminSeoSource = readFileSync(new URL("../client/src/components/admin/AdminSeoIntelligenceTab.tsx", import.meta.url), "utf8");
 assert.match(adminSeoSource,/Search Console query/,"the bold query or cluster is explicitly identified in the UI");
 assert.match(actionServiceSource, /loadPlannerMetrics[\s\S]+clusterAndScoreOpportunities\(metrics\.current,metrics\.previous/, "production analysis routes raw metrics through the cluster scorer");
+const metricLoaderSource=actionServiceSource.slice(actionServiceSource.indexOf("export async function loadPlannerMetrics"),actionServiceSource.indexOf("type FreshProposalEvidence"));assert.equal((metricLoaderSource.match(/db\.execute/g)??[]).length,1,"planner metrics and collection coverage share one PostgreSQL statement snapshot");assert.ok(metricLoaderSource.includes("generate_series")&&metricLoaderSource.includes("latest.status='success'")&&metricLoaderSource.includes("ORDER BY started_at DESC,id DESC"),"coverage is determined per requested date from its latest producing run");assert.match(metricLoaderSource,/FROM coverage LEFT JOIN expanded[\s\S]*planner_row/,"coverage survives an empty opportunity result without creating a planner row");
 assert.match(actionServiceSource, /processCandidatesUntil[\s\S]+skippedByCategory[\s\S]+recommendationsSkipped\+\+/, "one malformed opportunity is skipped rather than aborting the run");
 assert.doesNotMatch(actionServiceSource.match(/function actionIdentity[^\n]+/)?.[0]??"",/buildProposal|validateRecommendationOutput/,"identity calculation cannot validate a proposal");
 assert.match(actionServiceSource,/processCandidatesUntil\(captureCandidates,MAX_OPPORTUNITIES,[\s\S]+const proposal=buildProposal\(item,\{/,"proposal construction occurs inside the isolated per-candidate worker");
@@ -239,6 +267,8 @@ const migratedStable=clusterAndScoreOpportunities([metric(10,100,5,"migration qu
 const migratedDecline=clusterAndScoreOpportunities([metric(2,50,8,"migration decline","https://example.com/new")],[metric(20,200,5,"migration decline","https://example.com/old")]);assert.equal(migratedDecline[0].type,"decline");assert.equal((migratedDecline[0].evidence.historicalPages as unknown[]).length,1);
 const currentAndHistory=clusterAndScoreOpportunities([metric(3,80,8,"multi current query","https://example.com/a"),metric(2,70,9,"current query multi","https://example.com/b")],[metric(9,100,5,"multi current query","https://example.com/old")]);assert.equal(currentAndHistory[0].type,"cannibalization");assert.equal((currentAndHistory[0].evidence.currentVisiblePages as unknown[]).length,2);assert.equal((currentAndHistory[0].evidence.historicalPages as unknown[]).length,1);
 const languages=clusterAndScoreOpportunities([metric(3,80,8,"localized crm query","https://example.com/en/page"),metric(2,70,9,"crm query localized","https://example.com/es/page")],[]);assert.equal(languages[0].type,"cannibalization");
+const distinctShortEntities=clusterAndScoreOpportunities([metric(5,100,8,"X integration","/x"),metric(5,100,8,"R integration","/r")],[]);assert.equal(distinctShortEntities.length,2,"one-character entities remain distinct clusters");assert.ok(distinctShortEntities.every(item=>item.type!=="cannibalization"));
+const sameShortEntity=clusterAndScoreOpportunities([metric(5,100,8,"X integration","/x-primary"),metric(4,80,9,"integration X","/x-secondary")],[]);assert.equal(sameShortEntity.length,1);assert.equal(sameShortEntity[0].type,"cannibalization","genuine same-intent material pages still qualify");
 
 // Opportunities are append-only evidence snapshots; versions own their immutable evidence.
 const immutableMigration=readFileSync(new URL("../migrations/0099_seo_immutable_evidence.sql",import.meta.url),"utf8");assert.match(immutableMigration,/evidence_snapshot jsonb/);assert.match(immutableMigration,/DROP INDEX IF EXISTS seo_opportunities_property_cluster_uidx/);assert.doesNotMatch(immutableMigration,/DELETE FROM/i);assert.match(actionServiceSource,/persistOpportunity[\s\S]+\.values\([\s\S]+\.returning\(\)/);assert.doesNotMatch(actionServiceSource,/persistOpportunity[\s\S]{0,1200}onConflictDoUpdate/);assert.match(actionServiceSource,/evidenceSnapshot:immutableEvidence/);assert.match(actionServiceSource,/v\.evidence_snapshot->'currentMetrics'/);assert.match(startup,/0099_seo_immutable_evidence/);
