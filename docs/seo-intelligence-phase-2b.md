@@ -29,9 +29,9 @@ The full future lifecycle is `detected → researching → proposed → approved
 
 Do not run integration tests unless `TEST_DATABASE_URL` identifies a disposable PostgreSQL database. Never point tests at production.
 
-## Phase 2C handoff
+## Phase 2C handoff (implemented)
 
-Phase 2C should add a separately permissioned executor with repository/page adapters, fingerprint preconditions, preview diffs, two-person approval for medium/high risk, allowlisted mutation types, atomic version capture, canary rollout, and immediate rollback. It should record Search Console baselines and evaluate 7/14/28-day click, impression, CTR, and position deltas against controls; only then may actions become `kept`, `revision_required`, or `rolled_back`. Execution must use a distinct lease, budgets, kill switch, tenant/property fencing, and never infer success from publishing alone.
+The narrow review-only GitHub executor and post-sync automatic analysis are documented in `seo-intelligence-phase-2c.md`. It supports only the explicit `server/seo.ts` metadata adapter and still requires human merge/deployment. Measurement, canary rollout, automatic rollback, and additional reviewed page adapters remain future work; the system must never infer success from PR creation alone.
 
 ## Review corrections
 
