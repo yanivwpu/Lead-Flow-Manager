@@ -173,14 +173,14 @@ assert.deepEqual(
 for (const step of ["index-analysis-runs-active-property", "index-opportunities-property-cluster", "index-competitor-config-identity", "index-competitor-snapshots-cache", "index-actions-open-idempotency"]) {
   assert.match(startup, new RegExp(`step: "${step}"`), `0095 identifies potentially data-dependent failure step ${step}`);
 }
-assert.match(startup, /\^0\(\?:09\[3-9\]\|10\[01\]\)_seo/, "all fail-closed SEO startup patches retain redacted diagnostics");
+assert.match(startup, /\^0\(\?:09\[3-9\]\|10\[0-2\]\)_seo/, "all fail-closed SEO startup patches retain redacted diagnostics");
 assert.match(readOnlyDiagnostic, /^BEGIN TRANSACTION READ ONLY;/m);
 assert.match(readOnlyDiagnostic, /opportunity-history-duplicates/);
 assert.doesNotMatch(readOnlyDiagnostic, /\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE)\b/i, "production diagnostic cannot mutate schema or data");
 const refreshMigration = readFileSync(new URL("../migrations/0096_seo_action_refresh_snapshots.sql", import.meta.url), "utf8");
 assert.match(refreshMigration, /page_snapshot_id varchar REFERENCES seo_page_snapshots\(id\)/);
 assert.match(startup, /seoIntelligencePatchesReady\(patchResults\)/);
-for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair"]) assert.match(startup, new RegExp(tag));
+for (const tag of ["0093_seo_intelligence", "0094_seo_snapshot_bounded_key", "0095_seo_action_planner", "0096_seo_action_refresh_snapshots", "0097_seo_action_orphan_repair", "0098_seo_action_refresh_leases", "0099_seo_immutable_evidence", "0100_seo_refresh_return_and_stale_rotation", "0101_seo_revision_identity_reservation", "0102_seo_automation_and_github_execution"]) assert.match(startup, new RegExp(tag));
 assert.match(startup, /SEO schema patch failed; database details redacted/);
 assert.match(phase2bMigration, /UNIQUE\(action_id, version\)/, "concurrent refresh cannot create duplicate versions");
 assert.equal(proposedMetaDescriptionForQuery("x".repeat(SEO_META_DESCRIPTION_MAX)).length, SEO_META_DESCRIPTION_MAX, "at-limit input produces an exactly valid destination value");

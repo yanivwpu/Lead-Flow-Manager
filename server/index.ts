@@ -492,7 +492,7 @@ app.use((req, res, next) => {
   }
   if (!schemaPatches.seoIntelligencePatchOk) {
     throw new Error(
-      "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0101) — refusing to serve or schedule SEO sync",
+      "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0102) — refusing to serve or schedule SEO automation",
     );
   }
 
@@ -613,8 +613,12 @@ app.use((req, res, next) => {
   // Start notification scheduler
   startNotificationScheduler();
   
-  // Start cron jobs (trial check-in emails, etc.)
+  // Start cron jobs (trial check-in emails, Search Console sync, and post-sync SEO analysis).
   startCronJobs();
+
+  // Approved SEO proposals are claimed durably and can only create review-only GitHub PRs.
+  const { startSeoGithubExecutionWorker } = await import("./seo/githubExecutionService");
+  startSeoGithubExecutionWorker();
 
   // Dev-only fallback polling for Instagram DMs (when webhooks aren't delivering)
   startInstagramDevPolling();

@@ -345,6 +345,10 @@ export function startCronJobs() {
           }
           try { await claims.finishScheduledSeoSync(claim, result.status, result.diagnostic, result.errorCode); }
           catch (claimError) { console.error("[SEO Sync] import result persisted but scheduled-claim cleanup failed; it will not be re-imported:", claimError); }
+          if (result.status === "success") {
+            const { runAnalysisAfterSuccessfulScheduledSync } = await import("./seo/scheduledAnalysis");
+            await runAnalysisAfterSuccessfulScheduledSync(result, seoDay);
+          }
         } finally {
           clearInterval(heartbeat);
         }
