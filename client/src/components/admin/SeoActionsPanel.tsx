@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Loader2, Search, ShieldCheck } from "lucide-react";
+import { AlertCircle, ChevronDown, Loader2, Search, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TOKEN_KEY = "whachat_admin_token";
@@ -22,6 +21,22 @@ type ActionTab = "review" | "approved" | "history";
 
 const REVIEW_STATES = new Set(["detected", "researching", "proposed", "revision_required"]);
 const HISTORY_STATES = new Set(["rejected", "executing", "measuring", "kept", "rolled_back", "failed"]);
+
+type FilterOption = { value: string; label: string };
+
+function SeoFilterSelect({ label, value, options, onChange }: { label: string; value: string; options: FilterOption[]; onChange: (value: string) => void }) {
+  return <div className="relative">
+    <select
+      aria-label={label}
+      className="flex h-9 w-full appearance-none items-center rounded-md border border-input bg-transparent px-3 py-2 pr-9 text-sm shadow-sm ring-offset-background focus:outline-none focus:ring-1 focus:ring-ring"
+      value={value}
+      onChange={event => onChange(event.target.value)}
+    >
+      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+    <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50" />
+  </div>;
+}
 
 export function actionTabForStatus(status: string): ActionTab {
   if (status === "approved") return "approved";
@@ -41,14 +56,15 @@ export function SeoActionsPanel({ configured }: { configured: boolean }) {
   const all = actions.data?.actions ?? [];
   const counts = useMemo(() => ({ review: all.filter(a => actionTabForStatus(a.status) === "review").length, approved: all.filter(a => actionTabForStatus(a.status) === "approved").length, history: all.filter(a => actionTabForStatus(a.status) === "history").length }), [all]);
   const types = useMemo(() => [...new Set(all.map(a => a.action_type))].sort(), [all]);
+  const typeOptions = useMemo(() => [{ value: "all", label: "All action types" }, ...types.map(value => ({ value, label: value.replaceAll("_", " ") }))], [types]);
   const visible = all.filter(a => actionTabForStatus(a.status) === tab && (risk === "all" || a.risk === risk) && (type === "all" || a.action_type === type) && (!page.trim() || a.target_page.toLowerCase().includes(page.trim().toLowerCase())));
 
   return <section className="bg-white border rounded-xl p-4 space-y-3" data-testid="seo-actions">
     <div className="flex flex-col sm:flex-row gap-3 justify-between"><div><h3 className="font-semibold flex items-center gap-2"><ShieldCheck className="h-4 w-4"/>SEO Actions</h3><p className="text-xs text-gray-500">Approval records a reviewed recommendation for a future execution phase. It never publishes or modifies the website.</p></div><Button onClick={()=>analyze.mutate()} disabled={analyze.isPending||!configured}><Search className="h-4 w-4 mr-2"/>{analyze.isPending?"Analyzing…":"Analyze opportunities"}</Button></div>
     <Tabs value={tab} onValueChange={value => setTab(value as ActionTab)}><TabsList className="grid h-auto w-full grid-cols-3 sm:w-[480px]"><TabsTrigger value="review">Needs review ({counts.review})</TabsTrigger><TabsTrigger value="approved">Approved ({counts.approved})</TabsTrigger><TabsTrigger value="history">History ({counts.history})</TabsTrigger></TabsList></Tabs>
     <div className="grid gap-2 sm:grid-cols-3" aria-label="SEO action filters">
-      <Select value={risk} onValueChange={setRisk}><SelectTrigger aria-label="Filter by risk"><SelectValue placeholder="All risks"/></SelectTrigger><SelectContent><SelectItem value="all">All risks</SelectItem><SelectItem value="low">Low risk</SelectItem><SelectItem value="medium">Medium risk</SelectItem><SelectItem value="high">High risk</SelectItem></SelectContent></Select>
-      <Select value={type} onValueChange={setType}><SelectTrigger aria-label="Filter by action type"><SelectValue placeholder="All action types"/></SelectTrigger><SelectContent><SelectItem value="all">All action types</SelectItem>{types.map(value=><SelectItem key={value} value={value}>{value.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select>
+      <SeoFilterSelect label="Filter by risk" value={risk} onChange={setRisk} options={[{value:"all",label:"All risks"},{value:"low",label:"Low risk"},{value:"medium",label:"Medium risk"},{value:"high",label:"High risk"}]} />
+      <SeoFilterSelect label="Filter by action type" value={type} onChange={setType} options={typeOptions} />
       <Input value={page} onChange={event=>setPage(event.target.value)} placeholder="Filter by target page" aria-label="Filter by target page"/>
     </div>
     {actions.data?.provider.state === "not_configured" && <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-900">Automatic search-result discovery is not configured. Recommendations use Search Console evidence; configured manual competitor pages can be researched separately.</div>}
