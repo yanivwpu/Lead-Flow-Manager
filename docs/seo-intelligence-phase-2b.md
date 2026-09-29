@@ -10,6 +10,16 @@ Phase 2B detects and persists bounded opportunities, creates evidence-linked app
 
 Existing Search Console variables remain required (`GOOGLE_SEARCH_CONSOLE_SITE_URL` and the existing Google credential variables). Automatic organic-result discovery is deliberately `not_configured`: `OrganicSearchProvider` is an explicit abstraction and returns no invented rankings until an approved provider is integrated. `OPENAI_API_KEY` is optional in this release because the safe deterministic planner is used. Manual competitor domains/pages are stored in `seo_competitor_config` for future research adapters.
 
+### Safe SERP context path
+
+The `OrganicSearchProvider` boundary in `server/seo/competitorResearch.ts` is the approved integration point. Its normalized results can carry ranking position, result title, and snippet in addition to the destination URL. A future provider adapter should use an approved search API (with credentials, quota, timeout, and retention configuration), not scrape Google HTML. Results must still pass owned-domain filtering and the existing safe-fetch controls before competitor pages are captured. No paid vendor or live provider is enabled by this change, so the UI correctly continues to report `not_configured`.
+
+Once a provider is approved, its normalized titles and snippets should be stored with the competitor snapshot and supplied as optional context to the meta-description reviewer. They are intent/positioning evidence only: competitor wording must not be copied, and first-party page content remains the sole source for WhachatCRM product claims.
+
+### Meta-description quality gate
+
+Low CTR now identifies only an opportunity to review. Drafting also requires a fresh page fingerprint and its title, current meta description, H1–H3 headings, body facts, query cluster, and current clicks/impressions/position. The deterministic reviewer classifies query intent, scores current and proposed copy separately, and rejects awkward query insertion, generic copy, unsupported claims/facts, duplicate or malformed descriptions, and proposals that lose specificity or differentiators. A rejected review is counted as `NO_MATERIAL_IMPROVEMENT`; it does not create an executable action/version and leaves the current metadata untouched.
+
 Research cache identity uses bounded SHA-256 query/page keys and an expiry. Fetches accept only HTTP(S) without credentials or custom ports, resolve every host to public IPs, revalidate redirects, cap redirects/time/body size/concurrency/run volume, validate HTML content type, support robots-policy denial, and apply per-host pacing. Authentication, paywalls, CAPTCHAs, and access controls must never be bypassed. Partial page failures are categorized rather than replaced with fabricated evidence.
 
 ## Scoring and lifecycle
