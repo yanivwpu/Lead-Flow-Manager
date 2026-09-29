@@ -3,7 +3,9 @@ import { lookup } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
 
-export type SearchResult={url:string;position?:number};
+/** Provider-normalized SERP context. Implementations may supply display copy without
+ * the recommendation pipeline fetching or scraping a search-engine result page. */
+export type SearchResult={url:string;position?:number;title?:string;snippet?:string};
 export interface OrganicSearchProvider{readonly name:string;readonly configured:boolean;search(query:string,signal?:AbortSignal):Promise<SearchResult[]>;}
 export class DisabledSearchProvider implements OrganicSearchProvider{readonly name="disabled";readonly configured=false;async search(){return[];}}
 export const COMPETITOR_FETCH_LIMITS={redirects:3,timeoutMs:8_000,perAddressTimeoutMs:3_000,responseBytes:1_500_000,concurrency:3,perRun:15} as const;
