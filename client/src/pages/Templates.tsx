@@ -1373,12 +1373,11 @@ export function Templates() {
                     <Lock className="h-8 w-8 text-gray-400" />
                   </div>
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    Campaign automation is on Starter and Pro
+                    Campaign automation is available on Pro
                   </h2>
                   <p className="text-gray-500 max-w-md mb-6">
                     Basic WhatsApp templates stay available on Free for 1:1 sends outside the 24-hour
-                    window. Preset campaigns, bulk enrollment, and automation sequences require Starter
-                    or Pro.
+                    window. Preset campaigns, bulk enrollment, and automation sequences require Pro.
                   </p>
                   <InAppProUpgradeButton
                     canStartInternalTrial={canStartInternalTrial}

@@ -66,11 +66,11 @@ export function Campaigns() {
                 <Lock className="h-8 w-8 text-gray-400" />
               </div>
               <h1 className="text-xl font-semibold text-gray-900 mb-2">
-                Campaign automation is on Starter and Pro
+                Campaign automation is available on Pro
               </h1>
               <p className="text-gray-500 max-w-md mb-6">
-                Preset campaigns, bulk enrollment, and automation sequences require Starter or Pro.
-                Start from Templates after upgrading.
+                Preset campaigns, bulk enrollment, and automation sequences require Pro. Start from
+                Templates after upgrading.
               </p>
               <InAppProUpgradeButton
                 canStartInternalTrial={canStartInternalTrial}
