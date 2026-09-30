@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { averagePositionImprovementPercent, formatSeoPercent } from "@shared/seoMetrics";
@@ -19,11 +20,13 @@ const delta = (value:number, old:number) => old ? `${((value-old)/old*100).toFix
 
 export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
   const client = useQueryClient();
+  const [showAllOpportunities, setShowAllOpportunities] = useState(false);
   const query = useQuery<Dashboard>({ queryKey: ["/api/admin/seo-intelligence"], queryFn: () => request("/api/admin/seo-intelligence"), enabled });
   const sync = useMutation({ mutationFn: () => request("/api/admin/seo-intelligence/sync", { method: "POST" }), onSuccess: () => client.invalidateQueries({ queryKey: ["/api/admin/seo-intelligence"] }) });
   if (query.isLoading) return <div className="p-8 flex gap-2"><Loader2 className="animate-spin" /> Loading SEO intelligence…</div>;
   if (query.isError || !query.data) return <div className="p-6 text-red-700"><AlertCircle className="inline mr-2" />{query.error?.message || "Unable to load"}</div>;
   const d = query.data;
+  const visibleOpportunities = showAllOpportunities ? d.opportunities : d.opportunities.slice(0, 5);
   return <div className="space-y-5" data-testid="seo-intelligence">
     <div className="bg-white border rounded-xl p-5 flex flex-col sm:flex-row justify-between gap-4">
       <div><h2 className="text-lg font-semibold flex items-center gap-2"><Search className="h-5 w-5" />SEO Intelligence</h2><p className="text-sm text-gray-500">Read-only Google Search Console monitoring</p><p className="text-sm mt-2">Latest sync: <strong>{d.latestSync ? `${d.latestSync.status} · ${new Date(d.latestSync.startedAt).toLocaleString()}` : "Never"}</strong></p><p className="text-xs text-gray-500">Last successful sync: {d.lastSuccessfulSync ? new Date(d.lastSuccessfulSync).toLocaleString() : "Never"}</p></div>
@@ -36,7 +39,31 @@ export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
     {sync.isError && <div className="text-red-700"><AlertCircle className="inline h-4 w-4 mr-2" />{sync.error.message}</div>}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[["Clicks",d.period.clicks,delta(d.period.clicks,d.period.previous.clicks)],["Impressions",d.period.impressions,delta(d.period.impressions,d.period.previous.impressions)],["CTR",`${(d.period.ctr*100).toFixed(2)}%`,delta(d.period.ctr,d.period.previous.ctr)],["Avg. position",d.period.position === null ? "—" : d.period.position.toFixed(1),formatSeoPercent(averagePositionImprovementPercent(d.period.position,d.period.previous.position))]].map(([label,value,change])=><div className="bg-white border rounded-xl p-4" key={String(label)}><p className="text-xs text-gray-500">{label} · 28 days</p><p className="text-2xl font-semibold">{value}</p><p className="text-xs text-gray-500">vs previous: {change}</p></div>)}</div>
     <div className="grid lg:grid-cols-2 gap-4">{[["Top queries (reported queries)",d.topQueries],["Top pages by reported query",d.topPages]].map(([title, rows])=><div className="bg-white border rounded-xl p-4" key={String(title)}><h3 className="font-semibold mb-1">{title as string}</h3><p className="text-xs text-gray-500 mb-3">Detailed query reports exclude anonymized queries; aggregate cards above include them.</p>{(rows as Dashboard["topQueries"]).map(r=><div className="flex justify-between gap-3 py-2 border-t text-sm" key={r.name}><span className="truncate">{r.name}</span><span className="whitespace-nowrap">{r.clicks} clicks · {r.impressions} imp.</span></div>)}</div>)}</div>
-    <div className="bg-white border rounded-xl p-4"><h3 className="font-semibold mb-3">Prioritized opportunities</h3>{d.opportunities.length === 0 && <p className="text-sm text-gray-500">No opportunities detected in the current period.</p>}{d.opportunities.map((o,i)=><div className="py-3 border-t" key={`${o.type}-${o.query}-${i}`}><div className="flex gap-2 items-center"><Badge variant="secondary">{o.type.replaceAll("_"," ")}</Badge><strong className="text-sm">{o.query}</strong><span className="ml-auto text-xs">Priority {o.priority}</span></div>{o.page && <p className="text-xs text-gray-500 truncate mt-1">{o.page}</p>}<p className="text-xs text-gray-600 mt-1">{Object.entries(o.evidence).map(([k,v])=>`${k}: ${typeof v === "number" ? Number(v.toFixed(3)) : v}`).join(" · ")}</p></div>)}</div>
+    <section className="rounded-xl border bg-white p-4" aria-labelledby="prioritized-opportunities-heading">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 id="prioritized-opportunities-heading" className="font-semibold">Prioritized opportunities</h3>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {d.opportunities.length} prioritized {d.opportunities.length === 1 ? "opportunity" : "opportunities"}
+            {d.opportunities.length > 5 && ` · showing ${showAllOpportunities ? "all" : "top 5"}`}
+          </p>
+        </div>
+        {d.opportunities.length > 5 && <button
+          type="button"
+          aria-expanded={showAllOpportunities}
+          aria-controls="prioritized-opportunities-list"
+          onClick={() => setShowAllOpportunities(value => !value)}
+          className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/50"
+        >
+          {showAllOpportunities ? "Show top 5" : `Show all ${d.opportunities.length} opportunities`}
+          {showAllOpportunities ? <ChevronUp aria-hidden className="h-4 w-4" /> : <ChevronDown aria-hidden className="h-4 w-4" />}
+        </button>}
+      </div>
+      {d.opportunities.length === 0 && <p className="mt-3 text-sm text-gray-500">No opportunities detected in the current period.</p>}
+      <div id="prioritized-opportunities-list" className="mt-3">
+        {visibleOpportunities.map((o,i)=><div className="border-t py-2.5" key={`${o.type}-${o.query}-${i}`}><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{o.type.replaceAll("_"," ")}</Badge><strong className="min-w-0 flex-1 truncate text-sm">{o.query}</strong><span className="whitespace-nowrap text-xs text-gray-600">Priority {o.priority}</span></div>{o.page && <p className="mt-1 truncate text-xs text-gray-500">{o.page}</p>}<p className="mt-1 text-xs text-gray-600">{Object.entries(o.evidence).map(([k,v])=>`${k}: ${typeof v === "number" ? Number(v.toFixed(3)) : v}`).join(" · ")}</p></div>)}
+      </div>
+    </section>
     <SeoActionsPanel configured={d.config.configured} />
   </div>;
 }
