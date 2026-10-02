@@ -116,6 +116,8 @@ function inboundTurnAlreadyReplied(
 }
 
 async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
+  const { trustedProspectAiPageRuleReply, isProspectAiMarketingPage, PROSPECT_AI_SEARCH_PLANNING_CONTEXT } =
+    await import("@shared/prospectAiPageRuleReplies");
   const { aiService } = await import("./aiService");
   const { applyCalendlyBookingLinkForAi } = await import("./calendlyBookingConnected");
   const { readConversationAiControl } = await import("@shared/webchatAiPolicy");
@@ -142,6 +144,21 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
   });
   const pageCtx = contact?.webchatContext as WebchatPageContext | undefined;
   const parentUrl = pageCtx?.latestUrl || pageCtx?.pageAction?.parentUrl || pageCtx?.landingUrl;
+  const prospectReply = trustedProspectAiPageRuleReply(pageAction, control.conversationLanguage);
+  if (prospectReply) {
+    return {
+      suggestion: prospectReply,
+      confidence: WEBCHAT_AUTO_SEND_MIN_CONFIDENCE,
+      confidenceProvided: true,
+      knowledgeGrounded: true,
+      groundingViolations: [],
+      modelGenerationSucceeded: false,
+      retrievalIntent: "prospect_ai_page_action",
+    };
+  }
+  const replyHistory = isProspectAiMarketingPage(parentUrl)
+    ? [{ role: "system", content: PROSPECT_AI_SEARCH_PLANNING_CONTEXT }, ...input.history]
+    : input.history;
   const completion = buildChatbotCompletionContactContext({
     customFields: contact?.customFields,
     name: contact?.name,
@@ -167,7 +184,7 @@ async function defaultGenerate(input: Parameters<WebchatAiGenerateFn>[0]) {
   return aiService.suggestReply(
     input.userId,
     input.conversationId,
-    input.history,
+    replyHistory,
     knowledge || undefined,
     settings || undefined,
     undefined,
