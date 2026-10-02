@@ -311,11 +311,19 @@ export function evaluateFullAutoSend(params: {
 
   const joinedInbound = inboundMsgs.map((m) => m.content || "").join("\n");
   const lastInbound = inboundMsgs[inboundMsgs.length - 1]?.content?.trim() || "";
+  // A later typed demo request has no current button-click provenance. Only
+  // permit the same narrow invitation when it contains the workspace's verified URL.
+  const explicitTextBooking =
+    webchat &&
+    /^(?:(?:(?:i want to|i would like to|i'd like to|please)\s+)?(?:book|schedule)\s+(?:a\s+)?(?:live\s+)?demo|(?:(?:quiero|me gustaría)\s+)?(?:reservar|agendar)\s+(?:una\s+)?(?:demo|demostración)|(?:אני רוצה\s+)?לקבוע\s+הדגמה|קביעת\s+הדגמה)[\s.!?]*$/i.test(lastInbound) &&
+    params.knowledgeGrounded === true &&
+    isSafeStructuredBookingCta(suggestion, String(params.verifiedBookingUrl || "").trim());
   const structuredBooking =
     (params.currentTurnAskIntent?.trusted === true &&
       params.currentTurnAskIntent.provenanceCurrentInbound === true &&
       params.currentTurnAskIntent.kind === "book_demo") ||
     (pageActionValidated && params.currentTurnPageAction?.kind === "book_demo");
+  const bookingRequest = structuredBooking || explicitTextBooking;
 
   if (!lastInbound) {
     return none("empty_last_inbound", inboundCount);
@@ -369,7 +377,7 @@ export function evaluateFullAutoSend(params: {
   const qualifyingGuess = requiredQs.length > 0 && missingLen > 1;
   const verifiedBookingUrl = String(params.verifiedBookingUrl || "").trim();
   const safeBookingCta =
-    structuredBooking &&
+    bookingRequest &&
     grounded &&
     isSafeStructuredBookingCta(suggestion, verifiedBookingUrl);
 
@@ -386,9 +394,9 @@ export function evaluateFullAutoSend(params: {
       webchat &&
       !isCasualWebchatGreeting(lastInbound) &&
       ((knowledgeQuestion && grounded) ||
-        (structuredBooking && grounded) ||
+        (bookingRequest && grounded) ||
         ((explicitUserChoice || journeyContinuation) &&
-          !structuredBooking &&
+          !bookingRequest &&
           (grounded || !draftHasCurrencyAmount(suggestion))));
     if (!mayDefault) {
       return { ok: false, reason: "confidence_not_provided", source: "missing" };
@@ -436,11 +444,11 @@ export function evaluateFullAutoSend(params: {
     };
   }
 
-  if (!strongIntent && !structuredBooking && !contextuallyClear && inboundCount < 2 && !knowledgeQuestion) {
+  if (!strongIntent && !bookingRequest && !contextuallyClear && inboundCount < 2 && !knowledgeQuestion) {
     return none("conversation_too_short", inboundCount, missingLen);
   }
 
-  if (!strongIntent && !structuredBooking && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
+  if (!strongIntent && !bookingRequest && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
     return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
@@ -469,7 +477,7 @@ export function evaluateFullAutoSend(params: {
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =
-    structuredBooking ||
+    bookingRequest ||
     contextuallyClear ||
     signals.strongIntent ||
     signals.viewingIntent ||
@@ -497,7 +505,7 @@ export function evaluateFullAutoSend(params: {
       qualifyingGuess &&
       !safeBookingCta &&
       !knowledgeQuestion &&
-      !(contextuallyClear && !structuredBooking)
+      !(contextuallyClear && !bookingRequest)
     ) {
       return none("missing_required_gt_one", inboundCount, missingLen, conf.source, missingRequired);
     }
@@ -505,6 +513,8 @@ export function evaluateFullAutoSend(params: {
       allowed: true,
       reason: structuredBooking
         ? "ok_structured_booking"
+        : explicitTextBooking
+          ? "ok_explicit_demo_booking"
         : explicitUserChoice
           ? "ok_validated_page_action"
           : journeyContinuation
