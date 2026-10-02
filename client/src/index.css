@@ -433,6 +433,7 @@ img.wcs-hero-image {
 
 .wcs-hero-copy,
 #whachat-static-shell .wcs-order-txt {
+  text-align: start;
   order: 1;
   width: 100%;
   max-width: 780px;
