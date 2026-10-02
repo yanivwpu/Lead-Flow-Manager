@@ -548,6 +548,39 @@ test("Compare continuation answers users, WhatsApp, AI Brain, automation, and li
   assert.equal(getPaidPlanYearlyPriceUsd("pro"), 490);
 });
 
+test("homepage Features & pricing choices include plan benefits in EN/ES/HE", () => {
+  for (const locale of ["en", "es", "he"] as const) {
+    const inbound = HOMEPAGE_PAGE_RULE_FIXTURE.localized[locale].suggestedQuestions[0];
+    assert.equal(classifyPricingCompareTopic(inbound), "full");
+    const reply = realizeTrustedFeaturesPricingReply({
+      retrieved: [], locale, parentUrl: HOME, inbound, pageActionKind: "features_pricing",
+    });
+    assert.equal(reply.outcome, "formatted");
+    assert.match(reply.text, /\$0/);
+    assert.match(reply.text, /\$49/);
+    assert.match(reply.text, /\$490/);
+    assert.match(reply.text, /Prospect AI/);
+    assert.match(reply.text, /AI Brain/);
+    assert.ok(reply.text.split("\n").length > 3, "overview must contain features, not only the price sentence");
+  }
+  for (const inbound of ["features and pricing", "Features & prices", "funciones y precios", "תכונות ומחירים"]) {
+    assert.equal(classifyPricingCompareTopic(inbound), "full");
+  }
+});
+
+test("price-only questions retain concise pricing replies", () => {
+  for (const [locale, inbound] of [["en", "What is the pricing?"], ["es", "¿Qué precios tienen?"], ["he", "מה המחירים?"]] as const) {
+    assert.equal(classifyPricingCompareTopic(inbound), "pricing");
+    const reply = realizeTrustedFeaturesPricingReply({
+      retrieved: [], locale, parentUrl: HOME, inbound, pageActionKind: "features_pricing",
+    });
+    assert.match(reply.text, /\$49/);
+    assert.match(reply.text, /\$490/);
+    assert.doesNotMatch(reply.text, /Prospect AI|AI Brain/);
+    assert.equal(reply.text.split("\n").length, 1);
+  }
+});
+
 test("EN/ES/HE canonical comparison and Features wording share catalog amounts", () => {
   for (const locale of ["en", "es", "he"] as const) {
     const compare = formatCanonicalPricingComparison({ locale, kind: "compare_plans", topic: "full" });

@@ -105,7 +105,10 @@ export function classifyPricingCompareTopic(text: unknown): PricingCompareTopic 
   const brain = /\bai\s*brain\b/.test(t);
   const automation = /\b(?:automations?|workflows?|automatizaci[oó]n|אוטומצי(?:ה|ות))\b/.test(t);
   const limits = /\b(?:plan limits?|limits?|l[ií]mites|מגבלות)\b/.test(t);
-  const pricing = /\b(?:pricing|prices?|cost|fees?|precios?|מחיר|מחירים)\b/.test(t);
+  const pricing = /\b(?:pricing|prices?|cost|fees?|precios?)\b|מחיר(?:ים)?|תמחור/.test(t);
+  const features = /\b(?:features?|functions?|funciones|caracter[ií]sticas)\b|פיצ['׳’]?רים|תכונות/.test(t);
+  // A combined overview asks for plan benefits as well as amounts, not prices alone.
+  if (features && pricing) return "full";
   const fullAsk =
     /side[\s-]*by[\s-]*side/.test(t) ||
     /\b(?:show me (?:a |the )?compar|the comparison|comparaci[oó]n lado a lado|השוואה בין התוכניות)\b/.test(t);
