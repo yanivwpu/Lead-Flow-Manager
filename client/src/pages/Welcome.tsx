@@ -212,6 +212,25 @@ export function Welcome() {
               <p className="wcs-hero-eyebrow">{shell.trustPill}</p>
               <h1 className="wcs-hero-h1">{shell.h1}</h1>
               <p className="wcs-hero-sub">{shell.subtitle}</p>
+              <p className="wcs-hero-channels">{shell.channels}</p>
+              <div className="wcs-hero-cta-stack">
+                <div className="wcs-hero-cta-row">
+                  <a className="wcs-hero-btn-primary" href={user ? "/app/inbox" : "/auth"} data-testid="button-hero-cta">
+                    {shell.ctaTrial}
+                  </a>
+                </div>
+                <div className="wcs-hero-cta-row">
+                  <a className="wcs-hero-btn-outline" href={locale === "en" ? "/pricing" : `/${locale}/pricing`} data-testid="button-hero-pricing">
+                    {shell.ctaPricing}
+                  </a>
+                </div>
+                <div className="wcs-hero-cta-row">
+                  <button className="wcs-hero-btn-demo" type="button" onClick={() => setShowDemoModal(true)} data-testid="button-book-demo">
+                    {shell.ctaDemo}
+                  </button>
+                </div>
+              </div>
+              <p className="wcs-hero-note">{shell.noCreditCard}</p>
             </div>
           </div>
         </section>

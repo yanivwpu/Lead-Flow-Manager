@@ -15,7 +15,7 @@ export default function WelcomeDiscoveryPaths() {
       className="px-4 md:px-6 pb-10 md:pb-14"
       aria-label={content.sectionAria}
     >
-      <div className="mx-auto grid max-w-7xl gap-3 md:grid-cols-2 md:gap-4 xl:max-w-[1440px] 2xl:max-w-[1536px]">
+      <div className="mx-auto grid max-w-[1440px] gap-3 md:grid-cols-2 md:gap-4">
         <Link
           href={findHref}
           className="group flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-colors hover:border-brand-green/40 hover:bg-emerald-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green/40"
@@ -23,7 +23,7 @@ export default function WelcomeDiscoveryPaths() {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-brand-green">
             <Search className="h-5 w-5" aria-hidden />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-brand-green mb-1">
               {content.findProspects.eyebrow}
             </p>
@@ -43,7 +43,7 @@ export default function WelcomeDiscoveryPaths() {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
             <Inbox className="h-5 w-5" aria-hidden />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-brand-green mb-1">
               {content.convertConversations.eyebrow}
             </p>
