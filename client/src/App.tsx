@@ -24,6 +24,7 @@ import {
 } from "@/lib/shopifyBootstrap";
 import { useSyncLanguageFromMarketingUrl } from "@/lib/marketingLocaleRouting";
 import { parseLocalizedPath } from "@shared/localeRoutes";
+import { syncDocumentLanguage } from "@/lib/documentLanguage";
 import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
 import { WidgetFrameErrorBoundary } from "@/components/webchat/WidgetFrameErrorBoundary";
 
@@ -531,6 +532,7 @@ const PageLoader = () => (
 
 function App() {
   const { i18n } = useTranslation();
+  const [location] = useLocation();
 
   useEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
@@ -539,29 +541,9 @@ function App() {
     document.documentElement.style.overflow = "";
   }, []);
 
-  useEffect(() => {
-    const rtlLanguages = ["he", "ar", "fa", "ur"];
-    // Public marketing URL locale wins — avoid LTR→RTL flip while i18n JSON loads.
-    const parsed =
-      typeof window !== "undefined"
-        ? parseLocalizedPath(window.location.pathname || "/")
-        : null;
-    const urlLocale =
-      parsed?.isLocalePrefixed && parsed.isSupported ? parsed.locale : null;
-    const lang = urlLocale || (i18n.language || "en").split("-")[0];
-    const isRtl = rtlLanguages.includes(lang);
-
-    document.documentElement.dir = isRtl ? "rtl" : "ltr";
-    document.documentElement.lang = lang;
-
-    if (isRtl) {
-      document.body.classList.add("rtl");
-      document.documentElement.classList.add("rtl");
-    } else {
-      document.body.classList.remove("rtl");
-      document.documentElement.classList.remove("rtl");
-    }
-  }, [i18n.language]);
+  useLayoutEffect(() => {
+    syncDocumentLanguage(document, location, i18n.language);
+  }, [i18n.language, location]);
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -21,7 +21,7 @@ import { MARKETING_URL } from "@/lib/marketingUrl";
 import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
 import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
-import { hideStaticMarketingShell } from "@/lib/marketingShell";
+import { hideStaticMarketingShell, syncStaticHomepageHero } from "@/lib/marketingShell";
 
 /** Fixed min-heights reduce layout shift when lazy sections hydrate (approximate final block size). */
 function BelowFoldFallback({ className }: { className?: string }) {
@@ -65,6 +65,11 @@ export function Welcome() {
   const isRTL = locale === "he";
   const canonical = getCanonicalUrl("/", locale, MARKETING_URL) || `${MARKETING_URL}/`;
   const hreflang = getHreflangLinks("/", MARKETING_URL);
+
+  // The shell lives outside React: route changes must update its copy explicitly.
+  useLayoutEffect(() => {
+    if (isHomepagePath(location)) syncStaticHomepageHero(document, locale, !!user);
+  }, [location, locale, user]);
 
   useLayoutEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
