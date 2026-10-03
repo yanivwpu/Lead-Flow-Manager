@@ -15,6 +15,23 @@ export function seoRefreshMessage(category: string) {
   return messages[category] ?? messages.REFRESH_FAILED;
 }
 
+export function seoRefreshReasonMessage(reason: string) {
+  if (reason.startsWith("unsupported_fact:")) return "The draft included a feature or price not supported by this page.";
+  return ({
+    insufficient_evidence: "The captured page has too little evidence for a draft.",
+    ai_provider_failure_or_malformed_json: "The AI provider did not return a valid draft.",
+    ai_provider_failure: "The AI provider did not return a valid draft.",
+    inappropriate_length: "The draft length was outside the allowed range.",
+    generic_or_weak: "The draft was too generic.",
+    unsupported_claim: "The draft included an unsupported claim.",
+    query_intent_not_covered: "The draft did not answer the target query.",
+    keyword_stuffing: "The draft repeated query terms too often.",
+    duplicates_existing_content: "The draft copied content already on the page.",
+    insufficient_first_party_grounding: "The draft was not sufficiently grounded in page facts.",
+    missing_review_context: "The draft was missing its placement or explanation.",
+  } as Record<string, string>)[reason] ?? "A draft quality check did not pass.";
+}
+
 export function safeSeoRefreshFailure(error: unknown) {
   const value = error as { category?: unknown; audit?: { reviewerScores?: Array<{ rejectionReasons?: unknown }> } } | null;
   const category = typeof value?.category === "string" && Object.prototype.hasOwnProperty.call(messages, value.category) ? value.category : "REFRESH_FAILED";

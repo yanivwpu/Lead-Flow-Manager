@@ -1,7 +1,7 @@
 import { aiProvider } from "../aiProvider";
 import { classifyQueryIntent, type MetaGenerationAudit } from "./metaDescriptionQuality";
 
-export const CONTENT_EXPANSION_PROMPT_VERSION = "seo-content-expansion-v1";
+export const CONTENT_EXPANSION_PROMPT_VERSION = "seo-content-expansion-v2";
 
 export type ContentExpansionEvidence = {
   pageUrl: string;
@@ -21,6 +21,7 @@ export type ContentExpansionPacket = {
   h1: string;
   relevantHeadings: string[];
   currentPageExcerpt: string;
+  currentPageText: string;
   existingMetaDescription: string;
   pageType: string;
   searchIntent: string;
@@ -31,10 +32,11 @@ export type ContentExpansionPacket = {
 };
 
 export type ContentExpansionCandidate = { proposedContent: string; insertionLocation: string; rationale: string };
+export type ContentExpansionRevision = { previousDraft: string; rejectionReasons: string[] };
 export interface ContentExpansionCopywriter {
   provider: string;
   model: string;
-  generate(packet: ContentExpansionPacket): Promise<ContentExpansionCandidate>;
+  generate(packet: ContentExpansionPacket, revision?: ContentExpansionRevision): Promise<ContentExpansionCandidate>;
 }
 export type ContentExpansionResult =
   | { decision: "accept"; candidate: ContentExpansionCandidate; packet: ContentExpansionPacket; audit: MetaGenerationAudit }
@@ -61,6 +63,7 @@ export function buildContentExpansionPacket(evidence: ContentExpansionEvidence):
     h1: headings[0] ?? "",
     relevantHeadings: (relevant.length ? relevant : headings.slice(1, 9)),
     currentPageExcerpt,
+    currentPageText: evidence.bodyText.slice(0, 12_000),
     existingMetaDescription: evidence.metaDescription,
     pageType: evidence.pageType,
     searchIntent: classifyQueryIntent(evidence.queryCluster, evidence.title),
@@ -88,7 +91,7 @@ export function reviewContentExpansion(candidate: ContentExpansionCandidate, evi
   const repeatedQueryTerms = queryTerms.filter(term => (contentWords.filter(word => word === term).length > Math.max(4, Math.ceil(contentWords.length / 45))));
   if (repeatedQueryTerms.length) reasons.push("keyword_stuffing");
   for (const claim of content.match(/\$\s?\d+(?:\.\d+)?|\b\d+\s*%/g) ?? []) if (!source.includes(normalize(claim))) reasons.push(`unsupported_fact:${claim}`);
-  for (const term of featureTerms) if (normalize(content).includes(normalize(term)) && !source.includes(normalize(term))) reasons.push(`unsupported_fact:${term}`);
+  for (const term of featureTerms) if ((" " + normalize(content) + " ").includes(" " + normalize(term) + " ") && !(" " + source + " ").includes(" " + normalize(term) + " ")) reasons.push(`unsupported_fact:${term}`);
   const candidateSentences = sentences(content).map(normalize).filter(value => words(value).length >= 8);
   if (candidateSentences.some(sentence => source.includes(sentence))) reasons.push("duplicates_existing_content");
   const contentSet = new Set(contentWords.filter(word => word.length > 3 && !stop.has(word)));
@@ -99,14 +102,14 @@ export function reviewContentExpansion(candidate: ContentExpansionCandidate, evi
   return { accepted: reasons.length === 0, reasons: [...new Set(reasons)], groundedTermRatio: grounded };
 }
 
-const systemPrompt = `You are a careful website editor. Return exactly one JSON object with string fields proposedContent, insertionLocation, and rationale. Draft the actual visitor-facing section, normally 150-350 words. Directly answer the query intent, match the page tone, and add useful coverage without repeating the excerpt. Use only facts supplied in the first-party evidence packet. Never invent features, prices, results, guarantees, or superiority and never mention SEO, keywords, evidence packets, repositories, or internal systems. insertionLocation must be a clear "Insert after: [existing heading]" instruction. rationale must concisely explain the visitor benefit and query fit.`;
+const systemPrompt = `You are a careful website editor. Return exactly one JSON object with string fields proposedContent, insertionLocation, and rationale. Draft the actual visitor-facing section, normally 150-250 words. Use the language of the page. Write an original section heading and practical guidance supported by the supplied facts; do not copy existing headings or sentences. Directly answer the query intent, match the page tone, and add useful coverage without repeating the excerpt. Use only facts supplied in the first-party evidence packet. Never invent features, prices, results, guarantees, or superiority and never mention SEO, keywords, evidence packets, repositories, or internal systems. insertionLocation must be a clear "Insert after: [existing heading]" instruction. rationale must concisely explain the visitor benefit and query fit.`;
 
 export class ExistingAiContentExpansionCopywriter implements ContentExpansionCopywriter {
   provider: string;
   model: string;
   constructor() { const config = aiProvider.getModelConfig("automation"); this.provider = config.provider; this.model = config.model; }
-  async generate(packet: ContentExpansionPacket) {
-    const raw = await aiProvider.complete("automation", [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify(packet) }], { jsonMode: true, maxTokens: 1_200 });
+  async generate(packet: ContentExpansionPacket, revision?: ContentExpansionRevision) {
+    const raw = await aiProvider.complete("automation", [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ ...packet, ...(revision ? { revision, instruction: "Revise the prior draft to resolve every review issue without adding unverified facts." } : {}) }) }], { jsonMode: true, maxTokens: 1_600 });
     const parsed = JSON.parse(typeof raw === "string" ? raw : raw.content) as Partial<ContentExpansionCandidate>;
     if (typeof parsed.proposedContent !== "string" || typeof parsed.insertionLocation !== "string" || typeof parsed.rationale !== "string") throw new Error("Invalid content expansion response");
     return { proposedContent: parsed.proposedContent.trim(), insertionLocation: parsed.insertionLocation.trim(), rationale: parsed.rationale.trim() };
@@ -116,20 +119,27 @@ export class ExistingAiContentExpansionCopywriter implements ContentExpansionCop
 export async function generateAndReviewContentExpansion(evidence: ContentExpansionEvidence, copywriter: ContentExpansionCopywriter = new ExistingAiContentExpansionCopywriter()): Promise<ContentExpansionResult> {
   const packet = buildContentExpansionPacket(evidence);
   const audit: MetaGenerationAudit = { provider: copywriter.provider, model: copywriter.model, promptVersion: CONTENT_EXPANSION_PROMPT_VERSION, candidateCount: 0, selectedCandidateIndex: null, reviewerScores: [] };
-  if (!packet.pageTitle || !packet.h1 || packet.currentProductFacts.length < 2 || !packet.currentPageExcerpt) {
+  if (!packet.pageTitle || !packet.h1 || (packet.currentProductFacts.length < 2 && words(packet.currentPageText).length < 60) || !packet.currentPageExcerpt) {
     audit.reviewerScores.push({ index: -1, score: 0, better: false, rejectionReasons: ["insufficient_evidence"] });
     return { decision: "no_material_improvement", packet, audit };
   }
-  try {
-    const candidate = await copywriter.generate(packet);
-    audit.candidateCount = 1;
-    const review = reviewContentExpansion(candidate, evidence);
-    audit.reviewerScores.push({ index: 0, score: Math.round(review.groundedTermRatio * 100), better: review.accepted, rejectionReasons: review.reasons });
-    if (!review.accepted) return { decision: "no_material_improvement", packet, audit };
-    audit.selectedCandidateIndex = 0;
-    return { decision: "accept", candidate, packet, audit };
-  } catch {
-    audit.reviewerScores.push({ index: -1, score: 0, better: false, rejectionReasons: ["ai_provider_failure_or_malformed_json"] });
-    return { decision: "no_material_improvement", packet, audit };
+  let revision: ContentExpansionRevision | undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const candidate = await copywriter.generate(packet, revision);
+      audit.candidateCount++;
+      const review = reviewContentExpansion(candidate, evidence);
+      audit.reviewerScores.push({ index: attempt, score: Math.round(review.groundedTermRatio * 100), better: review.accepted, rejectionReasons: review.reasons });
+      if (review.accepted) {
+        audit.selectedCandidateIndex = attempt;
+        return { decision: "accept", candidate, packet, audit };
+      }
+      revision = { previousDraft: candidate.proposedContent, rejectionReasons: review.reasons };
+    } catch {
+      // Do not retry provider failures, and never replace a failed draft with filler.
+      audit.reviewerScores.push({ index: -1, score: 0, better: false, rejectionReasons: ["ai_provider_failure_or_malformed_json"] });
+      break;
+    }
   }
+  return { decision: "no_material_improvement", packet, audit };
 }
