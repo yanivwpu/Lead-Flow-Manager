@@ -1,3 +1,4 @@
+import { safeSeoRefreshFailure } from "@shared/seoRefreshFeedback";
 import type { Express } from "express";
 import type { RequestHandler } from "express";
 import { getSeoDashboard, runSeoSync } from "../seo/seoService";
@@ -31,6 +32,6 @@ export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: Reques
     try {
       const actor = String((req as typeof req & { user?: { id?: string }; session?: { userId?: string } }).user?.id ?? (req as typeof req & { session?: { userId?: string } }).session?.userId ?? "sales-admin");
       res.json(decision === "regenerate" ? await refreshSeoAction(req.params.id, actor) : await transitionSeoAction(req.params.id, decision === "approve" ? "approved" : "rejected", actor, typeof req.body?.reason === "string" ? req.body.reason : undefined));
-    } catch (error) { const status = Number((error as {status?:number}).status ?? 500); res.status(status).json({ error: status === 404 ? "SEO action not found" : status === 409 ? "Action status changed; refresh and try again" : "Unable to update SEO action" }); }
+    } catch (error) { const status = Number((error as {status?:number}).status ?? 500); if (decision === "regenerate" && status === 502) { const feedback = (error as {feedback?:ReturnType<typeof safeSeoRefreshFailure>}).feedback ?? safeSeoRefreshFailure(error); return res.status(status).json({ error: feedback.message, code: feedback.category, rejectionReasons: feedback.reasons }); } res.status(status).json({ error: status === 404 ? "SEO action not found" : status === 409 ? "Action status changed; refresh and try again" : "Unable to update SEO action" }); }
   });
 }
