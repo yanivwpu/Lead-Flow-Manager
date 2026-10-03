@@ -8,6 +8,7 @@ import { clusterAndScoreOpportunities, DEFAULT_OPPORTUNITY_CONFIG, excludeOpenAc
 import { captureFirstPartyPage } from "./firstPartyPage";
 import type { SeoMetricRow } from "./opportunities";
 import { generateAndSelectMeta, type MetaGenerationAudit } from "./metaDescriptionQuality";
+import { safeSeoRefreshFailure } from "@shared/seoRefreshFeedback";
 import { generateAndReviewContentExpansion } from "./contentExpansionQuality";
 
 const ANALYSIS_LEASE_MS=15*60_000,MAX_OPPORTUNITIES=10;
@@ -171,8 +172,10 @@ export async function refreshSeoAction(id:string,actorId:string){
   });
  }catch(error){
   if(error instanceof SeoActionRefreshInProgressError)throw error;
-  await db.transaction(async tx=>{const restored=await tx.update(seoActions).set({status:claim.returnStatus,updatedAt:new Date(),refreshLeaseToken:null,refreshStartedAt:null,refreshLeaseExpiresAt:null,refreshFailureCategory:"REFRESH_FAILED",refreshReturnStatus:null}).where(and(eq(seoActions.id,id),eq(seoActions.refreshLeaseToken,claim.token))).returning({id:seoActions.id});if(restored.length)await tx.insert(seoActionEvents).values({actionId:id,fromStatus:"researching",toStatus:claim.returnStatus,actorId,reason:"Refresh failed; prior proposal restored",safeMetadata:{refresh:true,failureCategory:"REFRESH_FAILED"}});});
-  throw Object.assign(new Error("SEO action refresh failed; the prior proposal remains available"),{status:502,cause:error});
+  const feedback=safeSeoRefreshFailure(error);
+  console.warn("[SEO Action Refresh] failed",{actionId:id,...feedback,error:safeSeoAnalysisError(error)});
+  await db.transaction(async tx=>{const restored=await tx.update(seoActions).set({status:claim.returnStatus,updatedAt:new Date(),refreshLeaseToken:null,refreshStartedAt:null,refreshLeaseExpiresAt:null,refreshFailureCategory:feedback.category,refreshReturnStatus:null}).where(and(eq(seoActions.id,id),eq(seoActions.refreshLeaseToken,claim.token))).returning({id:seoActions.id});if(restored.length)await tx.insert(seoActionEvents).values({actionId:id,fromStatus:"researching",toStatus:claim.returnStatus,actorId,reason:"Refresh failed; prior proposal restored",safeMetadata:{refresh:true,failureCategory:feedback.category,rejectionReasons:feedback.reasons}});});
+  throw Object.assign(new Error(feedback.message),{status:502,feedback,cause:error});
  }
 }
 export async function transitionSeoAction(id:string,to:"approved"|"rejected",actorId:string,reason?:string){
