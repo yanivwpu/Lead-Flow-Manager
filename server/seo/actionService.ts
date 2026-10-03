@@ -128,14 +128,14 @@ export async function listSeoActions(filters:{status?:string;risk?:string;type?:
    p.meta_description current_meta_description,p.content_fingerprint,
    created_event.safe_metadata->>'runId' analysis_run_id,
    execution.status execution_status,execution.pr_number,execution.pr_url,
-   final_event.reason final_reason,final_event.created_at final_event_at,
+   final_event.reason final_reason,final_event.created_at final_event_at,final_event.safe_metadata->'rejectionReasons' refresh_rejection_reasons,
    (SELECT COUNT(*) FROM seo_competitor_snapshots c WHERE c.property_id=a.property_id AND c.status='success') competitors_analyzed
    FROM seo_actions a JOIN seo_opportunities o ON o.id=a.opportunity_id
    LEFT JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version
    LEFT JOIN seo_page_snapshots p ON p.id=v.page_snapshot_id
    LEFT JOIN LATERAL (SELECT safe_metadata FROM seo_action_events e WHERE e.action_id=a.id AND e.safe_metadata ? 'runId' ORDER BY e.created_at ASC LIMIT 1) created_event ON true
    LEFT JOIN LATERAL (SELECT status,pr_number,pr_url FROM seo_github_executions g WHERE g.action_id=a.id ORDER BY g.created_at DESC LIMIT 1) execution ON true
-   LEFT JOIN LATERAL (SELECT reason,created_at FROM seo_action_events e WHERE e.action_id=a.id ORDER BY e.created_at DESC LIMIT 1) final_event ON true
+   LEFT JOIN LATERAL (SELECT reason,created_at,safe_metadata FROM seo_action_events e WHERE e.action_id=a.id ORDER BY e.created_at DESC LIMIT 1) final_event ON true
    WHERE a.property_id=${propertyId} AND (${filters.status??null}::text IS NULL OR a.status=${filters.status??null})
    AND (${filters.risk??null}::text IS NULL OR a.risk=${filters.risk??null}) AND (${filters.type??null}::text IS NULL OR a.action_type=${filters.type??null})
    AND (${filters.page??null}::text IS NULL OR a.target_page ILIKE ${filters.page?`%${filters.page}%`:null})
