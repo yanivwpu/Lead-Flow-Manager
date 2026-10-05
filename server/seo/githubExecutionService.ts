@@ -7,7 +7,8 @@ import { executeSeoGithubPullRequest, safeGithubExecutionError, seoBranchName, S
 
 export const SEO_GITHUB_EXECUTION_LEASE_MINUTES=15;
 export const SEO_GITHUB_WORKER_INTERVAL_MS=30_000;
-let workerTimer:NodeJS.Timeout|null=null,workerActive=false;
+export const SEO_AUTOPILOT_BACKGROUND_INTERVAL_MS=5*60_000;
+let workerTimer:NodeJS.Timeout|null=null,autopilotTimer:NodeJS.Timeout|null=null,workerActive=false;
 
 export function assertApprovedSeoExecution(status:unknown,currentVersion:unknown,requestedVersion:number){
   if(status!=="approved")throw new SeoGithubExecutionError("ACTION_NOT_APPROVED","SEO action must remain approved before GitHub execution");
@@ -82,7 +83,9 @@ export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActi
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
-  const startupAutopilot=setTimeout(()=>{void import("./autopilotService").then(m=>m.runSeoAutopilot()).catch(error=>console.error("[SEO Autopilot] startup cycle failed",{message:safeGithubExecutionError(error)}));},45_000);startupAutopilot.unref?.();
+  const runAutopilot=()=>{void import("./autopilotService").then(m=>m.runSeoAutopilot()).catch(error=>console.error("[SEO Autopilot] background cycle failed",{message:safeGithubExecutionError(error)}));};
+  const startupAutopilot=setTimeout(runAutopilot,45_000);startupAutopilot.unref?.();
+  autopilotTimer=setInterval(runAutopilot,SEO_AUTOPILOT_BACKGROUND_INTERVAL_MS);autopilotTimer.unref?.();
   workerTimer=setInterval(wakeSeoGithubExecutionWorker,SEO_GITHUB_WORKER_INTERVAL_MS);workerTimer.unref?.();
   console.log("[SEO GitHub] execution worker started");
 }
