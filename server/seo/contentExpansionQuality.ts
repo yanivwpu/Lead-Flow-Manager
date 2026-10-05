@@ -1,7 +1,7 @@
 import { aiProvider } from "../aiProvider";
 import { classifyQueryIntent, type MetaGenerationAudit } from "./metaDescriptionQuality";
 
-export const CONTENT_EXPANSION_PROMPT_VERSION = "seo-content-expansion-v2";
+export const CONTENT_EXPANSION_PROMPT_VERSION = "seo-content-expansion-v3-query-retry";
 
 export type ContentExpansionEvidence = {
   pageUrl: string;
@@ -109,7 +109,11 @@ export class ExistingAiContentExpansionCopywriter implements ContentExpansionCop
   model: string;
   constructor() { const config = aiProvider.getModelConfig("automation"); this.provider = config.provider; this.model = config.model; }
   async generate(packet: ContentExpansionPacket, revision?: ContentExpansionRevision) {
-    const raw = await aiProvider.complete("automation", [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ ...packet, ...(revision ? { revision, instruction: "Revise the prior draft to resolve every review issue without adding unverified facts." } : {}) }) }], { jsonMode: true, maxTokens: 1_600 });
+    const targetQueries = packet.searchConsole.queryCluster.filter(Boolean);
+    const revisionInstruction = revision
+      ? `Revise the prior draft to resolve every review issue without adding unverified facts. The visitor-facing section must substantively answer these Search Console queries: ${targetQueries.join(" | ")}. If query_intent_not_covered was rejected, make the answer unmistakable and naturally use at least one meaningful term from the target query where it fits. Do not keyword-stuff or force awkward wording.`
+      : `Draft a visitor-facing section that substantively answers these Search Console queries: ${targetQueries.join(" | ")}. Make the answer explicit while keeping the wording natural and grounded only in the supplied first-party facts.`;
+    const raw = await aiProvider.complete("automation", [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ ...packet, ...(revision ? { revision } : {}), instruction: revisionInstruction }) }], { jsonMode: true, maxTokens: 1_600 });
     const parsed = JSON.parse(typeof raw === "string" ? raw : raw.content) as Partial<ContentExpansionCandidate>;
     if (typeof parsed.proposedContent !== "string" || typeof parsed.insertionLocation !== "string" || typeof parsed.rationale !== "string") throw new Error("Invalid content expansion response");
     return { proposedContent: parsed.proposedContent.trim(), insertionLocation: parsed.insertionLocation.trim(), rationale: parsed.rationale.trim() };
@@ -124,7 +128,7 @@ export async function generateAndReviewContentExpansion(evidence: ContentExpansi
     return { decision: "no_material_improvement", packet, audit };
   }
   let revision: ContentExpansionRevision | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const candidate = await copywriter.generate(packet, revision);
       audit.candidateCount++;
