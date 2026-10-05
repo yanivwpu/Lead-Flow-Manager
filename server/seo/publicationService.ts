@@ -13,9 +13,9 @@ export async function requestSeoPublication(actionId:string,actor:string){
   const result=await tx.execute(sql`SELECT a.*,v.proposal,v.evidence_snapshot FROM seo_actions a JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version WHERE a.id=${actionId} FOR UPDATE OF a`);
   const a=result.rows[0] as any;if(!a)throw new SeoGithubExecutionError("ACTION_NOT_FOUND","Action not found");
   assertPublishableDraft({status:a.status,actionType:a.action_type,targetPage:a.target_page,currentVersion:a.current_version,staleAt:a.stale_at},a.proposal);
-  // Publishing is a separate explicit decision: legacy approvals never silently merge.
+  // Publication may be requested by a human reviewer or by guarded SEO Autopilot.
   await tx.execute(sql`INSERT INTO seo_github_executions(action_id,action_version,status,publication_requested_at,publication_requested_by) VALUES (${actionId},${a.current_version},'pending',NOW(),${actor}) ON CONFLICT(action_id,action_version) DO UPDATE SET publication_requested_at=COALESCE(seo_github_executions.publication_requested_at,NOW()),publication_requested_by=COALESCE(seo_github_executions.publication_requested_by,${actor}),status=CASE WHEN seo_github_executions.status='failed' AND seo_github_executions.pr_number IS NULL THEN 'pending' ELSE seo_github_executions.status END,branch_name=CASE WHEN seo_github_executions.status='failed' AND seo_github_executions.pr_number IS NULL THEN NULL ELSE seo_github_executions.branch_name END,error_message=NULL,failure_code=NULL,updated_at=NOW()`);
-  await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,actor_id,reason,safe_metadata) VALUES (${actionId},'approved','approved',${actor},'Publication requested for the reviewed draft',${JSON.stringify({version:a.current_version,placement:"before_final_cta",publishingPerformed:false})}::jsonb)`);
+  await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,actor_id,reason,safe_metadata) VALUES (${actionId},'approved','approved',${actor},'Publication requested for the approved draft',${JSON.stringify({version:a.current_version,placement:"before_final_cta",publishingPerformed:false})}::jsonb)`);
  });
  return{queued:true,message:"Publishing requested. GitHub checks, deployment, and live content must pass before this is marked live."};
 }
@@ -43,12 +43,17 @@ export async function runSeoPublicationOnce(deps:{config?:ReturnType<typeof reso
    if(pr.state!=="open"||pr.draft)throw new SeoGithubExecutionError("PR_CHANGED","PR no longer open and ready");
    const current=await capturePage(job.input.targetPage);
    if(current.fingerprint!==job.input.originalContentFingerprint)throw new SeoGithubExecutionError("STALE_FINGERPRINT","Page changed after approval");
-   const reviewed=reviewContentExpansion({proposedContent:p.proposedContent!,insertionLocation:p.insertionLocation,rationale:p.explanation},{pageUrl:job.input.targetPage,title:current.content.title,metaDescription:current.content.metaDescription,headings:current.content.headings,bodyText:current.content.bodyText,pageType:"marketing",queryCluster:[p.targetQuery??""],fingerprint:current.fingerprint,metrics:{clicks:0,impressions:0,position:0}});
-   if(!reviewed.accepted)throw new SeoGithubExecutionError("FINISHED_DRAFT_REQUIRED","Draft did not pass current-page fact validation");
-   const files=await get<any[]>(`/pulls/${job.pr}/files?per_page=100`);if(files.length!==1||files[0].filename!=="shared/seoPublishedContent.json")throw new SeoGithubExecutionError("PR_CHANGED","Unexpected files in generated PR");
-   const path="shared/seoPublishedContent.json",base=await get<any>(`/contents/${path}?ref=${pr.base.sha}`),head=await get<any>(`/contents/${path}?ref=${job.head}`);
-   const change=applySeoProposalToSource(path,Buffer.from(base.content,"base64").toString("utf8"),job.input.targetPage,p),expected=JSON.parse(change.content);expected[change.route].actionId=job.actionId;expected[change.route].version=job.version;
-   if(JSON.stringify(expected)!==JSON.stringify(JSON.parse(Buffer.from(head.content,"base64").toString("utf8"))))throw new SeoGithubExecutionError("PR_CHANGED","PR differs from approved draft");
+   if(job.input.actionType==="content_expansion"){
+    const reviewed=reviewContentExpansion({proposedContent:p.proposedContent!,insertionLocation:p.insertionLocation,rationale:p.explanation},{pageUrl:job.input.targetPage,title:current.content.title,metaDescription:current.content.metaDescription,headings:current.content.headings,bodyText:current.content.bodyText,pageType:"marketing",queryCluster:[p.targetQuery??""],fingerprint:current.fingerprint,metrics:{clicks:0,impressions:0,position:0}});
+    if(!reviewed.accepted)throw new SeoGithubExecutionError("FINISHED_DRAFT_REQUIRED","Draft did not pass current-page fact validation");
+   }
+   const path=job.input.actionType==="content_expansion"?"shared/seoPublishedContent.json":"server/seo.ts";
+   const files=await get<any[]>(`/pulls/${job.pr}/files?per_page=100`);if(files.length!==1||files[0].filename!==path)throw new SeoGithubExecutionError("PR_CHANGED","Unexpected files in generated PR");
+   const base=await get<any>(`/contents/${path}?ref=${pr.base.sha}`),head=await get<any>(`/contents/${path}?ref=${job.head}`);
+   const change=applySeoProposalToSource(path,Buffer.from(base.content,"base64").toString("utf8"),job.input.targetPage,p);
+   let expectedContent=change.content;
+   if(job.input.actionType==="content_expansion"){const expected=JSON.parse(change.content);expected[change.route].actionId=job.actionId;expected[change.route].version=job.version;expectedContent=JSON.stringify(expected,null,2)+"\n";}
+   if(expectedContent!==Buffer.from(head.content,"base64").toString("utf8"))throw new SeoGithubExecutionError("PR_CHANGED","PR differs from approved draft");
    const checks=await get<any>(`/commits/${job.head}/check-runs?per_page=100`),statuses=await get<any>(`/commits/${job.head}/status`);
    // 'clean' is required, in addition to every reported check/status succeeding. No admin override.
    if(!seoPullRequestCanMerge(pr,checks,statuses)){await finish(job,"awaiting_checks","CHECKS_PENDING");return true;}
@@ -68,8 +73,11 @@ export async function runSeoPublicationOnce(deps:{config?:ReturnType<typeof reso
   // A newer deployment is acceptable only when GitHub proves the merge is its ancestor.
   let deployed=probe.gitSha===mergeSha;if(!deployed&&/^[a-f0-9]{40}$/.test(probe.gitSha??"")){const compare=await get<any>(`/compare/${mergeSha}...${probe.gitSha}`);deployed=["ahead","identical"].includes(compare.status);}
   if(!deployed){await finish(job,"deploying","LIVE_VERIFICATION_PENDING",mergeSha);return true;}
-  const live=await capturePage(job.input.targetPage),draft=p.proposedContent!.replace(/^#{1,3}\s+/gm,"").replace(/\s+/g," ").trim();
-  if(!live.content.bodyText.includes(draft)){await finish(job,"deploying","LIVE_VERIFICATION_PENDING",mergeSha);return true;}
+  const live=await capturePage(job.input.targetPage);
+  const verified=job.input.actionType==="content_expansion"
+   ? live.content.bodyText.includes(p.proposedContent!.replace(/^#{1,3}\s+/gm,"").replace(/\s+/g," ").trim())
+   : live.content.metaDescription.trim()===p.proposedMetaDescription!.trim();
+  if(!verified){await finish(job,"deploying","LIVE_VERIFICATION_PENDING",mergeSha);return true;}
   const baseline=await baselineFor(job.input.targetPage,job.actionId,new Date());
   await db.transaction(async tx=>{const r=await tx.execute(sql`UPDATE seo_github_executions SET status='live',merge_sha=${mergeSha},live_at=COALESCE(live_at,NOW()),performance=${JSON.stringify(baseline)}::jsonb,failure_code=NULL,error_message=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=NOW() WHERE id=${job.id} AND lease_token=${job.token} AND lease_expires_at>NOW() RETURNING id`);if(!r.rows.length)throw new SeoGithubExecutionError("EXECUTION_LEASE_LOST","Publication lease expired");await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,reason,safe_metadata) VALUES (${job.actionId},'approved','approved','Live content and deployed revision verified',${JSON.stringify({version:job.version,mergeSha,liveRevision:probe.gitSha,publishingPerformed:true})}::jsonb)`);});
  }catch(error){const code=error instanceof SeoGithubExecutionError?error.code:"PUBLICATION_FAILED";await finish(job,["STALE_FINGERPRINT","PR_CHANGED","FINISHED_DRAFT_REQUIRED"].includes(code)?"publication_blocked":"publication_failed",code);console.error("[SEO publication]",{id:job.id,code,message:safeGithubExecutionError(error)});}
