@@ -74,7 +74,7 @@ export async function runSeoPublicationOnce(deps:{config?:ReturnType<typeof reso
   const live=await capturePage(job.input.targetPage);
   const verified=job.input.actionType==="content_expansion"
    ? live.content.bodyText.includes(p.proposedContent!.replace(/^#{1,3}\s+/gm,"").replace(/\s+/g," ").trim())
-   : live.content.metaDescription.trim()===p.proposedMetaDescription!.trim();
+   : (live.content.metaDescription??"").trim()===p.proposedMetaDescription!.trim();
   if(!verified){await finish(job,"deploying","LIVE_VERIFICATION_PENDING",mergeSha);return true;}
   const baseline=await baselineFor(job.input.targetPage,job.actionId,new Date());
   await db.transaction(async tx=>{const r=await tx.execute(sql`UPDATE seo_github_executions SET status='live',merge_sha=${mergeSha},live_at=COALESCE(live_at,NOW()),performance=${JSON.stringify(baseline)}::jsonb,failure_code=NULL,error_message=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=NOW() WHERE id=${job.id} AND lease_token=${job.token} AND lease_expires_at>NOW() RETURNING id`);if(!r.rows.length)throw new SeoGithubExecutionError("EXECUTION_LEASE_LOST","Publication lease expired");await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,reason,safe_metadata) VALUES (${job.actionId},'approved','approved','Live content and deployed revision verified',${JSON.stringify({version:job.version,mergeSha,liveRevision:probe.gitSha,publishingPerformed:true})}::jsonb)`);});
