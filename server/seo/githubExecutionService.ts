@@ -82,6 +82,7 @@ export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActi
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
+  const startupAutopilot=setTimeout(()=>{void import("./autopilotService").then(m=>m.runSeoAutopilot()).catch(error=>console.error("[SEO Autopilot] startup cycle failed",{message:safeGithubExecutionError(error)}));},45_000);startupAutopilot.unref?.();
   workerTimer=setInterval(wakeSeoGithubExecutionWorker,SEO_GITHUB_WORKER_INTERVAL_MS);workerTimer.unref?.();
   console.log("[SEO GitHub] execution worker started");
 }

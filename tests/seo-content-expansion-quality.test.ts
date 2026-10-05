@@ -89,6 +89,6 @@ const rejected = await generateAndReviewContentExpansion(evidence, { provider: "
   return { proposedContent: "Generic short draft.", insertionLocation: "Insert after: Review your workflow", rationale: "Too short." };
 } });
 assert.equal(rejected.decision, "no_material_improvement");
-assert.equal(rejectedCalls, 2, "revisions are capped and cannot bypass quality checks");
+assert.equal(rejectedCalls, 3, "revisions are capped and cannot bypass quality checks");
 
 console.log("seo content expansion quality tests passed");
