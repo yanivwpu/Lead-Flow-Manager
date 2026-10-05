@@ -150,9 +150,7 @@ export function seoActionRefreshLeaseMs(env:NodeJS.ProcessEnv=process.env){const
 export class SeoActionRefreshInProgressError extends Error{status=409;code="REFRESH_IN_PROGRESS";}
 export function selectRefreshedOpportunity(original:ScoredOpportunity,metrics:PlannerMetricLoad){if(metrics.collectionStatus!=="verified")throw Object.assign(new Error("Search Console refresh data is unavailable"),{category:"REFRESH_DATA_UNAVAILABLE"});const ranked=clusterAndScoreOpportunities(metrics.current,metrics.previous,{...DEFAULT_OPPORTUNITY_CONFIG,maxPerRun:SEO_PLANNER_CANDIDATE_LIMIT});return ranked.find(candidate=>candidate.targetPage===original.targetPage&&candidate.queryCluster.some(query=>original.queryCluster.some(value=>value.toLowerCase()===query.toLowerCase())));}
 async function claimSeoActionRefresh(id:string,actorId:string,now=new Date()){const token=randomUUID(),expiresAt=new Date(now.getTime()+seoActionRefreshLeaseMs());return db.transaction(async tx=>{const selected=await tx.execute(sql`SELECT id,status,refresh_lease_expires_at,refresh_return_status,stale_at FROM seo_actions WHERE id=${id} FOR UPDATE`),row=selected.rows[0] as {id?:string;status?:string;refresh_lease_expires_at?:Date|string|null;refresh_return_status?:string|null;stale_at?:Date|string|null}|undefined;if(!row?.id)throw Object.assign(new Error("Action not found"),{status:404});const expired=row.status==="researching"&&row.refresh_lease_expires_at!=null&&new Date(row.refresh_lease_expires_at).getTime()<=now.getTime();if(!["proposed","revision_required"].includes(row.status??"")&&!expired)throw new SeoActionRefreshInProgressError("SEO action refresh is already active or unavailable");const returnStatus=expired&&["proposed","revision_required"].includes(row.refresh_return_status??"")?row.refresh_return_status!:row.status==="revision_required"?"revision_required":"proposed";const [action]=await tx.update(seoActions).set({status:"researching",refreshLeaseToken:token,refreshStartedAt:now,refreshLeaseExpiresAt:expiresAt,refreshReturnStatus:returnStatus,refreshFailureCategory:null,updatedAt:now}).where(eq(seoActions.id,id)).returning();await tx.insert(seoActionEvents).values({actionId:id,fromStatus:row.status,toStatus:"researching",actorId,safeMetadata:{refreshClaimed:true,recoveredExpiredClaim:expired,returnStatus,leaseExpiresAt:expiresAt.toISOString()}});return{action,token,expiresAt,recovered:expired,returnStatus};});}
-export async function refreshSeoAction(id:string,actorId:string){
- await recoverAbandonedLegacyRefreshes();
- const claim=await claimSeoActionRefresh(id,actorId);
+async function runClaimedSeoActionRefresh(id:string,actorId:string,claim:Awaited<ReturnType<typeof claimSeoActionRefresh>>){
  try{
   const action=claim.action,[opportunity]=await db.select().from(seoOpportunities).where(eq(seoOpportunities.id,action.opportunityId)).limit(1);
   if(!opportunity)throw new Error("Opportunity unavailable");
@@ -178,6 +176,17 @@ export async function refreshSeoAction(id:string,actorId:string){
   await db.transaction(async tx=>{const restored=await tx.update(seoActions).set({status:claim.returnStatus,updatedAt:new Date(),refreshLeaseToken:null,refreshStartedAt:null,refreshLeaseExpiresAt:null,refreshFailureCategory:feedback.category,refreshReturnStatus:null}).where(and(eq(seoActions.id,id),eq(seoActions.refreshLeaseToken,claim.token))).returning({id:seoActions.id});if(restored.length)await tx.insert(seoActionEvents).values({actionId:id,fromStatus:"researching",toStatus:claim.returnStatus,actorId,reason:"Refresh failed; prior proposal restored",safeMetadata:{refresh:true,failureCategory:feedback.category,rejectionReasons:feedback.reasons}});});
   throw Object.assign(new Error(feedback.message),{status:502,feedback,cause:error});
  }
+}
+export async function refreshSeoAction(id:string,actorId:string){
+ await recoverAbandonedLegacyRefreshes();
+ const claim=await claimSeoActionRefresh(id,actorId);
+ return runClaimedSeoActionRefresh(id,actorId,claim);
+}
+export async function startSeoActionRefresh(id:string,actorId:string){
+ await recoverAbandonedLegacyRefreshes();
+ const claim=await claimSeoActionRefresh(id,actorId);
+ void runClaimedSeoActionRefresh(id,actorId,claim).catch(error=>console.error("[SEO Action Refresh] background refresh completed with failure",{actionId:id,error:safeSeoAnalysisError(error)}));
+ return{status:"researching",accepted:true,leaseExpiresAt:claim.expiresAt};
 }
 export async function transitionSeoAction(id:string,to:"approved"|"rejected",actorId:string,reason?:string){
  const result=await db.transaction(async tx=>{
