@@ -9,6 +9,7 @@ import { wakeSeoGithubExecutionWorker } from "./githubExecutionService";
 export const SEO_AUTOPILOT_CONFIDENCE_DEFAULT = 0.85;
 export const SEO_AUTOPILOT_MAX_REFRESH_DEFAULT = 3;
 export const SEO_AUTOPILOT_MAX_PUBLISH_DEFAULT = 5;
+let autopilotActive=false;
 
 function boundedInt(value:string|undefined,fallback:number,max:number){
   const parsed=Number(value);
@@ -75,7 +76,10 @@ async function retireSuperseded(rows:OpenRow[],actor:string){
 }
 
 export async function runSeoAutopilot(actor="seo-autopilot"){
+  if(autopilotActive)return{skipped:"already_running" as const};
+  autopilotActive=true;
   const config=seoAutopilotConfig();
+  try{
   let rows=await loadOpenRows();
   const retired=await retireSuperseded(rows,actor);
   rows=await loadOpenRows();
@@ -106,4 +110,7 @@ export async function runSeoAutopilot(actor="seo-autopilot"){
   const result={retired,refreshed,refreshFailed,approved,publicationQueued,publishFailed,minConfidence:config.minConfidence};
   console.info("[SEO Autopilot] cycle complete",result);
   return result;
+  }finally{
+    autopilotActive=false;
+  }
 }
