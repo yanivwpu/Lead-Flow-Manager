@@ -1,3 +1,4 @@
+import { PublishedSeoContent } from "@/components/marketing/PublishedSeoContent";
 /**
  * Shared layout for competitor alternative / comparison pages.
  * Preserves existing URLs; expands depth, schema, and current platform accuracy.
@@ -432,6 +433,7 @@ export function CompetitorAlternativeLayout({ content }: { content: CompetitorAl
         </div>
       </section>
 
+      <div className="mx-auto max-w-4xl px-4 md:px-6"><PublishedSeoContent path={new URL(canonical).pathname} /></div>
       <section className="bg-brand-green px-4 py-16 md:px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="mb-4 font-display text-2xl font-bold text-white">

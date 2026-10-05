@@ -1,3 +1,4 @@
+import { PublishedSeoContent } from "@/components/marketing/PublishedSeoContent";
 import { useEffect, useState } from "react";
 import { Link, useParams, Redirect } from "wouter";
 import { Calendar, Clock, ArrowLeft, ArrowRight, Share2, Linkedin, MessageCircle, Copy, Check } from "lucide-react";
@@ -1393,6 +1394,7 @@ export function BlogPost() {
           {renderContent(content)}
         </div>
 
+        <PublishedSeoContent path={`/blog/${slug}`} />
         <div className="mt-16 pt-8 border-t border-gray-200">
           <div className="bg-gradient-to-br from-brand-green/5 to-brand-teal/5 rounded-2xl p-8 text-center">
             <h2 className="text-2xl font-display font-bold text-gray-900 mb-3">

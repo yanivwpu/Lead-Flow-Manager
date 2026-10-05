@@ -1,3 +1,4 @@
+import { supportsSeoContentRoute } from "../../shared/seoPublishedContent";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
@@ -102,7 +103,7 @@ function actionTypeForItem(item:ScoredOpportunity){return item.type==="low_ctr"?
 function actionIdentity(propertyId:string,item:ScoredOpportunity){const actionType=actionTypeForItem(item);return{key:recommendationIdempotencyKey(propertyId,item.targetPage!,item.queryCluster,actionType)};}
 type OpenActionIdentity={id:string;idempotencyKey:string;targetPage:string;contentFingerprint:string;status:string;currentVersion:number;staleCheckedAt:Date|null;staleCheckRetryAt:Date|null};
 async function loadOpenActions(propertyId:string,keys:string[]){if(!keys.length)return[];const result=await db.execute(sql`SELECT a.id,a.idempotency_key,a.target_page,a.original_content_fingerprint,a.status,a.current_version,a.stale_checked_at,a.stale_check_retry_at FROM seo_actions a JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version WHERE a.property_id=${propertyId} AND a.status IN ('detected','researching','proposed','approved','revision_required') AND a.idempotency_key IN (${sql.join(keys.map(key=>sql`${key}`),sql`,`)}) ORDER BY a.updated_at ASC,a.id ASC LIMIT ${SEO_PLANNER_CANDIDATE_LIMIT}`);return(result.rows as Record<string,unknown>[]).map(row=>({id:String(row.id),idempotencyKey:String(row.idempotency_key),targetPage:String(row.target_page),contentFingerprint:String(row.original_content_fingerprint),status:String(row.status),currentVersion:Number(row.current_version),staleCheckedAt:row.stale_checked_at?new Date(String(row.stale_checked_at)):null,staleCheckRetryAt:row.stale_check_retry_at?new Date(String(row.stale_check_retry_at)):null}));}
-async function loadStaleCheckQueue(propertyId:string){const result=await db.execute(sql`SELECT a.id,a.idempotency_key,a.target_page,a.original_content_fingerprint,a.status,a.current_version,a.stale_checked_at,a.stale_check_retry_at FROM seo_actions a JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version WHERE a.property_id=${propertyId} AND a.status IN ('proposed','approved') AND (a.stale_check_retry_at IS NULL OR a.stale_check_retry_at<=NOW()) ORDER BY a.stale_checked_at ASC NULLS FIRST,a.id ASC LIMIT ${SEO_STALE_CHECK_LIMIT}`);return(result.rows as Record<string,unknown>[]).map(row=>({id:String(row.id),idempotencyKey:String(row.idempotency_key),targetPage:String(row.target_page),contentFingerprint:String(row.original_content_fingerprint),status:String(row.status),currentVersion:Number(row.current_version),staleCheckedAt:row.stale_checked_at?new Date(String(row.stale_checked_at)):null,staleCheckRetryAt:row.stale_check_retry_at?new Date(String(row.stale_check_retry_at)):null}));}
+async function loadStaleCheckQueue(propertyId:string){const result=await db.execute(sql`SELECT a.id,a.idempotency_key,a.target_page,a.original_content_fingerprint,a.status,a.current_version,a.stale_checked_at,a.stale_check_retry_at FROM seo_actions a JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version WHERE a.property_id=${propertyId} AND a.status IN ('proposed','approved') AND (a.stale_check_retry_at IS NULL OR a.stale_check_retry_at<=NOW()) AND NOT EXISTS(SELECT 1 FROM seo_github_executions g WHERE g.action_id=a.id AND g.action_version=a.current_version AND g.publication_requested_at IS NOT NULL AND g.status IN ('pr_created','awaiting_checks','deploying','live')) ORDER BY a.stale_checked_at ASC NULLS FIRST,a.id ASC LIMIT ${SEO_STALE_CHECK_LIMIT}`);return(result.rows as Record<string,unknown>[]).map(row=>({id:String(row.id),idempotencyKey:String(row.idempotency_key),targetPage:String(row.target_page),contentFingerprint:String(row.original_content_fingerprint),status:String(row.status),currentVersion:Number(row.current_version),staleCheckedAt:row.stale_checked_at?new Date(String(row.stale_checked_at)):null,staleCheckRetryAt:row.stale_check_retry_at?new Date(String(row.stale_check_retry_at)):null}));}
 export const SEO_STALE_CHECK_LIMIT=10;
 export const SEO_STALE_RETRY_MS=15*60_000;
 export const SEO_LEGACY_REFRESH_RECOVERY_LIMIT=50;
@@ -127,14 +128,14 @@ export async function listSeoActions(filters:{status?:string;risk?:string;type?:
    (v.evidence_snapshot->>'estimatedUpside')::double precision estimated_upside,
    p.meta_description current_meta_description,p.content_fingerprint,
    created_event.safe_metadata->>'runId' analysis_run_id,
-   execution.status execution_status,execution.pr_number,execution.pr_url,
+   execution.status execution_status,execution.pr_number,execution.pr_url,execution.failure_code execution_failure_code,execution.publication_requested_at,execution.merge_sha,execution.live_at,execution.performance,
    final_event.reason final_reason,final_event.created_at final_event_at,final_event.safe_metadata->'rejectionReasons' refresh_rejection_reasons,
    (SELECT COUNT(*) FROM seo_competitor_snapshots c WHERE c.property_id=a.property_id AND c.status='success') competitors_analyzed
    FROM seo_actions a JOIN seo_opportunities o ON o.id=a.opportunity_id
    LEFT JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version
    LEFT JOIN seo_page_snapshots p ON p.id=v.page_snapshot_id
    LEFT JOIN LATERAL (SELECT safe_metadata FROM seo_action_events e WHERE e.action_id=a.id AND e.safe_metadata ? 'runId' ORDER BY e.created_at ASC LIMIT 1) created_event ON true
-   LEFT JOIN LATERAL (SELECT status,pr_number,pr_url FROM seo_github_executions g WHERE g.action_id=a.id ORDER BY g.created_at DESC LIMIT 1) execution ON true
+   LEFT JOIN LATERAL (SELECT status,pr_number,pr_url,failure_code,publication_requested_at,merge_sha,live_at,performance FROM seo_github_executions g WHERE g.action_id=a.id AND g.action_version=a.current_version ORDER BY g.created_at DESC LIMIT 1) execution ON true
    LEFT JOIN LATERAL (SELECT reason,created_at,safe_metadata FROM seo_action_events e WHERE e.action_id=a.id ORDER BY e.created_at DESC LIMIT 1) final_event ON true
    WHERE a.property_id=${propertyId} AND (${filters.status??null}::text IS NULL OR a.status=${filters.status??null})
    AND (${filters.risk??null}::text IS NULL OR a.risk=${filters.risk??null}) AND (${filters.type??null}::text IS NULL OR a.action_type=${filters.type??null})
@@ -183,11 +184,12 @@ export async function transitionSeoAction(id:string,to:"approved"|"rejected",act
   const [action]=await tx.select().from(seoActions).where(eq(seoActions.id,id)).limit(1);
   if(!action)throw Object.assign(new Error("Action not found"),{status:404});
   if(!mayTransitionSeoAction(action.status,to)||(to==="approved"&&action.staleAt))throw Object.assign(new Error("Invalid lifecycle transition"),{status:409});
+  const queueExecution=to==="approved"&&(action.actionType==="meta_description"||action.actionType==="content_expansion"&&supportsSeoContentRoute(action.targetPage));
   const now=new Date(),changed=await tx.update(seoActions).set({status:to,updatedAt:now,...(to==="approved"?{approvedBy:actorId,approvedAt:now}:{}),...(to==="rejected"?{rejectedBy:actorId,rejectedAt:now,rejectionReason:reason?.slice(0,1000)}:{})}).where(and(eq(seoActions.id,id),eq(seoActions.status,action.status))).returning({id:seoActions.id});
   if(!changed.length)throw Object.assign(new Error("Action status changed"),{status:409});
-  await tx.insert(seoActionEvents).values({actionId:id,fromStatus:action.status,toStatus:to,actorId,reason:reason?.slice(0,1000),safeMetadata:{publishingPerformed:false,githubExecutionQueued:to==="approved"}});
-  if(to==="approved")await tx.insert(seoGithubExecutions).values({actionId:id,actionVersion:action.currentVersion,status:"pending"}).onConflictDoNothing({target:[seoGithubExecutions.actionId,seoGithubExecutions.actionVersion]});
-  return{status:to,published:false,executionQueued:to==="approved",message:to==="approved"?"Approval queued a review-only GitHub pull request; merge and deployment remain manual.":"SEO proposal rejected; no publishing was performed."};
+  await tx.insert(seoActionEvents).values({actionId:id,fromStatus:action.status,toStatus:to,actorId,reason:reason?.slice(0,1000),safeMetadata:{publishingPerformed:false,githubExecutionQueued:queueExecution}});
+  if(queueExecution)await tx.insert(seoGithubExecutions).values({actionId:id,actionVersion:action.currentVersion,status:"pending"}).onConflictDoNothing({target:[seoGithubExecutions.actionId,seoGithubExecutions.actionVersion]});
+  return{status:to,published:false,executionQueued:queueExecution,message:to==="approved"?queueExecution?"Approval queued a review pull request. Use Publish approved draft to request publication of supported finished content.":"Approved for manual implementation; no automatic publishing job was queued.":"SEO proposal rejected; no publishing was performed."};
  });
  if(to==="approved")import("./githubExecutionService").then(module=>module.wakeSeoGithubExecutionWorker()).catch(error=>console.error("[SEO GitHub] unable to wake execution worker",safeSeoAnalysisError(error)));
  return result;

@@ -1,3 +1,4 @@
+import { runSeoPublicationOnce, updateSeoPublicationMeasurements } from "./publicationService";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
@@ -58,7 +59,9 @@ export async function executeClaimedSeoGithubJob(claim:{id:string;actionId:strin
   }catch(error){
     const stale=error instanceof SeoGithubExecutionError&&["STALE_FINGERPRINT","STALE_ACTION_VERSION"].includes(error.code),message=safeGithubExecutionError(error);
     await db.transaction(async tx=>{
-      await tx.update(seoGithubExecutions).set({status:stale?"stale":"failed",errorMessage:message,leaseToken:null,leaseExpiresAt:null,completedAt:new Date(),updatedAt:new Date()}).where(and(eq(seoGithubExecutions.id,claim.id),eq(seoGithubExecutions.leaseToken,claim.token)));
+      const failed=await tx.update(seoGithubExecutions).set({status:stale?"stale":"failed",errorMessage:message,leaseToken:null,leaseExpiresAt:null,completedAt:new Date(),updatedAt:new Date()}).where(and(eq(seoGithubExecutions.id,claim.id),eq(seoGithubExecutions.leaseToken,claim.token))).returning({id:seoGithubExecutions.id});
+      if(!failed.length)return;
+      await tx.execute(sql`UPDATE seo_github_executions SET failure_code=${error instanceof SeoGithubExecutionError?error.code:"EXECUTION_FAILED"} WHERE id=${claim.id} AND status IN ('failed','stale')`);
       if(stale){
         await tx.update(seoActions).set({status:"revision_required",staleAt:new Date(),updatedAt:new Date()}).where(and(eq(seoActions.id,claim.actionId),eq(seoActions.status,"approved")));
         await tx.insert(seoActionEvents).values({actionId:claim.actionId,fromStatus:"approved",toStatus:"revision_required",reason:"GitHub execution stopped because the approved source version is stale",safeMetadata:{executionId:claim.id,failureCategory:(error as SeoGithubExecutionError).code,publishingPerformed:false}});
@@ -75,7 +78,7 @@ export async function runSeoGithubExecutionWorkerOnce(deps:{claim?:typeof claimP
   await (deps.executeJob??executeClaimedSeoGithubJob)(claim);
   return true;
 }
-export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActive=true;void runSeoGithubExecutionWorkerOnce().catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
+export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActive=true;void (async()=>{await runSeoGithubExecutionWorkerOnce();await runSeoPublicationOnce();await updateSeoPublicationMeasurements();})().catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
