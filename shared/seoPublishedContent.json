@@ -4,5 +4,11 @@
     "placement": "before_final_cta",
     "actionId": "932c7761-a0a8-43db-815b-d873f7047db5",
     "version": 1
+  },
+  "/zoko-alternative": {
+    "content": "### Exploring the Benefits of an Omnichannel CRM Strategy\n\nFor merchants using Shopify, adopting an omnichannel CRM strategy can unlock significant advantages in managing customer relationships. While Zoko offers a Shopify-first approach, WhachatCRM’s multi-channel CRM inbox extends beyond just WhatsApp, allowing for integration across various messaging platforms. This comprehensive approach provides businesses with a unified communication hub, streamlining the management of interactions and offering a complete view of customer engagements.\n\nWhachatCRM facilitates effective team collaboration through features such as shared inboxes and internal notes. This functionality ensures that customer interactions are handled efficiently, enabling quick and informed responses. Additionally, it supports order-aware follow-ups, enhancing customer satisfaction by ensuring timely and relevant communication.\n\nBy choosing WhachatCRM, Shopify merchants not only maintain their existing operations but also benefit from a solution that grows alongside their business. The platform's capability to handle both sales and service conversations across different channels makes it an ideal choice for businesses looking to scale and diversify their customer engagement strategies.",
+    "placement": "before_final_cta",
+    "actionId": "1a3f2b38-06de-4d17-a2f4-a6d63f4d0bb6",
+    "version": 2
   }
 }
