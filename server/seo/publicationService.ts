@@ -57,8 +57,6 @@ export async function runSeoPublicationOnce(deps:{config?:ReturnType<typeof reso
    const checks=await get<any>(`/commits/${job.head}/check-runs?per_page=100`),statuses=await get<any>(`/commits/${job.head}/status`);
    // 'clean' is required, in addition to every reported check/status succeeding. No admin override.
    if(!seoPullRequestCanMerge(pr,checks,statuses)){await finish(job,"awaiting_checks","CHECKS_PENDING");return true;}
-   const branch=await get<{protected:boolean}>("/branches/main");
-   if(branch.protected!==false){await finish(job,"awaiting_checks","MANUAL_MERGE_REQUIRED");return true;}
    await owned(job);
    const stillApproved=await db.execute(sql`SELECT id FROM seo_actions WHERE id=${job.actionId} AND status='approved' AND current_version=${job.version} AND stale_at IS NULL`);
    if(!stillApproved.rows.length)throw new SeoGithubExecutionError("STALE_FINGERPRINT","Approval changed before merge");
