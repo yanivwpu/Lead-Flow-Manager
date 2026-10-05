@@ -1,3 +1,4 @@
+import { publishedSeoHtml } from "../shared/seoPublishedContent";
 import {
   BLOG_POSTS,
   resolveBlogImageAlt,
@@ -903,7 +904,7 @@ export function generateMarketingPageSsrHtml(route: string): string | null {
   // Pricing gains an SSR body in Phase 2 (was meta-only).
   const page = resolveMarketingSsrPage(englishPath, locale);
   if (!page) return null;
-  return renderMarketingSsrPage(page);
+  return renderMarketingSsrPage(page).replace("</main>", `${publishedSeoHtml(route)}</main>`);
 }
 
 /** Routes that currently receive crawlable SSR body markup (for tests / audits). */
@@ -1675,6 +1676,7 @@ export function generateBlogPostHtml(slug: string): string | null {
         </header>
         <div style="color: #333; line-height: 1.7;">
           ${contentHtml}
+          ${publishedSeoHtml(`/blog/${slug}`)}
         </div>
       </article>
       <footer style="text-align: center; padding: 40px 0; margin-top: 40px; border-top: 1px solid #e5e7eb;">

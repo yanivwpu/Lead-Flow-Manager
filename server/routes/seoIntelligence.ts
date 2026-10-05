@@ -1,3 +1,8 @@
+import { db } from "../../drizzle/db";
+import { sql } from "drizzle-orm";
+import { requestSeoPublication } from "../seo/publicationService";
+import { SeoGithubExecutionError } from "../seo/githubExecutor";
+import { publicationFailureMessage } from "../seo/publicationPolicy";
 import { safeSeoRefreshFailure } from "@shared/seoRefreshFeedback";
 import type { Express } from "express";
 import type { RequestHandler } from "express";
@@ -26,6 +31,8 @@ export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: Reques
     try { res.json(await analyzeSeoOpportunities()); }
     catch (error) { res.status(error instanceof SeoAnalysisInProgressError ? 409 : 500).json({ error: error instanceof SeoAnalysisInProgressError ? "An SEO analysis is already running" : "SEO analysis could not be completed", code: error instanceof SeoAnalysisInProgressError ? error.code : "ANALYSIS_FAILED" }); }
   });
+  app.post("/api/admin/seo-intelligence/actions/:id/revise",requireAdmin,async(req,res)=>{try{await db.transaction(async tx=>{const r=await tx.execute(sql`UPDATE seo_actions SET status='revision_required',approved_by=NULL,approved_at=NULL,updated_at=NOW() WHERE id=${req.params.id} AND status='approved' AND NOT EXISTS(SELECT 1 FROM seo_github_executions g WHERE g.action_id=seo_actions.id AND g.publication_requested_at IS NOT NULL) RETURNING id`);if(!r.rows.length)throw new Error("Publication has already been requested or this action is no longer approved");await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,reason,safe_metadata) VALUES (${req.params.id},'approved','revision_required','Prior approval revoked for a fresh finished draft','{}')`);});res.json(await refreshSeoAction(req.params.id,"sales-admin"));}catch{res.status(409).json({error:"The draft could not be refreshed. Check its current status and review the refresh reason."});}});
+  app.post("/api/admin/seo-intelligence/actions/:id/publish", requireAdmin, async (req,res)=>{try{res.json(await requestSeoPublication(req.params.id,String((req as any).user?.id??"sales-admin")));import("../seo/githubExecutionService").then(m=>m.wakeSeoGithubExecutionWorker());}catch(error){const code=error instanceof SeoGithubExecutionError?error.code:"PUBLICATION_FAILED";res.status(409).json({code,error:publicationFailureMessage(code)});}});
   app.post("/api/admin/seo-intelligence/actions/:id/:decision", requireAdmin, async (req, res) => {
     const decision = req.params.decision;
     if (!(["approve", "reject", "regenerate"] as const).includes(decision as never)) return res.status(404).json({ error: "Unknown action operation" });

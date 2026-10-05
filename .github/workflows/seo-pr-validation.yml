@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - "server/seo/**"
+      - "shared/seoPublishedContent*"
+      - "server/seo.ts"
+      - "migrations/0103_seo_publication_tracking.sql"
       - "tests/seo-*.test.ts"
       - ".github/workflows/seo-pr-validation.yml"
 
@@ -38,6 +41,7 @@ jobs:
       - run: npm ci
       - name: Run isolated PostgreSQL SEO regressions
         run: |
+          npx tsx tests/seo-publication.test.ts
           npx tsx tests/seo-action-atomic-postgres.test.ts
           npx tsx tests/seo-action-history-postgres.test.ts
           npx tsx tests/seo-action-recovery-postgres.test.ts
