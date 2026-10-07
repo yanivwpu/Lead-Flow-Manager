@@ -279,4 +279,22 @@ run("shared presentation resolver is used by Review panel", () => {
   assert.ok(panel.includes("presentation.campaignReady"));
 });
 
+run("Not Qualified success clears active selection and refreshes shared counts", () => {
+  const panel = readFileSync(
+    join(process.cwd(), "client/src/components/settings/ProspectIntelligencePanel.tsx"),
+    "utf8",
+  );
+  assert.ok(panel.includes('if (decision === "not_qualified")'));
+  assert.ok(panel.includes("clearSelection();"));
+  assert.ok(panel.includes("setPinnedVisibleIds"));
+  assert.match(
+    panel,
+    /decision === "not_qualified"[\s\S]*invalidateQueries\([\s\S]*prospect-intelligence/,
+  );
+  assert.ok(panel.includes('data-testid="pi-filter-more"'));
+  assert.ok(panel.includes("PROSPECT_REVIEW_LIFECYCLE_FILTERS"));
+  assert.ok(panel.includes('data-testid="pi-not-qualified-reason"'));
+  assert.ok(panel.includes('"Restore as Qualified"'));
+});
+
 console.log("prospect-review-presentation.test.ts: all assertions passed");

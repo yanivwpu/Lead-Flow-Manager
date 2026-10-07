@@ -32,12 +32,13 @@ function run(name: string, fn: () => void) {
   }
 }
 
-run("no Qualified tab — three filters only", () => {
+run("working filters stay primary; lifecycle views are not duplicated", () => {
   assert.deepEqual(
     PROSPECT_REVIEW_WORK_FILTER_CHIPS.map((c) => c.id),
-    ["all", "needs_review", "not_qualified"],
+    ["all", "needs_review", "qualified", "campaign_ready", "not_qualified"],
   );
-  assert.ok(!PROSPECT_REVIEW_WORK_FILTER_CHIPS.some((c) => c.id === "qualified"));
+  assert.ok(!PROSPECT_REVIEW_WORK_FILTER_CHIPS.some((c) => c.id === "archived"));
+  assert.ok(!PROSPECT_REVIEW_WORK_FILTER_CHIPS.some((c) => c.id === "trashed"));
 });
 
 run("successful AI Review + clear fit → auto-qualify rule", () => {
@@ -256,7 +257,7 @@ run("counts/badges/campaign eligibility share resolver semantics", () => {
   assert.equal(resolveProspectNeedsReviewBadge(auto)?.code, "qualified");
 });
 
-run("panel defaults to All and has no Qualified chip wiring", () => {
+run("panel defaults to All and renders shared work-filter chips", () => {
   const panelSrc = readFileSync(
     join(root, "client/src/components/settings/ProspectIntelligencePanel.tsx"),
     "utf8",

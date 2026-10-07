@@ -63,7 +63,7 @@ export type ProspectNeedsAttentionSubFilter =
   | "missing_website"
   | "missing_email";
 
-/** Primary Review filters including lifecycle views. */
+/** Primary Review work queues. Lifecycle/storage views are intentionally separate. */
 export const PROSPECT_REVIEW_WORK_FILTER_CHIPS: Array<{
   id: Extract<
     ProspectReviewWorkFilter,
@@ -72,16 +72,21 @@ export const PROSPECT_REVIEW_WORK_FILTER_CHIPS: Array<{
     | "qualified"
     | "not_qualified"
     | "campaign_ready"
-    | "archived"
-    | "trashed"
   >;
   label: string;
 }> = [
   { id: "all", label: "All Active" },
   { id: "needs_review", label: "Needs Review" },
   { id: "qualified", label: "Qualified" },
-  { id: "not_qualified", label: "Not Qualified" },
   { id: "campaign_ready", label: "Campaign Ready" },
+  { id: "not_qualified", label: "Not Qualified" },
+];
+
+/** Closed/storage views shown behind the compact More control. */
+export const PROSPECT_REVIEW_LIFECYCLE_FILTERS: Array<{
+  id: Extract<ProspectReviewWorkFilter, "archived" | "trashed">;
+  label: string;
+}> = [
   { id: "archived", label: "Archived" },
   { id: "trashed", label: "Trash" },
 ];
@@ -1005,7 +1010,7 @@ export function isProspectVisibleInReview(input: ProspectReviewStateInput): bool
 
 /**
  * Primary filters:
- * - all → every Review-visible prospect (auto/manual qualified, needs review, not qualified)
+ * - all → active work only; explicit Not Qualified is a separate closed queue
  * - needs_review → genuine human-judgment exceptions only
  * - not_qualified → explicit reject (AI strong evidence or human)
  * - qualified (deprecated) → decision-qualified rows
@@ -1026,7 +1031,7 @@ export function matchesProspectReviewWorkFilter(
   if (lifecycle !== "active") return false;
   if (!isProspectVisibleInReview(input)) return false;
 
-  if (filter === "all") return true;
+  if (filter === "all") return !isProspectExplicitlyNotQualified(input);
 
   if (filter === "not_qualified") {
     return isProspectExplicitlyNotQualified(input);

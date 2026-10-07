@@ -17,6 +17,7 @@ import {
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
   needsHumanReview,
+  PROSPECT_REVIEW_LIFECYCLE_FILTERS,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
   resolveProspectNeedsAttentionReason,
   resolveProspectNeedsReviewBadge,
@@ -44,11 +45,13 @@ assert.deepEqual(
     "All Active",
     "Needs Review",
     "Qualified",
-    "Not Qualified",
     "Campaign Ready",
-    "Archived",
-    "Trash",
+    "Not Qualified",
   ],
+);
+assert.deepEqual(
+  PROSPECT_REVIEW_LIFECYCLE_FILTERS.map((c) => c.label),
+  ["Archived", "Trash"],
 );
 
 // Needs Review → can Enrich
@@ -280,9 +283,39 @@ assert.equal(
   assert.equal(matchesProspectReviewWorkFilter(pendingReviewRow, "needs_review"), true);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "needs_review"), false);
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "needs_review"), false);
+  assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "all"), false);
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "not_qualified"), true);
   assert.equal(matchesProspectReviewWorkFilter(rejectedRow, "qualified"), false);
   assert.equal(matchesProspectReviewWorkFilter(readyRow, "qualified"), true);
+  assert.equal(matchesProspectReviewWorkFilter(pendingReviewRow, "all"), true);
+  assert.equal(matchesProspectReviewWorkFilter(readyRow, "all"), true);
+  assert.equal(matchesProspectReviewWorkFilter(readyRow, "campaign_ready"), true);
+
+  const sample = [
+    ...Array.from({ length: 8 }, (_, index) => ({
+      ...pendingReviewRow,
+      email: `active${index}@example.com`,
+    })),
+    rejectedRow,
+    { ...rejectedRow, email: "rejected2@example.com" },
+  ];
+  assert.equal(sample.filter((row) => matchesProspectReviewWorkFilter(row, "all")).length, 8);
+  assert.equal(
+    sample.filter((row) => matchesProspectReviewWorkFilter(row, "not_qualified")).length,
+    2,
+  );
+
+  assert.equal(
+    matchesProspectReviewWorkFilter({ ...pendingReviewRow, outcome: "won" }, "all"),
+    false,
+  );
+  assert.equal(
+    matchesProspectReviewWorkFilter(
+      { ...readyRow, queueStatus: "queued", outreachStatus: "not_sent" },
+      "all",
+    ),
+    false,
+  );
 
   // Approved + enriching + email is Qualified (enrichment is separate from status badge)
   assert.deepEqual(resolveProspectNeedsReviewBadge(enrichingRow), {

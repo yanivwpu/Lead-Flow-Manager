@@ -75,7 +75,7 @@ test("bulk reason modes: infer / one_reason / no_reason", () => {
   assert.equal(inferProspectArchiveReason({}), "unspecified");
 });
 
-test("Review filters: archived hidden from All Active; visible in Archived", () => {
+test("Review filters: closed lifecycle rows stay out of All Active", () => {
   const archived = {
     analysisStatus: "completed",
     reviewStatus: "pending",
@@ -91,6 +91,11 @@ test("Review filters: archived hidden from All Active; visible in Archived", () 
   assert.equal(matchesProspectReviewWorkFilter(archived as never, "archived"), true);
   assert.equal(matchesProspectReviewWorkFilter(active as never, "all"), true);
   assert.equal(matchesProspectReviewWorkFilter(active as never, "archived"), false);
+  const trashed = { ...active, lifecycleStatus: "trashed" };
+  const deleted = { ...active, lifecycleStatus: "deleted" };
+  assert.equal(matchesProspectReviewWorkFilter(trashed as never, "all"), false);
+  assert.equal(matchesProspectReviewWorkFilter(trashed as never, "trashed"), true);
+  assert.equal(matchesProspectReviewWorkFilter(deleted as never, "all"), false);
 });
 
 test("discovery already_archived does not consume quota", () => {
