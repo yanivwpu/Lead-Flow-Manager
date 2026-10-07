@@ -112,6 +112,7 @@ import {
   listEmailCampaignBlockingReasons,
   matchesProspectReviewWorkFilter,
   PROSPECT_REVIEW_WORK_FILTER_CHIPS,
+  PROSPECT_REVIEW_LIFECYCLE_FILTERS,
   PROSPECT_REVIEW_WORK_STATE_LABELS,
   resolveProspectNeedsReviewBadge,
   resolveProspectNeedsReviewBadgeDetail,
@@ -160,6 +161,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { classifyProspectWebsiteUrl } from "@shared/prospectWebsiteClassification";
 import {
   assertEnrichIdsNonEmpty,
@@ -510,8 +517,11 @@ type DetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   onContactFieldsUpdated: (contactId: string, patch: { email?: string | null; phone?: string | null }) => void;
   onItemUpdated: (item: ProspectIntelligenceListItem) => void;
-  /** After manual qualification — parent may switch Review filter tabs. */
-  onQualificationChanged?: (decision: "qualified" | "needs_review" | "not_qualified") => void;
+  /** After a successful manual decision — parent reconciles filters and selection. */
+  onQualificationChanged?: (
+    decision: "qualified" | "needs_review" | "not_qualified",
+    contactId: string,
+  ) => void;
   /** Shared with toolbar — same Enrich action function. */
   onStartEnrichment: (
     contactIds: string[],
@@ -982,7 +992,7 @@ function ProspectIntelligenceDetailDialog({
     onSuccess: ({ data, decision }) => {
       if (data.item) applyItemUpdate(data.item);
       else void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
-      onQualificationChanged?.(decision);
+      onQualificationChanged?.(decision, item!.contactId);
       toast({
         title:
           decision === "qualified"
@@ -1665,7 +1675,7 @@ function ProspectIntelligenceDetailDialog({
               title="Mark as Qualified (manual override — does not re-run AI)"
             >
               <Check className="mr-1.5 h-3.5 w-3.5" />
-              Qualified
+              {detailIsNotQualified ? "Restore as Qualified" : "Qualified"}
             </Button>
             <Button
               type="button"
@@ -1679,7 +1689,16 @@ function ProspectIntelligenceDetailDialog({
               Not Qualified
             </Button>
           </div>
-          {String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
+          {detailIsNotQualified ? (
+            <p className="basis-full text-xs text-gray-500" data-testid="pi-not-qualified-detail">
+              {String(intel.reasoningSummary || "").trim() ||
+                "Closed as not qualified. Restore it if this decision was accidental."}
+              {intel.analyzedAt
+                ? ` · ${format(new Date(intel.analyzedAt), "MMM d, yyyy")}`
+                : ""}
+            </p>
+          ) : null}
+          {!detailIsNotQualified && String(intel?.analysisStatus || "").toLowerCase() === "failed" ? (
             <Button
               type="button"
               variant="outline"
@@ -1696,7 +1715,7 @@ function ProspectIntelligenceDetailDialog({
               Retry Qualification
             </Button>
           ) : null}
-          {(() => {
+          {!detailIsNotQualified ? (() => {
             const st = String(intel?.analysisStatus || "").toLowerCase();
             if (st !== "completed" && st !== "needs_review") return null;
             return (
@@ -1725,8 +1744,8 @@ function ProspectIntelligenceDetailDialog({
                 Re-run AI Review
               </Button>
             );
-          })()}
-          {detailRetryable ? (
+          })() : null}
+          {!detailIsNotQualified && detailRetryable ? (
             <Button
               type="button"
               variant="outline"
@@ -1743,7 +1762,7 @@ function ProspectIntelligenceDetailDialog({
               Retry Enrichment
             </Button>
           ) : null}
-          <Button
+          {!detailIsNotQualified ? <Button
             type="button"
             variant="outline"
             onClick={() =>
@@ -1755,8 +1774,8 @@ function ProspectIntelligenceDetailDialog({
             data-testid="pi-save-message"
           >
             Save Message
-          </Button>
-          {detailCanEnrich && !detailRetryable ? (
+          </Button> : null}
+          {!detailIsNotQualified && detailCanEnrich && !detailRetryable ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-brand-green/90"
@@ -1779,12 +1798,12 @@ function ProspectIntelligenceDetailDialog({
               {detailEnrichLabel}
             </Button>
           ) : null}
-          {detailEnrichExplain && !detailEnrichExplain.ok && !detailCanEnrich ? (
+          {!detailIsNotQualified && detailEnrichExplain && !detailEnrichExplain.ok && !detailCanEnrich ? (
             <p className="basis-full text-xs text-gray-500" data-testid="pi-enrich-blocked-reason">
               {detailEnrichExplain.message}
             </p>
           ) : null}
-          {!detailQualifiedExplain?.ok ? (
+          {!detailIsNotQualified && !detailQualifiedExplain?.ok ? (
             <p className="basis-full text-xs text-gray-500" data-testid="pi-campaign-blocked-reason">
               {detailQualifiedExplain?.message ||
                 (detailIsDecisionQualified
@@ -1792,7 +1811,7 @@ function ProspectIntelligenceDetailDialog({
                   : "Resolve Needs Review or mark Qualified to send.")}
             </p>
           ) : null}
-          {approveUi.showSendOutreach ? (
+          {!detailIsNotQualified && approveUi.showSendOutreach ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-brand-green/90"
@@ -1802,7 +1821,7 @@ function ProspectIntelligenceDetailDialog({
               <Mail className="mr-2 h-4 w-4" /> Send outreach email
             </Button>
           ) : null}
-          {approveUi.showViewThread ? (
+          {!detailIsNotQualified && approveUi.showViewThread ? (
             <Button
               type="button"
               className="bg-brand-green hover:bg-brand-green/90"
@@ -2099,12 +2118,13 @@ export function ProspectIntelligencePanel(props: {
 
   const workFilterCounts = useMemo(() => {
     const map: Record<string, number> = { all: 0 };
-    for (const chip of PROSPECT_REVIEW_WORK_FILTER_CHIPS) {
+    const filters = [...PROSPECT_REVIEW_WORK_FILTER_CHIPS, ...PROSPECT_REVIEW_LIFECYCLE_FILTERS];
+    for (const chip of filters) {
       map[chip.id] = 0;
     }
     for (const row of rawItems) {
       const ux = reviewUxInput(row);
-      for (const chip of PROSPECT_REVIEW_WORK_FILTER_CHIPS) {
+      for (const chip of filters) {
         if (matchesProspectReviewWorkFilter(ux, chip.id)) {
           map[chip.id] = (map[chip.id] || 0) + 1;
         }
@@ -3054,6 +3074,41 @@ export function ProspectIntelligencePanel(props: {
             </button>
           );
         })}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex h-6 shrink-0 items-center rounded-md px-2 text-[11px] font-medium transition-colors",
+                workFilter === "archived" || workFilter === "trashed"
+                  ? "bg-gray-900 text-white"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+              )}
+              data-testid="pi-filter-more"
+            >
+              {workFilter === "archived"
+                ? "Archived"
+                : workFilter === "trashed"
+                  ? "Trash"
+                  : "More"}
+              <ChevronDown className="ms-1 h-3 w-3" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            {PROSPECT_REVIEW_LIFECYCLE_FILTERS.map((filter) => (
+              <DropdownMenuItem
+                key={filter.id}
+                onSelect={() => setWorkFilter(filter.id)}
+                data-testid={`pi-filter-${filter.id}`}
+              >
+                <span className="flex-1">{filter.label}</span>
+                <span className="ms-3 text-xs tabular-nums text-gray-400">
+                  {workFilterCounts[filter.id] ?? 0}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div
@@ -3105,6 +3160,8 @@ export function ProspectIntelligencePanel(props: {
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+          {workFilter !== "not_qualified" ? (
+            <>
           <Button
             type="button"
             size="sm"
@@ -3208,6 +3265,8 @@ export function ProspectIntelligencePanel(props: {
               ? `Send ${selectionEligibility.qualified} to Campaign`
               : "Send to Campaign"}
           </Button>
+            </>
+          ) : null}
           {workFilter !== "archived" && workFilter !== "trashed" ? (
             <Button
               type="button"
@@ -3423,6 +3482,17 @@ export function ProspectIntelligencePanel(props: {
                           detail={resolveProspectNeedsReviewBadgeDetail(ux, needsReviewBadge)}
                         />
                       ) : null}
+                      {presentation.decision === "not_qualified" ? (
+                        <p
+                          className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-500"
+                          data-testid="pi-not-qualified-reason"
+                        >
+                          {String(intel.reasoningSummary || "").trim() || "Disqualified"}
+                          {intel.analyzedAt
+                            ? ` · ${format(new Date(intel.analyzedAt), "MMM d, yyyy")}`
+                            : ""}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="min-w-0">
                       {analyzing ? (
@@ -3448,9 +3518,6 @@ export function ProspectIntelligencePanel(props: {
                           <div className="flex flex-wrap items-center gap-1.5 text-xs leading-tight">
                             <MatchStars stars={rowSummary.matchStars} />
                             <span className="font-medium text-gray-900">{rowSummary.matchLabel}</span>
-                            {priorityBadge(rowSummary.priority || undefined, intel.analysisStatus, {
-                              decisionQualified: rowDecisionQualified,
-                            })}
                             <ProspectWebsiteGlobeIcon
                               websiteUrl={row.websiteUrl}
                               websiteUrlUsed={intel.websiteUrlUsed}
@@ -3459,11 +3526,6 @@ export function ProspectIntelligencePanel(props: {
                           {rowSummary.businessType ? (
                             <p className="truncate text-xs leading-tight text-gray-600">
                               {rowSummary.businessType}
-                            </p>
-                          ) : null}
-                          {rowSummary.offerLabel ? (
-                            <p className="truncate text-xs leading-tight text-gray-700">
-                              {rowSummary.offerLabel}
                             </p>
                           ) : null}
                           {rowSummary.angle ? (
@@ -3656,10 +3718,31 @@ export function ProspectIntelligencePanel(props: {
           setSelected(next);
           patchListRows([next.contactId], () => next);
         }}
-        onQualificationChanged={(decision) => {
-          if (decision === "qualified") setWorkFilter("qualified");
-          else if (decision === "not_qualified") setWorkFilter("not_qualified");
-          else setWorkFilter("needs_review");
+        onQualificationChanged={(decision, contactId) => {
+          if (decision === "not_qualified") {
+            clearSelection();
+            setPinnedVisibleIds((prev) => {
+              if (!prev.has(contactId)) return prev;
+              const next = new Set(prev);
+              next.delete(contactId);
+              return next;
+            });
+            if (workFilter !== "not_qualified") {
+              setDetailOpen(false);
+              setSelected(null);
+            }
+            void queryClient.invalidateQueries({
+              queryKey: ["/api/growth-tools/prospect-intelligence"],
+            });
+            return;
+          }
+          setSelectedIds((prev) => {
+            if (!prev.has(contactId)) return prev;
+            const next = new Set(prev);
+            next.delete(contactId);
+            return next;
+          });
+          setWorkFilter(decision === "qualified" ? "qualified" : "needs_review");
         }}
         onStartEnrichment={startProspectEnrichment}
         enrichPending={bulkApproveMutation.isPending}
