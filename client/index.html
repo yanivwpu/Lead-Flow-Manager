@@ -156,7 +156,7 @@
       type="image/avif"
       href="/hero/hero-640.avif"
       imagesrcset="/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w"
-      imagesizes="(min-width: 1024px) 380px, 350px"
+      imagesizes="(min-width: 1024px) 410px, 350px"
       fetchpriority="high"
     />
 
@@ -191,7 +191,7 @@
       */
       #whachat-static-shell { background: #fff; overflow-x: hidden; }
       #whachat-static-shell a { color: inherit; }
-      #whachat-static-shell .wcs-nav { height: 56px; min-height: 56px; padding: 8px 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 1280px; margin: 0 auto; box-sizing: border-box; }
+      #whachat-static-shell .wcs-nav { height: 56px; min-height: 56px; padding: 8px 16px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 1440px; margin: 0 auto; box-sizing: border-box; }
       #whachat-static-shell .wcs-brand { display: flex; align-items: center; gap: 8px; text-decoration: none; }
       #whachat-static-shell .wcs-logo { height: 32px; width: 32px; background: #059669; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 1.125rem; }
       #whachat-static-shell .wcs-wordmark { font-family: 'Plus Jakarta Sans', 'Plus Jakarta Sans Fallback', Inter, sans-serif; font-weight: 700; font-size: 1.25rem; color: #111827; }
@@ -226,25 +226,27 @@
       #whachat-static-shell .wcs-btn-header { font-size: 0.875rem; font-weight: 500; padding: 8px 16px; border-radius: 9999px; text-decoration: none; border: none; cursor: pointer; font-family: inherit; min-height: 36px; height: 36px; display: inline-flex; align-items: center; box-sizing: border-box; }
       #whachat-static-shell .wcs-btn-ghost { color: #4b5563; background: transparent; }
       #whachat-static-shell .wcs-btn-green { background: #047857; color: #fff; font-weight: 500; }
-      #whachat-static-shell .wcs-hero { box-sizing: border-box; max-width: 1280px; margin: 0 auto; padding: 20px 16px 32px; }
+      #whachat-static-shell .wcs-hero { box-sizing: border-box; max-width: 1440px; margin: 0 auto; padding: 20px 16px 32px; }
       #whachat-static-shell .wcs-hero-grid { display: flex; flex-direction: column; gap: 32px; align-items: stretch; }
       #whachat-static-shell .wcs-order-img,
       .wcs-hero-image-column { order: 2; width: 100%; flex-shrink: 0; position: relative; }
-      #whachat-static-shell .wcs-order-txt { order: 1; width: 100%; max-width: 780px; min-width: 0; }
+      #whachat-static-shell .wcs-order-txt { order: 1; width: 100%; max-width: 780px; min-width: 0; text-align: start; }
       @media (min-width: 768px) {
-        #whachat-static-shell .wcs-hero { padding: 32px 24px; }
-        #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: 1fr 1.04fr; gap: 40px; align-items: start; }
+        #whachat-static-shell .wcs-hero { padding: 24px 24px 20px; }
+      }
+      @media (min-width: 960px) {
+        #whachat-static-shell .wcs-hero-grid { display: grid; grid-template-columns: minmax(0, 1.16fr) minmax(360px, .84fr); gap: clamp(24px, 2.5vw, 40px); align-items: start; }
         #whachat-static-shell .wcs-order-img,
-        .wcs-hero-image-column { order: 2; margin-top: 40px; }
-        #whachat-static-shell .wcs-order-txt { order: 1; margin-top: 56px; }
+        .wcs-hero-image-column { order: 2; margin-top: 16px; }
+        #whachat-static-shell .wcs-order-txt { order: 1; margin-top: 32px; }
       }
       #whachat-static-shell .wcs-hero-eyebrow { margin: 0 0 1rem; min-height: 1.25rem; font-size: .875rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: #047857; line-height: 1.25; }
       #whachat-static-shell h1.wcs-hero-h1 { font-family: 'Plus Jakarta Sans', 'Plus Jakarta Sans Fallback', Inter, sans-serif; font-size: 2.75rem; font-weight: 700; line-height: .98; letter-spacing: -.025em; margin: 0 0 1.5rem; color: #030712; max-width: 780px; }
       @media (min-width: 768px) { #whachat-static-shell h1.wcs-hero-h1 { font-size: 3.75rem; } }
       @media (min-width: 1024px) { #whachat-static-shell h1.wcs-hero-h1 { font-size: 4.5rem; } }
       @media (min-width: 1280px) { #whachat-static-shell h1.wcs-hero-h1 { font-size: 5rem; } }
-      #whachat-static-shell .wcs-hero-sub { margin: 0 0 1rem; max-width: 36rem; font-size: 1rem; line-height: 1.75; color: #4b5563; }
-      @media (min-width: 768px) { #whachat-static-shell .wcs-hero-sub { font-size: 1.05rem; } }
+      #whachat-static-shell .wcs-hero-sub { margin: 0 0 1rem; max-width: 36rem; font-size: 1.0625rem; line-height: 1.75; color: #4b5563; }
+      @media (min-width: 768px) { #whachat-static-shell .wcs-hero-sub { font-size: 1.125rem; } }
       #whachat-static-shell .wcs-hero-channels { margin: 0 0 2rem; max-width: 36rem; font-size: .875rem; line-height: 1.5; color: #6b7280; }
       #whachat-static-shell .wcs-stack { display: flex; flex-direction: column; gap: .625rem; margin-bottom: 1rem; max-width: 100%; }
       #whachat-static-shell .wcs-btn-row { width: 100%; }
@@ -286,8 +288,8 @@
       }
       @media (min-width: 1024px) {
         .wcs-hero-image-slot {
-          max-width: 380px;
-          min-height: calc(380px * 871 / 560);
+          max-width: 410px;
+          min-height: calc(410px * 871 / 560);
         }
       }
       .wcs-hero-image-slot picture { display: block; width: 100%; height: 100%; }
@@ -451,9 +453,9 @@
           <div class="wcs-order-img wcs-hero-image-column">
             <div class="wcs-hero-image-slot">
               <picture>
-                <source type="image/avif" srcset="/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w" sizes="(min-width: 1024px) 380px, 350px" />
-                <source type="image/webp" srcset="/hero/hero-400.webp 400w, /hero/hero-640.webp 640w, /hero/hero-768.webp 768w, /hero/hero-1024.webp 1024w" sizes="(min-width: 1024px) 380px, 350px" />
-                <img class="wcs-hero-image" src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" sizes="(min-width: 1024px) 380px, 350px" loading="eager" decoding="async" fetchpriority="high" />
+                <source type="image/avif" srcset="/hero/hero-400.avif 400w, /hero/hero-640.avif 640w, /hero/hero-768.avif 768w, /hero/hero-1024.avif 1024w" sizes="(min-width: 1024px) 410px, 350px" />
+                <source type="image/webp" srcset="/hero/hero-400.webp 400w, /hero/hero-640.webp 640w, /hero/hero-768.webp 768w, /hero/hero-1024.webp 1024w" sizes="(min-width: 1024px) 410px, 350px" />
+                <img class="wcs-hero-image" src="/hero/whachat-hero-mockup.png" alt="WhachatCRM WhatsApp conversation mockup with AI copilot and lead score" width="560" height="871" sizes="(min-width: 1024px) 410px, 350px" loading="eager" decoding="async" fetchpriority="high" />
               </picture>
             </div>
           </div>

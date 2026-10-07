@@ -1,0 +1,56 @@
+import { seoPullRequestCanMerge } from "../server/seo/publicationChecks";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { PGlite } from "@electric-sql/pglite";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { assertPublishableDraft } from "../server/seo/publicationPolicy";
+import { applySeoProposalToSource } from "../server/seo/githubExecutor";
+import { aggregateSearchMetrics,measurementDates } from "../server/seo/publicationMetrics";
+import { publishedSeoHtml,seoContentBlocks,supportsSeoContentRoute } from "../shared/seoPublishedContent";
+process.env.DATABASE_URL ||= "postgres://test:test@localhost/test";
+const {db}=await import("../drizzle/db");
+const {requestSeoPublication,runSeoPublicationOnce}=await import("../server/seo/publicationService");
+const content="### Evaluating your team workflow\n\n"+"A shared inbox helps a team manage WhatsApp conversations and follow-ups together. ".repeat(10).trim();
+const proposal={actionType:"content_expansion" as const,proposedContent:content,explanation:"Help the visitor compare their actual team workflow before choosing an alternative.",insertionLocation:"Insert after: existing heading",expectedBenefit:"More useful guidance for visitors.",risk:"medium" as const,confidence:.8,automaticExecutionEligible:false,rollbackConcept:"Restore the prior version in Git history.",evidenceIds:["e1"],factValidationStatus:"passed" as const,generatedAt:new Date().toISOString()};
+const action={status:"approved",actionType:"content_expansion",targetPage:"https://www.whachatcrm.com/respond-io-alternative",currentVersion:1};
+assertPublishableDraft(action,proposal);
+const metaProposal={actionType:"meta_description" as const,proposedMetaDescription:"WhatsApp-first CRM for growing teams with a shared inbox, automation, and AI-assisted follow-up.",explanation:"Clarifies the page value for the target query.",insertionLocation:"Replace the existing meta description in the page head",expectedBenefit:"Improve qualified organic click potential.",risk:"medium" as const,confidence:.9,automaticExecutionEligible:false,rollbackConcept:"Restore the prior metadata from Git history.",evidenceIds:["e-meta"],factValidationStatus:"not_applicable" as const,generatedAt:new Date().toISOString()};
+assertPublishableDraft({status:"approved",actionType:"meta_description",targetPage:"https://www.whachatcrm.com/real-estate-crm",currentVersion:1},metaProposal);
+for(const [a,p] of [[{...action,status:"proposed"},proposal],[{...action,staleAt:new Date()},proposal],[action,{...proposal,proposedContent:null,contentBrief:"Only a brief"}],[action,{...proposal,factValidationStatus:"not_applicable"}],[{...action,actionType:"cannibalization"},proposal],[{...action,targetPage:"https://app.whachatcrm.com/respond-io-alternative"},proposal]] as any[])assert.throws(()=>assertPublishableDraft(a,p));
+assert.equal(supportsSeoContentRoute("https://www.whachatcrm.com/he/respond-io-alternative"),false,"English drafts cannot leak to localized pages");
+assert.equal(publishedSeoHtml("/unpublished"),"");
+assert.equal(seoContentBlocks("### Heading\n\nText <script>alert(1)</script>")[1].text,"Text <script>alert(1)</script>","text is retained and rendering escapes it");
+const change=applySeoProposalToSource("shared/seoPublishedContent.json",'{"/zoko-alternative":{"content":"Existing section"}}',action.targetPage,proposal),registry=JSON.parse(change.content);
+assert.equal(registry["/zoko-alternative"].content,"Existing section");assert.equal(registry["/respond-io-alternative"].content,content);assert.equal(registry["/respond-io-alternative"].placement,"before_final_cta");
+assert.throws(()=>applySeoProposalToSource("client/src/App.tsx","",action.targetPage,proposal));
+assert.deepEqual(aggregateSearchMetrics([{clicks:1,impressions:10,position:2},{clicks:2,impressions:30,position:10}]),{clicks:3,impressions:40,ctr:.075,position:8});
+assert.equal(aggregateSearchMetrics([]).position,null);
+assert.deepEqual(measurementDates(new Date("2026-10-04T20:00:00Z"),7),{beforeStart:"2026-09-27",beforeEnd:"2026-10-03",afterStart:"2026-10-05",afterEnd:"2026-10-11"});
+assert.equal(measurementDates(new Date("2026-10-05T02:00:00Z"),7).afterStart,"2026-10-05","publication day uses Search Console Pacific time");
+const clean={mergeable:true,mergeable_state:"clean"},checks={check_runs:[{status:"completed",conclusion:"success"}]},statuses={statuses:[]};assert.equal(seoPullRequestCanMerge(clean,checks,statuses),true);assert.equal(seoPullRequestCanMerge(clean,{check_runs:[{status:"in_progress",conclusion:null}]},statuses),false);assert.equal(seoPullRequestCanMerge({...clean,mergeable_state:"blocked"},checks,statuses),false);assert.equal(seoPullRequestCanMerge(clean,checks,{statuses:[{state:"pending"}]}),false);assert.equal(seoPullRequestCanMerge(clean,{},statuses),false);assert.equal(seoPullRequestCanMerge(clean,{...checks,total_count:101},statuses),false);
+const pg=new PGlite(),dialect=new PgDialect(),oldExecute=db.execute,oldTransaction=db.transaction;
+(db as any).execute=async(q:any)=>{const built=dialect.sqlToQuery(q);return pg.query(built.sql,built.params);};
+(db as any).transaction=async(fn:any)=>pg.transaction(tx=>fn({execute:async(q:any)=>{const built=dialect.sqlToQuery(q);return tx.query(built.sql,built.params);}}));
+try{
+ await pg.exec(`CREATE TABLE seo_actions(id varchar PRIMARY KEY,status text,action_type text,target_page text,current_version int,stale_at timestamp,property_id text,original_content_fingerprint text);CREATE TABLE seo_action_versions(action_id varchar,version int,proposal jsonb,evidence_snapshot jsonb);CREATE TABLE seo_action_events(action_id varchar,from_status text,to_status text,actor_id text,reason text,safe_metadata jsonb);CREATE TABLE seo_sync_runs(id varchar PRIMARY KEY,property_id text,start_date date,end_date date,started_at timestamp,status text);CREATE TABLE seo_search_snapshots(property_id text,page text,reporting_date date,clicks float,impressions float,position float);CREATE TABLE seo_search_daily_totals(property_id text,reporting_date date);CREATE TABLE seo_analysis_runs(id varchar PRIMARY KEY);`);
+ await pg.exec(readFileSync(new URL("../migrations/0102_seo_automation_and_github_execution.sql",import.meta.url),"utf8"));
+ const migration=readFileSync(new URL("../migrations/0103_seo_publication_tracking.sql",import.meta.url),"utf8");await pg.exec(migration);await pg.exec(migration);
+ await pg.query(`INSERT INTO seo_actions VALUES ('a','approved','content_expansion',$1,1,NULL,'sc-domain:whachatcrm.com','old-fingerprint')`,[action.targetPage]);await pg.query(`INSERT INTO seo_action_versions VALUES ('a',1,$1,'{}')`,[JSON.stringify(proposal)]);
+ await pg.exec(`INSERT INTO seo_github_executions(action_id,action_version,status,error_message) VALUES ('a',1,'failed','Old unsupported type')`);
+ await requestSeoPublication('a','admin');await requestSeoPublication('a','admin');
+ let result=await pg.query<any>(`SELECT * FROM seo_github_executions`);assert.equal(result.rows.length,1,"requests are idempotent for an action/version");assert.equal(result.rows[0].status,"pending");assert.ok(result.rows[0].publication_requested_at);assert.equal(result.rows[0].publication_requested_by,"admin");assert.equal(result.rows[0].error_message,null);
+ await pg.exec(`UPDATE seo_github_executions SET status='live',live_at=NOW();UPDATE seo_actions SET status='proposed'`);
+ await assert.rejects(()=>requestSeoPublication('a','admin'));result=await pg.query<any>(`SELECT status FROM seo_github_executions`);assert.equal(result.rows[0].status,"live","unapproved request cannot disturb a completed publication");
+ // A merged PR alone does not imply publication: revision AND actual live copy are required.
+ await pg.exec(`UPDATE seo_actions SET status='approved';UPDATE seo_github_executions SET status='pr_created',pr_number=45,commit_sha='head-sha',updated_at=NOW()-INTERVAL '1 minute',live_at=NULL;`);
+ const config={token:"test-token",owner:"o",repo:"r",apiUrl:"https://api.github.test"};let probeSha="old-sha",liveText="Old page",calls=0;
+ const fetchImpl:typeof fetch=async(url)=>{calls++;const path=String(url);if(path.endsWith('/pulls/45'))return new Response(JSON.stringify({merged:true,merge_commit_sha:'merge-sha',head:{sha:'head-sha'},base:{ref:'main'}}));if(path.includes('production-build-probe'))return new Response(JSON.stringify({gitSha:probeSha}));throw new Error('Unexpected request '+path);};
+ const capturePage=async()=>({fingerprint:'live-fingerprint',content:{bodyText:liveText} as any});
+ await runSeoPublicationOnce({config,fetchImpl,capturePage});result=await pg.query<any>(`SELECT * FROM seo_github_executions`);assert.equal(result.rows[0].status,'deploying');assert.equal(result.rows[0].live_at,null);
+ probeSha='merge-sha';await pg.exec(`UPDATE seo_github_executions SET updated_at=NOW()-INTERVAL '1 minute'`);await runSeoPublicationOnce({config,fetchImpl,capturePage});result=await pg.query<any>(`SELECT * FROM seo_github_executions`);assert.equal(result.rows[0].status,'deploying','matching revision without live copy is still not live');
+ liveText=content.replace(/^#{1,3}\s+/gm,'').replace(/\s+/g,' ').trim();await pg.exec(`UPDATE seo_github_executions SET updated_at=NOW()-INTERVAL '1 minute'`);await runSeoPublicationOnce({config,fetchImpl,capturePage});result=await pg.query<any>(`SELECT * FROM seo_github_executions`);assert.equal(result.rows[0].status,'live');assert.ok(result.rows[0].live_at);assert.equal(result.rows[0].performance.windows.length,3);assert.ok(result.rows[0].performance.windows.every((w:any)=>w.state==='waiting_for_data'));
+ assert.equal(await runSeoPublicationOnce({config,fetchImpl,capturePage}),false,'completed jobs are not claimed again');
+ // An active foreign lease cannot be reclaimed or updated by this worker.
+ await pg.exec(`UPDATE seo_github_executions SET status='deploying',lease_token='other-worker',lease_expires_at=NOW()+INTERVAL '5 minutes',updated_at=NOW()-INTERVAL '1 minute'`);const beforeCalls=calls;assert.equal(await runSeoPublicationOnce({config,fetchImpl,capturePage}),false);assert.equal(calls,beforeCalls);
+ console.log("seo-publication.test.ts: policy, adapter, measurement and PostgreSQL transaction assertions passed");
+}finally{(db as any).execute=oldExecute;(db as any).transaction=oldTransaction;await pg.close();}

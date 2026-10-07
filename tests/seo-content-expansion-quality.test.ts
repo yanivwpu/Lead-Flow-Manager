@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateAndReviewContentExpansion, reviewContentExpansion, type ContentExpansionCopywriter, type ContentExpansionEvidence } from "../server/seo/contentExpansionQuality";
+import { buildContentExpansionPacket, generateAndReviewContentExpansion, reviewContentExpansion, type ContentExpansionCopywriter, type ContentExpansionEvidence } from "../server/seo/contentExpansionQuality";
 
 const body = `WhatsApp Business automated messages help a team respond consistently when a customer starts a conversation. The automation workflow can send a welcome message, collect the customer's request, and route the conversation to a shared inbox. Team members can review the conversation and follow up from the inbox. An away message can set expectations outside business hours. Keep messages clear, give customers a useful next step, and offer a route to a person when the workflow cannot answer the request. Automation should support a conversation rather than repeat the same message. Review each workflow before publishing and update it when the customer journey changes. The page also explains how message templates and customer conversations fit into a practical WhatsApp workflow.`;
 const evidence: ContentExpansionEvidence = {
@@ -46,5 +46,49 @@ assert.ok(generic.reasons.includes("generic_or_weak"));
 const failed = await generateAndReviewContentExpansion(evidence, { provider: "test", model: "failure", async generate() { throw new Error("provider unavailable"); } });
 assert.equal(failed.decision, "no_material_improvement", "provider failure cannot create a fallback action");
 assert.deepEqual(failed.audit.reviewerScores[0].rejectionReasons, ["ai_provider_failure_or_malformed_json"]);
+
+const longText = "Team inbox notes and workflow routing ".repeat(30);
+assert.equal(buildContentExpansionPacket({ ...evidence, bodyText: longText }).currentPageText, longText,
+  "long source blocks and feature lists are retained even when sentence extraction omits them");
+let listCalls = 0;
+await generateAndReviewContentExpansion({ ...evidence, headings: [evidence.headings[0]], bodyText: longText }, {
+  provider: "test", model: "lists", async generate(packet) {
+    listCalls++;
+    assert.equal(packet.currentPageText, longText);
+    return copywriter.generate(packet);
+  },
+});
+assert.ok(listCalls > 0, "substantial list evidence reaches the writer instead of failing sentence extraction");
+let sparseCalls = 0;
+await generateAndReviewContentExpansion({ ...evidence, headings: [evidence.headings[0]], bodyText: "A short label." }, {
+  provider: "test", model: "sparse", async generate(packet) { sparseCalls++; return copywriter.generate(packet); },
+});
+assert.equal(sparseCalls, 0, "a page with too little evidence remains blocked");
+
+const withoutAi = { ...evidence, headings: evidence.headings.map(text => text.replace(/\w*ai\w*/gi, "context")), bodyText: body.replace(/\w*ai\w*/gi, "context") };
+const detailDraft = { proposedContent: actualDraft + " Explain the details before configuring a workflow.", insertionLocation: "Insert after: Review your workflow", rationale: "Adds grounded guidance." };
+assert.ok(!reviewContentExpansion(detailDraft, withoutAi).reasons.includes("unsupported_fact:ai"),
+  "AI is matched as a feature token, not a substring inside explain, details, or remains");
+assert.ok(reviewContentExpansion({ ...detailDraft, proposedContent: detailDraft.proposedContent + " AI generates replies." }, withoutAi).reasons.includes("unsupported_fact:ai"));
+
+let revisionCalls = 0;
+const revised = await generateAndReviewContentExpansion(evidence, { provider: "test", model: "reviser", async generate(_packet, revision) {
+  revisionCalls++;
+  if (!revision) return { proposedContent: "Generic short draft.", insertionLocation: "Insert after: Review your workflow", rationale: "Too short." };
+  assert.ok(revision.rejectionReasons.includes("inappropriate_length"));
+  assert.equal(revision.previousDraft, "Generic short draft.");
+  return copywriter.generate(_packet);
+} });
+assert.equal(revised.decision, "accept");
+assert.equal(revisionCalls, 2);
+assert.equal(revised.audit.selectedCandidateIndex, 1);
+
+let rejectedCalls = 0;
+const rejected = await generateAndReviewContentExpansion(evidence, { provider: "test", model: "rejected", async generate() {
+  rejectedCalls++;
+  return { proposedContent: "Generic short draft.", insertionLocation: "Insert after: Review your workflow", rationale: "Too short." };
+} });
+assert.equal(rejected.decision, "no_material_improvement");
+assert.equal(rejectedCalls, 3, "revisions are capped and cannot bypass quality checks");
 
 console.log("seo content expansion quality tests passed");

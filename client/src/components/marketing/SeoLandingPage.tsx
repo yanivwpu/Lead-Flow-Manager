@@ -1,3 +1,4 @@
+import { PublishedSeoContent } from "./PublishedSeoContent";
 import { useState } from "react";
 import { Link } from "wouter";
 import { ArrowRight } from "lucide-react";
@@ -268,6 +269,7 @@ export function SeoLandingPage({ config }: Props) {
             </div>
           </section>
         ) : null}
+        <PublishedSeoContent path={`/${config.slug}`} />
       </main>
 
       <MarketingLandingCta

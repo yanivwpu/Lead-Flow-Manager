@@ -272,7 +272,7 @@ assert.doesNotMatch(actionServiceSource,/console\.error\([^\n]+(?:stack|query|pa
 
 // Durable refresh claims are persisted, fenced, reclaimable only after expiry, and network work is outside transactions.
 const leaseMigration=readFileSync(new URL("../migrations/0098_seo_action_refresh_leases.sql",import.meta.url),"utf8");assert.match(leaseMigration,/refresh_lease_token/);assert.doesNotMatch(leaseMigration,/UPDATE seo_actions/);assert.doesNotMatch(leaseMigration,/DELETE FROM/i);
-assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:"REFRESH_FAILED"/);assert.match(startup,/0098_seo_action_refresh_leases/);
+assert.match(actionServiceSource,/SEO_ACTION_REFRESH_LEASE_DEFAULT_MS=5\*60_000/);assert.match(actionServiceSource,/refresh_lease_expires_at/);assert.match(actionServiceSource,/FOR UPDATE[\s\S]+recoveredExpiredClaim/);assert.match(actionServiceSource,/refresh_lease_expires_at>NOW\(\) FOR UPDATE/);assert.match(actionServiceSource,/refreshLeaseToken:null[\s\S]+refreshFailureCategory:feedback.category/);assert.match(startup,/0098_seo_action_refresh_leases/);
 
 // Historical pages explain migrations but only concurrent current visibility triggers cannibalization.
 const migratedStable=clusterAndScoreOpportunities([metric(10,100,5,"migration query","https://example.com/new")],[metric(10,100,5,"migration query","https://example.com/old")]);assert.notEqual(migratedStable[0]?.type,"cannibalization");

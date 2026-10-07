@@ -1,0 +1,2 @@
+import { publishedSeoSection, seoContentBlocks } from "@shared/seoPublishedContent";
+export function PublishedSeoContent({path}:{path:string}){const section=publishedSeoSection(path);if(!section)return null;return <section data-seo-action={section.actionId} data-seo-version={section.version} className="my-10 text-gray-700">{seoContentBlocks(section.content).map((b,i)=>b.heading?<h2 key={i} className="mb-5 mt-8 text-2xl font-bold text-gray-900">{b.text}</h2>:<p key={i} className="mb-4 whitespace-pre-line text-lg leading-8">{b.text}</p>)}</section>;}

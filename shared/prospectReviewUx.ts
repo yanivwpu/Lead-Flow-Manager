@@ -436,7 +436,7 @@ export function prospectReviewWorkEmptyMessage(
     case "qualified":
       return "No qualified prospects.";
     case "not_qualified":
-      return "No Not Qualified prospects.";
+      return "No disqualified prospects.";
     case "campaign_ready":
       return "No Campaign Ready prospects.";
     case "archived":
@@ -449,7 +449,7 @@ export function prospectReviewWorkEmptyMessage(
       return "Nothing needs attention.";
     case "all":
     default:
-      return "Nothing to show for this filter.";
+      return "No active prospects.";
   }
 }
 

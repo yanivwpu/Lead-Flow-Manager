@@ -21,7 +21,7 @@ import { MARKETING_URL } from "@/lib/marketingUrl";
 import { getLocalizedHomepage } from "@shared/localizeMarketingContent";
 import { getCanonicalUrl, getHreflangLinks } from "@shared/localeRoutes";
 import { useMarketingUrlLocale } from "@/lib/marketingLocaleRouting";
-import { hideStaticMarketingShell } from "@/lib/marketingShell";
+import { hideStaticMarketingShell, syncStaticHomepageHero } from "@/lib/marketingShell";
 
 /** Fixed min-heights reduce layout shift when lazy sections hydrate (approximate final block size). */
 function BelowFoldFallback({ className }: { className?: string }) {
@@ -65,6 +65,11 @@ export function Welcome() {
   const isRTL = locale === "he";
   const canonical = getCanonicalUrl("/", locale, MARKETING_URL) || `${MARKETING_URL}/`;
   const hreflang = getHreflangLinks("/", MARKETING_URL);
+
+  // The shell lives outside React: route changes must update its copy explicitly.
+  useLayoutEffect(() => {
+    if (isHomepagePath(location)) syncStaticHomepageHero(document, locale, !!user);
+  }, [location, locale, user]);
 
   useLayoutEffect(() => {
     document.documentElement.classList.remove("wcs-marketing-navigating");
@@ -212,6 +217,25 @@ export function Welcome() {
               <p className="wcs-hero-eyebrow">{shell.trustPill}</p>
               <h1 className="wcs-hero-h1">{shell.h1}</h1>
               <p className="wcs-hero-sub">{shell.subtitle}</p>
+              <p className="wcs-hero-channels">{shell.channels}</p>
+              <div className="wcs-hero-cta-stack">
+                <div className="wcs-hero-cta-row">
+                  <a className="wcs-hero-btn-primary" href={user ? "/app/inbox" : "/auth"} data-testid="button-hero-cta">
+                    {shell.ctaTrial}
+                  </a>
+                </div>
+                <div className="wcs-hero-cta-row">
+                  <a className="wcs-hero-btn-outline" href={locale === "en" ? "/pricing" : `/${locale}/pricing`} data-testid="button-hero-pricing">
+                    {shell.ctaPricing}
+                  </a>
+                </div>
+                <div className="wcs-hero-cta-row">
+                  <button className="wcs-hero-btn-demo" type="button" onClick={() => setShowDemoModal(true)} data-testid="button-book-demo">
+                    {shell.ctaDemo}
+                  </button>
+                </div>
+              </div>
+              <p className="wcs-hero-note">{shell.noCreditCard}</p>
             </div>
           </div>
         </section>

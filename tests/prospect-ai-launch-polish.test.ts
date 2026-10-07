@@ -56,6 +56,9 @@ run("empty states stay short and consistent", () => {
   assert.equal(prospectReviewEmptyMessage("campaigns", true), "No campaigns yet.");
   assert.equal(prospectReviewEmptyMessage("inbox", true), "No replies yet.");
   assert.equal(prospectReviewWorkEmptyMessage("campaign_ready", true), "No Campaign Ready prospects.");
+  assert.equal(prospectReviewWorkEmptyMessage("all", true), "No active prospects.");
+  assert.equal(prospectReviewWorkEmptyMessage("needs_review", true), "No prospects need review.");
+  assert.equal(prospectReviewWorkEmptyMessage("not_qualified", true), "No disqualified prospects.");
   assert.equal(prospectReviewWorkEmptyMessage("archived", true), "No archived prospects.");
 });
 

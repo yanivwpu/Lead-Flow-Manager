@@ -4,6 +4,7 @@ import { db } from "../../drizzle/db";
 import { seoScheduledAnalysisClaims } from "@shared/schema";
 import { analyzeSeoOpportunities, safeSeoAnalysisError } from "./actionService";
 import { resolveSearchConsoleConfig } from "./searchConsole";
+import { runSeoAutopilot } from "./autopilotService";
 
 export const SEO_SCHEDULED_ANALYSIS_LEASE_MINUTES = 30;
 export type ScheduledAnalysisClaim = { propertyId:string; reportingDay:string; syncRunId:string; leaseToken:string };
@@ -42,6 +43,7 @@ export async function runAnalysisAfterSuccessfulScheduledSync(
   if(!claim)return "skipped";
   try{
     const analysis=await (deps.analyze??analyzeSeoOpportunities)(new Date(),"scheduled");
+    try{await runSeoAutopilot();}catch(autopilotError){console.error("[SEO Autopilot] post-analysis cycle failed",safeSeoAnalysisError(autopilotError));}
     await (deps.finish??finishScheduledSeoAnalysis)(claim,"success",analysis.runId);
     return "completed";
   }catch(error){
