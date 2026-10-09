@@ -158,6 +158,8 @@ export type ProspectOutreachEligibilityReason =
   | "enrichment_required"
   | "enrichment_failed"
   | "analysis_incomplete"
+  | "inactive_prospect"
+  | "dedup_key_collision"
   | "duplicate_queued"
   | "duplicate_recipient"
   | "missing_message_snapshot"
@@ -171,6 +173,8 @@ export function prospectOutreachEligibilityReasonLabel(
 ): string {
   const r = String(reason || "").toLowerCase();
   switch (r) {
+    case "inactive_prospect":
+      return "Prospect is archived or deleted";
     case "eligible":
       return "Eligible";
     case "missing_identity":

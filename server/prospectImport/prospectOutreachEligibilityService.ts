@@ -3,6 +3,7 @@
  * Loads mailbox / channel connection + suppression state for the pure resolver.
  */
 
+import { buildProspectOutreachEligibilityInput } from "./prospectCampaignReadinessEvaluation";
 import type { Contact } from "@shared/schema";
 import { contactHasDoNotContact } from "../automationSendGuard";
 import { getPrimaryEmailMailbox } from "../emailChannel/mailboxStore";
@@ -45,6 +46,7 @@ import {
 /** Presentation + eligibility flags for list / Campaigns historical rows. */
 export type PriorOutreachListFlags = {
   priorOutreachDetected: boolean;
+  reason?: PriorProspectOutreachEvidenceResult["reason"];
   conversationId: string | null;
   messageId: string | null;
   sentAt: string | null;
@@ -177,6 +179,7 @@ export async function batchLoadPriorOutreachFlags(
     const matchConv = emailConversations.find((c) => c.id === convId);
     const flags: PriorOutreachListFlags = {
       priorOutreachDetected: true,
+      reason: prior.reason,
       conversationId: convId,
       messageId:
         pi?.outreachMessageId ||
@@ -481,6 +484,8 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
   ignoreAlreadyQueued?: boolean;
   /** Explicit resend bypass (future Autopilot / operator override). */
   forceResend?: boolean;
+  /** Queue creation only: configured templates generate the snapshot before insertion. */
+  messageWillBeGenerated?: boolean;
 }): Promise<{
   result: ProspectOutreachEligibilityResult;
   mailboxId: string | null;
@@ -524,45 +529,17 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     }
   }
 
-  const input: ProspectOutreachEligibilityInput = {
-    reviewStatus: pi?.reviewStatus,
-    approvedAt: pi?.approvedAt,
-    approvedByUserId: pi?.approvedByUserId,
-    enrichmentTriggeredBy: pi?.enrichmentTriggeredBy,
-    outreachStatus: priorOutreach.alreadyContacted
-      ? priorOutreach.reason === "already_replied"
-        ? "replied"
-        : "outreach_sent"
-      : pi?.outreachStatus,
-    outreachSentAt: pi?.outreachSentAt,
-    repliedAt: pi?.repliedAt,
-    analysisStatus: pi?.analysisStatus,
-    needsReview: pi?.needsReview,
-    enrichmentStatus: pi?.enrichmentStatus,
-    websiteUrl: resolveProspectWebsiteUrl(params.contact),
-    websiteUrlUsed: pi?.websiteUrlUsed,
-    notQualified: String(pi?.recommendedOffer || "").toLowerCase() === "not_a_fit",
-    email: params.contact.email,
-    phone: params.contact.phone,
-    whatsappId: params.contact.whatsappId,
-    facebookId: params.contact.facebookId,
-    instagramId: params.contact.instagramId,
-    emailConnected: connections.emailConnected,
-    smsConnected: connections.smsConnected,
-    whatsappConnected: connections.whatsappConnected,
-    facebookConnected: connections.facebookConnected,
-    instagramConnected: connections.instagramConnected,
-    smsConsent: false, // Phase 2: no SMS consent model for imported prospects
-    whatsappConsent: false,
-    suppressed: suppression.suppressed,
-    optedOut: suppression.optedOut,
-    suppressionDetail: suppression.detail || suppression.reason || null,
-    automationsPaused: params.contact.automationsPaused === true,
+  const input = buildProspectOutreachEligibilityInput({
+    contact: params.contact,
+    intelligence: pi,
+    priorOutreach,
+    connections,
+    suppression,
     alreadyQueued,
-    preferredChannel: params.preferredChannel || "auto",
-    suggestedFirstMessage: pi?.suggestedFirstMessage,
-    suggestedOutreachSubject: pi?.suggestedOutreachSubject,
-  };
+    preferredChannel: params.preferredChannel,
+    websiteUrl: resolveProspectWebsiteUrl(params.contact),
+    messageWillBeGenerated: params.messageWillBeGenerated,
+  });
 
   const result = resolveProspectOutreachEligibility(input);
   // Attach non-secret probe classifier so queue pause can persist sender_not_connected:<class>.

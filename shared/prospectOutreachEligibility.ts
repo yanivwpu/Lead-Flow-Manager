@@ -73,6 +73,7 @@ export type ProspectOutreachEligibilityInput = {
    */
   allowUnapproved?: boolean;
   /** Required for shared Email campaign hard gate (same as Review toolbar). */
+  messageWillBeGenerated?: boolean;
   suggestedFirstMessage?: string | null;
   suggestedOutreachSubject?: string | null;
 };
@@ -538,6 +539,7 @@ function emailCampaignHardGateReason(
         : input.outreachSentAt,
     repliedAt:
       input.repliedAt instanceof Date ? input.repliedAt.toISOString() : input.repliedAt,
+    messageWillBeGenerated: input.messageWillBeGenerated,
     suggestedFirstMessage: input.suggestedFirstMessage,
     suggestedOutreachSubject: input.suggestedOutreachSubject,
   };

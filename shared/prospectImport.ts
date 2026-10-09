@@ -394,6 +394,10 @@ export type ProspectIntelligence = {
 };
 
 export type ProspectIntelligenceListItem = {
+  /** Authoritative backend queue-preview readiness, evaluated as a batch. */
+  campaignReady?: boolean;
+  campaignReadyBlockCode?: import("./prospectBulkOutreach").ProspectOutreachEligibilityReason | null;
+  campaignReadyBlockLabel?: string | null;
   contactId: string;
   name: string;
   company?: string | null;

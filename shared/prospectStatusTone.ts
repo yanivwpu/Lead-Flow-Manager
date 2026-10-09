@@ -170,6 +170,7 @@ export function resolveProspectNeedsReviewBadgeTone(
     case "missing_information":
     case "needs_review":
     case "discovery_attention":
+    case "campaign_blocked":
     case "outreach_needed":
       return "warning";
     case "enriching":

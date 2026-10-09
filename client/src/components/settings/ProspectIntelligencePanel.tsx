@@ -206,9 +206,18 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+const PENDING_CAMPAIGN_READINESS = {
+  campaignReady: false,
+  campaignReadyBlockCode: null,
+  campaignReadyBlockLabel: "Checking campaign readiness",
+} as const;
+
 function reviewUxInput(row: ProspectIntelligenceListItem) {
   const offer = String(row.intelligence.recommendedOffer || "").toLowerCase();
   return {
+    campaignReady: row.campaignReady === true,
+    campaignReadyBlockCode: row.campaignReadyBlockCode,
+    campaignReadyBlockLabel: row.campaignReadyBlockLabel,
     analysisStatus: row.intelligence.analysisStatus,
     reviewStatus: row.intelligence.reviewStatus,
     needsReview: row.intelligence.needsReview,
@@ -942,8 +951,11 @@ function ProspectIntelligenceDetailDialog({
 
   const applyItemUpdate = (next: ProspectIntelligenceListItem | null | undefined) => {
     if (!next) return;
+    // A single-contact response cannot promote the winner of a batch recipient
+    // deduplication decision. Refresh the batch before showing it ready again.
+    next = { ...next, ...PENDING_CAMPAIGN_READINESS };
     onItemUpdated(next);
-    // Patch cache in place — do not invalidate (avoids table reorder).
+    // Patch in place; the parent refetches without changing stable row order.
     queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
       { queryKey: ["/api/growth-tools/prospect-intelligence"] },
       (old) => {
@@ -2229,7 +2241,11 @@ export function ProspectIntelligencePanel(props: {
         if (!old?.items) return old;
         return {
           ...old,
-          items: old.items.map((row) => (idSet.has(row.contactId) ? patch(row) : row)),
+          items: old.items.map((row) => {
+            if (!idSet.has(row.contactId)) return row;
+            const next = patch(row);
+            return next.campaignReady === false ? next : { ...next, ...PENDING_CAMPAIGN_READINESS };
+          }),
         };
       },
     );
@@ -2271,6 +2287,21 @@ export function ProspectIntelligencePanel(props: {
     ),
     [rawItems, effectiveSelectedIds],
   );
+
+  // Keep the open detail's readiness aligned with the batch after a refresh.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (!prev) return prev;
+      const row = rawItems.find((item) => item.contactId === prev.contactId);
+      if (!row) return prev;
+      return {
+        ...prev,
+        campaignReady: row.campaignReady,
+        campaignReadyBlockCode: row.campaignReadyBlockCode,
+        campaignReadyBlockLabel: row.campaignReadyBlockLabel,
+      };
+    });
+  }, [rawItems]);
 
   // Reconcile eligibility changes in Campaign Ready without waiting for a refresh.
   useEffect(() => {
@@ -2448,13 +2479,10 @@ export function ProspectIntelligencePanel(props: {
         },
       ),
     onSuccess: (data) => {
-      const cacheEntries = queryClient.getQueriesData<{ items: ProspectIntelligenceListItem[] }>({
-        queryKey: ["/api/growth-tools/prospect-intelligence"],
-      });
-      const cacheItems =
-        cacheEntries.find(([, d]) => d?.items?.length)?.[1]?.items ?? rawItems;
+      // Use readiness from the currently displayed batch, not an older cached filter.
+      const currentRows = new Map(rawItems.map((row) => [row.contactId, row]));
       const intersected = data.selection.contactIds.filter((id) => {
-        const row = cacheItems.find((r) => r.contactId === id);
+        const row = currentRows.get(id);
         if (!row) return false;
         const ux = reviewUxInput(row);
         if (isProspectInCampaigns(ux) || String(ux.outcome || "").toLowerCase() === "won") {
@@ -2652,6 +2680,18 @@ export function ProspectIntelligencePanel(props: {
     onSuccess: (data, contactIds) => {
       // Confirm the same frozen IDs; never fall back to the broader selection.
       const skippedIds = new Set(data.preview?.skips.map((skip) => skip.contactId) ?? []);
+      // Reconcile stale readiness immediately, then fetch fresh batch truth (including
+      // duplicate recipients outside the selected set). Preview remains the final gate.
+      if (data.preview?.skips.length) {
+        const skipsById = new Map(data.preview.skips.map((skip) => [skip.contactId, skip]));
+        patchListRows([...skippedIds], (row) => ({
+          ...row,
+          campaignReady: false,
+          campaignReadyBlockCode: skipsById.get(row.contactId)?.reason as ProspectIntelligenceListItem["campaignReadyBlockCode"],
+          campaignReadyBlockLabel: skipsById.get(row.contactId)?.reasonLabel || "Not Campaign Ready",
+        }));
+        void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
+      }
       setQueuePreviewContactIds(contactIds.filter((id) => !skippedIds.has(id)));
       setQueuePreview(data.preview);
       setQueuePreviewOpen(true);
@@ -2782,6 +2822,9 @@ export function ProspectIntelligencePanel(props: {
       patchListRows(ids, (row) => ({
         ...row,
         queueStatus: "queued",
+        campaignReady: false,
+        campaignReadyBlockCode: "duplicate_queued",
+        campaignReadyBlockLabel: "Already in Campaigns",
       }));
       clearSelection();
       setQueuePreviewContactIds([]);
@@ -3739,8 +3782,10 @@ export function ProspectIntelligencePanel(props: {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onItemUpdated={(next) => {
-          setSelected(next);
-          patchListRows([next.contactId], () => next);
+          const pending = { ...next, ...PENDING_CAMPAIGN_READINESS };
+          setSelected(pending);
+          patchListRows([next.contactId], () => pending);
+          void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
         }}
         onQualificationChanged={(decision, contactId) => {
           if (decision === "not_qualified") {
@@ -3772,7 +3817,7 @@ export function ProspectIntelligencePanel(props: {
         enrichPending={bulkApproveMutation.isPending}
         onContactFieldsUpdated={(contactId, patch) => {
           setSelected((prev) =>
-            prev && prev.contactId === contactId ? { ...prev, ...patch } : prev,
+            prev && prev.contactId === contactId ? { ...prev, ...patch, ...PENDING_CAMPAIGN_READINESS } : prev,
           );
           queryClient.setQueriesData<{ items: ProspectIntelligenceListItem[] }>(
             { queryKey: ["/api/growth-tools/prospect-intelligence"] },
@@ -3781,7 +3826,7 @@ export function ProspectIntelligencePanel(props: {
               return {
                 ...old,
                 items: old.items.map((row) =>
-                  row.contactId === contactId ? { ...row, ...patch } : row,
+                  row.contactId === contactId ? { ...row, ...patch, ...PENDING_CAMPAIGN_READINESS } : row,
                 ),
               };
             },

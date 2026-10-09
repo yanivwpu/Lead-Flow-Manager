@@ -3,6 +3,7 @@
  * Single source for filters, assistant counts, Enrich / Qualified eligibility.
  */
 
+import type { ProspectOutreachEligibilityReason } from "./prospectBulkOutreach";
 import { isValidProspectEmail } from "./prospectContactEnrichment";
 import {
   hasTraceableProspectCampaignHistory,
@@ -126,7 +127,8 @@ export type ProspectNeedsReviewBadgeCode =
   | "needs_review"
   | "discovery_attention"
   | "qualified"
-  | "outreach_needed";
+  | "outreach_needed"
+  | "campaign_blocked";
 
 export type ProspectNeedsReviewBadge = {
   code: ProspectNeedsReviewBadgeCode;
@@ -134,6 +136,11 @@ export type ProspectNeedsReviewBadge = {
 };
 
 export type ProspectReviewStateInput = ProspectReviewUxInput & {
+  campaignReady?: boolean;
+  campaignReadyBlockCode?: ProspectOutreachEligibilityReason | null;
+  campaignReadyBlockLabel?: string | null;
+  /** Backend-only eligibility context; never inferred by the browser. */
+  messageWillBeGenerated?: boolean;
   email?: string | null;
   phone?: string | null;
   websiteUrl?: string | null;
@@ -193,6 +200,8 @@ export function resolveProspectNeedsReviewBadge(
     return { code: "needs_review", label: "Needs Review" };
   }
   if (isProspectDecisionQualified(input)) {
+    if (input.campaignReady === true) return { code: "qualified", label: "Campaign Ready" };
+    if (input.campaignReady === false) return { code: "campaign_blocked", label: input.campaignReadyBlockLabel || "Checking campaign readiness" };
     if (!prospectHasCampaignContact(input)) {
       return { code: "missing_email", label: "Missing Email" };
     }
@@ -419,7 +428,8 @@ export type ProspectEligibilityExplanation = {
     | "not_approved"
     | "outreach_needed"
     | "review_not_pending"
-    | "retry_available";
+    | "retry_available"
+    | ProspectOutreachEligibilityReason;
   /** Short user-facing reason. */
   message: string;
 };
@@ -627,6 +637,7 @@ export function needsHumanReview(input: ProspectReviewStateInput): boolean {
 }
 
 export type ProspectEmailCampaignBlockCode =
+  | ProspectOutreachEligibilityReason
   | "not_qualified"
   | "not_approved"
   | "needs_review"
@@ -656,6 +667,14 @@ export function isProspectAlreadyContactedForCampaign(
 export function listEmailCampaignBlockingReasons(
   input: ProspectReviewStateInput,
 ): Array<{ code: ProspectEmailCampaignBlockCode; message: string }> {
+  // Server readiness supersedes row-level hints. Legacy callers without a server result
+  // retain the existing qualification helper; Review explicitly fails closed while loading.
+  if (typeof input.campaignReady === "boolean") {
+    return input.campaignReady ? [] : [{
+      code: input.campaignReadyBlockCode || "not_approved",
+      message: input.campaignReadyBlockLabel || "Checking campaign readiness",
+    }];
+  }
   const blocks: Array<{ code: ProspectEmailCampaignBlockCode; message: string }> = [];
 
   if (isProspectExplicitlyNotQualified(input)) {
@@ -714,6 +733,7 @@ export function listEmailCampaignBlockingReasons(
   if (
     isProspectDecisionQualified(input) &&
     prospectHasCampaignContact(input) &&
+    !input.messageWillBeGenerated &&
     !hasProspectOutreachContent(input)
   ) {
     blocks.push({
@@ -761,7 +781,7 @@ export function isProspectQualifiedForCampaign(input: ProspectReviewStateInput):
 export function isProspectQualifiedCampaignBlocked(
   input: ProspectReviewStateInput,
 ): boolean {
-  if (!isProspectVisibleInReview(input)) return false;
+  if (!isProspectActiveReviewRecord(input)) return false;
   if (!isProspectDecisionQualified(input)) return false;
   return !isProspectQualifiedForCampaign(input);
 }
@@ -1008,7 +1028,12 @@ export function isProspectVisibleInReview(input: ProspectReviewStateInput): bool
   return true;
 }
 
-/** Review Campaign Ready uses the Send hard gate plus active workflow membership. */
+/** Shared active scope for assistant work, blockers, and next actions. */
+export function isProspectActiveReviewRecord(input: ProspectReviewStateInput): boolean {
+  return String(input.lifecycleStatus || "active").trim().toLowerCase() === "active" && isProspectVisibleInReview(input);
+}
+
+/** Review consumes authoritative queue readiness; legacy helpers retain compatibility. */
 export function isProspectCampaignReady(input: ProspectReviewStateInput): boolean {
   return (
     String(input.lifecycleStatus || "active").trim().toLowerCase() === "active" &&
@@ -1145,7 +1170,7 @@ export function countProspectReviewWorkStates(
     analyzing: 0,
   };
   for (const item of items) {
-    if (!isProspectVisibleInReview(item)) continue;
+    if (!isProspectActiveReviewRecord(item)) continue;
     if (isProspectExplicitlyNotQualified(item)) {
       counts.notQualified += 1;
     } else if (isProspectDecisionQualified(item)) {

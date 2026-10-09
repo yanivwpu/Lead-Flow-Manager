@@ -4,6 +4,8 @@
  * Sending goes through existing channelService / EmailProspectOutreachSender.
  */
 
+import { batchEvaluateProspectCampaignReadiness } from "./prospectCampaignReadinessService";
+import { canGenerateCampaignMessage } from "./prospectCampaignReadinessEvaluation";
 import { and, asc, desc, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   contacts,
@@ -270,125 +272,12 @@ export async function previewQueueBatch(params: {
 }): Promise<ProspectOutreachQueuePreview> {
   const workspaceUserId =
     params.workspaceUserId || (await resolveProspectImportDestinationUserId());
-  const settings = await getOutreachSettings(workspaceUserId);
-  const preferred = params.preferredChannel || settings.preferredChannel;
-  const connections = await loadWorkspaceChannelConnections(workspaceUserId);
-
-  const uniqueIds = Array.from(new Set(params.contactIds.filter(Boolean)));
-  const skips: ProspectOutreachQueuePreview["skips"] = [];
-  const eligibleByChannel: Partial<Record<ProspectOutreachChannel, number>> = {};
-  let willQueue = 0;
-  let notBulkEligible = 0;
-  const seenRecipients = new Set<string>();
-
-  for (const contactId of uniqueIds) {
-    const contact = await storage.getContact(contactId);
-    if (!contact) {
-      skips.push({
-        contactId,
-        reason: "missing_identity",
-        detail: "contact_not_found",
-        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "contact_not_found"),
-      });
-      continue;
-    }
-    if (contact.userId !== workspaceUserId) {
-      skips.push({
-        contactId,
-        reason: "missing_identity",
-        detail: "wrong_workspace",
-        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "wrong_workspace"),
-      });
-      continue;
-    }
-    const { result, priorOutreach } = await resolveProspectOutreachEligibilityForContact({
-      contact,
-      workspaceUserId,
-      preferredChannel: preferred,
-      connections,
-    });
-    if (!result.anyEligible || !result.selectedChannel) {
-      const reason = result.summaryReason || result.channels.email?.reason || "not_enabled_for_bulk";
-      const detail = result.channels.email?.detail;
-      const skip = {
-        contactId,
-        name: contact.name,
-        reason,
-        detail,
-        reasonLabel: prospectOutreachEligibilityReasonLabel(reason, detail),
-      };
-      if (
-        reason === "already_outreach_sent" ||
-        reason === "already_replied" ||
-        reason === "needs_review" ||
-        reason === "not_approved" ||
-        reason === "duplicate_queued" ||
-        reason === "suppressed" ||
-        reason === "opted_out" ||
-        reason === "analysis_incomplete" ||
-        isSenderNotConnectedReason(reason) ||
-        reason === "missing_identity" ||
-        reason === "missing_message_snapshot"
-      ) {
-        skips.push(skip);
-      } else {
-        notBulkEligible += 1;
-        skips.push(skip);
-      }
-      continue;
-    }
-
-    const recipient = recipientIdentityForSelectedChannel(result.selectedChannel, contact);
-    if (!recipient) {
-      skips.push({
-        contactId,
-        name: contact.name,
-        reason: "missing_identity",
-        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_identity", "missing_email"),
-      });
-      continue;
-    }
-    const recipientKey = `${result.selectedChannel}:${recipient}`;
-    if (seenRecipients.has(recipientKey)) {
-      skips.push({
-        contactId,
-        name: contact.name,
-        reason: "duplicate_recipient",
-        reasonLabel: prospectOutreachEligibilityReasonLabel("duplicate_recipient"),
-      });
-      continue;
-    }
-
-    const piRows = await db
-      .select()
-      .from(prospectIntelligence)
-      .where(eq(prospectIntelligence.contactId, contactId))
-      .limit(1);
-    const message = String(piRows[0]?.suggestedFirstMessage || "").trim();
-    if (!message) {
-      skips.push({
-        contactId,
-        name: contact.name,
-        reason: "missing_message_snapshot",
-        reasonLabel: prospectOutreachEligibilityReasonLabel("missing_message_snapshot"),
-      });
-      continue;
-    }
-
-    seenRecipients.add(recipientKey);
-    willQueue += 1;
-    eligibleByChannel[result.selectedChannel] =
-      (eligibleByChannel[result.selectedChannel] || 0) + 1;
-  }
-
-  return {
-    selectedCount: uniqueIds.length,
-    willQueue,
-    eligibleByChannel,
-    notBulkEligible,
-    skips,
-    preferredChannel: preferred,
-  };
+  const { preview } = await batchEvaluateProspectCampaignReadiness({
+    contactIds: params.contactIds,
+    workspaceUserId,
+    preferredChannel: params.preferredChannel,
+  });
+  return preview;
 }
 
 export async function createQueueBatch(params: {
@@ -458,7 +347,9 @@ export async function createQueueBatch(params: {
   let delayCursor = Date.now() + 5_000; // first send shortly after queue start
   let queuedCount = 0;
 
-  for (const contactId of Array.from(new Set(params.contactIds.filter(Boolean)))) {
+  const previewSkippedIds = new Set(preview.skips.map((skip) => skip.contactId));
+  for (const contactId of Array.from(new Set(params.contactIds.filter(Boolean))).sort()) {
+    if (previewSkippedIds.has(contactId)) continue;
     const contact = await storage.getContact(contactId);
     if (!contact) {
       console.info(
@@ -479,6 +370,7 @@ export async function createQueueBatch(params: {
       workspaceUserId,
       preferredChannel: preferred,
       connections,
+      messageWillBeGenerated: canGenerateCampaignMessage(settings.outreachInstructions),
     });
 
     if (!result.anyEligible || !result.selectedChannel) {
