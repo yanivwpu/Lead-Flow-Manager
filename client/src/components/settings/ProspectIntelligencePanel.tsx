@@ -104,6 +104,8 @@ import {
   enrichActionLabel,
   explainCanEnrichProspect,
   explainQualifiedForCampaign,
+  isProspectCampaignReady,
+  selectProspectCampaignReadyContactIds,
   formatProspectBulkActionResult,
   isProspectDecisionQualified,
   isProspectEnrichmentRetryable,
@@ -1105,7 +1107,7 @@ function ProspectIntelligenceDetailDialog({
               const primary = resolveProspectDetailPrimaryStatus({
                 analysisStatus: intel.analysisStatus,
                 decision: detailQualificationDecision,
-                readyForCampaign: detailQualifiedExplain?.ok === true,
+                readyForCampaign: item ? isProspectCampaignReady(reviewUxInput(item)) : false,
               });
               const tone =
                 primary.code === "ai_review_failed"
@@ -1876,6 +1878,7 @@ export function ProspectIntelligencePanel(props: {
   const [resolvedFilteredCount, setResolvedFilteredCount] = useState<number | null>(null);
   const [bulkResultBanner, setBulkResultBanner] = useState<string | null>(null);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [queuePreviewContactIds, setQueuePreviewContactIds] = useState<string[]>([]);
   const [queuePreviewOpen, setQueuePreviewOpen] = useState(false);
   const [queuePreview, setQueuePreview] = useState<{
     selectedCount: number;
@@ -2159,6 +2162,7 @@ export function ProspectIntelligencePanel(props: {
           return false;
         }
       }
+      if (workFilter === "campaign_ready") return isProspectCampaignReady(ux);
       if (pinnedVisibleIds.has(row.contactId)) return true;
       return matchesProspectReviewWorkFilter(ux, workFilter);
     });
@@ -2249,7 +2253,7 @@ export function ProspectIntelligencePanel(props: {
   }, [selectAllFiltered, resolvedFilteredIds, currentFiltersPayload, selectedIds]);
 
   const selectedCount = selectAllFiltered
-    ? resolvedFilteredCount ?? resolvedFilteredIds?.length ?? 0
+    ? resolvedFilteredIds?.length ?? resolvedFilteredCount ?? 0
     : selectedIds.size;
   const selectedContactIds = Array.from(
     selectAllFiltered && resolvedFilteredIds ? resolvedFilteredIds : selectedIds,
@@ -2259,6 +2263,30 @@ export function ProspectIntelligencePanel(props: {
     if (selectAllFiltered) return new Set(items.map((i) => i.contactId));
     return selectedIds;
   }, [selectAllFiltered, resolvedFilteredIds, items, selectedIds]);
+
+  const campaignReadySelectedIds = useMemo(
+    () => selectProspectCampaignReadyContactIds(
+      rawItems.map((row) => ({ ...reviewUxInput(row), contactId: row.contactId })),
+      effectiveSelectedIds,
+    ),
+    [rawItems, effectiveSelectedIds],
+  );
+
+  // Reconcile eligibility changes in Campaign Ready without waiting for a refresh.
+  useEffect(() => {
+    if (workFilter !== "campaign_ready") return;
+    const ready = new Set(rawItems.filter((row) => isProspectCampaignReady(reviewUxInput(row)))
+      .map((row) => row.contactId));
+    setSelectedIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => ready.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    setResolvedFilteredIds((prev) => {
+      if (!prev) return prev;
+      const next = prev.filter((id) => ready.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [rawItems, workFilter]);
 
   const selectionEligibility = useMemo(() => {
     let canEnrich = 0;
@@ -2289,7 +2317,7 @@ export function ProspectIntelligencePanel(props: {
       } else {
         unavailable += 1;
       }
-      if (qualEx.ok) qualified += 1;
+      if (isProspectCampaignReady(ux)) qualified += 1;
       if (isProspectDecisionQualified(ux) && qualEx.code === "missing_email") missingEmail += 1;
       else if (!qualEx.ok && qualEx.code === "missing_email") missingEmail += 1;
       if (ux.notQualified === true && !isProspectDecisionQualified(ux)) notQualified += 1;
@@ -2612,22 +2640,19 @@ export function ProspectIntelligencePanel(props: {
     });
   };
   const previewQueueMutation = useMutation({
-    mutationFn: (contactIds?: string[]) =>
+    mutationFn: (contactIds: string[]) =>
       fetchJson<{ preview: typeof queuePreview }>(
         "/api/growth-tools/prospect-outreach/queue/preview",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            contactIds?.length
-              ? { contactIds, preferredChannel: "auto" }
-              : { ...selectionBody, preferredChannel: "auto" },
-          ),
+          body: JSON.stringify({ contactIds, preferredChannel: "auto" }),
         },
       ),
-    onMutate: (contactIds) => {
-    },
-    onSuccess: (data) => {
+    onSuccess: (data, contactIds) => {
+      // Confirm the same frozen IDs; never fall back to the broader selection.
+      const skippedIds = new Set(data.preview?.skips.map((skip) => skip.contactId) ?? []);
+      setQueuePreviewContactIds(contactIds.filter((id) => !skippedIds.has(id)));
       setQueuePreview(data.preview);
       setQueuePreviewOpen(true);
     },
@@ -2723,11 +2748,12 @@ export function ProspectIntelligencePanel(props: {
           skips?: unknown[];
         };
         queuedItemIds?: string[];
+        queuedContactIds: string[];
       }>("/api/growth-tools/prospect-outreach/queue", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...selectionBody,
+          contactIds: queuePreviewContactIds,
           preferredChannel: "auto",
           idempotencyKey: `ui-${Date.now()}`,
         }),
@@ -2745,7 +2771,7 @@ export function ProspectIntelligencePanel(props: {
         }),
       );
       setQueuePreviewOpen(false);
-      const ids = Array.from(effectiveSelectedIds);
+      const ids = data.queuedContactIds;
       // Remove from Review pin — do not keep queued rows visible via pin.
       setPinnedVisibleIds((prev) => {
         const next = new Set(prev);
@@ -2758,6 +2784,7 @@ export function ProspectIntelligencePanel(props: {
         queueStatus: "queued",
       }));
       clearSelection();
+      setQueuePreviewContactIds([]);
       // Quiet refresh for queue counts — stable order preserves row positions.
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-outreach"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/growth-tools/prospect-intelligence"] });
@@ -3245,12 +3272,9 @@ export function ProspectIntelligencePanel(props: {
               previewQueueMutation.isPending
             }
             onClick={() => {
-              const qualifiedIds = Array.from(effectiveSelectedIds).filter((id) => {
-                const row = rawItems.find((r) => r.contactId === id);
-                if (!row) return false;
-                return explainQualifiedForCampaign(reviewUxInput(row)).ok;
-              });
-              previewQueueMutation.mutate(qualifiedIds.length ? qualifiedIds : undefined);
+              if (campaignReadySelectedIds.length) {
+                previewQueueMutation.mutate(campaignReadySelectedIds);
+              }
             }}
             data-testid="pi-queue-outreach"
             title={

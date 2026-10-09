@@ -10,6 +10,7 @@ import {
   isProspectDecisionQualified,
   isProspectQualifiedCampaignBlocked,
   isProspectQualifiedForCampaign,
+  isProspectCampaignReady,
   isProspectVisibleInReview,
   resolveQualifiedCampaignBlockCode,
   type ProspectEmailCampaignBlockCode,
@@ -314,7 +315,7 @@ export function buildAiGrowthAssistantModel(
     (p) => isProspectVisibleInReview(p) && isProspectDecisionQualified(p),
   ).length;
   const campaignReady = items.filter(
-    (p) => isProspectVisibleInReview(p) && isProspectQualifiedForCampaign(p),
+    (p) => isProspectCampaignReady(p),
   ).length;
   const campaignBlocked = items.filter((p) => isProspectQualifiedCampaignBlocked(p)).length;
   const blockerLines = countQualifiedCampaignBlockers(items);
