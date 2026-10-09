@@ -1766,7 +1766,15 @@ export async function listProspectIntelligence(
   });
 
   const limit = Math.min(Math.max(filters.limit ?? 200, 1), 1000);
-  return items.slice(0, limit);
+  const reviewItems = items.slice(0, limit);
+  const { batchEvaluateProspectCampaignReadiness } = await import("./prospectCampaignReadinessService");
+  const { readiness } = await batchEvaluateProspectCampaignReadiness({
+    contactIds: reviewItems.map((item) => item.contactId),
+    workspaceUserId,
+    preferredChannel: "auto",
+    context: { contacts: contactMap, intelligence: new Map(rows.map((row) => [row.contactId, row])), priorOutreach: priorByContact },
+  });
+  return reviewItems.map((item) => ({ ...item, ...readiness.get(item.contactId)! }));
 }
 
 export async function getProspectIntelligenceDetail(
@@ -1842,7 +1850,14 @@ export async function getProspectIntelligenceDetail(
       ? String(pai.attentionReason).trim()
       : null;
 
+  const { batchEvaluateProspectCampaignReadiness } = await import("./prospectCampaignReadinessService");
+  const { readiness } = await batchEvaluateProspectCampaignReadiness({
+    contactIds: [contactId], workspaceUserId, preferredChannel: "auto",
+    context: { contacts: new Map([[contactId, contact]]), intelligence: new Map([[contactId, rows[0]]]), priorOutreach: priorMap },
+  });
+
   return {
+    ...readiness.get(contactId)!,
     contactId: contact.id,
     name: contact.name,
     company: rows[0].companyName ?? null,

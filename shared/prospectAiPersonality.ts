@@ -12,6 +12,7 @@ import {
   isProspectQualifiedForCampaign,
   isProspectCampaignReady,
   isProspectVisibleInReview,
+  isProspectActiveReviewRecord,
   resolveQualifiedCampaignBlockCode,
   type ProspectEmailCampaignBlockCode,
   type ProspectReviewStateInput,
@@ -234,6 +235,12 @@ function blockerLabel(code: string, count: number): string {
       return count === 1
         ? "1 qualified prospect is missing an email address."
         : `${count} qualified prospects are missing an email address.`;
+    case "already_in_campaign":
+    case "duplicate_queued":
+    case "duplicate_recipient":
+    case "dedup_key_collision":
+      return `${count} qualified prospect${count === 1 ? " is" : "s are"} already in Campaigns.`;
+    case "missing_message_snapshot":
     case "outreach_needed":
       return count === 1
         ? "1 qualified prospect still needs outreach copy."
@@ -303,13 +310,19 @@ export function buildAiGrowthAssistantModel(
   items: AiGrowthAssistantItemInput[],
   options?: AiGrowthAssistantOptions,
 ): AiGrowthAssistantModel {
+  const hasActiveRecords = items.some((item) => String(item.lifecycleStatus || "active").trim().toLowerCase() === "active");
+  items = items.filter(isProspectActiveReviewRecord);
   const counts = countProspectReviewWorkStates(items);
   const contactFound = items.filter(
     (item) =>
       String(item.enrichmentStatus || "").toLowerCase() === "completed" &&
       (item.enrichmentEmailFound === true || item.enrichmentPhoneFound === true),
   ).length;
-  const bulkFailed = Math.max(0, options?.failedQualificationCount ?? 0);
+  // Historical bulk summaries cannot resurrect archived or deleted work.
+  const bulkFailed = Math.min(
+    Math.max(0, options?.failedQualificationCount ?? 0),
+    items.filter((item) => String(item.analysisStatus || "").toLowerCase() === "failed").length,
+  );
   const busy = counts.analyzing > 0 || counts.enriching > 0;
   const decisionQualified = items.filter(
     (p) => isProspectVisibleInReview(p) && isProspectDecisionQualified(p),
@@ -354,13 +367,13 @@ export function buildAiGrowthAssistantModel(
     if (counts.needsReview > 0) {
       return "Open Needs Review and decide fit for the remaining rows.";
     }
-    if (items.length === 0) return "Discover businesses to get started.";
+    if (!hasActiveRecords) return "Discover businesses to get started.";
     return "Discover more businesses when ready.";
   };
 
   const lines: AiGrowthAssistantLine[] = [];
 
-  if (items.length === 0) {
+  if (!hasActiveRecords) {
     lines.push({ emoji: "👋", text: "No prospects in Review yet." });
     lines.push({ emoji: "✨", text: "Discover businesses to get started." });
   } else if (!workWaiting) {
