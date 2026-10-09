@@ -1008,6 +1008,25 @@ export function isProspectVisibleInReview(input: ProspectReviewStateInput): bool
   return true;
 }
 
+/** Review Campaign Ready uses the Send hard gate plus active workflow membership. */
+export function isProspectCampaignReady(input: ProspectReviewStateInput): boolean {
+  return (
+    String(input.lifecycleStatus || "active").trim().toLowerCase() === "active" &&
+    isProspectVisibleInReview(input) &&
+    explainQualifiedForCampaign(input).ok
+  );
+}
+
+/** Freeze only genuinely ready members of the current Review selection. */
+export function selectProspectCampaignReadyContactIds(
+  rows: readonly (ProspectReviewStateInput & { contactId: string })[],
+  selectedIds: ReadonlySet<string>,
+): string[] {
+  return Array.from(new Set(rows.filter(
+    (row) => selectedIds.has(row.contactId) && isProspectCampaignReady(row),
+  ).map((row) => row.contactId)));
+}
+
 /**
  * Primary filters:
  * - all → active work only; explicit Not Qualified is a separate closed queue
@@ -1042,7 +1061,7 @@ export function matchesProspectReviewWorkFilter(
   }
 
   if (filter === "campaign_ready") {
-    return explainQualifiedForCampaign(input).ok;
+    return isProspectCampaignReady(input);
   }
 
   if (filter === "needs_review") {
@@ -1197,7 +1216,7 @@ export function resolveProspectReviewPresentation(
     decision,
     decisionQualified,
     awaitingHumanReview,
-    campaignReady: campaign.ok,
+    campaignReady: isProspectCampaignReady(input),
     campaignBlockCode: campaign.ok ? null : campaign.code,
     rowBadge: resolveProspectNeedsReviewBadge(input),
     displayPriority,

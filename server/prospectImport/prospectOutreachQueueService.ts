@@ -402,6 +402,7 @@ export async function createQueueBatch(params: {
   batch: ProspectOutreachBatchSummary;
   preview: ProspectOutreachQueuePreview;
   queuedItemIds: string[];
+  queuedContactIds: string[];
 }> {
   const workspaceUserId =
     params.workspaceUserId || (await resolveProspectImportDestinationUserId());
@@ -667,6 +668,7 @@ export async function createQueueBatch(params: {
     batch: mapBatch(refreshed[0] || batch),
     preview: { ...preview, willQueue: queuedCount },
     queuedItemIds,
+    queuedContactIds,
   };
 }
 

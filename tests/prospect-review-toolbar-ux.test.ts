@@ -104,7 +104,8 @@ const panelSrc = readFileSync(
   assert.ok(panelSrc.includes("`Enrich ${selectionEligibility.canEnrich}`") || panelSrc.includes("Enrich ${selectionEligibility.canEnrich}"));
   assert.ok(panelSrc.includes("Send ${selectionEligibility.qualified} to Campaign"));
   assert.ok(panelSrc.includes("startProspectEnrichment"));
-  assert.ok(panelSrc.includes("explainQualifiedForCampaign(reviewUxInput(row)).ok"));
+  assert.ok(panelSrc.includes("selectProspectCampaignReadyContactIds("));
+  assert.ok(panelSrc.includes("previewQueueMutation.mutate(campaignReadySelectedIds)"));
 }
 
 {

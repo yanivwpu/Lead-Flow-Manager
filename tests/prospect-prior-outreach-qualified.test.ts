@@ -26,6 +26,9 @@ const baseQualified = {
   enrichmentStatus: "completed" as const,
   email: "a@b.com",
   websiteUrl: "https://example.com",
+  // Keep this otherwise-ready fixture aligned with the required outreach gate.
+  suggestedFirstMessage: "Hi — a quick idea for your team.",
+  suggestedOutreachSubject: "A quick idea",
 };
 
 // A. Real manual/historical outbound conversation, no PI message id, no queue
