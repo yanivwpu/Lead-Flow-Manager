@@ -49,7 +49,7 @@ export function getUpgradeNavigationPath(options?: {
 
   const shop = options?.shopHint ?? getShopifyShopHint();
   const params = new URLSearchParams();
-  params.set("shopify_installed", "1");
+  params.set("shopify_pricing", "1");
   if (shop) params.set("shop", shop);
   return `/pricing?${params.toString()}`;
 }

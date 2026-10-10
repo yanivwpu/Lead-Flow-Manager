@@ -171,7 +171,7 @@ export function getShopifyBootstrapContext(
   const onApp = path === "/app" || path.startsWith("/app/");
 
   // The server-verified start screen owns recovery/auth states. Drop stale pricing hints.
-  if (path === "/shopify/start") {
+  if (path === "/shopify/start" || (onPricing && params.get("shopify_pricing") === "1")) {
     clearShopifyPostInstallPricingPath();
     clearShopifyPlanPickerOpened();
     return { active: false, shop, shopifyInstalled: false, embedded: false,

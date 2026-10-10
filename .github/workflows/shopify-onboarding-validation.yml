@@ -4,6 +4,7 @@ on:
     paths:
       - "server/shopify*.ts"
       - "shared/shopify*.ts"
+      - "client/index.html"
       - "client/src/App.tsx"
       - "client/src/pages/AppLayout.tsx"
       - "client/src/pages/ShopifyStart.tsx"

@@ -7,6 +7,8 @@ import {
   resolveShopifyOnboardingState, shopifyInstallDestination,
   parseShopifyActivationEvent, isEarlyShopifyUninstall,
 } from "../shared/shopifyOnboarding";
+import { getShopifyBootstrapContext, resolveShopifyBootstrapDestination } from "../client/src/lib/shopifyBootstrap";
+import { getUpgradeNavigationPath } from "../client/src/lib/proAiTrialState";
 import { ShopifyStartView } from "../client/src/components/ShopifyStartView";
 
 const base = { shopifyShop: "eligible.myshopify.com", shopifyAccessToken: "test-token",
@@ -81,4 +83,26 @@ test("telemetry accepts only bounded milestones and strips arbitrary data", () =
   assert.equal(isEarlyShopifyUninstall("2026-10-09T01:00:00Z", now), false);
   assert.equal(isEarlyShopifyUninstall("invalid", now), false);
   assert.equal(isEarlyShopifyUninstall("2026-10-09T02:00:00Z", now), false);
+});
+
+test("guided start clears stale pricing, legacy callbacks route to start, and voluntary pricing stays accessible", () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key) };
+  const original = (globalThis as any).sessionStorage;
+  (globalThis as any).sessionStorage = storage;
+  try {
+    const legacy = getShopifyBootstrapContext("/pricing", "?shopify_installed=1&shop=eligible.myshopify.com");
+    assert.equal(legacy.active, true);
+    assert.equal(resolveShopifyBootstrapDestination(legacy, true, false, false), "/shopify/start");
+    values.set("whachatcrm_shopify_post_install_pricing", "/pricing?shopify_installed=1");
+    assert.equal(getShopifyBootstrapContext("/shopify/start", "").active, false);
+    assert.equal(values.size, 0);
+    const pricingPath = getUpgradeNavigationPath({ isShopify: true, shopHint: base.shopifyShop });
+    assert.match(pricingPath, /shopify_pricing=1/);
+    assert.doesNotMatch(pricingPath, /shopify_installed/);
+    const [path, search] = pricingPath.split("?");
+    assert.equal(getShopifyBootstrapContext(path, "?" + search).active, false);
+  } finally { (globalThis as any).sessionStorage = original; }
 });

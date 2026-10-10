@@ -59,14 +59,24 @@
           } catch (e) {}
           var persistedShopify = persisted && persisted.indexOf("/pricing") === 0;
 
-          var shopifyIntent =
+          // Guided start and voluntary pricing must not inherit a mandatory-pricing preboot.
+          if (p === "/shopify/start" || (onPricing && params.get("shopify_pricing") === "1")) {
+            try {
+              sessionStorage.removeItem("whachatcrm_shopify_post_install_pricing");
+              sessionStorage.removeItem("whachatcrm_shopify_plan_picker_opened");
+            } catch (e) {}
+            persistedShopify = false;
+          }
+          var bypassInstallBootstrap = p === "/shopify/start" ||
+            (onPricing && params.get("shopify_pricing") === "1");
+          var shopifyIntent = !bypassInstallBootstrap && (
             shopifyInstalled ||
             embedded ||
             persistedShopify ||
             (shopOk && hmac) ||
             (p === "/auth" && (shopOk || redirectShopify)) ||
             (onPricing && (shopOk || shopifyInstalled)) ||
-            (p === "/" && (shopOk || shopifyInstalled));
+            (p === "/" && (shopOk || shopifyInstalled)));
 
           if (shopifyIntent) {
             document.documentElement.classList.add(

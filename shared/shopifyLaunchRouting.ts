@@ -54,7 +54,7 @@ export function isProAiTrialActive(
 }
 
 function hasLegacyTrialWindow(user: ShopifyLaunchBillingUser, now: Date = new Date()): boolean {
-  if (!user.trialEndsAt || new Date(user.trialEndsAt) <= now) return false;
+  if (!user.trialEndsAt || !Number.isFinite(new Date(user.trialEndsAt).getTime()) || new Date(user.trialEndsAt) <= now) return false;
   if (user.trialStatus === "expired") return false;
   return true;
 }
