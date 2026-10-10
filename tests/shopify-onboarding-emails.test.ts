@@ -127,7 +127,7 @@ test("E–H: first install Day 0 once, owner email recipient, Connect WhatsApp C
   const service = src("server/shopifyOnboardingEmailService.ts");
   assert.ok(service.includes("if (user.shopifyWelcomeEmailSentAt) return true"));
   assert.ok(service.includes("usableShopifyOwnerEmail(user.shopifyOwnerEmail)"));
-  assert.ok(service.includes("sendShopifyWelcomeEmail(user.name, recipient)"));
+  assert.ok(service.includes("sendShopifyWelcomeEmail(current.name, recipient)"));
   assert.ok(!service.includes("sendShopifyWelcomeEmail(user.name, user.email)"));
 });
 

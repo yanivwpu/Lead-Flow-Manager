@@ -1,3 +1,4 @@
+import { normalizeDiagnosticTypeProperties } from "./typecheck-diagnostic-normalization.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +21,10 @@ function check(directory) {
   const diagnostics = new Map();
   let current = "";
   const save = () => {
-    if (current) diagnostics.set(current, (diagnostics.get(current) || 0) + 1);
+    if (current) {
+      const normalized = normalizeDiagnosticTypeProperties(current);
+      diagnostics.set(normalized, (diagnostics.get(normalized) || 0) + 1);
+    }
     current = "";
   };
   for (const line of lines) {

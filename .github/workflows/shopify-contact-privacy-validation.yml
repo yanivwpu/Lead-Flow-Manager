@@ -19,6 +19,8 @@ on:
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
       - "scripts/check-types-against-base.mjs"
+      - "scripts/typecheck-diagnostic-normalization.mjs"
+      - "tests/typecheck-diagnostic-normalization.test.mjs"
       - ".github/workflows/shopify-contact-privacy-validation.yml"
 permissions:
   contents: read
@@ -52,6 +54,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Contact capture, optional confirmation, and real PostgreSQL erasure
         run: |
+          node --test tests/typecheck-diagnostic-normalization.test.mjs
           npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
