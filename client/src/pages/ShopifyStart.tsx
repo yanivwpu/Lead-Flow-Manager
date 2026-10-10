@@ -11,6 +11,7 @@ export function ShopifyStart() {
   const { i18n } = useTranslation();
   const { user, isLoading, sessionAligned, refreshSession } = useAuth();
   const cache = useQueryClient();
+  const installationFailed = new URLSearchParams(window.location.search).get("installation_error") === "1";
   const [busy, setBusy] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   const [sessionTimedOut, setSessionTimedOut] = useState(false);
@@ -23,7 +24,7 @@ export function ShopifyStart() {
     return () => window.clearTimeout(timeout);
   }, []);
   const query = useQuery<ShopifyOnboardingSnapshot>({
-    queryKey: key, enabled: !!user && sessionAligned,
+    queryKey: key, enabled: !!user && sessionAligned && !installationFailed,
     retry: false, staleTime: 0,
     queryFn: async () => {
       const response = await fetch("/api/shopify/onboarding", {
@@ -36,10 +37,10 @@ export function ShopifyStart() {
     },
   });
   useEffect(() => {
-    if (!user || !sessionAligned || waitingForSession) return;
+    if (!user || !sessionAligned || waitingForSession || installationFailed) return;
     void trackShopifyActivation(user.id, "first_app_page_reached", "start");
     if (query.isFetched) void trackShopifyActivation(user.id, "first_successful_render", "start");
-  }, [user?.id, sessionAligned, waitingForSession, query.isFetched]);
+  }, [user?.id, sessionAligned, waitingForSession, query.isFetched, installationFailed]);
 
   const refresh = async () => {
     setBusy(true);
@@ -67,10 +68,10 @@ export function ShopifyStart() {
     finally { setBusy(false); }
   };
 
-  const loading = (waitingForSession && !sessionTimedOut) ||
-    (!!user && sessionAligned && query.isPending);
+  const loading = !installationFailed && ((waitingForSession && !sessionTimedOut) ||
+    (!!user && sessionAligned && query.isPending));
   const snapshot: ShopifyOnboardingSnapshot | null =
-    !loading && (!user || (waitingForSession && sessionTimedOut))
+    !loading && (installationFailed || !user || (waitingForSession && sessionTimedOut))
       ? { state: "reconnect_required" } : query.data ?? null;
   return <ShopifyStartView locale={i18n.language} snapshot={snapshot} loading={loading} busy={busy}
     failed={query.isError || retryFailed} onRetry={() => void retry()} onRefresh={() => void refresh()} />;

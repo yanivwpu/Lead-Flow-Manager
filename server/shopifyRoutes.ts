@@ -38,6 +38,7 @@ import { shopifyInstallDestination, isEarlyShopifyUninstall } from '@shared/shop
 import { getShopifyOnboardingSnapshot } from './shopifyOnboardingService';
 import { createShopifyOnboardingRouter } from './shopifyOnboardingRoutes';
 import { logShopifyActivation } from './shopifyActivationTelemetry';
+import { establishShopifyLogin } from './shopifyLoginSession';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -213,6 +214,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to exchange authorization code' });
     }
 
+    logShopifyActivation(shop, "oauth_completed", { source: "oauth" });
     const sessionUserId = (req as any).user?.id as string | undefined;
     const resolved = await resolveShopifyInstallUser({ shop, sessionUserId });
     const normalizedShop = resolved.normalizedShop;
@@ -264,7 +266,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
     }
 
-    logShopifyActivation(normalizedShop, "oauth_completed", { source: "oauth" });
     let trialClaim;
     try {
       trialClaim = await claimShopifyShopTrialForInstall({ canonicalShop: normalizedShop, user });
@@ -346,13 +347,13 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId: user.id,
         type: 'shopify',
         name: 'Shopify',
-        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'] },
+        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'], shopifyLastInstalledAt: new Date().toISOString() },
         isActive: true,
       });
     } else {
       const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
       await storage.updateIntegration(existingIntegration.id, {
-        config: { ...existingConfig, shopUrl: normalizedShop },
+        config: { ...existingConfig, shopUrl: normalizedShop, shopifyLastInstalledAt: new Date().toISOString() },
         isActive: true,
       });
     }
@@ -365,12 +366,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     // Persist login before redirecting; a successful OAuth exchange is not a rendered app session.
-    await new Promise<void>((resolve, reject) => {
-      (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
-    });
-    await new Promise<void>((resolve, reject) => {
-      req.session.save((err) => (err ? reject(err) : resolve()));
-    });
+    await establishShopifyLogin(req, user);
     let destination = "/shopify/start";
     try {
       const current = await storage.getUserForSession(user.id);
@@ -381,12 +377,8 @@ router.get('/callback', async (req: Request, res: Response) => {
     return res.redirect(destination);
   } catch (error) {
     console.error('Shopify callback error:', error);
-    if (isUsersEmailUniqueViolation(error)) {
-      return res.status(409).json({
-        error: 'Shopify merchant account already exists. Please open the app from Shopify admin to continue.',
-      });
-    }
-    res.status(500).json({ error: 'Installation failed' });
+    // No tokens, shop identifiers, or raw error messages in the browser destination.
+    return res.redirect("/shopify/start?installation_error=1");
   }
 });
 
@@ -631,10 +623,6 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
       return res.status(200).json({ received: true });
     }
 
-    if (isEarlyShopifyUninstall(user.shopifyInstalledAt)) {
-      logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
-    }
-
     try {
       // Keep shopify_shop and shopify_shop_trials so a reinstall cannot restart a trial.
       // shop/redact (not uninstall) is the path that erases the shop-identifying ledger.
@@ -654,6 +642,10 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
 
     try {
       const integration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
+      const lastInstalledAt = (integration?.config as Record<string, unknown> | null)?.shopifyLastInstalledAt;
+      if (isEarlyShopifyUninstall(typeof lastInstalledAt === "string" ? lastInstalledAt : user.shopifyInstalledAt)) {
+        logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
+      }
       if (integration) {
         await storage.updateIntegration(integration.id, { isActive: false });
         console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_deactivated' });

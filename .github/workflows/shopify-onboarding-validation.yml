@@ -12,6 +12,7 @@ on:
       - "client/src/lib/shopify*.ts"
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
+      - "scripts/check-types-against-base.mjs"
       - ".github/workflows/shopify-onboarding-validation.yml"
 permissions:
   contents: read
@@ -45,14 +46,17 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Onboarding behavior, HTTP session recovery, and real PostgreSQL atomicity
         run: |
-          npx tsx --test tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts
+          npx tsx --test tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts tests/shopify-login-session.test.ts
           npx tsx --test tests/shopify-trial-provisioning-postgres.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts
           npx tsx tests/shopify-shop-trial-reconciliation.test.ts
           npx tsx --test tests/shopify-managed-pricing.test.ts tests/shopify-oauth-state.test.ts tests/shopify-onboarding-emails.test.ts
-      - name: Typecheck
-        run: npm run check
+      - name: Reject TypeScript regressions against the exact PR base
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
       - name: Build
+        if: ${{ !cancelled() }}
         run: npm run build

@@ -29,9 +29,17 @@ export function useShopifyActivationObservation(
     }
     if (!userId || !isShopify) return;
     void trackShopifyActivation(userId, "first_app_page_reached", "other");
-    if (hasAnyMessagingChannel === false) observedWithoutChannel.current = true;
+    const pendingKey = "whachat_shopify_channel_pending_" + userId;
+    try {
+      if (sessionStorage.getItem(pendingKey) === "1") observedWithoutChannel.current = true;
+    } catch { /* Browser storage is optional. */ }
+    if (hasAnyMessagingChannel === false) {
+      observedWithoutChannel.current = true;
+      try { sessionStorage.setItem(pendingKey, "1"); } catch { /* optional */ }
+    }
     if (hasAnyMessagingChannel === true && observedWithoutChannel.current) {
       void trackShopifyActivation(userId, "first_channel_setup", "integrations");
+      try { sessionStorage.removeItem(pendingKey); } catch { /* optional */ }
     }
   }, [userId, isShopify, hasAnyMessagingChannel]);
 }
