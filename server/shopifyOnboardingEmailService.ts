@@ -4,7 +4,7 @@ import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { storage } from "./storage";
 import { fetchShopifyShopOwnerEmailResult } from "./shopify";
 import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
-import { persistShopifyOwnerEmailCapture } from "./shopifyContactService";
+import { persistShopifyOwnerEmailCapture, withShopifyMailPrivacyFence } from "./shopifyContactService";
 import {
   sendShopifyWelcomeEmail,
   sendShopifyActivationEmailDay5,
@@ -76,19 +76,15 @@ export async function trySendShopifyWelcomeEmailForUser(user: {
   shopifyWelcomeEmailSentAt?: Date | string | null;
   deletionRequestedAt?: Date | string | null;
 }): Promise<boolean> {
-  if (user.shopifyWelcomeEmailSentAt) return true;
-  if (user.deletionRequestedAt) return true;
-  if (!isShopifyInstallActiveForOnboarding(user)) return true;
-
-  const recipient = usableShopifyOwnerEmail(user.shopifyOwnerEmail);
-  if (!recipient) return false;
-  if (isShopifySyntheticMerchantEmail(recipient)) return false;
-
-  const sent = await sendShopifyWelcomeEmail(user.name, recipient);
-  if (sent) {
-    await storage.updateUser(user.id, { shopifyWelcomeEmailSentAt: new Date() });
-  }
-  return sent;
+  if (!user.shopifyShop) return true;
+  return withShopifyMailPrivacyFence(user.id, user.shopifyShop, async current => {
+    if (current.shopifyWelcomeEmailSentAt) return true;
+    const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+    if (!recipient) return false;
+    const sent = await sendShopifyWelcomeEmail(current.name, recipient);
+    if (sent) await storage.updateUser(current.id, { shopifyWelcomeEmailSentAt: new Date() });
+    return sent;
+  });
 }
 
 async function maybeRefreshOwnerEmail(user: ShopifyOnboardingRow): Promise<string | null> {
@@ -197,16 +193,15 @@ export async function runShopifyOnboardingEmails(): Promise<{
 
       if (choice.action === "day5") {
         try {
-          const ok = await sendShopifyActivationEmailDay5(firstName(user.name), ownerEmail);
-          if (ok) {
-            await db
-              .update(users)
-              .set({ shopifyActivationEmailDay5SentAt: now })
-              .where(eq(users.id, user.id));
-            day5Sent++;
-          } else {
-            errors++;
-          }
+          const ok = await withShopifyMailPrivacyFence(user.id, user.shopifyShop!, async current => {
+            if (current.shopifyActivationEmailDay5SentAt) return true;
+            const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+            if (!recipient) return false;
+            const sent = await sendShopifyActivationEmailDay5(firstName(current.name), recipient);
+            if (sent) await db.update(users).set({ shopifyActivationEmailDay5SentAt: now }).where(eq(users.id, current.id));
+            return sent;
+          });
+          if (ok) day5Sent++; else errors++;
         } catch (err) {
           errors++;
           console.error("[ShopifyContact] onboarding_email_delivery_failed");
@@ -216,19 +211,18 @@ export async function runShopifyOnboardingEmails(): Promise<{
 
       if (choice.action === "day10") {
         try {
-          const ok = await sendShopifyActivationEmailDay10(firstName(user.name), ownerEmail);
-          if (ok) {
-            await db
-              .update(users)
-              .set({
-                shopifyActivationEmailDay10SentAt: now,
-                ...(choice.alsoCompleteDay5 ? { shopifyActivationEmailDay5SentAt: now } : {}),
-              })
-              .where(eq(users.id, user.id));
-            day10Sent++;
-          } else {
-            errors++;
-          }
+          const ok = await withShopifyMailPrivacyFence(user.id, user.shopifyShop!, async current => {
+            if (current.shopifyActivationEmailDay10SentAt) return true;
+            const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+            if (!recipient) return false;
+            const sent = await sendShopifyActivationEmailDay10(firstName(current.name), recipient);
+            if (sent) await db.update(users).set({
+              shopifyActivationEmailDay10SentAt: now,
+              ...(choice.alsoCompleteDay5 ? { shopifyActivationEmailDay5SentAt: now } : {}),
+            }).where(eq(users.id, current.id));
+            return sent;
+          });
+          if (ok) day10Sent++; else errors++;
         } catch (err) {
           errors++;
           console.error("[ShopifyContact] onboarding_email_delivery_failed");

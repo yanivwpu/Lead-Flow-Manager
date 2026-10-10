@@ -97,3 +97,16 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
       .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify")));
   });
 }
+
+/** Mail snapshots must not send after uninstall/redact, including across app instances. */
+export async function withShopifyMailPrivacyFence(userId: string, rawShop: string, send: (current: typeof users.$inferSelect) => Promise<boolean>): Promise<boolean> {
+  const shop = normalizeShopifyShopDomain(rawShop);
+  if (!shop) return false;
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+    const [current] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!current || normalizeShopifyShopDomain(current.shopifyShop) !== shop ||
+        !isShopifyContactInstallationActive(current)) return false;
+    return send(current);
+  });
+}

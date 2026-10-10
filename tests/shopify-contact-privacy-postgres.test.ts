@@ -27,7 +27,7 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
   delete process.env.GHL_MARKETPLACE_PRO_PLAN_ID;
   const { db } = await import("../drizzle/db");
   const { persistShopifyOwnerEmailCapture: persist, readShopifySupportContact: read,
-    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyPrivacyFence: fence } =
+    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyPrivacyFence: fence, withShopifyMailPrivacyFence: mailFence } =
       await import("../server/shopifyContactService");
   const { redactShopifyStore: redact } = await import("../server/shopifyPrivacyRedaction");
   const { processShopifyExternalErasureTasks: external } = await import("../server/shopifyExternalErasure");
@@ -201,6 +201,9 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     let late = false;
     await fence(other.shopifyShop!, async () => { late = true; });
     assert.ok(!late);
+    let staleMail = false;
+    await mailFence(other.id, other.shopifyShop!, async () => { staleMail = true; return true; });
+    assert.ok(!staleMail);
     assert.equal((await db.select().from(schema.shopifyMerchantContacts)).length, 0);
 
     // A startup/migration backfill must not reconstruct shop mappings from neutral redacted identities.
