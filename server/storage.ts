@@ -1,3 +1,4 @@
+import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
@@ -154,28 +155,11 @@ function sanitizeUserUpdatesForLog(updates: Partial<User>): Record<string, unkno
 }
 
 function logUserUpdateFailure(userId: string, updates: Partial<User>, err: unknown, context = "storage.updateUser"): void {
-  const anyErr = err as {
-    message?: string;
-    code?: string;
-    detail?: string;
-    constraint?: string;
-    column?: string;
-  };
-  console.error(
-    JSON.stringify({
-      tag: "[USER_UPDATE_FAILED]",
-      context,
-      userId,
-      updatedFieldKeys: Object.keys(updates),
-      sanitizedUpdates: sanitizeUserUpdatesForLog(updates),
-      errorMessage: anyErr?.message ?? String(err),
-      pgCode: anyErr?.code ?? null,
-      pgDetail: anyErr?.detail ?? null,
-      pgConstraint: anyErr?.constraint ?? null,
-      pgColumn: anyErr?.column ?? null,
-      stack: err instanceof Error ? err.stack : null,
-    }),
-  );
+  console.error(JSON.stringify({
+    tag: "[USER_UPDATE_FAILED]", context,
+    updatedFieldKeys: Object.keys(updates),
+    ...safeDatabaseErrorDiagnostic(err, "user-update"),
+  }));
 }
 
 function logUserSessionLoadFailure(phase: string, userId: string, err: unknown): void {

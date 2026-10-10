@@ -1,3 +1,4 @@
+import { withShopifyPrivacyFence } from "./shopifyContactService";
 import type { Request, Response } from "express";
 import { storage } from "./storage";
 import { formatShopifyOrderCreatedMessage, ingestCommerceEvent } from "./commerceEventPipeline";
@@ -64,14 +65,14 @@ async function resolveShopifyMerchantUser(shop: string): Promise<{
   return { userId: user.id, integrationId: integration.id, syncOptions };
 }
 
-export async function processShopifyOrderCreate(
+async function ingestShopifyOrderCreate(
   req: Request,
   shop: string,
   body: ShopifyOrderPayload,
 ): Promise<void> {
   const merchant = await resolveShopifyMerchantUser(shop);
   if (!merchant) {
-    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant", shop }));
+    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant" }));
     return;
   }
   if (!syncOptionEnabled(merchant.syncOptions, "new_orders")) {
@@ -136,14 +137,14 @@ export async function processShopifyOrderCreate(
   });
 }
 
-export async function processShopifyCustomerCreate(
+async function ingestShopifyCustomerCreate(
   req: Request,
   shop: string,
   body: ShopifyCustomerPayload,
 ): Promise<void> {
   const merchant = await resolveShopifyMerchantUser(shop);
   if (!merchant) {
-    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant", shop }));
+    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant" }));
     return;
   }
   if (!syncOptionEnabled(merchant.syncOptions, "new_customers")) {
@@ -201,9 +202,16 @@ export function scheduleShopifyCommerceProcessing(
           tag: "[CommerceIngest]",
           event: "shopify_async_error",
           shop,
-          error: err instanceof Error ? err.message : String(err),
+          reason: "processing_failed",
         }),
       );
     });
   });
+}
+
+export async function processShopifyOrderCreate(req: Request, shop: string, body: ShopifyOrderPayload): Promise<void> {
+  return withShopifyPrivacyFence(shop, () => ingestShopifyOrderCreate(req, shop, body));
+}
+export async function processShopifyCustomerCreate(req: Request, shop: string, body: ShopifyCustomerPayload): Promise<void> {
+  return withShopifyPrivacyFence(shop, () => ingestShopifyCustomerCreate(req, shop, body));
 }

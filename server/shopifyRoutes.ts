@@ -11,7 +11,7 @@ import {
   shopifySessionMiddleware,
   registerMandatoryWebhooks,
   SHOPIFY_BILLING_PLANS,
-  fetchShopifyShopOwnerEmail,
+  fetchShopifyShopOwnerEmailResult,
 } from './shopify';
 import { getAppOrigin } from './urlOrigins';
 import { resolveShopifyMerchantForBilling } from './shopifyMerchantResolver';
@@ -32,7 +32,7 @@ import {
   resolveShopifyInstallUser,
 } from './shopifyInstallUser';
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
-import { claimShopifyShopTrialForInstall, deleteShopifyShopTrialLedgerForCanonicalShop, hashShopifyShopForLogs } from './shopifyShopTrialService';
+import { claimShopifyShopTrialForInstall, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
 import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import {
@@ -46,10 +46,16 @@ import {
   registerShopWebhooks,
 } from './shopifyWebhookHealth';
 
+import { captureCurrentShopifyOwnerEmail, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
+import { createShopifySupportContactRouter } from "./shopifySupportContactRoutes";
+import { redactShopifyStore } from "./shopifyPrivacyRedaction";
+import { createShopifyStoreRedactionHandler } from "./shopifyStoreRedactionHandler";
+
 const router = Router();
 
 // Ensure JSON body is parsed for session-auth billing routes (checkout-web).
 router.use(express.json());
+router.use(createShopifySupportContactRouter({ read: readShopifySupportContact, save: saveShopifySupportContact }));
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
@@ -278,18 +284,8 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
     };
 
-    let shopOwnerEmail: string | null = null;
-    try {
-      shopOwnerEmail = await fetchShopifyShopOwnerEmail(normalizedShop, accessToken);
-    } catch (ownerErr) {
-      console.warn("[Shopify Callback] shop.email fetch failed", {
-        shop: normalizedShop,
-        error: ownerErr instanceof Error ? ownerErr.message : String(ownerErr),
-      });
-    }
-    if (shopOwnerEmail) {
-      installPatch.shopifyOwnerEmail = shopOwnerEmail;
-    }
+    // A linked account switching shops must not carry forward the old owner's contact.
+    if (user.shopifyShop && user.shopifyShop !== normalizedShop) installPatch.shopifyOwnerEmail = null;
     if (!shopAlreadyActive && (firstTokenInstall || !usableAppAccess)) {
       Object.assign(installPatch, {
         shopifySubscriptionStatus: 'pending',
@@ -302,6 +298,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     await storage.updateUser(user.id, installPatch);
+    const ownerCapture = await captureCurrentShopifyOwnerEmail({
+      userId: user.id, shop: normalizedShop, accessToken,
+    }, fetchShopifyShopOwnerEmailResult);
+    const shopOwnerEmail = ownerCapture.email;
 
     try {
       const forWelcome = (await storage.getUserForSession(user.id)) ?? user;
@@ -316,10 +316,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         deletionRequestedAt: forWelcome.deletionRequestedAt,
       });
     } catch (welcomeErr) {
-      console.warn("[Shopify Callback] Shopify Day 0 welcome skipped or failed", {
-        userId: user.id,
-        error: welcomeErr instanceof Error ? welcomeErr.message : String(welcomeErr),
-      });
+      console.warn("[ShopifyContact] welcome_delivery_failed");
     }
 
     const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
@@ -360,7 +357,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       `/pricing?shopify_installed=1&shop=${encodeURIComponent(normalizedShop)}&trial_days=${String(trialDays)}`,
     );
   } catch (error) {
-    console.error('Shopify callback error:', error);
+    console.error("[ShopifyContact] oauth_callback_failed");
     if (isUsersEmailUniqueViolation(error)) {
       return res.status(409).json({
         error: 'Shopify merchant account already exists. Please open the app from Shopify admin to continue.',
@@ -601,49 +598,14 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
     return res.status(401).json({ error: 'Invalid webhook signature' });
   }
 
-  console.log('[Shopify Uninstall]', { shopHash: hashShopifyShopForLogs(shop) });
-
   try {
-    const user = await storage.getUserByShopifyShop(shop);
-
-    if (!user) {
-      console.log('[Shopify Uninstall Cleanup]', { shopHash: hashShopifyShopForLogs(shop), status: 'no_user_found' });
-      return res.status(200).json({ received: true });
-    }
-
-    try {
-      // Keep shopify_shop and shopify_shop_trials so a reinstall cannot restart a trial.
-      // shop/redact (not uninstall) is the path that erases the shop-identifying ledger.
-      await storage.updateUser(user.id, {
-        shopifyAccessToken: null,
-        shopifyChargeId: null,
-        shopifySubscriptionStatus: 'uninstalled',
-        shopifyAIBrainEnabled: false,
-        billingPlan: 'free',
-        subscriptionPlan: 'free',
-        subscriptionStatus: 'canceled',
-      });
-      console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'user_updated' });
-    } catch (userErr) {
-      console.warn('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'user_update_skipped', error: userErr });
-    }
-
-    try {
-      const integration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
-      if (integration) {
-        await storage.updateIntegration(integration.id, { isActive: false });
-        console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_deactivated' });
-      } else {
-        console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'no_integration_found' });
-      }
-    } catch (integrationErr) {
-      console.warn('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_update_skipped', error: integrationErr });
-    }
-
+    await uninstallShopifyStore(shop);
+    console.info("[ShopifyPrivacy] uninstall_processed");
     return res.status(200).json({ received: true });
-  } catch (error) {
-    console.error('[Shopify Uninstall]', { shop, error });
-    return res.status(200).json({ received: true });
+  } catch {
+    // A failed atomic cleanup must be retried by Shopify, not acknowledged as complete.
+    console.error("[ShopifyPrivacy] uninstall_processing_failed");
+    return res.status(503).json({ error: "Webhook processing failed" });
   }
 });
 
@@ -708,7 +670,7 @@ router.post('/webhooks/customers/data_request', async (req: Request, res: Respon
 
   try {
     const { shop_domain, customer, orders_requested } = req.body;
-    console.log(`[Shopify Compliance] Data request received for shop: ${shop_domain}, customer: ${customer?.email || customer?.id}`);
+    console.info("[ShopifyPrivacy] signed_customer_data_request_received");
     
     // WhachatCRM stores conversation data linked to phone numbers, not Shopify customer IDs
     // We acknowledge the request - actual data export would be handled via support ticket
@@ -719,7 +681,7 @@ router.post('/webhooks/customers/data_request', async (req: Request, res: Respon
       message: 'Data request acknowledged. Customer data export will be processed within 30 days.'
     });
   } catch (error) {
-    console.error('[Shopify Compliance] customers/data_request error:', error);
+    console.error("[ShopifyPrivacy] compliance_processing_failed");
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -742,7 +704,7 @@ router.post('/webhooks/customers/redact', async (req: Request, res: Response) =>
 
   try {
     const { shop_domain, customer, orders_to_redact } = req.body;
-    console.log(`[Shopify Compliance] Customer redact request for shop: ${shop_domain}, customer: ${customer?.email || customer?.id}`);
+    console.info("[ShopifyPrivacy] signed_customer_redaction_received");
     
     // WhachatCRM stores conversation data linked to phone numbers
     // If we had a phone number, we would delete associated chats
@@ -760,7 +722,7 @@ router.post('/webhooks/customers/redact', async (req: Request, res: Response) =>
         
         for (const chat of matchingChats) {
           await storage.deleteChat(chat.id);
-          console.log(`[Shopify Compliance] Deleted chat ${chat.id} for customer phone ${customer.phone}`);
+          console.info("[ShopifyPrivacy] customer_chat_erased");
         }
       }
     }
@@ -770,71 +732,16 @@ router.post('/webhooks/customers/redact', async (req: Request, res: Response) =>
       message: 'Customer data redaction request processed.'
     });
   } catch (error) {
-    console.error('[Shopify Compliance] customers/redact error:', error);
+    console.error("[ShopifyPrivacy] compliance_processing_failed");
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
 // shop/redact - Shop data deletion (48 hours after uninstall)
-router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
-  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  const shop = req.headers['x-shopify-shop-domain'] as string;
-
-  if (!hmac || !shop) {
-    console.log('[Shopify Compliance] shop/redact - Missing headers');
-    return res.status(401).json({ error: 'Missing webhook headers' });
-  }
-
-  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-  if (!verifyWebhookHmac(rawBody, hmac)) {
-    console.log('[Shopify Compliance] shop/redact - Invalid HMAC');
-    return res.status(401).json({ error: 'Invalid webhook signature' });
-  }
-
-  try {
-    const { shop_domain } = req.body;
-    const canonicalShop = normalizeShopifyShopDomain(shop_domain || shop);
-    const shopHash = hashShopifyShopForLogs(canonicalShop || shop_domain || shop);
-    console.log(`[Shopify Compliance] Shop redact request`, { shopHash });
-
-    // Erase the shop-identifying trial ledger with the store data. A later
-    // reinstall after completed redaction may qualify as a new shop trial
-    // because WhachatCRM no longer retains identifying history.
-    if (canonicalShop) {
-      await deleteShopifyShopTrialLedgerForCanonicalShop(canonicalShop);
-    }
-    
-    // Find the user associated with this shop and delete all their data
-    const user = await storage.getUserByShopifyShop(shop_domain || shop);
-    
-    if (user) {
-      // Delete all chats for this user
-      const chats = await storage.getChats(user.id);
-      for (const chat of chats) {
-        await storage.deleteChat(chat.id);
-      }
-      console.log(`[Shopify Compliance] Deleted chats for redacted shop`, { shopHash, chatCount: chats.length });
-      
-      await storage.updateUser(user.id, {
-        shopifyShop: null,
-        shopifyAccessToken: null,
-        shopifyChargeId: null,
-        shopifySubscriptionStatus: 'redacted',
-        shopifyInstalledAt: null,
-      });
-      console.log(`[Shopify Compliance] Cleared Shopify data for user`, { userId: user.id, shopHash });
-    }
-    
-    res.status(200).json({ 
-      received: true,
-      message: 'Shop data redaction completed. Identifying trial ledger removed. A later reinstall may qualify as a new shop trial.'
-    });
-  } catch (error) {
-    console.error('[Shopify Compliance] shop/redact error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
+router.post('/webhooks/shop/redact', createShopifyStoreRedactionHandler({
+  verify: verifyWebhookHmac,
+  redact: redactShopifyStore,
+}));
 function verifyShopifyCommerceWebhook(req: Request, res: Response): { shop: string; body: Record<string, unknown> } | null {
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;
   const shop = req.headers['x-shopify-shop-domain'] as string;

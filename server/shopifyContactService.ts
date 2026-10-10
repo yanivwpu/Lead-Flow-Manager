@@ -1,0 +1,140 @@
+import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
+import { shopifyContactCaptureLog } from "@shared/shopifyContactPrivacy";
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { users, shopifyMerchantContacts, integrations } from "@shared/schema";
+import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from "@shared/shopifyBilling";
+import { isShopifyContactInstallationActive, type ShopifyEmailCaptureResult,
+  type ShopifyContactSnapshot, type ShopifySupportContactAction } from "@shared/shopifyContactPrivacy";
+
+export async function persistShopifyOwnerEmailCapture(input: {
+  userId: string; shop: string; accessToken: string;
+}, result: ShopifyEmailCaptureResult, at: Date): Promise<boolean> {
+  return db.transaction(async tx => {
+    const [user] = await tx.select().from(users).where(eq(users.id, input.userId)).for("update").limit(1);
+    if (!user || !isShopifyContactInstallationActive(user) ||
+        normalizeShopifyShopDomain(user.shopifyShop) !== input.shop || user.shopifyAccessToken !== input.accessToken) return false;
+    if (result.status === "success" && result.email) {
+      await tx.update(users).set({ shopifyOwnerEmail: result.email }).where(eq(users.id, user.id));
+    }
+    const [previous] = await tx.select().from(shopifyMerchantContacts).where(eq(shopifyMerchantContacts.userId, user.id));
+    const patch = {
+      canonicalShop: input.shop, captureStatus: result.status, captureSource: "shop.email", captureAt: at,
+      ...(previous && previous.canonicalShop !== input.shop ? {
+        supportEmail: null, supportSource: null, supportConfirmedAt: null, supportDismissedAt: null,
+      } : {}),
+    };
+    await tx.insert(shopifyMerchantContacts).values({ userId: user.id, ...patch })
+      .onConflictDoUpdate({ target: shopifyMerchantContacts.userId, set: patch });
+    return true;
+  });
+}
+
+export async function readShopifySupportContact(userId: string): Promise<ShopifyContactSnapshot> {
+  return db.transaction(async tx => {
+    const [user] = await tx.select({
+      shopifyShop: users.shopifyShop, shopifyAccessToken: users.shopifyAccessToken,
+      shopifySubscriptionStatus: users.shopifySubscriptionStatus, deletionRequestedAt: users.deletionRequestedAt,
+      shopifyOwnerEmail: users.shopifyOwnerEmail,
+    }).from(users).where(eq(users.id, userId)).for("share").limit(1);
+    if (!user || !isShopifyContactInstallationActive(user)) return {
+      available: false, suggestedEmail: null, confirmed: false, dismissed: false,
+    };
+    const [row] = await tx.select().from(shopifyMerchantContacts).where(and(
+      eq(shopifyMerchantContacts.userId, userId), eq(shopifyMerchantContacts.canonicalShop, user.shopifyShop!)));
+    return {
+      available: true, suggestedEmail: sanitizeShopifyOwnerEmail(row?.supportEmail || user.shopifyOwnerEmail),
+      confirmed: !!row?.supportConfirmedAt, dismissed: !!row?.supportDismissedAt,
+    };
+  });
+}
+
+export async function saveShopifySupportContact(userId: string, action: ShopifySupportContactAction): Promise<boolean> {
+  return db.transaction(async tx => {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update").limit(1);
+    const shop = normalizeShopifyShopDomain(user?.shopifyShop);
+    if (!user || !shop || !isShopifyContactInstallationActive(user)) return false;
+    if (action.action === "confirm" && sanitizeShopifyOwnerEmail(action.email) !== action.email) return false;
+    const patch = action.action === "confirm" ? {
+      supportEmail: action.email,
+      supportSource: action.email === sanitizeShopifyOwnerEmail(user.shopifyOwnerEmail) ? "shop.email_confirmed" : "merchant_input",
+      supportConfirmedAt: new Date(), supportDismissedAt: null,
+    } : action.action === "dismiss" ? { supportDismissedAt: new Date() } : {
+      supportEmail: null, supportSource: null, supportConfirmedAt: null, supportDismissedAt: new Date(),
+    };
+    const [previous] = await tx.select().from(shopifyMerchantContacts).where(eq(shopifyMerchantContacts.userId, userId));
+    const clearOld = previous && previous.canonicalShop !== shop ? {
+      supportEmail: null, supportSource: null, supportConfirmedAt: null, supportDismissedAt: null,
+    } : {};
+    const update = { canonicalShop: shop, ...clearOld, ...patch };
+    await tx.insert(shopifyMerchantContacts).values({ userId, ...update })
+      .onConflictDoUpdate({ target: shopifyMerchantContacts.userId, set: update });
+    return true;
+  });
+}
+
+/** Serialize ingestion against uninstall/redaction; do not repopulate a revoked installation. */
+export async function withShopifyPrivacyFence(shop: string, process: () => Promise<void>): Promise<void> {
+  const canonical = normalizeShopifyShopDomain(shop);
+  if (!canonical) return;
+  await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${canonical}, 0))`);
+    const [user] = await tx.select().from(users).where(eq(users.shopifyShop, canonical)).limit(1);
+    if (!user || !isShopifyContactInstallationActive(user)) return;
+    const [integration] = await tx.select({ id: integrations.id }).from(integrations)
+      .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify"), eq(integrations.isActive, true))).limit(1);
+    if (!integration) return;
+    await process();
+  });
+}
+
+/** Same uninstall entitlement changes as the existing handler; retain eligibility/contact history until redact. */
+export async function uninstallShopifyStore(rawShop: string): Promise<void> {
+  const shop = normalizeShopifyShopDomain(rawShop);
+  if (!shop) throw new Error("Invalid Shopify domain");
+  await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.shopifyShop, shop)).for("update").limit(1);
+    if (!user) return;
+    await tx.update(users).set({
+      shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
+      shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",
+    }).where(eq(users.id, user.id));
+    await tx.update(integrations).set({ isActive: false, accessToken: null, refreshToken: null, tokenExpiresAt: null })
+      .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify")));
+  });
+}
+
+/** Mail snapshots must not send after uninstall/redact, including across app instances. */
+export async function withShopifyMailPrivacyFence(userId: string, rawShop: string, send: (current: typeof users.$inferSelect) => Promise<boolean>): Promise<boolean> {
+  const shop = normalizeShopifyShopDomain(rawShop);
+  if (!shop) return false;
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+    const [current] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!current || normalizeShopifyShopDomain(current.shopifyShop) !== shop ||
+        !isShopifyContactInstallationActive(current)) return false;
+    return send(current);
+  });
+}
+
+/** Recheck retained authorization before requesting shop.email; a stale scheduler must not use a revoked token. */
+export async function captureCurrentShopifyOwnerEmail(input: { userId: string; shop: string; accessToken: string },
+  fetch: (shop: string, token: string) => Promise<ShopifyEmailCaptureResult>,
+  emit: (line: string) => void = console.info): Promise<ShopifyEmailCaptureResult> {
+  try {
+    return await db.transaction(async (tx): Promise<ShopifyEmailCaptureResult> => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.shop}, 0))`);
+      const [current] = await tx.select().from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!current || !isShopifyContactInstallationActive(current) ||
+          normalizeShopifyShopDomain(current.shopifyShop) !== input.shop || current.shopifyAccessToken !== input.accessToken) {
+        emit(shopifyContactCaptureLog("installation_inactive", new Date()));
+        return { status: "installation_inactive", email: null };
+    }
+      return captureShopifyOwnerEmail(input, { fetch, persist: persistShopifyOwnerEmailCapture, emit });
+    });
+  } catch {
+    emit(shopifyContactCaptureLog("persist_failed", new Date()));
+    return { status: "persist_failed", email: null };
+  }
+}

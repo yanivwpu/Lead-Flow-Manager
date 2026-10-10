@@ -1,3 +1,4 @@
+import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { useState, useEffect, lazy, Suspense, useMemo, useRef } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -144,6 +145,7 @@ function AppContent() {
       <TrialModalOpenProvider openTrialModal={() => setTrialModalOpen(true)}>
         <Sidebar />
         <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
+          {subscription?.subscription?.isShopify && <div className="shrink-0 px-3 pt-3"><ShopifySupportContact /></div>}
           {showTrialEndingSoon && (
             <TrialEndingSoonBanner
               upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}

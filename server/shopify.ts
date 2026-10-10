@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
 import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from '@shared/shopifyBilling';
+import { classifyShopifyOwnerEmail, type ShopifyEmailCaptureResult } from '@shared/shopifyContactPrivacy';
 import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import { getAppOrigin } from './urlOrigins';
 import { storage } from './storage';
@@ -94,33 +95,25 @@ export const SHOPIFY_SHOP_OWNER_EMAIL_QUERY = `
   }
 `;
 
-export async function fetchShopifyShopOwnerEmail(
+export async function fetchShopifyShopOwnerEmailResult(
   shop: string,
   accessToken: string,
-): Promise<string | null> {
+): Promise<ShopifyEmailCaptureResult> {
   try {
-    const shopify = getShopifyApi();
-    if (!shopify) return null;
-
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
-
+    const api = getShopifyApi();
+    if (!api) return { status: "fetch_failed", email: null };
+    const client = new api.clients.Graphql({ session: { shop, accessToken } as Session });
     const response = await client.request(SHOPIFY_SHOP_OWNER_EMAIL_QUERY);
-    const data = (response as { data?: { shop?: { email?: string | null } } }).data;
-    const sanitized = sanitizeShopifyOwnerEmail(data?.shop?.email);
-    if (!sanitized) {
-      console.warn("[Shopify] shop.email missing or unusable", { shop });
-      return null;
-    }
-    return sanitized;
-  } catch (error) {
-    console.warn("[Shopify] shop.email fetch failed", {
-      shop,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    const data = (response as { data?: { shop?: { email?: unknown } } }).data;
+    return classifyShopifyOwnerEmail(data?.shop?.email);
+  } catch {
+    // Provider errors may echo contact data or credentials. Report only a bounded outcome.
+    return { status: "fetch_failed", email: null };
   }
+}
+
+export async function fetchShopifyShopOwnerEmail(shop: string, accessToken: string): Promise<string | null> {
+  return (await fetchShopifyShopOwnerEmailResult(shop, accessToken)).email;
 }
 
 export async function verifyShopifySessionToken(token: string): Promise<{
