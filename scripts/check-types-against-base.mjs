@@ -14,7 +14,8 @@ function check(directory) {
   const result = spawnSync(process.execPath, [compiler, "--noEmit", "--incremental", "false", "--pretty", "false"],
     { cwd: directory, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   if (result.error) throw result.error;
-  const output = (result.stdout || "") + (result.stderr || "");
+  // Inferred import types contain absolute checkout paths; normalize both worktrees equally.
+  const output = ((result.stdout || "") + (result.stderr || "")).replaceAll(directory, "<repo>");
   const lines = output.split("\n");
   const diagnostics = new Map();
   let current = "";
