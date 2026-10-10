@@ -80,7 +80,10 @@ export async function bootstrapStagingDatabase(env = process.env, artifactDirect
     if (objects.length) throw new Error("staging_database_not_empty_no_bootstrap_marker");
     // Full generated schema, including defaults, indexes and FK constraints, is applied atomically.
     // Never infer a partial database is safe to repair; never DROP/TRUNCATE existing objects.
-    await client.query(ddl.replaceAll("--> statement-breakpoint", ""));
+    // Drizzle breakpoints preserve DO blocks and keep a failed query from logging the full baseline.
+    for (const statement of ddl.split("--> statement-breakpoint").map(part => part.trim()).filter(Boolean)) {
+      await client.query(statement);
+    }
     await verify(client, manifest);
     await client.query(`CREATE TABLE public.${MARKER} (
       version integer PRIMARY KEY, baseline_sha256 text NOT NULL, initialized_at timestamptz NOT NULL DEFAULT now()
