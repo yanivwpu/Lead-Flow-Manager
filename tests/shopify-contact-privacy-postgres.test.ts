@@ -182,7 +182,13 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     const other = await user("current", { shopifyOwnerEmail: secondEmail });
     await integration(other.id, "old.myshopify.com");
     await integration(other.id, other.shopifyShop!);
+    const [oldContact] = await db.insert(schema.contacts).values({ userId: other.id, name: "Old fixture", source: "shopify",
+      email: fixtureEmail, customFields: { lastCommerceSource: "shopify", lastCommerceMetadata: { shop: "old.myshopify.com", email: fixtureEmail } } }).returning();
+    const [currentContact] = await db.insert(schema.contacts).values({ userId: other.id, name: "Current fixture", source: "shopify",
+      email: secondEmail, customFields: { lastCommerceSource: "shopify", lastCommerceMetadata: { shop: other.shopifyShop, email: secondEmail } } }).returning();
     await redact("old.myshopify.com");
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, oldContact.id))).length, 0);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, currentContact.id))).length, 1);
     const [untouched] = await db.select().from(schema.users).where(eq(schema.users.id, other.id));
     assert.ok(untouched.shopifyOwnerEmail === secondEmail && untouched.shopifyShop === other.shopifyShop);
 

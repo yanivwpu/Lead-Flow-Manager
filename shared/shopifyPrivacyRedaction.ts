@@ -74,3 +74,13 @@ export function shopifyContactRedactionPatch(contact: Contact, shop: string): Pa
   }
   return patch;
 }
+
+/** Domain provenance only: safe for old-store erasure when the account now has another shop. */
+export function recordHasExplicitShop(value: unknown, shop: string, depth = 0): boolean {
+  if (!value || typeof value !== "object" || depth > 12) return false;
+  if (Array.isArray(value)) return value.some(item => recordHasExplicitShop(item, shop, depth + 1));
+  const row = value as Record<string, unknown>;
+  for (const key of ["shop", "shopUrl", "canonicalShop", "shop_domain"])
+    if (typeof row[key] === "string" && normalizeShopifyShopDomain(row[key] as string) === shop) return true;
+  return Object.values(row).some(item => item && typeof item === "object" && recordHasExplicitShop(item, shop, depth + 1));
+}

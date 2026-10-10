@@ -30,7 +30,7 @@ A signed shop/redact runs one transaction. Failure returns a retryable error rat
 - Shopify-origin contacts without another channel are deleted through existing orphan cleanup/FK cascades. Mixed contacts retain independent channels while Shopify metadata and attributable imported contact fields are scrubbed.
 - Shopify conversations/messages, activity events, workflow execution snapshots, delayed flow jobs, webhook delivery payloads and legacy chat mirrors are erased where identifiable.
 - A shared advisory fence serializes Shopify ingestion/workflow snapshots with uninstall/redact; late ingests and contact writes cannot repopulate an erased mapping. Shopify onboarding mail also rechecks its recipient/installation inside the fence rather than sending from an old scheduler snapshot.
-- Late requests for an old store do not clear a different current installation.
+- Late requests for an old store erase explicitly domain-tagged old records without clearing a different current installation. Untagged historical records in such a mixed account require privacy review rather than guessing their provenance.
 
 Legacy mixed records do not have complete field-level provenance. Unknown Shopify-derived copies, hand-copied notes, workflow-generated output and independent third-party exports may need a scoped privacy review; the code does not claim every cross-channel copy can be inferred automatically.
 

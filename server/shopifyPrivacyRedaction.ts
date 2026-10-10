@@ -6,7 +6,7 @@ import {
   webhookDeliveries, webhooks, flowJobs, shopifyShopTrials, shopifyMerchantContacts, shopifyPrivacyErasureTasks,
 } from "@shared/schema";
 import { normalizeShopifyShopDomain, shopifySyntheticMerchantEmail } from "@shared/shopifyBilling";
-import { shopifyMerchantRedactionPatch, shopifyContactRedactionPatch, recordBelongsToShopify } from "@shared/shopifyPrivacyRedaction";
+import { shopifyMerchantRedactionPatch, shopifyContactRedactionPatch, recordBelongsToShopify, recordHasExplicitShop } from "@shared/shopifyPrivacyRedaction";
 import { deleteContactRecords } from "./contactDeleteService";
 
 /**
@@ -41,10 +41,15 @@ export async function redactShopifyStore(rawShop: string) {
       }
 
       // Contacts have legacy source markers without a domain. Only use them for this mapping.
-      if (ownsShop || (!current?.shopifyShop && !otherIntegration)) {
+      const useLegacyMarkers = ownsShop || (!current?.shopifyShop && !otherIntegration);
+      {
+        const allContacts = await tx.select().from(contacts).where(eq(contacts.userId, userId));
+        const imported = allContacts.filter(contact => useLegacyMarkers ||
+          recordHasExplicitShop(contact.customFields, shop) || recordHasExplicitShop(contact.sourceDetails, shop));
+        const scopedIds = imported.map(contact => contact.id);
         const threadIds = (await tx.select({ id: conversations.id }).from(conversations)
-          .where(and(eq(conversations.userId, userId), eq(conversations.channel, "shopify")))).map(r => r.id);
-        const imported = await tx.select().from(contacts).where(eq(contacts.userId, userId));
+          .where(and(eq(conversations.userId, userId), eq(conversations.channel, "shopify"),
+            useLegacyMarkers ? sql`true` : scopedIds.length ? inArray(conversations.contactId, scopedIds) : sql`false`))).map(r => r.id);
         for (const contact of imported) {
           const custom = (contact.customFields || {}) as Record<string, unknown>;
           const linked = contact.source === "shopify" || custom.shopifyCustomerId != null ||
@@ -73,16 +78,19 @@ export async function redactShopifyStore(rawShop: string) {
           await tx.delete(workflowExecutions).where(inArray(workflowExecutions.conversationId, threadIds));
           await tx.delete(conversations).where(inArray(conversations.id, threadIds));
         }
-        await tx.delete(messages).where(and(eq(messages.userId, userId), sql`${messages.externalMessageId} LIKE 'shopify:%'`));
-        await tx.delete(activityEvents).where(and(eq(activityEvents.userId, userId),
-          or(sql`${activityEvents.eventType} LIKE 'shopify_%'`, sql`${activityEvents.eventData}->>'source' = 'shopify'`,
-            sql`${activityEvents.eventData}->>'shop' = ${shop}`)));
+        if (useLegacyMarkers) await tx.delete(messages).where(and(eq(messages.userId, userId), sql`${messages.externalMessageId} LIKE 'shopify:%'`));
+        const activities = await tx.select().from(activityEvents).where(eq(activityEvents.userId, userId));
+        for (const event of activities) {
+          if (recordHasExplicitShop(event.eventData, shop) ||
+              (useLegacyMarkers && (event.eventType.startsWith("shopify_") || recordBelongsToShopify(event.eventData, shop))))
+            await tx.delete(activityEvents).where(eq(activityEvents.id, event.id));
+        }
         const ownedWorkflows = (await tx.select({ id: workflows.id }).from(workflows).where(eq(workflows.userId, userId))).map(r => r.id);
         if (ownedWorkflows.length) {
           const executions = await tx.select().from(workflowExecutions).where(inArray(workflowExecutions.workflowId, ownedWorkflows));
           for (const row of executions) {
             const trigger = row.triggerData as Record<string, unknown> | null;
-            if (recordBelongsToShopify(trigger, shop) || recordBelongsToShopify(trigger?.metadata, shop))
+            if (recordHasExplicitShop(trigger, shop) || (useLegacyMarkers && recordBelongsToShopify(trigger, shop)))
               await tx.delete(workflowExecutions).where(eq(workflowExecutions.id, row.id));
           }
         }
@@ -91,15 +99,15 @@ export async function redactShopifyStore(rawShop: string) {
           const deliveries = await tx.select().from(webhookDeliveries).where(inArray(webhookDeliveries.webhookId, ownedHooks));
           for (const row of deliveries) {
             const payload = row.payload as Record<string, unknown>;
-            if (row.event.startsWith("shopify_") || recordBelongsToShopify(payload, shop) ||
-                recordBelongsToShopify(payload?.metadata, shop) || recordBelongsToShopify(payload?.data, shop))
+            if (recordHasExplicitShop(payload, shop) ||
+                (useLegacyMarkers && (row.event.startsWith("shopify_") || recordBelongsToShopify(payload, shop))))
               await tx.delete(webhookDeliveries).where(eq(webhookDeliveries.id, row.id));
           }
         }
         const jobs = await tx.select().from(flowJobs).where(eq(flowJobs.userId, userId));
         for (const job of jobs) {
           const payload = job.payload as Record<string, unknown>;
-          if (recordBelongsToShopify(payload, shop) || recordBelongsToShopify(payload?.metadata, shop))
+          if (recordHasExplicitShop(payload, shop) || (useLegacyMarkers && recordBelongsToShopify(payload, shop)))
             await tx.delete(flowJobs).where(eq(flowJobs.id, job.id));
         }
       }
