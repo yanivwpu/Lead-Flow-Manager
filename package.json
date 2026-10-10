@@ -15,7 +15,9 @@
     "db:push": "drizzle-kit push",
     "diagnose:messages": "tsx scripts/diagnose-conversation-messages.ts",
     "wa:template-media-matrix": "tsx scripts/wa-template-media-matrix.ts",
-    "backfill:ghl-installs": "tsx scripts/backfill-ghl-marketplace-installs.ts"
+    "backfill:ghl-installs": "tsx scripts/backfill-ghl-marketplace-installs.ts",
+    "build:staging": "npm run build && tsx script/generate-staging-schema.ts",
+    "db:bootstrap:staging": "node scripts/bootstrap-staging-db.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1040.0",
