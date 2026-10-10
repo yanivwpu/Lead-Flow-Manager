@@ -353,7 +353,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     } else {
       const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
       await storage.updateIntegration(existingIntegration.id, {
-        config: { ...existingConfig, shopUrl: normalizedShop, shopifyLastInstalledAt: new Date().toISOString() },
+        config: { ...existingConfig, shopUrl: normalizedShop, ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
         isActive: true,
       });
     }
