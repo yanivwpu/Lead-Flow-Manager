@@ -123,15 +123,15 @@ export async function captureCurrentShopifyOwnerEmail(input: { userId: string; s
   fetch: (shop: string, token: string) => Promise<ShopifyEmailCaptureResult>,
   emit: (line: string) => void = console.info): Promise<ShopifyEmailCaptureResult> {
   try {
-    return await db.transaction(async tx => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.shop}, 0))`);
-    const [current] = await tx.select().from(users).where(eq(users.id, input.userId)).limit(1);
-    if (!current || !isShopifyContactInstallationActive(current) ||
-        normalizeShopifyShopDomain(current.shopifyShop) !== input.shop || current.shopifyAccessToken !== input.accessToken) {
-      emit(shopifyContactCaptureLog("installation_inactive", new Date()));
-      return { status: "installation_inactive", email: null };
+    return await db.transaction(async (tx): Promise<ShopifyEmailCaptureResult> => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.shop}, 0))`);
+      const [current] = await tx.select().from(users).where(eq(users.id, input.userId)).limit(1);
+      if (!current || !isShopifyContactInstallationActive(current) ||
+          normalizeShopifyShopDomain(current.shopifyShop) !== input.shop || current.shopifyAccessToken !== input.accessToken) {
+        emit(shopifyContactCaptureLog("installation_inactive", new Date()));
+        return { status: "installation_inactive", email: null };
     }
-    return captureShopifyOwnerEmail(input, { fetch, persist: persistShopifyOwnerEmailCapture, emit });
+      return captureShopifyOwnerEmail(input, { fetch, persist: persistShopifyOwnerEmailCapture, emit });
     });
   } catch {
     emit(shopifyContactCaptureLog("persist_failed", new Date()));
