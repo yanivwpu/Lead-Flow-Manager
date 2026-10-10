@@ -29,20 +29,22 @@ export async function persistShopifyOwnerEmailCapture(input: {
 }
 
 export async function readShopifySupportContact(userId: string): Promise<ShopifyContactSnapshot> {
-  const [user] = await db.select({
-    shopifyShop: users.shopifyShop, shopifyAccessToken: users.shopifyAccessToken,
-    shopifySubscriptionStatus: users.shopifySubscriptionStatus, deletionRequestedAt: users.deletionRequestedAt,
-    shopifyOwnerEmail: users.shopifyOwnerEmail,
-  }).from(users).where(eq(users.id, userId));
-  if (!user || !isShopifyContactInstallationActive(user)) return {
-    available: false, suggestedEmail: null, confirmed: false, dismissed: false,
-  };
-  const [row] = await db.select().from(shopifyMerchantContacts).where(and(
-    eq(shopifyMerchantContacts.userId, userId), eq(shopifyMerchantContacts.canonicalShop, user.shopifyShop!)));
-  return {
-    available: true, suggestedEmail: sanitizeShopifyOwnerEmail(row?.supportEmail || user.shopifyOwnerEmail),
-    confirmed: !!row?.supportConfirmedAt, dismissed: !!row?.supportDismissedAt,
-  };
+  return db.transaction(async tx => {
+    const [user] = await tx.select({
+      shopifyShop: users.shopifyShop, shopifyAccessToken: users.shopifyAccessToken,
+      shopifySubscriptionStatus: users.shopifySubscriptionStatus, deletionRequestedAt: users.deletionRequestedAt,
+      shopifyOwnerEmail: users.shopifyOwnerEmail,
+    }).from(users).where(eq(users.id, userId)).for("share").limit(1);
+    if (!user || !isShopifyContactInstallationActive(user)) return {
+      available: false, suggestedEmail: null, confirmed: false, dismissed: false,
+    };
+    const [row] = await tx.select().from(shopifyMerchantContacts).where(and(
+      eq(shopifyMerchantContacts.userId, userId), eq(shopifyMerchantContacts.canonicalShop, user.shopifyShop!)));
+    return {
+      available: true, suggestedEmail: sanitizeShopifyOwnerEmail(row?.supportEmail || user.shopifyOwnerEmail),
+      confirmed: !!row?.supportConfirmedAt, dismissed: !!row?.supportDismissedAt,
+    };
+  });
 }
 
 export async function saveShopifySupportContact(userId: string, action: ShopifySupportContactAction): Promise<boolean> {
@@ -50,6 +52,7 @@ export async function saveShopifySupportContact(userId: string, action: ShopifyS
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update").limit(1);
     const shop = normalizeShopifyShopDomain(user?.shopifyShop);
     if (!user || !shop || !isShopifyContactInstallationActive(user)) return false;
+    if (action.action === "confirm" && sanitizeShopifyOwnerEmail(action.email) !== action.email) return false;
     const patch = action.action === "confirm" ? {
       supportEmail: action.email,
       supportSource: action.email === sanitizeShopifyOwnerEmail(user.shopifyOwnerEmail) ? "shop.email_confirmed" : "merchant_input",

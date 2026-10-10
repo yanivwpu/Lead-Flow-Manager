@@ -13,6 +13,15 @@ export function shopifyMerchantRedactionPatch(user: Pick<User, "email">, neutral
     } : {}),
   };
 }
+function directlyIdentifiesShopify(value: unknown, shop: string): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  if (row.source === "shopify" || row.lastCommerceSource === "shopify" ||
+      (typeof row.trigger === "string" && row.trigger.startsWith("shopify_")) ||
+      (typeof row.triggerType === "string" && row.triggerType.startsWith("shopify_"))) return true;
+  return ["shop", "shopUrl", "canonicalShop", "shop_domain"].some(key =>
+    typeof row[key] === "string" && normalizeShopifyShopDomain(row[key] as string) === shop);
+}
 export function recordBelongsToShopify(value: unknown, shop: string, depth = 0): boolean {
   if (!value || typeof value !== "object" || depth > 12) return false;
   if (Array.isArray(value)) return value.some(item => recordBelongsToShopify(item, shop, depth + 1));
@@ -33,8 +42,10 @@ export function scrubShopifyContactMetadata(value: unknown, shop: string): Recor
     if (/^commerceThreadKey$/i.test(key) && (row.lastCommerceSource === "shopify" || String(item).startsWith("shopify:"))) continue;
     if (/^lastCommerce(Source|At|Metadata)$/.test(key) &&
         (row.lastCommerceSource === "shopify" || recordBelongsToShopify(row.lastCommerceMetadata, shop))) continue;
-    if (recordBelongsToShopify(item, shop)) continue;
-    out[key] = item && typeof item === "object" && !Array.isArray(item) ? scrubShopifyContactMetadata(item, shop) : item;
+    if (directlyIdentifiesShopify(item, shop)) continue;
+    out[key] = Array.isArray(item) ? item.filter(entry => !directlyIdentifiesShopify(entry, shop))
+      .map(entry => entry && typeof entry === "object" ? scrubShopifyContactMetadata(entry, shop) : entry)
+      : item && typeof item === "object" ? scrubShopifyContactMetadata(item, shop) : item;
   }
   return out;
 }

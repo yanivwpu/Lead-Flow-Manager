@@ -37,7 +37,7 @@ export async function redactShopifyStore(rawShop: string) {
           sql`COALESCE(${integrations.config}->>'shopUrl', '') <> ${shop}`)).limit(1);
       if (current && (ownsShop || (!current.shopifyShop && !otherIntegration))) {
         await tx.update(users).set(shopifyMerchantRedactionPatch(current,
-          `redacted-${crypto.randomUUID()}@shopify.whachatcrm.com`)).where(eq(users.id, userId));
+          `redacted.${crypto.randomUUID()}@shopify.whachatcrm.com`)).where(eq(users.id, userId));
       }
 
       // Contacts have legacy source markers without a domain. Only use them for this mapping.

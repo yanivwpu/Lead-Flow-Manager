@@ -1,3 +1,4 @@
+import { canonicalShopFromInstall } from "../shared/shopifyShopTrialReconciliation";
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
@@ -68,11 +69,18 @@ test("uninstall and redaction stop capture/contact use; reinstall can use retain
   const patch = shopifyMerchantRedactionPatch({ email: fixtureEmail }, fixtureSynthetic);
   assert.ok(patch.shopifyOwnerEmail === null && patch.shopifyInstalledAt === null);
   for (const key of ["email", "name", "billingPlan", "subscriptionPlan", "trialStartedAt", "trialEndsAt", "trialStatus"]) assert.ok(!(key in patch));
-  const syntheticPatch = shopifyMerchantRedactionPatch({ email: fixtureSynthetic }, "neutral");
-  assert.ok(syntheticPatch.email === "neutral");
+  const neutral = ["redacted.fixture", "shopify.whachatcrm.com"].join("@");
+  const syntheticPatch = shopifyMerchantRedactionPatch({ email: fixtureSynthetic }, neutral);
+  assert.ok(syntheticPatch.email === neutral);
+  assert.ok(canonicalShopFromInstall({ email: neutral, shopifyShop: null }) === null);
   const scrubbed = scrubShopifyContactMetadata({ shopifyCustomerId: "1", customNote: "independent",
     lastCommerceSource: "shopify", lastCommerceMetadata: { email: fixtureEmail }, commerceThreadKey: fixtureEmail }, user.shopifyShop);
   assert.equal(Object.keys(scrubbed).join(","), "customNote");
+  const nested = scrubShopifyContactMetadata({ mixed: { independent: "keep", erased: { source: "shopify", email: fixtureEmail } },
+    list: [{ source: "shopify", email: fixtureEmail }, { independent: "keep" }] }, user.shopifyShop);
+  assert.equal((nested.mixed as any).independent, "keep");
+  assert.ok(!JSON.stringify(nested).includes(fixtureEmail));
+  assert.equal((nested.list as any[]).length, 1);
 });
 
 test("optional UI explains support purpose separately from marketing and never blocks Inbox", () => {

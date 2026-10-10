@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Pool } from "pg";
@@ -202,6 +203,9 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     assert.ok(!late);
     assert.equal((await db.select().from(schema.shopifyMerchantContacts)).length, 0);
 
+    // A startup/migration backfill must not reconstruct shop mappings from neutral redacted identities.
+    await db.execute(sql.raw(readFileSync("migrations/0084_shopify_shop_trials.sql", "utf8")));
+    assert.equal((await db.select().from(schema.shopifyShopTrials)).length, 0);
     const beforeExternal = (await db.select().from(schema.shopifyPrivacyErasureTasks)).length;
     assert.ok(beforeExternal > 0);
     const pending = await external({ eraseAndVerify: async () => ({ verified: false }) });

@@ -23,7 +23,7 @@ The production PostgreSQL database, Railway runtime/retained logs and the Octobe
 A signed shop/redact runs one transaction. Failure returns a retryable error rather than false completion.
 
 - users: owner email, Shopify link/token/charge/status, installation timestamp, AI flag and Shopify email milestones.
-- Shopify-created synthetic identities: replace the shop-derived identity/name with an unlinked neutral identity. Independently linked account identity and billing/trial fields are preserved.
+- Shopify-created synthetic identities: replace the shop-derived identity/name with an unlinked neutral identity whose local part cannot map to a Shopify domain. SQL backfill/reconciliation cannot reconstruct a shop from it. Independently linked account identity and billing/trial fields are preserved.
 - shopify_merchant_contacts: captured-contact metadata and confirmed support address are deleted.
 - integrations: Shopify configurations, tokens and metadata for the store are deleted, including legacy partial-redaction mappings. Other integrations remain.
 - shopify_shop_trials: retained on uninstall, erased only by the existing signed shop/redact policy. This change does not reset eligibility.
