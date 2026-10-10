@@ -27,7 +27,7 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
   delete process.env.GHL_MARKETPLACE_PRO_PLAN_ID;
   const { db } = await import("../drizzle/db");
   const { persistShopifyOwnerEmailCapture: persist, readShopifySupportContact: read,
-    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyPrivacyFence: fence, withShopifyMailPrivacyFence: mailFence } =
+    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyPrivacyFence: fence, withShopifyMailPrivacyFence: mailFence, captureCurrentShopifyOwnerEmail: currentCapture } =
       await import("../server/shopifyContactService");
   const { redactShopifyStore: redact } = await import("../server/shopifyPrivacyRedaction");
   const { processShopifyExternalErasureTasks: external } = await import("../server/shopifyExternalErasure");
@@ -106,6 +106,9 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     assert.ok(!(await read(initial.id)).available);
     assert.ok(!await save(initial.id, { action: "confirm", email: fixtureEmail }));
     assert.ok(!await persist(input, classifyShopifyOwnerEmail(fixtureEmail), new Date()));
+    let revokedFetch = false;
+    const inactiveCapture = await currentCapture(input, async () => { revokedFetch = true; return classifyShopifyOwnerEmail(fixtureEmail); }, () => {});
+    assert.ok(!revokedFetch && inactiveCapture.status === "installation_inactive");
     [stored] = await db.select().from(schema.users).where(eq(schema.users.id, initial.id));
     assert.ok(stored.shopifyOwnerEmail === fixtureEmail);
     assert.equal(stored.trialEndsAt?.getTime(), initial.trialEndsAt?.getTime());

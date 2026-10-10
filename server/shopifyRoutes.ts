@@ -46,8 +46,7 @@ import {
   registerShopWebhooks,
 } from './shopifyWebhookHealth';
 
-import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
-import { persistShopifyOwnerEmailCapture, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
+import { captureCurrentShopifyOwnerEmail, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
 import { createShopifySupportContactRouter } from "./shopifySupportContactRoutes";
 import { redactShopifyStore } from "./shopifyPrivacyRedaction";
 import { createShopifyStoreRedactionHandler } from "./shopifyStoreRedactionHandler";
@@ -299,9 +298,9 @@ router.get('/callback', async (req: Request, res: Response) => {
     }
 
     await storage.updateUser(user.id, installPatch);
-    const ownerCapture = await captureShopifyOwnerEmail({
+    const ownerCapture = await captureCurrentShopifyOwnerEmail({
       userId: user.id, shop: normalizedShop, accessToken,
-    }, { fetch: fetchShopifyShopOwnerEmailResult, persist: persistShopifyOwnerEmailCapture });
+    }, fetchShopifyShopOwnerEmailResult);
     const shopOwnerEmail = ownerCapture.email;
 
     try {

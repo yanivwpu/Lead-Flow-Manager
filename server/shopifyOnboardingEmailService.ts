@@ -3,8 +3,7 @@ import { users } from "@shared/schema";
 import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { storage } from "./storage";
 import { fetchShopifyShopOwnerEmailResult } from "./shopify";
-import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
-import { persistShopifyOwnerEmailCapture, withShopifyMailPrivacyFence } from "./shopifyContactService";
+import { captureCurrentShopifyOwnerEmail, withShopifyMailPrivacyFence } from "./shopifyContactService";
 import {
   sendShopifyWelcomeEmail,
   sendShopifyActivationEmailDay5,
@@ -92,9 +91,9 @@ async function maybeRefreshOwnerEmail(user: ShopifyOnboardingRow): Promise<strin
   if (!user.shopifyShop || !user.shopifyAccessToken) return null;
   if (!isShopifyInstallActiveForOnboarding(user)) return null;
 
-  const result = await captureShopifyOwnerEmail({
+  const result = await captureCurrentShopifyOwnerEmail({
     userId: user.id, shop: user.shopifyShop, accessToken: user.shopifyAccessToken,
-  }, { fetch: fetchShopifyShopOwnerEmailResult, persist: persistShopifyOwnerEmailCapture });
+  }, fetchShopifyShopOwnerEmailResult);
   return usableShopifyOwnerEmail(result.email);
 }
 

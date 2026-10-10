@@ -1,3 +1,5 @@
+import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
+import { shopifyContactCaptureLog } from "@shared/shopifyContactPrivacy";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users, shopifyMerchantContacts, integrations } from "@shared/schema";
@@ -113,5 +115,21 @@ export async function withShopifyMailPrivacyFence(userId: string, rawShop: strin
     if (!current || normalizeShopifyShopDomain(current.shopifyShop) !== shop ||
         !isShopifyContactInstallationActive(current)) return false;
     return send(current);
+  });
+}
+
+/** Recheck retained authorization before requesting shop.email; a stale scheduler must not use a revoked token. */
+export async function captureCurrentShopifyOwnerEmail(input: { userId: string; shop: string; accessToken: string },
+  fetch: (shop: string, token: string) => Promise<ShopifyEmailCaptureResult>,
+  emit: (line: string) => void = console.info): Promise<ShopifyEmailCaptureResult> {
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.shop}, 0))`);
+    const [current] = await tx.select().from(users).where(eq(users.id, input.userId)).limit(1);
+    if (!current || !isShopifyContactInstallationActive(current) ||
+        normalizeShopifyShopDomain(current.shopifyShop) !== input.shop || current.shopifyAccessToken !== input.accessToken) {
+      emit(shopifyContactCaptureLog("installation_inactive", new Date()));
+      return { status: "installation_inactive", email: null };
+    }
+    return captureShopifyOwnerEmail(input, { fetch, persist: persistShopifyOwnerEmailCapture, emit });
   });
 }

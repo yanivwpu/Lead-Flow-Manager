@@ -12,7 +12,7 @@ The production PostgreSQL database, Railway runtime/retained logs and the Octobe
 
 - Existing shop.email capture and synthetic users.email identity remain separate.
 - Success, missing, invalid and fetch-failed results are classified without retaining raw responses/errors.
-- The capture transaction locks/rechecks the current installation and token before persisting. It preserves an existing valid owner email on failure, and does not recreate data after uninstall/redact.
+- Capture rechecks the current installation/token inside the privacy fence before requesting Shopify metadata, then locks/rechecks again before persisting. It preserves an existing valid owner email on failure, and does not recreate data after uninstall/redact.
 - shopify_merchant_contacts stores outcome/source/timestamp and an optional support contact. Aggregate logs contain only bounded outcome, source and UTC timestamp; no shop/user identifier or contact address.
 - The optional confirmation accepts a merchant-selected business contact, is skippable, and can be removed in Shopify settings. The confirmed address is for setup/support only; no marketing flag is set and no marketing email is sent by confirmation. This confirms the merchant's choice, not independent ownership verification.
 - Contact reads are session-scoped, no-store and unavailable after uninstall/deletion requests. Writes require same-origin JSON; arbitrary user/shop/marketing fields are discarded.
