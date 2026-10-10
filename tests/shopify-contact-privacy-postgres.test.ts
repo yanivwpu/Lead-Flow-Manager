@@ -90,6 +90,11 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
 
     assert.ok(await save(initial.id, { action: "confirm", email: secondEmail }));
     assert.ok((await read(initial.id)).suggestedEmail === secondEmail);
+    assert.ok(await save(initial.id, { action: "dismiss" }));
+    assert.ok((await read(initial.id)).suggestedEmail === secondEmail, "Dismissing a prompt must not erase a confirmed contact");
+    assert.ok(await save(initial.id, { action: "remove" }));
+    assert.ok(!(await read(initial.id)).confirmed);
+    assert.ok(await save(initial.id, { action: "confirm", email: secondEmail }));
     [stored] = await db.select().from(schema.users).where(eq(schema.users.id, initial.id));
     assert.ok(stored.email === initial.email && stored.billingPlan === "pro");
     await integration(initial.id, input.shop);

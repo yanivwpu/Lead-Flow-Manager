@@ -57,11 +57,16 @@ export async function saveShopifySupportContact(userId: string, action: ShopifyS
       supportEmail: action.email,
       supportSource: action.email === sanitizeShopifyOwnerEmail(user.shopifyOwnerEmail) ? "shop.email_confirmed" : "merchant_input",
       supportConfirmedAt: new Date(), supportDismissedAt: null,
-    } : {
+    } : action.action === "dismiss" ? { supportDismissedAt: new Date() } : {
       supportEmail: null, supportSource: null, supportConfirmedAt: null, supportDismissedAt: new Date(),
     };
-    await tx.insert(shopifyMerchantContacts).values({ userId, canonicalShop: shop, ...patch })
-      .onConflictDoUpdate({ target: shopifyMerchantContacts.userId, set: { canonicalShop: shop, ...patch } });
+    const [previous] = await tx.select().from(shopifyMerchantContacts).where(eq(shopifyMerchantContacts.userId, userId));
+    const clearOld = previous && previous.canonicalShop !== shop ? {
+      supportEmail: null, supportSource: null, supportConfirmedAt: null, supportDismissedAt: null,
+    } : {};
+    const update = { canonicalShop: shop, ...clearOld, ...patch };
+    await tx.insert(shopifyMerchantContacts).values({ userId, ...update })
+      .onConflictDoUpdate({ target: shopifyMerchantContacts.userId, set: update });
     return true;
   });
 }

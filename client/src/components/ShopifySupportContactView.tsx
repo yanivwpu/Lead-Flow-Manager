@@ -26,7 +26,7 @@ export function ShopifySupportContactView(props: {
       {props.failed && <p role="alert" className="text-red-700">{copy.error}</p>}
       <div className="flex flex-wrap gap-3">
         <button type="submit" disabled={props.pending} className="rounded bg-brand-green px-3 py-2 text-white">{copy.save}</button>
-        <button type="button" disabled={props.pending} onClick={props.onSkip}>{copy.skip}</button>
+        {!props.confirmed && <button type="button" disabled={props.pending} onClick={props.onSkip}>{copy.skip}</button>}
         {props.manage && props.confirmed && <button type="button" disabled={props.pending} onClick={props.onRemove}>{copy.remove}</button>}
         <button type="button" disabled={props.pending} onClick={props.onClose}>{copy.cancel}</button>
       </div>
