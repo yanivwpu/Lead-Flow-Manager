@@ -458,7 +458,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     });
 
     if (triggerType && recordMode !== "activity_only") {
-      dispatchCommerceEventAutomation({
+      const dispatch = dispatchCommerceEventAutomation({
         userId,
         triggerType,
         contact,
@@ -470,9 +470,11 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
         logCommerce("workflow_dispatch_error", {
           userId,
           triggerType,
-          error: err instanceof Error ? err.message : String(err),
+          error: source === "shopify" ? "workflow_dispatch_failed" : err instanceof Error ? err.message : String(err),
         });
       });
+      // The Shopify erasure fence must cover workflow snapshots as well as initial ingestion.
+      if (source === "shopify") await dispatch;
     }
 
     scheduleHubSpotAutoSync(userId, contact.id);
@@ -493,7 +495,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       contactCreated,
     };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = source === "shopify" ? "commerce_ingest_failed" : err instanceof Error ? err.message : String(err);
     logCommerce("failed", { userId, triggerType: triggerType || null, error });
     return { ok: false, error };
   }

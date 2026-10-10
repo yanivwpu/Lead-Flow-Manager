@@ -1,3 +1,4 @@
+import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -99,6 +100,7 @@ export function ShopifyManagePanel({
 
   return (
     <div className="space-y-4" data-testid="shopify-manage-connected">
+      <ShopifySupportContact manage />
       <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 p-4 text-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="font-semibold text-emerald-950">Connected</p>

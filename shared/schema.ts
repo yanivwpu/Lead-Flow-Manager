@@ -289,6 +289,26 @@ export const shopifyShopTrials = pgTable(
 
 export type ShopifyShopTrial = typeof shopifyShopTrials.$inferSelect;
 
+export const shopifyMerchantContacts = pgTable("shopify_merchant_contacts", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  canonicalShop: text("canonical_shop").notNull(),
+  captureStatus: text("capture_status"),
+  captureSource: text("capture_source"),
+  captureAt: timestamp("capture_at"),
+  supportEmail: text("support_email"),
+  supportSource: text("support_source"),
+  supportConfirmedAt: timestamp("support_confirmed_at"),
+  supportDismissedAt: timestamp("support_dismissed_at"),
+});
+export const shopifyPrivacyErasureTasks = pgTable("shopify_privacy_erasure_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  scopeFrom: timestamp("scope_from"),
+  scopeTo: timestamp("scope_to").notNull().defaultNow(),
+  status: text("status").notNull().default("pending_external"),
+  completedAt: timestamp("completed_at"),
+});
+
 /** Hashed, single-use password reset tokens for main app users (DB-backed for multi-instance). */
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
