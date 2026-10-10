@@ -61,6 +61,7 @@ router.use(createShopifyOnboardingRouter({
     canonicalShop: user.shopifyShop!, user, requireInstalledShop: true,
   }),
   emit: logShopifyActivation,
+  afterRecovery: trySendShopifyWelcomeEmailForUser,
 }));
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
@@ -324,7 +325,8 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     try {
       const forWelcome = (await storage.getUserForSession(user.id)) ?? user;
-      await trySendShopifyWelcomeEmailForUser({
+      // Do not send trial welcome copy before usable access is confirmed.
+      if (usableAppAccess) await trySendShopifyWelcomeEmailForUser({
         id: forWelcome.id,
         name: forWelcome.name,
         email: forWelcome.email,

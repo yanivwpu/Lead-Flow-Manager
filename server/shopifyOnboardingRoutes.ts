@@ -8,6 +8,7 @@ type Dependencies<T extends Merchant> = {
   readMerchant(id: string): Promise<T | undefined>;
   describe(user: T): Promise<ShopifyOnboardingSnapshot>;
   claim(user: T): Promise<{ granted: boolean; reason: string }>;
+  afterRecovery?(user: T): Promise<unknown>;
   emit(shop: string, event: "trial_activated" | "trial_failed" |
     "first_app_page_reached" | "first_successful_render" | "first_channel_setup",
     detail: { page?: "start" | "inbox" | "integrations" | "other";
@@ -69,7 +70,10 @@ export function createShopifyOnboardingRouter<T extends Merchant>(deps: Dependen
       const current = await merchant(req);
       if (!current) return res.status(409).json({ state: "reconnect_required" });
       const after = await deps.describe(current);
-      if (result.granted) deps.emit(user.shopifyShop!, "trial_activated", { source: "recovery" });
+      if (result.granted) {
+        deps.emit(user.shopifyShop!, "trial_activated", { source: "recovery" });
+        try { await deps.afterRecovery?.(current); } catch { /* Welcome mail must not block usable access. */ }
+      }
       if (after.state === "recovery_required") {
         deps.emit(user.shopifyShop!, "trial_failed", {
           source: "recovery", reason: result.reason === "ledger_not_ready" ? "ledger_not_ready" : "provisioning_failed",

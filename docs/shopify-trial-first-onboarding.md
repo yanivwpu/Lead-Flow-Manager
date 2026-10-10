@@ -6,6 +6,7 @@ First installs formerly redirected to Pricing after the trial grant, and the fre
 
 - A usable first-install Pro + AI trial opens /shopify/start. The screen verifies its state with the signed-in session and offers channel setup, Inbox, and voluntary Pricing.
 - Existing usable merchants and paid subscriptions continue to Inbox. Used/expired trials without usable access go to Pricing. Blocked history gets an explicit support state; disconnected sessions get an instruction to reopen from Shopify.
+- Trial welcome mail is deferred until usable access is confirmed, and sent through the existing send-once service after successful recovery.
 - Provisioning failures retain the OAuth connection and session, allowing recovery without replaying a single-use authorization code. Retry uses the session's shop and the existing transactional claim.
 - The claim locks and reads the current user before eligibility evaluation. It never overwrites an existing shop-ledger row, resets dates, bypasses a readiness gate, or changes paid plans.
 - Uninstall still keeps the ledger, and valid shop/redact still removes it. Original installation/trial dates remain unchanged. Integration metadata records the most recent first-token installation/reinstallation time for early-uninstall measurement.

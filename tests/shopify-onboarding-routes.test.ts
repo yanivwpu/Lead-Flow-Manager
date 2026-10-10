@@ -11,6 +11,7 @@ test("session authorization, CSRF, retry, blocked history, and telemetry over HT
   let installed = true;
   let calls = 0;
   let failClaim = false;
+  let welcomeCalls = 0;
   const events: unknown[] = [];
   const user = { id: "test-user", shopifyShop: "test.myshopify.com", shopifyAccessToken: "test-only" };
   const app = express();
@@ -27,6 +28,7 @@ test("session authorization, CSRF, retry, blocked history, and telemetry over HT
       return { granted: true, reason: "grant" };
     },
     emit: (_shop, event, detail) => events.push({ event, ...detail }),
+    afterRecovery: async () => { welcomeCalls++; },
   }));
   // OAuth/webhooks must not inherit the new session middleware.
   app.get("/api/shopify/callback", (_req, res) => res.sendStatus(200));
@@ -60,6 +62,7 @@ test("session authorization, CSRF, retry, blocked history, and telemetry over HT
     assert.equal(calls, 1);
     assert.equal((await request("/api/shopify/onboarding/retry", {})).status, 200);
     assert.equal(calls, 1, "retry after a grant is read-only");
+    assert.equal(welcomeCalls, 1, "welcome is sent after confirmed recovery, not replayed by later retries");
     for (const existing of ["plan_required", "support_required", "app_ready"] as const) {
       state = existing;
       assert.equal((await request("/api/shopify/onboarding/retry", {})).status, 200);
