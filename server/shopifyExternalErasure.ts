@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { shopifyPrivacyErasureTasks } from "@shared/schema";
 
@@ -22,5 +22,6 @@ export async function processShopifyExternalErasureTasks(adapter: {
       }
     } catch { /* A failed/unconfigured processor never marks erasure complete. */ }
   }
-  return { pending: tasks.length - completed, completed };
+  const [remaining] = await db.select({ total: count() }).from(shopifyPrivacyErasureTasks);
+  return { pending: remaining.total, completed };
 }

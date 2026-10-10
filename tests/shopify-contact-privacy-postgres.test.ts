@@ -234,6 +234,12 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     } });
     assert.equal(completed.completed, beforeExternal);
     assert.equal((await db.select().from(schema.shopifyPrivacyErasureTasks)).length, 0);
+    await db.insert(schema.shopifyPrivacyErasureTasks).values(Array.from({ length: 25 }, () => ({ scopeTo: new Date(), requestedAt: new Date() })));
+    const batch = await external({ eraseAndVerify: async () => ({ verified: true }) });
+    assert.equal(batch.completed, 20);
+    assert.equal(batch.pending, 5, "Report the remaining queue, not just the processed batch");
+    const tail = await external({ eraseAndVerify: async () => ({ verified: true }) });
+    assert.equal(tail.completed, 5); assert.equal(tail.pending, 0);
   } finally {
     await (db as any).$client.end();
     await admin.query("DROP SCHEMA " + namespace + " CASCADE");
