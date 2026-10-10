@@ -1,4 +1,4 @@
-import { useId } from "react";
+import React, { useId } from "react";
 import { shopifySupportContactCopy } from "@/lib/shopifySupportContactCopy";
 export function ShopifySupportContactView(props: {
   language: string; expanded: boolean; email: string; suggested: boolean; confirmed: boolean;

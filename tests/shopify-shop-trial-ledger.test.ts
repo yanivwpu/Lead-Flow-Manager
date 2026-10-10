@@ -250,15 +250,19 @@ section("uninstall keeps ledger; shop/redact deletes identifying ledger");
   const routes = src("server/shopifyRoutes.ts");
   const uninstallStart = routes.indexOf("router.post('/webhooks/app-uninstalled'");
   const uninstallEnd = routes.indexOf("router.post('/webhooks/subscription-update'");
-  const uninstall = routes.slice(uninstallStart, uninstallEnd);
-  assert.ok(uninstall.includes("shopifySubscriptionStatus: 'uninstalled'"));
+  const handler = routes.slice(uninstallStart, uninstallEnd);
+  assert.ok(handler.includes("uninstallShopifyStore"));
+  const uninstall = src("server/shopifyContactService.ts").slice(src("server/shopifyContactService.ts").indexOf("export async function uninstallShopifyStore"));
+  assert.ok(uninstall.includes('shopifySubscriptionStatus: "uninstalled"'));
   assert.ok(!uninstall.includes("deleteShopifyShopTrialLedgerForCanonicalShop"));
-  assert.ok(uninstall.includes("Keep shopify_shop and shopify_shop_trials"));
+  assert.ok(!uninstall.includes(".delete(shopifyShopTrials)"));
+  assert.ok(!uninstall.includes("trialEndsAt:"));
 
   const redactStart = routes.indexOf("router.post('/webhooks/shop/redact'");
-  const redact = routes.slice(redactStart, redactStart + 3500);
-  assert.ok(redact.includes("deleteShopifyShopTrialLedgerForCanonicalShop"));
-  assert.ok(redact.includes("may qualify as a new shop trial"));
+  const redactHandler = routes.slice(redactStart, redactStart + 3500);
+  assert.ok(redactHandler.includes("redactShopifyStore"));
+  const redact = src("server/shopifyPrivacyRedaction.ts");
+  assert.ok(redact.includes(".delete(shopifyShopTrials)"));
   assert.ok(!redact.includes("intentionally\n      // not deleted"));
   assert.ok(!redact.includes("non-PII lifetime consumption"));
 

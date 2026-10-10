@@ -13,15 +13,16 @@ export function shopifyMerchantRedactionPatch(user: Pick<User, "email">, neutral
     } : {}),
   };
 }
-export function recordBelongsToShopify(value: unknown, shop: string): boolean {
-  if (!value || typeof value !== "object") return false;
+export function recordBelongsToShopify(value: unknown, shop: string, depth = 0): boolean {
+  if (!value || typeof value !== "object" || depth > 12) return false;
+  if (Array.isArray(value)) return value.some(item => recordBelongsToShopify(item, shop, depth + 1));
   const row = value as Record<string, unknown>;
   if (row.source === "shopify" || row.lastCommerceSource === "shopify" ||
       (typeof row.trigger === "string" && row.trigger.startsWith("shopify_")) ||
       (typeof row.triggerType === "string" && row.triggerType.startsWith("shopify_"))) return true;
   for (const key of ["shop", "shopUrl", "canonicalShop", "shop_domain"])
     if (typeof row[key] === "string" && normalizeShopifyShopDomain(row[key] as string) === shop) return true;
-  return false;
+  return Object.values(row).some(item => item && typeof item === "object" && recordBelongsToShopify(item, shop, depth + 1));
 }
 export function scrubShopifyContactMetadata(value: unknown, shop: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
