@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { clearShopifyPostInstallPricingPath, clearShopifyPlanPickerOpened } from "@/lib/shopifyBootstrap";
@@ -7,6 +8,7 @@ import { trackShopifyActivation } from "@/lib/shopifyActivationTelemetry";
 import type { ShopifyOnboardingSnapshot } from "@shared/shopifyOnboarding";
 
 export function ShopifyStart() {
+  const { i18n } = useTranslation();
   const { user, isLoading, sessionAligned, refreshSession } = useAuth();
   const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -70,6 +72,6 @@ export function ShopifyStart() {
   const snapshot: ShopifyOnboardingSnapshot | null =
     !loading && (!user || (waitingForSession && sessionTimedOut))
       ? { state: "reconnect_required" } : query.data ?? null;
-  return <ShopifyStartView snapshot={snapshot} loading={loading} busy={busy}
+  return <ShopifyStartView locale={i18n.language} snapshot={snapshot} loading={loading} busy={busy}
     failed={query.isError || retryFailed} onRetry={() => void retry()} onRefresh={() => void refresh()} />;
 }

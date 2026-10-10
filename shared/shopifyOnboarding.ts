@@ -59,3 +59,10 @@ export function isEarlyShopifyUninstall(installedAt: Date | string | null | unde
   const elapsed = now.getTime() - new Date(installedAt).getTime();
   return Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= 10 * 60 * 1000;
 }
+
+/** Voluntary pricing must not masquerade as a fresh OAuth installation. */
+export function shopifyVoluntaryPricingPath(shop?: string | null): string {
+  const params = new URLSearchParams({ shopify_pricing: "1" });
+  if (shop) params.set("shop", shop);
+  return "/pricing?" + params.toString();
+}

@@ -5,10 +5,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { shopifyMerchantNeedsPlanSelection } from "../shared/shopifyLaunchRouting";
 import {
   resolveShopifyOnboardingState, shopifyInstallDestination,
-  parseShopifyActivationEvent, isEarlyShopifyUninstall,
+  parseShopifyActivationEvent, isEarlyShopifyUninstall, shopifyVoluntaryPricingPath,
 } from "../shared/shopifyOnboarding";
 import { getShopifyBootstrapContext, resolveShopifyBootstrapDestination } from "../client/src/lib/shopifyBootstrap";
-import { getUpgradeNavigationPath } from "../client/src/lib/proAiTrialState";
 import { ShopifyStartView } from "../client/src/components/ShopifyStartView";
 
 const base = { shopifyShop: "eligible.myshopify.com", shopifyAccessToken: "test-token",
@@ -99,10 +98,22 @@ test("guided start clears stale pricing, legacy callbacks route to start, and vo
     values.set("whachatcrm_shopify_post_install_pricing", "/pricing?shopify_installed=1");
     assert.equal(getShopifyBootstrapContext("/shopify/start", "").active, false);
     assert.equal(values.size, 0);
-    const pricingPath = getUpgradeNavigationPath({ isShopify: true, shopHint: base.shopifyShop });
+    const pricingPath = shopifyVoluntaryPricingPath(base.shopifyShop);
     assert.match(pricingPath, /shopify_pricing=1/);
     assert.doesNotMatch(pricingPath, /shopify_installed/);
     const [path, search] = pricingPath.split("?");
     assert.equal(getShopifyBootstrapContext(path, "?" + search).active, false);
   } finally { (globalThis as any).sessionStorage = original; }
+});
+
+test("Spanish and Hebrew first-use screens retain the same verified trial actions", () => {
+  for (const locale of ["es", "he"]) {
+    const html = renderToStaticMarkup(React.createElement(ShopifyStartView, {
+      locale, snapshot: { state: "trial_active" }, loading: false, busy: false, failed: false,
+      onRetry() {}, onRefresh() {},
+    }));
+    assert.match(html, /href="\/app\/inbox"/);
+    assert.match(html, /href="\/pricing"/);
+    if (locale === "he") assert.match(html, /dir="rtl"/);
+  }
 });
