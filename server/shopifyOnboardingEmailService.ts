@@ -55,15 +55,14 @@ type ShopifyOnboardingRow = {
   deletionRequestedAt: Date | null;
 };
 
-async function markShopifyRemindersComplete(userId: string): Promise<void> {
-  const now = new Date();
-  await db
-    .update(users)
-    .set({
-      shopifyActivationEmailDay5SentAt: now,
-      shopifyActivationEmailDay10SentAt: now,
-    })
-    .where(eq(users.id, userId));
+async function markShopifyRemindersComplete(userId: string, shop: string): Promise<boolean> {
+  return withShopifyMailPrivacyFence(userId, shop, async current => {
+    const now = new Date();
+    await db.update(users).set({
+      shopifyActivationEmailDay5SentAt: now, shopifyActivationEmailDay10SentAt: now,
+    }).where(eq(users.id, current.id));
+    return true;
+  });
 }
 
 export async function trySendShopifyWelcomeEmailForUser(user: {
@@ -168,8 +167,7 @@ export async function runShopifyOnboardingEmails(): Promise<{
       if (choice.action === "none") continue;
 
       if (choice.action === "mark_complete") {
-        await markShopifyRemindersComplete(user.id);
-        markedComplete++;
+        if (await markShopifyRemindersComplete(user.id, user.shopifyShop!)) markedComplete++;
         continue;
       }
 
