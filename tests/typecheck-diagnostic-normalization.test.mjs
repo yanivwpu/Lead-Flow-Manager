@@ -8,5 +8,7 @@ test("diagnostic comparison ignores property order but preserves type/property/c
   assert.notEqual(normalize(one), normalize(one.replace("number", "boolean")));
   assert.notEqual(normalize(one), normalize(one.replace("currency", "newCurrency")));
   assert.notEqual(normalize(one), normalize(one.replace("2345", "9999")));
+  assert.equal(normalize('Type "week" | "month"'), normalize('Type "month" | "week"'));
+  assert.notEqual(normalize('Type "week" | "month"'), normalize('Type "year" | "month"'));
   assert.equal(normalize("unexpected { non-type }"), "unexpected { non-type }");
 });

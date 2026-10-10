@@ -52,6 +52,8 @@ try {
   if (previous.count) console.log("The repository-wide typecheck already fails on the base; this check rejects any additional diagnostics.");
   if (added.length) {
     console.error(added.join("\n\n"));
+    const removed = [...previous.diagnostics.keys()].filter(message => !candidate.diagnostics.has(message));
+    if (removed.length) console.error("Base-only diagnostics for comparison:\\n".replace("\\\\n", "\\n") + removed.join("\n\n"));
     process.exitCode = 1;
   }
 } finally {
