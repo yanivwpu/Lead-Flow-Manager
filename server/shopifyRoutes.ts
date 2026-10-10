@@ -51,6 +51,9 @@ import {
 } from './shopifyWebhookHealth';
 
 const router = Router();
+
+// Ensure JSON body is parsed for session-auth billing routes (checkout-web).
+router.use(express.json());
 router.use(createShopifyOnboardingRouter({
   readMerchant: (id) => storage.getUserForSession(id),
   describe: getShopifyOnboardingSnapshot,
@@ -59,9 +62,6 @@ router.use(createShopifyOnboardingRouter({
   }),
   emit: logShopifyActivation,
 }));
-
-// Ensure JSON body is parsed for session-auth billing routes (checkout-web).
-router.use(express.json());
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
@@ -347,7 +347,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId: user.id,
         type: 'shopify',
         name: 'Shopify',
-        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'], shopifyLastInstalledAt: new Date().toISOString() },
+        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'], ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
         isActive: true,
       });
     } else {
