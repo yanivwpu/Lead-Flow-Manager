@@ -61,7 +61,7 @@ router.use(createShopifyOnboardingRouter({
     canonicalShop: user.shopifyShop!, user, requireInstalledShop: true,
   }),
   emit: logShopifyActivation,
-  afterRecovery: trySendShopifyWelcomeEmailForUser,
+  afterRecovery: async (user) => trySendShopifyWelcomeEmailForUser(user),
 }));
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
