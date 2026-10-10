@@ -32,7 +32,7 @@ import {
   resolveShopifyInstallUser,
 } from './shopifyInstallUser';
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
-import { claimShopifyShopTrialForInstall, deleteShopifyShopTrialLedgerForCanonicalShop, hashShopifyShopForLogs } from './shopifyShopTrialService';
+import { claimShopifyShopTrialForInstall, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
 import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import {
@@ -50,6 +50,7 @@ import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
 import { persistShopifyOwnerEmailCapture, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
 import { createShopifySupportContactRouter } from "./shopifySupportContactRoutes";
 import { redactShopifyStore } from "./shopifyPrivacyRedaction";
+import { createShopifyStoreRedactionHandler } from "./shopifyStoreRedactionHandler";
 
 const router = Router();
 
@@ -738,44 +739,10 @@ router.post('/webhooks/customers/redact', async (req: Request, res: Response) =>
 });
 
 // shop/redact - Shop data deletion (48 hours after uninstall)
-router.post('/webhooks/shop/redact', async (req: Request, res: Response) => {
-  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  const shop = req.headers['x-shopify-shop-domain'] as string;
-
-  if (!hmac || !shop) {
-    console.log('[Shopify Compliance] shop/redact - Missing headers');
-    return res.status(401).json({ error: 'Missing webhook headers' });
-  }
-
-  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-  if (!verifyWebhookHmac(rawBody, hmac)) {
-    console.log('[Shopify Compliance] shop/redact - Invalid HMAC');
-    return res.status(401).json({ error: 'Invalid webhook signature' });
-  }
-
-  try {
-    const { shop_domain } = req.body;
-    const canonicalShop = normalizeShopifyShopDomain(shop_domain || shop);
-    const shopHash = hashShopifyShopForLogs(canonicalShop || shop_domain || shop);
-    console.info("[ShopifyPrivacy] signed_redaction_received");
-
-    if (!canonicalShop) return res.status(400).json({ error: "Invalid shop domain" });
-    const result = await redactShopifyStore(canonicalShop);
-    // Never log payloads, contact values, provider errors, or merchant selectors here.
-    console.info(JSON.stringify({ tag: "[ShopifyPrivacy]", event: "database_erasure_completed",
-      at: new Date().toISOString(), externalErasurePending: result.externalErasurePending }));
-    res.status(200).json({ 
-      received: true,
-      databaseErased: true,
-      externalErasurePending: true,
-      message: 'Application store data erased. Governed external erasure queued.'
-    });
-  } catch (error) {
-    console.error("[ShopifyPrivacy] compliance_processing_failed");
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
+router.post('/webhooks/shop/redact', createShopifyStoreRedactionHandler({
+  verify: verifyWebhookHmac,
+  redact: redactShopifyStore,
+}));
 function verifyShopifyCommerceWebhook(req: Request, res: Response): { shop: string; body: Record<string, unknown> } | null {
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;
   const shop = req.headers['x-shopify-shop-domain'] as string;

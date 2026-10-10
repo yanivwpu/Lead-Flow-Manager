@@ -64,14 +64,6 @@ export async function saveShopifySupportContact(userId: string, action: ShopifyS
 }
 
 /** Serialize ingestion against uninstall/redaction; do not repopulate a revoked installation. */
-export async function withShopifyPrivacyMutation<T>(shop: string, process: () => Promise<T>): Promise<T> {
-  const canonical = normalizeShopifyShopDomain(shop);
-  if (!canonical) throw new Error("Invalid Shopify domain");
-  return db.transaction(async tx => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${canonical}, 0))`);
-    return process();
-  });
-}
 export async function withShopifyPrivacyFence(shop: string, process: () => Promise<void>): Promise<void> {
   const canonical = normalizeShopifyShopDomain(shop);
   if (!canonical) return;

@@ -52,7 +52,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Contact capture, optional confirmation, and real PostgreSQL erasure
         run: |
-          npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts
+          npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
