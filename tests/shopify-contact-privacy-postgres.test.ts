@@ -76,6 +76,14 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
       fetch: async () => classifyShopifyOwnerEmail(fixtureEmail), persist, emit: line => logs.push(line),
     });
     assert.equal(captured.status, "success");
+    assert.equal((await currentCapture(input, async () => classifyShopifyOwnerEmail(fixtureEmail), () => {})).status, "success");
+    await db.execute(sql.raw("ALTER TABLE users RENAME COLUMN shopify_owner_email TO fixture_hidden_owner_email"));
+    try {
+      let fetchedDuringFailure = false;
+      const unavailable = await currentCapture(input, async () => { fetchedDuringFailure = true; return classifyShopifyOwnerEmail(fixtureEmail); }, () => {});
+      assert.equal(unavailable.status, "persist_failed");
+      assert.ok(!fetchedDuringFailure);
+    } finally { await db.execute(sql.raw("ALTER TABLE users RENAME COLUMN fixture_hidden_owner_email TO shopify_owner_email")); }
     let [stored] = await db.select().from(schema.users).where(eq(schema.users.id, initial.id));
     assert.ok(stored.shopifyOwnerEmail === fixtureEmail);
     const [report] = await db.select().from(schema.shopifyMerchantContacts).where(eq(schema.shopifyMerchantContacts.userId, initial.id));

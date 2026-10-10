@@ -122,7 +122,8 @@ export async function withShopifyMailPrivacyFence(userId: string, rawShop: strin
 export async function captureCurrentShopifyOwnerEmail(input: { userId: string; shop: string; accessToken: string },
   fetch: (shop: string, token: string) => Promise<ShopifyEmailCaptureResult>,
   emit: (line: string) => void = console.info): Promise<ShopifyEmailCaptureResult> {
-  return db.transaction(async tx => {
+  try {
+    return await db.transaction(async tx => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.shop}, 0))`);
     const [current] = await tx.select().from(users).where(eq(users.id, input.userId)).limit(1);
     if (!current || !isShopifyContactInstallationActive(current) ||
@@ -131,5 +132,9 @@ export async function captureCurrentShopifyOwnerEmail(input: { userId: string; s
       return { status: "installation_inactive", email: null };
     }
     return captureShopifyOwnerEmail(input, { fetch, persist: persistShopifyOwnerEmailCapture, emit });
-  });
+    });
+  } catch {
+    emit(shopifyContactCaptureLog("persist_failed", new Date()));
+    return { status: "persist_failed", email: null };
+  }
 }
