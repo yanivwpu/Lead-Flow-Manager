@@ -167,10 +167,6 @@ export function ProspectAiLanding() {
           className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(5,150,105,0.14),_transparent_55%),linear-gradient(180deg,#f8fafc_0%,#ffffff_70%)]"
           aria-hidden
         />
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-[url('/og/prospect-ai-growth-engine.png')] bg-cover bg-center opacity-[0.12]"
-          aria-hidden
-        />
         <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 md:px-6 md:pb-24 md:pt-10 xl:max-w-[1440px]">
           <MarketingBreadcrumbs
             items={[
