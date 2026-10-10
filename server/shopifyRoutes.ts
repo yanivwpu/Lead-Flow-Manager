@@ -34,7 +34,11 @@ import {
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
 import { claimShopifyShopTrialForInstall, deleteShopifyShopTrialLedgerForCanonicalShop, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
-import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
+import { shopifyInstallDestination, isEarlyShopifyUninstall } from '@shared/shopifyOnboarding';
+import { getShopifyOnboardingSnapshot } from './shopifyOnboardingService';
+import { createShopifyOnboardingRouter } from './shopifyOnboardingRoutes';
+import { logShopifyActivation } from './shopifyActivationTelemetry';
+import { establishShopifyLogin } from './shopifyLoginSession';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -50,6 +54,15 @@ const router = Router();
 
 // Ensure JSON body is parsed for session-auth billing routes (checkout-web).
 router.use(express.json());
+router.use(createShopifyOnboardingRouter({
+  readMerchant: (id) => storage.getUserForSession(id),
+  describe: getShopifyOnboardingSnapshot,
+  claim: (user) => claimShopifyShopTrialForInstall({
+    canonicalShop: user.shopifyShop!, user, requireInstalledShop: true,
+  }),
+  emit: logShopifyActivation,
+  afterRecovery: async (user) => trySendShopifyWelcomeEmailForUser(user),
+}));
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
@@ -202,6 +215,7 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to exchange authorization code' });
     }
 
+    logShopifyActivation(shop, "oauth_completed", { source: "oauth" });
     const sessionUserId = (req as any).user?.id as string | undefined;
     const resolved = await resolveShopifyInstallUser({ shop, sessionUserId });
     const normalizedShop = resolved.normalizedShop;
@@ -253,24 +267,26 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
     }
 
-    const trialClaim = await claimShopifyShopTrialForInstall({
-      canonicalShop: normalizedShop,
-      user,
-    });
-    console.log("[Shopify Callback] Shop trial ledger", {
-      shopHash: hashShopifyShopForLogs(normalizedShop),
-      userId: user.id,
-      claimed: trialClaim.claimed,
-      granted: trialClaim.granted,
-      status: trialClaim.status,
-      reason: trialClaim.reason,
-    });
+    let trialClaim;
+    try {
+      trialClaim = await claimShopifyShopTrialForInstall({ canonicalShop: normalizedShop, user });
+      if (trialClaim.granted) {
+        logShopifyActivation(normalizedShop, "trial_activated", { source: "oauth" });
+      } else if (!["ledger_exists", "user_ineligible"].includes(trialClaim.reason)) {
+        logShopifyActivation(normalizedShop, "trial_failed", {
+          source: "oauth", reason: trialClaim.reason === "ledger_not_ready" ? "ledger_not_ready" : "provisioning_failed",
+        });
+      }
+    } catch {
+      // Save the OAuth connection/session so recovery does not replay a single-use authorization code.
+      logShopifyActivation(normalizedShop, "trial_failed", { source: "oauth", reason: "provisioning_failed" });
+    }
     user = (await storage.getUserForSession(user.id)) ?? user;
 
     const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
     const shopAlreadyActive = priorShopifyStatus === 'active';
     const firstTokenInstall = shopifyMerchantIsFirstTokenInstall(user);
-    const usableAppAccess = shopifyMerchantHasUsableAppAccess(user);
+    const usableAppAccess = shopifyMerchantHasUsableAppAccess({ ...user, shopifyShop: normalizedShop });
 
     const installPatch: Parameters<typeof storage.updateUser>[1] = {
       shopifyShop: normalizedShop,
@@ -278,6 +294,10 @@ router.get('/callback', async (req: Request, res: Response) => {
       shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
     };
 
+    // Reconnect an uninstalled/cancelled trial without changing its dates or paid entitlements.
+    if (["uninstalled", "cancelled", "canceled"].includes(priorShopifyStatus)) {
+      installPatch.shopifySubscriptionStatus = "pending";
+    }
     let shopOwnerEmail: string | null = null;
     try {
       shopOwnerEmail = await fetchShopifyShopOwnerEmail(normalizedShop, accessToken);
@@ -290,7 +310,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     if (shopOwnerEmail) {
       installPatch.shopifyOwnerEmail = shopOwnerEmail;
     }
-    if (!shopAlreadyActive && (firstTokenInstall || !usableAppAccess)) {
+    if (!shopAlreadyActive && !usableAppAccess) {
       Object.assign(installPatch, {
         shopifySubscriptionStatus: 'pending',
         shopifyChargeId: null,
@@ -305,7 +325,8 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     try {
       const forWelcome = (await storage.getUserForSession(user.id)) ?? user;
-      await trySendShopifyWelcomeEmailForUser({
+      // Do not send trial welcome copy before usable access is confirmed.
+      if (usableAppAccess) await trySendShopifyWelcomeEmailForUser({
         id: forWelcome.id,
         name: forWelcome.name,
         email: forWelcome.email,
@@ -328,13 +349,13 @@ router.get('/callback', async (req: Request, res: Response) => {
         userId: user.id,
         type: 'shopify',
         name: 'Shopify',
-        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'] },
+        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'], ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
         isActive: true,
       });
     } else {
       const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
       await storage.updateIntegration(existingIntegration.id, {
-        config: { ...existingConfig, shopUrl: normalizedShop },
+        config: { ...existingConfig, shopUrl: normalizedShop, ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
         isActive: true,
       });
     }
@@ -346,27 +367,20 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.error('[Shopify Webhook Register Failed]', { shop: normalizedShop, error: webhookErr });
     }
 
-    // Log the merchant into the web app so they can choose Starter vs Pro on Pricing (Shopify Billing API).
-    await new Promise<void>((resolve, reject) => {
-      (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
-    });
-
-    if (shopAlreadyActive || (usableAppAccess && !firstTokenInstall)) {
-      return res.redirect('/app/inbox');
+    // Persist login before redirecting; a successful OAuth exchange is not a rendered app session.
+    await establishShopifyLogin(req, user);
+    let destination = "/shopify/start";
+    try {
+      const current = await storage.getUserForSession(user.id);
+      if (current) destination = shopifyInstallDestination((await getShopifyOnboardingSnapshot(current)).state, firstTokenInstall);
+    } catch {
+      // The start screen can retry a status read; never advertise an unverified trial.
     }
-
-    const trialDays = PRO_AI_TRIAL_DAYS;
-    res.redirect(
-      `/pricing?shopify_installed=1&shop=${encodeURIComponent(normalizedShop)}&trial_days=${String(trialDays)}`,
-    );
+    return res.redirect(destination);
   } catch (error) {
     console.error('Shopify callback error:', error);
-    if (isUsersEmailUniqueViolation(error)) {
-      return res.status(409).json({
-        error: 'Shopify merchant account already exists. Please open the app from Shopify admin to continue.',
-      });
-    }
-    res.status(500).json({ error: 'Installation failed' });
+    // No tokens, shop identifiers, or raw error messages in the browser destination.
+    return res.redirect("/shopify/start?installation_error=1");
   }
 });
 
@@ -630,6 +644,10 @@ router.post('/webhooks/app-uninstalled', async (req: Request, res: Response) => 
 
     try {
       const integration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
+      const lastInstalledAt = (integration?.config as Record<string, unknown> | null)?.shopifyLastInstalledAt;
+      if (isEarlyShopifyUninstall(typeof lastInstalledAt === "string" ? lastInstalledAt : user.shopifyInstalledAt)) {
+        logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
+      }
       if (integration) {
         await storage.updateIntegration(integration.id, { isActive: false });
         console.log('[Shopify Uninstall Cleanup]', { shop, userId: user.id, status: 'integration_deactivated' });

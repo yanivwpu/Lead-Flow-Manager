@@ -72,7 +72,7 @@ export type ShopifyBootstrapContext = {
   embedded: boolean;
   needsInstallRedirect: boolean;
   pricingPath: string;
-  /** Must land on Shopify pricing — never /app/inbox first. */
+  /** Legacy installation context; trial/paid access takes precedence over pricing. */
   postInstallFlow: boolean;
   persistedPostInstall: boolean;
 };
@@ -170,6 +170,15 @@ export function getShopifyBootstrapContext(
   const onHome = path === "/";
   const onApp = path === "/app" || path.startsWith("/app/");
 
+  // The server-verified start screen owns recovery/auth states. Drop stale pricing hints.
+  if (path === "/shopify/start" || (onPricing && params.get("shopify_pricing") === "1")) {
+    clearShopifyPostInstallPricingPath();
+    clearShopifyPlanPickerOpened();
+    return { active: false, shop, shopifyInstalled: false, embedded: false,
+      needsInstallRedirect: false, pricingPath: "/pricing", postInstallFlow: false,
+      persistedPostInstall: false };
+  }
+
   const planApprovalReturn = isShopifyPlanApprovalReturn(search);
   const persisted = readPersistedPricingPath();
 
@@ -234,7 +243,7 @@ export function getShopifyBootstrapContext(
   };
 }
 
-/** Post-install must reach pricing with install query intact — not inbox. */
+/** Legacy post-install context; fresh eligible installs go to guided start. */
 function shopifyInstallPricingFlow(ctx: ShopifyBootstrapContext): boolean {
   return !!(ctx.postInstallFlow || ctx.shopifyInstalled || ctx.persistedPostInstall);
 }
@@ -319,7 +328,7 @@ export function resolveShopifyBootstrapDestination(
       if (logRedirect) {
         logBootstrap("redirecting_to_inbox_existing_shopify_merchant");
       }
-      return "/app/inbox";
+      return ctx.shopifyInstalled ? "/shopify/start" : "/app/inbox";
     }
     if (logRedirect) {
       logBootstrap("redirecting_to_pricing", {
