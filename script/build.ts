@@ -63,6 +63,13 @@ async function buildAll() {
     logLevel: "info",
   });
 
+  // Explicit invocation only; included so Railway SSH needs no dev tools or source checkout.
+  await esbuild({
+    entryPoints: ["scripts/smoke-shopify-privacy-email.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-privacy-smoke.cjs", external: externals, logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],

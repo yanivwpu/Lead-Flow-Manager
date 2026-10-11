@@ -2,6 +2,11 @@ name: Staging database bootstrap validation
 on:
   pull_request:
     paths:
+      - "scripts/smoke-shopify-privacy-email.ts"
+      - "server/shopifyPrivacySmokeSafety.ts"
+      - "tests/shopify-privacy-smoke-safety.test.ts"
+      - "script/build.ts"
+      - "docs/shopify-privacy-staging-smoke.md"
       - "scripts/bootstrap-staging-db.mjs"
       - "script/generate-staging-schema.ts"
       - "tests/staging-database-bootstrap.test.ts"

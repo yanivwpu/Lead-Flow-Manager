@@ -2,6 +2,11 @@ name: Shopify onboarding validation
 on:
   pull_request:
     paths:
+      - "scripts/smoke-shopify-privacy-email.ts"
+      - "server/shopifyPrivacySmokeSafety.ts"
+      - "tests/shopify-privacy-smoke-safety.test.ts"
+      - "script/build.ts"
+      - "docs/shopify-privacy-staging-smoke.md"
       - "server/shopify*.ts"
       - "shared/shopify*.ts"
       - "client/index.html"
