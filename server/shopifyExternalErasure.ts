@@ -88,15 +88,22 @@ export async function processShopifyExternalErasureTasks(adapter: PrivacyAdapter
 }
 
 export async function queuePrivacyExceptionAlerts() {
-  // Unique(task_id, reason) deduplicates across replicas, retries and webhook redeliveries.
-  await pool.query(`INSERT INTO shopify_privacy_alerts(task_id,reason,status,action_code)
-    SELECT id,reason,status,action_code FROM shopify_privacy_erasure_tasks t CROSS JOIN LATERAL (
-      SELECT 'permanent_failure' reason, COALESCE(error_code,'provider_permanent') action_code WHERE status='permanent_failure'
-      UNION ALL SELECT 'configuration', COALESCE(error_code,'missing_configuration') WHERE status='blocked' AND request_kind<>'access_request'
-      UNION ALL SELECT 'access_request','access_request' WHERE request_kind='access_request'
-      UNION ALL SELECT 'approaching_deadline','approaching_deadline' WHERE deadline_at>NOW() AND deadline_at<=NOW()+interval '3 days'
-      UNION ALL SELECT 'overdue','overdue' WHERE deadline_at<=NOW()
-    ) exceptions WHERE completed_at IS NULL ON CONFLICT(task_id,reason) DO NOTHING`);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Serialize occurrence reconciliation across worker replicas.
+    await client.query("SELECT pg_advisory_xact_lock(1060106)");
+    await client.query(`UPDATE shopify_privacy_alerts a SET resolved_at=NOW()
+      WHERE resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM shopify_privacy_current_issues i
+        WHERE i.task_id=a.task_id AND i.reason=a.reason)`);
+    await client.query(`INSERT INTO shopify_privacy_alerts(task_id,reason,status,action_code)
+      SELECT task_id,reason,status,CASE WHEN action_code IN ('missing_configuration','invalid_evidence',
+        'unsupported_provider','provider_permanent','provider_retry','approaching_deadline','overdue','access_request')
+        THEN action_code ELSE 'unsupported_provider' END FROM shopify_privacy_current_issues
+      ON CONFLICT(task_id,reason) WHERE resolved_at IS NULL DO NOTHING`);
+    await client.query("COMMIT");
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
 }
 export type PrivacyAlertPayload = { event: "privacy_intervention_required"; taskId: string; status: string; reason: string; actionRequired: string; deadlineAt: string };
 export async function deliverPrivacyAlerts(send?: (payload: PrivacyAlertPayload, key: string) => Promise<boolean>) {
@@ -105,7 +112,9 @@ export async function deliverPrivacyAlerts(send?: (payload: PrivacyAlertPayload,
     const token = randomUUID();
     const claim = await pool.query(`WITH due AS (
       SELECT a.id FROM shopify_privacy_alerts a JOIN shopify_privacy_erasure_tasks t ON t.id=a.task_id
-      WHERE a.delivered_at IS NULL AND t.completed_at IS NULL AND a.next_attempt_at<=NOW()
+      WHERE a.delivered_at IS NULL AND a.resolved_at IS NULL AND NOT a.email_reconciliation_required
+        AND t.completed_at IS NULL AND a.next_attempt_at<=NOW()
+        AND EXISTS (SELECT 1 FROM shopify_privacy_current_issues i WHERE i.task_id=a.task_id AND i.reason=a.reason)
         AND (a.lease_expires_at IS NULL OR a.lease_expires_at<=NOW())
       ORDER BY a.created_at FOR UPDATE OF a SKIP LOCKED LIMIT 1
     ) UPDATE shopify_privacy_alerts a SET lease_token=$1,lease_expires_at=NOW()+interval '1 minute'
@@ -119,21 +128,22 @@ export async function deliverPrivacyAlerts(send?: (payload: PrivacyAlertPayload,
         deadlineAt: current.deadline_at.toISOString() }, `shopify-privacy-${alert.id}`); } catch { /* bounded, no provider response in logs */ }
     }
     await pool.query(`UPDATE shopify_privacy_alerts SET delivered_at=CASE WHEN $3 THEN NOW() ELSE delivered_at END,
-      attempts=attempts+1,next_attempt_at=$4,lease_token=NULL,lease_expires_at=NULL
-      WHERE id=$1 AND lease_token=$2 AND lease_expires_at>NOW()`, [alert.id, token, ok, new Date(Date.now()+privacyRetryDelay(alert.attempts+1))]);
+      attempts=attempts+1,next_attempt_at=NOW()+($4::bigint * interval '1 millisecond'),lease_token=NULL,lease_expires_at=NULL
+      WHERE id=$1 AND lease_token=$2 AND lease_expires_at>NOW()`, [alert.id, token, ok, Math.min(3600000,privacyRetryDelay(alert.attempts+1))]);
   }
 }
 export function configuredPrivacyAlertSender(env = process.env) {
   const endpoint = env.SHOPIFY_PRIVACY_ALERT_URL;
   const token = env.SHOPIFY_PRIVACY_ALERT_TOKEN;
-  if (!endpoint || !token || token.length < 32) return undefined;
-  try { const url = new URL(endpoint); if (url.protocol !== "https:" || url.username || url.password) return undefined; }
+  if (env.SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED !== "true" || !endpoint || !token || !/^[A-Za-z0-9_-]{32,256}$/.test(token)) return undefined;
+  try { const url = new URL(endpoint); if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/api/internal/shopify/privacy-alerts") return undefined; }
   catch { return undefined; }
   return async (payload: PrivacyAlertPayload, key: string) => {
     const response = await fetch(endpoint, { method: "POST", redirect: "error", signal: AbortSignal.timeout(10000),
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(payload) });
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify({ alertId: key.replace(/^shopify-privacy-/, "") }) });
     // Receiver must persist the idempotency key; a delivery timeout can occur after receipt.
-    return response.ok;
+    if (!response.ok) return false;
+    try { return (await response.json()).accepted === true; } catch { return false; }
   };
 }
 let tickRunning = false;
@@ -141,7 +151,7 @@ export async function runShopifyPrivacyTick() {
   if (tickRunning) return { ok: true, skipped: true };
   tickRunning = true;
   try {
-    if ((await pool.query("SELECT to_regclass('shopify_privacy_alerts') IS NOT NULL ready")).rows[0].ready !== true) return { ok: false, skipped: true };
+    if ((await pool.query("SELECT to_regclass('shopify_privacy_current_issues') IS NOT NULL ready")).rows[0].ready !== true) return { ok: false, skipped: true };
     await queuePrivacyExceptionAlerts();
     await deliverPrivacyAlerts(configuredPrivacyAlertSender());
     await processShopifyExternalErasureTasks(configuredPrivacyAdapter(), 5);
@@ -159,11 +169,12 @@ export async function readPrivacyOperationsStatus() {
     count(*) FILTER(WHERE completed_at IS NULL AND deadline_at<=NOW())::int overdue,
     count(*) FILTER(WHERE status='verified_complete' AND completed_at IS NOT NULL)::int verified_complete
     FROM shopify_privacy_erasure_tasks`);
-  const alerts = await pool.query(`SELECT a.id,a.task_id,a.reason,a.action_code,t.status,t.deadline_at
+  const alerts = await pool.query(`SELECT a.id,a.task_id,a.reason,a.action_code,t.status,t.deadline_at,a.delivered_at,a.email_reconciliation_required
     FROM shopify_privacy_alerts a JOIN shopify_privacy_erasure_tasks t ON t.id=a.task_id
-    WHERE t.completed_at IS NULL ORDER BY t.deadline_at,a.created_at LIMIT 50`);
+    WHERE t.completed_at IS NULL AND a.resolved_at IS NULL ORDER BY t.deadline_at,a.created_at LIMIT 50`);
   return { counts: counts.rows[0], outboundAlertsConfigured: !!configuredPrivacyAlertSender(), alerts: alerts.rows.map(a => ({
-    id: a.id, taskId: a.task_id, reason: a.reason, status: a.status, deadlineAt: a.deadline_at.toISOString(),
+    id: a.id, taskId: a.task_id, reason: a.reason, status: a.status,
+    emailStatus: a.email_reconciliation_required ? "reconciliation_required" : a.delivered_at ? "accepted" : "pending", deadlineAt: a.deadline_at.toISOString(),
     actionRequired: PRIVACY_ACTIONS[a.action_code] || PRIVACY_ACTIONS.unsupported_provider,
   })) };
 }

@@ -11,6 +11,8 @@ on:
       - "client/src/pages/Admin.tsx"
       - "client/src/components/admin/AdminPrivacyOperationsTab.tsx"
       - "migrations/0105_shopify_privacy_automation.sql"
+      - "migrations/0106_shopify_privacy_alert_email.sql"
+      - "server/index.ts"
       - "docs/shopify-privacy-operations.md"
       - "server/commerceEventPipeline.ts"
       - "server/startupSchemaPatches.ts"
@@ -65,6 +67,7 @@ jobs:
           npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
           npx tsx --test tests/shopify-privacy-worker-postgres.test.ts
+          npx tsx --test tests/shopify-privacy-alert-email.test.ts
           npx tsx --test tests/shopify-privacy-verification.test.ts tests/shopify-customer-privacy-handler.test.ts tests/shopify-privacy-admin-routes.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |

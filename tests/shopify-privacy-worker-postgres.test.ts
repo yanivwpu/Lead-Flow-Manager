@@ -19,6 +19,8 @@ test("PostgreSQL worker races, leases, retries, checkpoints, complete verificati
     await pool.query(`CREATE TABLE shopify_privacy_erasure_tasks(id varchar PRIMARY KEY DEFAULT gen_random_uuid(), requested_at timestamp NOT NULL DEFAULT NOW(),scope_from timestamp,scope_to timestamp NOT NULL DEFAULT NOW(),status text NOT NULL DEFAULT 'pending_external',completed_at timestamp)`);
     await pool.query(readFileSync("migrations/0105_shopify_privacy_automation.sql", "utf8"));
     await pool.query(readFileSync("migrations/0105_shopify_privacy_automation.sql", "utf8"));
+    await pool.query(readFileSync("migrations/0106_shopify_privacy_alert_email.sql", "utf8"));
+    await pool.query(readFileSync("migrations/0106_shopify_privacy_alert_email.sql", "utf8"));
     await insert("race");
     const calls: string[] = [];
     await Promise.all(Array.from({ length: 6 }, () => run(async (t, check, signal) => { calls.push(check); return verified(t, check, signal); })));

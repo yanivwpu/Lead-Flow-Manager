@@ -63,17 +63,20 @@ export const EMAIL_VERIFICATION_REMINDER_SUBJECT =
 
 interface EmailOptions {
   to: string;
+  from?: string;
   subject: string;
   html: string;
   text?: string;
   replyTo?: string;
   privacyContext?: "shopify";
+  idempotencyKey?: string;
 }
 
 export type EmailDispatchResult = {
   ok: boolean;
   providerMessageId: string | null;
   error: string | null;
+  acceptanceUnknown?: boolean;
 };
 
 export function maskEmailForLogs(email: string | null | undefined): string | null {
@@ -105,7 +108,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, privacyConte
   return result.ok;
 }
 
-export async function sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext }: EmailOptions): Promise<EmailDispatchResult> {
+export async function sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext, idempotencyKey, from }: EmailOptions): Promise<EmailDispatchResult> {
   const privateShopify = privacyContext === "shopify";
   const recipientLog = privateShopify ? "[redacted]" : maskEmailForLogs(to);
   const subjectLog = privateShopify ? "[redacted]" : subject;
@@ -128,12 +131,15 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo, priv
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      redirect: "error",
+      ...(idempotencyKey ? { signal: AbortSignal.timeout(8000) } : {}),
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: resolveResendFromEmail(),
+        from: from || resolveResendFromEmail(),
         to,
         subject,
         html,
@@ -149,7 +155,7 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo, priv
         `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${recipientLog}, subject: "${subjectLog}"`,
       );
       console.error(`[Email] Resend error (sanitized): ${sanitized || "(empty)"}`);
-      return { ok: false, providerMessageId: null, error: sanitized || `http_${response.status}` };
+      return { ok: false, providerMessageId: null, error: sanitized || `http_${response.status}`, acceptanceUnknown: response.status >= 500 || response.status === 409 || response.status === 408 };
     }
 
     let providerMessageId: string | null = null;
@@ -160,6 +166,7 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo, priv
       providerMessageId = null;
     }
 
+    if (idempotencyKey && (!providerMessageId || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(providerMessageId))) return { ok: false, providerMessageId: null, error: "resend_acceptance_unconfirmed", acceptanceUnknown: true };
     console.log(`[Email] Sent successfully to ${recipientLog}: ${subjectLog}`);
     return { ok: true, providerMessageId, error: null };
   } catch (error) {
@@ -168,7 +175,7 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo, priv
       `[Email] Network or unexpected error while calling Resend — recipient: ${recipientLog}, subject: "${subjectLog}"`,
       sanitizeEmailProviderError(message),
     );
-    return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message) };
+    return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message), acceptanceUnknown: true };
   }
 }
 

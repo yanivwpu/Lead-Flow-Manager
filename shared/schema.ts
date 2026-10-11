@@ -325,7 +325,11 @@ export const shopifyPrivacyAlerts = pgTable("shopify_privacy_alerts", {
   createdAt: timestamp("created_at").notNull().defaultNow(), deliveredAt: timestamp("delivered_at"),
   attempts: integer("attempts").notNull().default(0), nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
   leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at"),
-}, table => [uniqueIndex("shopify_privacy_alert_dedupe").on(table.taskId, table.reason)]);
+  resolvedAt: timestamp("resolved_at"), emailPayload: jsonb("email_payload"),
+  emailStartedAt: timestamp("email_started_at"), emailUncertain: boolean("email_uncertain").notNull().default(false),
+  emailAcceptedAt: timestamp("email_accepted_at"), providerMessageId: text("provider_message_id"),
+  emailReconciliationRequired: boolean("email_reconciliation_required").notNull().default(false),
+}, table => [uniqueIndex("shopify_privacy_alert_dedupe").on(table.taskId, table.reason).where(sql`${table.resolvedAt} IS NULL`)]);
 export const shopifyPrivacyCustomerLocks = pgTable("shopify_privacy_customer_locks", {
   identityHash: text("identity_hash").primaryKey(), createdAt: timestamp("created_at").notNull().defaultNow(),
 });

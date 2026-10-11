@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 type PrivacyStatus = {
   counts: Record<"pending" | "retrying" | "blocked" | "overdue" | "verified_complete", number>;
   outboundAlertsConfigured: boolean;
-  alerts: Array<{ id: string; taskId: string; status: string; reason: string; deadlineAt: string; actionRequired: string }>;
+  alerts: Array<{ id: string; taskId: string; status: string; reason: string; deadlineAt: string; actionRequired: string; emailStatus?: "pending" | "accepted" | "reconciliation_required" }>;
 };
 export function AdminPrivacyOperationsTab({ enabled }: { enabled: boolean }) {
   const query = useQuery({ queryKey: ["admin-privacy-operations"], enabled, refetchInterval: 60000,
@@ -24,6 +24,7 @@ export function AdminPrivacyOperationsTab({ enabled }: { enabled: boolean }) {
       <p className="text-sm">Access requests require verified support fulfilment. Erasure remains pending until every required check is verified.</p>
       <ul className="space-y-3">{query.data.alerts.map(alert => <li key={alert.id} className="border rounded p-3">
         <p>Request {alert.taskId} · {alert.status} · {alert.reason.replaceAll("_", " ")}</p>
+        <p>Email: {alert.emailStatus === "reconciliation_required" ? "Provider acceptance needs reconciliation; automatic sending paused to prevent duplicates." : alert.emailStatus || "pending"}</p>
         <p>Deadline: {new Date(alert.deadlineAt).toLocaleString()}</p><p>{alert.actionRequired}</p>
       </li>)}</ul>
     </>}
