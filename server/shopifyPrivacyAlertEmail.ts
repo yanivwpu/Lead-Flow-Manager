@@ -1,3 +1,4 @@
+import { verifyPrivacySmokeDatabase } from "./shopifyPrivacySmokeSafety";
 import { timingSafeEqual } from "node:crypto";
 import express, { type Express, type ErrorRequestHandler } from "express";
 import type { Pool } from "pg";
@@ -11,6 +12,7 @@ export const PRIVACY_EMAIL_RETRY_WINDOW_MS = 23 * 3600000;
 const uuid = z.string().uuid();
 const snapshotSchema = z.object({
   taskId: uuid,
+  stagingTest: z.literal("privacy_smoke_v1").optional(),
   status: z.enum(["pending_external", "retrying", "blocked", "permanent_failure"]),
   reason: z.enum(["configuration", "permanent_failure", "access_request", "approaching_deadline", "overdue"]),
   actionCode: z.enum(["missing_configuration", "invalid_evidence", "unsupported_provider", "provider_permanent", "provider_retry", "approaching_deadline", "overdue", "access_request"]),
@@ -21,11 +23,11 @@ export type PrivacyEmailSnapshot = z.infer<typeof snapshotSchema>;
 export function renderPrivacyAlertEmail(input: PrivacyEmailSnapshot) {
   const s = snapshotSchema.parse(input);
   const category = s.actionCode === "unsupported_provider" ? "unsupported external provider" : s.reason.replaceAll("_", " ");
-  const text = ["WhachatCRM Shopify privacy alert", `Operation ID: ${s.taskId}`,
+  const text = [s.stagingTest ? "STAGING TEST — synthetic operation; no merchant/customer data." : "WhachatCRM Shopify privacy alert", `Operation ID: ${s.taskId}`,
     `Issue category: ${category}`, `Deadline (UTC): ${s.deadlineAt}`, `Status: ${s.status}`,
     `Required action: ${PRIVACY_ACTIONS[s.actionCode]}`, "Review this operation in Admin → Privacy."].join("\n");
   // All variable content is allowlisted identifiers, enums and a normalized timestamp.
-  return { to: WHACHATCRM_SUPPORT_EMAIL, from: s.from, subject: `Shopify privacy alert: ${category}`,
+  return { to: WHACHATCRM_SUPPORT_EMAIL, from: s.from, subject: s.stagingTest ? "STAGING TEST — Shopify Privacy Alert" : `Shopify privacy alert: ${category}`,
     text, html: `<pre>${text}</pre>`, privacyContext: "shopify" as const };
 }
 type Dispatch = typeof sendEmailDetailed;
@@ -58,6 +60,7 @@ export async function acceptPrivacyAlertEmail(pool: Pool, alertId: string, dispa
     }
     const snapshot = snapshotSchema.parse(a.email_payload || { taskId: a.task_id, status: a.current_status,
       reason: a.reason, actionCode: a.action_code, deadlineAt: a.deadline_at.toISOString(), from: resolveResendFromEmail() });
+    if (snapshot.stagingTest) await verifyPrivacySmokeDatabase(client);
     // Immutable sender/body and a conservative uncertainty marker survive process death.
     await client.query(`UPDATE shopify_privacy_alerts SET email_payload=$2::jsonb,
       email_started_at=COALESCE(email_started_at,NOW()),email_uncertain=true WHERE id=$1`, [alertId, JSON.stringify(snapshot)]);

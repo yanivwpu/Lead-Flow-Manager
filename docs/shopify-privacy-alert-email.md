@@ -35,6 +35,8 @@ Admin → Privacy shows `pending`, `accepted`, or `reconciliation_required` per 
 
 ## Staging verification and production readiness
 
+Use the explicitly invoked [staging smoke-test procedure](shopify-privacy-staging-smoke.md) for a synthetic email test with independently verified database identity, process-only activation, replay checks, deployed Admin verification and test-owned cleanup.
+
 Apply/verify 0106 through the existing startup patches or reviewed migration process; inspect Admin → Privacy before enabling email. In staging, configure the existing verified sender/key and an independent alert token, then explicitly enable the flag. Create only a synthetic random-ID operation in the **staging** database. Verify one email to support, unchanged-issue suppression, generic unauthenticated rejection and pending/retry behavior with a simulated provider outage. Revert the flag to `false` if staging email is not intended to remain active. Integration tests use disposable localhost PostgreSQL and mocked Resend; they do not send email or access Railway data.
 
 Required CI: Shopify onboarding, Shopify contact privacy (including the receiver/outbox integration test), and staging database bootstrap. Both Shopify workflows compare TypeScript diagnostics against the exact PR base, because the base already has unrelated TypeScript errors. Production activation remains a separate reviewed operation after CI, migration, sender-domain verification, monitoring ownership and staging smoke-test evidence. No production deployment, merge, variable change or email activation is part of this PR.

@@ -147,6 +147,40 @@ test("authenticated receiver, real PostgreSQL outbox, Resend failures, uncertain
     assert.equal(recurrence.length, 1); assert.notEqual(recurrence[0].id, id);
     assert.equal((await post(recurrence[0].id)).status, 200);
     assert.ok(!JSON.stringify((await pool.query("SELECT * FROM shopify_privacy_alerts")).rows).includes("secret-token"));
+    // Smoke-specific scope must neither reconcile nor send unrelated active/historical alerts.
+    const { cleanupPrivacySmokeTask } = await import("../server/shopifyPrivacySmokeSafety");
+    const smokeTask = randomUUID(), unrelatedTask = randomUUID();
+    await pool.query("INSERT INTO shopify_privacy_erasure_tasks(id,status,error_code,dedupe_key) VALUES($1,'permanent_failure','provider_permanent',$2),($3,'blocked','missing_configuration',NULL)",
+      [smokeTask, "staging-privacy-smoke:"+smokeTask, unrelatedTask]);
+    await queue(smokeTask, pool);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id=$1", [unrelatedTask])).rows[0].n, 0);
+    const smokeAlert = (await pool.query("SELECT id FROM shopify_privacy_alerts WHERE task_id=$1", [smokeTask])).rows[0].id;
+    const beforeSmoke = providerCalls;
+    await worker(transport, smokeTask, pool);
+    await queue(smokeTask, pool);
+    await worker(transport, smokeTask, pool);
+    assert.equal((await post(smokeAlert)).status, 200);
+    assert.equal(providerCalls, beforeSmoke+1, "Scoped worker and receiver replay do not call Resend twice");
+    assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id=$1", [smokeTask])).rows[0].n, 1);
+    assert.ok((await readPrivacyOperationsStatus()).alerts.some(a => a.id===smokeAlert && a.emailStatus==="accepted"));
+    const testSnapshot = { taskId: smokeTask, stagingTest: "privacy_smoke_v1" as const, status: "permanent_failure" as const,
+      reason: "permanent_failure" as const, actionCode: "provider_permanent" as const,
+      deadlineAt: new Date().toISOString(), from: "WhachatCRM <noreply@crm.whachatcrm.com>" };
+    const rendered = renderPrivacyAlertEmail(testSnapshot);
+    assert.equal(rendered.subject, "STAGING TEST — Shopify Privacy Alert");
+    assert.equal(rendered.to, "support@whachatcrm.com");
+    assert.ok(rendered.text.includes("synthetic operation"));
+    // A saved smoke snapshot can never be delivered by a normal worker, including production.
+    await pool.query("UPDATE shopify_privacy_alerts SET email_payload=$2::jsonb,email_accepted_at=NULL,provider_message_id=NULL,delivered_at=NULL,next_attempt_at=NOW() WHERE id=$1", [smokeAlert, JSON.stringify(testSnapshot)]);
+    assert.equal((await post(smokeAlert)).status, 503);
+    assert.equal(providerCalls, beforeSmoke+1, "Staging marker requires the independently verified staging runtime");
+    const beforeCleanup = (await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id<>$1", [smokeTask])).rows[0].n;
+    await assert.rejects(cleanupPrivacySmokeTask(pool, unrelatedTask), /cleanup_incomplete/);
+    await cleanupPrivacySmokeTask(pool, smokeTask);
+    await cleanupPrivacySmokeTask(pool, smokeTask); // Repeat safe.
+    assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id<>$1", [smokeTask])).rows[0].n, beforeCleanup);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_erasure_tasks WHERE id=$1", [unrelatedTask])).rows[0].n, 1);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id=$1", [smokeTask])).rows[0].n, 0);
     // Sender configuration rejects unprotected/non-HTTPS endpoints and is disabled by default.
     assert.equal(configuredPrivacyAlertSender({ ...env, SHOPIFY_PRIVACY_ALERT_URL: "http://example.com" }), undefined);
     assert.equal(configuredPrivacyAlertSender({ ...env, SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "false" }), undefined);

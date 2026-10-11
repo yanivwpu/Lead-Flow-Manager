@@ -2,6 +2,11 @@ name: Shopify contact privacy validation
 on:
   pull_request:
     paths:
+      - "scripts/smoke-shopify-privacy-email.ts"
+      - "server/shopifyPrivacySmokeSafety.ts"
+      - "tests/shopify-privacy-smoke-safety.test.ts"
+      - "script/build.ts"
+      - "docs/shopify-privacy-staging-smoke.md"
       - "server/shopify*.ts"
       - "shared/shopify*.ts"
       - "server/email.ts"
@@ -67,6 +72,7 @@ jobs:
           npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
           npx tsx --test tests/shopify-privacy-worker-postgres.test.ts
+          npx tsx --test tests/shopify-privacy-smoke-safety.test.ts
           npx tsx --test tests/shopify-privacy-alert-email.test.ts
           npx tsx --test tests/shopify-privacy-verification.test.ts tests/shopify-customer-privacy-handler.test.ts tests/shopify-privacy-admin-routes.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
