@@ -307,6 +307,32 @@ export const shopifyPrivacyErasureTasks = pgTable("shopify_privacy_erasure_tasks
   scopeTo: timestamp("scope_to").notNull().defaultNow(),
   status: text("status").notNull().default("pending_external"),
   completedAt: timestamp("completed_at"),
+  requestKind: text("request_kind").notNull().default("store_erasure"),
+  dedupeKey: text("dedupe_key"),
+  deadlineAt: timestamp("deadline_at").notNull().default(sql`NOW() + interval '30 days'`),
+  nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(0),
+  leaseToken: text("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  errorCode: text("error_code"),
+  checks: jsonb("checks").notNull().default({}),
+  requiredChecks: jsonb("required_checks").notNull().default(["railway_logs", "mail_processor", "archives", "backups", "exports", "local_review"]),
+}, table => [uniqueIndex("shopify_privacy_erasure_dedupe").on(table.dedupeKey).where(sql`${table.dedupeKey} IS NOT NULL`)]);
+export const shopifyPrivacyAlerts = pgTable("shopify_privacy_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => shopifyPrivacyErasureTasks.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(), status: text("status").notNull(), actionCode: text("action_code").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(), deliveredAt: timestamp("delivered_at"),
+  attempts: integer("attempts").notNull().default(0), nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at"),
+}, table => [uniqueIndex("shopify_privacy_alert_dedupe").on(table.taskId, table.reason)]);
+export const shopifyPrivacyCustomerLocks = pgTable("shopify_privacy_customer_locks", {
+  identityHash: text("identity_hash").primaryKey(), createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const shopifyPrivacyRequestPayloads = pgTable("shopify_privacy_request_payloads", {
+  taskId: varchar("task_id").primaryKey().references(() => shopifyPrivacyErasureTasks.id, { onDelete: "cascade" }),
+  encryptedPayload: text("encrypted_payload").notNull(),
 });
 
 /** Hashed, single-use password reset tokens for main app users (DB-backed for multi-instance). */

@@ -1,3 +1,4 @@
+import { runShopifyPrivacyTick } from "./shopifyExternalErasure";
 import { db } from '../drizzle/db';
 import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
 import { eq, and, lte, gte, isNotNull, or, desc, ne, inArray, sql } from 'drizzle-orm';
@@ -311,6 +312,7 @@ export function startCronJobs() {
   }, 30_000);
   
   cronInterval = setInterval(() => {
+    void runShopifyPrivacyTick();
     const now = new Date();
     const utcHour = now.getUTCHours();
     const utcMin  = now.getUTCMinutes();

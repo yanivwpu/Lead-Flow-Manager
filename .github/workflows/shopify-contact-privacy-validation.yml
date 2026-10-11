@@ -6,6 +6,12 @@ on:
       - "shared/shopify*.ts"
       - "server/email.ts"
       - "server/storage.ts"
+      - "server/cron.ts"
+      - "server/routes.ts"
+      - "client/src/pages/Admin.tsx"
+      - "client/src/components/admin/AdminPrivacyOperationsTab.tsx"
+      - "migrations/0105_shopify_privacy_automation.sql"
+      - "docs/shopify-privacy-operations.md"
       - "server/commerceEventPipeline.ts"
       - "server/startupSchemaPatches.ts"
       - "shared/schema.ts"
@@ -19,6 +25,7 @@ on:
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
       - "scripts/check-types-against-base.mjs"
+      - "scripts/process-shopify-privacy.ts"
       - "scripts/typecheck-diagnostic-normalization.mjs"
       - "tests/typecheck-diagnostic-normalization.test.mjs"
       - ".github/workflows/shopify-contact-privacy-validation.yml"
@@ -57,6 +64,8 @@ jobs:
           node --test tests/typecheck-diagnostic-normalization.test.mjs
           npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
+          npx tsx --test tests/shopify-privacy-worker-postgres.test.ts
+          npx tsx --test tests/shopify-privacy-verification.test.ts tests/shopify-customer-privacy-handler.test.ts tests/shopify-privacy-admin-routes.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts

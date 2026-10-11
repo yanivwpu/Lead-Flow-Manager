@@ -1,9 +1,10 @@
+import { enqueuePrivacyRequest } from "./shopifyPrivacyRequests";
 import crypto from "crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import {
   users, integrations, contacts, chats, conversations, messages, activityEvents, workflowExecutions, workflows,
-  webhookDeliveries, webhooks, flowJobs, shopifyShopTrials, shopifyMerchantContacts, shopifyPrivacyErasureTasks,
+  webhookDeliveries, webhooks, flowJobs, shopifyShopTrials, shopifyMerchantContacts,
 } from "@shared/schema";
 import { normalizeShopifyShopDomain, shopifySyntheticMerchantEmail } from "@shared/shopifyBilling";
 import { shopifyMerchantRedactionPatch, shopifyContactRedactionPatch, recordBelongsToShopify, recordHasExplicitShop } from "@shared/shopifyPrivacyRedaction";
@@ -12,9 +13,9 @@ import { deleteContactRecords } from "./contactDeleteService";
 /**
  * One transaction: erase application copies before acknowledging the signed webhook.
  * Trials are erased only here (not on uninstall); independent paid/global billing is preserved.
- * External processor/log erasure remains explicitly pending until verified by an operator.
+ * External processor/log erasure remains explicitly pending until every required worker check is verified.
  */
-export async function redactShopifyStore(rawShop: string) {
+export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
   const shop = normalizeShopifyShopDomain(rawShop);
   if (!shop) throw new Error("Invalid Shopify privacy request");
   return db.transaction(async tx => {
@@ -120,9 +121,10 @@ export async function redactShopifyStore(rawShop: string) {
     await tx.delete(shopifyShopTrials).where(eq(shopifyShopTrials.canonicalShop, shop));
     const dates = merchantRows.map(u => u.shopifyInstalledAt).filter((d): d is Date => !!d);
     // No address/domain/hash/user selector is retained in this task. Purge streams for the time window.
-    await tx.insert(shopifyPrivacyErasureTasks).values({
-      scopeFrom: dates.length ? new Date(Math.min(...dates.map(d => d.getTime()))) : null,
-      scopeTo: new Date(),
+    await enqueuePrivacyRequest(tx, {
+      kind: "store_erasure", dedupeKey,
+      from: dates.length ? new Date(Math.min(...dates.map(d => d.getTime()))) : null,
+      to: new Date(),
     });
     return { databaseErased: true, externalErasurePending: true, erasedContacts };
   });
