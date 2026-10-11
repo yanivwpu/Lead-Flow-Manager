@@ -2,7 +2,8 @@ import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { storage } from "./storage";
-import { fetchShopifyShopOwnerEmail } from "./shopify";
+import { fetchShopifyShopOwnerEmailResult } from "./shopify";
+import { captureCurrentShopifyOwnerEmail, withShopifyMailPrivacyFence } from "./shopifyContactService";
 import {
   sendShopifyWelcomeEmail,
   sendShopifyActivationEmailDay5,
@@ -53,15 +54,14 @@ type ShopifyOnboardingRow = {
   deletionRequestedAt: Date | null;
 };
 
-async function markShopifyRemindersComplete(userId: string): Promise<void> {
-  const now = new Date();
-  await db
-    .update(users)
-    .set({
-      shopifyActivationEmailDay5SentAt: now,
-      shopifyActivationEmailDay10SentAt: now,
-    })
-    .where(eq(users.id, userId));
+async function markShopifyRemindersComplete(userId: string, shop: string): Promise<boolean> {
+  return withShopifyMailPrivacyFence(userId, shop, async current => {
+    const now = new Date();
+    await db.update(users).set({
+      shopifyActivationEmailDay5SentAt: now, shopifyActivationEmailDay10SentAt: now,
+    }).where(eq(users.id, current.id));
+    return true;
+  });
 }
 
 export async function trySendShopifyWelcomeEmailForUser(user: {
@@ -74,19 +74,15 @@ export async function trySendShopifyWelcomeEmailForUser(user: {
   shopifyWelcomeEmailSentAt?: Date | string | null;
   deletionRequestedAt?: Date | string | null;
 }): Promise<boolean> {
-  if (user.shopifyWelcomeEmailSentAt) return true;
-  if (user.deletionRequestedAt) return true;
-  if (!isShopifyInstallActiveForOnboarding(user)) return true;
-
-  const recipient = usableShopifyOwnerEmail(user.shopifyOwnerEmail);
-  if (!recipient) return false;
-  if (isShopifySyntheticMerchantEmail(recipient)) return false;
-
-  const sent = await sendShopifyWelcomeEmail(user.name, recipient);
-  if (sent) {
-    await storage.updateUser(user.id, { shopifyWelcomeEmailSentAt: new Date() });
-  }
-  return sent;
+  if (!user.shopifyShop) return true;
+  return withShopifyMailPrivacyFence(user.id, user.shopifyShop, async current => {
+    if (current.shopifyWelcomeEmailSentAt) return true;
+    const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+    if (!recipient) return false;
+    const sent = await sendShopifyWelcomeEmail(current.name, recipient);
+    if (sent) await storage.updateUser(current.id, { shopifyWelcomeEmailSentAt: new Date() });
+    return sent;
+  });
 }
 
 async function maybeRefreshOwnerEmail(user: ShopifyOnboardingRow): Promise<string | null> {
@@ -95,18 +91,10 @@ async function maybeRefreshOwnerEmail(user: ShopifyOnboardingRow): Promise<strin
   if (!user.shopifyShop || !user.shopifyAccessToken) return null;
   if (!isShopifyInstallActiveForOnboarding(user)) return null;
 
-  const fetched = await fetchShopifyShopOwnerEmail(user.shopifyShop, user.shopifyAccessToken);
-  const usable = usableShopifyOwnerEmail(fetched);
-  if (!usable) return null;
-  try {
-    await storage.updateUser(user.id, { shopifyOwnerEmail: usable });
-  } catch (err) {
-    console.warn("[ShopifyOnboarding] failed to persist shopifyOwnerEmail", {
-      userId: user.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-  return usable;
+  const result = await captureCurrentShopifyOwnerEmail({
+    userId: user.id, shop: user.shopifyShop, accessToken: user.shopifyAccessToken,
+  }, fetchShopifyShopOwnerEmailResult);
+  return usableShopifyOwnerEmail(result.email);
 }
 
 export async function runShopifyOnboardingEmails(): Promise<{
@@ -178,8 +166,7 @@ export async function runShopifyOnboardingEmails(): Promise<{
       if (choice.action === "none") continue;
 
       if (choice.action === "mark_complete") {
-        await markShopifyRemindersComplete(user.id);
-        markedComplete++;
+        if (await markShopifyRemindersComplete(user.id, user.shopifyShop!)) markedComplete++;
         continue;
       }
 
@@ -196,48 +183,46 @@ export async function runShopifyOnboardingEmails(): Promise<{
           else if (!ok) errors++;
         } catch (err) {
           errors++;
-          console.error("[Cron] Shopify Day 0 email error", { userId: user.id, err });
+          console.error("[ShopifyContact] onboarding_email_delivery_failed");
         }
         continue;
       }
 
       if (choice.action === "day5") {
         try {
-          const ok = await sendShopifyActivationEmailDay5(firstName(user.name), ownerEmail);
-          if (ok) {
-            await db
-              .update(users)
-              .set({ shopifyActivationEmailDay5SentAt: now })
-              .where(eq(users.id, user.id));
-            day5Sent++;
-          } else {
-            errors++;
-          }
+          const ok = await withShopifyMailPrivacyFence(user.id, user.shopifyShop!, async current => {
+            if (current.shopifyActivationEmailDay5SentAt) return true;
+            const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+            if (!recipient) return false;
+            const sent = await sendShopifyActivationEmailDay5(firstName(current.name), recipient);
+            if (sent) await db.update(users).set({ shopifyActivationEmailDay5SentAt: now }).where(eq(users.id, current.id));
+            return sent;
+          });
+          if (ok) day5Sent++; else errors++;
         } catch (err) {
           errors++;
-          console.error("[Cron] Shopify Day 5 email error", { userId: user.id, err });
+          console.error("[ShopifyContact] onboarding_email_delivery_failed");
         }
         continue;
       }
 
       if (choice.action === "day10") {
         try {
-          const ok = await sendShopifyActivationEmailDay10(firstName(user.name), ownerEmail);
-          if (ok) {
-            await db
-              .update(users)
-              .set({
-                shopifyActivationEmailDay10SentAt: now,
-                ...(choice.alsoCompleteDay5 ? { shopifyActivationEmailDay5SentAt: now } : {}),
-              })
-              .where(eq(users.id, user.id));
-            day10Sent++;
-          } else {
-            errors++;
-          }
+          const ok = await withShopifyMailPrivacyFence(user.id, user.shopifyShop!, async current => {
+            if (current.shopifyActivationEmailDay10SentAt) return true;
+            const recipient = usableShopifyOwnerEmail(current.shopifyOwnerEmail);
+            if (!recipient) return false;
+            const sent = await sendShopifyActivationEmailDay10(firstName(current.name), recipient);
+            if (sent) await db.update(users).set({
+              shopifyActivationEmailDay10SentAt: now,
+              ...(choice.alsoCompleteDay5 ? { shopifyActivationEmailDay5SentAt: now } : {}),
+            }).where(eq(users.id, current.id));
+            return sent;
+          });
+          if (ok) day10Sent++; else errors++;
         } catch (err) {
           errors++;
-          console.error("[Cron] Shopify Day 10 email error", { userId: user.id, err });
+          console.error("[ShopifyContact] onboarding_email_delivery_failed");
         }
       }
     }
@@ -247,7 +232,7 @@ export async function runShopifyOnboardingEmails(): Promise<{
     );
     return { welcomeSent, day5Sent, day10Sent, markedComplete, errors };
   } catch (error) {
-    console.error("[Cron] Error in Shopify onboarding email job:", error);
+    console.error("[ShopifyContact] onboarding_email_job_failed");
     throw error;
   }
 }

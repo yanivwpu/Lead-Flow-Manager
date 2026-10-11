@@ -8,7 +8,7 @@ import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
 import { storage } from "./storage";
 import { promoteInboxIdentityToCrm } from "./emailChannel/contactMatch";
 import { dispatchCommerceEventAutomation } from "./automationEventDispatcher";
-import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import { scheduleHubSpotAutoSync, syncContactToHubSpotIfEnabled } from "./hubspotAutoSync";
 import { notifyUser } from "./presence";
 
 export type CommerceSource = "shopify" | "woocommerce";
@@ -458,7 +458,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     });
 
     if (triggerType && recordMode !== "activity_only") {
-      dispatchCommerceEventAutomation({
+      const dispatch = dispatchCommerceEventAutomation({
         userId,
         triggerType,
         contact,
@@ -470,12 +470,16 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
         logCommerce("workflow_dispatch_error", {
           userId,
           triggerType,
-          error: err instanceof Error ? err.message : String(err),
+          error: source === "shopify" ? "workflow_dispatch_failed" : err instanceof Error ? err.message : String(err),
         });
       });
+      // The Shopify erasure fence must cover workflow snapshots as well as initial ingestion.
+      if (source === "shopify") await dispatch;
     }
 
-    scheduleHubSpotAutoSync(userId, contact.id);
+    // Keep Shopify exports inside the erasure fence and its external-erasure time window.
+    if (source === "shopify") await syncContactToHubSpotIfEnabled(userId, contact);
+    else scheduleHubSpotAutoSync(userId, contact.id);
 
     logCommerce("completed", {
       userId,
@@ -493,7 +497,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       contactCreated,
     };
   } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+    const error = source === "shopify" ? "commerce_ingest_failed" : err instanceof Error ? err.message : String(err);
     logCommerce("failed", { userId, triggerType: triggerType || null, error });
     return { ok: false, error };
   }

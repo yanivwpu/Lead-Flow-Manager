@@ -1,3 +1,4 @@
+import { normalizeDiagnosticTypeProperties } from "./typecheck-diagnostic-normalization.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +21,10 @@ function check(directory) {
   const diagnostics = new Map();
   let current = "";
   const save = () => {
-    if (current) diagnostics.set(current, (diagnostics.get(current) || 0) + 1);
+    if (current) {
+      const normalized = normalizeDiagnosticTypeProperties(current);
+      diagnostics.set(normalized, (diagnostics.get(normalized) || 0) + 1);
+    }
     current = "";
   };
   for (const line of lines) {
@@ -48,6 +52,8 @@ try {
   if (previous.count) console.log("The repository-wide typecheck already fails on the base; this check rejects any additional diagnostics.");
   if (added.length) {
     console.error(added.join("\n\n"));
+    const removed = [...previous.diagnostics.keys()].filter(message => !candidate.diagnostics.has(message));
+    if (removed.length) console.error("Base-only diagnostics for comparison:\n" + removed.join("\n\n"));
     process.exitCode = 1;
   }
 } finally {

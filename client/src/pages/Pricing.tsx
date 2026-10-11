@@ -1,3 +1,4 @@
+import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -626,6 +627,7 @@ export function Pricing() {
           </a>
         </Link>
 
+        {showShopifyInstallBanner && user && <div className="mb-6"><ShopifySupportContact /></div>}
         {showShopifyInstallBanner && (
           <div
             className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"

@@ -95,7 +95,8 @@ test("D: customer emails and contactEmail are never the merchant recipient", () 
   const fetchBody = shopifyTs.slice(fetchStart, fetchStart + 1400);
   assert.ok(!fetchBody.includes("contactEmail"));
   assert.ok(!fetchBody.includes("customers"));
-  assert.ok(fetchBody.includes("sanitizeShopifyOwnerEmail(data?.shop?.email)"));
+  assert.ok(fetchBody.includes("classifyShopifyOwnerEmail(data?.shop?.email)"));
+  assert.ok(src("shared/shopifyContactPrivacy.ts").includes("sanitizeShopifyOwnerEmail(raw)"));
   const queryStart = shopifyTs.indexOf("SHOPIFY_SHOP_OWNER_EMAIL_QUERY");
   const queryBody = shopifyTs.slice(queryStart, queryStart + 400);
   assert.ok(!queryBody.includes("contactEmail"));
@@ -124,9 +125,9 @@ test("E–H: first install Day 0 once, owner email recipient, Connect WhatsApp C
   assert.equal(DEFAULT_RESEND_FROM_EMAIL, "WhachatCRM <noreply@crm.whachatcrm.com>");
 
   const service = src("server/shopifyOnboardingEmailService.ts");
-  assert.ok(service.includes("if (user.shopifyWelcomeEmailSentAt) return true"));
+  assert.ok(service.includes("if (current.shopifyWelcomeEmailSentAt) return true"));
   assert.ok(service.includes("usableShopifyOwnerEmail(user.shopifyOwnerEmail)"));
-  assert.ok(service.includes("sendShopifyWelcomeEmail(user.name, recipient)"));
+  assert.ok(service.includes("sendShopifyWelcomeEmail(current.name, recipient)"));
   assert.ok(!service.includes("sendShopifyWelcomeEmail(user.name, user.email)"));
 });
 
@@ -286,8 +287,8 @@ test("R: uninstall / redact suppress Shopify onboarding mail", () => {
     }),
     false,
   );
-  const uninstall = src("server/shopifyRoutes.ts");
-  assert.ok(uninstall.includes("shopifySubscriptionStatus: 'uninstalled'"));
+  const uninstall = src("server/shopifyContactService.ts");
+  assert.ok(uninstall.includes('shopifySubscriptionStatus: "uninstalled"'));
   assert.ok(!uninstall.includes("sendShopifyWelcomeEmail"));
 });
 

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { clearShopifyPostInstallPricingPath, clearShopifyPlanPickerOpened } from "@/lib/shopifyBootstrap";
+import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { ShopifyStartView } from "@/components/ShopifyStartView";
 import { trackShopifyActivation } from "@/lib/shopifyActivationTelemetry";
 import type { ShopifyOnboardingSnapshot } from "@shared/shopifyOnboarding";
@@ -73,6 +74,10 @@ export function ShopifyStart() {
   const snapshot: ShopifyOnboardingSnapshot | null =
     !loading && (installationFailed || !user || (waitingForSession && sessionTimedOut))
       ? { state: "reconnect_required" } : query.data ?? null;
-  return <ShopifyStartView locale={i18n.language} snapshot={snapshot} loading={loading} busy={busy}
-    failed={query.isError || retryFailed} onRetry={() => void retry()} onRefresh={() => void refresh()} />;
+  return <>
+    <ShopifyStartView locale={i18n.language} snapshot={snapshot} loading={loading} busy={busy}
+    failed={query.isError || retryFailed} onRetry={() => void retry()} onRefresh={() => void refresh()} />
+    {!loading && !installationFailed && (snapshot?.state === "trial_active" || snapshot?.state === "app_ready") &&
+      <div className="mx-auto max-w-2xl px-4 pb-8"><ShopifySupportContact /></div>}
+  </>;
 }

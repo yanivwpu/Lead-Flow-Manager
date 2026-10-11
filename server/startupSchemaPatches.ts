@@ -20,6 +20,10 @@ type StartupPatch = { tag: string; sql: string | StartupPatchStep[] };
 
 const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
   {
+    tag: "0104_shopify_contact_privacy",
+    sql: "CREATE TABLE IF NOT EXISTS shopify_merchant_contacts (\n  user_id varchar PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,\n  canonical_shop text NOT NULL,\n  capture_status text,\n  capture_source text,\n  capture_at timestamp,\n  support_email text,\n  support_source text,\n  support_confirmed_at timestamp,\n  support_dismissed_at timestamp\n);\nCREATE INDEX IF NOT EXISTS shopify_merchant_contacts_shop_idx ON shopify_merchant_contacts(canonical_shop);\n-- No contact addresses, tokens, shop domains, or user IDs in external-erasure tasks.\n-- Retain only until the governed-processor purge is verified; see the privacy runbook.\nCREATE TABLE IF NOT EXISTS shopify_privacy_erasure_tasks (\n  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),\n  requested_at timestamp NOT NULL DEFAULT NOW(),\n  scope_from timestamp,\n  scope_to timestamp NOT NULL DEFAULT NOW(),\n  status text NOT NULL DEFAULT 'pending_external',\n  completed_at timestamp\n);\n",
+  },
+  {
     tag: "0030_contacts_buyer_preference_profile",
     sql: `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS buyer_preference_profile jsonb NOT NULL DEFAULT '{}'::jsonb`,
   },
