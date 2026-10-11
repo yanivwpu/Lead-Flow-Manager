@@ -8,7 +8,7 @@ import { isEmailInboxIdentitySource } from "@shared/contactCrmVisibility";
 import { storage } from "./storage";
 import { promoteInboxIdentityToCrm } from "./emailChannel/contactMatch";
 import { dispatchCommerceEventAutomation } from "./automationEventDispatcher";
-import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
+import { scheduleHubSpotAutoSync, syncContactToHubSpotIfEnabled } from "./hubspotAutoSync";
 import { notifyUser } from "./presence";
 
 export type CommerceSource = "shopify" | "woocommerce";
@@ -477,7 +477,9 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       if (source === "shopify") await dispatch;
     }
 
-    scheduleHubSpotAutoSync(userId, contact.id);
+    // Keep Shopify exports inside the erasure fence and its external-erasure time window.
+    if (source === "shopify") await syncContactToHubSpotIfEnabled(userId, contact);
+    else scheduleHubSpotAutoSync(userId, contact.id);
 
     logCommerce("completed", {
       userId,

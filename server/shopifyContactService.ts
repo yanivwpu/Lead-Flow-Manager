@@ -1,3 +1,5 @@
+import { isEarlyShopifyUninstall } from "@shared/shopifyOnboarding";
+import { logShopifyActivation } from "./shopifyActivationTelemetry";
 import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
 import { shopifyContactCaptureLog } from "@shared/shopifyContactPrivacy";
 import { and, eq, sql } from "drizzle-orm";
@@ -73,6 +75,18 @@ export async function saveShopifySupportContact(userId: string, action: ShopifyS
   });
 }
 
+/** Serialize the complete OAuth exchange and installation mutations with uninstall/redaction.
+ * Contact capture and mail run afterward under their own fences to avoid nested advisory locks.
+ */
+export async function withShopifyInstallPrivacyFence<T>(rawShop: string, install: () => Promise<T>): Promise<T> {
+  const shop = normalizeShopifyShopDomain(rawShop);
+  if (!shop) throw new Error("Invalid Shopify domain");
+  return db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+    return install();
+  });
+}
+
 /** Serialize ingestion against uninstall/redaction; do not repopulate a revoked installation. */
 export async function withShopifyPrivacyFence(shop: string, process: () => Promise<void>): Promise<void> {
   const canonical = normalizeShopifyShopDomain(shop);
@@ -94,8 +108,14 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
   if (!shop) throw new Error("Invalid Shopify domain");
   await db.transaction(async tx => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
-    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.shopifyShop, shop)).for("update").limit(1);
+    const [user] = await tx.select().from(users).where(eq(users.shopifyShop, shop)).for("update").limit(1);
     if (!user) return;
+    const [integration] = await tx.select().from(integrations)
+      .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify"))).limit(1);
+    const lastInstalledAt = (integration?.config as Record<string, unknown> | null)?.shopifyLastInstalledAt;
+    if (isEarlyShopifyUninstall(typeof lastInstalledAt === "string" ? lastInstalledAt : user.shopifyInstalledAt)) {
+      logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
+    }
     await tx.update(users).set({
       shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
       shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",

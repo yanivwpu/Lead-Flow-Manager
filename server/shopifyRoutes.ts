@@ -34,7 +34,11 @@ import {
 import { shopifySyntheticMerchantEmail } from '@shared/shopifyBilling';
 import { claimShopifyShopTrialForInstall, hashShopifyShopForLogs } from './shopifyShopTrialService';
 import { trySendShopifyWelcomeEmailForUser } from './shopifyOnboardingEmailService';
-import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
+import { shopifyInstallDestination } from '@shared/shopifyOnboarding';
+import { getShopifyOnboardingSnapshot } from './shopifyOnboardingService';
+import { createShopifyOnboardingRouter } from './shopifyOnboardingRoutes';
+import { logShopifyActivation } from './shopifyActivationTelemetry';
+import { establishShopifyLogin } from './shopifyLoginSession';
 import {
   processShopifyCustomerCreate,
   processShopifyOrderCreate,
@@ -46,7 +50,7 @@ import {
   registerShopWebhooks,
 } from './shopifyWebhookHealth';
 
-import { captureCurrentShopifyOwnerEmail, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
+import { withShopifyInstallPrivacyFence, captureCurrentShopifyOwnerEmail, readShopifySupportContact, saveShopifySupportContact, uninstallShopifyStore } from "./shopifyContactService";
 import { createShopifySupportContactRouter } from "./shopifySupportContactRoutes";
 import { redactShopifyStore } from "./shopifyPrivacyRedaction";
 import { createShopifyStoreRedactionHandler } from "./shopifyStoreRedactionHandler";
@@ -56,6 +60,15 @@ const router = Router();
 // Ensure JSON body is parsed for session-auth billing routes (checkout-web).
 router.use(express.json());
 router.use(createShopifySupportContactRouter({ read: readShopifySupportContact, save: saveShopifySupportContact }));
+router.use(createShopifyOnboardingRouter({
+  readMerchant: (id) => storage.getUserForSession(id),
+  describe: getShopifyOnboardingSnapshot,
+  claim: (user) => claimShopifyShopTrialForInstall({
+    canonicalShop: user.shopifyShop!, user, requireInstalledShop: true,
+  }),
+  emit: logShopifyActivation,
+  afterRecovery: async (user) => trySendShopifyWelcomeEmailForUser(user),
+}));
 
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
 
@@ -102,7 +115,7 @@ async function probeListingUrl(urlStr: string): Promise<{ ok: boolean; status: n
 
 function verifyShopifyHmac(query: Record<string, any>): boolean {
   if (!SHOPIFY_API_SECRET) return false;
-  
+
   const { hmac, ...params } = query;
   if (!hmac) return false;
 
@@ -186,7 +199,7 @@ router.get('/callback', async (req: Request, res: Response) => {
   const stateCheck = validateOAuthStateWithReason(state, shop);
   if (!stateCheck.ok) {
     console.warn('[Shopify Callback] Invalid OAuth state', {
-      shop,
+      shopHash: hashShopifyShopForLogs(shop),
       reason: stateCheck.reason,
       appOrigin: getAppOrigin(),
     });
@@ -202,102 +215,129 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 
   try {
-    const accessToken = await exchangeShopifyCode(shop, code);
-    
-    if (!accessToken) {
-      return res.status(500).json({ error: 'Failed to exchange authorization code' });
-    }
+    const { user, normalizedShop, accessToken, firstTokenInstall, usableAppAccess } = await withShopifyInstallPrivacyFence(shop, async () => {
+      const accessToken = await exchangeShopifyCode(shop, code);
 
-    const sessionUserId = (req as any).user?.id as string | undefined;
-    const resolved = await resolveShopifyInstallUser({ shop, sessionUserId });
-    const normalizedShop = resolved.normalizedShop;
-    if (!normalizedShop) {
-      return res.status(400).json({ error: 'Invalid shop domain' });
-    }
-
-    let user = resolved.user;
-    if (user) {
-      console.log('[Shopify Callback] Reusing existing user', {
-        shop: normalizedShop,
-        userId: user.id,
-        resolution: resolved.resolution,
-      });
-    }
-
-    if (!user) {
-      const tempPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(tempPassword, 10));
-      const merchantEmail = shopifySyntheticMerchantEmail(normalizedShop);
-      if (!merchantEmail) {
-        return res.status(400).json({ error: 'Invalid shop domain' });
+      if (!accessToken) {
+        throw new Error("Shopify authorization exchange failed");
       }
 
-      try {
-        user = await storage.createUser({
-          name: normalizedShop.replace('.myshopify.com', ''),
-          email: merchantEmail,
-          password: hashedPassword,
-          trialStartedAt: null,
-          trialEndsAt: null,
-          trialStatus: 'none',
-          trialPlan: null,
-          emailVerifiedAt: new Date(),
-        });
-      } catch (createErr) {
-        if (!isUsersEmailUniqueViolation(createErr)) {
-          throw createErr;
-        }
-        const existing = await storage.getUserByEmail(merchantEmail);
-        if (!existing) {
-          throw createErr;
-        }
-        user = (await storage.getUserForSession(existing.id)) ?? existing;
-        console.warn('[Shopify Callback] createUser raced or reinstall — reusing by email', {
-          shop: normalizedShop,
+      logShopifyActivation(shop, "oauth_completed", { source: "oauth" });
+      const sessionUserId = (req as any).user?.id as string | undefined;
+      const resolved = await resolveShopifyInstallUser({ shop, sessionUserId });
+      const normalizedShop = resolved.normalizedShop;
+      if (!normalizedShop) {
+        throw new Error("Invalid Shopify domain");
+      }
+
+      let user = resolved.user;
+      if (user) {
+        console.log('[Shopify Callback] Reusing existing user', {
+          shopHash: hashShopifyShopForLogs(normalizedShop),
           userId: user.id,
+          resolution: resolved.resolution,
         });
       }
-    }
 
-    const trialClaim = await claimShopifyShopTrialForInstall({
-      canonicalShop: normalizedShop,
-      user,
+      if (!user) {
+        const tempPassword = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await import('bcryptjs').then(bcrypt => bcrypt.hash(tempPassword, 10));
+        const merchantEmail = shopifySyntheticMerchantEmail(normalizedShop);
+        if (!merchantEmail) {
+          throw new Error("Invalid Shopify domain");
+        }
+
+        try {
+          user = await storage.createUser({
+            name: normalizedShop.replace('.myshopify.com', ''),
+            email: merchantEmail,
+            password: hashedPassword,
+            trialStartedAt: null,
+            trialEndsAt: null,
+            trialStatus: 'none',
+            trialPlan: null,
+            emailVerifiedAt: new Date(),
+          });
+        } catch (createErr) {
+          if (!isUsersEmailUniqueViolation(createErr)) {
+            throw createErr;
+          }
+          const existing = await storage.getUserByEmail(merchantEmail);
+          if (!existing) {
+            throw createErr;
+          }
+          user = (await storage.getUserForSession(existing.id)) ?? existing;
+          console.warn('[Shopify Callback] createUser raced or reinstall — reusing by email', {
+            shop: normalizedShop,
+            userId: user.id,
+          });
+        }
+      }
+
+      let trialClaim;
+      try {
+        trialClaim = await claimShopifyShopTrialForInstall({ canonicalShop: normalizedShop, user });
+        if (trialClaim.granted) {
+          logShopifyActivation(normalizedShop, "trial_activated", { source: "oauth" });
+        } else if (!["ledger_exists", "user_ineligible"].includes(trialClaim.reason)) {
+          logShopifyActivation(normalizedShop, "trial_failed", {
+            source: "oauth", reason: trialClaim.reason === "ledger_not_ready" ? "ledger_not_ready" : "provisioning_failed",
+          });
+        }
+      } catch {
+        // Save the OAuth connection/session so recovery does not replay a single-use authorization code.
+        logShopifyActivation(normalizedShop, "trial_failed", { source: "oauth", reason: "provisioning_failed" });
+      }
+      user = (await storage.getUserForSession(user.id)) ?? user;
+
+      const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
+      const shopAlreadyActive = priorShopifyStatus === 'active';
+      const firstTokenInstall = shopifyMerchantIsFirstTokenInstall(user);
+      const usableAppAccess = shopifyMerchantHasUsableAppAccess({ ...user, shopifyShop: normalizedShop });
+
+      const installPatch: Parameters<typeof storage.updateUser>[1] = {
+        shopifyShop: normalizedShop,
+        shopifyAccessToken: accessToken,
+        shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
+      };
+
+      // A linked account switching shops must not carry forward the old owner's contact.
+      if (user.shopifyShop && user.shopifyShop !== normalizedShop) installPatch.shopifyOwnerEmail = null;
+      // Reconnect without resetting the original trial dates or paid entitlements.
+      if (["uninstalled", "cancelled", "canceled"].includes(priorShopifyStatus)) {
+        installPatch.shopifySubscriptionStatus = "pending";
+      }
+      if (!shopAlreadyActive && !usableAppAccess) {
+        Object.assign(installPatch, {
+          shopifySubscriptionStatus: 'pending',
+          shopifyChargeId: null,
+          billingPlan: 'free',
+          subscriptionPlan: 'free',
+          subscriptionStatus: 'active',
+          shopifyAIBrainEnabled: false,
+        });
+      }
+
+      await storage.updateUser(user.id, installPatch);
+      const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
+      if (!existingIntegration) {
+        await storage.createIntegration({
+          userId: user.id,
+          type: 'shopify',
+          name: 'Shopify',
+          config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'], ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
+          isActive: true,
+        });
+      } else {
+        const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
+        await storage.updateIntegration(existingIntegration.id, {
+          config: { ...existingConfig, shopUrl: normalizedShop, ...(firstTokenInstall ? { shopifyLastInstalledAt: new Date().toISOString() } : {}) },
+          isActive: true,
+        });
+      }
+      return { user, normalizedShop, accessToken, firstTokenInstall, usableAppAccess };
     });
-    console.log("[Shopify Callback] Shop trial ledger", {
-      shopHash: hashShopifyShopForLogs(normalizedShop),
-      userId: user.id,
-      claimed: trialClaim.claimed,
-      granted: trialClaim.granted,
-      status: trialClaim.status,
-      reason: trialClaim.reason,
-    });
-    user = (await storage.getUserForSession(user.id)) ?? user;
 
-    const priorShopifyStatus = (user.shopifySubscriptionStatus || '').toLowerCase();
-    const shopAlreadyActive = priorShopifyStatus === 'active';
-    const firstTokenInstall = shopifyMerchantIsFirstTokenInstall(user);
-    const usableAppAccess = shopifyMerchantHasUsableAppAccess(user);
-
-    const installPatch: Parameters<typeof storage.updateUser>[1] = {
-      shopifyShop: normalizedShop,
-      shopifyAccessToken: accessToken,
-      shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
-    };
-
-    // A linked account switching shops must not carry forward the old owner's contact.
-    if (user.shopifyShop && user.shopifyShop !== normalizedShop) installPatch.shopifyOwnerEmail = null;
-    if (!shopAlreadyActive && (firstTokenInstall || !usableAppAccess)) {
-      Object.assign(installPatch, {
-        shopifySubscriptionStatus: 'pending',
-        shopifyChargeId: null,
-        billingPlan: 'free',
-        subscriptionPlan: 'free',
-        subscriptionStatus: 'active',
-        shopifyAIBrainEnabled: false,
-      });
-    }
-
-    await storage.updateUser(user.id, installPatch);
     const ownerCapture = await captureCurrentShopifyOwnerEmail({
       userId: user.id, shop: normalizedShop, accessToken,
     }, fetchShopifyShopOwnerEmailResult);
@@ -305,7 +345,8 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     try {
       const forWelcome = (await storage.getUserForSession(user.id)) ?? user;
-      await trySendShopifyWelcomeEmailForUser({
+      // Do not send trial welcome copy before usable access is confirmed.
+      if (usableAppAccess) await trySendShopifyWelcomeEmailForUser({
         id: forWelcome.id,
         name: forWelcome.name,
         email: forWelcome.email,
@@ -319,23 +360,6 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.warn("[ShopifyContact] welcome_delivery_failed");
     }
 
-    const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
-    if (!existingIntegration) {
-      await storage.createIntegration({
-        userId: user.id,
-        type: 'shopify',
-        name: 'Shopify',
-        config: { shopUrl: normalizedShop, syncOptions: ['new_orders', 'new_customers'] },
-        isActive: true,
-      });
-    } else {
-      const existingConfig = (existingIntegration.config && typeof existingIntegration.config === 'object') ? existingIntegration.config as Record<string, any> : {};
-      await storage.updateIntegration(existingIntegration.id, {
-        config: { ...existingConfig, shopUrl: normalizedShop },
-        isActive: true,
-      });
-    }
-
     // Best-effort webhook registration — must not block install
     try {
       await registerMandatoryWebhooks(normalizedShop, accessToken);
@@ -343,27 +367,19 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.error('[Shopify Webhook Register Failed]', { shop: normalizedShop, error: webhookErr });
     }
 
-    // Log the merchant into the web app so they can choose Starter vs Pro on Pricing (Shopify Billing API).
-    await new Promise<void>((resolve, reject) => {
-      (req as any).login(user, (err: unknown) => (err ? reject(err) : resolve()));
-    });
-
-    if (shopAlreadyActive || (usableAppAccess && !firstTokenInstall)) {
-      return res.redirect('/app/inbox');
+    // Persist login before redirecting; a successful OAuth exchange is not a rendered app session.
+    await establishShopifyLogin(req, user);
+    let destination = "/shopify/start";
+    try {
+      const current = await storage.getUserForSession(user.id);
+      if (current) destination = shopifyInstallDestination((await getShopifyOnboardingSnapshot(current)).state, firstTokenInstall);
+    } catch {
+      // The start screen can retry a status read; never advertise an unverified trial.
     }
-
-    const trialDays = PRO_AI_TRIAL_DAYS;
-    res.redirect(
-      `/pricing?shopify_installed=1&shop=${encodeURIComponent(normalizedShop)}&trial_days=${String(trialDays)}`,
-    );
+    return res.redirect(destination);
   } catch (error) {
     console.error("[ShopifyContact] oauth_callback_failed");
-    if (isUsersEmailUniqueViolation(error)) {
-      return res.status(409).json({
-        error: 'Shopify merchant account already exists. Please open the app from Shopify admin to continue.',
-      });
-    }
-    res.status(500).json({ error: 'Installation failed' });
+    return res.redirect("/shopify/start?installation_error=1");
   }
 });
 
@@ -381,7 +397,7 @@ router.get('/billing/callback', async (req: Request, res: Response) => {
 
   try {
     const user = await storage.getUserByShopifyShop(shop);
-    
+
     if (!user || !user.shopifyAccessToken) {
       return res.status(404).json({ error: 'Shop not found' });
     }
@@ -445,7 +461,7 @@ router.get('/subscription', shopifySessionMiddleware(), async (req: Request, res
 
   try {
     const user = await storage.getUserByShopifyShop(shop);
-    
+
     if (!user || !user.shopifyAccessToken) {
       return res.status(404).json({ error: 'Shop not found' });
     }
@@ -465,12 +481,12 @@ router.get('/subscription', shopifySessionMiddleware(), async (req: Request, res
 
 function verifyWebhookHmac(rawBody: Buffer | string, hmac: string): boolean {
   if (!SHOPIFY_API_SECRET || !hmac) return false;
-  
+
   const calculatedHmac = crypto
     .createHmac('sha256', SHOPIFY_API_SECRET)
     .update(rawBody)
     .digest('base64');
-  
+
   try {
     return crypto.timingSafeEqual(
       Buffer.from(hmac),
@@ -625,7 +641,7 @@ router.post('/webhooks/subscription-update', async (req: Request, res: Response)
   try {
     const subscription = req.body;
     const user = await storage.getUserByShopifyShop(shop);
-    
+
     if (user && user.shopifyAccessToken) {
       const rawStatus = String(subscription?.status || '').toUpperCase();
       if (rawStatus === 'ACTIVE') {
@@ -671,12 +687,12 @@ router.post('/webhooks/customers/data_request', async (req: Request, res: Respon
   try {
     const { shop_domain, customer, orders_requested } = req.body;
     console.info("[ShopifyPrivacy] signed_customer_data_request_received");
-    
+
     // WhachatCRM stores conversation data linked to phone numbers, not Shopify customer IDs
     // We acknowledge the request - actual data export would be handled via support ticket
     // since we need to match by phone number which requires manual verification
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       received: true,
       message: 'Data request acknowledged. Customer data export will be processed within 30 days.'
     });
@@ -705,29 +721,29 @@ router.post('/webhooks/customers/redact', async (req: Request, res: Response) =>
   try {
     const { shop_domain, customer, orders_to_redact } = req.body;
     console.info("[ShopifyPrivacy] signed_customer_redaction_received");
-    
+
     // WhachatCRM stores conversation data linked to phone numbers
     // If we had a phone number, we would delete associated chats
     // For now, we acknowledge and log for manual processing if needed
-    
+
     if (customer?.phone) {
       // Attempt to find and delete chats by phone number
       const user = await storage.getUserByShopifyShop(shop);
       if (user) {
         const chats = await storage.getChats(user.id);
-        const matchingChats = chats.filter((chat: any) => 
-          chat.whatsappPhone === customer.phone || 
+        const matchingChats = chats.filter((chat: any) =>
+          chat.whatsappPhone === customer.phone ||
           chat.whatsappPhone === customer.phone.replace(/\D/g, '')
         );
-        
+
         for (const chat of matchingChats) {
           await storage.deleteChat(chat.id);
           console.info("[ShopifyPrivacy] customer_chat_erased");
         }
       }
     }
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       received: true,
       message: 'Customer data redaction request processed.'
     });

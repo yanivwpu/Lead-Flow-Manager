@@ -56,3 +56,11 @@ Reference: https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance
 ## Tests
 
 The PR workflow exercises successful/missing/invalid/failed capture, private reporting, support-contact validation and real HTTP session/CSRF behavior, optional UI copy in English/Spanish/Hebrew, and actual PostgreSQL persistence/uninstall/reinstall/redaction/races/rollback. Existing Shopify trial/billing/OAuth regressions, exact-base TypeScript comparison, and build also run. The comparison normalizes harmless object-property display order while preserving field/type/error-code differences; its normalization is unit-tested. PostgreSQL fixtures accept only an explicitly named localhost disposable test database, never production credentials. Fixture addresses are generated in memory and never printed or used as assertion diagnostics.
+
+## Integration with trial-first onboarding (PR #59)
+
+PR #60 includes `codex/shopify-trial-first-onboarding` at `c5066163fc0c505cb26e0728f9c4047f8d035c72`, including the staging database bootstrap. OAuth keeps the locked, idempotent 14-day claim, reconnects uninstalled trials without changing dates, preserves usable/paid access, persists the Passport session before redirect, and shows guided start or voluntary Pricing according to verified access. The optional support contact is also available on a verified usable guided start.
+
+The full OAuth exchange, account resolution/creation, trial claim, user/token update and integration upsert share the uninstall/redaction advisory fence. Owner capture and send-once welcome delivery acquire their own fences after installation, avoiding nested advisory-lock waits. Shopify-triggered HubSpot export is awaited before the ingestion fence releases. Atomic uninstall cleanup retains the original trial ledger/dates and contact history, revokes integration credentials, preserves early-uninstall telemetry and returns a retryable failure on cleanup failure.
+
+Validation runs both Shopify workflows and the staging bootstrap workflow, using disposable localhost PostgreSQL. External-erasure provider integration and staging live-install checks described above remain release requirements; this integration does not deploy or access production data.

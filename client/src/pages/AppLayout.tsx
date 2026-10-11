@@ -30,6 +30,7 @@ import { Loader2 } from "lucide-react";
 import { AuthenticatedAppErrorBoundary } from "@/components/AuthenticatedAppErrorBoundary";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { ShopifySuccessfulRender, useShopifyActivationObservation } from "@/components/ShopifyActivationObserver";
 import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
 
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
@@ -112,6 +113,8 @@ function AppContent() {
     shownToday: shownActivationModalToday,
     pathname: location,
   });
+
+  useShopifyActivationObservation(user?.id, !!subscription?.subscription?.isShopify, activation?.hasAnyMessagingChannel);
 
   const showUsageBanner =
     !isLoading &&
@@ -226,6 +229,7 @@ function AppContent() {
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />
             </Switch>
+            <ShopifySuccessfulRender isShopify={!!subscription?.subscription?.isShopify} />
             </AuthenticatedAppErrorBoundary>
           </Suspense>
         </div>

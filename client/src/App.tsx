@@ -146,6 +146,8 @@ import { CookieConsentRoot } from "@/components/CookieConsentRoot";
 import { GoogleAnalyticsRouteTracker } from "@/components/GoogleAnalyticsRouteTracker";
 import { MarketingWebsiteChatWidget } from "@/components/MarketingWebsiteChatWidget";
 import { Welcome } from "@/pages/Welcome";
+import { AuthenticatedAppErrorBoundary } from "@/components/AuthenticatedAppErrorBoundary";
+const ShopifyStart = lazy(() => import("@/pages/ShopifyStart").then(m => ({ default: m.ShopifyStart })));
 
 // Wrapper for protected routes
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -495,6 +497,10 @@ function Router() {
       document.documentElement.classList.add("wcs-shopify-bootstrap");
     }
   }, [authLoading, bootstrap.active, bootstrap.needsInstallRedirect, destinationReached]);
+
+  if (location.split("?")[0] === "/shopify/start") {
+    return <AuthenticatedAppErrorBoundary><ShopifyStart /></AuthenticatedAppErrorBoundary>;
+  }
 
   if (bootstrap.active) {
     if (

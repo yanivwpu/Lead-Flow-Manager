@@ -27,7 +27,7 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
   delete process.env.GHL_MARKETPLACE_PRO_PLAN_ID;
   const { db } = await import("../drizzle/db");
   const { persistShopifyOwnerEmailCapture: persist, readShopifySupportContact: read,
-    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyPrivacyFence: fence, withShopifyMailPrivacyFence: mailFence, captureCurrentShopifyOwnerEmail: currentCapture } =
+    saveShopifySupportContact: save, uninstallShopifyStore: uninstall, withShopifyInstallPrivacyFence: installFence, withShopifyPrivacyFence: fence, withShopifyMailPrivacyFence: mailFence, captureCurrentShopifyOwnerEmail: currentCapture } =
       await import("../server/shopifyContactService");
   const { redactShopifyStore: redact } = await import("../server/shopifyPrivacyRedaction");
   const { processShopifyExternalErasureTasks: external } = await import("../server/shopifyExternalErasure");
@@ -207,6 +207,33 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, currentContact.id))).length, 1);
     const [untouched] = await db.select().from(schema.users).where(eq(schema.users.id, other.id));
     assert.ok(untouched.shopifyOwnerEmail === secondEmail && untouched.shopifyShop === other.shopifyShop);
+
+    // An OAuth exchange paused before installation writes holds the same cross-instance lock.
+    // Erasure must wait for user/token and integration writes, then erase every copy.
+    const installing = await user("installrace");
+    let installEntered!: () => void;
+    const installStarted = new Promise<void>(resolve => { installEntered = resolve; });
+    let resumeInstall!: () => void;
+    const pausedInstall = new Promise<void>(resolve => { resumeInstall = resolve; });
+    const installation = installFence(installing.shopifyShop!, async () => {
+      installEntered();
+      await pausedInstall;
+      await db.update(schema.users).set({ shopifyAccessToken: "new-fixture-token", shopifyOwnerEmail: fixtureEmail })
+        .where(eq(schema.users.id, installing.id));
+      await integration(installing.id, installing.shopifyShop!);
+    });
+    await installStarted;
+    let erasedInstall = false;
+    const installErasure = redact(installing.shopifyShop!).then(() => { erasedInstall = true; });
+    await new Promise(resolve => setTimeout(resolve, 40));
+    assert.ok(!erasedInstall, "erasure waits for the complete OAuth installation");
+    resumeInstall();
+    await Promise.all([installation, installErasure]);
+    const [erasedMerchant] = await db.select().from(schema.users).where(eq(schema.users.id, installing.id));
+    assert.equal(erasedMerchant.shopifyShop, null);
+    assert.equal(erasedMerchant.shopifyAccessToken, null);
+    assert.equal(erasedMerchant.shopifyOwnerEmail, null);
+    assert.equal((await db.select().from(schema.integrations).where(eq(schema.integrations.userId, installing.id))).length, 0);
 
     // Fenced in-flight ingestion finishes before erasure, and late arrivals cannot recreate data.
     await db.update(schema.users).set({ shopifyAccessToken: "fixture-only", shopifySubscriptionStatus: "active" }).where(eq(schema.users.id, other.id));
