@@ -38,6 +38,7 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
   const quote = (name: string) => '"' + name.replaceAll('"', '""') + '"';
   try {
     for (const table of tables) {
+      if (table === schema.shopifyPrivacyErasureTasks) continue;
       const config = getTableConfig(table as PgTable);
       const columns = config.columns.map(column => quote(column.name) + " " +
         (column.enumValues?.length ? "text" : column.getSQLType()) +
@@ -45,6 +46,8 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
       if (config.name === "shopify_merchant_contacts") columns.push("PRIMARY KEY (user_id)");
       await db.execute(sql.raw("CREATE TABLE " + quote(config.name) + " (" + columns.join(",") + ")"));
     }
+    await db.execute(sql.raw(readFileSync("migrations/0104_shopify_contact_privacy.sql", "utf8")));
+    await db.execute(sql.raw(readFileSync("migrations/0105_shopify_privacy_automation.sql", "utf8")));
     // The fixture enforces actual cascade behavior relied on by the production redaction.
     for (const query of [
       "ALTER TABLE conversations ADD FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE",
@@ -258,26 +261,68 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     // A startup/migration backfill must not reconstruct shop mappings from neutral redacted identities.
     await db.execute(sql.raw(readFileSync("migrations/0084_shopify_shop_trials.sql", "utf8")));
     assert.equal((await db.select().from(schema.shopifyShopTrials)).length, 0);
+    // Actual customer deletion uses Shopify identity, tenant isolation and a persistent replay lock.
+    const { handleShopifyCustomerPrivacy: customerRequest, customerPrivacyLocked: locked, privacyRequestDedupe: dedupe } = await import("../server/shopifyPrivacyRequests");
+    process.env.SHOPIFY_PRIVACY_REQUEST_KEY = "f".repeat(64);
+    const customerOwner = await user("customer-owner");
+    const foreignOwner = await user("customer-foreign");
+    const makeCustomer = async (owner: string) => (await db.insert(schema.contacts).values({
+      userId: owner, name: "Fixture customer", source: "shopify", customFields: { shopifyCustomerId: "9123" },
+      email: fixtureEmail, phone: "+15555550123", primaryChannel: "shopify",
+    } as any).returning())[0];
+    const localCustomer = await makeCustomer(customerOwner.id), foreignCustomer = await makeCustomer(foreignOwner.id);
+    const otherShopCustomer = await makeCustomer(customerOwner.id);
+    await db.update(schema.contacts).set({ customFields: { shopifyCustomerId: "9123", lastCommerceMetadata: { shop: "old-store.myshopify.com" } } }).where(eq(schema.contacts.id, otherShopCustomer.id));
+    const requestBody = { customer: { id: "9123", email: fixtureEmail, phone: "+15555550123" }, data_request: { id: 42 } };
+    const accessKey = dedupe("access_request", customerOwner.shopifyShop!, requestBody);
+    await customerRequest("access_request", customerOwner.shopifyShop!, requestBody, accessKey);
+    await customerRequest("access_request", customerOwner.shopifyShop!, requestBody, accessKey);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, localCustomer.id))).length, 1);
+    const payloads = await db.execute(sql`SELECT encrypted_payload FROM shopify_privacy_request_payloads`);
+    assert.equal(payloads.rows.length, 1); assert.ok(!JSON.stringify(payloads.rows).includes(fixtureEmail));
+    const deleteKey = dedupe("customer_erasure", customerOwner.shopifyShop!, requestBody);
+    // Failure to delete rolls back the task and suppression hashes too.
+    await db.execute(sql.raw("CREATE FUNCTION reject_customer_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture'; END $$"));
+    await db.execute(sql.raw("CREATE TRIGGER reject_customer_delete BEFORE DELETE ON contacts FOR EACH ROW EXECUTE FUNCTION reject_customer_delete()"));
+    await assert.rejects(customerRequest("customer_erasure", customerOwner.shopifyShop!, requestBody, deleteKey));
+    assert.equal(await locked(customerOwner.shopifyShop!, requestBody.customer), false);
+    await db.execute(sql.raw("DROP TRIGGER reject_customer_delete ON contacts"));
+    await Promise.all([customerRequest("customer_erasure", customerOwner.shopifyShop!, requestBody, deleteKey), customerRequest("customer_erasure", customerOwner.shopifyShop!, requestBody, deleteKey)]);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, localCustomer.id))).length, 0);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, foreignCustomer.id))).length, 1);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, otherShopCustomer.id))).length, 1);
+    assert.equal(await locked(customerOwner.shopifyShop!, requestBody.customer), true);
+    assert.equal(await locked(foreignOwner.shopifyShop!, requestBody.customer), false);
+    const { processShopifyCustomerCreate: lateCustomer } = await import("../server/shopifyCommerceWebhooks");
+    await lateCustomer({ headers: {} } as any, customerOwner.shopifyShop!, requestBody.customer);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.userId, customerOwner.id))).length, 1);
+    // Test-only remove the access fixture after verifying its separation from deletion.
+    await db.delete(schema.shopifyPrivacyErasureTasks).where(eq(schema.shopifyPrivacyErasureTasks.dedupeKey, accessKey));
     const beforeExternal = (await db.select().from(schema.shopifyPrivacyErasureTasks)).length;
     assert.ok(beforeExternal > 0);
-    const pending = await external({ eraseAndVerify: async () => ({ verified: false }) });
+    const pending = await external(async () => ({ verified: false, code: "provider_retry" }));
     assert.equal(pending.completed, 0);
     assert.equal((await db.select().from(schema.shopifyPrivacyErasureTasks)).length, beforeExternal);
-    await external({ eraseAndVerify: async () => { throw new Error("fixture failure"); } });
+    await db.execute(sql`UPDATE shopify_privacy_erasure_tasks SET next_attempt_at=NOW()`);
+    await external(async () => { throw new Error("fixture failure"); });
     assert.equal((await db.select().from(schema.shopifyPrivacyErasureTasks)).length, beforeExternal);
-    const completed = await external({ eraseAndVerify: async window => {
-      assert.ok(window.to instanceof Date);
+    await db.execute(sql`UPDATE shopify_privacy_erasure_tasks SET next_attempt_at=NOW()`);
+    const verified = async () => ({ verified: true as const, evidence: { method: "deletion" as const,
+      evidenceDigest: "a".repeat(64), verifiedAt: new Date().toISOString() } });
+    const completed = await external(async window => {
+      assert.ok(window.scope_to instanceof Date);
       assert.ok(!JSON.stringify(window).includes(fixtureEmail));
-      return { verified: true };
-    } });
+      return verified();
+    });
     assert.equal(completed.completed, beforeExternal);
-    assert.equal((await db.select().from(schema.shopifyPrivacyErasureTasks)).length, 0);
+    assert.equal((await db.select().from(schema.shopifyPrivacyErasureTasks)).length, beforeExternal);
     await db.insert(schema.shopifyPrivacyErasureTasks).values(Array.from({ length: 25 }, () => ({ scopeTo: new Date(), requestedAt: new Date() })));
-    const batch = await external({ eraseAndVerify: async () => ({ verified: true }) });
+    const batch = await external(verified);
     assert.equal(batch.completed, 20);
-    assert.equal(batch.pending, 5, "Report the remaining queue, not just the processed batch");
-    const tail = await external({ eraseAndVerify: async () => ({ verified: true }) });
+    assert.equal(batch.pending, 5);
+    const tail = await external(verified);
     assert.equal(tail.completed, 5); assert.equal(tail.pending, 0);
+
   } finally {
     await (db as any).$client.end();
     await admin.query("DROP SCHEMA " + namespace + " CASCADE");

@@ -1,3 +1,4 @@
+import { customerPrivacyLocked } from "./shopifyPrivacyRequests";
 import { withShopifyPrivacyFence } from "./shopifyContactService";
 import type { Request, Response } from "express";
 import { storage } from "./storage";
@@ -210,8 +211,14 @@ export function scheduleShopifyCommerceProcessing(
 }
 
 export async function processShopifyOrderCreate(req: Request, shop: string, body: ShopifyOrderPayload): Promise<void> {
-  return withShopifyPrivacyFence(shop, () => ingestShopifyOrderCreate(req, shop, body));
+  return withShopifyPrivacyFence(shop, async () => {
+    if (await customerPrivacyLocked(shop, { ...body.customer, email: body.customer?.email || body.email, phone: body.customer?.phone || body.phone })) return;
+    await ingestShopifyOrderCreate(req, shop, body);
+  });
 }
 export async function processShopifyCustomerCreate(req: Request, shop: string, body: ShopifyCustomerPayload): Promise<void> {
-  return withShopifyPrivacyFence(shop, () => ingestShopifyCustomerCreate(req, shop, body));
+  return withShopifyPrivacyFence(shop, async () => {
+    if (await customerPrivacyLocked(shop, body)) return;
+    await ingestShopifyCustomerCreate(req, shop, body);
+  });
 }

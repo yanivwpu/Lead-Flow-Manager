@@ -64,3 +64,7 @@ PR #60 includes `codex/shopify-trial-first-onboarding` at `c5066163fc0c505cb26e0
 The full OAuth exchange, account resolution/creation, trial claim, user/token update and integration upsert share the uninstall/redaction advisory fence. Owner capture and send-once welcome delivery acquire their own fences after installation, avoiding nested advisory-lock waits. Shopify-triggered HubSpot export is awaited before the ingestion fence releases. Atomic uninstall cleanup retains the original trial ledger/dates and contact history, revokes integration credentials, preserves early-uninstall telemetry and returns a retryable failure on cleanup failure.
 
 Validation runs both Shopify workflows and the staging bootstrap workflow, using disposable localhost PostgreSQL. External-erasure provider integration and staging live-install checks described above remain release requirements; this integration does not deploy or access production data.
+
+## Automatic processing follow-up
+
+See [privacy operations](shopify-privacy-operations.md) for migration 0105, leases/retries, signed evidence, automatic exception alerts, customer erasure/access handling and Admin status. Verified tasks are now retained as minimal completion records; a bare adapter acknowledgment no longer deletes a task. Provider-specific blockers remain explicit until evidenced.

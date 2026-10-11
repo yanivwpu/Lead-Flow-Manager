@@ -1,3 +1,5 @@
+import { createShopifyCustomerPrivacyHandler } from "./shopifyCustomerPrivacyHandler";
+import { handleShopifyCustomerPrivacy, privacyRequestDedupe } from "./shopifyPrivacyRequests";
 import express, { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { storage } from './storage';
@@ -668,95 +670,18 @@ router.post('/webhooks/subscription-update', async (req: Request, res: Response)
 // ============= MANDATORY COMPLIANCE WEBHOOKS =============
 // These are required by Shopify for app approval
 
-// customers/data_request - Customer requests their data (GDPR/CCPA)
-router.post('/webhooks/customers/data_request', async (req: Request, res: Response) => {
-  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  const shop = req.headers['x-shopify-shop-domain'] as string;
-
-  if (!hmac || !shop) {
-    console.log('[Shopify Compliance] customers/data_request - Missing headers');
-    return res.status(401).json({ error: 'Missing webhook headers' });
-  }
-
-  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-  if (!verifyWebhookHmac(rawBody, hmac)) {
-    console.log('[Shopify Compliance] customers/data_request - Invalid HMAC');
-    return res.status(401).json({ error: 'Invalid webhook signature' });
-  }
-
-  try {
-    const { shop_domain, customer, orders_requested } = req.body;
-    console.info("[ShopifyPrivacy] signed_customer_data_request_received");
-
-    // WhachatCRM stores conversation data linked to phone numbers, not Shopify customer IDs
-    // We acknowledge the request - actual data export would be handled via support ticket
-    // since we need to match by phone number which requires manual verification
-
-    res.status(200).json({
-      received: true,
-      message: 'Data request acknowledged. Customer data export will be processed within 30 days.'
-    });
-  } catch (error) {
-    console.error("[ShopifyPrivacy] compliance_processing_failed");
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
-// customers/redact - Customer requests data deletion (GDPR right to erasure)
-router.post('/webhooks/customers/redact', async (req: Request, res: Response) => {
-  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  const shop = req.headers['x-shopify-shop-domain'] as string;
-
-  if (!hmac || !shop) {
-    console.log('[Shopify Compliance] customers/redact - Missing headers');
-    return res.status(401).json({ error: 'Missing webhook headers' });
-  }
-
-  const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-  if (!verifyWebhookHmac(rawBody, hmac)) {
-    console.log('[Shopify Compliance] customers/redact - Invalid HMAC');
-    return res.status(401).json({ error: 'Invalid webhook signature' });
-  }
-
-  try {
-    const { shop_domain, customer, orders_to_redact } = req.body;
-    console.info("[ShopifyPrivacy] signed_customer_redaction_received");
-
-    // WhachatCRM stores conversation data linked to phone numbers
-    // If we had a phone number, we would delete associated chats
-    // For now, we acknowledge and log for manual processing if needed
-
-    if (customer?.phone) {
-      // Attempt to find and delete chats by phone number
-      const user = await storage.getUserByShopifyShop(shop);
-      if (user) {
-        const chats = await storage.getChats(user.id);
-        const matchingChats = chats.filter((chat: any) =>
-          chat.whatsappPhone === customer.phone ||
-          chat.whatsappPhone === customer.phone.replace(/\D/g, '')
-        );
-
-        for (const chat of matchingChats) {
-          await storage.deleteChat(chat.id);
-          console.info("[ShopifyPrivacy] customer_chat_erased");
-        }
-      }
-    }
-
-    res.status(200).json({
-      received: true,
-      message: 'Customer data redaction request processed.'
-    });
-  } catch (error) {
-    console.error("[ShopifyPrivacy] compliance_processing_failed");
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
+// Access requests are durable support work; they never invoke the erasure worker.
+router.post('/webhooks/customers/data_request', createShopifyCustomerPrivacyHandler("access_request", {
+  verify: verifyWebhookHmac, dedupe: privacyRequestDedupe, process: handleShopifyCustomerPrivacy,
+}));
+router.post('/webhooks/customers/redact', createShopifyCustomerPrivacyHandler("customer_erasure", {
+  verify: verifyWebhookHmac, dedupe: privacyRequestDedupe, process: handleShopifyCustomerPrivacy,
+}));
 
 // shop/redact - Shop data deletion (48 hours after uninstall)
 router.post('/webhooks/shop/redact', createShopifyStoreRedactionHandler({
   verify: verifyWebhookHmac,
-  redact: redactShopifyStore,
+  redact: redactShopifyStore, dedupe: privacyRequestDedupe,
 }));
 function verifyShopifyCommerceWebhook(req: Request, res: Response): { shop: string; body: Record<string, unknown> } | null {
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;

@@ -12,7 +12,7 @@ const baseline = join(parent, "baseline");
 const compiler = resolve("node_modules/typescript/bin/tsc");
 
 function check(directory) {
-  const result = spawnSync(process.execPath, [compiler, "--noEmit", "--incremental", "false", "--pretty", "false"],
+  const result = spawnSync(process.execPath, [compiler, "--noEmit", "--incremental", "false", "--pretty", "false", "--noErrorTruncation", "true"],
     { cwd: directory, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   if (result.error) throw result.error;
   // Inferred import types contain absolute checkout paths; normalize both worktrees equally.
