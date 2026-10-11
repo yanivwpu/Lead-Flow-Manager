@@ -22,6 +22,8 @@ test("smoke gate requires explicit invocation and exact Railway identities, neve
     { SHOPIFY_PRIVACY_ALERT_URL: T.receiver + "?debug=1" },
     { SHOPIFY_PRIVACY_SMOKE_DATABASE_SYSTEM_ID: "0" },
     { SHOPIFY_PRIVACY_ALERT_TOKEN: "short" },
+    { RESEND_FROM_EMAIL: "Personal Name <fixture@example.invalid>" },
+    { RESEND_FROM_EMAIL: "noreply@crm.whachatcrm.com\r\nBcc: fixture@example.invalid" },
   ]) assert.throws(() => validatePrivacySmokeTarget({ ...valid, ...patch }));
   for (const database of [
     "postgres://fixture:fixture@localhost/railway", "postgres://fixture:fixture@127.0.0.1/railway",
@@ -45,6 +47,7 @@ test("database control identity, server address, bootstrap marker and migration 
   for (const patch of [
     { database: "production" }, { schema: "other" }, { system_id: "7654321098765432101" },
     { address: "127.0.0.1" }, { address: "::1" }, { address: null },
+    { address: "::ffff:127.0.0.1" }, { address: "0.0.0.0" }, { address: "::" },
   ]) await assert.rejects(verifyPrivacySmokeDatabase(client([[{ ...context, ...patch }]]), valid), /database_identity_rejected/);
   for (const bad of [[], [{ version: 2, baseline_sha256: "a".repeat(64) }], [{ version: 1, baseline_sha256: "unknown" }]])
     await assert.rejects(verifyPrivacySmokeDatabase(client([[context], bad]), valid), /staging_bootstrap_marker_rejected/);

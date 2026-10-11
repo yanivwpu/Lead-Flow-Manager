@@ -32,6 +32,8 @@ export function validatePrivacySmokeTarget(env = process.env) {
   if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL ||
       !/^[A-Za-z0-9_-]{32,256}$/.test(env.SHOPIFY_PRIVACY_ALERT_TOKEN || ""))
     throw Error("email_configuration_incomplete");
+  if (!/^(?:(?:WhachatCRM|WhaChatCRM) <noreply@crm\.whachatcrm\.com>|noreply@crm\.whachatcrm\.com)$/.test(env.RESEND_FROM_EMAIL))
+    throw Error("smoke_sender_not_allowlisted");
   return url.toString();
 }
 
@@ -49,7 +51,7 @@ export async function verifyPrivacySmokeDatabase(client: PoolClient, env = proce
   const context = (await client.query(`SELECT current_database() database, current_schema() schema,
     inet_server_addr()::text address, system_identifier::text system_id FROM pg_control_system()`)).rows[0];
   if (context?.database !== "railway" || context.schema !== "public" || !context.address ||
-      /^(127\.|::1$)/.test(context.address) ||
+      /^(127\.|::ffff:127\.|::1$|0\.0\.0\.0$|::$)/i.test(context.address) ||
       context.system_id !== env.SHOPIFY_PRIVACY_SMOKE_DATABASE_SYSTEM_ID)
     throw Error("database_identity_rejected");
   const marker = (await client.query("SELECT version, baseline_sha256 FROM public.whachat_staging_schema_bootstrap")).rows;
