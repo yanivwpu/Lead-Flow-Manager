@@ -2,8 +2,9 @@ import { createHmac, randomBytes, createCipheriv } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users, contacts, conversations, chats, workflowExecutions, workflows, flowJobs, webhooks, webhookDeliveries, activityEvents, messages, shopifyPrivacyErasureTasks, shopifyPrivacyCustomerLocks } from "@shared/schema";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { deleteContactRecords } from "./contactDeleteService";
-import { recordHasExplicitShop } from "@shared/shopifyPrivacyRedaction";
+import { recordHasExplicitShop, recordBelongsToShopify } from "@shared/shopifyPrivacyRedaction";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type CustomerIdentity = { id?: unknown; email?: unknown; phone?: unknown };
@@ -46,16 +47,26 @@ export async function enqueuePrivacyRequest(tx: Tx, input: { kind: string; dedup
   const [existing] = await tx.select({ id: shopifyPrivacyErasureTasks.id }).from(shopifyPrivacyErasureTasks).where(eq(shopifyPrivacyErasureTasks.dedupeKey, input.dedupeKey!));
   return existing.id;
 }
-function matchesSnapshot(value: unknown, tokens: string[], contactIds: string[], depth = 0): boolean {
+function hasDifferentShop(value: unknown, shop: string, depth = 0): boolean {
   if (!value || typeof value !== "object" || depth > 12) return false;
-  if (Array.isArray(value)) return value.some(v => matchesSnapshot(v, tokens, contactIds, depth+1));
+  if (Array.isArray(value)) return value.some(v => hasDifferentShop(v, shop, depth+1));
+  const row = value as Record<string, unknown>;
+  for (const key of ["shop", "shopUrl", "canonicalShop", "shop_domain"]) {
+    if (typeof row[key] === "string") { const domain = normalizeShopifyShopDomain(row[key]); if (domain && domain !== shop) return true; }
+  }
+  return Object.values(row).some(v => hasDifferentShop(v, shop, depth+1));
+}
+function matchesSnapshot(value: unknown, tokens: string[], contactIds: string[], shop: string, depth = 0, scoped = false): boolean {
+  if (!value || typeof value !== "object" || depth > 12 || hasDifferentShop(value, shop)) return false;
+  scoped ||= recordHasExplicitShop(value, shop) || recordBelongsToShopify(value, shop);
+  if (Array.isArray(value)) return value.some(v => matchesSnapshot(v, tokens, contactIds, shop, depth+1, scoped));
   const row = value as Record<string, unknown>;
   for (const [key, val] of Object.entries(row)) {
     if (["contactId", "contact_id"].includes(key) && contactIds.includes(String(val))) return true;
-    if (["customerId", "shopifyCustomerId", "customer_id"].includes(key) && tokens.includes(`id:${val}`)) return true;
-    if (/email/i.test(key) && typeof val === "string" && tokens.includes(`email:${val.trim().toLowerCase()}`)) return true;
-    if (/phone/i.test(key) && typeof val === "string" && tokens.includes(`phone:${val.replace(/\D/g, "")}`)) return true;
-    if (matchesSnapshot(val, tokens, contactIds, depth+1)) return true;
+    if (scoped && ["customerId", "shopifyCustomerId", "customer_id"].includes(key) && tokens.includes(`id:${val}`)) return true;
+    if (scoped && /email/i.test(key) && typeof val === "string" && tokens.includes(`email:${val.trim().toLowerCase()}`)) return true;
+    if (scoped && /phone/i.test(key) && typeof val === "string" && tokens.includes(`phone:${val.replace(/\D/g, "")}`)) return true;
+    if (matchesSnapshot(val, tokens, contactIds, shop, depth+1, scoped)) return true;
   }
   return false;
 }
@@ -84,6 +95,7 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
     const candidates = await tx.select().from(contacts).where(eq(contacts.userId, user.id)).for("update");
     const found = candidates.filter(c => {
       const custom = c.customFields as Record<string, any> | null;
+      if (hasDifferentShop(custom, shop) || hasDifferentShop(c.sourceDetails, shop)) return false;
       if (recordHasExplicitShop(custom, shop) === false && c.source !== "shopify" && custom?.shopifyCustomerId == null) return false;
       const id = custom?.shopifyCustomerId ?? custom?.lastCommerceMetadata?.customerId;
       // An explicit different customer ID wins over shared phone/email hints.
@@ -97,17 +109,17 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
       await tx.delete(workflowExecutions).where(inArray(workflowExecutions.conversationId, threads));
     }
     const jobs = await tx.select().from(flowJobs).where(eq(flowJobs.userId, user.id));
-    for (const row of jobs) if (matchesSnapshot(row.payload, tokens, ids)) await tx.delete(flowJobs).where(eq(flowJobs.id, row.id));
+    for (const row of jobs) if (matchesSnapshot(row.payload, tokens, ids, shop)) await tx.delete(flowJobs).where(eq(flowJobs.id, row.id));
     const ownedFlows = (await tx.select({ id: workflows.id }).from(workflows).where(eq(workflows.userId, user.id))).map(w => w.id);
     if (ownedFlows.length) for (const row of await tx.select().from(workflowExecutions).where(inArray(workflowExecutions.workflowId, ownedFlows))) {
-      if (matchesSnapshot(row.triggerData, tokens, ids)) await tx.delete(workflowExecutions).where(eq(workflowExecutions.id, row.id));
+      if (matchesSnapshot(row.triggerData, tokens, ids, shop)) await tx.delete(workflowExecutions).where(eq(workflowExecutions.id, row.id));
     }
     const hooks = (await tx.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.userId, user.id))).map(w => w.id);
     if (hooks.length) for (const row of await tx.select().from(webhookDeliveries).where(inArray(webhookDeliveries.webhookId, hooks))) {
-      if (matchesSnapshot(row.payload, tokens, ids)) await tx.delete(webhookDeliveries).where(eq(webhookDeliveries.id, row.id));
+      if (matchesSnapshot(row.payload, tokens, ids, shop)) await tx.delete(webhookDeliveries).where(eq(webhookDeliveries.id, row.id));
     }
     for (const row of await tx.select().from(activityEvents).where(eq(activityEvents.userId, user.id))) {
-      if (matchesSnapshot(row.eventData, tokens, ids)) await tx.delete(activityEvents).where(eq(activityEvents.id, row.id));
+      if (matchesSnapshot(row.eventData, tokens, ids, shop)) await tx.delete(activityEvents).where(eq(activityEvents.id, row.id));
     }
     const ownedChats = await tx.select().from(chats).where(eq(chats.userId, user.id));
     for (const chat of ownedChats) if (ids.some(id => chat.whatsappPhone === `webchat:${id}`) ||

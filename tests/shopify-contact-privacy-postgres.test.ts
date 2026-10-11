@@ -271,6 +271,8 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
       email: fixtureEmail, phone: "+15555550123", primaryChannel: "shopify",
     } as any).returning())[0];
     const localCustomer = await makeCustomer(customerOwner.id), foreignCustomer = await makeCustomer(foreignOwner.id);
+    const otherShopCustomer = await makeCustomer(customerOwner.id);
+    await db.update(schema.contacts).set({ customFields: { shopifyCustomerId: "9123", lastCommerceMetadata: { shop: "old-store.myshopify.com" } } }).where(eq(schema.contacts.id, otherShopCustomer.id));
     const requestBody = { customer: { id: "9123", email: fixtureEmail, phone: "+15555550123" }, data_request: { id: 42 } };
     const accessKey = dedupe("access_request", customerOwner.shopifyShop!, requestBody);
     await customerRequest("access_request", customerOwner.shopifyShop!, requestBody, accessKey);
@@ -288,11 +290,12 @@ test("real PostgreSQL capture, uninstall/reinstall, scoped redaction, late write
     await Promise.all([customerRequest("customer_erasure", customerOwner.shopifyShop!, requestBody, deleteKey), customerRequest("customer_erasure", customerOwner.shopifyShop!, requestBody, deleteKey)]);
     assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, localCustomer.id))).length, 0);
     assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, foreignCustomer.id))).length, 1);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.id, otherShopCustomer.id))).length, 1);
     assert.equal(await locked(customerOwner.shopifyShop!, requestBody.customer), true);
     assert.equal(await locked(foreignOwner.shopifyShop!, requestBody.customer), false);
     const { processShopifyCustomerCreate: lateCustomer } = await import("../server/shopifyCommerceWebhooks");
     await lateCustomer({ headers: {} } as any, customerOwner.shopifyShop!, requestBody.customer);
-    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.userId, customerOwner.id))).length, 0);
+    assert.equal((await db.select().from(schema.contacts).where(eq(schema.contacts.userId, customerOwner.id))).length, 1);
     // Test-only remove the access fixture after verifying its separation from deletion.
     await db.delete(schema.shopifyPrivacyErasureTasks).where(eq(schema.shopifyPrivacyErasureTasks.dedupeKey, accessKey));
     const beforeExternal = (await db.select().from(schema.shopifyPrivacyErasureTasks)).length;
