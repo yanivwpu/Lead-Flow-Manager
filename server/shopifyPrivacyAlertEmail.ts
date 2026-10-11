@@ -44,13 +44,15 @@ export async function acceptPrivacyAlertEmail(pool: Pool, alertId: string, dispa
   try {
     locked = (await client.query("SELECT pg_try_advisory_lock(hashtextextended($1, 106)) locked", [alertId])).rows[0].locked;
     if (!locked) return false;
-    const a = (await client.query(`SELECT a.*, t.deadline_at, t.status current_status FROM shopify_privacy_alerts a
-      JOIN shopify_privacy_erasure_tasks t ON t.id=a.task_id WHERE a.id=$1`, [alertId])).rows[0];
+    const a = (await client.query(`SELECT a.*, t.deadline_at AT TIME ZONE 'UTC' deadline_at, t.status current_status,
+      a.next_attempt_at<=NOW() due,
+      a.email_started_at<=NOW()-($2::bigint * interval '1 millisecond') email_window_expired FROM shopify_privacy_alerts a
+      JOIN shopify_privacy_erasure_tasks t ON t.id=a.task_id WHERE a.id=$1`, [alertId, PRIVACY_EMAIL_RETRY_WINDOW_MS])).rows[0];
     if (!a) return false;
     if (a.email_accepted_at && a.provider_message_id) return true;
     const active = (await client.query(`SELECT 1 FROM shopify_privacy_current_issues WHERE task_id=$1 AND reason=$2`, [a.task_id, a.reason])).rowCount;
-    if (a.resolved_at || !active || a.email_reconciliation_required || a.next_attempt_at > new Date()) return false;
-    if (a.email_started_at && Date.now() - a.email_started_at.getTime() >= PRIVACY_EMAIL_RETRY_WINDOW_MS) {
+    if (a.resolved_at || !active || a.email_reconciliation_required || !a.due) return false;
+    if (a.email_window_expired) {
       await client.query("UPDATE shopify_privacy_alerts SET email_reconciliation_required=true WHERE id=$1", [alertId]);
       return false;
     }

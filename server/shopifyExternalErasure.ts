@@ -128,8 +128,8 @@ export async function deliverPrivacyAlerts(send?: (payload: PrivacyAlertPayload,
         deadlineAt: current.deadline_at.toISOString() }, `shopify-privacy-${alert.id}`); } catch { /* bounded, no provider response in logs */ }
     }
     await pool.query(`UPDATE shopify_privacy_alerts SET delivered_at=CASE WHEN $3 THEN NOW() ELSE delivered_at END,
-      attempts=attempts+1,next_attempt_at=$4,lease_token=NULL,lease_expires_at=NULL
-      WHERE id=$1 AND lease_token=$2 AND lease_expires_at>NOW()`, [alert.id, token, ok, new Date(Date.now()+Math.min(3600000,privacyRetryDelay(alert.attempts+1)))]);
+      attempts=attempts+1,next_attempt_at=NOW()+($4::bigint * interval '1 millisecond'),lease_token=NULL,lease_expires_at=NULL
+      WHERE id=$1 AND lease_token=$2 AND lease_expires_at>NOW()`, [alert.id, token, ok, Math.min(3600000,privacyRetryDelay(alert.attempts+1))]);
   }
 }
 export function configuredPrivacyAlertSender(env = process.env) {
