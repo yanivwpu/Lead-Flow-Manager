@@ -5,7 +5,9 @@ export const PRIVACY_SMOKE_TARGET = Object.freeze({
   project: "1d22ff35-a259-4977-9375-377dda1cdd2b",
   environment: "43e4c163-6da9-4be5-ad93-0a3534234613",
   service: "7663b193-b936-41cd-a810-a4940d9912fc",
-  databaseService: "303eefe1-6964-40ac-822e-cf47e5e51752",
+  databaseService: "88d5aec0-1cf7-4fe1-9084-5745a97736bd",
+  databaseServiceName: "Postgres-JSIn",
+  databaseReference: "${{Postgres-JSIn.DATABASE_URL}}",
   host: "postgres.railway.internal",
   receiver: "https://whachatcrm-staging-app-staging.up.railway.app/api/internal/shopify/privacy-alerts",
 });

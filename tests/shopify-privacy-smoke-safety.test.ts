@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { validatePrivacySmokeTarget, verifyPrivacySmokeDatabase, PRIVACY_SMOKE_TARGET as T } from "../server/shopifyPrivacySmokeSafety";
 
 const valid = {
@@ -11,6 +12,23 @@ const valid = {
   RESEND_API_KEY: "fixture-key", RESEND_FROM_EMAIL: "WhachatCRM <noreply@crm.whachatcrm.com>",
   SHOPIFY_PRIVACY_ALERT_TOKEN: "a".repeat(48),
 };
+test("documented database reference, service identity, endpoint and SSH target agree", () => {
+  assert.equal(T.databaseService, "88d5aec0-1cf7-4fe1-9084-5745a97736bd");
+  assert.equal(T.databaseServiceName, "Postgres-JSIn");
+  assert.equal(T.databaseReference, "${{" + T.databaseServiceName + ".DATABASE_URL}}");
+  const doc = readFileSync(new URL("../docs/shopify-privacy-staging-smoke.md", import.meta.url), "utf8");
+  const setting = (name: string) => doc.split("\n").find(line => line.startsWith("| " + name + " |"))?.split("|")[2].trim().replaceAll("`", "");
+  assert.equal(setting("Database service"), T.databaseServiceName);
+  assert.equal(setting("Database service ID"), T.databaseService);
+  assert.equal(setting("App DATABASE_URL reference"), T.databaseReference);
+  assert.equal(setting("Database private endpoint"), T.host);
+  const databaseCommands = doc.split("\n").filter(line => line.includes("railway ssh") && line.includes("pg_control_system()"));
+  assert.equal(databaseCommands.length, 1);
+  assert.ok(databaseCommands[0].includes("--project " + T.project));
+  assert.ok(databaseCommands[0].includes("--environment " + T.environment));
+  assert.ok(databaseCommands[0].includes("--service " + T.databaseService + " -- "));
+  assert.ok(!doc.includes("303eefe1-6964-40ac-822e-cf47e5e51752"));
+});
 test("smoke gate requires explicit invocation and exact Railway identities, never a disposable bypass", () => {
   assert.equal(validatePrivacySmokeTarget(valid), valid.DATABASE_URL);
   for (const key of Object.keys(valid)) assert.throws(() => validatePrivacySmokeTarget({ ...valid, [key]: "" }), key);
