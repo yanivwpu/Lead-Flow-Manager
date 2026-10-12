@@ -23,13 +23,15 @@ export const SHOPIFY_GRAPHQL_WEBHOOK_SPECS: ShopifyGraphqlWebhookSpec[] = [
     pathSuffix: "/api/shopify/webhooks/customers-create",
     label: "Customer created",
     required: true,
+    requiredScopes: ["read_customers"],
+    requiresProtectedCustomerData: true,
   },
   {
     topic: "ORDERS_CREATE",
     restTopic: "orders/create",
     pathSuffix: "/api/shopify/webhooks/orders-create",
     label: "Order created",
-    required: false,
+    required: true,
     requiredScopes: ["read_orders"],
     requiresProtectedCustomerData: true,
   },
@@ -75,7 +77,11 @@ export type ShopifyWebhookItemStatus =
   | "missing"
   | "wrong_url"
   | "blocked_scope"
-  | "app_config";
+  | "app_config"
+  | "permissions_unknown"
+  | "registration_unknown"
+  | "blocked_shopify"
+  | "protected_data_unconfirmed";
 
 export type ShopifyWebhookHealthItem = {
   topic: string;
@@ -96,6 +102,7 @@ export type ShopifyWebhookRegistrationAttempt = {
     | "registered"
     | "already_registered"
     | "failed"
+    | "skipped_verification"
     | "skipped_scope"
     | "skipped_protected_data";
   message?: string;
@@ -106,7 +113,9 @@ export type ShopifyOrdersCreateRegistrationBlockedReason =
   | "missing_scope"
   | "protected_customer_data"
   | "registration_failed"
-  | "not_attempted";
+  | "not_attempted"
+  | "permissions_unknown"
+  | "registration_unknown";
 
 export type ShopifyOrdersCreateAudit = {
   requiredScopes: string[];
@@ -125,12 +134,19 @@ export type ShopifyWebhookHealthReport = {
   shop: string;
   host: string;
   configured: boolean;
+  permissionVerification: "verified" | "unknown";
+  missingScopes: string[];
+  unknownScopes: string[];
+  protectedCustomerData: { approval: "reported"; reportedApprovalDate: string; liveConfirmation: "not_confirmed" };
+  recommendedAction: string;
+  failedRegistrations: ShopifyWebhookRegistrationAttempt[];
   oauthScopesRequested: string[];
   grantedScopes: string[];
   webhooks: ShopifyWebhookHealthItem[];
   ordersCreateAudit: ShopifyOrdersCreateAudit;
   summary: {
     healthy: boolean;
+    status: "Healthy" | "Action Required" | "Verification Unavailable";
     missingRequired: number;
     missingOptional: number;
     blockedByScope: number;
@@ -143,8 +159,14 @@ export type ShopifyShopWebhookSummary = {
   email: string | null;
   shop: string;
   healthy: boolean;
+  status?: "Healthy" | "Action Required" | "Verification Unavailable";
+  report?: ShopifyWebhookHealthReport;
   missingRequired: number;
   missingOptional: number;
   blockedByScope: number;
   error?: string;
 };
+
+export type ShopifyScopeVerification =
+  | { status: "verified"; grantedScopes: string[] }
+  | { status: "unknown"; grantedScopes: []; reason: string };

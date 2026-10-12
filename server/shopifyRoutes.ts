@@ -1,3 +1,4 @@
+import { requireAdmin as requireSalesAdmin } from "./adminAuth";
 import { createShopifyCustomerPrivacyHandler } from "./shopifyCustomerPrivacyHandler";
 import { handleShopifyCustomerPrivacy, privacyRequestDedupe } from "./shopifyPrivacyRequests";
 import express, { Router, Request, Response } from 'express';
@@ -499,12 +500,6 @@ function verifyWebhookHmac(rawBody: Buffer | string, hmac: string): boolean {
   }
 }
 
-function requireAdminSession(req: Request, res: Response): boolean {
-  if ((req.session as { isAdmin?: boolean })?.isAdmin === true) return true;
-  res.status(403).json({ error: "Forbidden" });
-  return false;
-}
-
 async function resolveSessionShopifyMerchant(userId: string) {
   const user = await storage.getUserForSession(userId);
   if (!user?.shopifyShop || !user.shopifyAccessToken) {
@@ -562,9 +557,8 @@ router.get('/webhooks/health', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/webhooks/health/all', async (req: Request, res: Response) => {
-  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-  if (!requireAdminSession(req, res)) return;
+router.get('/webhooks/health/all', requireSalesAdmin, async (_req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
 
   try {
     const shops = await auditAllShopifyShopsWebhookHealth();
@@ -590,7 +584,7 @@ router.post('/webhooks/reregister', async (req: Request, res: Response) => {
     }
 
     const attempts = await registerShopWebhooks(merchant.shop, merchant.accessToken);
-    const report = await auditShopWebhookHealth(merchant.shop, merchant.accessToken);
+    const report = await auditShopWebhookHealth(merchant.shop, merchant.accessToken, attempts);
 
     res.json({
       ok: true,

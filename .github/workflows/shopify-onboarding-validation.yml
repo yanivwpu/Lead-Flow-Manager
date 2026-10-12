@@ -14,6 +14,8 @@ on:
       - "client/src/pages/AppLayout.tsx"
       - "client/src/pages/ShopifyStart.tsx"
       - "client/src/components/Shopify*.tsx"
+      - "client/src/components/integrations/ShopifyWebhook*.tsx"
+      - "client/src/components/admin/AdminShopifyWebhookHealth.tsx"
       - "client/src/lib/shopify*.ts"
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
@@ -53,6 +55,8 @@ jobs:
         run: |
           npx tsx --test tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts tests/shopify-login-session.test.ts
           npx tsx --test tests/shopify-trial-provisioning-postgres.test.ts
+      - name: Fail-closed scope and webhook verification regressions
+        run: npx tsx --test tests/shopify-webhook-health.test.ts tests/shopify-webhook-health-ui.test.tsx
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts
