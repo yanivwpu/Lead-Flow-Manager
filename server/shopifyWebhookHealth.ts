@@ -1,9 +1,9 @@
+import { registerVerifiedShopWebhooks } from "./shopifyWebhookRegistration";
 import { and, isNotNull } from "drizzle-orm";
 import type { Session } from "@shopify/shopify-api";
 import { db } from "../drizzle/db";
 import { users } from "../shared/schema";
 import {
-  SHOPIFY_GRAPHQL_WEBHOOK_SPECS,
   type ShopifyShopWebhookSummary,
   type ShopifyWebhookHealthReport,
   type ShopifyWebhookRegistrationAttempt,
@@ -14,14 +14,9 @@ import {
   buildShopWebhookHealthReport,
   verifyShopScopes,
   listVerifiedWebhookSubscriptions,
-  classifyRegistrationFailure,
   type ListedWebhook,
 } from "./shopifyWebhookHealthAudit";
 export { buildShopWebhookHealthReport } from "./shopifyWebhookHealthAudit";
-
-function expectedCallbackUrl(pathSuffix: string): string {
-  return `${HOST.replace(/\/+$/, "")}${pathSuffix}`;
-}
 
 function clientFor(shop: string, accessToken: string) {
   const shopify = getShopifyApi();
@@ -52,142 +47,11 @@ export async function auditShopWebhookHealth(
   return buildShopWebhookHealthReport({ shop, host: HOST, requestedScopes: SHOPIFY_SCOPES, scopes, subscriptions, registrationAttempts });
 }
 
-export async function registerShopWebhooks(
-  shop: string,
-  accessToken: string,
-): Promise<ShopifyWebhookRegistrationAttempt[]> {
-  const shopify = getShopifyApi();
-  if (!shopify) {
-    return SHOPIFY_GRAPHQL_WEBHOOK_SPECS.map((spec) => ({
-      topic: spec.topic,
-      address: expectedCallbackUrl(spec.pathSuffix),
-      status: "failed" as const,
-      message: "Shopify API not configured",
-    }));
-  }
-
-  const scopes = await fetchShopGrantedScopes(shop, accessToken);
-  const grantedScopes: string[] = [...scopes.grantedScopes];
-  const client = new shopify.clients.Graphql({
-    session: { shop, accessToken } as Session,
+export async function registerShopWebhooks(shop: string, accessToken: string): Promise<ShopifyWebhookRegistrationAttempt[]> {
+  return registerVerifiedShopWebhooks({
+    getClient: () => clientFor(shop, accessToken), host: HOST,
+    requestedScopes: SHOPIFY_SCOPES,
   });
-
-  const results: ShopifyWebhookRegistrationAttempt[] = [];
-
-  for (const spec of SHOPIFY_GRAPHQL_WEBHOOK_SPECS) {
-    const address = expectedCallbackUrl(spec.pathSuffix);
-
-    if (scopes.status === "unknown" && spec.requiredScopes?.length) {
-      results.push({ topic: spec.topic, address, status: "skipped_verification", message: "OAuth permissions could not be verified. Retry verification before registering." });
-      continue;
-    }
-
-    if (
-      spec.requiredScopes?.length &&
-      !spec.requiredScopes.every((scope) => grantedScopes.includes(scope))
-    ) {
-      const message = `Missing scope(s): ${spec.requiredScopes.join(", ")}. OAuth requests: ${SHOPIFY_SCOPES.join(", ")}. Approve the missing permissions in Shopify Admin, then refresh verification.`;
-      results.push({
-        topic: spec.topic,
-        address,
-        status: "skipped_scope",
-        message,
-      });
-      console.warn("[Shopify Webhook Register] skipped_scope", { shop, topic: spec.topic, message });
-      continue;
-    }
-
-    try {
-      const response = await client.request(
-        `
-        mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
-          webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
-            webhookSubscription {
-              id
-              topic
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `,
-        {
-          variables: {
-            topic: spec.topic,
-            webhookSubscription: {
-              callbackUrl: address,
-              format: "JSON",
-            },
-          },
-        },
-      );
-
-      if (response.errors) throw new Error("Shopify did not confirm registration");
-      const data = response.data as {
-        webhookSubscriptionCreate?: {
-          webhookSubscription?: { id?: string };
-          userErrors?: Array<{ message?: string }>;
-        };
-      };
-      const userErrors = data?.webhookSubscriptionCreate?.userErrors ?? [];
-      const onlyAlreadyRegistered =
-        userErrors.length > 0 &&
-        userErrors.every((err) => /already been taken/i.test(String(err?.message || "")));
-
-      if (onlyAlreadyRegistered) {
-        results.push({ topic: spec.topic, address, status: "already_registered" });
-      } else if (userErrors.length > 0) {
-        const message = userErrors.map((e) => e.message).filter(Boolean).join("; ");
-        const status = classifyRegistrationFailure(spec.topic, message);
-        results.push({
-          topic: spec.topic,
-          address,
-          status,
-          message,
-        });
-        if (status === "skipped_protected_data") {
-          console.warn("[Shopify Webhook Register] skipped_protected_data", {
-            shop,
-            topic: spec.topic,
-            message,
-            hint: "Check the reported Partner Dashboard approval and Shopify rejection details; approval does not grant merchant OAuth scopes.",
-          });
-        } else {
-          console.warn("[Shopify Webhook Register Failed]", {
-            shop,
-            topic: spec.topic,
-            userErrors,
-          });
-        }
-      } else if (data?.webhookSubscriptionCreate?.webhookSubscription?.id) {
-        results.push({ topic: spec.topic, address, status: "registered" });
-      } else {
-        results.push({ topic: spec.topic, address, status: "failed", message: "Shopify did not confirm a created subscription." });
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const status = classifyRegistrationFailure(spec.topic, message);
-      results.push({
-        topic: spec.topic,
-        address,
-        status,
-        message,
-      });
-      if (status === "skipped_protected_data") {
-        console.warn("[Shopify Webhook Register] skipped_protected_data", {
-          shop,
-          topic: spec.topic,
-          message,
-        });
-      } else {
-        console.error("[Shopify Webhook Register Failed]", { shop, topic: spec.topic, error: err });
-      }
-    }
-  }
-
-  return results;
 }
 
 /** Backward-compatible install hook — logs outcomes; does not throw. */

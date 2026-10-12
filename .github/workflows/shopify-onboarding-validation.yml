@@ -2,6 +2,11 @@ name: Shopify onboarding validation
 on:
   pull_request:
     paths:
+      - "shopify.app.staging.toml"
+      - "scripts/validate-shopify-staging.py"
+      - "tests/shopify-staging-config.test.py"
+      - "server/shopifyWebhookRegistration.ts"
+      - "tests/shopify-webhook-registration.test.ts"
       - "scripts/smoke-shopify-privacy-email.ts"
       - "server/shopifyPrivacySmokeSafety.ts"
       - "tests/shopify-privacy-smoke-safety.test.ts"
@@ -55,6 +60,10 @@ jobs:
         run: |
           npx tsx --test tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts tests/shopify-login-session.test.ts tests/shopify-oauth-navigation.test.tsx
           npx tsx --test tests/shopify-trial-provisioning-postgres.test.ts
+      - name: Staging configuration, identity guard, and idempotent registration
+        run: |
+          python3 tests/shopify-staging-config.test.py
+          npx tsx --test tests/shopify-webhook-registration.test.ts
       - name: Fail-closed scope and webhook verification regressions
         run: npx tsx --test tests/shopify-webhook-health.test.ts tests/shopify-webhook-health-ui.test.tsx
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
