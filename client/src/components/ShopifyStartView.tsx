@@ -11,10 +11,11 @@ export type ShopifyStartViewProps = {
   failed: boolean;
   onRetry: () => void;
   onRefresh: () => void;
+  reconnectHref?: string;
 };
 
 /** All success copy is conditional on a current, server-verified snapshot. */
-export function ShopifyStartView({ locale = "en", snapshot, loading, busy, failed, onRetry, onRefresh }: ShopifyStartViewProps) {
+export function ShopifyStartView({ locale = "en", snapshot, loading, busy, failed, onRetry, onRefresh, reconnectHref }: ShopifyStartViewProps) {
   const copy = shopifyOnboardingCopy(locale);
   const state = snapshot?.state;
   const usable = state === "trial_active" || state === "app_ready";
@@ -45,7 +46,9 @@ export function ShopifyStartView({ locale = "en", snapshot, loading, busy, faile
             </a>
           </> : state === "reconnect_required" ? <>
             <p>{copy.reopenDescription}</p>
-            <a className="block underline" href="https://admin.shopify.com/">{copy.admin}</a>
+            <a className="block underline" target="_top" href={reconnectHref ?? "https://admin.shopify.com/"}>
+              {reconnectHref ? copy.reconnectAction : copy.admin}
+            </a>
             <button type="button" className="rounded-lg border px-4 py-2" disabled={busy} onClick={onRefresh}>
               {copy.checkAgain}
             </button>

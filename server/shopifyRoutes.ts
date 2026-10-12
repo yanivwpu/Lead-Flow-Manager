@@ -17,6 +17,7 @@ import {
   fetchShopifyShopOwnerEmailResult,
 } from './shopify';
 import { getAppOrigin } from './urlOrigins';
+import { sendShopifyOAuthNavigation } from './shopifyOAuthNavigation';
 import { resolveShopifyMerchantForBilling } from './shopifyMerchantResolver';
 import { rawShopFromRequest, shopDomainFromRequest } from './shopifyBillingGuard';
 import {
@@ -120,7 +121,7 @@ function verifyShopifyHmac(query: Record<string, any>): boolean {
   if (!SHOPIFY_API_SECRET) return false;
 
   const { hmac, ...params } = query;
-  if (!hmac) return false;
+  if (typeof hmac !== 'string' || !/^[a-f0-9]{64}$/i.test(hmac)) return false;
 
   const sortedParams = Object.keys(params)
     .sort()
@@ -176,11 +177,17 @@ router.get('/install', (req: Request, res: Response) => {
     return res.status(503).json({ error: 'Shopify integration not configured' });
   }
 
+  // An existing authenticated merchant can reopen without another token exchange.
+  const merchant = req.user as { shopifyShop?: string; shopifyAccessToken?: string } | undefined;
+  if (merchant?.shopifyAccessToken && normalizeShopifyShopDomain(merchant.shopifyShop) === shop) {
+    return sendShopifyOAuthNavigation(res, `/shopify/start?shop=${encodeURIComponent(shop)}`);
+  }
+
   const { url } = generateShopifyInstallUrl(shop);
   if (!url) {
     return res.status(500).json({ error: 'Failed to generate install URL' });
   }
-  res.redirect(url);
+  sendShopifyOAuthNavigation(res, url);
 });
 
 router.get('/callback', async (req: Request, res: Response) => {
@@ -215,6 +222,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     if (now - requestTime > 5 * 60 * 1000) {
       return res.status(401).json({ error: 'Request timestamp expired' });
     }
+  }
+
+  if (req.get('sec-fetch-dest') === 'iframe' || req.get('sec-fetch-dest') === 'frame') {
+    return sendShopifyOAuthNavigation(res, req.originalUrl);
   }
 
   try {
@@ -379,10 +390,12 @@ router.get('/callback', async (req: Request, res: Response) => {
     } catch {
       // The start screen can retry a status read; never advertise an unverified trial.
     }
+    // Keep only a validated recovery hint; a shop parameter never grants a session.
+    if (destination === '/shopify/start') destination += `?shop=${encodeURIComponent(normalizedShop)}`;
     return res.redirect(destination);
   } catch (error) {
     console.error("[ShopifyContact] oauth_callback_failed");
-    return res.redirect("/shopify/start?installation_error=1");
+    return res.redirect(`/shopify/start?installation_error=1&shop=${encodeURIComponent(shop)}`);
   }
 });
 
