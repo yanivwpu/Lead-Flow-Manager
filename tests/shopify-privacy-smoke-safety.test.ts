@@ -7,7 +7,7 @@ const valid = {
   SHOPIFY_PRIVACY_SMOKE_TEST: "1", RAILWAY_PROJECT_ID: T.project, RAILWAY_ENVIRONMENT_ID: T.environment,
   RAILWAY_SERVICE_ID: T.service, RAILWAY_ENVIRONMENT_NAME: "staging",
   DATABASE_URL: "postgresql://fixture:fixture@postgres.railway.internal:5432/railway",
-  SHOPIFY_PRIVACY_SMOKE_DATABASE_SYSTEM_ID: "7654321098765432100",
+  SHOPIFY_PRIVACY_SMOKE_DATABASE_SYSTEM_ID: T.databaseSystemId,
   SHOPIFY_PRIVACY_ALERT_URL: T.receiver, SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "true",
   RESEND_API_KEY: "fixture-key", RESEND_FROM_EMAIL: "WhachatCRM <noreply@crm.whachatcrm.com>",
   SHOPIFY_PRIVACY_ALERT_TOKEN: "a".repeat(48),

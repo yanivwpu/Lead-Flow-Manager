@@ -1,5 +1,7 @@
 // Deliberately no dotenv/app/worker imports before the environment gate.
 import { validatePrivacySmokeTarget, verifyPrivacySmokeDatabase, cleanupPrivacySmokeTask, PRIVACY_SMOKE_TARGET } from "../server/shopifyPrivacySmokeSafety";
+import { authorizePrivacySmokeOneShot, consumePrivacySmokeOneShot, privacySmokeAdminToken,
+  recordPrivacySmokeOneShot, oneShotDispatch } from "../server/shopifyPrivacySmokeOneShot";
 
 async function main() {
 let stage = "environment";
@@ -10,16 +12,38 @@ let cleanupNeeded = false;
 let providerCalls = 0;
 let providerAccepted = false;
 let providerMessageId: string | null = null;
+let jobConsumed = false;
+let jobResult = "failed";
+let watchdog: ReturnType<typeof setTimeout> | undefined;
+const oneShot = process.argv.slice(2).join(" ") === "--railway-one-shot";
 try {
-  if (process.argv.slice(2).join(" ") !== "--send-one-synthetic-alert") throw Error("explicit_command_required");
+  if (!oneShot && process.argv.slice(2).join(" ") !== "--send-one-synthetic-alert") throw Error("explicit_command_required");
+  if (!oneShot && process.env.RAILWAY_SERVICE_ID !== PRIVACY_SMOKE_TARGET.service)
+    throw Error("legacy_command_requires_app_identity");
+  const authorization = oneShot ? authorizePrivacySmokeOneShot() : undefined;
+  if (oneShot) {
+    process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED = "true";
+    // Last-resort process shutdown; the durable consumed record prevents a second send after a kill.
+    watchdog = setTimeout(() => {
+      console.error(JSON.stringify({ stage: "timeout", result: "failed_closed" }));
+      process.exit(1);
+    }, 180000);
+  }
   const connectionString = validatePrivacySmokeTarget();
-  if (!process.env.SHOPIFY_PRIVACY_SMOKE_ADMIN_TOKEN) throw Error("staging_admin_token_required");
+  if (!oneShot && !process.env.SHOPIFY_PRIVACY_SMOKE_ADMIN_TOKEN) throw Error("staging_admin_token_required");
   const { Pool } = await import("pg");
   pool = new Pool({ connectionString, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000 });
   stage = "database_identity";
   const client = await pool.connect();
   try { await verifyPrivacySmokeDatabase(client); } finally { client.release(); }
   const { randomUUID } = await import("node:crypto");
+  if (oneShot) {
+    taskId = randomUUID();
+    stage = "one_time_authorization";
+    await consumePrivacySmokeOneShot(pool, taskId, authorization!.expires);
+    jobConsumed = true;
+  }
+  const adminToken = oneShot ? await privacySmokeAdminToken(pool, process.env.SESSION_SECRET!) : process.env.SHOPIFY_PRIVACY_SMOKE_ADMIN_TOKEN!;
   const { default: express } = await import("express");
   const { registerShopifyPrivacyAlertReceiver, acceptPrivacyAlertEmail, PRIVACY_ALERT_RECEIVER_PATH } =
     await import("../server/shopifyPrivacyAlertEmail");
@@ -29,7 +53,7 @@ try {
   const adminUrl = new URL("/api/admin/privacy-operations", remote);
   const readAdmin = async () => {
     const response = await fetch(adminUrl, { redirect: "error", signal: AbortSignal.timeout(10000),
-      headers: { "x-admin-token": process.env.SHOPIFY_PRIVACY_SMOKE_ADMIN_TOKEN!, "Cache-Control": "no-cache" } });
+      headers: { "x-admin-token": adminToken, "Cache-Control": "no-cache" } });
     if (!response.ok) throw Error("staging_admin_unavailable");
     return response.json();
   };
@@ -45,7 +69,7 @@ try {
       "Idempotency-Key": "shopify-privacy-" + randomUUID() }, body: JSON.stringify({ alertId: randomUUID() }) });
   if (disabled.status !== 503 || (await disabled.json()).error !== "delivery_disabled")
     throw Error("deployment_email_must_remain_disabled");
-  taskId = randomUUID();
+  taskId ||= randomUUID();
   stage = "synthetic_queue";
   // Permanent failure is excluded from erasure claims. No selectors, domains, evidence or customer payload.
   cleanupNeeded = true; // Also clean up an insert whose acknowledgement is lost.
@@ -65,16 +89,18 @@ try {
       deadlineAt: new Date(alerts[0].created_at.getTime() + 30*86400000).toISOString(), from: resolveResendFromEmail() }), taskId]);
   const app = express();
   const receiverEnv = { ...process.env };
+  const dispatch = async (options: Parameters<typeof sendEmailDetailed>[0]) => {
+    providerCalls++;
+    const result = await sendEmailDetailed(options);
+    if (result.ok && result.providerMessageId) {
+      providerAccepted = true; providerMessageId = result.providerMessageId;
+    }
+    return result;
+  };
+  const providerDispatch = oneShot ? oneShotDispatch(dispatch, authorization!.expires) : dispatch;
   registerShopifyPrivacyAlertReceiver(app, async id => {
     if (id !== alertId) return false;
-    return acceptPrivacyAlertEmail(pool!, id, async options => {
-      providerCalls++;
-      const result = await sendEmailDetailed(options); // Real existing Resend transport; no simulated success.
-      if (result.ok && result.providerMessageId) {
-        providerAccepted = true; providerMessageId = result.providerMessageId;
-      }
-      return result;
-    });
+    return acceptPrivacyAlertEmail(pool!, id, providerDispatch);
   }, receiverEnv);
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve, reject) => { server!.once("listening", resolve); server!.once("error", reject); });
@@ -117,9 +143,11 @@ try {
   const admin = await readAdmin();
   if (!admin.alerts?.some((a: any) => a.id === alertId && a.taskId === taskId &&
       a.status === "permanent_failure" && a.emailStatus === "accepted")) throw Error("admin_alert_missing_or_wrong_status");
+  jobResult = "verified";
   console.log(JSON.stringify({ stage: "verified", taskId, alertId, providerMessageId,
     resendAccepted: true, providerCalls, adminStatus: "accepted", inboxReceiptVerified: false }));
 } catch {
+  if (providerCalls > 0 && !providerAccepted) jobResult = "failed_acceptance_unconfirmed";
   // Never print driver exceptions, provider bodies, URLs, secrets or stack traces.
   console.error(JSON.stringify({ stage, result: "failed", taskId, resendAccepted: providerAccepted,
     providerMessageId, providerCalls, inboxReceiptVerified: false }));
@@ -134,9 +162,16 @@ try {
     } catch {
       console.error(JSON.stringify({ stage: "cleanup", result: "failed", taskId }));
       process.exitCode = 1;
+      jobResult = "cleanup_failed";
     }
   }
+  if (pool && jobConsumed && taskId) {
+    try { await recordPrivacySmokeOneShot(pool, taskId, jobResult, providerMessageId); }
+    catch { console.error(JSON.stringify({ stage: "job_receipt", result: "failed_closed" })); process.exitCode = 1; }
+  }
   await pool?.end();
+  if (oneShot) process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED = "false";
+  if (watchdog) clearTimeout(watchdog);
 }
 
 }
