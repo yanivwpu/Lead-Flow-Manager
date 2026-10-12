@@ -14,7 +14,6 @@ import { registerChannelAdapters } from "./channelAdapters";
 import { getQueue, isRedisUrlConfigured } from "./queue";
 import { startInstagramDevPolling } from "./instagramPolling";
 import oidcRouter from "./oidc";
-import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { db } from "../drizzle/db";
 import { contacts, conversations } from "@shared/schema";
@@ -518,23 +517,6 @@ app.use((req, res, next) => {
     console.log(
       "[Workers] Skipping ProspectBulkAnalysis + KnowledgeScan in development (set ENABLE_OPTIONAL_DB_WORKERS=1 to enable).",
     );
-  }
-
-  // Ensure SSO user exists for LeadConnector integration
-  try {
-    const ssoUser = await storage.getUserByEmail('yaniv@whachatcrm.com');
-    if (!ssoUser) {
-      const hashedPassword = await bcrypt.hash('WhachatSSO2026!', 10);
-      await storage.createUser({
-        name: 'Yaniv',
-        email: 'yaniv@whachatcrm.com',
-        password: hashedPassword,
-        emailVerifiedAt: new Date(),
-      });
-      console.log('[SSO] Created SSO user: yaniv@whachatcrm.com');
-    }
-  } catch (err) {
-    console.error('[SSO] Failed to seed SSO user:', err);
   }
 
   // Seed Realtor Growth Engine template

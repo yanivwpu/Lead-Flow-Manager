@@ -226,7 +226,7 @@ test("hostname and action mismatches are rejected; test keys skip host checks", 
   assert.ok(expectedTurnstileHostnames().includes("app.whachatcrm.com"));
 });
 
-test("login, reset, Shopify, GHL, invite, and seed paths are not Turnstile-gated", () => {
+test("login, reset, Shopify, GHL, and invite paths are not Turnstile-gated", () => {
   const auth = read("server/auth.ts");
   const signupSlice = auth.slice(auth.indexOf("app.post('/api/auth/signup'"), auth.indexOf("app.post('/api/auth/resend-verification'"));
   assert.match(signupSlice, /isTurnstileRequired/);
@@ -234,7 +234,7 @@ test("login, reset, Shopify, GHL, invite, and seed paths are not Turnstile-gated
 
   const loginSlice = auth.slice(auth.indexOf("app.post('/api/auth/login'"), auth.indexOf("app.post('/api/auth/logout'"));
   assert.doesNotMatch(loginSlice, /verifyTurnstileToken/);
-  const forgotSlice = auth.slice(auth.indexOf("app.post('/api/auth/forgot-password'"), auth.indexOf("app.post('/api/auth/emergency-reset'"));
+  const forgotSlice = auth.slice(auth.indexOf("app.post('/api/auth/forgot-password'"), auth.indexOf("app.post('/api/auth/reset-password'"));
   assert.doesNotMatch(forgotSlice, /verifyTurnstileToken/);
   const resetSlice = auth.slice(auth.indexOf("app.post('/api/auth/reset-password'"));
   assert.doesNotMatch(resetSlice, /verifyTurnstileToken/);
@@ -253,9 +253,8 @@ test("login, reset, Shopify, GHL, invite, and seed paths are not Turnstile-gated
   assert.doesNotMatch(invite, /storage\.createUser\(/);
 
   const boot = read("server/index.ts");
-  const sso = boot.slice(boot.indexOf("Ensure SSO user exists"), boot.indexOf("Seed Realtor Growth Engine"));
-  assert.match(sso, /storage\.createUser\(/);
-  assert.doesNotMatch(sso, /verifyTurnstileToken/);
+  assert.doesNotMatch(boot, /Ensure SSO user exists/);
+  assert.doesNotMatch(boot, /bcrypt\.hash\(/);
 
   const widget = read("client/src/components/TurnstileWidget.tsx");
   assert.match(widget, /action: "signup"/);

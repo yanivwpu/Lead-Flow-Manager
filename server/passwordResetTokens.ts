@@ -107,10 +107,16 @@ export async function consumePasswordResetToken(rawToken: string): Promise<Consu
   const user = await storage.getUserForSession(row.userId);
   if (!user) return { ok: false, reason: "user_missing" };
 
-  await db
+  const claimed = await db
     .update(passwordResetTokens)
     .set({ usedAt: new Date() })
-    .where(eq(passwordResetTokens.id, row.id));
+    .where(and(
+      eq(passwordResetTokens.id, row.id),
+      isNull(passwordResetTokens.usedAt),
+      gt(passwordResetTokens.expiresAt, new Date()),
+    ))
+    .returning({ id: passwordResetTokens.id });
+  if (!claimed.length) return { ok: false, reason: "used" };
 
   return { ok: true, userId: user.id, email: user.email };
 }
