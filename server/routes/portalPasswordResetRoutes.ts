@@ -60,8 +60,8 @@ function clearCurrentPortalSession(req: Request, accountType: PortalResetAccount
 function resetHandler(accountType: PortalResetAccountType) {
   return async (req: Request, res: Response) => {
     try {
-      const token = String(req.body?.token || "").trim();
-      const password = String(req.body?.password || req.body?.newPassword || "");
+      const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+      const password = req.body?.password ?? req.body?.newPassword;
       const confirmPassword = String(req.body?.confirmPassword || "");
 
       if (!token || !password) {

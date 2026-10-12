@@ -1,6 +1,7 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
+import { validateNewPassword } from './passwordPolicy';
 import type { Express, Request, Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
@@ -327,6 +328,9 @@ export function registerAuthRoutes(app: Express) {
       if (!name || !email || !password) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
+
+      const passwordError = validateNewPassword(password);
+      if (passwordError) return res.status(400).json({ error: passwordError });
 
       const normalizedEmail = normalizeEmailForAuth(email);
 
@@ -984,123 +988,24 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  // Emergency password reset page (TEMPORARY - remove after use)
-  app.get('/reset-emergency', (req, res) => {
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head><title>Emergency Password Reset</title></head>
-      <body style="font-family: Arial; max-width: 400px; margin: 50px auto; padding: 20px;">
-        <h2>Emergency Password Reset</h2>
-        <form id="resetForm">
-          <div style="margin-bottom: 15px;">
-            <label>Email:</label><br>
-            <input type="email" id="email" style="width: 100%; padding: 8px;" required>
-          </div>
-          <div style="margin-bottom: 15px;">
-            <label>New Password:</label><br>
-            <input type="password" id="password" style="width: 100%; padding: 8px;" required>
-          </div>
-          <button type="submit" style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">Reset Password</button>
-        </form>
-        <p id="result"></p>
-        <script>
-          document.getElementById('resetForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const res = await fetch('/api/auth/emergency-reset', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({
-                email: document.getElementById('email').value,
-                newPassword: document.getElementById('password').value
-              })
-            });
-            const data = await res.json();
-            document.getElementById('result').textContent = data.message || data.error;
-          };
-        </script>
-      </body>
-      </html>
-    `);
-  });
-
-  // Emergency password reset API (TEMPORARY - remove after use)
-  app.post('/api/auth/emergency-reset', async (req, res) => {
-    try {
-      const { email, newPassword } = req.body;
-      
-      // Only allow specific emails for security (REMOVE THIS ENDPOINT AFTER USE)
-      const allowedEmails = ['yanivharamaty@gmail.com', 'yahabegood@gmail.com'];
-      const normalizedEmail = (typeof email === 'string' ? email : '').trim().toLowerCase();
-      if (!allowedEmails.includes(normalizedEmail)) {
-        return res.status(403).json({ error: 'This email is not authorized for emergency reset' });
-      }
-      
-      if (!email || !newPassword) {
-        return res.status(400).json({ error: 'Email and newPassword required' });
-      }
-      
-      const user = await resolveUserForLogin(email);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found with that email' });
-      }
-      
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await storage.updateUser(user.id, { password: hashedPassword });
-      
-      res.json({ success: true, message: 'Password reset successfully! You can now login.' });
-    } catch (error: any) {
-      console.error('Emergency reset error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  /**
-   * Secret-gated emergency reset (set EMERGENCY_AUTH_RESET_SECRET in Railway).
-   * POST { secret, email, newPassword }
-   */
-  app.post('/api/auth/reset-debug', async (req, res) => {
-    try {
-      const expected = process.env.EMERGENCY_AUTH_RESET_SECRET?.trim();
-      if (!expected) {
-        return res.status(501).json({ error: 'Emergency reset is not configured (missing EMERGENCY_AUTH_RESET_SECRET)' });
-      }
-      const { secret, email, newPassword } = req.body || {};
-      if (secret !== expected) {
-        console.warn('[AUTH reset-debug] forbidden: bad secret');
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-      if (!email || !newPassword || typeof newPassword !== 'string') {
-        return res.status(400).json({ error: 'email and newPassword required' });
-      }
-      if (isRetiredCrmDemoEmail(typeof email === 'string' ? email : '')) {
-        return res.status(403).json({ error: 'Forbidden' });
-      }
-      if (newPassword.length < 8) {
-        return res.status(400).json({ error: 'newPassword must be at least 8 characters' });
-      }
-      const user = await resolveUserForLogin(email);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found with that email' });
-      }
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await storage.updateUser(user.id, { password: hashedPassword });
-      console.log('[AUTH reset-debug] password updated for user id', user.id);
-      res.json({ success: true, message: 'Password reset. You can log in now.' });
-    } catch (error: any) {
-      console.error('[AUTH reset-debug] error:', error);
-      res.status(500).json({ error: error?.message || 'Reset failed' });
-    }
-  });
+  // Retired recovery bypasses: never inspect credentials or touch storage.
+  app.get('/reset-emergency', (_req, res) => res.status(404).send('Not found'));
+  for (const path of ['/api/auth/emergency-reset', '/api/auth/reset-debug']) {
+    app.post(path, (_req, res) => res.status(404).json({ error: 'Not found' }));
+  }
 
   // Reset password with hashed DB-backed token
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
-      const { token, password } = req.body;
+      const { token, password } = req.body || {};
 
       if (!token || !password) {
         return res.status(400).json({ error: 'Token and password are required' });
       }
+
+      const passwordError = validateNewPassword(password);
+      if (passwordError) return res.status(400).json({ error: passwordError });
+      if (typeof token !== 'string') return res.status(400).json({ error: 'Invalid or expired reset token' });
 
       const consumed = await consumePasswordResetToken(token);
       if (!consumed.ok) {
