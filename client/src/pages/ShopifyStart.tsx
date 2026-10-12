@@ -7,12 +7,15 @@ import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { ShopifyStartView } from "@/components/ShopifyStartView";
 import { trackShopifyActivation } from "@/lib/shopifyActivationTelemetry";
 import type { ShopifyOnboardingSnapshot } from "@shared/shopifyOnboarding";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 
 export function ShopifyStart() {
   const { i18n } = useTranslation();
   const { user, isLoading, sessionAligned, refreshSession } = useAuth();
   const cache = useQueryClient();
   const installationFailed = new URLSearchParams(window.location.search).get("installation_error") === "1";
+  const reconnectShop = normalizeShopifyShopDomain(new URLSearchParams(window.location.search).get("shop"));
+  const reconnectHref = reconnectShop ? `/api/shopify/install?shop=${encodeURIComponent(reconnectShop)}` : undefined;
   const [busy, setBusy] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
   const [sessionTimedOut, setSessionTimedOut] = useState(false);
@@ -47,9 +50,14 @@ export function ShopifyStart() {
     setBusy(true);
     setRetryFailed(false);
     try {
+      if ((!user || installationFailed || query.data?.state === "reconnect_required") && reconnectHref) {
+        window.location.assign(reconnectHref);
+        return;
+      }
       await refreshSession();
       await query.refetch();
-    } finally { setBusy(false); }
+    } catch { setRetryFailed(true); }
+    finally { setBusy(false); }
   };
   const retry = async () => {
     setBusy(true);
@@ -76,7 +84,8 @@ export function ShopifyStart() {
       ? { state: "reconnect_required" } : query.data ?? null;
   return <>
     <ShopifyStartView locale={i18n.language} snapshot={snapshot} loading={loading} busy={busy}
-    failed={query.isError || retryFailed} onRetry={() => void retry()} onRefresh={() => void refresh()} />
+    failed={query.isError || retryFailed} reconnectHref={reconnectHref}
+    onRetry={() => void retry()} onRefresh={() => void refresh()} />
     {!loading && !installationFailed && (snapshot?.state === "trial_active" || snapshot?.state === "app_ready") &&
       <div className="mx-auto max-w-2xl px-4 pb-8"><ShopifySupportContact /></div>}
   </>;
