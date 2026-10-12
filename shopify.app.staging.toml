@@ -1,7 +1,7 @@
-# RELEASE BLOCKED: set client_id from WhachatCRM Staging's verified Dev Dashboard
-# or staging SHOPIFY_API_KEY. Never copy the production app ID.
+# Staging app client ID supplied by operator from active staging-v2-oauth-fix.
+# Confirm it matches Railway staging SHOPIFY_API_KEY before Shopify release.
 # Validate with: python3 scripts/validate-shopify-staging.py --client-id "$SHOPIFY_STAGING_CLIENT_ID"
-client_id = ""
+client_id = "71a0de963ce2fb0c2e970c904eabbc56"
 name = "WhachatCRM Staging"
 application_url = "https://whachatcrm-staging-app-staging.up.railway.app"
 embedded = false
