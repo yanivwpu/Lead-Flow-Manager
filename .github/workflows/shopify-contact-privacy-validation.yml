@@ -2,6 +2,11 @@ name: Shopify contact privacy validation
 on:
   pull_request:
     paths:
+      - "shopify.app.staging.toml"
+      - "scripts/validate-shopify-staging.py"
+      - "tests/shopify-staging-config.test.py"
+      - "server/shopifyWebhookRegistration.ts"
+      - "tests/shopify-webhook-registration.test.ts"
       - "scripts/smoke-shopify-privacy-email.ts"
       - "railway/privacy-email-smoke*"
       - "docs/shopify-privacy-railway-one-shot.md"

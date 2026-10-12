@@ -2,6 +2,11 @@ name: Staging database bootstrap validation
 on:
   pull_request:
     paths:
+      - "shopify.app.staging.toml"
+      - "scripts/validate-shopify-staging.py"
+      - "tests/shopify-staging-config.test.py"
+      - "server/shopifyWebhookRegistration.ts"
+      - "tests/shopify-webhook-registration.test.ts"
       - "server/shopifyOAuth*.ts"
       - "server/shopifyRoutes.ts"
       - "tests/shopify-oauth-navigation.test.tsx"

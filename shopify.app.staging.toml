@@ -1,0 +1,39 @@
+# Staging app client ID supplied by operator from active staging-v2-oauth-fix.
+# Confirm it matches Railway staging SHOPIFY_API_KEY before Shopify release.
+# Validate with: python3 scripts/validate-shopify-staging.py --client-id "$SHOPIFY_STAGING_CLIENT_ID"
+client_id = "71a0de963ce2fb0c2e970c904eabbc56"
+name = "WhachatCRM Staging"
+application_url = "https://whachatcrm-staging-app-staging.up.railway.app"
+embedded = false
+
+[webhooks]
+api_version = "2026-10"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers/data_request"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/redact"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers/redact"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["shop/redact"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/shop/redact"
+
+# App-owned commerce. Uninstall remains per-shop; do not add it here.
+[[webhooks.subscriptions]]
+topics = ["customers/create"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers-create"
+
+[[webhooks.subscriptions]]
+topics = ["orders/create"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/orders-create"
+
+[access_scopes]
+scopes = "read_customers,read_orders"
+optional_scopes = []
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = ["https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/callback"]
