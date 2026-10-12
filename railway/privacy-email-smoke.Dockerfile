@@ -1,10 +1,7 @@
-# syntax=docker/dockerfile:1
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    npm ci --ignore-scripts --strict-ssl=true
+RUN npm ci --ignore-scripts
 COPY . .
 RUN ./node_modules/.bin/esbuild scripts/smoke-shopify-privacy-email.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/privacy-email-smoke.cjs
 RUN npm prune --omit=dev --ignore-scripts
