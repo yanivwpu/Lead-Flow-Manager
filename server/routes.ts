@@ -1,4 +1,6 @@
 import { registerShopifyPrivacyAdminRoutes } from "./shopifyPrivacyAdminRoutes";
+import { registerSalesAdminLoginRoute } from "./salesAdminLogin";
+import { validateNewPassword } from "./passwordPolicy";
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import crypto from "crypto";
@@ -8376,36 +8378,7 @@ export async function registerRoutes(
     return computeAdminToken(storedHash) === token;
   }
 
-  app.post("/api/admin/login", async (req, res) => {
-    try {
-      const { password } = req.body;
-      const storedHash = await storage.getAdminPasswordHash();
-
-      if (!storedHash) {
-        const hash = await bcrypt.hash(password, 10);
-        await storage.setAdminPassword(hash);
-        (req.session as any).isAdmin = true;
-        const token = computeAdminToken(hash);
-        return req.session.save((err) => {
-          if (err) console.error('[Admin] Session save error on setup:', err);
-          res.json({ success: true, token, message: "Admin password set" });
-        });
-      }
-
-      const valid = await bcrypt.compare(password, storedHash);
-      if (!valid) return res.status(401).json({ error: "Invalid password" });
-
-      (req.session as any).isAdmin = true;
-      const token = computeAdminToken(storedHash);
-      req.session.save((err) => {
-        if (err) console.error('[Admin] Session save error:', err);
-        res.json({ success: true, token });
-      });
-    } catch (error) {
-      console.error("Error in admin login:", error);
-      res.status(500).json({ error: "Login failed" });
-    }
-  });
+  registerSalesAdminLoginRoute(app);
 
   app.get("/api/admin/check", async (req, res) => {
     if ((req.session as any)?.isAdmin === true) return res.json({ isAdmin: true });
@@ -10007,48 +9980,6 @@ export async function registerRoutes(
 
       const normalizedEmail = email.toLowerCase().trim();
       
-      // Special handling for demo partner account - auto-create/fix
-      const DEMO_PARTNER_EMAIL = 'partner@demo.com';
-      const DEMO_PARTNER_PASSWORD = 'password123';
-      
-      if (normalizedEmail === DEMO_PARTNER_EMAIL && password === DEMO_PARTNER_PASSWORD) {
-        let partner = await storage.getPartnerByEmail(DEMO_PARTNER_EMAIL);
-        
-        if (!partner) {
-          // Create demo partner if it doesn't exist
-          const hashedPassword = await bcrypt.hash(DEMO_PARTNER_PASSWORD, 10);
-          partner = await storage.createPartner({
-            name: 'Demo Partner',
-            email: DEMO_PARTNER_EMAIL,
-            password: hashedPassword,
-            refCode: 'DEMO2026',
-            commissionRate: '50.00',
-            commissionDurationMonths: 6,
-            status: 'active',
-          });
-          console.log('[PARTNER] Demo partner created on-demand');
-        } else {
-          // Verify password, if wrong fix it
-          const isValid = await bcrypt.compare(DEMO_PARTNER_PASSWORD, partner.password);
-          if (!isValid) {
-            const hashedPassword = await bcrypt.hash(DEMO_PARTNER_PASSWORD, 10);
-            partner = await storage.updatePartner(partner.id, { password: hashedPassword }) || partner;
-            console.log('[PARTNER] Demo partner password fixed on-demand');
-          }
-        }
-        
-        (req.session as any).partnerId = partner.id;
-        return res.json({ 
-          success: true, 
-          partner: {
-            id: partner.id,
-            name: partner.name,
-            email: partner.email,
-            refCode: partner.refCode,
-          }
-        });
-      }
-
       const partner = await storage.getPartnerByEmail(normalizedEmail);
       
       if (!partner) {
@@ -10348,6 +10279,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Name, email, and password are required" });
       }
 
+      const passwordError = validateNewPassword(password);
+      if (passwordError) return res.status(400).json({ error: passwordError });
+
       // Check if email already exists
       const existing = await storage.getPartnerByEmail(email);
       if (existing) {
@@ -10400,7 +10334,9 @@ export async function registerRoutes(
       if (status !== undefined) updates.status = status;
       
       // If password is provided, hash it
-      if (password) {
+      if (password !== undefined) {
+        const passwordError = validateNewPassword(password);
+        if (passwordError) return res.status(400).json({ error: passwordError });
         updates.password = await bcrypt.hash(password, 10);
       }
       

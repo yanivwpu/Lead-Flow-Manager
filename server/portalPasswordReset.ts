@@ -16,7 +16,8 @@ import {
 export const PORTAL_RESET_ACCOUNT_TYPES = ["partner", "salesperson"] as const;
 export type PortalResetAccountType = (typeof PORTAL_RESET_ACCOUNT_TYPES)[number];
 
-export const PORTAL_PASSWORD_MIN_LENGTH = 6;
+export { PASSWORD_MIN_LENGTH as PORTAL_PASSWORD_MIN_LENGTH } from "./passwordPolicy";
+import { validateNewPassword } from "./passwordPolicy";
 export const PORTAL_RESET_TTL_MS = 60 * 60 * 1000;
 
 export function normalizePortalEmail(email: unknown): string {
@@ -26,11 +27,7 @@ export function normalizePortalEmail(email: unknown): string {
 }
 
 export function validatePortalPassword(password: unknown): string | null {
-  const p = String(password || "");
-  if (p.length < PORTAL_PASSWORD_MIN_LENGTH) {
-    return `Password must be at least ${PORTAL_PASSWORD_MIN_LENGTH} characters`;
-  }
-  return null;
+  return validateNewPassword(password);
 }
 
 function hashToken(rawToken: string): string {
@@ -220,6 +217,17 @@ export async function completePortalPasswordReset(params: {
     return { ok: false, error: "This reset link has expired" };
   }
 
+  // Atomic claim prevents simultaneous requests from changing credentials twice.
+  const claimed = await db.update(portalPasswordResetTokens)
+    .set({ usedAt: new Date() })
+    .where(and(
+      eq(portalPasswordResetTokens.id, row.id),
+      isNull(portalPasswordResetTokens.usedAt),
+      gt(portalPasswordResetTokens.expiresAt, new Date()),
+    ))
+    .returning({ id: portalPasswordResetTokens.id });
+  if (!claimed.length) return { ok: false, error: "Invalid or expired reset link" };
+
   const hashedPassword = await bcrypt.hash(params.newPassword, 10);
 
   let accountId = row.accountId;
@@ -254,11 +262,6 @@ export async function completePortalPasswordReset(params: {
       loginCode: newLoginCode,
     });
   }
-
-  await db
-    .update(portalPasswordResetTokens)
-    .set({ usedAt: new Date() })
-    .where(eq(portalPasswordResetTokens.id, row.id));
 
   await invalidateUnusedTokens(params.accountType, row.accountId);
   await invalidatePortalSessions(params.accountType, accountId);

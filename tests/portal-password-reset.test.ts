@@ -24,7 +24,7 @@ function hashToken(raw: string): string {
 {
   assert.equal(normalizePortalEmail("  Alex@Example.COM "), "alex@example.com");
   assert.equal(validatePortalPassword("12345"), `Password must be at least ${PORTAL_PASSWORD_MIN_LENGTH} characters`);
-  assert.equal(validatePortalPassword("123456"), null);
+  assert.equal(validatePortalPassword("a valid passphrase"), null);
   assert.equal(PORTAL_RESET_TTL_MS, 60 * 60 * 1000);
 }
 
