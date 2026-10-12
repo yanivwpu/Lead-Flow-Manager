@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "railway/privacy-email-smoke.Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "node dist/privacy-email-smoke.cjs --railway-one-shot",
+    "restartPolicyType": "NEVER",
+    "numReplicas": 1
+  }
+}
