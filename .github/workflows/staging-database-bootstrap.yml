@@ -2,6 +2,9 @@ name: Staging database bootstrap validation
 on:
   pull_request:
     paths:
+      - "server/shopifyWebhookHealth*.ts"
+      - "shared/shopifyWebhookHealth.ts"
+      - "tests/shopify-webhook-health.test.ts"
       - "scripts/smoke-shopify-privacy-email.ts"
       - "server/shopifyPrivacySmokeSafety.ts"
       - "tests/shopify-privacy-smoke-safety.test.ts"
