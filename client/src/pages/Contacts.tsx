@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -251,13 +251,28 @@ export function Contacts() {
   const notesSummaryQueryKey = withUserQueryScope(["/api/contacts/notes-summary"], user?.id);
   const appointmentsQueryKey = withUserQueryScope(["/api/appointments"], user?.id);
 
-  const [search, setSearch] = useState("");
-  const [filterTag, setFilterTag] = useState<string>("");
-  const [filterChannel, setFilterChannel] = useState<string>("");
-  const [filterStage, setFilterStage] = useState<string>("");
-  const [listTab, setListTab] = useState<CrmContactListTab>(CRM_LIST_IDENTIFIED);
-  const [sortField, setSortField] = useState<SortField>("createdAt");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const listSearch = useSearch();
+  const listParams = new URLSearchParams(listSearch);
+  const updateListParams = (values: Record<string, string>) => {
+    const next = new URLSearchParams(window.location.search);
+    for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); }
+    navigate(`/app/contacts${next.size ? `?${next}` : ""}`, { replace: true });
+  };
+  const updateListParam = (key: string, value: string) => updateListParams({ [key]: value });
+  const search = listParams.get("search") || "";
+  const setSearch = (value: string) => updateListParam("search", value);
+  const filterTag = listParams.get("tag") || "";
+  const setFilterTag = (value: string) => updateListParam("tag", value);
+  const filterChannel = listParams.get("channel") || "";
+  const setFilterChannel = (value: string) => updateListParam("channel", value);
+  const filterStage = listParams.get("stage") || "";
+  const setFilterStage = (value: string) => updateListParam("stage", value);
+  const listTab = ([CRM_LIST_ALL, CRM_LIST_IDENTIFIED, CRM_LIST_WEBSITE_VISITORS].includes(listParams.get("tab") as CrmContactListTab) ? listParams.get("tab") : CRM_LIST_IDENTIFIED) as CrmContactListTab;
+  const setListTab = (value: CrmContactListTab) => updateListParam("tab", value);
+  const sortField = (["name", "tag", "pipelineStage", "createdAt"].includes(listParams.get("sort") || "") ? listParams.get("sort") : "createdAt") as SortField;
+  const sortDir: SortDir = listParams.get("direction") === "asc" ? "asc" : "desc";
+  const setSortDir = (value: SortDir | ((previous: SortDir) => SortDir)) => updateListParam("direction", typeof value === "function" ? value(sortDir) : value);
+  const openContact = (id: string) => navigate(`/app/contacts/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(`/app/contacts${listSearch ? `?${listSearch}` : ""}`)}`);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
   const [addError, setAddError] = useState("");
@@ -344,7 +359,7 @@ export function Contacts() {
       setShowAddDialog(false);
       setNewContact({ name: "", phone: "", email: "" });
       setAddError("");
-      navigate(`/app/inbox/${contact.id}`);
+      openContact(contact.id);
     },
     onError: (err: Error) => setAddError(err.message),
   });
@@ -556,14 +571,11 @@ export function Contacts() {
 
   function handleSort(field: SortField) {
     if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortField(field); setSortDir("asc"); }
+    else updateListParams({ sort: field, direction: "asc" });
   }
 
   function clearFilters() {
-    setFilterTag("");
-    setFilterChannel("");
-    setFilterStage("");
-    setSearch("");
+    updateListParams({ tag: "", channel: "", stage: "", search: "" });
   }
 
   function handleExport() {
@@ -816,7 +828,11 @@ export function Contacts() {
                   return (
                     <div
                       key={contact.id}
-                      onClick={() => navigate(`/app/inbox/${contact.id}`)}
+                      role="link"
+                      tabIndex={0}
+                      aria-label={`View ${displayName}`}
+                      onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openContact(contact.id); } }}
+                      onClick={() => openContact(contact.id)}
                       className="flex items-center gap-3 px-4 py-3 active:bg-gray-50 cursor-pointer transition-colors"
                       data-testid={`row-contact-${contact.id}`}
                     >
@@ -998,7 +1014,11 @@ export function Contacts() {
                   return (
                     <div
                       key={contact.id}
-                      onClick={() => navigate(`/app/inbox/${contact.id}`)}
+                      role="link"
+                      tabIndex={0}
+                      aria-label={`View ${displayName}`}
+                      onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openContact(contact.id); } }}
+                      onClick={() => openContact(contact.id)}
                       className={cn("grid gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group", CONTACTS_TABLE_COLS)}
                       data-testid={`row-contact-${contact.id}`}
                     >
