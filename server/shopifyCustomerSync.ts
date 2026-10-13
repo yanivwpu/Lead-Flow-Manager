@@ -1,6 +1,7 @@
+import { customerWorkflowFingerprint, customerHubSpotAuthorized, type CustomerEffect } from "./shopifyCustomerEffects";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
-import { contacts, conversations, activityEvents, integrations, users } from "@shared/schema";
+import { contacts, conversations, activityEvents, integrations, users, workflows } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
 import { customerPrivacyLocked } from "./shopifyPrivacyRequests";
@@ -95,7 +96,19 @@ export async function syncShopifyCustomer(input: {
       ...(Number.isSafeInteger(input.body.orders_count) && Number(input.body.orders_count) >= 0 ? { ordersCount: input.body.orders_count } : {}),
       ...(typeof input.body.total_spent === "string" && /^\d+(\.\d+)?$/.test(input.body.total_spent) ? { totalSpent: input.body.total_spent } : {}),
     };
+    const customerEffects: CustomerEffect[] = [];
+    if (input.topic === "customers/create" && previous.shopifyCustomerCreatedEffectsRecorded !== true) {
+      const enabled = await tx.select().from(workflows).where(and(eq(workflows.userId, user.id),
+        eq(workflows.triggerType, "shopify_customer_created"), eq(workflows.isActive, true)));
+      for (const workflow of enabled) customerEffects.push({ kind: "workflow", targetId: workflow.id,
+        fingerprint: customerWorkflowFingerprint(workflow), status: "pending" });
+      const hubs = await tx.select().from(integrations).where(and(eq(integrations.userId, user.id),
+        eq(integrations.type, "hubspot"), eq(integrations.isActive, true)));
+      for (const hub of hubs) if (customerHubSpotAuthorized((hub.config || {}) as Record<string, unknown>))
+        customerEffects.push({ kind: "hubspot", targetId: hub.id, status: "pending" });
+    }
     const customFields = { ...previous, shopifyCustomerId: id, shopifyShop: shop,
+      ...(input.topic === "customers/create" ? { shopifyCustomerCreatedEffectsRecorded: true } : {}),
       commerceThreadKey: previous.commerceThreadKey || `shopify:${id}`, shopifyCustomerSync: nextSnapshot };
     // Only customer data and Shopify's namespace change; all CRM preferences, tags and ownership survive.
     const patch = { ...(name ? { name } : {}), ...(email ? { email } : {}), ...(phone ? { phone } : {}),
@@ -113,7 +126,8 @@ export async function syncShopifyCustomer(input: {
     await tx.insert(activityEvents).values({ userId: user.id, contactId: contact.id, conversationId: conversation.id,
       eventType: input.topic === "customers/update" ? "shopify_customer_updated" : "shopify_customer_created",
       eventData: { source: "shopify", recordMode: "quiet_thread", shop, customerId: id,
-        shopifyEventId: input.eventId, sourceUpdatedAt: version, summary: "Shopify customer synchronized" } });
+        shopifyEventId: input.eventId, sourceUpdatedAt: version,
+        ...(customerEffects.length ? { customerEffects } : {}), summary: "Shopify customer synchronized" } });
     return existing ? "updated" : "created";
   });
 }

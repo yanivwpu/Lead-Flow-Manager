@@ -1,3 +1,4 @@
+import { runShopifyCustomerEffectsTick } from "./shopifyCustomerEffects";
 import { runShopifyPrivacyTick } from "./shopifyExternalErasure";
 import { db } from '../drizzle/db';
 import { users, chats, contacts, templateEntitlements, channelSettings } from '@shared/schema';
@@ -298,6 +299,7 @@ let lastGmailWatchRenewalDay = "";
 
 export function startCronJobs() {
   console.log('[Cron] Starting cron scheduler...');
+  void runShopifyCustomerEffectsTick();
 
   // Activation emails run only on the daily schedule (14:00 UTC) — not on deploy/startup,
   // to avoid blasting legacy users when new sequence flags are introduced.
@@ -313,6 +315,7 @@ export function startCronJobs() {
   
   cronInterval = setInterval(() => {
     void runShopifyPrivacyTick();
+    void runShopifyCustomerEffectsTick();
     const now = new Date();
     const utcHour = now.getUTCHours();
     const utcMin  = now.getUTCMinutes();

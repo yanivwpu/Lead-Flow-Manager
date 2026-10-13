@@ -95,7 +95,7 @@ test("PostgreSQL engine customer synchronization regression fixtures", async t =
   const dialect = new PgDialect();
   const quote = (v: string) => '"' + v.replaceAll('"', '""') + '"';
   for (const table of [schema.users, schema.integrations, schema.contacts, schema.conversations, schema.activityEvents,
-    schema.messages, schema.contactNotes, schema.shopifyPrivacyCustomerLocks]) {
+    schema.messages, schema.contactNotes, schema.shopifyPrivacyCustomerLocks, schema.workflows, schema.workflowExecutions]) {
     const cfg = getTableConfig(table as PgTable);
     const columns = cfg.columns.map(c => quote(c.name) + " " + (c.enumValues?.length ? "text" : c.getSQLType()) +
       (c.name === "id" ? " PRIMARY KEY DEFAULT gen_random_uuid()::text" : c.default !== undefined ?
@@ -208,6 +208,137 @@ test("PostgreSQL engine customer synchronization regression fixtures", async t =
       const { findContactForCommerceHints } = await import("../server/commerceEventPipeline");
       const resolved = await findContactForCommerceHints("owner", { shopifyCustomerId: "123", email: "shared@example.invalid", phone: "15555550124" }, "shopify", shop, database as any);
       assert.equal(resolved?.id, contact.id, "orders match the stable ID before shared email/phone, without the 2000-contact cap");
+    });
+    await t.test("controlled create effects are durable, quiet on updates, and once-only", async () => {
+      const { processCustomerEffectEvent: process, customerEffectAdapters, customerEffectFence,
+        customerWorkflowSupported, customerHubSpotAuthorized, customerEffectsSuppressed } = await import("../server/shopifyCustomerEffects");
+      const { subscriptionService } = await import("../server/subscriptionService");
+      const previousLimits = subscriptionService.getUserLimits;
+      subscriptionService.getUserLimits = async () => ({ workflowsEnabled: true } as any);
+      const originalFetch = globalThis.fetch;
+      let exports = 0, workflowRuns = 0, loseResponse = false, failLookup = false;
+      globalThis.fetch = async (url, options) => {
+        const path = String(url);
+        if (path.endsWith("/crm/v3/properties/contacts")) return new Response(JSON.stringify({ results: [] }), { status: 200 });
+        if (path.includes("?limit=1")) return new Response("{}", { status: 200 });
+        if (path.endsWith("/search")) { if (failLookup) return new Response("{}", { status: 503 });
+          return new Response(JSON.stringify({ results: [] }), { status: 200 }); }
+        if (path.endsWith("/crm/v3/objects/contacts") && options?.method === "POST") {
+          exports++; if (loseResponse) throw new Error("response lost after provider acceptance");
+          return new Response(JSON.stringify({ id: "fixture-remote" }), { status: 201 });
+        }
+        throw new Error("Unexpected provider request");
+      };
+      const [workflow] = await database.insert(schema.workflows).values({ userId: "owner", name: "Controlled CRM",
+        isActive: true, triggerType: "shopify_customer_created", actions: [{ type: "tag", value: "Qualified" }] }).returning();
+      await database.insert(schema.workflows).values({ userId: "owner", name: "Disabled CRM", isActive: false,
+        triggerType: "shopify_customer_created", actions: [{ type: "tag", value: "Disabled" }] });
+      const [hub] = await database.insert(schema.integrations).values({ userId: "owner", type: "hubspot", name: "Disposable HubSpot",
+        isActive: true, config: { connectionStatus: "connected", syncOptions: ["sync_contacts"],
+          accessToken: "fixture-only", shopifyCustomerExportAuthorized: true } }).returning();
+      const fence = nativePool ? customerEffectFence : async (_shop: string, run: () => Promise<any>) => run();
+      const adapters = { prepare: async (...args: Parameters<typeof customerEffectAdapters.prepare>) => {
+        const prepared = await customerEffectAdapters.prepare(...args);
+        if (prepared && args[0].kind === "workflow" && !nativePool) {
+          return async (start: () => Promise<void>) => { await start(); workflowRuns++; return "completed" as const; };
+        }
+        return prepared;
+      } };
+      const getEvent = async (customer: string) => (await database.select().from(schema.activityEvents))
+        .find(a => (a.eventData as any).customerId === customer && a.eventType === "shopify_customer_created")!;
+      const run = async (id: string) => process(id, database as any, adapters, fence as any);
+      try {
+        await send(15, { email: "authorized@example.invalid" }, "customers/create", "30001");
+        const event = await getEvent("30001");
+        assert.equal((event.eventData as any).customerEffects.length, 2, "only enabled destinations are recorded");
+        if (nativePool) await Promise.all([run(event.id), run(event.id)]); else await run(event.id);
+        await run(event.id);
+        await send(15, {}, "customers/create", "30001");
+        await send(16, { email: "updated@example.invalid" }, "customers/update", "30001");
+        await run(event.id);
+        assert.equal(exports, 1);
+        if (nativePool) {
+          assert.equal((await database.select().from(schema.workflowExecutions).where(eq(schema.workflowExecutions.workflowId, workflow.id))).length, 1);
+          assert.equal((await rows()).find(c => (c.customFields as any).shopifyCustomerId === "30001")!.tag, "Qualified");
+        } else assert.equal(workflowRuns, 1);
+        assert.equal((await database.select().from(schema.activityEvents)).filter(a => (a.eventData as any).customerId === "30001" && (a.eventData as any).customerEffects).length, 1);
+        assert.equal((await rows()).find(c => (c.customFields as any).shopifyCustomerId === "30001")!.email, "updated@example.invalid");
+
+        await database.update(schema.integrations).set({ isActive: false }).where(eq(schema.integrations.id, hub.id));
+        await database.update(schema.workflows).set({ isActive: false }).where(eq(schema.workflows.id, workflow.id));
+        await send(17, {}, "customers/create", "30002");
+        assert.equal((await getEvent("30002")).eventData && ((await getEvent("30002")).eventData as any).customerEffects, undefined);
+        assert.equal(exports, 1);
+        assert.equal(customerWorkflowSupported({ ...workflow, actions: [{ type: "send_message_template", templateKey: "welcome" }] }), false,
+          "marketing/channel authorization is not inferred from a populated email or phone");
+        assert.equal(customerEffectsSuppressed({ ...contact, tag: "New", automationsPaused: false, customFields: { smsSuppressed: true } }), true);
+        assert.equal(customerHubSpotAuthorized({ connectionStatus: "connected", syncOptions: ["sync_contacts"], accessToken: "fixture-only" }), false);
+
+        await database.update(schema.workflows).set({ isActive: true }).where(eq(schema.workflows.id, workflow.id));
+        await send(18, {}, "customers/create", "30003");
+        const retryEvent = await getEvent("30003"); let preflights = 0, effects = 0;
+        const retryAdapters = { prepare: async () => {
+          if (++preflights === 1) throw new Error("temporary read failure");
+          return async (start: () => Promise<void>) => { await start(); effects++; return "completed" as const; };
+        } };
+        await process(retryEvent.id, database as any, retryAdapters, fence as any);
+        let fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, retryEvent.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "pending");
+        await database.update(schema.activityEvents).set({ eventData: { ...(fresh.eventData as any), customerEffects:
+          (fresh.eventData as any).customerEffects.map((j: any) => ({ ...j, nextAttemptAt: undefined })) } }).where(eq(schema.activityEvents.id, fresh.id));
+        await process(retryEvent.id, database as any, retryAdapters, fence as any);
+        await process(retryEvent.id, database as any, retryAdapters, fence as any); assert.equal(effects, 1);
+
+        await send(19, {}, "customers/create", "30004"); const uncertain = await getEvent("30004"); let attempts = 0;
+        const uncertainAdapters = { prepare: async () => async (start: () => Promise<void>) => { await start(); attempts++; throw new Error("accepted but response lost"); } };
+        await process(uncertain.id, database as any, uncertainAdapters, fence as any);
+        await process(uncertain.id, database as any, uncertainAdapters, fence as any);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, uncertain.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "reconciliation_required"); assert.equal(attempts, 1);
+
+        await send(20, {}, "customers/create", "30005"); const suppressed = await getEvent("30005");
+        const c = (await rows()).find(c => (c.customFields as any).shopifyCustomerId === "30005")!;
+        await database.update(schema.contacts).set({ tag: "Unsubscribed" }).where(eq(schema.contacts.id, c.id));
+        await process(suppressed.id, database as any, uncertainAdapters, fence as any); assert.equal(attempts, 1);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, suppressed.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "skipped");
+        await send(21, {}, "customers/create", "30006"); const noPlan = await getEvent("30006");
+        subscriptionService.getUserLimits = async () => ({ workflowsEnabled: false } as any);
+        await run(noPlan.id);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, noPlan.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "skipped");
+        subscriptionService.getUserLimits = async () => ({ workflowsEnabled: true } as any);
+        await send(22, {}, "customers/create", "30007"); const redacted = await getEvent("30007");
+        await database.insert(schema.shopifyPrivacyCustomerLocks).values({ identityHash: createHmac("sha256", secret)
+          .update("shopify-privacy-v1:" + JSON.stringify([shop, "id:30007"])).digest("hex") });
+        await process(redacted.id, database as any, uncertainAdapters, fence as any); assert.equal(attempts, 1);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, redacted.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "skipped");
+        const [messaging] = await database.insert(schema.workflows).values({ userId: "owner", name: "Messaging requires stage two", isActive: true,
+          triggerType: "shopify_customer_created", actions: [{ type: "send_message_template", templateKey: "welcome" }] }).returning();
+        await send(23, { email: "no-consent@example.invalid", phone: "15555550123" }, "customers/create", "30008");
+        const noConsent = await getEvent("30008"); await run(noConsent.id);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, noConsent.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects.find((j: any) => j.targetId === messaging.id).status, "skipped");
+        assert.equal((await database.select().from(schema.messages)).length, 1, "no workflow sends without channel authorization");
+        await database.update(schema.workflows).set({ isActive: false }).where(eq(schema.workflows.userId, "owner"));
+        await database.update(schema.integrations).set({ isActive: true }).where(eq(schema.integrations.id, hub.id));
+        await send(24, { email: "uncertain-export@example.invalid" }, "customers/create", "30009");
+        const lost = await getEvent("30009"); loseResponse = true; const beforeExports = exports;
+        await run(lost.id); await run(lost.id);
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, lost.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "reconciliation_required");
+        assert.equal(exports, beforeExports + 1, "an accepted export with a lost response is never resent"); loseResponse = false;
+        await send(25, { email: "retry-export@example.invalid" }, "customers/create", "30010");
+        const readFailure = await getEvent("30010"); failLookup = true; await run(readFailure.id);
+        assert.equal(exports, beforeExports + 1, "lookup failures must not fall through to contact creation");
+        fresh = (await database.select().from(schema.activityEvents).where(eq(schema.activityEvents.id, readFailure.id)))[0];
+        assert.equal((fresh.eventData as any).customerEffects[0].status, "pending"); failLookup = false;
+        await database.update(schema.activityEvents).set({ eventData: { ...(fresh.eventData as any), customerEffects:
+          (fresh.eventData as any).customerEffects.map((j: any) => ({ ...j, nextAttemptAt: undefined })) } }).where(eq(schema.activityEvents.id, fresh.id));
+        await run(readFailure.id); await run(readFailure.id); assert.equal(exports, beforeExports + 2);
+      } finally { globalThis.fetch = originalFetch; subscriptionService.getUserLimits = previousLimits;
+        if (nativePool) await (await import("../drizzle/db")).db.$client.end(); }
     });
     if (nativePool) await t.test("privacy fence on a separate connection blocks delivery until suppression commits", async () => {
       let entered!: () => void, release!: () => void;

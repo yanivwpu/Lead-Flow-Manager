@@ -15,14 +15,57 @@ Unknown, inactive or ambiguous merchants and mismatched integration shops fail
 closed. Durable redaction tombstones are checked first; suppressed customers are
 acknowledged without retaining their payload or creating CRM records.
 
-`syncShopifyCustomer` is the quiet customer branch of the commerce architecture.
-It reuses contacts, commerce conversations, activity events and privacy locks;
-no new table or migration is required. It deliberately writes through one database
-transaction instead of the general storage lifecycle hooks: synchronization invokes
-no messaging, automation dispatch, campaign opt-in or external contact exports.
-Customer creation now uses this same quiet path, so it also does not invoke the
-previous customer-created automation or HubSpot export. Order processing and its
-existing automations remain separate. Review this behavioral change before release.
+`syncShopifyCustomer` reuses contacts, commerce conversations, activity events and
+privacy locks. No new table or migration is required. Create events also record a
+durable side-effect outbox in their existing activity's `eventData.customerEffects`.
+The intent list captures the enabled customer-created workflow IDs/actions fingerprint
+and explicitly authorized HubSpot integration IDs at synchronization time. Contact,
+activity, intent list and watermark commit together before acknowledgment.
+
+The existing cron scheduler drains these intents at startup and on its normal tick.
+It uses a session-level shop advisory lock (not a database transaction) shared with
+uninstall/erasure and customer ingestion. External requests occur after synchronization
+commits and outside transactions. Fresh tenant, installation, contact, suppression,
+workflow configuration/entitlement and integration authorization checks precede work.
+Privacy deletion cascades existing contact activity records, including pending intents.
+No old activity is retroactively enrolled in automation or exports.
+
+### Controlled capability and staged limits
+
+Active `shopify_customer_created` workflows use the established workflow executor,
+with workspace subscription entitlements rechecked. This first stage supports CRM
+only actions: tags, pipeline, assignment, notes, follow-ups and existing-lead actions.
+The Shopify execution option makes contact writes strict and prevents the executor's
+implicit fire-and-forget HubSpot export; the separate authorized export intent owns
+that work. Other workflow callers retain their existing behavior.
+
+Messaging, unknown actions and mixed workflows containing them are skipped as a whole.
+The current executor cannot bind a verified permission to its eventual resolved channel
+and destination, or checkpoint partial outreach safely. Even populated email/phone or
+Shopify email/SMS consent does not grant WhatsApp authorization. Stage two requires
+channel/destination-bound authorization, per-action checkpoints and provider idempotency
+or reconciliation before messaging workflows can be enabled. This is a deliberate minimal
+staged solution, not an assertion that arbitrary workflows are exactly-once capable.
+
+HubSpot retains its existing API/upsert infrastructure. Automatic customer-created
+exports require an active connected integration, `sync_contacts`, usable authorized
+credentials and explicit `config.shopifyCustomerExportAuthorized: true`. The new permission
+must be enabled through the existing authorized integration configuration workflow only
+after workspace/privacy review; this PR does not change merchant configuration or add a
+new marketing permission. No UI for the new permission is introduced in this stage.
+Other CRM integration paths are untouched. Updates do not enqueue workflows or exports.
+
+Preflight failures retry with bounded exponential delay while the synchronized contact
+remains committed. Before execution/mutation, the worker persists `started`. A completed
+intent is never run again. If execution fails after this barrier, a completion write fails,
+or the process stops, the intent becomes `reconciliation_required` and is never
+simply replayed. This prevents duplicate notes or accepted external requests when their
+responses/checkpoints are lost. An interrupted run is at-most-once, not guaranteed eventual
+exactly-once execution. An authorized operator must inspect the workflow execution/provider
+result before resolving or explicitly retrying an unperformed operation. There is no
+automatic reconciliation UI in this stage. Read-only HubSpot failures reject safely before
+creation; provider calls have bounded timeouts. Disabled or unsupported intents are skipped,
+and contact pause, unsubscribe/DNC or suppression flags prevent all side effects.
 
 ## Identity, durability and fields
 
@@ -40,6 +83,10 @@ Shopify's delivery retry is the recovery mechanism. A 200 is sent only after com
 observe the committed watermark and do not add activities. Create and update share
 the shop lock, so concurrent instances cannot create two contacts. An update before
 create safely creates a quiet contact; the later older create is ignored.
+
+Create-side effect eligibility is recorded once per Shopify customer lifetime in
+`shopifyCustomerCreatedEffectsRecorded`; updates and duplicate/stale/suppressed events
+never enroll new work. Active destinations added later are not retroactively invoked.
 
 The source version uses Shopify `updated_at`, with `created_at` as the conservative
 fallback; an event with neither valid timestamp or a stable customer ID is rejected.
@@ -60,7 +107,8 @@ custom fields, channel identities, conversations and messages are preserved.
 Consent remains metadata under `shopifyCustomerSync.consent`. Valid supplied
 email/SMS consent and legacy `accepts_marketing` are retained; omitted consent
 preserves the prior snapshot. No consent is inferred from an address, and no
-Shopify consent changes CRM suppression or grants WhatsApp permission. CRM's
+Shopify consent changes CRM suppression or grants WhatsApp permission. Supported CRM-only
+workflows and authorized exports can run after create; synchronization itself performs no send. CRM's
 unsubscribe tag and suppression preferences remain unchanged. Aggregate logs expose
 topic/outcome or status without customer payloads, shop IDs, credentials or provider
 errors. Activity records retain delivery IDs for authorized fixture diagnosis.
@@ -120,7 +168,10 @@ All test data is disposable; no merchant records or real messages are used.
    delivery topic, destination, ID, timestamp and successful response with aggregate
    staging sync logs and the fixture's activity. Verify one CRM contact ID survives,
    supported fields change, notes/tags/stage/assignment/messages survive, and no
-   outbound messages or workflow executions appear. Use disposable addresses such
+   outbound messages or customer-created workflow executions appear on updates. For
+   creates, use a separately authorized active CRM-only workflow and an explicitly
+   opted-in disposable HubSpot integration; verify exactly one completed intent and
+   execution/export. Inspect `reconciliation_required` intents without blindly replaying them. Use disposable addresses such
    as `three@example.invalid`, not real customer data.
 6. Retry an authorized fixture delivery and send an older signed fixture through local
    tests; confirm no additional activity or regression. Verify a transient processing
