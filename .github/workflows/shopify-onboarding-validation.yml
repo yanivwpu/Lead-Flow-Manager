@@ -6,6 +6,7 @@ on:
       - "shopify.app.whachatcrm.toml"
       - "server/commerceEventPipeline.ts"
       - "scripts/verify-shopify-order-recovery.ts"
+      - "scripts/monitor-shopify-privacy.ts"
       - "tests/shopify-production-config.test.py"
       - "scripts/validate-shopify-staging.py"
       - "tests/shopify-staging-config.test.py"
@@ -73,7 +74,7 @@ jobs:
         run: npx tsx --test tests/shopify-webhook-health.test.ts tests/shopify-webhook-health-ui.test.tsx
       - name: Durable order delivery and interrupted-write recovery
         run: |
-          npx tsx --test tests/shopify-order-webhook.test.ts tests/shopify-order-persistence.test.ts tests/shopify-privacy-request-encryption.test.ts
+          npx tsx --test tests/shopify-order-webhook.test.ts tests/shopify-order-persistence.test.ts tests/shopify-privacy-request-encryption.test.ts tests/shopify-privacy-monitoring.test.ts
           SHOPIFY_RECOVERY_DATABASE_URL="$SHOPIFY_TEST_DATABASE_URL" SHOPIFY_RECOVERY_FIXTURE_ACK=isolated-staging-schema npx tsx scripts/verify-shopify-order-recovery.ts --local-validation
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |

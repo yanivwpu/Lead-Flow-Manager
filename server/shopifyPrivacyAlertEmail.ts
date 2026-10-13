@@ -18,6 +18,8 @@ const snapshotSchema = z.object({
   actionCode: z.enum(["missing_configuration", "invalid_evidence", "unsupported_provider", "provider_permanent", "provider_retry", "approaching_deadline", "overdue", "access_request"]),
   deadlineAt: z.string().datetime(),
   from: z.string().min(1).max(254).refine(value => !/[\r\n]/.test(value)),
+  // Persist recipient alongside body so a configuration change cannot alter an uncertain retry.
+  to: z.string().email().max(254).optional(),
 }).strict();
 export type PrivacyEmailSnapshot = z.infer<typeof snapshotSchema>;
 export function renderPrivacyAlertEmail(input: PrivacyEmailSnapshot) {
@@ -27,7 +29,7 @@ export function renderPrivacyAlertEmail(input: PrivacyEmailSnapshot) {
     `Issue category: ${category}`, `Deadline (UTC): ${s.deadlineAt}`, `Status: ${s.status}`,
     `Required action: ${PRIVACY_ACTIONS[s.actionCode]}`, "Review this operation in Admin → Privacy."].join("\n");
   // All variable content is allowlisted identifiers, enums and a normalized timestamp.
-  return { to: WHACHATCRM_SUPPORT_EMAIL, from: s.from, subject: s.stagingTest ? "STAGING TEST — Shopify Privacy Alert" : `Shopify privacy alert: ${category}`,
+  return { to: s.to || WHACHATCRM_SUPPORT_EMAIL, from: s.from, subject: s.stagingTest ? "STAGING TEST — Shopify Privacy Alert" : `Shopify privacy alert: ${category}`,
     text, html: `<pre>${text}</pre>`, privacyContext: "shopify" as const };
 }
 type Dispatch = typeof sendEmailDetailed;
@@ -59,7 +61,8 @@ export async function acceptPrivacyAlertEmail(pool: Pool, alertId: string, dispa
       return false;
     }
     const snapshot = snapshotSchema.parse(a.email_payload || { taskId: a.task_id, status: a.current_status,
-      reason: a.reason, actionCode: a.action_code, deadlineAt: a.deadline_at.toISOString(), from: resolveResendFromEmail() });
+      reason: a.reason, actionCode: a.action_code, deadlineAt: a.deadline_at.toISOString(), from: resolveResendFromEmail(),
+      to: process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_TO || WHACHATCRM_SUPPORT_EMAIL });
     if (snapshot.stagingTest) await verifyPrivacySmokeDatabase(client);
     // Immutable sender/body and a conservative uncertainty marker survive process death.
     await client.query(`UPDATE shopify_privacy_alerts SET email_payload=$2::jsonb,

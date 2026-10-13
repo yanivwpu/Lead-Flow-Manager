@@ -52,7 +52,7 @@ Prefer forward correction of additive columns/indexes/views. Application rollbac
 
 ## Secure production privacy setup — owner action only
 
-Primary operator, backup operator and monitored destination are **unassigned/unverified**. Set these in the restricted operations register before release, including escalation contacts and acknowledgment coverage. Proposed operating targets for owner acceptance: inspect queue/worker health at least every five minutes; acknowledge actionable alerts within one hour; escalate unacknowledged alerts to backup then incident owner; daily review of outstanding provider checks; three-day approach-to-deadline and overdue escalation. The current task deadline defaults to 30 days; legal/operator review must validate applicable deadlines. These targets are proposed procedures, not evidence they are running.
+Yaniv Haramaty is the designated primary privacy owner, backup oversight owner, backup operator and incident escalation owner. The proposed monitored destination is `hello@whachatcrm.com`; mailbox operation and successful delivery are **unverified**. These assignments were provided by the owner in this task. There is currently one accountable person; coverage during unavailability must be arranged operationally. Set these in the restricted operations register before release, including escalation contacts and acknowledgment coverage. Proposed operating targets for owner acceptance: inspect queue/worker health at least every five minutes; acknowledge actionable alerts within one hour; escalate unacknowledged alerts to backup then incident owner; daily review of outstanding provider checks; three-day approach-to-deadline and overdue escalation. The current task deadline defaults to 30 days; legal/operator review must validate applicable deadlines. These targets are proposed procedures, not evidence they are running.
 
 Use the approved password/secret manager to generate independent values: request key = 32 random bytes encoded as 64 hex characters; evidence key = independent >=32 random bytes encoded base64url; alert token = another independent 32 random bytes encoded base64url (implementation accepts 32–256 characters). Never reuse staging or Shopify API secrets. Do not rotate the Shopify API secret casually: suppression hashes depend on it. Do not create/overwrite/rotate these production secrets automatically. If using an offline generator, the **owner** can run the following once in a protected encrypted temporary directory, then import the file into the secret manager without logging it:
 
@@ -101,3 +101,51 @@ No genuine provider-erasure receipts, completed historical purge, backup restore
 Initial selected tests lacked a DB URL and failed portal import and PostgreSQL alert preconditions; those were environment failures, not counted as passes. Re-run against a disposable localhost PostgreSQL 16 container: 25 selected security/Contacts/order/privacy tests passed, zero skipped. Encryption test verifies fresh IVs, authenticated task binding, plaintext recovery, tamper rejection and invalid-key rejection. Recovery harness output showed 503 → 200, eight concurrent deliveries, one card/activity/contact, zero outgoing/automation/export calls, unread 1 → 1. Storage hooks and provider APIs are replaced with fixture SQL adapters/forbidden-call spies; these are local implementation checks, not real staging or production proofs.
 
 TypeScript baseline on merge head: 97 main diagnostics, 97 candidate, zero added; the repository-wide check remains failing on existing diagnostics. CI includes build validation. Already-confirmed OAuth, customer/order #1001 and staging browser acceptance were accepted and not repeated. Issue #76's outstanding mobile/filter/notes/existing-thread/no-thread and tenant/privacy acceptance, production active app subscriptions/scopes and provider privacy operations must still be completed by authorized operators.
+
+
+## Owner-directed monitoring and backup follow-up
+
+All three CI checks on development head `2808bd3ccbb4c75522d0bbd484b7428a20b98f54` passed. PR #59 remains open and mergeable; production main remains `112ea8c61be69640ec5f63430d32ca7f7ce901f4`.
+
+The existing privacy worker already automatically tracks deadlines, retries provider checks with leases/backoff, queues approaching-deadline/overdue/configuration/access alerts and delivers through the authenticated receiver and immutable Resend outbox. Those controls are exercised in local PostgreSQL tests. The focused monitoring PR adds an independent **read-only** aggregate probe for overdue requests, the three-day deadline window, manual intervention, due work stalled for 15 minutes, alert delivery stalled for 15 minutes and uncertain-email reconciliation. It does not process tasks or create receipts. It returns only counts, not task IDs/customer selectors. A quiet queue cannot prove worker liveness, and provider acceptance cannot prove operator acknowledgment; both remain explicitly unverified in probe output.
+
+Owner-approved scheduler setup can run every five minutes:
+
+```sh
+node --import tsx scripts/monitor-shopify-privacy.ts
+```
+
+Inject `SHOPIFY_PRIVACY_MONITOR_DATABASE_URL` securely with SELECT privileges only on the task/alert tables and no schema/table write privileges. Each probe uses BEGIN READ ONLY with statement/lock timeouts. Exit 0 means no queue intervention signals, 1 means operator intervention required, 2 means configuration/connection/schema/probe failure. Configure an independent scheduler/monitor to notify the verified mailbox on nonzero exit or a missed five-minute run, deduplicate repeated failures, and escalate according to the acknowledged operating targets above. Monitor the scheduler itself, app availability and worker execution separately. No scheduler/service, production DB role, secret, email or escalation integration was provisioned or activated in this task. Thus automated monitoring is implemented and tested locally, but operational monitoring remains unverified.
+
+The proposed recipient is configurable through `SHOPIFY_PRIVACY_ALERT_EMAIL_TO=hello@whachatcrm.com` **after verification and approval**. New outbox snapshots freeze the recipient together with sender/body/idempotency key, preserving the recipient on ambiguous retries even if configuration changes. Existing snapshots without a recipient retain the legacy support mailbox; never rewrite accepted/uncertain snapshots just to reroute them. The global support address is unchanged. Invalid recipients fail schema validation. No email activation flag or production recipient was changed, and no real email was sent.
+
+### Railway backup findings
+
+Read-only project inventory and service inspection found only the production app service in the connected production project, with **no attached volumes or database service**. DATABASE_URL is present but its value/host is withheld by OAuth. This establishes neither the location of the production database nor absence of backups: it may be in another Railway project or another database provider. Owner says Railway is the infrastructure provider, but the actual production DB/volume must be mapped before backup status can be verified. Available connected tools expose service/volume inventory but no backup schedule/list or arbitrary authenticated GraphQL query; no Railway CLI/account token is available. No backup configuration, retention schedule, successful snapshot, PITR window or restore capability was inspected on the actual production database.
+
+Railway documentation supports volume backups and scheduled backup retention. Published defaults are daily/6 days, weekly/1 month, monthly/3 months; these are provider capability descriptions, **not this application's configured policy**. Read official references: https://docs.railway.com/guides/postgres-backups-restores and https://docs.railway.com/integrations/api/manage-volumes . PITR capability is described at https://docs.railway.com/volumes/point-in-time-recovery ; availability/configuration/archive retention are not established here.
+
+After privately mapping the actual production database service and volume instance, an authorized operator can inspect the volume Backups tab and use these documented **read-only** GraphQL queries (authenticated through their existing Railway account; never paste a token into GitHub/chat):
+
+```graphql
+query PrivacyBackupInventory($volumeInstanceId: String!) {
+  volumeInstanceBackupList(volumeInstanceId: $volumeInstanceId) {
+    id name createdAt expiresAt usedMB referencedMB
+  }
+  volumeInstanceBackupScheduleList(volumeInstanceId: $volumeInstanceId) {
+    id name cron kind retentionSeconds createdAt
+  }
+}
+```
+
+Record actual volume/service/environment mapping, configured schedules and retentionSeconds, recent successful backups/expiry, failure monitoring, encrypted access, legal holds and PITR enabled/window if applicable. Independently verify restore into an isolated clone, schema/row-count checks, suppression/erasure replay, measured RPO/RTO and exclusion from all live messaging/exports. A list of backup objects alone cannot close recovery verification.
+
+### Actions requiring separate owner approval
+
+- Set the three independently generated production secrets and verified alert URL/recipient; enable privacy email only after real receiver/mailbox delivery testing.
+- Provision the restricted monitoring DB role/connection and independent scheduler/escalation channel; verify notifications and missed-run detection with disposable tasks.
+- Deploy/merge production, change Shopify published subscriptions/scopes, or perform live merchant acceptance.
+- Change backup schedules/retention/PITR, create a production snapshot, or provision/restore a clone and incur related cost. Never restore over the live database during a rehearsal.
+- Run reviewed additive production migrations or rotate encryption/evidence/API keys with an explicit transition plan.
+
+Read-only inspection and local tests are already authorized and continue without a new approval request. No privacy/provider erasure, backup/restore or real alert gate is marked complete until actual evidence exists.
