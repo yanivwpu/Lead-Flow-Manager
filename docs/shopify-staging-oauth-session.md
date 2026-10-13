@@ -20,7 +20,7 @@ Trial grant/reinstall ledger, billing, webhooks, privacy and non-Shopify authent
 
 ## Exact configuration contract (staging app only)
 
-The connected Railway app can expose variable names but redacts values. No Shopify Dashboard reader is available. Actual values/settings therefore remain unverified; these are the expected values to verify and correct only on **WhachatCRM Staging**:
+The connected Railway app can expose variable names but redacts values. No Shopify Dashboard reader is available. The owner subsequently confirmed the staging API key listed below, and Shopify Support confirmed that same app is installed on the development store. Other live values/settings remain unverified; verify these expected settings only on **WhachatCRM Staging**, identified by its full client ID:
 
 | Setting | Expected value |
 | --- | --- |
@@ -29,7 +29,7 @@ The connected Railway app can expose variable names but redacts values. No Shopi
 | Shopify Dev Dashboard app version: Allowed redirection URL | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/callback` |
 | Staging Railway `APP_URL` | `https://whachatcrm-staging-app-staging.up.railway.app` |
 | Staging Railway `SHOPIFY_APP_HOST` | `https://whachatcrm-staging-app-staging.up.railway.app` |
-| Staging Railway `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | Credentials belonging to **WhachatCRM Staging**, never the production app |
+| Staging Railway `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | API key `2e424c769c25776a9086c36490ed14fc` (owner-confirmed); existing secret for that same app. The duplicate ending in `b56` must not be used |
 | Staging Railway `NODE_ENV` | `production` (retains Secure cookies) |
 | Staging Railway `SESSION_SECRET` | Existing staging-only persistent secret, stable across replicas/restarts |
 

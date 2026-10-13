@@ -1,7 +1,7 @@
-# Staging app client ID supplied by operator from active staging-v2-oauth-fix.
-# Confirm it matches Railway staging SHOPIFY_API_KEY before Shopify release.
+# Installed staging app confirmed by Shopify Support and owner; Railway key matches.
+# The duplicate app ending in b56 must never receive this configuration.
 # Validate with: python3 scripts/validate-shopify-staging.py --client-id "$SHOPIFY_STAGING_CLIENT_ID"
-client_id = "71a0de963ce2fb0c2e970c904eabbc56"
+client_id = "2e424c769c25776a9086c36490ed14fc"
 name = "WhachatCRM Staging"
 application_url = "https://whachatcrm-staging-app-staging.up.railway.app"
 embedded = false

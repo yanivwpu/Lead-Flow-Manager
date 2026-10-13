@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 import tomllib
 
+STAGING_CLIENT_ID = '2e424c769c25776a9086c36490ed14fc'
+RETIRED_CLIENT_ID = '71a0de963ce2fb0c2e970c904eabbc56'
 ORIGIN = 'https://whachatcrm-staging-app-staging.up.railway.app'
 TOPICS = {
     'customers/data_request': '/api/shopify/webhooks/customers/data_request',
@@ -19,22 +21,25 @@ PRODUCTION_IDS = {tomllib.loads((ROOT / name).read_text())['client_id']
                   for name in ('shopify.app.toml', 'shopify.app.whachatcrm.toml')}
 
 
-def validate(config, verified_client_id=None, allow_unlinked=False):
+def validate(config, verified_client_id=None):
     def require(condition, message):
         if not condition:
             raise ValueError(message)
     client_id = config.get('client_id')
     require(client_id not in PRODUCTION_IDS, 'Production app identity is forbidden')
-    if client_id or not allow_unlinked:
-        require(bool(verified_client_id) and bool(re.fullmatch(r'[a-f0-9]{32}', verified_client_id)),
-                'Provide the independently verified WhachatCRM Staging client ID')
-        require(verified_client_id not in PRODUCTION_IDS and client_id == verified_client_id,
-                'Staging client ID must match the verified staging app identity')
-    require(client_id == '' or bool(re.fullmatch(r'[a-f0-9]{32}', client_id)), 'Invalid staging client ID')
+    require(client_id != RETIRED_CLIENT_ID and verified_client_id != RETIRED_CLIENT_ID,
+            'Retired duplicate staging app identity is forbidden')
+    require(client_id == STAGING_CLIENT_ID, 'Staging must target the installed app ending in 4fc')
+    require(isinstance(verified_client_id, str) and bool(re.fullmatch(r'[a-f0-9]{32}', verified_client_id)),
+            'Provide the independently verified WhachatCRM Staging client ID')
+    require(verified_client_id not in PRODUCTION_IDS and verified_client_id == STAGING_CLIENT_ID,
+            'Verified identity must match the installed staging app ending in 4fc')
+    require(set(config) == {'client_id', 'name', 'application_url', 'embedded',
+                            'access_scopes', 'auth', 'webhooks'}, 'Unexpected app configuration or credentials')
     require(config.get('name') == 'WhachatCRM Staging', 'Wrong app name')
     require(config.get('embedded') is False, 'Staging must be non-embedded')
     require(config.get('application_url') == ORIGIN, 'Wrong staging application URL')
-    require(config.get('auth', {}).get('redirect_urls') == [ORIGIN + '/api/shopify/callback'], 'Wrong OAuth callback')
+    require(config.get('auth') == {'redirect_urls': [ORIGIN + '/api/shopify/callback']}, 'Wrong OAuth callback')
     require(config.get('access_scopes') == {'scopes': 'read_customers,read_orders', 'optional_scopes': [],
                                           'use_legacy_install_flow': False}, 'Wrong scopes/install flow')
     webhooks = config.get('webhooks', {})
