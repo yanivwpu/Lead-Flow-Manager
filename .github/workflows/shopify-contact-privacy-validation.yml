@@ -77,6 +77,7 @@ jobs:
         run: |
           node --test tests/typecheck-diagnostic-normalization.test.mjs
           npx tsx --test tests/shopify-contact-privacy.test.tsx tests/shopify-support-contact-routes.test.ts tests/shopify-store-redaction-handler.test.ts
+          npx tsx --test tests/shopify-customer-update.test.ts
           npx tsx --test tests/shopify-contact-privacy-postgres.test.ts
           npx tsx --test tests/shopify-privacy-worker-postgres.test.ts
           npx tsx --test tests/shopify-privacy-smoke-safety.test.ts

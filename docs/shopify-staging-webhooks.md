@@ -1,5 +1,9 @@
 # Staging webhook restoration
 
+For the current customer-update release, use the operator steps in
+[Shopify customer update synchronization](shopify-customer-update-sync.md).
+The identity-restoration version commands below describe the earlier release.
+
 ## Confirmed staging identity
 
 The owner and Shopify Support confirmed that the app installed on
@@ -14,7 +18,8 @@ A second app has the same name but client ID
 so releasing its webhooks did not configure the installed app. Do not use,
 modify, or delete the duplicate. Identify apps by full client ID, never name.
 
-The corrected TOML retains all five destinations listed below, API version
+The corrected TOML retains the five existing destinations and adds customer updates
+below, API version
 `2026-10`, `embedded = false`, `read_customers,read_orders`, the staging
 application URL and `/api/shopify/callback`. The validator pins the installed
 app ID and rejects the duplicate, both production identities, empty IDs,
@@ -24,6 +29,7 @@ duplicate subscriptions. An independently supplied verified ID is still required
 | Topic | Destination |
 | --- | --- |
 | `customers/create` | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers-create` |
+| `customers/update` | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers-update` |
 | `orders/create` | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/orders-create` |
 | `customers/data_request` | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers/data_request` |
 | `customers/redact` | `https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers/redact` |
@@ -76,12 +82,15 @@ case confirm it in the active version and record the limitation separately,
 rather than clicking Re-register to create another subscription. No optimistic
 health override is introduced.
 
-All five backend routes exist. Customer privacy and store-redaction handlers
+All six backend routes exist. Customer create/update share a transactional quiet
+synchronizer; see [customer update synchronization](shopify-customer-update-sync.md).
+Customer privacy and store-redaction handlers
 require raw bodies and Shopify HMAC verification before processing. Commerce
 and uninstall also call verifyWebhookHmac, which uses SHA-256 with the existing
 secret and a timing-safe comparison; malformed lengths reject. The server's
-Shopify webhook body parser captures the original bytes. Signature handling,
-trial ledger, billing, OAuth routes, and production TOMLs are unchanged.
+Shopify webhook body parser captures the original bytes. Customer create/update
+require raw bytes and acknowledge only after durable
+processing. Trial ledger, billing, OAuth routes, and production TOMLs are unchanged.
 
 ## Operator preparation and explicitly approved release
 
@@ -120,7 +129,7 @@ Do not uninstall or reinstall `whachatcrm.myshopify.com`.
 4. Run `shopify app versions list --config staging` and, in Dev Dashboard for
    client ID `2e424c769c25776a9086c36490ed14fc`, confirm Versions marks
    `staging-v4-identity-webhooks` active. Inspect that version for all three compliance
-   topics and both commerce topics with exact staging URLs. Local TOML is intent.
+   topics and all three commerce topics with exact staging URLs. Local TOML is intent.
 5. Use the existing authenticated read-only /api/shopify/webhooks/health audit for
    whachatcrm.myshopify.com (or the existing Sales Admin gated audit). Confirm actual
    read_customers/read_orders grants and the uninstall callback. Inspect actual

@@ -1,3 +1,5 @@
+import { createShopifyCustomerWebhookHandler } from "./shopifyCustomerWebhookHandler";
+import { syncShopifyCustomer } from "./shopifyCustomerSync";
 import { requireAdmin as requireSalesAdmin } from "./adminAuth";
 import { createShopifyCustomerPrivacyHandler } from "./shopifyCustomerPrivacyHandler";
 import { handleShopifyCustomerPrivacy, privacyRequestDedupe } from "./shopifyPrivacyRequests";
@@ -44,7 +46,6 @@ import { createShopifyOnboardingRouter } from './shopifyOnboardingRoutes';
 import { logShopifyActivation } from './shopifyActivationTelemetry';
 import { establishShopifyLogin } from './shopifyLoginSession';
 import {
-  processShopifyCustomerCreate,
   processShopifyOrderCreate,
   scheduleShopifyCommerceProcessing,
 } from './shopifyCommerceWebhooks';
@@ -723,22 +724,12 @@ router.post('/webhooks/orders-create', (req: Request, res: Response) => {
   );
 });
 
-router.post('/webhooks/customers-create', (req: Request, res: Response) => {
-  const verified = verifyShopifyCommerceWebhook(req, res);
-  if (!verified) return;
-  const topic = req.headers['x-shopify-topic'];
-  console.log(
-    JSON.stringify({
-      tag: '[CommerceIngest]',
-      event: 'shopify_webhook_received',
-      topic: topic || 'customers/create',
-      shop: verified.shop,
-    }),
-  );
-  scheduleShopifyCommerceProcessing(req, res, verified.shop, () =>
-    processShopifyCustomerCreate(req, verified.shop, verified.body as Parameters<typeof processShopifyCustomerCreate>[2]),
-  );
-});
+router.post('/webhooks/customers-create', createShopifyCustomerWebhookHandler("customers/create", {
+  verify: verifyWebhookHmac, process: syncShopifyCustomer,
+}));
+router.post('/webhooks/customers-update', createShopifyCustomerWebhookHandler("customers/update", {
+  verify: verifyWebhookHmac, process: syncShopifyCustomer,
+}));
 
 /** After Managed Pricing approval redirect (?plan_handle=) — sync Shopify → DB (session auth). */
 router.get('/billing/sync-return', async (req: Request, res: Response) => {
