@@ -1,3 +1,4 @@
+import { contactUpdateCondition } from "./contactDetailsService";
 import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
@@ -181,6 +182,8 @@ export type UpdateContactOptions = {
   skipAutomationHooks?: boolean;
   /** When set, UPDATE ... WHERE id AND user_id — foreign rows are a no-op. */
   expectedWorkspaceUserId?: string;
+  /** Optional optimistic concurrency guard used by the CRM details editor. */
+  expectedUpdatedAt?: Date | null;
 };
 
 export interface IStorage {
@@ -2635,7 +2638,7 @@ export class DbStorage implements IStorage {
     if (!before) {
       const result = await db.update(contacts)
         .set({ ...updates, updatedAt: new Date() })
-        .where(eq(contacts.id, id))
+        .where(contactUpdateCondition(id, options))
         .returning();
       return result[0];
     }
@@ -2643,9 +2646,7 @@ export class DbStorage implements IStorage {
     const result = await db.update(contacts)
       .set({ ...updates, updatedAt: new Date() })
       .where(
-        options?.expectedWorkspaceUserId
-          ? and(eq(contacts.id, id), eq(contacts.userId, options.expectedWorkspaceUserId))
-          : eq(contacts.id, id),
+        contactUpdateCondition(id, options),
       )
       .returning();
     const after = result[0];

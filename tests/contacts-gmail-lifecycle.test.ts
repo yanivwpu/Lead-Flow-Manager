@@ -1,3 +1,4 @@
+import { readContactsListState } from "../shared/contactDetailsNavigation";
 /**
  * Contacts page filter IA + Gmail inbox-only lifecycle.
  * Run: npx tsx --test tests/contacts-gmail-lifecycle.test.ts
@@ -119,7 +120,8 @@ test("Website Visitors classification stays lifecycle-based", () => {
 
 test("Contacts page uses a compact Contact type filter and keeps existing filters", () => {
   const page = read("client/src/pages/Contacts.tsx");
-  assert.match(page, /useState<CrmContactListTab>\(CRM_LIST_IDENTIFIED\)/);
+  assert.match(page, /readContactsListState\(listSearch\)/);
+  assert.equal(readContactsListState("").listTab, CRM_LIST_IDENTIFIED);
   assert.match(page, /select-filter-contact-type/);
   assert.match(page, /select-filter-tag/);
   assert.match(page, /select-filter-stage/);

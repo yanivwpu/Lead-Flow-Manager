@@ -47,6 +47,7 @@ const WebsiteWidget = lazy(() => import("./WebsiteWidget").then(m => ({ default:
 const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain })));
 const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const ProspectAI = lazy(() => import("./ProspectAI").then(m => ({ default: m.ProspectAI })));
+const ContactDetails = lazy(() => import("./ContactDetails").then(m => ({ default: m.ContactDetails })));
 const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contacts })));
 const Campaigns = lazy(() => import("./Campaigns").then(m => ({ default: m.Campaigns })));
 
@@ -198,6 +199,7 @@ function AppContent() {
                 <Redirect to="/app/inbox" />
               </Route>
               <Route path="/app/followups" component={FollowUps} />
+              <Route path="/app/contacts/:contactId" component={ContactDetails} />
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />

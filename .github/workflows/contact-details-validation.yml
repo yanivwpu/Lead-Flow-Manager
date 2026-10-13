@@ -1,0 +1,56 @@
+name: Contact details regression
+on:
+  pull_request:
+    paths:
+      - 'client/src/pages/Contact*.tsx'
+      - 'client/src/pages/AppLayout.tsx'
+      - 'server/contactDetailsService.ts'
+      - 'server/routes/contacts.ts'
+      - 'server/storage.ts'
+      - 'shared/contactDetails*.ts'
+      - 'tests/contact-details*'
+      - '.github/workflows/contact-details-validation.yml'
+permissions:
+  contents: read
+jobs:
+  contacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgres://fixture:fixture@127.0.0.1:1/whachat_shopify_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: SQL isolation, privacy, concurrency, navigation and existing Inbox regressions
+        run: >-
+          node --import tsx --test
+          tests/contact-details.test.ts tests/contacts-gmail-lifecycle.test.ts
+          tests/contact-deletion.test.ts tests/inbox-deep-link-and-perf.test.ts
+          tests/inbox-selection-isolation.test.ts tests/inbox-channel-adaptive-conversation.test.ts
+          tests/account-switch-auth-isolation.test.ts
+      - name: Desktop and mobile browser scenarios
+        env:
+          CONTACT_DETAILS_CHROMIUM_PATH: /usr/bin/google-chrome
+        run: |
+          npm install --prefix work/browser --no-save --package-lock=false playwright-core
+          node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173 > /tmp/contact-details-vite.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:5173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          CONTACT_DETAILS_PLAYWRIGHT_PATH="$PWD/work/browser/node_modules/playwright-core/index.mjs" node tests/contact-details-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contact-details-screenshots
+          path: work/contact-details-screenshots
+          if-no-files-found: ignore
+      - name: Reject added TypeScript diagnostics against exact PR base
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: npm run build
