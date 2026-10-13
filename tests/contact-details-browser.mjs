@@ -1,0 +1,87 @@
+// Synthetic API fixtures only; no live customer data. See docs/contact-details.md for execution.
+const { chromium } = await import(process.env.CONTACT_DETAILS_PLAYWRIGHT_PATH || 'playwright-core');
+import { mkdir } from 'node:fs/promises';
+const out = process.env.CONTACT_DETAILS_SCREENSHOTS || 'work/contact-details-screenshots';
+await mkdir(out, { recursive: true });
+const browser = await chromium.launch({ executablePath:process.env.CONTACT_DETAILS_CHROMIUM_PATH || '/usr/bin/chromium', args:['--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width:1366,height:900 }, timezoneId: 'America/New_York' });
+const errors=[]; page.on('pageerror', e => errors.push(e.message));
+const stamp='2026-10-13T12:00:00.000Z';
+const user={id:'fixture-owner',name:'CRM Reviewer',email:'reviewer@example.invalid',emailVerifiedAt:stamp,language:'en',role:'owner',onboardingCompleted:true};
+const contact={id:'fixture-contact',name:'Alex Morgan',email:'alex@example.invalid',phone:'15551234567',source:'shopify',primaryChannel:'shopify',tag:'Warm',pipelineStage:'Lead',createdAt:stamp,updatedAt:stamp,customFields:{shopifyCustomerId:'123'},leadScore:72};
+const details={profile:{...contact,channel:'Shopify',assignedTo:null,shopifyLinked:true,identityReadOnly:true,notes:'',followUp:'Check delivery experience',followUpDate:'2026-10-15T14:00:00Z'},conversations:[{id:'fixture-thread',channel:'shopify'}],notes:[{id:'fixture-note',content:'Customer prefers updates by email.',author:'CRM Reviewer',createdAt:stamp}],timeline:[{id:'order',title:'shopify order created',detail:'Shopify order synchronized',date:stamp},{id:'created',title:'Contact created',detail:null,date:'2026-10-12T10:00:00Z'}],shopify:{shop:'demo-store.myshopify.com',ordersCount:2,totalSpent:'145.00',orders:[{key:'order-1',number:'#1042',total:'85.00',currency:'USD',payment:'paid',fulfillment:'fulfilled',date:stamp,dateSource:'Synced',items:[{title:'Everyday cotton shirt',quantity:2},{title:'Canvas tote',quantity:1}]}]}};
+const writes=[];
+await page.route('**/api/**', async route=>{
+ const req=route.request(),url=new URL(req.url()),path=url.pathname;
+ let body=[]; let status=200;
+ if(path==='/api/auth/me') body=user;
+ else if(path==='/api/subscription') body={subscription:{plan:'pro',status:'active',isShopify:false,isPaidSubscriber:true},limits:{plan:'pro',planName:'Pro',conversationsLimit:1000,conversationsUsed:0,isInTrial:false,trialDaysRemaining:0,assignmentEnabled:true,teamInbox:true}};
+ else if(path==='/api/activation-status') body={hasAnyMessagingChannel:true,needsSetup:false};
+ else if(path==='/api/contacts') body=[contact];
+ else if(path.endsWith('/details')) {
+  if(path.includes('/unauthorized/')) {status=404;body={error:'Contact not found'};}
+  else if(req.method()==='PATCH') {const patch=req.postDataJSON();writes.push(patch);Object.assign(details.profile,patch);details.profile.updatedAt=new Date().toISOString();body=details.profile;}
+  else body=details;
+ }
+ else if(path.endsWith('/notes') && req.method()==='POST') {const n=req.postDataJSON();writes.push(n);details.notes.unshift({id:'new-note',content:n.content,author:'CRM Reviewer',createdAt:stamp});body=n;}
+ else if(path==='/api/team') body=[{id:'owner',memberId:user.id,name:user.name,status:'active'}];
+ else if(path==='/api/contacts/notes-summary') body={};
+ else if(path==='/api/channels') body=[];
+ await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+});
+await page.goto(`${process.env.CONTACT_DETAILS_BASE_URL || 'http://127.0.0.1:5173'}/app/contacts?q=Alex&tag=Warm&sort=name&dir=asc`);
+await page.getByTestId('row-contact-fixture-contact').last().waitFor({state:'visible',timeout:30000});
+await page.getByTestId('row-contact-fixture-contact').last().click();
+await page.getByRole('heading',{name:'Alex Morgan'}).waitFor();
+await page.screenshot({path:`${out}/contact-details-desktop.png`,fullPage:true});
+console.log('desktop overflow',await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+await page.getByRole('link',{name:'Back to Contacts'}).click();
+console.log('return URL',page.url());
+if(!page.url().includes('tag=Warm')||!page.url().includes('sort=name')) throw Error('Lost list filters');
+await page.goBack(); await page.getByRole('heading',{name:'Alex Morgan'}).waitFor();
+await page.goForward(); await page.getByTestId('input-contacts-search').waitFor();
+await page.getByTestId('row-contact-fixture-contact').last().click();
+await page.getByRole('button',{name:'Edit contact'}).click();
+if(!await page.getByLabel('Name',{exact:true}).isDisabled()) throw Error('Shopify field editable');
+await page.getByLabel('Tag',{exact:true}).fill('VIP');
+await page.getByRole('button',{name:'Save changes'}).click();
+await page.getByRole('button',{name:'Edit contact'}).waitFor();
+if(writes[0].tag!=='VIP'||'name' in writes[0]||!('expectedUpdatedAt' in writes[0])) throw Error('Unsafe patch');
+await page.getByLabel('Add a CRM note').fill('Arrange a product demonstration.');
+await page.getByRole('button',{name:'Add note',exact:true}).click();
+await page.getByText('Arrange a product demonstration.',{exact:true}).waitFor();
+await page.getByRole('button',{name:'Update follow-up'}).click();
+await page.getByLabel('Follow-up',{exact:true}).fill('Call about the shipment');
+await page.getByLabel('Due date',{exact:true}).fill('2026-10-20T10:00');
+await page.getByRole('button',{name:'Save follow-up'}).click();
+await page.getByRole('button',{name:'Update follow-up'}).waitFor();
+if(!writes.some(w=>w.followUp==='Call about the shipment' && w.followUpDate)) throw Error('Follow-up was not persisted');
+await page.getByRole('link',{name:'Open Conversation'}).click();
+if(!page.url().includes('/app/inbox/fixture-contact?conversation=fixture-thread')) throw Error('Incorrect Inbox link');
+await page.goto(`${process.env.CONTACT_DETAILS_BASE_URL || 'http://127.0.0.1:5173'}/app/contacts/fixture-contact`);
+await page.getByRole('heading',{name:'Alex Morgan'}).waitFor();
+await page.setViewportSize({width:390,height:844});
+await page.screenshot({path:`${out}/contact-details-mobile.png`,fullPage:true});
+await page.getByRole('heading',{name:'Shopify customer & orders'}).scrollIntoViewIfNeeded();
+await page.screenshot({path:`${out}/contact-details-mobile-commerce.png`,fullPage:true});
+console.log('mobile overflow',await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth));
+if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)) throw Error('Mobile overflow');
+await page.goto(`${process.env.CONTACT_DETAILS_BASE_URL || 'http://127.0.0.1:5173'}/app/contacts?q=Alex&tag=Warm&sort=name&dir=asc`);
+await page.getByTestId('row-contact-fixture-contact').first().waitFor({state:'visible'});
+await page.getByTestId('row-contact-fixture-contact').first().click();
+await page.getByRole('heading',{name:'Alex Morgan'}).waitFor();
+details.conversations=[];details.shopify=null;details.profile={...details.profile,shopifyLinked:false,identityReadOnly:false,channel:'Instagram',source:'instagram'};
+await page.reload(); await page.getByRole('button',{name:'No conversation yet'}).waitFor();
+if(await page.getByRole('heading',{name:'Shopify customer & orders'}).count()) throw Error('Commerce shown for non-Shopify contact');
+await page.getByRole('button',{name:'Edit contact'}).click();
+if(await page.getByLabel('Name',{exact:true}).isDisabled()) throw Error('Non-Shopify field locked');
+await page.getByLabel('Name',{exact:true}).fill('Alex Updated');
+await page.getByRole('button',{name:'Save changes'}).click();
+await page.getByRole('heading',{name:'Alex Updated'}).waitFor();
+if(!writes.some(w=>w.name==='Alex Updated')) throw Error('Non-Shopify edit was not saved');
+await page.getByRole('button',{name:'Edit contact'}).click();
+await page.getByRole('button',{name:'Cancel',exact:true}).click();
+await page.goto(`${process.env.CONTACT_DETAILS_BASE_URL || 'http://127.0.0.1:5173'}/app/contacts/unauthorized`);
+await page.getByRole('alert').filter({hasText:'Contact not found'}).waitFor();
+console.log('Browser scenarios passed; page errors:',JSON.stringify(errors));
+await browser.close();

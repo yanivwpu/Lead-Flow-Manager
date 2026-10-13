@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
+import { readContactsListState, contactDetailsHref } from "@shared/contactDetailsNavigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -251,13 +252,18 @@ export function Contacts() {
   const notesSummaryQueryKey = withUserQueryScope(["/api/contacts/notes-summary"], user?.id);
   const appointmentsQueryKey = withUserQueryScope(["/api/appointments"], user?.id);
 
-  const [search, setSearch] = useState("");
-  const [filterTag, setFilterTag] = useState<string>("");
-  const [filterChannel, setFilterChannel] = useState<string>("");
-  const [filterStage, setFilterStage] = useState<string>("");
-  const [listTab, setListTab] = useState<CrmContactListTab>(CRM_LIST_IDENTIFIED);
-  const [sortField, setSortField] = useState<SortField>("createdAt");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const listSearch = useSearch();
+  const { search, filterTag, filterChannel, filterStage, listTab, sortField, sortDir } = readContactsListState(listSearch);
+  const updateListParam = (key: string, value: string) => {
+    const params = new URLSearchParams(listSearch);
+    if (value) params.set(key, value); else params.delete(key);
+    navigate(`/app/contacts${params.size ? `?${params}` : ""}`, { replace: true });
+  };
+  const setSearch = (v: string) => updateListParam("q", v);
+  const setFilterTag = (v: string) => updateListParam("tag", v);
+  const setFilterChannel = (v: string) => updateListParam("channel", v);
+  const setFilterStage = (v: string) => updateListParam("stage", v);
+  const setListTab = (v: CrmContactListTab) => updateListParam("tab", v);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
   const [addError, setAddError] = useState("");
@@ -344,7 +350,7 @@ export function Contacts() {
       setShowAddDialog(false);
       setNewContact({ name: "", phone: "", email: "" });
       setAddError("");
-      navigate(`/app/inbox/${contact.id}`);
+      navigate(contactDetailsHref(contact.id, listSearch));
     },
     onError: (err: Error) => setAddError(err.message),
   });
@@ -555,15 +561,16 @@ export function Contacts() {
   }
 
   function handleSort(field: SortField) {
-    if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else { setSortField(field); setSortDir("asc"); }
+    const params = new URLSearchParams(listSearch);
+    params.set("sort", field);
+    params.set("dir", field === sortField && sortDir === "asc" ? "desc" : "asc");
+    navigate(`/app/contacts?${params}`, { replace: true });
   }
 
   function clearFilters() {
-    setFilterTag("");
-    setFilterChannel("");
-    setFilterStage("");
-    setSearch("");
+    const params = new URLSearchParams(listSearch);
+    for (const key of ["q", "tag", "channel", "stage"]) params.delete(key);
+    navigate(`/app/contacts${params.size ? `?${params}` : ""}`, { replace: true });
   }
 
   function handleExport() {
@@ -816,7 +823,7 @@ export function Contacts() {
                   return (
                     <div
                       key={contact.id}
-                      onClick={() => navigate(`/app/inbox/${contact.id}`)}
+                      onClick={() => navigate(contactDetailsHref(contact.id, listSearch))}
                       className="flex items-center gap-3 px-4 py-3 active:bg-gray-50 cursor-pointer transition-colors"
                       data-testid={`row-contact-${contact.id}`}
                     >
@@ -998,7 +1005,7 @@ export function Contacts() {
                   return (
                     <div
                       key={contact.id}
-                      onClick={() => navigate(`/app/inbox/${contact.id}`)}
+                      onClick={() => navigate(contactDetailsHref(contact.id, listSearch))}
                       className={cn("grid gap-4 px-4 py-3 items-center hover:bg-gray-50 cursor-pointer transition-colors group", CONTACTS_TABLE_COLS)}
                       data-testid={`row-contact-${contact.id}`}
                     >

@@ -1,4 +1,7 @@
 import type { Express } from "express";
+import { contactDetailsPatchSchema } from "@shared/contactDetailsPatch";
+import { isShopifyLinked } from "@shared/contactDetails";
+import { loadContactDetails, contactDetailsPrivacyUnavailable } from "../contactDetailsService";
 import {
   filterCrmListedContacts,
   isCrmListedContact,
@@ -13,7 +16,7 @@ import {
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
 import { sql, eq, and, inArray } from "drizzle-orm";
-import { CHANNELS, contactNotes, campaignEnrollments } from "@shared/schema";
+import { CHANNELS, contacts, contactNotes, campaignEnrollments } from "@shared/schema";
 import {
   CONTACTS_BULK_DELETE_MAX,
   deleteContactSafely,
@@ -434,12 +437,26 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/contacts/:id/details", async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const result = await loadContactDetails(req.user.id, req.params.id, req.user.shopifySubscriptionStatus === "redacted");
+      if (!result) return res.status(404).json({ error: "Contact not found" });
+      res.setHeader("Cache-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch contact details" });
+    }
+  });
+
   // Get single contact with all conversations
   app.get("/api/contacts/:id", async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      const ownedContact = await db.select().from(contacts).where(and(eq(contacts.id, req.params.id), eq(contacts.userId, req.user.id)));
+      if (!ownedContact.length) return res.status(404).json({ error: "Not found" });
       const result = await storage.getContactWithConversations(req.params.id);
       if (!result) {
         return res.status(404).json({ error: "Contact not found" });
@@ -565,7 +582,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Update contact
-  app.patch("/api/contacts/:id", async (req, res) => {
+  app.patch(["/api/contacts/:id", "/api/contacts/:id/details"], async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -577,8 +594,25 @@ export function registerContactRoutes(app: Express): void {
       if (contact.userId !== req.user.id) {
         return res.status(404).json({ error: "Not found" });
       }
+      if (req.path.endsWith("/details")) {
+        if (await contactDetailsPrivacyUnavailable(contact)) return res.status(404).json({ error: "Contact not found" });
+        const parsed = contactDetailsPatchSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: "Invalid contact changes" });
+        req.body = parsed.data;
+        if (isShopifyLinked(contact) && ["name", "email", "phone"].some(key => key in req.body)) {
+          return res.status(409).json({ error: "Shopify-linked profile fields are managed by synchronization. Refresh the contact." });
+        }
+        if (req.body.assignedTo && req.body.assignedTo !== req.user.id) {
+          const team = await storage.getTeamMembers(req.user.id);
+          if (!team.some(m => m.memberId === req.body.assignedTo && m.status === "active")) {
+            return res.status(400).json({ error: "Choose an active workspace team member" });
+          }
+        }
+      }
       // Coerce date strings → Date objects for timestamp columns
       const body = { ...req.body };
+      const expectedUpdatedAt = body.expectedUpdatedAt;
+      delete body.expectedUpdatedAt;
       delete body.automationsPausedAt;
       delete body.automationsPausedByUserId;
       if (Object.prototype.hasOwnProperty.call(req.body, "automationsPaused")) {
@@ -598,7 +632,7 @@ export function registerContactRoutes(app: Express): void {
           contact.followUp != null &&
           contact.followUp !== "");
 
-      if (clearingFollowUp) {
+      if (clearingFollowUp && !req.path.endsWith("/details")) {
         await clearActiveAppointmentsForContact(req.user.id, req.params.id);
       }
 
@@ -616,7 +650,23 @@ export function registerContactRoutes(app: Express): void {
         );
       }
 
-      const updated = await storage.updateContact(req.params.id, body);
+      const updated = await storage.updateContact(req.params.id, body, {
+        expectedWorkspaceUserId: req.user.id,
+        ...(req.path.endsWith("/details") ? { expectedUpdatedAt: expectedUpdatedAt ? new Date(expectedUpdatedAt) : null } : {}),
+      });
+      if (!updated) return res.status(409).json({ error: "This contact changed. Refresh it before saving again." });
+      if (clearingFollowUp && req.path.endsWith("/details")) {
+        await clearActiveAppointmentsForContact(req.user.id, req.params.id);
+      }
+      if (req.path.endsWith("/details")) {
+        for (const [key, type] of [["tag", "tag_change"], ["pipelineStage", "stage_change"], ["assignedTo", "assignment"], ["followUpDate", "follow_up"], ["name", "contact_updated"], ["email", "contact_updated"], ["phone", "contact_updated"]]) {
+          if (key in body && String(body[key] ?? "") !== String((contact as any)[key] ?? "")) {
+            await storage.createActivityEvent({ userId: req.user.id, contactId: contact.id, eventType: type,
+              actorType: "user", actorId: req.user.id, eventData: { title: key === "followUpDate" ? "Follow-up scheduled" : `${key === "pipelineStage" ? "Pipeline stage" : key === "assignedTo" ? "Assignment" : key} updated`,
+                ...(["tag", "pipelineStage"].includes(key) ? { from: (contact as any)[key], to: body[key] } : {}) } });
+          }
+        }
+      }
 
       if (
         updated &&
@@ -683,7 +733,7 @@ export function registerContactRoutes(app: Express): void {
         scheduleHubSpotAutoSync(req.user.id, req.params.id);
       }
 
-      res.json(updated);
+      res.json(req.path.endsWith("/details") ? { updated: true } : updated);
     } catch (error) {
       console.error("Error updating contact:", error);
       res.status(500).json({ error: "Failed to update contact" });
