@@ -182,6 +182,21 @@ test("authenticated receiver, real PostgreSQL outbox, Resend failures, uncertain
     assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_erasure_tasks WHERE id=$1", [unrelatedTask])).rows[0].n, 1);
     assert.equal((await pool.query("SELECT count(*)::int n FROM shopify_privacy_alerts WHERE task_id=$1", [smokeTask])).rows[0].n, 0);
     // Sender configuration rejects unprotected/non-HTTPS endpoints and is disabled by default.
+    const [recipientId] = await add();
+    process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_TO = "hello@whachatcrm.com";
+    const recipientBodies: string[] = [];
+    assert.equal(await acceptPrivacyAlertEmail(pool,recipientId,async options => {
+      recipientBodies.push(JSON.stringify(options));assert.equal(options.to,"hello@whachatcrm.com");
+      return {ok:false,providerMessageId:null,error:"fixture_timeout",acceptanceUnknown:true};
+    }),false);
+    process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_TO = "changed@example.invalid";
+    assert.equal(await acceptPrivacyAlertEmail(pool,recipientId,async options => {
+      recipientBodies.push(JSON.stringify(options));assert.equal(options.to,"hello@whachatcrm.com");
+      return {ok:true,providerMessageId:randomUUID()};
+    }),true);
+    assert.equal(recipientBodies[0],recipientBodies[1]);
+    delete process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_TO;
+    assert.throws(() => renderPrivacyAlertEmail({...testSnapshot,to:"hello@whachatcrm.com\r\nBcc: private@example.com"} as any));
     assert.equal(configuredPrivacyAlertSender({ ...env, SHOPIFY_PRIVACY_ALERT_URL: "http://example.com" }), undefined);
     assert.equal(configuredPrivacyAlertSender({ ...env, SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "false" }), undefined);
     const send = configuredPrivacyAlertSender({ ...env, SHOPIFY_PRIVACY_ALERT_URL: `https://internal.example${PRIVACY_ALERT_RECEIVER_PATH}` })!;
@@ -190,7 +205,7 @@ test("authenticated receiver, real PostgreSQL outbox, Resend failures, uncertain
     globalThis.fetch = async () => new Response(null, { status: 204 });
     assert.equal(await send({} as any, `shopify-privacy-${id}`), false, "Only confirmed receiver acceptance is delivery");
   } finally {
-    globalThis.fetch = originalFetch; delete process.env.RESEND_FROM_EMAIL;
+    globalThis.fetch = originalFetch; delete process.env.RESEND_FROM_EMAIL; delete process.env.SHOPIFY_PRIVACY_ALERT_EMAIL_TO;
     await new Promise<void>(resolve => server.close(() => resolve()));
     await pool.end(); await admin.query(`DROP SCHEMA ${namespace} CASCADE`); await admin.end();
   }
