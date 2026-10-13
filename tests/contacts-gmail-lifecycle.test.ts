@@ -119,7 +119,8 @@ test("Website Visitors classification stays lifecycle-based", () => {
 
 test("Contacts page uses a compact Contact type filter and keeps existing filters", () => {
   const page = read("client/src/pages/Contacts.tsx");
-  assert.match(page, /useState<CrmContactListTab>\(CRM_LIST_IDENTIFIED\)/);
+  assert.match(page, /listParams\.get\("tab"\)/);
+  assert.match(page, /: CRM_LIST_IDENTIFIED/);
   assert.match(page, /select-filter-contact-type/);
   assert.match(page, /select-filter-tag/);
   assert.match(page, /select-filter-stage/);

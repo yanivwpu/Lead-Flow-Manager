@@ -30,6 +30,10 @@ api_version = "2026-01"
   topics = [ "orders/create" ]
   uri = "https://app.whachatcrm.com/api/shopify/webhooks/orders-create"
 
+  [[webhooks.subscriptions]]
+  topics = [ "customers/update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/webhooks/customers-update"
+
 [access_scopes]
 # Kept in sync with server/shopify.ts
 scopes = "read_customers,read_orders"

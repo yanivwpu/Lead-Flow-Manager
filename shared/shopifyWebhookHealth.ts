@@ -37,8 +37,13 @@ export const SHOPIFY_GRAPHQL_WEBHOOK_SPECS: ShopifyGraphqlWebhookSpec[] = [
   },
 ];
 
-/** App-level compliance webhooks configured in shopify.app.whachatcrm.toml (not per-shop GraphQL). */
+/** App-level update and compliance webhooks configured in shopify.app.whachatcrm.toml (not per-shop GraphQL). */
 export const SHOPIFY_APP_CONFIG_WEBHOOK_SPECS = [
+  {
+    topic: "customers/update",
+    pathSuffix: "/api/shopify/webhooks/customers-update",
+    label: "Customer updated (app config)",
+  },
   {
     topic: "customers/data_request",
     pathSuffix: "/api/shopify/webhooks/customers/data_request",
@@ -58,6 +63,11 @@ export const SHOPIFY_APP_CONFIG_WEBHOOK_SPECS = [
 
 /** Commerce webhooks declared in shopify.app.whachatcrm.toml (app-level + per-shop GraphQL on install). */
 export const SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS = [
+  {
+    topic: "customers/update",
+    pathSuffix: "/api/shopify/webhooks/customers-update",
+    label: "Customer updated (app config)",
+  },
   {
     topic: "customers/create",
     pathSuffix: "/api/shopify/webhooks/customers-create",

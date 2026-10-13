@@ -1,3 +1,4 @@
+import { createShopifyOrderWebhookHandler } from "./shopifyOrderWebhookHandler";
 import { createShopifyCustomerWebhookHandler } from "./shopifyCustomerWebhookHandler";
 import { syncShopifyCustomer } from "./shopifyCustomerSync";
 import { requireAdmin as requireSalesAdmin } from "./adminAuth";
@@ -47,7 +48,6 @@ import { logShopifyActivation } from './shopifyActivationTelemetry';
 import { establishShopifyLogin } from './shopifyLoginSession';
 import {
   processShopifyOrderCreate,
-  scheduleShopifyCommerceProcessing,
 } from './shopifyCommerceWebhooks';
 import {
   auditAllShopifyShopsWebhookHealth,
@@ -691,38 +691,13 @@ router.post('/webhooks/shop/redact', createShopifyStoreRedactionHandler({
   verify: verifyWebhookHmac,
   redact: redactShopifyStore, dedupe: privacyRequestDedupe,
 }));
-function verifyShopifyCommerceWebhook(req: Request, res: Response): { shop: string; body: Record<string, unknown> } | null {
-  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  const shop = req.headers['x-shopify-shop-domain'] as string;
-  if (!hmac || !shop) {
-    res.status(401).json({ error: 'Missing webhook headers' });
-    return null;
-  }
-  const rawBody = (req as { rawBody?: Buffer }).rawBody || Buffer.from(JSON.stringify(req.body ?? {}));
-  if (!verifyWebhookHmac(rawBody, hmac)) {
-    console.log(JSON.stringify({ tag: '[CommerceIngest]', event: 'shopify_hmac_invalid', shop }));
-    res.status(401).json({ error: 'Invalid webhook signature' });
-    return null;
-  }
-  return { shop, body: (req.body || {}) as Record<string, unknown> };
-}
-
-router.post('/webhooks/orders-create', (req: Request, res: Response) => {
-  const verified = verifyShopifyCommerceWebhook(req, res);
-  if (!verified) return;
-  const topic = req.headers['x-shopify-topic'];
-  console.log(
-    JSON.stringify({
-      tag: '[CommerceIngest]',
-      event: 'shopify_webhook_received',
-      topic: topic || 'orders/create',
-      shop: verified.shop,
-    }),
-  );
-  scheduleShopifyCommerceProcessing(req, res, verified.shop, () =>
-    processShopifyOrderCreate(req, verified.shop, verified.body as Parameters<typeof processShopifyOrderCreate>[2]),
-  );
-});
+router.post('/webhooks/orders-create', createShopifyOrderWebhookHandler("orders/create", {
+  verify: verifyWebhookHmac,
+  process: async ({ shop, eventId, body }) => {
+    await processShopifyOrderCreate({ headers: { "x-shopify-event-id": eventId } },
+      shop, body as Parameters<typeof processShopifyOrderCreate>[2]);
+  },
+}));
 
 router.post('/webhooks/customers-create', createShopifyCustomerWebhookHandler("customers/create", {
   verify: verifyWebhookHmac, process: syncShopifyCustomer,

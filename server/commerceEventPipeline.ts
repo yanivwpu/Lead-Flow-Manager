@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
-import { contacts } from "@shared/schema";
+import { contacts, activityEvents } from "@shared/schema";
 /**
  * Commerce event ingest — contact + commerce thread + activity + workflows.
  * Shopify / WooCommerce: customer imports use empty threads; orders use structured commerce cards.
@@ -45,6 +45,8 @@ export type CommerceIngestParams = {
   activityEventType: string;
   metadata: Record<string, unknown>;
   contactHints: CommerceContactHints;
+  /** Persist commerce only when channel consent/export authorization cannot be verified. */
+  allowSideEffects?: boolean;
 };
 
 export type CommerceIngestResult = {
@@ -212,7 +214,7 @@ async function upsertCommerceContact(
     if (name && (existing.name === fallbackName || !existing.name?.trim())) {
       patch.name = name;
     }
-    const updated = await storage.updateContact(existing.id, patch);
+    const updated = await storage.updateContact(existing.id, patch, source === "shopify" ? { expectedWorkspaceUserId: userId, skipAutomationHooks: true } : undefined);
     return { contact: updated || existing, created: false };
   }
 
@@ -390,11 +392,19 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     externalMessageId: externalMessageId || null,
   });
 
+  const persistOnly = source === "shopify" && params.allowSideEffects === false;
+  let savedMessage: Awaited<ReturnType<typeof storage.getMessageByUserExternalId>>;
   if (recordMode === "commerce_message" && externalMessageId) {
-    const existingMsg = await storage.getMessageByUserExternalId(userId, externalMessageId);
-    if (existingMsg) {
-      logCommerce("deduped", { userId, externalMessageId, messageId: existingMsg.id });
-      return { ok: true, deduped: true, contactId: existingMsg.contactId };
+    savedMessage = await storage.getMessageByUserExternalId(userId, externalMessageId);
+    if (savedMessage) {
+      // A card alone is not completion: a crash may have prevented its purchase activity.
+      const [activity] = persistOnly ? await db.select({ id: activityEvents.id }).from(activityEvents).where(and(
+        eq(activityEvents.userId, userId), eq(activityEvents.eventType, activityEventType),
+        sql`${activityEvents.eventData}->>'externalMessageId' = ${externalMessageId}`)).limit(1) : [true];
+      if (activity) {
+        logCommerce("deduped", { userId, externalMessageId, messageId: savedMessage.id });
+        return { ok: true, deduped: true, contactId: savedMessage.contactId };
+      }
     }
   }
 
@@ -436,13 +446,21 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       if (!externalMessageId) {
         throw new Error("commerce_message requires externalMessageId");
       }
-      messageId = await appendCommerceChatMessage({
+      messageId = savedMessage?.id || await appendCommerceChatMessage({
         userId,
         contact,
         conversation,
         body: messageBody.trim(),
         externalMessageId,
       });
+      if (persistOnly && savedMessage) {
+        // Repair the preview without guessing whether the previous attempt incremented unreadCount.
+        await storage.updateConversation(conversation.id, {
+          lastMessageAt: savedMessage.createdAt,
+          lastMessagePreview: messageBody.split("\n").find(line => line.trim())?.slice(0, 100) || "Commerce update",
+          lastMessageDirection: "inbound",
+        });
+      }
       logCommerce("commerce_message_written", {
         userId,
         contactId: contact.id,
@@ -469,7 +487,7 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
       ...metadata,
     });
 
-    if (triggerType && recordMode !== "activity_only") {
+    if (params.allowSideEffects !== false && triggerType && recordMode !== "activity_only") {
       const dispatch = dispatchCommerceEventAutomation({
         userId,
         triggerType,
@@ -490,8 +508,10 @@ export async function ingestCommerceEvent(params: CommerceIngestParams): Promise
     }
 
     // Keep Shopify exports inside the erasure fence and its external-erasure time window.
-    if (source === "shopify") await syncContactToHubSpotIfEnabled(userId, contact);
-    else scheduleHubSpotAutoSync(userId, contact.id);
+    if (params.allowSideEffects !== false) {
+      if (source === "shopify") await syncContactToHubSpotIfEnabled(userId, contact);
+      else scheduleHubSpotAutoSync(userId, contact.id);
+    }
 
     logCommerce("completed", {
       userId,

@@ -74,9 +74,9 @@ class StagingConfiguration(unittest.TestCase):
         self.assertIn('verify: verifyWebhookHmac', routes)
         self.assertIn(".createHmac('sha256', SHOPIFY_API_SECRET)", routes)
         self.assertIn('crypto.timingSafeEqual', routes)
-        self.assertIn('verifyShopifyCommerceWebhook', routes)
+        self.assertIn('createShopifyOrderWebhookHandler', routes)
         self.assertIn("router.post('/webhooks/app-uninstalled'", routes)
-        for filename in ('shopifyCustomerPrivacyHandler.ts', 'shopifyStoreRedactionHandler.ts'):
+        for filename in ('shopifyCustomerPrivacyHandler.ts', 'shopifyStoreRedactionHandler.ts', 'shopifyOrderWebhookHandler.ts'):
             handler = (ROOT / 'server' / filename).read_text()
             self.assertIn('deps.verify', handler)
 

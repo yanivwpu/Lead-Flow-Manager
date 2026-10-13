@@ -68,7 +68,7 @@ test("TOML compliance declarations are not confirmed live registrations", () => 
   const r = report();
   assert.equal(r.webhooks.filter(w => w.registrationMethod === "graphql").every(w => w.status === "registered"), true);
   const app = r.webhooks.filter(w => w.registrationMethod === "app_toml");
-  assert.deepEqual(app.map(w => w.topic), ["customers/data_request", "customers/redact", "shop/redact"]);
+  assert.deepEqual(app.map(w => w.topic), ["customers/update", "customers/data_request", "customers/redact", "shop/redact"]);
   assert.equal(app.every(w => w.registeredCallbackUrl === null && w.status === "app_config"), true);
   assert.equal(r.summary.status, "Verification Unavailable"); assert.equal(r.summary.healthy, false);
   assert.equal(r.protectedCustomerData.reportedApprovalDate, "2026-06-25");
