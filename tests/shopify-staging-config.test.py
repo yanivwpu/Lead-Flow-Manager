@@ -17,6 +17,8 @@ class StagingConfiguration(unittest.TestCase):
     def test_checked_in_identity(self):
         self.assertEqual(CONFIG['client_id'], EXPECTED_ID)
         self.assertTrue(v.validate(CONFIG, EXPECTED_ID))
+        self.assertEqual(len(CONFIG['webhooks']['subscriptions']), 6)
+        self.assertIn('customers/update', v.TOPICS)
 
     def test_verified_identity_required_and_wrong_apps_rejected(self):
         for identity in (None, '', 'f' * 32, RETIRED_ID, *v.PRODUCTION_IDS):

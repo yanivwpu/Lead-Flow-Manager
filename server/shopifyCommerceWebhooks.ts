@@ -1,3 +1,4 @@
+import { syncShopifyCustomer } from "./shopifyCustomerSync";
 import { customerPrivacyLocked } from "./shopifyPrivacyRequests";
 import { withShopifyPrivacyFence } from "./shopifyContactService";
 import type { Request, Response } from "express";
@@ -138,57 +139,6 @@ async function ingestShopifyOrderCreate(
   });
 }
 
-async function ingestShopifyCustomerCreate(
-  req: Request,
-  shop: string,
-  body: ShopifyCustomerPayload,
-): Promise<void> {
-  const merchant = await resolveShopifyMerchantUser(shop);
-  if (!merchant) {
-    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant" }));
-    return;
-  }
-  if (!syncOptionEnabled(merchant.syncOptions, "new_customers")) {
-    console.log(
-      JSON.stringify({
-        tag: "[CommerceIngest]",
-        event: "shopify_ignored",
-        reason: "sync_option_disabled",
-        shop,
-        option: "new_customers",
-      }),
-    );
-    return;
-  }
-
-  const customerId = body.id != null ? String(body.id) : "";
-  const eventId = shopifyEventId(req, `customer-${customerId}-${Date.now()}`);
-  const name = customerName(body) || body.email || "Shopify customer";
-
-  await ingestCommerceEvent({
-    userId: merchant.userId,
-    source: "shopify",
-    triggerType: "shopify_customer_created",
-    recordMode: "quiet_thread",
-    activityEventType: "shopify_customer_created",
-    metadata: {
-      shop,
-      shopifyEventId: eventId,
-      customerId,
-      email: body.email,
-      phone: body.phone,
-      ordersCount: body.orders_count,
-      totalSpent: body.total_spent,
-    },
-    contactHints: {
-      name,
-      email: body.email,
-      phone: body.phone,
-      shopifyCustomerId: body.id,
-    },
-  });
-}
-
 export function scheduleShopifyCommerceProcessing(
   req: Request,
   res: Response,
@@ -217,8 +167,6 @@ export async function processShopifyOrderCreate(req: Request, shop: string, body
   });
 }
 export async function processShopifyCustomerCreate(req: Request, shop: string, body: ShopifyCustomerPayload): Promise<void> {
-  return withShopifyPrivacyFence(shop, async () => {
-    if (await customerPrivacyLocked(shop, body)) return;
-    await ingestShopifyCustomerCreate(req, shop, body);
-  });
+  await syncShopifyCustomer({ shop, topic: "customers/create", body,
+    eventId: shopifyEventId(req, "") });
 }

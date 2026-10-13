@@ -1,3 +1,6 @@
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { contacts } from "@shared/schema";
 /**
  * Commerce event ingest — contact + commerce thread + activity + workflows.
  * Shopify / WooCommerce: customer imports use empty threads; orders use structured commerce cards.
@@ -100,33 +103,42 @@ function commerceThreadKey(
   return `contact:${contact.id}`;
 }
 
-async function findContactForCommerceHints(
+export async function findContactForCommerceHints(
   userId: string,
   hints: CommerceContactHints,
   source: CommerceSource,
+  shop?: string,
+  database: Pick<typeof db, "select"> = db,
 ): Promise<Contact | undefined> {
+  // Stable customer identity takes precedence over mutable/shared phone or email hints.
+  if (source === "shopify" && hints.shopifyCustomerId != null) {
+    const rows = await database.select().from(contacts).where(and(eq(contacts.userId, userId),
+      sql`COALESCE(${contacts.customFields}->>'shopifyCustomerId', ${contacts.sourceDetails}->>'shopifyCustomerId') = ${String(hints.shopifyCustomerId)}`,
+      ...(shop ? [sql`COALESCE(${contacts.customFields}->>'shopifyShop', ${contacts.customFields}->'lastCommerceMetadata'->>'shop', ${contacts.sourceDetails}->>'shop', ${shop}) = ${shop}`] : [])
+    )).limit(2);
+    if (rows.length > 1) throw new Error("Ambiguous Shopify customer identity");
+    if (rows[0]) return rows[0];
+  }
+  const compatible = (contact: Contact) => {
+    if (source !== "shopify") return true;
+    const cf = (contact.customFields || {}) as Record<string, any>;
+    const details = (contact.sourceDetails || {}) as Record<string, any>;
+    const boundId = cf.shopifyCustomerId ?? details.shopifyCustomerId;
+    const boundShop = cf.shopifyShop ?? cf.lastCommerceMetadata?.shop ?? details.shop;
+    return (boundId == null || String(boundId) === String(hints.shopifyCustomerId)) && (!boundShop || !shop || boundShop === shop);
+  };
   if (source !== "woocommerce") {
     const phoneDigits = normalizePhone(hints.phone);
     if (phoneDigits.length >= 8) {
       const byPhone = await storage.getContactByChannelId(userId, "whatsapp", phoneDigits);
-      if (byPhone) return byPhone;
+      if (byPhone && compatible(byPhone)) return byPhone;
     }
   }
 
   const email = normalizeEmail(hints.email);
   if (email.includes("@")) {
     const byEmail = await storage.getContactByChannelId(userId, "calendly", email);
-    if (byEmail) return byEmail;
-  }
-
-  if (hints.shopifyCustomerId != null) {
-    const shopifyId = String(hints.shopifyCustomerId);
-    const all = await storage.getContacts(userId, 2000);
-    const hit = all.find((c) => {
-      const cf = (c.customFields || {}) as Record<string, unknown>;
-      return cf.shopifyCustomerId != null && String(cf.shopifyCustomerId) === shopifyId;
-    });
-    if (hit) return hit;
+    if (byEmail && compatible(byEmail)) return byEmail;
   }
 
   if (hints.woocommerceCustomerId != null) {
@@ -148,7 +160,7 @@ async function upsertCommerceContact(
   metadata: Record<string, unknown>,
   source: CommerceSource,
 ): Promise<{ contact: Contact; created: boolean }> {
-  let existing = await findContactForCommerceHints(userId, hints, source);
+  let existing = await findContactForCommerceHints(userId, hints, source, typeof metadata.shop === "string" ? metadata.shop : undefined);
   const phoneDigits = normalizePhone(hints.phone);
   const email = normalizeEmail(hints.email);
   const fallbackName = defaultCustomerName(source);

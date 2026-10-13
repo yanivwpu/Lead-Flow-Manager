@@ -50,7 +50,8 @@ export function normalizePhoneForHubSpot(raw: string | undefined | null): string
  */
 export async function pushLeadsToHubSpot(
   token: string,
-  leads: HubSpotLeadRow[]
+  leads: HubSpotLeadRow[],
+  options: { strictLookup?: boolean; beforeWrite?: () => Promise<void> } = {},
 ): Promise<HubSpotPushOutcome> {
   const propertyNames = await hubspotFetchContactPropertyNames(token);
   const hasPipelineProp = propertyNames.has(PIPELINE_PROP);
@@ -75,10 +76,10 @@ export async function pushLeadsToHubSpot(
 
     let contactId: string | undefined;
     if (email) {
-      contactId = await hubspotSearchContactByEmail(token, email);
+      contactId = await hubspotSearchContactByEmail(token, email, options.strictLookup);
     }
     if (!contactId && phone) {
-      contactId = await hubspotSearchContactByPhone(token, phone);
+      contactId = await hubspotSearchContactByPhone(token, phone, options.strictLookup);
     }
 
     const { firstname, lastname } = splitNameForHubSpot(
@@ -97,6 +98,7 @@ export async function pushLeadsToHubSpot(
       properties[TAG_PROP] = lead.tag.trim().slice(0, 255);
     }
 
+    await options.beforeWrite?.();
     if (contactId) {
       const patch = await hubspotPatchContact(token, contactId, properties);
       if (patch.ok) pushed++;

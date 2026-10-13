@@ -142,14 +142,16 @@ async function dualWriteContact(
   contactUpdates: Partial<Contact>,
   chat: Chat | null,
   chatUpdates: Parameters<typeof storage.updateChat>[1],
-  opts?: { skipAutomationHooks?: boolean }
+  opts?: { skipAutomationHooks?: boolean; durableShopify?: boolean }
 ) {
   if (contact) {
-    await storage
-      .updateContact(contact.id, contactUpdates, { skipAutomationHooks: opts?.skipAutomationHooks === true })
-      .catch(() => {});
+    const write = storage.updateContact(contact.id, contactUpdates, { skipAutomationHooks: opts?.skipAutomationHooks === true,
+      ...(opts?.durableShopify ? { expectedWorkspaceUserId: contact.userId } : {}) });
+    if (opts?.durableShopify) {
+      if (!await write) throw new Error("shopify_workflow_contact_missing");
+    } else await write.catch(() => {});
     const keys = Object.keys(contactUpdates);
-    if (keys.some((k) => ["tag", "pipelineStage", "name", "email", "phone"].includes(k))) {
+    if (!opts?.durableShopify && keys.some((k) => ["tag", "pipelineStage", "name", "email", "phone"].includes(k))) {
       scheduleHubSpotAutoSync(contact.userId, contact.id);
     }
   }
@@ -630,7 +632,8 @@ export async function executeWorkflowActions(
   chat: Chat | null,
   triggerData: any = {},
   contact?: Contact,
-  conversationId?: string
+  conversationId?: string,
+  executionOptions: { durableShopify?: boolean } = {},
 ): Promise<{
   success: boolean;
   actionsExecuted: WorkflowAction[];
@@ -672,7 +675,7 @@ export async function executeWorkflowActions(
           { tag: action.tag },
           chat,
           { tag: action.tag },
-          { skipAutomationHooks: true }
+          { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
         );
         if (contact?.id && action.tag === "Appointment Requested") {
           await storage
@@ -701,7 +704,7 @@ export async function executeWorkflowActions(
           { pipelineStage: action.stage },
           chat,
           { pipelineStage: action.stage },
-          { skipAutomationHooks: true }
+          { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
         );
         executedActions.push({ type: "set_pipeline", value: action.stage });
         continue;
@@ -825,7 +828,7 @@ export async function executeWorkflowActions(
                 { assignedTo: assignee.memberId ?? null },
                 chat,
                 { assignedTo: assignee.memberId },
-                { skipAutomationHooks: true }
+                { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
               );
               executedActions.push({ type: "assign", value: assignee.memberId || "unassigned" });
             }
@@ -835,7 +838,7 @@ export async function executeWorkflowActions(
               { assignedTo: action.value },
               chat,
               { assignedTo: action.value },
-              { skipAutomationHooks: true }
+              { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
             );
             executedActions.push(action);
           }
@@ -848,7 +851,7 @@ export async function executeWorkflowActions(
               { tag: action.value },
               chat,
               { tag: action.value },
-              { skipAutomationHooks: true }
+              { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
             );
             executedActions.push(action);
           }
@@ -870,7 +873,7 @@ export async function executeWorkflowActions(
               { pipelineStage: action.value },
               chat,
               { pipelineStage: action.value },
-              { skipAutomationHooks: true }
+              { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
             );
             executedActions.push(action);
           }
@@ -889,7 +892,7 @@ export async function executeWorkflowActions(
               { notes: newNote },
               chat,
               { notes: newNote },
-              { skipAutomationHooks: true }
+              { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
             );
             executedActions.push(action);
           }
@@ -906,7 +909,7 @@ export async function executeWorkflowActions(
               { followUpDate, followUp },
               chat,
               { followUpDate, followUp },
-              { skipAutomationHooks: true }
+              { skipAutomationHooks: true, durableShopify: executionOptions.durableShopify }
             );
             executedActions.push(action);
           }

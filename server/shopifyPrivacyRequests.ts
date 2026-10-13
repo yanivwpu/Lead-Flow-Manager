@@ -24,10 +24,10 @@ export function privacyRequestDedupe(kind: string, shop: string, body: unknown) 
   // Request ID for access, stable customer identity/order set for redaction; no raw identifiers retained.
   return hash(JSON.stringify([kind, shop, body]));
 }
-export async function customerPrivacyLocked(shop: string, identity: CustomerIdentity): Promise<boolean> {
+export async function customerPrivacyLocked(shop: string, identity: CustomerIdentity, database: Pick<Tx, "select"> = db): Promise<boolean> {
   const hashes = customerIdentityTokens(identity).map(token => hash(JSON.stringify([shop, token])));
   if (!hashes.length) return false;
-  const rows = await db.select().from(shopifyPrivacyCustomerLocks).where(inArray(shopifyPrivacyCustomerLocks.identityHash, hashes)).limit(1);
+  const rows = await database.select().from(shopifyPrivacyCustomerLocks).where(inArray(shopifyPrivacyCustomerLocks.identityHash, hashes)).limit(1);
   return rows.length > 0;
 }
 function encryptRequest(taskId: string, value: unknown) {

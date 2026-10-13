@@ -13,6 +13,7 @@ TOPICS = {
     'customers/redact': '/api/shopify/webhooks/customers/redact',
     'shop/redact': '/api/shopify/webhooks/shop/redact',
     'customers/create': '/api/shopify/webhooks/customers-create',
+    'customers/update': '/api/shopify/webhooks/customers-update',
     'orders/create': '/api/shopify/webhooks/orders-create',
 }
 PRIVACY = {'customers/data_request', 'customers/redact', 'shop/redact'}
