@@ -1,0 +1,93 @@
+# Shopify production launch readiness — October 13, 2026
+
+## Decision and scope
+
+**Not ready to deploy yet.** The shortest path is to review the focused development-branch integration fix, complete the production configuration/privacy owner gates below, and verify Contact Details and order failure recovery in staging. No production merge, deployment, Shopify setting change, email activation, or merchant-data mutation was performed.
+
+Audited production `main` at `112ea8c61be69640ec5f63430d32ca7f7ce901f4` and PR #59 head `8536c97e41d2b3a5eee482732e42ca8720e4ad07`, including the Contacts merge. GitHub comparison confirmed current main is identical to that production SHA. PR #59 remains open and unmergeable. Its metadata still reports the older base SHA `f75009b2`; readiness comparisons use current main, not that stale base.
+
+The previously reported staging installation, customer/update/order synchronization, app-level webhook registration, and authentication checks are accepted as user-provided staging evidence. This audit did not repeat a live browser installation or inspect production Shopify/Railway settings, credentials, logs, or database state.
+
+## Prioritized remaining blockers
+
+| Priority | Gate | Evidence needed to close it |
+| --- | --- | --- |
+| P0 | Review and integrate the release safeguards and ancestry resolution into the Shopify branch | Green CI on the reviewed head; preserve the main parent with a merge commit. Recheck PR #59 mergeability against current main. |
+| P0 | Confirm production app identity and active app version | Owner compares Partner Dashboard app ID/client ID with existing production `SHOPIFY_API_KEY`, installed app, secret binding, and canonical TOML. The reference TOML contains `e4585d4a1434c9e5649a2269e716076`; the active production TOML contains `e4585d4da1434c9e5649a2269e716076`. Do not guess which ID to replace. |
+| P0 | Publish/verify production `customers/update` subscription after code is available | Proposed TOML now declares it; source intent is not live registration. Verify all commerce/privacy callbacks on the correct production app and actual successful deliveries. Do not publish settings during this task. |
+| P0 | Privacy operations can receive, fulfill and evidence requests | Production request encryption key, independent evidence key, monitored alert path/operator, support access-export procedure, and verified inventory/retention/erasure/restoration procedures covering all six mandatory categories. Missing evidence stays blocked; do not fabricate receipts. |
+| P0 | Verify database readiness | Confirm 0082/0084 existing prerequisites and additive 0104–0106 in production through approved migration checks. No production schema state was inspected. |
+| P1 | Finish staging acceptance on the exact candidate | Contacts desktop/mobile, list return state, existing Inbox navigation, tenant denial/privacy lock, and interrupted order-write redelivery. Repeat a short new/existing/paid merchant and Managed Pricing smoke check after integrating changes. |
+| P1 | Security owner review of historical exposure | Check prior emergency-reset/public-admin-bootstrap exposure and previously created fixed-password demo accounts; decide credential/session remediation and incident response from actual evidence. This audit establishes neither exploitation nor remediation of historical accounts. |
+
+These are release gates, not findings that production is currently misconfigured or that a provider has failed to erase data.
+
+## PR #59 conflict resolution and minimal fixes
+
+A three-way merge of current main into the Shopify snapshot produces **one conflict**, at the initial import block of `server/routes.ts`. Retain `registerShopifyPrivacyAdminRoutes`, `registerSalesAdminLoginRoute`, and `validateNewPassword`; retain both privacy registration and production authentication behavior. The Shopify snapshot already contains the current production authentication fixes, so the resolved merge has no authentication source changes relative to that snapshot. Preserve main ancestry: a squash/cherry-pick of the resolution can leave the same history conflict outstanding.
+
+The focused review change targets `codex/shopify-trial-first-onboarding` only and proposes:
+
+- Add production app-level `customers/update` and include it in webhook diagnostics as declared, **unverified** app configuration. Keep production client IDs, secrets, scopes and API version unchanged.
+- Replace early HTTP 200/in-memory order scheduling with an awaited order handler. Require raw-body HMAC, canonical shop, correct topic, bounded delivery/event ID and valid order ID. Persistence failure returns 503; sensitive payload/error details are excluded from handler logs.
+- Recheck exactly one active merchant and a matching active Shopify integration under the existing privacy fence. Preserve legacy integrations with no explicit config shop.
+- Persist order cards/activity without dispatching order workflows, implicit contact-diff hooks or automatic HubSpot exports. Other commerce callers retain their existing default behavior. Customer-create CRM-only workflows and explicitly authorized customer exports retain their separate existing safeguards; updates enqueue neither. Enabling order outreach/exports is outside this release.
+- Treat a saved card without its purchase activity as an incomplete write. Redelivery reuses the card and repairs activity rather than acknowledging the card as completion. Recovery preserves the unread count instead of guessing whether a partial attempt already incremented it.
+- Add failure/retry/configuration regressions and CI coverage; update stale Contacts/staging assertions for the new navigation/handler wiring.
+
+No schema, pricing, entitlement, Facebook, WhatsApp, Instagram, Telegram, SMS or email-channel feature changes are proposed. The order interrupted-write regression executes the actual ingest function with isolated dependency fixtures; it is not evidence of a live provider retry or end-to-end PostgreSQL order crash recovery. Verify that path in staging before launch.
+
+## Production Shopify configuration checklist
+
+1. Use `shopify.app.whachatcrm.toml` only after the owner verifies its production identity. Never use `shopify.app.staging.toml`, the staging app key/secret, staging callback host, or staging database for production. Resolve the reference-config ID discrepancy through authoritative owner evidence.
+2. Existing production `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` must belong to the same installed production app. Preserve the secret: privacy suppression hashes depend on it. Rotation requires a reviewed suppression migration or ingestion suspension, not a casual launch-time replacement.
+3. `APP_URL` and `SHOPIFY_APP_HOST` resolve to `https://app.whachatcrm.com`; callback is `/api/shopify/callback`. `APP_URL` has precedence. Keep `NODE_ENV=production`, stable `SESSION_SECRET`, existing production `DATABASE_URL`, and normal session/proxy configuration. Never enable `STAGING_DATABASE_BOOTSTRAP` or privacy-smoke authorization variables in production.
+4. Required scopes remain `read_customers,read_orders`. Verify actual installed grants and protected customer data approval for the production app; a reported approval date or TOML declaration is not confirmation. No `read_all_orders` or historical backfill is added.
+5. Production webhook/SDK API version remains `2026-01`; staging uses `2026-10`. Do not combine an API upgrade with this launch. Verify production-version payloads in smoke tests.
+6. Confirm app-level `customers/create` → `/api/shopify/webhooks/customers-create`, `customers/update` → `/api/shopify/webhooks/customers-update`, and `orders/create` → `/api/shopify/webhooks/orders-create`.
+7. Confirm app-level privacy topics `customers/data_request`, `customers/redact`, `shop/redact` use their matching slash-separated paths under `/api/shopify/webhooks/`. `app/uninstalled` remains per-shop at `/api/shopify/webhooks/app-uninstalled`.
+8. Inspect existing per-shop subscriptions as well as the active app version. Production registration still supports legacy GraphQL commerce subscriptions; app-level configuration alone does not prove absence of duplicate/conflicting subscriptions. Review actual deliveries; do not blindly delete/reregister existing subscriptions or reinstall merchants.
+9. Set independently generated production `SHOPIFY_PRIVACY_REQUEST_KEY` (64 hex characters), `SHOPIFY_PRIVACY_EVIDENCE_KEY` (at least 32 characters), and only genuine task-bound `SHOPIFY_PRIVACY_EVIDENCE_JSON` receipts. Maintain a restricted procedure for encrypted access/ambiguous-request selectors and key rotation.
+10. Verify a monitored privacy alert receiver at `https://app.whachatcrm.com/api/internal/shopify/privacy-alerts`, independent `SHOPIFY_PRIVACY_ALERT_TOKEN` (32–256 base64url characters), existing authorized `RESEND_API_KEY` and verified `RESEND_FROM_EMAIL`. `SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED` remains false/unset until a separate approved operator activation. An unmonitored in-app queue is not an operational alert path.
+11. Keep `SHOPIFY_PRIVACY_S3_DELETE_ENABLED` disabled unless dedicated frozen-prefix scope, separate least-privilege credentials and signed evidence were reviewed. S3 credentials/session token are optional, not baseline launch requirements. Never reuse broad media-storage credentials.
+12. Verify `SHOPIFY_BILLING_TEST=false` if explicitly configured; preserve production app handle/listing and Managed Pricing plans. Existing and paid users must retain their tokens, entitlements and trial ledger/dates. Preserve existing Redis/worker, Meta/Facebook, messaging, mail and storage variables unchanged.
+
+## Database migration and rollback plan
+
+The branch delta adds **0104, 0105, 0106**, in that order. Contact Details, customer updates and the proposed order fixes add no migration. 0104 creates merchant support-contact and external-erasure task tables. 0105 adds request kinds, deadlines, dedupe/leases/checkpoints/alerts, suppression locks and encrypted support payloads. 0106 adds alert acceptance/reconciliation fields, active-occurrence uniqueness and the current-issues view. Matching repeat-safe startup patches exist, but only the existing 0084 trial-ledger failure is an explicit startup listen gate; verify privacy schema readiness rather than assuming a running process proves all patches succeeded.
+
+Before release, take a verified recoverable production backup under the approved retention policy; inspect applied migrations and pending tasks read-only; apply reviewed additive migrations before accepting new webhook traffic; verify columns/indexes/view and scheduler readiness. Existing 0082 onboarding-email and 0084 trial-ledger prerequisites must remain intact. Do not run staging bootstrap, `db:push`, reset/backfill commands, or blind migration history against production.
+
+0104–0106 were applied and replayed successfully in a disposable localhost schema, retaining the fixture deadline and suppression hash. Real PostgreSQL suites also passed erasure/worker/trial concurrency and rollback checks. This does not prove production migration status or production lock duration.
+
+Prefer a forward correction. For application rollback, retain production authentication fixes, privacy suppression/erasure behavior and additive tables. Do not drop privacy tables, reset trial ledgers, remove completion/acceptance records or restore deleted customer data from a backup. If an older application cannot enforce suppression, an authorized operator must temporarily reject affected Shopify ingestion with retryable responses at the gateway while correcting it; preserve other channel traffic. Replay only confirmed failed deliveries after correction. Reapply erasures/suppression after any restore using the approved restoration procedure.
+
+## Privacy/security audit disposition
+
+**Launch requirements:** assigned operator and deadlines; secure access-request export/fulfillment; request encryption; monitored exceptions; inventory of Railway logs/drains/traces, mail processors, archives, backups, exports and local historical/mixed records; evidenced erasure/retention and restore exclusions. All six mandatory checks are fail-closed. Local SQL deletion is not proof of deletion from Railway, Resend, HubSpot or other processors. No historical provider purge, retention duration, IAM scope or compliance certification was established here.
+
+**Owner/provider verification:** Railway visibility limits must not be treated as irreversible retention, especially when plan upgrades can expose older logs. Resend send/contact-delete responses do not establish historical message/log erasure. HubSpot/CRM archives do not establish irreversible erasure. Inventory all processors, exports, mirrors and regions; verify backups/legal holds and restoration protections. Review who can access production logs/support selectors/admin status, access logging completeness and retention, incident ownership/escalation, historical credential exposure, and any notification obligations based on actual facts. Current HTTP logs omit response/request bodies; pseudonymous IDs, shop hashes and resource paths still require governed access/retention. No complete access-audit trail or practiced incident response was demonstrated.
+
+**Can follow launch once manual obligations are covered:** additional provider-specific automatic adapters, order workflow/export enablement with destination-bound consent and checkpointing, richer access audit UX, reconciliation UI, fuller purchase history/fulfillment refresh, and unrelated TypeScript cleanup. Missing operator/provider procedures are not deferred merely because automation enhancements are optional. Email/SMS consent does not authorize WhatsApp marketing; no unsolicited marketing automation is enabled.
+
+## Contacts and merchant smoke tests
+
+Use staging fixtures first; later production verification must be separately authorized and avoid destructive privacy/uninstall tests on real merchants.
+
+- Existing merchant: retain app identity/token, open app and Inbox, confirm existing contacts/orders and channel threads, replay a fixture create/update delivery and verify one stable customer/contact, then create one fixture order and verify one card plus purchase activity. Existing legacy per-shop subscriptions/scopes must remain usable without blanket reinstallation.
+- New merchant: OAuth top-level redirect and persisted session; usable 14-day trial to guided onboarding, voluntary Pricing round trip, connected channel and Inbox; customer create then name/email/phone update reuses the stable Shopify ID. Paid/consumed/expired/reinstalled merchant cases must preserve original entitlements and dates, with no second trial.
+- Orders: verify expected production API-version payload and guest/customer behavior, invalid HMAC/topic/headers rejection, duplicate/concurrent delivery, process interruption after the card but before activity, 503/retry, and exactly one final card/activity with no outgoing message/export. Confirm privacy redaction/uninstall serialized with late delivery on disposable fixtures.
+- Privacy: signed access request creates restricted support work without deletion; staged customer/store erasure removes only fixture tenant records, preserves trial eligibility, blocks late re-ingestion and raises a monitored pending-external alert. Validate operator export fulfillment, outage/reconciliation/deadline alerts and receipt verification without inventing completion evidence.
+- Contacts: at desktop 1366×768 and mobile 390×844, open Shopify purchases and non-Shopify/no-thread contacts. Restore search/tag/channel/stage/tab/sort with Back/Contacts and browser history. Open Conversation selects the existing Inbox thread; viewing creates no thread/message. Another tenant gets 404; privacy-locked records are unavailable. Shopify identity is read-only; CRM edits/notes/follow-ups persist and concurrent identity edits conflict safely. Purchases use up to 200 persisted events, not a live Shopify/history fetch; absent fulfillment data remains absent.
+- Channels: verify existing Facebook page selection, one inbound/reply thread and normal Inbox deep links on an authorized staging channel; include the currently used WhatsApp/email/other channels. Automated source/fixture tests do not replace a live channel smoke check.
+
+## Validation evidence and limits
+
+- Shopify combined suite: **127 passed, zero failures/skips**, using disposable localhost PostgreSQL and mocked provider calls. Includes actual PostgreSQL customer update/effects/privacy fence checks, trial concurrency/rollback, erasure/worker and alert flows, OAuth/session/billing/onboarding/webhook-health tests. Later focused order handler/persistence checks: **4 passed**. Final webhook health/order run: **23 passed**.
+- Production authentication suites plus four Contact Details suites: **78 passed, zero failures/skips**. Selected Facebook/Inbox/contact lifecycle suites: **23 passed**.
+- Production configuration Python test: **1 passed**; staging configuration Python tests: **5 passed**. Diagnostic normalization: **1 passed**. Migration replay fixture: passed.
+- Production client/server/privacy-smoke/worker build: passed. Ordinary large-bundle warnings remain. Generated hero assets and incidental debug logs are excluded from the review change.
+- TypeScript comparison against exact current main: **97 existing diagnostics, 97 candidate diagnostics, zero added**. Global typecheck still fails. An intermediate request-header cast added one diagnostic and was corrected before the final comparison. A stale pre-Contacts Gmail filter assertion failed initially and was updated; it was not a Gmail runtime failure.
+- Git fetch was unavailable because the managed proxy was unreachable. The branch was reconstructed from the connected GitHub unified diff against its exact merge base. Type comparison used the repository comparison logic with only the fetch omitted in a scratch copy and the exact locally present main commit. Tests requiring local HTTP sockets/child processes ran with execution escalation; no production network/data access was used. No live browser or provider configuration/compliance evidence is claimed.
+
+Fastest safe release sequence: review the focused development PR with ancestry preserved → verify privacy operator/provider/configuration/migrations → finish the short staging acceptance list on the reviewed head → recheck PR #59 CI/mergeability and owner launch approval. Production merge/deployment/settings changes remain separate authorized operations.

@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - "shopify.app.staging.toml"
+      - "shopify.app.whachatcrm.toml"
+      - "server/commerceEventPipeline.ts"
+      - "tests/shopify-production-config.test.py"
       - "scripts/validate-shopify-staging.py"
       - "tests/shopify-staging-config.test.py"
       - "server/shopifyWebhookRegistration.ts"
@@ -63,9 +66,12 @@ jobs:
       - name: Staging configuration, identity guard, and idempotent registration
         run: |
           python3 tests/shopify-staging-config.test.py
+          python3 tests/shopify-production-config.test.py
           npx tsx --test tests/shopify-webhook-registration.test.ts
       - name: Fail-closed scope and webhook verification regressions
         run: npx tsx --test tests/shopify-webhook-health.test.ts tests/shopify-webhook-health-ui.test.tsx
+      - name: Durable order delivery and interrupted-write recovery
+        run: npx tsx --test tests/shopify-order-webhook.test.ts tests/shopify-order-persistence.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts
