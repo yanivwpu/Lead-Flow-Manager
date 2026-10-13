@@ -1,3 +1,7 @@
+import { shopifyContactContext } from "@shared/contactDetails";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import { customerPrivacyLocked } from "../shopifyPrivacyRequests";
+import { createContactDetailsHandler } from "../contactDetailsRoute";
 import type { Express } from "express";
 import {
   filterCrmListedContacts,
@@ -12,8 +16,8 @@ import {
   pickPreferredEmailContact,
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
-import { sql, eq, and, inArray } from "drizzle-orm";
-import { CHANNELS, contactNotes, campaignEnrollments } from "@shared/schema";
+import { sql, eq, and, inArray, desc } from "drizzle-orm";
+import { CHANNELS, contactNotes, campaignEnrollments, contacts, conversations, activityEvents } from "@shared/schema";
 import {
   CONTACTS_BULK_DELETE_MAX,
   deleteContactSafely,
@@ -454,6 +458,19 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/contacts/:id/details", createContactDetailsHandler({
+    getContact: async (id, userId) => (await db.select().from(contacts).where(and(eq(contacts.id, id), eq(contacts.userId, userId))).limit(1))[0],
+    getConversations: (id, userId) => db.select().from(conversations).where(and(eq(conversations.contactId, id), eq(conversations.userId, userId))).orderBy(desc(conversations.lastMessageAt)),
+    getActivityEvents: (id, userId, limit) => db.select().from(activityEvents).where(and(eq(activityEvents.contactId, id), eq(activityEvents.userId, userId))).orderBy(desc(activityEvents.createdAt)).limit(limit),
+    isPrivacyLocked: async (contact) => {
+      const context = shopifyContactContext(contact);
+      if (!context.linked) return false;
+      const shop = normalizeShopifyShopDomain(context.store || (await storage.getUser(contact.userId))?.shopifyShop);
+      // A missing store cannot be checked against the privacy ledger: fail closed.
+      return !shop || await customerPrivacyLocked(shop, { id: context.customerId, email: contact.email, phone: contact.phone });
+    },
+  }));
+
   // Create new contact (reuse + promote an Inbox identity with the same email)
   app.post("/api/contacts", async (req, res) => {
     try {
@@ -577,6 +594,12 @@ export function registerContactRoutes(app: Express): void {
       if (contact.userId !== req.user.id) {
         return res.status(404).json({ error: "Not found" });
       }
+      const identityVersion = req.get("X-Contact-Updated-At");
+      const expectedUpdatedAt = identityVersion ? new Date(identityVersion) : undefined;
+      if (expectedUpdatedAt && Number.isNaN(expectedUpdatedAt.getTime())) return res.status(400).json({ error: "Invalid contact version" });
+      if (identityVersion && (shopifyContactContext(contact).linked || contact.updatedAt?.getTime() !== expectedUpdatedAt?.getTime())) {
+        return res.status(409).json({ error: "Customer information changed. Refresh before editing; Shopify identity is synchronized from the store." });
+      }
       // Coerce date strings → Date objects for timestamp columns
       const body = { ...req.body };
       delete body.automationsPausedAt;
@@ -598,7 +621,7 @@ export function registerContactRoutes(app: Express): void {
           contact.followUp != null &&
           contact.followUp !== "");
 
-      if (clearingFollowUp) {
+      if (clearingFollowUp && !identityVersion) {
         await clearActiveAppointmentsForContact(req.user.id, req.params.id);
       }
 
@@ -616,7 +639,11 @@ export function registerContactRoutes(app: Express): void {
         );
       }
 
-      const updated = await storage.updateContact(req.params.id, body);
+      const updated = await storage.updateContact(req.params.id, body, identityVersion ? {
+        expectedWorkspaceUserId: req.user.id, expectedUpdatedAt, requireUnsyncedIdentity: true,
+      } : undefined);
+      if (identityVersion && !updated) return res.status(409).json({ error: "Customer information changed. Refresh before editing." });
+      if (clearingFollowUp && identityVersion) await clearActiveAppointmentsForContact(req.user.id, req.params.id);
 
       if (
         updated &&

@@ -181,6 +181,9 @@ export type UpdateContactOptions = {
   skipAutomationHooks?: boolean;
   /** When set, UPDATE ... WHERE id AND user_id — foreign rows are a no-op. */
   expectedWorkspaceUserId?: string;
+  /** Optimistic identity edit: never overwrite a newer synchronized customer snapshot. */
+  expectedUpdatedAt?: Date;
+  requireUnsyncedIdentity?: boolean;
 };
 
 export interface IStorage {
@@ -2608,6 +2611,10 @@ export class DbStorage implements IStorage {
     updates: Partial<Contact>,
     options?: UpdateContactOptions
   ): Promise<Contact | undefined> {
+    const writeScope = and(eq(contacts.id, id),
+      options?.expectedWorkspaceUserId ? eq(contacts.userId, options.expectedWorkspaceUserId) : undefined,
+      options?.expectedUpdatedAt ? sql`date_trunc('milliseconds', ${contacts.updatedAt}) = ${options.expectedUpdatedAt.toISOString()}::timestamp` : undefined,
+      options?.requireUnsyncedIdentity ? sql`coalesce(${contacts.source}, '') <> 'shopify' AND coalesce(${contacts.customFields}->>'lastCommerceSource', '') <> 'shopify' AND ${contacts.customFields}->>'shopifyCustomerId' IS NULL AND ${contacts.sourceDetails}->>'shopifyCustomerId' IS NULL` : undefined);
     const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
 
     if (hasBuyerPref) {
@@ -2635,18 +2642,14 @@ export class DbStorage implements IStorage {
     if (!before) {
       const result = await db.update(contacts)
         .set({ ...updates, updatedAt: new Date() })
-        .where(eq(contacts.id, id))
+        .where(writeScope)
         .returning();
       return result[0];
     }
 
     const result = await db.update(contacts)
       .set({ ...updates, updatedAt: new Date() })
-      .where(
-        options?.expectedWorkspaceUserId
-          ? and(eq(contacts.id, id), eq(contacts.userId, options.expectedWorkspaceUserId))
-          : eq(contacts.id, id),
-      )
+      .where(writeScope)
       .returning();
     const after = result[0];
     if (!after) return undefined;

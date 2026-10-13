@@ -33,6 +33,8 @@ import { cn } from "@/lib/utils";
 import { ShopifySuccessfulRender, useShopifyActivationObservation } from "@/components/ShopifyActivationObserver";
 import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
 
+const ContactDetails = lazy(() => import("./ContactDetails").then(m => ({ default: m.ContactDetails })));
+
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
@@ -198,6 +200,7 @@ function AppContent() {
                 <Redirect to="/app/inbox" />
               </Route>
               <Route path="/app/followups" component={FollowUps} />
+              <Route path="/app/contacts/:id" component={ContactDetails} />
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
