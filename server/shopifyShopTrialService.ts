@@ -48,6 +48,8 @@ export async function claimShopifyShopTrialForInstall(input: {
   canonicalShop: string;
   user: User;
   now?: Date;
+  /** Recovery must still belong to a live installed shop after acquiring the user lock. */
+  requireInstalledShop?: boolean;
 }): Promise<ShopifyShopTrialClaimResult> {
   const shop = normalizeShopifyShopDomain(input.canonicalShop);
   const shopHash = hashShopifyShopForLogs(input.canonicalShop);
@@ -81,6 +83,18 @@ export async function claimShopifyShopTrialForInstall(input: {
   const grantEnds = addShopifyTrialDays(now);
 
   return db.transaction(async (tx) => {
+    // Eligibility is evaluated from a locked current row, never a stale OAuth/retry snapshot.
+    const [currentUser] = await tx.select().from(users)
+      .where(eq(users.id, input.user.id)).for("update").limit(1);
+    if (!currentUser || currentUser.deletionRequestedAt ||
+        (input.requireInstalledShop && (
+          normalizeShopifyShopDomain(currentUser.shopifyShop) !== shop ||
+          !currentUser.shopifyAccessToken ||
+          currentUser.shopifySubscriptionStatus === "uninstalled"
+        ))) {
+      return { claimed: false, granted: false, status: null,
+        trialStartedAt: null, trialEndsAt: null, reason: "installation_unavailable" };
+    }
     const inserted = await tx
       .insert(shopifyShopTrials)
       .values({
@@ -121,7 +135,7 @@ export async function claimShopifyShopTrialForInstall(input: {
       };
     }
 
-    if (shopifyInstallShouldGrantUserTrial(input.user, now, {
+    if (shopifyInstallShouldGrantUserTrial(currentUser, now, {
       ghlMarketplaceProActive: await userHasActiveGhlMarketplacePro(input.user.id),
     })) {
       await tx
@@ -147,15 +161,15 @@ export async function claimShopifyShopTrialForInstall(input: {
       };
     }
 
-    const existingStart = asDate(input.user.trialStartedAt);
-    const existingEnd = asDate(input.user.trialEndsAt);
+    const existingStart = asDate(currentUser.trialStartedAt);
+    const existingEnd = asDate(currentUser.trialEndsAt);
     if (existingStart && existingEnd) {
       await tx
         .update(shopifyShopTrials)
         .set({
           trialStartedAt: existingStart,
           trialEndsAt: existingEnd,
-          trialPlan: input.user.trialPlan || SHOPIFY_SHOP_TRIAL_PLAN,
+          trialPlan: currentUser.trialPlan || SHOPIFY_SHOP_TRIAL_PLAN,
           updatedAt: now,
         })
         .where(eq(shopifyShopTrials.id, created.id));

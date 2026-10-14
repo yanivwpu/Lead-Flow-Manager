@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+node_modules
+dist
+work
+output
+.aws
+.codex
+.agents
+.railway
+.npmrc
+**/.npmrc
+*.pem
+*.key

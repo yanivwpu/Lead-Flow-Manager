@@ -1,3 +1,4 @@
+import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { useState, useEffect, lazy, Suspense, useMemo, useRef } from "react";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +30,10 @@ import { Loader2 } from "lucide-react";
 import { AuthenticatedAppErrorBoundary } from "@/components/AuthenticatedAppErrorBoundary";
 import { supportedLanguages, type SupportedLanguage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { ShopifySuccessfulRender, useShopifyActivationObservation } from "@/components/ShopifyActivationObserver";
 import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
+
+const ContactDetails = lazy(() => import("./ContactDetails").then(m => ({ default: m.ContactDetails })));
 
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
 
@@ -112,6 +116,8 @@ function AppContent() {
     pathname: location,
   });
 
+  useShopifyActivationObservation(user?.id, !!subscription?.subscription?.isShopify, activation?.hasAnyMessagingChannel);
+
   const showUsageBanner =
     !isLoading &&
     subscription?.limits &&
@@ -144,6 +150,7 @@ function AppContent() {
       <TrialModalOpenProvider openTrialModal={() => setTrialModalOpen(true)}>
         <Sidebar />
         <main className="flex-1 flex flex-col min-w-0 bg-white md:mx-3 md:rounded-2xl md:shadow-sm border-gray-200 md:border overflow-hidden relative pb-14 md:pb-0">
+          {subscription?.subscription?.isShopify && <div className="shrink-0 px-3 pt-3"><ShopifySupportContact /></div>}
           {showTrialEndingSoon && (
             <TrialEndingSoonBanner
               upgradeProviderLabel={upgradeProvider === "shopify" ? "Shopify" : "Stripe"}
@@ -193,6 +200,7 @@ function AppContent() {
                 <Redirect to="/app/inbox" />
               </Route>
               <Route path="/app/followups" component={FollowUps} />
+              <Route path="/app/contacts/:id" component={ContactDetails} />
               <Route path="/app/contacts" component={Contacts} />
               <Route path="/app/workflows" component={Workflows} />
               <Route path="/app/chatbot" component={ChatbotBuilder} />
@@ -224,6 +232,7 @@ function AppContent() {
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />
             </Switch>
+            <ShopifySuccessfulRender isShopify={!!subscription?.subscription?.isShopify} />
             </AuthenticatedAppErrorBoundary>
           </Suspense>
         </div>

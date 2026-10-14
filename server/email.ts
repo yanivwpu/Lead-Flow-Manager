@@ -63,16 +63,20 @@ export const EMAIL_VERIFICATION_REMINDER_SUBJECT =
 
 interface EmailOptions {
   to: string;
+  from?: string;
   subject: string;
   html: string;
   text?: string;
   replyTo?: string;
+  privacyContext?: "shopify";
+  idempotencyKey?: string;
 }
 
 export type EmailDispatchResult = {
   ok: boolean;
   providerMessageId: string | null;
   error: string | null;
+  acceptanceUnknown?: boolean;
 };
 
 export function maskEmailForLogs(email: string | null | undefined): string | null {
@@ -86,6 +90,7 @@ export function maskEmailForLogs(email: string | null | undefined): string | nul
 export function sanitizeEmailProviderError(raw: string): string {
   return String(raw || "")
     .replace(/Bearer\s+\S+/gi, "[redacted]")
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "[redacted]")
     .replace(/re_[A-Za-z0-9_]+/g, "[redacted]")
     .slice(0, 400);
 }
@@ -98,21 +103,24 @@ export function demoScheduledEmailSubject(visitorName: string): string {
   return `Demo Scheduled: ${visitorName}`;
 }
 
-export async function sendEmail({ to, subject, html, text, replyTo }: EmailOptions): Promise<boolean> {
-  const result = await sendEmailDetailed({ to, subject, html, text, replyTo });
+export async function sendEmail({ to, subject, html, text, replyTo, privacyContext }: EmailOptions): Promise<boolean> {
+  const result = await sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext });
   return result.ok;
 }
 
-export async function sendEmailDetailed({ to, subject, html, text, replyTo }: EmailOptions): Promise<EmailDispatchResult> {
+export async function sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext, idempotencyKey, from }: EmailOptions): Promise<EmailDispatchResult> {
+  const privateShopify = privacyContext === "shopify";
+  const recipientLog = privateShopify ? "[redacted]" : maskEmailForLogs(to);
+  const subjectLog = privateShopify ? "[redacted]" : subject;
   if (isShopifySyntheticMerchantEmail(to)) {
     console.warn(
-      `[Email] Refusing to send to synthetic Shopify identity address. Subject: "${subject}"`,
+      `[Email] Refusing to send to synthetic Shopify identity address. Subject: "${subjectLog}"`,
     );
     return { ok: false, providerMessageId: null, error: "synthetic_shopify_recipient" };
   }
   if (!RESEND_API_KEY) {
     console.warn(
-      `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`
+      `[Email] RESEND_API_KEY is missing — cannot send email. Recipient: ${recipientLog}, subject: "${subjectLog}"`
     );
     console.warn(
       "[Email] Set RESEND_API_KEY in your environment (e.g. Railway variables) to enable Resend."
@@ -123,12 +131,15 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo }: Em
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      redirect: "error",
+      ...(idempotencyKey ? { signal: AbortSignal.timeout(8000) } : {}),
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: resolveResendFromEmail(),
+        from: from || resolveResendFromEmail(),
         to,
         subject,
         html,
@@ -139,12 +150,12 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo }: Em
 
     const rawBody = await response.text();
     if (!response.ok) {
-      const sanitized = sanitizeEmailProviderError(rawBody || `http_${response.status}`);
+      const sanitized = privateShopify ? `http_${response.status}` : sanitizeEmailProviderError(rawBody || `http_${response.status}`);
       console.error(
-        `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`,
+        `[Email] Resend API returned an error — HTTP ${response.status} — recipient: ${recipientLog}, subject: "${subjectLog}"`,
       );
       console.error(`[Email] Resend error (sanitized): ${sanitized || "(empty)"}`);
-      return { ok: false, providerMessageId: null, error: sanitized || `http_${response.status}` };
+      return { ok: false, providerMessageId: null, error: sanitized || `http_${response.status}`, acceptanceUnknown: response.status >= 500 || response.status === 409 || response.status === 408 };
     }
 
     let providerMessageId: string | null = null;
@@ -155,15 +166,16 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo }: Em
       providerMessageId = null;
     }
 
-    console.log(`[Email] Sent successfully to ${maskEmailForLogs(to)}: ${subject}`);
+    if (idempotencyKey && (!providerMessageId || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(providerMessageId))) return { ok: false, providerMessageId: null, error: "resend_acceptance_unconfirmed", acceptanceUnknown: true };
+    console.log(`[Email] Sent successfully to ${recipientLog}: ${subjectLog}`);
     return { ok: true, providerMessageId, error: null };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = privateShopify ? "email_delivery_failed" : error instanceof Error ? error.message : String(error);
     console.error(
-      `[Email] Network or unexpected error while calling Resend — recipient: ${maskEmailForLogs(to)}, subject: "${subject}"`,
+      `[Email] Network or unexpected error while calling Resend — recipient: ${recipientLog}, subject: "${subjectLog}"`,
       sanitizeEmailProviderError(message),
     );
-    return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message) };
+    return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message), acceptanceUnknown: true };
   }
 }
 
@@ -401,6 +413,7 @@ export async function sendShopifyWelcomeEmail(name: string, email: string): Prom
   return sendEmail({
     to: email,
     subject: SHOPIFY_WELCOME_EMAIL_SUBJECT,
+    privacyContext: "shopify",
     html: renderShopifyWelcomeEmailHtml(name),
   });
 }
@@ -442,6 +455,7 @@ export async function sendShopifyActivationEmailDay5(
   return sendEmail({
     to: email,
     subject: SHOPIFY_ACTIVATION_DAY5_EMAIL_SUBJECT,
+    privacyContext: "shopify",
     html: renderShopifyActivationEmailDay5Html(firstName),
   });
 }
@@ -481,6 +495,7 @@ export async function sendShopifyActivationEmailDay10(
   return sendEmail({
     to: email,
     subject: SHOPIFY_ACTIVATION_DAY10_EMAIL_SUBJECT,
+    privacyContext: "shopify",
     html: renderShopifyActivationEmailDay10Html(firstName),
     replyTo: WHACHATCRM_SUPPORT_EMAIL,
   });

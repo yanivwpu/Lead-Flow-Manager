@@ -1,4 +1,12 @@
-import type { Request, Response } from "express";
+import { eq } from "drizzle-orm";
+import { db } from "../drizzle/db";
+import { users } from "@shared/schema";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
+import { syncShopifyCustomer } from "./shopifyCustomerSync";
+import { customerPrivacyLocked } from "./shopifyPrivacyRequests";
+import { withShopifyPrivacyFence } from "./shopifyContactService";
+import type { Request } from "express";
 import { storage } from "./storage";
 import { formatShopifyOrderCreatedMessage, ingestCommerceEvent } from "./commerceEventPipeline";
 
@@ -36,7 +44,7 @@ type ShopifyCustomerPayload = {
   total_spent?: string;
 };
 
-function shopifyEventId(req: Request, fallback: string): string {
+function shopifyEventId(req: Pick<Request, "headers">, fallback: string): string {
   const header = req.headers["x-shopify-event-id"];
   if (typeof header === "string" && header.trim()) return header.trim();
   return fallback;
@@ -55,23 +63,25 @@ async function resolveShopifyMerchantUser(shop: string): Promise<{
   integrationId: string;
   syncOptions: string[];
 } | null> {
-  const user = await storage.getUserByShopifyShop(shop);
-  if (!user) return null;
+  const merchants = await db.select().from(users).where(eq(users.shopifyShop, shop));
+  if (merchants.length !== 1 || !isShopifyContactInstallationActive(merchants[0])) return null;
+  const user = merchants[0];
   const integration = await storage.getIntegrationByUserAndType(user.id, "shopify");
   if (!integration?.isActive) return null;
   const cfg = (integration.config || {}) as Record<string, unknown>;
+  if (cfg.shop != null && (typeof cfg.shop !== "string" || normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
   const syncOptions = Array.isArray(cfg.syncOptions) ? (cfg.syncOptions as string[]) : [];
   return { userId: user.id, integrationId: integration.id, syncOptions };
 }
 
-export async function processShopifyOrderCreate(
-  req: Request,
+async function ingestShopifyOrderCreate(
+  req: Pick<Request, "headers">,
   shop: string,
   body: ShopifyOrderPayload,
 ): Promise<void> {
   const merchant = await resolveShopifyMerchantUser(shop);
   if (!merchant) {
-    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant", shop }));
+    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant" }));
     return;
   }
   if (!syncOptionEnabled(merchant.syncOptions, "new_orders")) {
@@ -105,7 +115,8 @@ export async function processShopifyOrderCreate(
     financialStatus: body.financial_status,
   });
 
-  await ingestCommerceEvent({
+  const result = await ingestCommerceEvent({
+    allowSideEffects: false,
     userId: merchant.userId,
     source: "shopify",
     triggerType: "shopify_order_created",
@@ -134,76 +145,16 @@ export async function processShopifyOrderCreate(
       shopifyCustomerId: customer?.id,
     },
   });
+  if (!result.ok) throw new Error("Order persistence failed");
 }
 
-export async function processShopifyCustomerCreate(
-  req: Request,
-  shop: string,
-  body: ShopifyCustomerPayload,
-): Promise<void> {
-  const merchant = await resolveShopifyMerchantUser(shop);
-  if (!merchant) {
-    console.log(JSON.stringify({ tag: "[CommerceIngest]", event: "shopify_ignored", reason: "no_merchant", shop }));
-    return;
-  }
-  if (!syncOptionEnabled(merchant.syncOptions, "new_customers")) {
-    console.log(
-      JSON.stringify({
-        tag: "[CommerceIngest]",
-        event: "shopify_ignored",
-        reason: "sync_option_disabled",
-        shop,
-        option: "new_customers",
-      }),
-    );
-    return;
-  }
-
-  const customerId = body.id != null ? String(body.id) : "";
-  const eventId = shopifyEventId(req, `customer-${customerId}-${Date.now()}`);
-  const name = customerName(body) || body.email || "Shopify customer";
-
-  await ingestCommerceEvent({
-    userId: merchant.userId,
-    source: "shopify",
-    triggerType: "shopify_customer_created",
-    recordMode: "quiet_thread",
-    activityEventType: "shopify_customer_created",
-    metadata: {
-      shop,
-      shopifyEventId: eventId,
-      customerId,
-      email: body.email,
-      phone: body.phone,
-      ordersCount: body.orders_count,
-      totalSpent: body.total_spent,
-    },
-    contactHints: {
-      name,
-      email: body.email,
-      phone: body.phone,
-      shopifyCustomerId: body.id,
-    },
+export async function processShopifyOrderCreate(req: Pick<Request, "headers">, shop: string, body: ShopifyOrderPayload): Promise<void> {
+  return withShopifyPrivacyFence(shop, async () => {
+    if (await customerPrivacyLocked(shop, { ...body.customer, email: body.customer?.email || body.email, phone: body.customer?.phone || body.phone })) return;
+    await ingestShopifyOrderCreate(req, shop, body);
   });
 }
-
-export function scheduleShopifyCommerceProcessing(
-  req: Request,
-  res: Response,
-  shop: string,
-  processor: () => Promise<void>,
-): void {
-  res.status(200).json({ received: true });
-  setImmediate(() => {
-    processor().catch((err) => {
-      console.error(
-        JSON.stringify({
-          tag: "[CommerceIngest]",
-          event: "shopify_async_error",
-          shop,
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    });
-  });
+export async function processShopifyCustomerCreate(req: Request, shop: string, body: ShopifyCustomerPayload): Promise<void> {
+  await syncShopifyCustomer({ shop, topic: "customers/create", body,
+    eventId: shopifyEventId(req, "") });
 }

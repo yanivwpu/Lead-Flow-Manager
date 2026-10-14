@@ -1,3 +1,5 @@
+import { AdminShopifyWebhookHealth } from "@/components/admin/AdminShopifyWebhookHealth";
+import { AdminPrivacyOperationsTab } from "@/components/admin/AdminPrivacyOperationsTab";
 import { useMemo, useState, useEffect } from "react";
 
 const ADMIN_TOKEN_KEY = 'whachat_admin_token';
@@ -1118,6 +1120,7 @@ export function Admin() {
                 <span className="hidden sm:inline">Email crypto</span>
                 <span className="sm:hidden">Crypto</span>
               </TabsTrigger>
+              <TabsTrigger value="privacy-operations" className="text-xs sm:text-sm">Privacy</TabsTrigger>
               <TabsTrigger value="seo-intelligence" className="gap-1.5 text-xs sm:text-sm px-2.5 sm:px-4" data-testid="tab-seo-intelligence">
                 <Search className="h-4 w-4" /> SEO
               </TabsTrigger>
@@ -1449,6 +1452,7 @@ export function Admin() {
           </TabsContent>
 
           <TabsContent value="users">
+            <AdminShopifyWebhookHealth enabled={isLoggedIn} />
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="p-3 sm:p-4 border-b border-gray-200 flex flex-col gap-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -2259,6 +2263,7 @@ export function Admin() {
           <TabsContent value="email-crypto">
             <AdminEmailCryptoTab />
           </TabsContent>
+          <TabsContent value="privacy-operations"><AdminPrivacyOperationsTab enabled={isLoggedIn} /></TabsContent>
           <TabsContent value="seo-intelligence">
             <AdminSeoIntelligenceTab enabled={isLoggedIn} />
           </TabsContent>

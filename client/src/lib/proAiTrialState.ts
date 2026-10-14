@@ -1,3 +1,4 @@
+import { shopifyVoluntaryPricingPath } from "@shared/shopifyOnboarding";
 import { getShopifyShopHint } from "@/lib/shopifyBillingHint";
 
 /** Subscription payload shape from GET /api/subscription (subset). */
@@ -48,8 +49,5 @@ export function getUpgradeNavigationPath(options?: {
   if (!isShopify) return "/pricing";
 
   const shop = options?.shopHint ?? getShopifyShopHint();
-  const params = new URLSearchParams();
-  params.set("shopify_installed", "1");
-  if (shop) params.set("shop", shop);
-  return `/pricing?${params.toString()}`;
+  return shopifyVoluntaryPricingPath(shop);
 }

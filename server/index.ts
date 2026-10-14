@@ -1,3 +1,4 @@
+import { registerShopifyPrivacyAlertReceiver } from "./shopifyPrivacyAlertEmail";
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import compression from "compression";
@@ -296,6 +297,7 @@ function skipGlobalBodyParser(path: string): boolean {
   );
 }
 
+registerShopifyPrivacyAlertReceiver(app);
 const globalJsonParser = express.json();
 app.use((req: Request, _res: Response, next: NextFunction) => {
   if (skipGlobalBodyParser(req.path)) {

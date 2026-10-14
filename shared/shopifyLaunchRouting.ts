@@ -17,7 +17,7 @@ export type ShopifyLaunchBillingUser = {
 };
 
 export type ShopifyLaunchRoutingOptions = {
-  /** OAuth callback just sent merchant to pricing (?shopify_installed=1). */
+  /** Legacy fresh-install hint; usable trial/paid access always takes precedence. */
   isFreshInstallRedirect?: boolean;
 };
 
@@ -43,18 +43,18 @@ function hasActivePaidPlan(
   return false;
 }
 
-function isProAiTrialActive(
+export function isProAiTrialActive(
   user: ShopifyLaunchBillingUser,
   now: Date = new Date(),
 ): boolean {
   if (hasActivePaidPlan(user, now)) return false;
-  if (!user.trialEndsAt || new Date(user.trialEndsAt) <= now) return false;
+  if (!user.trialEndsAt || !Number.isFinite(new Date(user.trialEndsAt).getTime()) || new Date(user.trialEndsAt) <= now) return false;
   if (user.trialStatus === "expired") return false;
   return (user.trialPlan || "pro_ai") === "pro_ai";
 }
 
 function hasLegacyTrialWindow(user: ShopifyLaunchBillingUser, now: Date = new Date()): boolean {
-  if (!user.trialEndsAt || new Date(user.trialEndsAt) <= now) return false;
+  if (!user.trialEndsAt || !Number.isFinite(new Date(user.trialEndsAt).getTime()) || new Date(user.trialEndsAt) <= now) return false;
   if (user.trialStatus === "expired") return false;
   return true;
 }
@@ -93,8 +93,6 @@ export function shopifyMerchantNeedsPlanSelection(
   options: ShopifyLaunchRoutingOptions = {},
 ): boolean {
   if (!user?.shopifyShop) return false;
-
-  if (options.isFreshInstallRedirect) return true;
 
   const shopifyStatus = (user.shopifySubscriptionStatus || "").toLowerCase();
   if (shopifyStatus === "active") return false;

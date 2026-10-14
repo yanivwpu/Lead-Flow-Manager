@@ -4,8 +4,10 @@ import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
 import { normalizeShopifyShopDomain, sanitizeShopifyOwnerEmail } from '@shared/shopifyBilling';
+import { classifyShopifyOwnerEmail, type ShopifyEmailCaptureResult } from '@shared/shopifyContactPrivacy';
 import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import { getAppOrigin } from './urlOrigins';
+import { getShopifyOAuthOrigin } from './shopifyOAuthOrigin';
 import { storage } from './storage';
 
 /** Align with shopify.app.whachatcrm.toml webhooks `api_version` (2026-01). */
@@ -94,33 +96,25 @@ export const SHOPIFY_SHOP_OWNER_EMAIL_QUERY = `
   }
 `;
 
-export async function fetchShopifyShopOwnerEmail(
+export async function fetchShopifyShopOwnerEmailResult(
   shop: string,
   accessToken: string,
-): Promise<string | null> {
+): Promise<ShopifyEmailCaptureResult> {
   try {
-    const shopify = getShopifyApi();
-    if (!shopify) return null;
-
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
-
+    const api = getShopifyApi();
+    if (!api) return { status: "fetch_failed", email: null };
+    const client = new api.clients.Graphql({ session: { shop, accessToken } as Session });
     const response = await client.request(SHOPIFY_SHOP_OWNER_EMAIL_QUERY);
-    const data = (response as { data?: { shop?: { email?: string | null } } }).data;
-    const sanitized = sanitizeShopifyOwnerEmail(data?.shop?.email);
-    if (!sanitized) {
-      console.warn("[Shopify] shop.email missing or unusable", { shop });
-      return null;
-    }
-    return sanitized;
-  } catch (error) {
-    console.warn("[Shopify] shop.email fetch failed", {
-      shop,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+    const data = (response as { data?: { shop?: { email?: unknown } } }).data;
+    return classifyShopifyOwnerEmail(data?.shop?.email);
+  } catch {
+    // Provider errors may echo contact data or credentials. Report only a bounded outcome.
+    return { status: "fetch_failed", email: null };
   }
+}
+
+export async function fetchShopifyShopOwnerEmail(shop: string, accessToken: string): Promise<string | null> {
+  return (await fetchShopifyShopOwnerEmailResult(shop, accessToken)).email;
 }
 
 export async function verifyShopifySessionToken(token: string): Promise<{
@@ -632,7 +626,7 @@ const oauthStateStore = new Map<string, { shop: string; timestamp: number }>();
 /** OAuth CSRF state TTL — must exceed typical App Store install approval time. */
 export const SHOPIFY_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
-type SignedOAuthStatePayload = { n: string; s: string; t: number };
+type SignedOAuthStatePayload = { n: string; s: string; t: number; o: string };
 
 function shopifyOAuthStateSecret(): string | null {
   return SHOPIFY_API_SECRET || null;
@@ -648,6 +642,7 @@ export function createSignedShopifyOAuthState(shop: string): string | null {
     n: crypto.randomBytes(16).toString('hex'),
     s: normalized,
     t: Date.now(),
+    o: getShopifyOAuthOrigin(),
   };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', secret).update(body).digest('base64url');
@@ -660,7 +655,8 @@ export type ShopifyOAuthStateFailure =
   | 'bad_signature'
   | 'shop_mismatch'
   | 'expired'
-  | 'invalid_shop';
+  | 'invalid_shop'
+  | 'origin_mismatch';
 
 /** Validates HMAC-signed OAuth state; returns failure reason for structured logs. */
 export function verifySignedShopifyOAuthState(
@@ -715,6 +711,9 @@ export function verifySignedShopifyOAuthState(
     return { ok: false, reason: 'expired' };
   }
 
+  // Old, unscoped states must restart authorization after this change.
+  if (payload.o !== getShopifyOAuthOrigin()) return { ok: false, reason: 'origin_mismatch' };
+
   return { ok: true };
 }
 
@@ -745,7 +744,7 @@ export function generateShopifyInstallUrl(shop: string): { url: string; state: s
   const state = createSignedShopifyOAuthState(normalizedShop);
   if (!state) return { url: '', state: '' };
 
-  const redirectUri = `${getAppOrigin()}/api/shopify/callback`;
+  const redirectUri = `${getShopifyOAuthOrigin()}/api/shopify/callback`;
   const scopes = SHOPIFY_SCOPES.join(',');
 
   const url = `https://${normalizedShop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;

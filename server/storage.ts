@@ -1,3 +1,4 @@
+import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
@@ -154,28 +155,11 @@ function sanitizeUserUpdatesForLog(updates: Partial<User>): Record<string, unkno
 }
 
 function logUserUpdateFailure(userId: string, updates: Partial<User>, err: unknown, context = "storage.updateUser"): void {
-  const anyErr = err as {
-    message?: string;
-    code?: string;
-    detail?: string;
-    constraint?: string;
-    column?: string;
-  };
-  console.error(
-    JSON.stringify({
-      tag: "[USER_UPDATE_FAILED]",
-      context,
-      userId,
-      updatedFieldKeys: Object.keys(updates),
-      sanitizedUpdates: sanitizeUserUpdatesForLog(updates),
-      errorMessage: anyErr?.message ?? String(err),
-      pgCode: anyErr?.code ?? null,
-      pgDetail: anyErr?.detail ?? null,
-      pgConstraint: anyErr?.constraint ?? null,
-      pgColumn: anyErr?.column ?? null,
-      stack: err instanceof Error ? err.stack : null,
-    }),
-  );
+  console.error(JSON.stringify({
+    tag: "[USER_UPDATE_FAILED]", context,
+    updatedFieldKeys: Object.keys(updates),
+    ...safeDatabaseErrorDiagnostic(err, "user-update"),
+  }));
 }
 
 function logUserSessionLoadFailure(phase: string, userId: string, err: unknown): void {
@@ -197,6 +181,9 @@ export type UpdateContactOptions = {
   skipAutomationHooks?: boolean;
   /** When set, UPDATE ... WHERE id AND user_id — foreign rows are a no-op. */
   expectedWorkspaceUserId?: string;
+  /** Optimistic identity edit: never overwrite a newer synchronized customer snapshot. */
+  expectedUpdatedAt?: Date;
+  requireUnsyncedIdentity?: boolean;
 };
 
 export interface IStorage {
@@ -2624,6 +2611,10 @@ export class DbStorage implements IStorage {
     updates: Partial<Contact>,
     options?: UpdateContactOptions
   ): Promise<Contact | undefined> {
+    const writeScope = and(eq(contacts.id, id),
+      options?.expectedWorkspaceUserId ? eq(contacts.userId, options.expectedWorkspaceUserId) : undefined,
+      options?.expectedUpdatedAt ? sql`date_trunc('milliseconds', ${contacts.updatedAt}) = ${options.expectedUpdatedAt.toISOString()}::timestamp` : undefined,
+      options?.requireUnsyncedIdentity ? sql`coalesce(${contacts.source}, '') <> 'shopify' AND coalesce(${contacts.customFields}->>'lastCommerceSource', '') <> 'shopify' AND ${contacts.customFields}->>'shopifyCustomerId' IS NULL AND ${contacts.sourceDetails}->>'shopifyCustomerId' IS NULL` : undefined);
     const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
 
     if (hasBuyerPref) {
@@ -2651,18 +2642,14 @@ export class DbStorage implements IStorage {
     if (!before) {
       const result = await db.update(contacts)
         .set({ ...updates, updatedAt: new Date() })
-        .where(eq(contacts.id, id))
+        .where(writeScope)
         .returning();
       return result[0];
     }
 
     const result = await db.update(contacts)
       .set({ ...updates, updatedAt: new Date() })
-      .where(
-        options?.expectedWorkspaceUserId
-          ? and(eq(contacts.id, id), eq(contacts.userId, options.expectedWorkspaceUserId))
-          : eq(contacts.id, id),
-      )
+      .where(writeScope)
       .returning();
     const after = result[0];
     if (!after) return undefined;

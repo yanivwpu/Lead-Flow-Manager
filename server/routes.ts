@@ -1,3 +1,4 @@
+import { registerShopifyPrivacyAdminRoutes } from "./shopifyPrivacyAdminRoutes";
 import { registerSalesAdminLoginRoute } from "./salesAdminLogin";
 import { validateNewPassword } from "./passwordPolicy";
 import type { Express, Request, Response } from "express";
@@ -8397,6 +8398,7 @@ export async function registerRoutes(
   // Admin middleware — Sales Admin session (isAdmin) OR persistent x-admin-token.
   // Does NOT accept normal WhachatCRM owner login (req.user) — that never sets isAdmin.
   const requireAdmin = requireSalesAdmin;
+  registerShopifyPrivacyAdminRoutes(app, requireAdmin);
 
   const { registerPortalPasswordResetRoutes } = await import("./routes/portalPasswordResetRoutes");
   registerPortalPasswordResetRoutes(app, requireAdmin);

@@ -289,6 +289,56 @@ export const shopifyShopTrials = pgTable(
 
 export type ShopifyShopTrial = typeof shopifyShopTrials.$inferSelect;
 
+export const shopifyMerchantContacts = pgTable("shopify_merchant_contacts", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  canonicalShop: text("canonical_shop").notNull(),
+  captureStatus: text("capture_status"),
+  captureSource: text("capture_source"),
+  captureAt: timestamp("capture_at"),
+  supportEmail: text("support_email"),
+  supportSource: text("support_source"),
+  supportConfirmedAt: timestamp("support_confirmed_at"),
+  supportDismissedAt: timestamp("support_dismissed_at"),
+});
+export const shopifyPrivacyErasureTasks = pgTable("shopify_privacy_erasure_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  scopeFrom: timestamp("scope_from"),
+  scopeTo: timestamp("scope_to").notNull().defaultNow(),
+  status: text("status").notNull().default("pending_external"),
+  completedAt: timestamp("completed_at"),
+  requestKind: text("request_kind").notNull().default("store_erasure"),
+  dedupeKey: text("dedupe_key"),
+  deadlineAt: timestamp("deadline_at").notNull().default(sql`NOW() + interval '30 days'`),
+  nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(0),
+  leaseToken: text("lease_token"),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  errorCode: text("error_code"),
+  checks: jsonb("checks").notNull().default({}),
+  requiredChecks: jsonb("required_checks").notNull().default(["railway_logs", "mail_processor", "archives", "backups", "exports", "local_review"]),
+}, table => [uniqueIndex("shopify_privacy_erasure_dedupe").on(table.dedupeKey).where(sql`${table.dedupeKey} IS NOT NULL`)]);
+export const shopifyPrivacyAlerts = pgTable("shopify_privacy_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  taskId: varchar("task_id").notNull().references(() => shopifyPrivacyErasureTasks.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(), status: text("status").notNull(), actionCode: text("action_code").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(), deliveredAt: timestamp("delivered_at"),
+  attempts: integer("attempts").notNull().default(0), nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+  leaseToken: text("lease_token"), leaseExpiresAt: timestamp("lease_expires_at"),
+  resolvedAt: timestamp("resolved_at"), emailPayload: jsonb("email_payload"),
+  emailStartedAt: timestamp("email_started_at"), emailUncertain: boolean("email_uncertain").notNull().default(false),
+  emailAcceptedAt: timestamp("email_accepted_at"), providerMessageId: text("provider_message_id"),
+  emailReconciliationRequired: boolean("email_reconciliation_required").notNull().default(false),
+}, table => [uniqueIndex("shopify_privacy_alert_dedupe").on(table.taskId, table.reason).where(sql`${table.resolvedAt} IS NULL`)]);
+export const shopifyPrivacyCustomerLocks = pgTable("shopify_privacy_customer_locks", {
+  identityHash: text("identity_hash").primaryKey(), createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const shopifyPrivacyRequestPayloads = pgTable("shopify_privacy_request_payloads", {
+  taskId: varchar("task_id").primaryKey().references(() => shopifyPrivacyErasureTasks.id, { onDelete: "cascade" }),
+  encryptedPayload: text("encrypted_payload").notNull(),
+});
+
 /** Hashed, single-use password reset tokens for main app users (DB-backed for multi-instance). */
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",

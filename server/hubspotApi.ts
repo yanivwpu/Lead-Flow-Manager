@@ -15,6 +15,7 @@ function authHeaders(token: string): HeadersInit {
 /** True if the token can read contacts (valid private app with CRM scope). */
 export async function hubspotValidatePrivateAppToken(token: string): Promise<boolean> {
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts?limit=1`, {
+    signal: AbortSignal.timeout(15000),
     method: "GET",
     headers: { Authorization: `Bearer ${token.trim()}` },
   });
@@ -23,6 +24,7 @@ export async function hubspotValidatePrivateAppToken(token: string): Promise<boo
 
 export async function hubspotFetchContactPropertyNames(token: string): Promise<Set<string>> {
   const res = await fetch(`${HUBSPOT_API}/crm/v3/properties/contacts`, {
+    signal: AbortSignal.timeout(15000),
     method: "GET",
     headers: { Authorization: `Bearer ${token.trim()}` },
   });
@@ -37,11 +39,13 @@ export async function hubspotFetchContactPropertyNames(token: string): Promise<S
 
 export async function hubspotSearchContactByEmail(
   token: string,
-  email: string
+  email: string,
+  strict = false
 ): Promise<string | undefined> {
   const value = email.trim().toLowerCase();
   if (!value) return undefined;
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+    signal: AbortSignal.timeout(15000),
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({
@@ -50,19 +54,23 @@ export async function hubspotSearchContactByEmail(
       limit: 1,
     }),
   });
-  if (!res.ok) return undefined;
+  if (!res.ok) { if (strict) throw new Error("hubspot_lookup_failed"); return undefined; }
   const data = (await res.json()) as { results?: { id?: string }[] };
+  if (strict && (!Array.isArray(data.results) || (data.results.length && typeof data.results[0]?.id !== "string")))
+    throw new Error("hubspot_lookup_invalid");
   const id = data.results?.[0]?.id;
   return typeof id === "string" ? id : undefined;
 }
 
 export async function hubspotSearchContactByPhone(
   token: string,
-  phone: string
+  phone: string,
+  strict = false
 ): Promise<string | undefined> {
   const value = phone.trim();
   if (!value) return undefined;
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/search`, {
+    signal: AbortSignal.timeout(15000),
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({
@@ -71,8 +79,10 @@ export async function hubspotSearchContactByPhone(
       limit: 1,
     }),
   });
-  if (!res.ok) return undefined;
+  if (!res.ok) { if (strict) throw new Error("hubspot_lookup_failed"); return undefined; }
   const data = (await res.json()) as { results?: { id?: string }[] };
+  if (strict && (!Array.isArray(data.results) || (data.results.length && typeof data.results[0]?.id !== "string")))
+    throw new Error("hubspot_lookup_invalid");
   const id = data.results?.[0]?.id;
   return typeof id === "string" ? id : undefined;
 }
@@ -82,6 +92,7 @@ export async function hubspotCreateContact(
   properties: Record<string, string>
 ): Promise<{ ok: boolean; status: number; id?: string; message?: string }> {
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts`, {
+    signal: AbortSignal.timeout(15000),
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ properties }),
@@ -99,6 +110,7 @@ export async function hubspotPatchContact(
   properties: Record<string, string>
 ): Promise<{ ok: boolean; status: number; message?: string }> {
   const res = await fetch(`${HUBSPOT_API}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`, {
+    signal: AbortSignal.timeout(15000),
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ properties }),
