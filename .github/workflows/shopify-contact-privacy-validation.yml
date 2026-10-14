@@ -8,6 +8,9 @@ on:
       - "server/shopifyWebhookRegistration.ts"
       - "tests/shopify-webhook-registration.test.ts"
       - "scripts/smoke-shopify-privacy-email.ts"
+      - "scripts/smoke-shopify-privacy-production.ts"
+      - "railway/privacy-production-smoke*"
+      - "docs/shopify-privacy-production-smoke.md"
       - "railway/privacy-email-smoke*"
       - "docs/shopify-privacy-railway-one-shot.md"
       - "server/shopifyPrivacySmokeSafety.ts"
@@ -82,6 +85,8 @@ jobs:
           npx tsx --test tests/shopify-privacy-worker-postgres.test.ts
           npx tsx --test tests/shopify-privacy-smoke-safety.test.ts
           npx tsx --test tests/shopify-privacy-one-shot.test.ts
+          npx tsx --test tests/shopify-privacy-production-smoke.test.ts
+          npx esbuild scripts/smoke-shopify-privacy-production.ts --bundle --platform=node --format=cjs --packages=external --outfile=work/privacy-production-smoke.cjs
           npx tsx --test tests/shopify-privacy-alert-email.test.ts
           npx tsx --test tests/shopify-privacy-verification.test.ts tests/shopify-customer-privacy-handler.test.ts tests/shopify-privacy-admin-routes.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
