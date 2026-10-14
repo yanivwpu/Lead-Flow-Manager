@@ -49,3 +49,39 @@ test("contact endpoint is session-scoped, private, CSRF protected and does not i
     assert.equal((await fetch(path, { method: "POST", headers, body: JSON.stringify({ action: "dismiss" }) })).status, 409);
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });
+
+test("support contact accepts direct first-party requests behind TLS proxy and rejects tainted/foreign origins before writes", async () => {
+  const app = express(); app.set("trust proxy",1); app.use(express.json());
+  app.use((req,_res,next) => { if(req.get("x-fixture-session") === "valid") (req as any).user={id:"merchant"}; next(); });
+  let writes=0, failed=false, inactive=false;
+  let saved = {available:true,suggestedEmail:null as string|null,confirmed:false,dismissed:false};
+  app.use('/api/shopify',createShopifySupportContactRouter({
+    read:async id=>{assert.equal(id,'merchant');return saved;},
+    save:async(id,action)=>{
+      assert.equal(id,'merchant'); if(failed)throw Error('database unavailable'); if(inactive)return false;
+      writes++; saved={...saved,...(action.action==='dismiss'?{dismissed:true}:action.action==='confirm'?{confirmed:true,dismissed:false,suggestedEmail:action.email}:{})}; return true;
+    },
+  }));
+  const server=app.listen(0); await new Promise<void>(resolve=>server.once('listening',resolve));
+  const path=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/shopify/support-contact`;
+  const post=(origin:string,extra:Record<string,string>={},body:unknown={action:'dismiss'})=>fetch(path,{method:'POST',
+    headers:{Host:'app.whachatcrm.com','x-forwarded-proto':'https','x-fixture-session':'valid',Origin:origin,'Content-Type':'application/json','sec-fetch-site':'same-site',...extra},body:JSON.stringify(body)});
+  try {
+    for(const origin of ['https://www.whachatcrm.com','https://whachatcrm.com','https://app.whachatcrm.com'])
+      assert.equal((await post(origin)).status,200);
+    assert.equal(writes,3); assert.equal(saved.dismissed,true); assert.equal(saved.suggestedEmail,null);
+    const refresh=await fetch(path,{headers:{'x-fixture-session':'valid'}}); assert.equal((await refresh.json()).dismissed,true);
+    for(const origin of ['null','','https://evil.example.invalid','https://app.whachatcrm.com.evil.example.invalid','http://www.whachatcrm.com','https://www.whachatcrm.com/path'])
+      assert.equal((await post(origin)).status,403);
+    assert.equal((await post('https://www.whachatcrm.com',{'sec-fetch-site':'cross-site'})).status,403);
+    assert.equal((await post('https://www.whachatcrm.com',{'Content-Type':'text/plain'})).status,403);
+    assert.equal(writes,3);
+    assert.equal((await post('https://www.whachatcrm.com',{'x-fixture-session':'expired'})).status,401);
+    assert.equal((await post('https://www.whachatcrm.com',{}, {action:'confirm',email:fixtureEmail,userId:'other'})).status,200);
+    assert.equal(saved.confirmed,true); assert.equal(saved.suggestedEmail,fixtureEmail);
+    assert.equal((await post('https://www.whachatcrm.com',{}, {action:'confirm',email:''})).status,400);
+    failed=true; assert.equal((await post('https://www.whachatcrm.com')).status,503);
+    failed=false; inactive=true; assert.equal((await post('https://www.whachatcrm.com')).status,409);
+    assert.equal(writes,4);
+  } finally {await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
