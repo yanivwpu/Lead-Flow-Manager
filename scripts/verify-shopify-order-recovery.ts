@@ -32,7 +32,9 @@ if (!localValidation) {
 }
 assert.equal(process.env.SHOPIFY_RECOVERY_FIXTURE_ACK, 'isolated-staging-schema');
 assert.ok(process.env.SHOPIFY_RECOVERY_DATABASE_URL, 'Provide staging DB URL privately');
-const url = new URL(process.env.SHOPIFY_RECOVERY_DATABASE_URL!);
+let url: URL;
+try {url=new URL(process.env.SHOPIFY_RECOVERY_DATABASE_URL!);}
+catch {throw new Error('Staging private database reference did not resolve to a valid connection');}
 assert.ok(['postgres:', 'postgresql:'].includes(url.protocol));
 if (localValidation) {
   assert.ok(['127.0.0.1','localhost'].includes(url.hostname));
@@ -50,6 +52,7 @@ const db = drizzle(pool, { schema });
 const quote = (s: string) => '"' + s.replaceAll('"', '""') + '"';
 let createdSchema = false;
 let verifiedResults: Record<string,unknown> | undefined;
+let failureStage='database_identity';
 async function load(source: string, dependencies: Record<string, unknown>) {
   const module = { exports: {} as any };
   const compiled = await transform(source.replace(/^import[\s\S]*?;\r?\n/gm, ''),
@@ -72,6 +75,7 @@ try {
       assert.match(marker[0].baseline_sha256,/^[a-f0-9]{64}$/);
     } finally {try {await client.query('ROLLBACK');} finally {client.release();}}
   }
+  failureStage='fixture_schema';
   await admin.query('CREATE SCHEMA ' + namespace); createdSchema = true;
   console.log(JSON.stringify({event:'recovery_fixture_schema_created',schema:namespace,sourceSha}));
   const dialect = new PgDialect();
@@ -145,6 +149,7 @@ try {
     return res.code;
   }
   const count = async (table: PgTable) => Number((await db.select({n:sql`count(*)`}).from(table))[0].n);
+  failureStage='order_recovery';
   assert.equal(await send(),503);
   assert.equal(await count(schema.messages),1);assert.equal(await count(schema.activityEvents),0);
   const [partial] = await db.select().from(schema.conversations);
@@ -166,7 +171,10 @@ try {
     limitation:'SQL fixture adapters; no deployed HTTP, real provider or production acceptance'};
 } catch (error) {
   if (localValidation) console.error(error instanceof Error ? error.message : 'local fixture error');
-  console.error('Order recovery fixture failed; credentials and SQL errors withheld. Gate remains unverified.');
+  const code=(error as {code?:unknown})?.code;
+  console.error(JSON.stringify({event:'order_recovery_failed',stage:failureStage,
+    sqlState:typeof code==='string' && /^[0-9A-Z]{5}$/.test(code) ? code : undefined,
+    credentialsWithheld:true,gate:'unverified'}));
   process.exitCode=1;
 } finally {
   await pool.end();
