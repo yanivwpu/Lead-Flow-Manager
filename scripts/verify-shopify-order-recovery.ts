@@ -22,6 +22,10 @@ import { createShopifyOrderWebhookHandler } from '../server/shopifyOrderWebhookH
 const expectedProject = '1d22ff35-a259-4977-9375-377dda1cdd2b';
 const expectedEnvironment = '43e4c163-6da9-4be5-ad93-0a3534234613';
 const localValidation = process.argv.includes('--local-validation');
+const pinnedStagingSystemId = '7695281403431092283'; // independently pinned staging DB identity
+const sourceSha = localValidation ? execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()
+  : process.env.RAILWAY_GIT_COMMIT_SHA;
+assert.ok(sourceSha && /^[a-f0-9]{40}$/.test(sourceSha), 'Verified source commit metadata required');
 if (!localValidation) {
   assert.equal(process.env.RAILWAY_PROJECT_ID, expectedProject, 'Staging project only');
   assert.equal(process.env.RAILWAY_ENVIRONMENT_ID, expectedEnvironment, 'Staging environment only');
@@ -33,14 +37,19 @@ assert.ok(['postgres:', 'postgresql:'].includes(url.protocol));
 if (localValidation) {
   assert.ok(['127.0.0.1','localhost'].includes(url.hostname));
   assert.equal(url.pathname,'/whachat_shopify_test');
+} else {
+  assert.equal(url.hostname,'postgres.railway.internal','Private staging PostgreSQL only');
+  assert.equal(url.pathname,'/railway');
+  assert.ok(!url.port || url.port==='5432');
 }
 const namespace = 'shopify_recovery_' + randomBytes(8).toString('hex');
 const admin = new Pool({ connectionString: url.toString(), connectionTimeoutMillis: 10000 });
 url.searchParams.set('options', '-c search_path=' + namespace);
-const pool = new Pool({ connectionString: url.toString(), max: 16 });
+const pool = new Pool({ connectionString: url.toString(), max: 16,connectionTimeoutMillis:10000,statement_timeout:15000 });
 const db = drizzle(pool, { schema });
 const quote = (s: string) => '"' + s.replaceAll('"', '""') + '"';
 let createdSchema = false;
+let verifiedResults: Record<string,unknown> | undefined;
 async function load(source: string, dependencies: Record<string, unknown>) {
   const module = { exports: {} as any };
   const compiled = await transform(source.replace(/^import[\s\S]*?;\r?\n/gm, ''),
@@ -50,7 +59,21 @@ async function load(source: string, dependencies: Record<string, unknown>) {
   return module.exports;
 }
 try {
+  if (!localValidation) {
+    const client=await admin.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      await client.query("SET LOCAL statement_timeout='15s'");
+      const identity=(await client.query(`SELECT current_database() database,
+        system_identifier::text system_id FROM pg_control_system()`)).rows[0];
+      assert.equal(identity.database,'railway');assert.equal(identity.system_id,pinnedStagingSystemId);
+      const marker=(await client.query('SELECT version,baseline_sha256 FROM public.whachat_staging_schema_bootstrap')).rows;
+      assert.equal(marker.length,1);assert.equal(marker[0].version,1);
+      assert.match(marker[0].baseline_sha256,/^[a-f0-9]{64}$/);
+    } finally {try {await client.query('ROLLBACK');} finally {client.release();}}
+  }
   await admin.query('CREATE SCHEMA ' + namespace); createdSchema = true;
+  console.log(JSON.stringify({event:'recovery_fixture_schema_created',schema:namespace,sourceSha}));
   const dialect = new PgDialect();
   for (const table of [schema.users,schema.integrations,schema.contacts,schema.conversations,
     schema.messages,schema.activityEvents,schema.workflowExecutions,schema.shopifyPrivacyCustomerLocks]) {
@@ -136,17 +159,27 @@ try {
   const [final] = await db.select().from(schema.conversations);
   assert.equal(final.unreadCount,partial.unreadCount);
   const messages = await db.select().from(schema.messages);assert.equal(messages[0].direction,'inbound');
-  console.log(JSON.stringify({gate:localValidation ? 'local-postgres-harness-validation' : 'staging-isolated-postgres-order-recovery',
-    sha:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
+  verifiedResults={gate:localValidation ? 'local-postgres-harness-validation' : 'staging-isolated-postgres-order-recovery',
+    sha:sourceSha,
     interruptedStatus:503,retryStatus:200,concurrentDeliveries:8,cards:1,activities:1,contacts:1,
     outboundMessages:0,automationCalls:0,exportCalls:0,unreadBefore:1,unreadAfter:1,
-    limitation:'SQL fixture adapters; no deployed HTTP, real provider or production acceptance'}));
+    limitation:'SQL fixture adapters; no deployed HTTP, real provider or production acceptance'};
 } catch (error) {
   if (localValidation) console.error(error instanceof Error ? error.message : 'local fixture error');
   console.error('Order recovery fixture failed; credentials and SQL errors withheld. Gate remains unverified.');
   process.exitCode=1;
 } finally {
   await pool.end();
-  if (createdSchema) await admin.query('DROP SCHEMA ' + namespace + ' CASCADE');
+  if (createdSchema) {
+    try {
+      await admin.query('DROP SCHEMA ' + namespace + ' CASCADE');
+      assert.equal((await admin.query('SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname=$1) present',[namespace])).rows[0].present,false);
+      console.log(JSON.stringify({event:'recovery_fixture_cleanup',schema:namespace,removed:true}));
+    } catch {
+      console.error(JSON.stringify({event:'recovery_fixture_cleanup_failed',schema:namespace,credentialsWithheld:true}));
+      process.exitCode=1;verifiedResults=undefined;
+    }
+  }
   await admin.end();
 }
+if (verifiedResults && !process.exitCode) console.log(JSON.stringify({...verifiedResults,cleanupVerified:true}));

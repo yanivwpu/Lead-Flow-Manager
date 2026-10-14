@@ -1,0 +1,16 @@
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!shared/
+!shared/**
+!server/
+!server/commerceEventPipeline.ts
+!server/shopifyContactService.ts
+!server/shopifyCommerceWebhooks.ts
+!server/shopifyOrderWebhookHandler.ts
+!scripts/
+!scripts/verify-shopify-order-recovery.ts
+!railway/
+!railway/order-recovery.Dockerfile
+!railway/order-recovery.Dockerfile.dockerignore
