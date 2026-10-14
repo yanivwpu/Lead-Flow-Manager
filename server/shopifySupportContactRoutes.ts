@@ -1,3 +1,4 @@
+import { getAppOrigin, getMarketingOrigin } from "./urlOrigins";
 import { Router } from "express";
 import { parseShopifySupportContactAction, type ShopifyContactSnapshot, type ShopifySupportContactAction } from "@shared/shopifyContactPrivacy";
 
@@ -9,7 +10,7 @@ export function createShopifySupportContactRouter(deps: {
   router.use("/support-contact", (req, res, next) => {
     res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
     if (!req.user) return res.status(401).json({ error: "Sign in to manage your support contact." });
-    if (req.method === "POST" && (req.get("origin") !== `${req.protocol}://${req.get("host")}` ||
+    if (req.method === "POST" && (![`${req.protocol}://${req.get("host")}`, getAppOrigin(), getMarketingOrigin(), "https://whachatcrm.com"].includes(req.get("origin") || "") ||
         req.get("sec-fetch-site") === "cross-site" || req.is("application/json") !== "application/json")) {
       return res.status(403).json({ error: "Open the app and try again." });
     }

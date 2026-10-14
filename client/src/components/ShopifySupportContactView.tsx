@@ -1,8 +1,9 @@
+import type { SupportContactFailure } from "@/lib/shopifySupportContactRequest";
 import React, { useId } from "react";
 import { shopifySupportContactCopy } from "@/lib/shopifySupportContactCopy";
 export function ShopifySupportContactView(props: {
   language: string; expanded: boolean; email: string; suggested: boolean; confirmed: boolean;
-  manage: boolean; pending: boolean; failed: boolean;
+  manage: boolean; pending: boolean; failed: boolean; failureReason?: SupportContactFailure;
   onOpen(): void; onClose(): void; onEmail(value: string): void;
   onSave(): void; onSkip(): void; onRemove(): void;
 }) {
@@ -16,14 +17,14 @@ export function ShopifySupportContactView(props: {
       </button>}
     </div>
     <p className="mt-1 text-gray-600">{copy.body}</p>
-    {props.failed && !props.expanded && <p role="alert" className="text-red-700">{copy.error}</p>}
+    {props.failed && !props.expanded && <p role="alert" className="text-red-700">{copy[props.failureReason || "error"]}</p>}
     {props.expanded ? <form className="mt-3 space-y-2" onSubmit={event => { event.preventDefault(); props.onSave(); }}>
       <label htmlFor={id} className="block font-medium">{copy.label}</label>
       <input id={id} type="email" autoComplete="email" value={props.email} maxLength={254}
         required disabled={props.pending} dir="ltr" className="w-full rounded border px-3 py-2"
         aria-describedby={id + "-help"} onChange={event => props.onEmail(event.target.value)} />
       <p id={id + "-help"} className="text-xs text-gray-600">{props.suggested ? copy.source : copy.missing}</p>
-      {props.failed && <p role="alert" className="text-red-700">{copy.error}</p>}
+      {props.failed && <p role="alert" className="text-red-700">{copy[props.failureReason || "error"]}</p>}
       <div className="flex flex-wrap gap-3">
         <button type="submit" disabled={props.pending} className="rounded bg-brand-green px-3 py-2 text-white">{copy.save}</button>
         {!props.confirmed && <button type="button" disabled={props.pending} onClick={props.onSkip}>{copy.skip}</button>}

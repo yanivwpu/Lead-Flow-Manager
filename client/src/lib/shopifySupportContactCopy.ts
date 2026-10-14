@@ -4,6 +4,10 @@ const en = {
   open: "Confirm support email", manage: "Manage support contact", label: "Business email",
   source: "Suggested from your Shopify store settings. You can change it.",
   save: "Save support contact", skip: "Skip", remove: "Remove confirmed contact",
+  sessionExpired: "Your session expired. Sign in again to update your support contact.",
+  permissionDenied: "Open WhachatCRM from your app tab and try again.",
+  reconnectRequired: "Reopen WhachatCRM from your connected Shopify store.",
+  invalidEmail: "Enter a valid business email address, or choose Skip.",
   error: "Could not save your support contact. Please try again.", cancel: "Close",
   saved: "Support contact saved.", missing: "You can enter a business email, or skip and keep using the app.",
 };
@@ -13,6 +17,10 @@ const es: typeof en = {
   open: "Confirmar correo de soporte", manage: "Gestionar contacto de soporte", label: "Correo de empresa",
   source: "Sugerido desde la configuración de tu tienda Shopify. Puedes cambiarlo.",
   save: "Guardar contacto de soporte", skip: "Omitir", remove: "Eliminar contacto confirmado",
+  sessionExpired: "Tu sesión ha caducado. Inicia sesión para actualizar el contacto de soporte.",
+  permissionDenied: "Abre WhachatCRM desde la pestaña de la aplicación e inténtalo de nuevo.",
+  reconnectRequired: "Vuelve a abrir WhachatCRM desde tu tienda Shopify conectada.",
+  invalidEmail: "Introduce un correo de empresa válido o elige Omitir.",
   error: "No se pudo guardar el contacto de soporte. Inténtalo de nuevo.", cancel: "Cerrar",
   saved: "Contacto de soporte guardado.", missing: "Puedes introducir un correo de empresa u omitir este paso y seguir usando la aplicación.",
 };
@@ -22,6 +30,10 @@ const he: typeof en = {
   open: "אישור דוא״ל לתמיכה", manage: "ניהול איש קשר לתמיכה", label: "דוא״ל עסקי",
   source: "הכתובת מוצעת מהגדרות חנות Shopify. אפשר לשנות אותה.",
   save: "שמירת איש קשר לתמיכה", skip: "דלגו", remove: "הסרת איש הקשר שאושר",
+  sessionExpired: "תוקף ההתחברות פג. התחברו שוב כדי לעדכן את איש הקשר לתמיכה.",
+  permissionDenied: "פתחו את WhachatCRM מלשונית האפליקציה ונסו שוב.",
+  reconnectRequired: "פתחו מחדש את WhachatCRM מתוך חנות Shopify המחוברת.",
+  invalidEmail: "הזינו כתובת דוא״ל עסקית תקינה או בחרו לדלג.",
   error: "לא ניתן לשמור את איש הקשר לתמיכה. נסו שוב.", cancel: "סגירה",
   saved: "איש הקשר לתמיכה נשמר.", missing: "אפשר להזין כתובת עסקית או לדלג ולהמשיך להשתמש באפליקציה.",
 };
