@@ -35,7 +35,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Catalog integration and offer, AI, navigation compatibility
         run: |
-          node --import tsx --test tests/sales-catalog-ui.test.tsx tests/sales-catalog.test.ts tests/sales-catalog-provider.test.ts tests/workspace-offers.test.ts tests/ai-live-business-data.test.ts tests/app-nav-ia.test.ts tests/knowledge-fact-grounding.test.ts tests/growth-engine-pro-entitlement.test.ts
+          node --import tsx --test tests/sales-catalog-ui.test.tsx tests/sales-catalog-retrieval.test.ts tests/sales-catalog.test.ts tests/sales-catalog-provider.test.ts tests/workspace-offers.test.ts tests/ai-live-business-data.test.ts tests/app-nav-ia.test.ts tests/knowledge-fact-grounding.test.ts tests/growth-engine-pro-entitlement.test.ts
           # Two untouched Prospect AI artwork/quota layout assertions already fail on main.
           node --import tsx --test --test-name-pattern="^(authenticated|public|Growth Engine catalog)" tests/growth-engine-prospect-ai-routing.test.ts
       - name: Reject TypeScript regressions against PR base

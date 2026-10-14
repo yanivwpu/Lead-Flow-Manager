@@ -27,11 +27,11 @@ test("bounded catalog reads preserve records, rank across pages, isolate tenants
     await pg.exec(
       `CREATE TABLE workspace_offers (${config.columns.map((c) => `"${c.name}" ${c.getSQLType()}`).join(",")})`,
     );
-    const rows = Array.from({ length: 125 }, (_, i) => ({
+    const rows = Array.from({ length: 2505 }, (_, i) => ({
       id: `item-${String(i).padStart(3, "0")}`,
       userId: "tenant-a",
       internalName: `Package ${i}`,
-      displayName: i === 124 ? "Special Gold" : `Package ${i}`,
+      displayName: i === 2504 ? "Special Gold" : `Package ${i}`,
       description: i === 0 ? "Literal 50%_ discount" : "Service",
       benefits: ["Support"],
       priceDisplay: "$49/month",
@@ -48,23 +48,29 @@ test("bounded catalog reads preserve records, rank across pages, isolate tenants
       createdAt: new Date(0),
       updatedAt: new Date(0),
     }));
-    await database
-      .insert(workspaceOffers)
-      .values([
-        ...rows,
-        {
-          ...rows[0],
-          id: "other-tenant",
-          userId: "tenant-b",
-          displayName: "Special Gold",
-        },
-        { ...rows[0], id: "inactive", active: false },
-        { ...rows[0], id: "archived", archivedAt: new Date() },
-        { ...rows[0], id: "unavailable", availability: "unavailable" },
-        { ...rows[0], id: "waitlist", availability: "waitlist" },
-        { ...rows[0], id: "limited", availability: "limited" },
-      ]);
+    const fixtures = [
+      ...rows,
+      {
+        ...rows[0],
+        id: "other-tenant",
+        userId: "tenant-b",
+        displayName: "Special Gold",
+      },
+      { ...rows[0], id: "inactive", active: false },
+      { ...rows[0], id: "archived", archivedAt: new Date() },
+      { ...rows[0], id: "unavailable", availability: "unavailable" },
+      { ...rows[0], id: "waitlist", availability: "waitlist" },
+      { ...rows[0], id: "limited", availability: "limited" },
+    ];
+    // Keep fixture binds below PostgreSQL protocol parameter limits.
+    for (let start = 0; start < fixtures.length; start += 200) {
+      await database
+        .insert(workspaceOffers)
+        .values(fixtures.slice(start, start + 200));
+    }
+
     const before = await database.select().from(workspaceOffers);
+    assert.equal(before.length, fixtures.length);
     const seen: string[] = [];
     let offset: number | null = 0;
     do {
@@ -73,12 +79,12 @@ test("bounded catalog reads preserve records, rank across pages, isolate tenants
       seen.push(...page.items.map((item) => item.id));
       offset = page.nextOffset;
     } while (offset !== null);
-    assert.equal(new Set(seen).size, 129);
-    assert.equal(seen.length, 129);
+    assert.equal(new Set(seen).size, rows.length + 4);
+    assert.equal(seen.length, rows.length + 4);
     assert.ok(!seen.includes("archived") && !seen.includes("other-tenant"));
     assert.equal(
       (await service.search("tenant-a", { query: "special gold" })).items[0].id,
-      "item-124",
+      "item-2504",
     );
     assert.ok(
       (await service.search("tenant-a", { query: "50%_" })).items.some(
@@ -117,7 +123,7 @@ test("bounded catalog reads preserve records, rank across pages, isolate tenants
       "waitlist",
     );
     assert.equal(
-      (await service.search("tenant-a", { offset: 1000 })).nextOffset,
+      (await service.search("tenant-a", { offset: 10000 })).nextOffset,
       null,
     );
     assert.equal(await service.lookup("tenant-a", "other-tenant"), null);

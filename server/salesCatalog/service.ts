@@ -18,10 +18,7 @@ import {
   type SalesCatalogItem,
 } from "@shared/salesCatalog";
 import { toWorkspaceOfferView } from "../workspaceOffers/offerView";
-import {
-  selectRelevantOffers,
-  scoreOfferRelevance,
-} from "@shared/workspaceOffers";
+import { createManualOfferAdapter } from "./manualOfferAdapter";
 
 type CatalogDatabase = Pick<NodePgDatabase, "select">;
 /** Read-only facade; consumers supply a trusted workspace owner id, never a body/query tenant id. */
@@ -109,51 +106,9 @@ export function createSalesCatalogService(database: CatalogDatabase) {
         .limit(1);
       return row ? toWorkspaceOfferView(row) : null;
     },
-    async recommend(
-      userId: string,
-      input: { message: string; hint?: string | null; limit?: number },
-    ): Promise<SalesCatalogItem[]> {
-      const limit = Math.max(1, Math.min(5, Math.floor(input.limit ?? 5)));
-      // Preserve global legacy matching/sibling semantics while bounding database reads and retained candidates.
-      // Phase 1A manual offers are small; provider-scale ranked retrieval comes with commerce adapters.
-      const first: SalesCatalogItem[] = [];
-      let matches: SalesCatalogItem[] = [];
-      let offset: number | null = 0;
-      do {
-        const page: SalesCatalogPage = await search(userId, {
-          status: "purchasable",
-          limit: 100,
-          offset,
-        });
-        first.push(...page.items.slice(0, Math.max(0, 5 - first.length)));
-        matches = [
-          ...matches,
-          ...page.items.filter(
-            (item) =>
-              scoreOfferRelevance(item, input.message, input.hint ?? null) >=
-              40,
-          ),
-        ]
-          .sort(
-            (a, b) =>
-              scoreOfferRelevance(b, input.message, input.hint ?? null) -
-                scoreOfferRelevance(a, input.message, input.hint ?? null) ||
-              a.sortOrder - b.sortOrder,
-          )
-          .slice(0, 3);
-        offset = page.nextOffset;
-      } while (offset !== null);
-      return selectRelevantOffers(
-        [
-          ...new Map(
-            [...first, ...matches].map((item) => [item.id, item]),
-          ).values(),
-        ],
-        input.message,
-        input.hint ?? null,
-        limit,
-      );
-    },
+    // Existing AI/API compatibility: recommendations here are manual offers only.
+    // Connected products must use the separate bounded commerce search contract.
+    recommend: createManualOfferAdapter(search).recommend,
   };
 }
 export type SalesCatalogService = ReturnType<typeof createSalesCatalogService>;

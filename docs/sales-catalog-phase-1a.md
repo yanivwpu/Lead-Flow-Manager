@@ -34,9 +34,21 @@ HTTP reads use existing offer administration authorization and session tenancy:
 The AI provider retains `businessPackages` and `recordType: offer`, existing package
 payload shape, amount/source precedence and exact-link human approval. Intent routing
 is unchanged in this PR. Recommendation reads are batched, with bounded retained
-ranking candidates; legacy manual matching still scans eligible offers. Offset pages
+ranking candidates. The full traversal now lives exclusively in
+`manualOfferAdapter.ts`; `salesCatalog.recommend` delegates there for existing offer
+compatibility. Never wire connected products through this adapter. Offset pages
 are deterministic by sort order, creation timestamp and ID, but concurrent edits can
-shift them. Use provider-scale indexed ranking and stable cursors in the next phase.
+shift them.
+
+Connected commerce has a separate contract in `connectedCommerceSearch.ts`:
+`createConnectedCommerceSearch(adapter).searchCandidates(userId, { sourceId, query,
+hint?, limit? })`. It makes exactly one adapter call (25 candidates default, 100 max),
+with no pagination, retries, full traversal or manual fallback. The adapter must perform
+an indexed tenant/source-scoped query, filter eligibility and rank at the source with
+a stable ID tie-breaker. The wrapper preserves order and rejects oversized, cross-tenant,
+cross-source or duplicate results. No commerce adapter is connected yet; this contract
+defines the next phase boundary without adding product storage or synchronization.
+Provider-scale indexing and commerce data models remain the next phase's work.
 Catalog-mode reordering is disabled because partial-page IDs must not reset the whole
 catalog's ordering; the existing Settings editor retains full-list reorder.
 
