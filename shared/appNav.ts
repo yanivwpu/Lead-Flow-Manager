@@ -22,6 +22,7 @@ export const APP_NAV_ITEM_IDS = [
   "followups",
   "contacts",
   "search",
+  "salesCatalog",
   "widget",
   "chatbot",
   "automations",
@@ -38,7 +39,7 @@ export const APP_NAV_ITEM_IDS = [
 
 export type AppNavItemId = (typeof APP_NAV_ITEM_IDS)[number];
 
-export const APP_NAV_MAIN_ITEM_IDS = ["inbox", "followups", "contacts", "search"] as const;
+export const APP_NAV_MAIN_ITEM_IDS = ["inbox", "followups", "contacts", "search", "salesCatalog"] as const;
 export const APP_NAV_MOBILE_PRIMARY_IDS = ["inbox", "followups", "contacts"] as const;
 
 export const APP_NAV_AUTOMATION_BASE_ITEM_IDS = [
@@ -62,6 +63,7 @@ export const APP_NAV_LABEL_KEYS: Record<AppNavSectionId | AppNavItemId, string> 
   followups: "nav.followups",
   contacts: "nav.contacts",
   search: "nav.search",
+  salesCatalog: "nav.salesCatalog",
   widget: "nav.widget",
   chatbot: "nav.chatbot",
   automations: "nav.automations",
@@ -86,6 +88,7 @@ export const APP_NAV_LABEL_DEFAULTS: Record<AppNavSectionId | AppNavItemId, stri
   followups: "Follow-ups",
   contacts: "Contacts",
   search: "Search",
+  salesCatalog: "Sales Catalog",
   widget: "Website Widget",
   chatbot: "Chatbot",
   automations: "Automations",
@@ -105,6 +108,7 @@ export const APP_NAV_HREFS: Record<AppNavItemId, string> = {
   followups: "/app/followups",
   contacts: "/app/contacts",
   search: "/app/search",
+  salesCatalog: "/app/sales-catalog",
   widget: "/app/widget",
   chatbot: "/app/chatbot",
   automations: "/app/workflows",
@@ -126,6 +130,7 @@ export const APP_NAV_SIDEBAR_TEST_IDS: Record<AppNavItemId, string> = {
   followups: "sidebar-followups",
   contacts: "sidebar-contacts",
   search: "sidebar-search",
+  salesCatalog: "sidebar-sales-catalog",
   widget: "sidebar-widget",
   chatbot: "sidebar-chatbot",
   automations: "sidebar-automation",
@@ -145,6 +150,7 @@ export const APP_NAV_MOBILE_TEST_IDS: Record<AppNavItemId, string> = {
   followups: "followups",
   contacts: "contacts",
   search: "search",
+  salesCatalog: "sales-catalog",
   widget: "website-widget",
   chatbot: "chatbot",
   automations: "automation",

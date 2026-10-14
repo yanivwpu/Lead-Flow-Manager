@@ -3,6 +3,8 @@
  * Workspace-admin editor for structured offers used by AI Brain Live Business Data.
  */
 
+import { useTranslation } from "react-i18next";
+import { useAuth } from "@/lib/auth-context";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -31,6 +33,7 @@ import { cn } from "@/lib/utils";
 
 type Offer = {
   id: string;
+  archivedAt?: string | null;
   internalName: string;
   displayName: string;
   description: string | null;
@@ -123,26 +126,75 @@ function payloadFromForm(form: OfferForm) {
   };
 }
 
-export function OffersPaymentLinksSettings() {
+export function OffersPaymentLinksSettings({
+  catalog = false,
+}: {
+  catalog?: boolean;
+}) {
+  const { t } = useTranslation();
+  const { user, sessionAligned } = useAuth();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [category, setCategory] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(search);
+      setOffset(0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const catalogParams = new URLSearchParams({
+    query,
+    status,
+    category,
+    offset: String(offset),
+    limit: "25",
+  });
   const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<OfferForm>(EMPTY_FORM);
+  useEffect(() => {
+    setEditingId(null);
+    setCreating(false);
+    setForm(EMPTY_FORM);
+    setOffset(0);
+  }, [user?.id]);
 
-  const offersQuery = useQuery<{ offers: Offer[] }>({
-    queryKey: OFFERS_KEY,
-    queryFn: async () => {
-      const res = await fetch("/api/workspace-offers", { credentials: "include" });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.error === "string" ? err.error : "Failed to load offers");
-      }
-      return res.json();
+  const offersQuery = useQuery<{ offers: Offer[]; nextOffset?: number | null }>(
+    {
+      queryKey: catalog
+        ? ["/api/sales-catalog", user?.id, query, status, category, offset]
+        : [...OFFERS_KEY, user?.id],
+      enabled: !!user && sessionAligned,
+      queryFn: async () => {
+        const res = await fetch(
+          catalog
+            ? `/api/sales-catalog?${catalogParams}`
+            : "/api/workspace-offers",
+          { credentials: "include" },
+        );
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(
+            typeof err.error === "string" ? err.error : "Failed to load offers",
+          );
+        }
+        const data = await res.json();
+        return catalog
+          ? { offers: data.items, nextOffset: data.nextOffset }
+          : data;
+      },
     },
-  });
+  );
 
   const offers = offersQuery.data?.offers ?? [];
-  const activeCount = useMemo(() => offers.filter((o) => o.active).length, [offers]);
+  const activeCount = useMemo(
+    () => offers.filter((o) => o.active).length,
+    [offers],
+  );
 
   useEffect(() => {
     if (!editingId) return;
@@ -155,7 +207,11 @@ export function OffersPaymentLinksSettings() {
       const body = payloadFromForm(form);
       if (!body.displayName) throw new Error("Display name is required");
       if (editingId) {
-        const res = await apiRequest("PATCH", `/api/workspace-offers/${editingId}`, body);
+        const res = await apiRequest(
+          "PATCH",
+          `/api/workspace-offers/${editingId}`,
+          body,
+        );
         return res.json();
       }
       const res = await apiRequest("POST", "/api/workspace-offers", body);
@@ -163,14 +219,21 @@ export function OffersPaymentLinksSettings() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: OFFERS_KEY });
-      void queryClient.invalidateQueries({ queryKey: ["/api/ai/live-business-data"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/sales-catalog"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/ai/live-business-data"],
+      });
       setCreating(false);
       setEditingId(null);
       setForm(EMPTY_FORM);
       toast({ title: "Offer saved" });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not save offer", description: err.message, variant: "destructive" });
+      toast({
+        title: "Could not save offer",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -181,7 +244,10 @@ export function OffersPaymentLinksSettings() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: OFFERS_KEY });
-      void queryClient.invalidateQueries({ queryKey: ["/api/ai/live-business-data"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/sales-catalog"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["/api/ai/live-business-data"],
+      });
       if (editingId) {
         setEditingId(null);
         setForm(EMPTY_FORM);
@@ -189,20 +255,31 @@ export function OffersPaymentLinksSettings() {
       toast({ title: "Offer archived" });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not archive offer", description: err.message, variant: "destructive" });
+      toast({
+        title: "Could not archive offer",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
   const reorderMutation = useMutation({
     mutationFn: async (orderedIds: string[]) => {
-      const res = await apiRequest("POST", "/api/workspace-offers/reorder", { orderedIds });
+      const res = await apiRequest("POST", "/api/workspace-offers/reorder", {
+        orderedIds,
+      });
       return res.json();
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: OFFERS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["/api/sales-catalog"] });
     },
     onError: (err: Error) => {
-      toast({ title: "Could not reorder", description: err.message, variant: "destructive" });
+      toast({
+        title: "Could not reorder",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -233,15 +310,23 @@ export function OffersPaymentLinksSettings() {
             <Tag className="h-4 w-4" />
           </div>
           <div className="min-w-0 space-y-1">
-            <h2 className="text-base sm:text-lg font-bold text-gray-900">Offers & Payment Links</h2>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900">
+              Offers & Payment Links
+            </h2>
             <p className="text-sm leading-relaxed text-gray-600">
-              Structured packages AI can quote accurately — prices, benefits, and checkout links you control.
-              Website scans stay marketing context only.
+              Structured packages AI can quote accurately — prices, benefits,
+              and checkout links you control. Website scans stay marketing
+              context only.
             </p>
             <p className="text-xs text-gray-500">
-              {activeCount === 0
-                ? "Not configured — add an active offer for AI pricing answers."
-                : `${activeCount} active offer${activeCount === 1 ? "" : "s"} · payment links require human approval before send`}
+              {catalog
+                ? t(
+                    "salesCatalog.approval",
+                    "Payment links require human approval before send.",
+                  )
+                : activeCount === 0
+                  ? "Not configured — add an active offer for AI pricing answers."
+                  : `${activeCount} active offer${activeCount === 1 ? "" : "s"} · payment links require human approval before send`}
             </p>
           </div>
         </div>
@@ -262,15 +347,66 @@ export function OffersPaymentLinksSettings() {
         )}
       </div>
 
+      {catalog && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Input
+            aria-label={t("salesCatalog.search", "Search catalog")}
+            placeholder={t("salesCatalog.search", "Search catalog")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value);
+              setOffset(0);
+            }}
+          >
+            <SelectTrigger aria-label={t("salesCatalog.status", "Status")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["all", "active", "inactive", "archived", "purchasable"].map(
+                (value) => (
+                  <SelectItem key={value} value={value}>
+                    {t(`salesCatalog.${value}`, value)}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
+          </Select>
+          <Input
+            aria-label={t("salesCatalog.category", "Category")}
+            placeholder={t("salesCatalog.category", "Category")}
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setOffset(0);
+            }}
+          />
+        </div>
+      )}
+      {offersQuery.isError && (
+        <div role="alert" className="mt-4 text-sm text-red-700">
+          {offersQuery.error.message}{" "}
+          <Button variant="outline" onClick={() => void offersQuery.refetch()}>
+            {t("salesCatalog.retry", "Retry")}
+          </Button>
+        </div>
+      )}
       {offersQuery.isLoading ? (
         <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading offers…
         </div>
-      ) : offers.length === 0 && !showEditor ? (
+      ) : offersQuery.isError ? null : offers.length === 0 && !showEditor ? (
         <p className="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-3 py-4 text-sm text-gray-600">
-          No offers yet. Add packages, retainers, or listing products with an HTTPS checkout link (Stripe Payment Links,
-          PayPal, and other providers are fine).
+          {catalog
+            ? t(
+                "salesCatalog.empty",
+                "No matching items. Change your filters or add an offer.",
+              )
+            : "No offers yet. Add packages, retainers, or listing products with an HTTPS checkout link (Stripe Payment Links, PayPal, and other providers are fine)."}
         </p>
       ) : (
         <ul className="mt-4 divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
@@ -281,9 +417,16 @@ export function OffersPaymentLinksSettings() {
               data-testid={`offer-row-${offer.id}`}
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-gray-900">{offer.displayName}</p>
+                <p className="truncate font-medium text-gray-900">
+                  {offer.displayName}
+                </p>
                 <p className="truncate text-xs text-gray-500">
-                  {[offer.priceDisplay, offer.billingCadence !== "once" ? offer.billingCadence : null]
+                  {[
+                    offer.priceDisplay,
+                    offer.billingCadence !== "once"
+                      ? offer.billingCadence
+                      : null,
+                  ]
                     .filter(Boolean)
                     .join(" · ") || "No price set"}
                   {offer.checkoutUrl ? " · Checkout set" : " · No checkout URL"}
@@ -292,67 +435,110 @@ export function OffersPaymentLinksSettings() {
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                  offer.active ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-gray-600",
+                  offer.active
+                    ? "bg-emerald-100 text-emerald-900"
+                    : "bg-gray-100 text-gray-600",
                 )}
               >
-                {offer.active ? "Active" : "Inactive"}
+                {offer.archivedAt
+                  ? t("salesCatalog.archived", "Archived")
+                  : offer.active
+                    ? "Active"
+                    : "Inactive"}
               </span>
               <div className="flex items-center gap-0.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={index === 0 || reorderMutation.isPending}
-                  onClick={() => moveOffer(offer.id, -1)}
-                  aria-label="Move up"
-                >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={index === offers.length - 1 || reorderMutation.isPending}
-                  onClick={() => moveOffer(offer.id, 1)}
-                  aria-label="Move down"
-                >
-                  <ArrowDown className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={() => {
-                    setCreating(false);
-                    setEditingId(offer.id);
-                    setForm(formFromOffer(offer));
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 text-gray-500 hover:text-red-700"
-                  onClick={() => {
-                    if (window.confirm(`Archive “${offer.displayName}”? AI will stop using it.`)) {
-                      archiveMutation.mutate(offer.id);
-                    }
-                  }}
-                  aria-label="Archive offer"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                {!catalog && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      disabled={index === 0 || reorderMutation.isPending}
+                      onClick={() => moveOffer(offer.id, -1)}
+                      aria-label="Move up"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      disabled={
+                        index === offers.length - 1 || reorderMutation.isPending
+                      }
+                      onClick={() => moveOffer(offer.id, 1)}
+                      aria-label="Move down"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
+                {!offer.archivedAt && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        setCreating(false);
+                        setEditingId(offer.id);
+                        setForm(formFromOffer(offer));
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-gray-500 hover:text-red-700"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Archive “${offer.displayName}”? AI will stop using it.`,
+                          )
+                        ) {
+                          archiveMutation.mutate(offer.id);
+                        }
+                      }}
+                      aria-label="Archive offer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
 
+      {catalog && (
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            disabled={offset === 0 || offersQuery.isFetching}
+            onClick={() => setOffset(Math.max(0, offset - 25))}
+          >
+            {t("salesCatalog.previous", "Previous")}
+          </Button>
+          <span className="text-sm text-gray-500">
+            {t("salesCatalog.page", "Page")} {Math.floor(offset / 25) + 1}
+          </span>
+          <Button
+            variant="outline"
+            disabled={
+              offersQuery.data?.nextOffset == null || offersQuery.isFetching
+            }
+            onClick={() => setOffset(offersQuery.data?.nextOffset ?? 0)}
+          >
+            {t("salesCatalog.next", "Next")}
+          </Button>
+        </div>
+      )}
       {showEditor && (
         <div className="mt-4 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3 sm:p-4">
           <p className="text-sm font-semibold text-gray-900">

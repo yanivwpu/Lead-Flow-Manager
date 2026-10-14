@@ -50,6 +50,7 @@ const AIBrain = lazy(() => import("./AIBrain").then(m => ({ default: m.AIBrain }
 const RealtorGrowthEngine = lazy(() => import("./RealtorGrowthEngine").then(m => ({ default: m.RealtorGrowthEngine })));
 const ProspectAI = lazy(() => import("./ProspectAI").then(m => ({ default: m.ProspectAI })));
 const Contacts = lazy(() => import("./Contacts").then(m => ({ default: m.Contacts })));
+const SalesCatalog = lazy(() => import("./SalesCatalog").then(m => ({ default: m.SalesCatalog })));
 const Campaigns = lazy(() => import("./Campaigns").then(m => ({ default: m.Campaigns })));
 
 const PageLoader = () => (
@@ -228,6 +229,7 @@ function AppContent() {
               <Route path="/app/widget" component={WebsiteWidget} />
               <Route path="/app/integrations" component={Integrations} />
               <Route path="/app/ai-brain" component={AIBrain} />
+              <Route path="/app/sales-catalog" component={SalesCatalog} />
               <Route path="/app/search" component={Search} />
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />

@@ -70,6 +70,7 @@ export async function listLiveBusinessDataProviderViews(
       ...descriptor,
       status: statusResult.status,
       detail: statusResult.detail,
+      catalogReadiness: "catalogReadiness" in statusResult ? statusResult.catalogReadiness : undefined,
     });
   }
   return views;

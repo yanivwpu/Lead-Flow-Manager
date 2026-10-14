@@ -1,3 +1,4 @@
+import { shopifyCatalogReadiness } from "@shared/salesCatalog";
 /**
  * Shopify Products — wraps existing Shopify connection status.
  * Product catalog query is not implemented in Phase 1 (no prompt stuffing).
@@ -26,10 +27,10 @@ export const shopifyProvider: LiveBusinessDataProvider = {
     try {
       const user = await storage.getUser(userId);
       if (!isShopifyConnected(user)) {
-        return { status: "disconnected", detail: "Not connected" };
+        return { status: "disconnected", detail: "Not connected · Product catalog unavailable", catalogReadiness: shopifyCatalogReadiness(false) };
       }
       // Catalog search is Phase 2+; surface connection only in Phase 1.
-      return { status: "connected", detail: "Connected" };
+      return { status: "connected", detail: "Shop connected · Product catalog unavailable", catalogReadiness: shopifyCatalogReadiness(true) };
     } catch {
       return { status: "error", detail: "Unable to load Shopify status" };
     }

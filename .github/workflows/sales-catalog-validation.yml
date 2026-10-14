@@ -1,0 +1,46 @@
+name: Sales Catalog validation
+on:
+  pull_request:
+    paths:
+      - "server/salesCatalog/**"
+      - "shared/salesCatalog.ts"
+      - "server/workspaceOffers/**"
+      - "server/aiLiveBusinessData/**"
+      - "shared/aiLiveBusinessData.ts"
+      - "shared/appNav.ts"
+      - "client/src/pages/SalesCatalog*.tsx"
+      - "client/src/pages/AppLayout.tsx"
+      - "client/src/components/settings/OffersPaymentLinksSettings.tsx"
+      - "client/src/components/aibrain/BusinessKnowledgeSteps.tsx"
+      - "client/src/lib/useAppNav.ts"
+      - "client/src/locales/*.json"
+      - "tests/sales-catalog*.test.ts"
+      - "tests/sales-catalog*.test.tsx"
+      - ".github/workflows/sales-catalog-validation.yml"
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Unreachable fixture only. Integration tests use disposable in-memory PostgreSQL.
+      DATABASE_URL: postgres://fixture:fixture@127.0.0.1:1/catalog_fixture
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Catalog integration and offer, AI, navigation compatibility
+        run: |
+          node --import tsx --test tests/sales-catalog-ui.test.tsx tests/sales-catalog-retrieval.test.ts tests/sales-catalog.test.ts tests/sales-catalog-provider.test.ts tests/workspace-offers.test.ts tests/ai-live-business-data.test.ts tests/app-nav-ia.test.ts tests/knowledge-fact-grounding.test.ts tests/growth-engine-pro-entitlement.test.ts
+          # Two untouched Prospect AI artwork/quota layout assertions already fail on main.
+          node --import tsx --test --test-name-pattern="^(authenticated|public|Growth Engine catalog)" tests/growth-engine-prospect-ai-routing.test.ts
+      - name: Reject TypeScript regressions against PR base
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - name: Build
+        run: npm run build

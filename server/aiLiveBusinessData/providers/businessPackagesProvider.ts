@@ -20,12 +20,11 @@ import {
   formatOfferLiveSummary,
   messageHasPurchaseIntent,
   offerToBusinessPackage,
-  selectRelevantOffers,
 } from "@shared/workspaceOffers";
 import {
   countActiveWorkspaceOffers,
-  listWorkspaceOffers,
 } from "../../workspaceOffers/offerStore";
+import { salesCatalog } from "../../salesCatalog";
 import type {
   LiveBusinessDataProvider,
   LiveBusinessDataProviderStatusResult,
@@ -118,20 +117,13 @@ export const businessPackagesProvider: LiveBusinessDataProvider = {
       LIVE_BUSINESS_DATA_PROMPT_RECORD_LIMIT,
     );
 
-    const offers = await listWorkspaceOffers(ctx.userId, {
-      includeArchived: false,
-      activeOnly: false,
-    });
-    const active = offers.filter((o) => o.active && !o.archivedAt);
-    if (active.length === 0) return [];
-
     const hint =
       (ctx.hint && String(ctx.hint).trim()) ||
       extractPackageNameHint(ctx.message) ||
       null;
     const purchaseIntent = messageHasPurchaseIntent(ctx.message);
 
-    const relevant = selectRelevantOffers(active, ctx.message, hint, limit);
+    const relevant = await salesCatalog.recommend(ctx.userId, { message: ctx.message, hint, limit });
     return relevant.map((offer) => {
       const pkg = offerToBusinessPackage(offer);
       // Only surface the exact stored checkout URL — never invent when missing.
