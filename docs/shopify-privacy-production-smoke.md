@@ -2,7 +2,8 @@
 
 Preparation only. This procedure does not authorize merge, deployment, infrastructure,
 production permissions/settings changes, or sending. The staging procedure remains
-staging-only. No production identities or receiver URLs are compiled into this runner.
+staging-only. Railway app/runner identities and receiver URLs are supplied independently. The reviewed
+Neon production identities below are pinned in source; runner variables cannot redirect them.
 
 ## What this verifies
 
@@ -50,8 +51,10 @@ Separate approval is required for the strictly necessary synthetic INSERT and
 receipt UPDATE. Use an **existing approved restricted database login** via a secret
 reference, not the app's `DATABASE_URL`. Its minimum privileges are:
 
-- CONNECT to the existing production database; USAGE on `public`.
-- EXECUTE on `pg_catalog.pg_control_system()` for independent database identity.
+- CONNECT to the existing Neon `neondb` database; USAGE on `public`.
+- Read-only catalog visibility for `pg_settings`, `pg_roles` and the task primary-key metadata.
+  No `pg_control_system()` or elevated monitoring role is needed.
+- No SET privilege on `neon.project_id`, `neon.branch_id` or `neon.endpoint_id`.
 - INSERT on task columns `id,dedupe_key,request_kind,status,completed_at,deadline_at,next_attempt_at,required_checks,checks`.
 - SELECT on `id,dedupe_key,request_kind,status,completed_at`; UPDATE on `checks` only.
 - No elevated role flags, database/schema CREATE, DELETE, TRUNCATE, UPDATE on status,
@@ -67,11 +70,48 @@ back to app credentials. If persistence cannot be approved, do not send.
 
 ## Runner-only configuration (after separate approval)
 
-First verify the production app/database IDs, receiver domain, database hostname
-and PostgreSQL system identifier independently through the Railway control plane
-and a read-only DBA observation. Record that non-secret manifest and reviewed source
-SHA before provisioning; do not learn expected identity from the connection under
-test. This preparation has not revalidated those live identities or sender keys.
+### Independently verified Neon production identity
+
+On 2026-10-14, authenticated Neon control-plane reads confirmed:
+
+- Project: `fancy-truth-71283112`.
+- Production branch: `br-lucky-salad-anatrtle` (named `production`).
+- Database: `neondb` (owner `neondb_owner`, which the runner must never use).
+- Read-write endpoint: `ep-polished-boat-an973ovy`.
+- Direct hostname: `ep-polished-boat-an973ovy.c-6.us-east-1.aws.neon.tech`.
+
+A separately routed, read-only query of server catalog metadata on those explicit
+project/branch/endpoint/database IDs returned the same `neon.project_id`,
+`neon.branch_id` and `neon.endpoint_id`. Project/branch settings were `postmaster`;
+the deployed endpoint setting was `superuser`. No merchant tables, rows or credentials
+were read. These non-secret identities are pinned in reviewed source. This metadata
+check used the connector's existing access; it does **not** establish that a suitable
+least-privilege runner login exists or has approved permissions.
+
+The runtime requires a direct connection and forces TLS certificate/hostname
+validation (`rejectUnauthorized: true` with the pinned SNI hostname). Only optional
+`sslmode=verify-full` is accepted in the URL; it is removed before constructing the
+Pool so pg URL options cannot override the explicit verified TLS configuration.
+Pooled hosts, other databases, role substitutions, SSL downgrades and URL options
+are rejected. Hostname is a transport constraint, never proof of tenant identity.
+
+On the **same pinned database session** used for the guard and receipt writes, the
+runner validates `current_database()=neondb`, schema `public`, and current/session
+user both equal the independently approved restricted login. It requires registered
+`pg_settings` entries to match the pinned Neon project/branch/endpoint IDs. Project
+and branch must be postmaster-only; endpoint must be postmaster/superuser-only; the
+login must have no SET privilege for any of them. Merely setting custom GUC placeholders
+cannot satisfy this check. Missing, empty, mutable, inaccessible or mismatched
+metadata is a hard stop; no hostname-only or `pg_control_system()` fallback exists.
+The pinned connection does not reconnect before consuming authorization.
+
+Neon's [server implementation](https://github.com/neondatabase/neon/blob/main/pgxn/neon/libpagestore.c)
+defines these registered identity settings. Their visibility/context is checked on
+the deployed server rather than assumed from the latest source. Reverify the
+control-plane manifest and restricted-role access before execution. A changed
+endpoint requires a reviewed source update; never automatically repin from the
+connection under test. Independently verify Railway app/runner identities and the
+receiver domain separately. Sender/key authorization remains unverified.
 
 Prepare one domainless service named `production-privacy-email-once`, pinned to the
 reviewed commit and `/railway/privacy-production-smoke.json`, repository root `/`.
@@ -88,11 +128,15 @@ into commands, logs, PRs or source. Do not attach the app's full environment.
 | --- | --- |
 | `PRIVACY_SMOKE_PROJECT_ID`, `PRIVACY_SMOKE_ENVIRONMENT_ID` | Independently verified production UUIDs |
 | `PRIVACY_SMOKE_RUNNER_ID` | Literal independently verified new runner UUID; never self-reference the runtime ID |
-| `PRIVACY_SMOKE_APP_ID`, `PRIVACY_SMOKE_DATABASE_SERVICE_ID` | Verified existing app/database UUIDs, distinct from runner |
+| `PRIVACY_SMOKE_APP_ID` | Verified existing Railway app UUID, distinct from runner |
 | `PRIVACY_SMOKE_APPROVED_APP_ORIGIN` | Independently verified HTTPS production origin, e.g. `https://app.whachatcrm.com` |
 | `PRIVACY_SMOKE_RECEIVER_URL` | That origin plus `/api/internal/shopify/privacy-alerts` |
-| `PRIVACY_SMOKE_DATABASE_HOST`, `PRIVACY_SMOKE_DATABASE_SYSTEM_ID` | Independently pinned production hostname/system identifier |
-| `PRIVACY_SMOKE_DATABASE_URL` | Existing approved restricted-login reference; not `${{App.DATABASE_URL}}` |
+| `PRIVACY_SMOKE_NEON_PROJECT_ID` | `fancy-truth-71283112`; must equal the independently verified source pin |
+| `PRIVACY_SMOKE_NEON_BRANCH_ID` | `br-lucky-salad-anatrtle`; must equal the source pin |
+| `PRIVACY_SMOKE_NEON_ENDPOINT_ID` | `ep-polished-boat-an973ovy`; must equal the source pin |
+| `PRIVACY_SMOKE_DATABASE_NAME` | `neondb`; must equal the source pin |
+| `PRIVACY_SMOKE_DATABASE_ROLE` | Independently approved existing least-privilege Neon login; never `neondb_owner` |
+| `PRIVACY_SMOKE_DATABASE_URL` | Existing approved restricted Neon login reference, direct pinned host and `/neondb`, optionally `?sslmode=verify-full`; not `${{App.DATABASE_URL}}` |
 | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SHOPIFY_PRIVACY_ALERT_TOKEN` | References to existing production sending key, sender and rotated token |
 | `PRIVACY_SMOKE_RESEND_VERIFY_KEY` | Existing Resend account credential permitted to GET the verified sender domain, runner-only reference |
 | `PRIVACY_SMOKE_RESEND_DOMAIN_ID` | Independently verified Resend UUID for `crm.whachatcrm.com` |
@@ -147,7 +191,8 @@ are needed. Do not configure ongoing alert delivery on the production app.
 ## Validation
 
 `node --import tsx --test tests/shopify-privacy-production-smoke.test.ts` tests identity,
-authorization/expiry, dangerous configuration, disabled authenticated receiver,
+authorization/expiry, verified TLS, wrong/missing/spoofable Neon identity metadata,
+database/login mismatches, dangerous configuration, disabled authenticated receiver,
 live domain-verification failures, restricted role, PostgreSQL uniqueness races,
 lost commit acknowledgment, restarts and provider rejection/timeout. CI uses the
 explicit disposable localhost `whachat_shopify_test` database; local fallback uses

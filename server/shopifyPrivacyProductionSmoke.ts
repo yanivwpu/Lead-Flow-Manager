@@ -1,4 +1,13 @@
 import type { Pool } from "pg";
+type SmokeDatabase = Pick<Pool, "query">;
+
+// Independently verified via Neon control-plane metadata and read-only server metadata.
+// These reviewed pins cannot be redirected by changing runner variables. No credentials.
+export const PRODUCTION_SMOKE_NEON_TARGET = Object.freeze({
+  project: "fancy-truth-71283112", branch: "br-lucky-salad-anatrtle", database: "neondb",
+  endpoint: "ep-polished-boat-an973ovy",
+  host: "ep-polished-boat-an973ovy.c-6.us-east-1.aws.neon.tech",
+});
 
 // One logical authorization, never derived from deployment IDs or configurable retry keys.
 export const PRODUCTION_SMOKE_ID = "8b0b231e-a197-4bda-982a-397ec42b2b0c";
@@ -11,8 +20,7 @@ export function productionSmokeConfig(env = process.env, now = Date.now()) {
     ["RAILWAY_ENVIRONMENT_ID", "PRIVACY_SMOKE_ENVIRONMENT_ID"], ["RAILWAY_SERVICE_ID", "PRIVACY_SMOKE_RUNNER_ID"]]) {
     if (!uuid.test(env[expected] || "") || env[actual] !== env[expected]) throw Error("runner_identity_rejected");
   }
-  if (!uuid.test(env.PRIVACY_SMOKE_APP_ID || "") || !uuid.test(env.PRIVACY_SMOKE_DATABASE_SERVICE_ID || "") ||
-      new Set([env.PRIVACY_SMOKE_RUNNER_ID, env.PRIVACY_SMOKE_APP_ID, env.PRIVACY_SMOKE_DATABASE_SERVICE_ID]).size !== 3 ||
+  if (!uuid.test(env.PRIVACY_SMOKE_APP_ID || "") || env.PRIVACY_SMOKE_RUNNER_ID === env.PRIVACY_SMOKE_APP_ID ||
       env.RAILWAY_SERVICE_NAME !== "production-privacy-email-once" || env.RAILWAY_ENVIRONMENT_NAME !== "production")
     throw Error("runner_isolation_rejected");
   const expires = Date.parse(env.PRIVACY_SMOKE_EXPIRES_AT || "");
@@ -32,19 +40,43 @@ export function productionSmokeConfig(env = process.env, now = Date.now()) {
       receiver.origin !== origin.origin || receiver.protocol !== "https:" || receiver.username || receiver.password ||
       receiver.pathname !== "/api/internal/shopify/privacy-alerts" || receiver.search || receiver.hash)
     throw Error("receiver_target_rejected");
+  const target = PRODUCTION_SMOKE_NEON_TARGET;
+  if (env.PRIVACY_SMOKE_NEON_PROJECT_ID !== target.project || env.PRIVACY_SMOKE_NEON_BRANCH_ID !== target.branch ||
+      env.PRIVACY_SMOKE_NEON_ENDPOINT_ID !== target.endpoint || env.PRIVACY_SMOKE_DATABASE_NAME !== target.database ||
+      !/^[a-z][a-z0-9_]{0,62}$/.test(env.PRIVACY_SMOKE_DATABASE_ROLE || "") || env.PRIVACY_SMOKE_DATABASE_ROLE === "neondb_owner")
+    throw Error("neon_target_or_role_rejected");
   const database = new URL(env.PRIVACY_SMOKE_DATABASE_URL || "");
-  if (!["postgres:", "postgresql:"].includes(database.protocol) || !env.PRIVACY_SMOKE_DATABASE_HOST ||
-      database.hostname !== env.PRIVACY_SMOKE_DATABASE_HOST || database.pathname !== "/railway" ||
-      database.search || database.hash || (database.port && database.port !== "5432") || !database.username || !database.password ||
-      !/^\d+$/.test(env.PRIVACY_SMOKE_DATABASE_SYSTEM_ID || "")) throw Error("database_target_rejected");
-  return { receiver: receiver.href, expires, connectionString: database.href };
+  if (!["postgres:", "postgresql:"].includes(database.protocol) || database.hostname !== target.host ||
+      database.pathname !== `/${target.database}` || database.hash || (database.port && database.port !== "5432") ||
+      decodeURIComponent(database.username) !== env.PRIVACY_SMOKE_DATABASE_ROLE || !database.password ||
+      [...database.searchParams].some(([key,value]) => key !== "sslmode" || value !== "verify-full") ||
+      database.searchParams.getAll("sslmode").length > 1) throw Error("database_target_rejected");
+  // pg URL SSL parameters override Pool.ssl. Strip the validated query and force verified TLS explicitly.
+  database.search = "";
+  return { receiver: receiver.href, expires, connectionString: database.href,
+    ssl: { rejectUnauthorized: true as const, servername: target.host } };
 }
 
-export async function verifyProductionSmokeDatabase(pool: Pool, env = process.env) {
+export async function verifyProductionSmokeDatabase(pool: SmokeDatabase, env = process.env) {
+  const target = PRODUCTION_SMOKE_NEON_TARGET;
   const row = (await pool.query(`SELECT current_database() database, current_schema() schema,
-    system_identifier::text system_id FROM pg_control_system()`)).rows[0];
-  if (row?.database !== "railway" || row.schema !== "public" || row.system_id !== env.PRIVACY_SMOKE_DATABASE_SYSTEM_ID)
+    current_user AS role, session_user AS login`)).rows[0];
+  if (row?.database !== target.database || row.schema !== "public" || !env.PRIVACY_SMOKE_DATABASE_ROLE ||
+      row.role !== env.PRIVACY_SMOKE_DATABASE_ROLE || row.login !== env.PRIVACY_SMOKE_DATABASE_ROLE)
     throw Error("database_identity_rejected");
+  // Registered server GUCs, not spoofable custom placeholders or hostname inference.
+  // Production project/branch settings are postmaster-only; endpoint may be superuser-only.
+  const settings = (await pool.query(`SELECT name, setting, context,
+    has_parameter_privilege(name,'SET') can_set FROM pg_catalog.pg_settings
+    WHERE name IN ('neon.project_id','neon.branch_id','neon.endpoint_id')`)).rows;
+  const expected = { "neon.project_id": target.project, "neon.branch_id": target.branch, "neon.endpoint_id": target.endpoint };
+  for (const [name, value] of Object.entries(expected)) {
+    const matches = settings.filter(s => s.name === name);
+    const setting = matches[0];
+    if (matches.length !== 1 || setting.setting !== value ||
+        (name === "neon.endpoint_id" ? !["postmaster","superuser"].includes(setting.context) : setting.context !== "postmaster") ||
+        setting.can_set !== false) throw Error("neon_server_identity_rejected");
+  }
   const privilege = (await pool.query(`SELECT r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls
       OR has_database_privilege(current_database(),'CREATE') OR has_schema_privilege('public','CREATE')
       OR has_table_privilege('public.shopify_privacy_erasure_tasks','DELETE')
@@ -86,7 +118,7 @@ export async function verifyProductionSmokeSender(env = process.env, request = f
  * If the commit acknowledgement is lost, the caller must stop. A restart cannot resend.
  * Keep this completed synthetic tombstone indefinitely; no actual privacy request is queued.
  */
-export async function consumeProductionSmoke(pool: Pool, expires: number) {
+export async function consumeProductionSmoke(pool: SmokeDatabase, expires: number) {
   const result = await pool.query(`INSERT INTO public.shopify_privacy_erasure_tasks
     (id,dedupe_key,request_kind,status,completed_at,deadline_at,next_attempt_at,required_checks,checks)
     SELECT $1,$2,'privacy_email_smoke','smoke_consumed',NOW(),NOW(),'infinity','[]'::jsonb,
@@ -96,7 +128,7 @@ export async function consumeProductionSmoke(pool: Pool, expires: number) {
   if (result.rowCount !== 1) throw Error("authorization_consumed_or_expired");
 }
 
-export async function recordProductionSmoke(pool: Pool, accepted: boolean, messageId: string | null) {
+export async function recordProductionSmoke(pool: SmokeDatabase, accepted: boolean, messageId: string | null) {
   if (accepted !== !!messageId || (messageId && !uuid.test(messageId))) throw Error("invalid_receipt");
   const result = await pool.query(`UPDATE public.shopify_privacy_erasure_tasks SET checks=$3::jsonb
     WHERE id=$1 AND dedupe_key=$2 AND request_kind='privacy_email_smoke'
@@ -107,7 +139,7 @@ export async function recordProductionSmoke(pool: Pool, accepted: boolean, messa
 }
 
 /** The persistent insert and local burn both precede the only allowed provider invocation. */
-export function productionSmokeDelivery(pool: Pool, expires: number, send: () => Promise<boolean>) {
+export function productionSmokeDelivery(pool: SmokeDatabase, expires: number, send: () => Promise<boolean>) {
   let attempted = false, consumed = false, accepted = false;
   return {
     get consumed() { return consumed; },

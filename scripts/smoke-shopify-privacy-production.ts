@@ -7,6 +7,7 @@ async function main() {
   let providerCalls = 0;
   let delivery: ReturnType<typeof productionSmokeDelivery> | undefined;
   let pool: import("pg").Pool | undefined;
+  let client: import("pg").PoolClient | undefined;
   let server: import("node:http").Server | undefined;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -16,10 +17,12 @@ async function main() {
       console.error(JSON.stringify({ stage: "timeout", result: "acceptance_unconfirmed" })); process.exit(1);
     }, 120000);
     const { Pool } = await import("pg");
-    pool = new Pool({ connectionString: config.connectionString, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 10000 });
+    pool = new Pool({ connectionString: config.connectionString, ssl: config.ssl, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 10000 });
     pool.on("error", () => {}); // Driver events must not expose connection details.
     stage = "database_identity";
-    await verifyProductionSmokeDatabase(pool);
+    client = await pool.connect();
+    client.on("error", () => {});
+    await verifyProductionSmokeDatabase(client);
     stage = "production_receiver";
     await verifyProductionSmokeReceiver(config.receiver, process.env.SHOPIFY_PRIVACY_ALERT_TOKEN!);
     stage = "resend_sender";
@@ -29,7 +32,7 @@ async function main() {
     const { sendEmailDetailed } = await import("../server/email");
     const app = express();
     const receiverEnv = { ...process.env }; // Only the private test receiver is enabled in memory.
-    delivery = productionSmokeDelivery(pool, config.expires, async () => {
+    delivery = productionSmokeDelivery(client, config.expires, async () => {
       stage = "resend_acceptance";
       providerCalls++;
       const result = await sendEmailDetailed({
@@ -66,10 +69,11 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
-    if (pool && delivery?.consumed) {
-      try { await recordProductionSmoke(pool, accepted, providerMessageId); }
+    if (client && delivery?.consumed) {
+      try { await recordProductionSmoke(client, accepted, providerMessageId); }
       catch { console.error(JSON.stringify({ stage: "receipt", result: "recording_failed", resendAccepted: accepted, providerMessageId })); process.exitCode = 1; }
     }
+    client?.release(true);
     await pool?.end();
     if (watchdog) clearTimeout(watchdog);
   }

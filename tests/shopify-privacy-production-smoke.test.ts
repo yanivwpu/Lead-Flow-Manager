@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { Pool } from "pg";
+import { Pool, Client } from "pg";
 import { PGlite } from "@electric-sql/pglite";
 import { productionSmokeConfig, verifyProductionSmokeDatabase, verifyProductionSmokeReceiver, verifyProductionSmokeSender,
-  consumeProductionSmoke, recordProductionSmoke, productionSmokeDelivery, PRODUCTION_SMOKE_ID, PRODUCTION_SMOKE_AUTH } from "../server/shopifyPrivacyProductionSmoke";
+  consumeProductionSmoke, recordProductionSmoke, productionSmokeDelivery, PRODUCTION_SMOKE_ID, PRODUCTION_SMOKE_AUTH, PRODUCTION_SMOKE_NEON_TARGET as N } from "../server/shopifyPrivacyProductionSmoke";
 const ids = [1,2,3,4,5,6].map(n => `00000000-0000-4000-8000-${String(n).padStart(12,"0")}`);
 const env = {
   RAILWAY_PROJECT_ID: ids[0], PRIVACY_SMOKE_PROJECT_ID: ids[0], RAILWAY_ENVIRONMENT_ID: ids[1], PRIVACY_SMOKE_ENVIRONMENT_ID: ids[1],
-  RAILWAY_SERVICE_ID: ids[2], PRIVACY_SMOKE_RUNNER_ID: ids[2], PRIVACY_SMOKE_APP_ID: ids[3], PRIVACY_SMOKE_DATABASE_SERVICE_ID: ids[4],
+  RAILWAY_SERVICE_ID: ids[2], PRIVACY_SMOKE_RUNNER_ID: ids[2], PRIVACY_SMOKE_APP_ID: ids[3],
   RAILWAY_SERVICE_NAME: "production-privacy-email-once", RAILWAY_ENVIRONMENT_NAME: "production",
   PRIVACY_SMOKE_AUTHORIZE: PRODUCTION_SMOKE_AUTH, PRIVACY_SMOKE_EXPIRES_AT: new Date(Date.now()+1800000).toISOString(),
   SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "false", SHOPIFY_PRIVACY_S3_DELETE_ENABLED: "0",
@@ -17,15 +17,18 @@ const env = {
   PRIVACY_SMOKE_SENDER_APPROVAL: "VERIFIED SENDING KEY AUTHORIZED FOR noreply@crm.whachatcrm.com",
   RESEND_FROM_EMAIL: "WhachatCRM <noreply@crm.whachatcrm.com>", SHOPIFY_PRIVACY_ALERT_TOKEN: "t".repeat(48),
   PRIVACY_SMOKE_APPROVED_APP_ORIGIN: "https://production.example.invalid", PRIVACY_SMOKE_RECEIVER_URL: "https://production.example.invalid/api/internal/shopify/privacy-alerts",
-  PRIVACY_SMOKE_DATABASE_HOST: "private.example.invalid", PRIVACY_SMOKE_DATABASE_URL: "postgres://fixture:fixture@private.example.invalid/railway",
-  PRIVACY_SMOKE_DATABASE_SYSTEM_ID: "123456789",
+  PRIVACY_SMOKE_NEON_PROJECT_ID: N.project, PRIVACY_SMOKE_NEON_BRANCH_ID: N.branch, PRIVACY_SMOKE_NEON_ENDPOINT_ID: N.endpoint,
+  PRIVACY_SMOKE_DATABASE_NAME: N.database, PRIVACY_SMOKE_DATABASE_ROLE: "privacy_smoke_runner",
+  PRIVACY_SMOKE_DATABASE_URL: `postgres://privacy_smoke_runner:fixture@${N.host}/${N.database}?sslmode=verify-full`,
 };
 test("production gates require independently supplied identities and explicit approval, with no mutation", () => {
   const original = { ...env }; assert.equal(productionSmokeConfig(env).receiver, env.PRIVACY_SMOKE_RECEIVER_URL); assert.deepEqual(env, original);
   for (const key of Object.keys(env)) assert.throws(() => productionSmokeConfig({ ...env, [key]: "" }), key);
   for (const patch of [
     { RAILWAY_ENVIRONMENT_NAME: "staging" }, { RAILWAY_SERVICE_ID: ids[3], PRIVACY_SMOKE_RUNNER_ID: ids[3] },
-    { PRIVACY_SMOKE_RUNNER_ID: ids[4], RAILWAY_SERVICE_ID: ids[4] }, { SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "true" },
+    { PRIVACY_SMOKE_NEON_PROJECT_ID: "another-project" }, { PRIVACY_SMOKE_NEON_BRANCH_ID: "br-other-branch" },
+    { PRIVACY_SMOKE_NEON_ENDPOINT_ID: "ep-other-endpoint" }, { PRIVACY_SMOKE_DATABASE_NAME: "railway" },
+    { PRIVACY_SMOKE_DATABASE_ROLE: "neondb_owner" }, { SHOPIFY_PRIVACY_ALERT_EMAIL_ENABLED: "true" },
     { DATABASE_URL: env.PRIVACY_SMOKE_DATABASE_URL }, { SESSION_SECRET: "fixture" }, { SHOPIFY_PRIVACY_EVIDENCE_KEY: "fixture" },
     { SHOPIFY_PRIVACY_S3_DELETE_ENABLED: "1" }, { RESEND_FROM_EMAIL: "personal@example.invalid" },
     { PRIVACY_SMOKE_RECEIVER_URL: "https://different.example.invalid/api/internal/shopify/privacy-alerts" },
@@ -67,12 +70,50 @@ test("sender requires live verified sending domain; missing read permission is a
     await assert.rejects(verifyProductionSmokeSender(env, (async () => Response.json(body)) as typeof fetch));
   await assert.rejects(verifyProductionSmokeSender(env, (async () => new Response('{}',{status:403})) as typeof fetch));
 });
-test("database identity and excessive runner privilege fail before durable consumption", async () => {
-  const pool = (identity: string, unsafe: boolean) => ({query: async (sql: string) => ({ rows: sql.includes('pg_control_system') ?
-    [{database:'railway',schema:'public',system_id:identity}] : sql.includes('pg_roles') ? [{unsafe}] : [{ready:true}] })}) as unknown as Pool;
-  await verifyProductionSmokeDatabase(pool(env.PRIVACY_SMOKE_DATABASE_SYSTEM_ID,false),env);
-  await assert.rejects(verifyProductionSmokeDatabase(pool('different',false),env));
-  await assert.rejects(verifyProductionSmokeDatabase(pool(env.PRIVACY_SMOKE_DATABASE_SYSTEM_ID,true),env));
+test("Neon connection enforces verified TLS and rejects pooled/redirected databases and SSL/options overrides", () => {
+  const config = productionSmokeConfig(env);
+  assert.equal(new URL(config.connectionString).search, "");
+  const client = new Client({ connectionString: config.connectionString, ssl: config.ssl });
+  assert.deepEqual((client as any).connectionParameters.ssl, { rejectUnauthorized: true, servername: N.host });
+  for (const connection of [
+    env.PRIVACY_SMOKE_DATABASE_URL.replace('verify-full','require'),
+    env.PRIVACY_SMOKE_DATABASE_URL.replace('verify-full','disable'),
+    env.PRIVACY_SMOKE_DATABASE_URL + '&sslmode=verify-full',
+    env.PRIVACY_SMOKE_DATABASE_URL + '&options=-c%20neon.branch_id%3Dbr-spoof',
+    env.PRIVACY_SMOKE_DATABASE_URL + '&ssl=no-verify',
+    env.PRIVACY_SMOKE_DATABASE_URL.replace(N.host,N.host.replace('.','-pooler.')),
+    env.PRIVACY_SMOKE_DATABASE_URL.replace('/neondb','/railway'),
+    env.PRIVACY_SMOKE_DATABASE_URL.replace('privacy_smoke_runner:','neondb_owner:'),
+    'postgres://privacy_smoke_runner:fixture@postgres.railway.internal/railway',
+  ]) assert.throws(() => productionSmokeConfig({ ...env, PRIVACY_SMOKE_DATABASE_URL: connection }));
+});
+test("Neon server project/branch/endpoint, database/login and non-settable registered settings fail closed before writes", async () => {
+  const context = { database:N.database, schema:'public', role:env.PRIVACY_SMOKE_DATABASE_ROLE, login:env.PRIVACY_SMOKE_DATABASE_ROLE };
+  const settings = [
+    {name:'neon.project_id',setting:N.project,context:'postmaster',can_set:false},
+    {name:'neon.branch_id',setting:N.branch,context:'postmaster',can_set:false},
+    {name:'neon.endpoint_id',setting:N.endpoint,context:'superuser',can_set:false},
+  ];
+  const connection = (row = context, rows = settings, unsafe = false, ready = true) => ({ query: async (sql: string) => {
+    assert.ok(!/^\s*(INSERT|UPDATE|DELETE|CREATE|ALTER)\b|pg_control_system/.test(sql));
+    return { rows: sql.includes('current_database() database, current_schema()') ? [row] :
+      sql.includes('pg_catalog.pg_settings') ? rows : sql.includes('pg_roles') ? [{unsafe}] : [{ready}] };
+  }}) as unknown as Pool;
+  await verifyProductionSmokeDatabase(connection(),env);
+  // Matching connection hostname cannot rescue a mismatched tenant, branch or compute.
+  for (let i=0;i<settings.length;i++) {
+    for (const patch of [{setting:'wrong'}, {setting:''}, {context:'user'}, {can_set:true}]) {
+      const changed = settings.map((s,n) => n===i ? {...s,...patch} : s);
+      await assert.rejects(verifyProductionSmokeDatabase(connection(context,changed),env));
+    }
+    await assert.rejects(verifyProductionSmokeDatabase(connection(context,settings.filter((_,n)=>n!==i)),env));
+  }
+  await assert.rejects(verifyProductionSmokeDatabase(connection(context,[...settings,settings[0]]),env));
+  for (const patch of [{database:'railway'}, {schema:'other'}, {role:'neondb_owner'}, {login:'different_login'}])
+    await assert.rejects(verifyProductionSmokeDatabase(connection({...context,...patch}),env));
+  await assert.rejects(verifyProductionSmokeDatabase(connection(context,settings,true),env));
+  await assert.rejects(verifyProductionSmokeDatabase(connection(context,settings,false,false),env));
+  await assert.rejects(verifyProductionSmokeDatabase({query: async () => {throw Error('metadata unavailable');}} as unknown as Pool,env));
 });
 test("existing PostgreSQL task PK burns one authorization across races, restarts, ambiguity and expiry without DDL in runner", async () => {
   const target = process.env.SHOPIFY_TEST_DATABASE_URL;
