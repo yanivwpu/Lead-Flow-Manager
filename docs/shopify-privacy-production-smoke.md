@@ -65,8 +65,197 @@ An operator must independently inspect remaining privileges and role memberships
 these checks are defense in depth, not a substitute for permission review. If this
 approved login/reference or permission to inspect database identity is missing,
 **stop**. Role creation/grants are production configuration changes requiring
-separate approval; this PR includes no provisioning or grant script. Do not fall
+separate approval; the operator-only SQL templates below are not an executed provisioning script. Do not fall
 back to app credentials. If persistence cannot be approved, do not send.
+
+## Supported least-privilege role provisioning (operator action only)
+
+Neon's [role documentation](https://neon.com/docs/manage/roles#manage-roles-with-sql)
+distinguishes SQL-created roles from Console/CLI/API-created roles. The latter
+receive `neon_superuser` membership; ordinary SQL-created roles do not. Do not use
+`neon_create_postgres_role`, the Console **Add role** control, or CLI role creation
+for this runner. Do not try to repair an API-created role by revoking the protected
+membership, and do not change the runner's rejection checks.
+
+The reported API-created `privacy_smoke_once` was removed. A read-only catalog
+observation on 2026-10-14 independently confirmed it is absent. The connector's
+existing SQL session authenticates as `neondb_owner`, has `CREATEROLE`, and owns
+`neondb` and the task table. Thus the project has the SQL authority needed to create
+an ordinary role and grant these columns; inability to revoke `neon_superuser` is
+not evidence that SQL role creation is unavailable. No CREATE/GRANT/password statement
+was executed during this investigation. The connector's owner credential must never
+be attached to the runner or used to run the test. Under the current instruction
+not to use the owner role, provisioning must be handled by an explicitly authorized
+operator/DBA session with role-creation and object-grant authority, not by this agent.
+If a suitable non-owner provisioning account is unavailable, stop and have the DBA
+resolve administrative access separately; do not substitute owner credentials.
+
+1. Obtain separate approval for ordinary SQL role creation, the exact column grants,
+   secure credential installation, and later removal of this disposable login.
+   These are production permission/credential changes, not authorization to send.
+2. Use a trusted private SQL client on the pinned direct Neon production endpoint,
+   `neondb`. Reverify server project/branch/endpoint identity first. The operator
+   must have `CREATEROLE` and grant authority for the database, schema and specified
+   task columns. Check the target name is absent; never reuse or alter an unknown
+   existing role. Do not grant role memberships, ownership, `ALL`, table-wide
+   SELECT/INSERT/UPDATE, predefined read/write/monitor roles, or identity-parameter
+   SET/ALTER SYSTEM privileges.
+3. Create a disabled ordinary SQL role and grant only the required columns in one
+   transaction. This SQL contains no password and creates no table or function:
+
+```sql
+BEGIN;
+CREATE ROLE privacy_smoke_once NOLOGIN NOINHERIT
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS
+  CONNECTION LIMIT 1;
+GRANT CONNECT ON DATABASE neondb TO privacy_smoke_once;
+GRANT USAGE ON SCHEMA public TO privacy_smoke_once;
+GRANT SELECT (id,dedupe_key,request_kind,status,completed_at),
+      INSERT (id,dedupe_key,request_kind,status,completed_at,deadline_at,
+              next_attempt_at,required_checks,checks),
+      UPDATE (checks)
+  ON TABLE public.shopify_privacy_erasure_tasks TO privacy_smoke_once;
+COMMIT;
+```
+
+4. Inspect the permission query below before enabling login: the only expected
+   pre-login blocker is `unsafe_role_attributes` because `rolcanlogin=false`.
+   `NOINHERIT` alone is insufficient: no membership, including transitive membership,
+   is permitted. Effective privileges include PUBLIC and inherited/default grants.
+   Role-local REVOKE cannot subtract privileges granted to PUBLIC. If PUBLIC,
+   default ACLs, an event trigger or any other policy produces extra access, stop.
+   Do not alter PUBLIC/default grants or other application permissions under this
+   procedure; a DBA must review that separately. Review access in any other database
+   on this branch too; the query audits application objects only in the current DB.
+5. Generate the password in the operator's secure secret manager (at least 128 bits
+   of entropy). Use a vetted private SQL client with secret injection, SQL-literal
+   escaping, and credential redaction/history controls to execute the following
+   **template**, supplying a real approved UTC expiry after the execution window.
+   Never execute the placeholder literally. Do not put the password into connector
+   tool arguments, command-line arguments, shell history, PRs, files, query history
+   or unredacted logs. Neon documents plaintext input for SQL password provisioning;
+   do not assume a precomputed hash or a management-API reset is an equivalent safe
+   path. If the client/logging path cannot protect it, stop for operator remediation.
+
+```sql
+ALTER ROLE privacy_smoke_once LOGIN
+  PASSWORD '<securely-injected-random-secret>'
+  VALID UNTIL '<approved-UTC-expiry>';
+```
+
+6. Store the credential/connection URL directly in the approved secure runner-only
+   reference, with the pinned direct hostname, `/neondb`, and verified TLS. Set
+   `PRIVACY_SMOKE_DATABASE_ROLE=privacy_smoke_once`. Reconnect **as that role**;
+   do not validate using SET ROLE or the owner login. Run the read-only audit below
+   and the runner's read-only Neon identity/role/PK preflight without consuming the
+   guard or invoking the smoke entrypoint. Require no blockers and all minimum
+   privileges, matching current/session users, visible non-settable identity GUCs,
+   and the existing primary key. If any permission is missing, stop; never broaden
+   the grants to work around a failure.
+7. After the separately approved test and runner/reference removal, the authorized
+   DBA removes the disposable login. Revoke only its explicit column/database/schema
+   grants and drop that login through SQL; do not use DROP OWNED or CASCADE, and do
+   not delete the fixed task tombstone. Its receipt belongs to the existing table,
+   not to this login. Confirm role absence through a read-only catalog query.
+
+### Read-only permission audit
+
+Run on the pinned `neondb` branch. This inspects only catalogs/effective ACLs, never
+merchant rows, passwords or `pg_authid`. After login is enabled require
+`role_exists=true`, `blockers=[]`, and `basic_grants_present=true`. The basic flag
+is a quick check; the blockers include every required SELECT/INSERT/UPDATE column
+and forbidden grant options. Also run the existing runner's identity/role/PK checks. This audit
+also flags callable non-system routines that could indirectly access merchant data;
+review any such access before approving the runner. Ordinary system catalog access
+and PUBLIC CONNECT/TEMP defaults are not a grant to touch merchant data: the runner
+never uses temp objects, and DBA review of other databases remains required.
+
+```sql
+WITH RECURSIVE
+r AS (
+  SELECT oid, rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
+         rolreplication, rolbypassrls, rolinherit, rolconnlimit
+  FROM pg_catalog.pg_roles WHERE rolname = 'privacy_smoke_once'
+), memberships(roleid) AS (
+  SELECT m.roleid FROM pg_catalog.pg_auth_members m JOIN r ON m.member = r.oid
+  UNION
+  SELECT m.roleid FROM pg_catalog.pg_auth_members m JOIN memberships a ON m.member = a.roleid
+), columns AS (
+  SELECT c.oid, n.nspname, c.relname, a.attnum, a.attname,
+         n.nspname = 'public' AND c.relname = 'shopify_privacy_erasure_tasks' AS allowed_table
+  FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+  WHERE c.relkind IN ('r','p','v','m','f') AND a.attnum > 0 AND NOT a.attisdropped
+    AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+), violations(issue, object_name) AS (
+  SELECT 'role_missing', 'privacy_smoke_once' WHERE NOT EXISTS (SELECT 1 FROM r)
+  UNION ALL
+  SELECT 'unsafe_role_attributes', rolname FROM r
+    WHERE NOT rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls OR rolinherit OR rolconnlimit <> 1
+  UNION ALL
+  SELECT 'missing_database_connect', 'neondb' FROM r WHERE NOT has_database_privilege(r.oid,'neondb','CONNECT')
+  UNION ALL
+  SELECT 'missing_schema_usage', 'public' FROM r WHERE NOT has_schema_privilege(r.oid,'public','USAGE')
+  UNION ALL
+  SELECT 'missing_required_column_grant', required.column_name || ':' || required.privilege
+    FROM r CROSS JOIN (VALUES
+      ('id','SELECT'),('dedupe_key','SELECT'),('request_kind','SELECT'),('status','SELECT'),('completed_at','SELECT'),
+      ('id','INSERT'),('dedupe_key','INSERT'),('request_kind','INSERT'),('status','INSERT'),('completed_at','INSERT'),
+      ('deadline_at','INSERT'),('next_attempt_at','INSERT'),('required_checks','INSERT'),('checks','INSERT'),('checks','UPDATE')
+    ) AS required(column_name,privilege)
+    WHERE NOT has_column_privilege(r.oid,'public.shopify_privacy_erasure_tasks',required.column_name,required.privilege)
+  UNION ALL
+  SELECT 'role_membership', p.rolname FROM memberships m JOIN pg_catalog.pg_roles p ON p.oid=m.roleid
+  UNION ALL
+  SELECT 'database_create', d.datname FROM r CROSS JOIN pg_catalog.pg_database d
+    WHERE has_database_privilege(r.oid,d.oid,'CREATE')
+  UNION ALL
+  SELECT 'schema_create', n.nspname FROM r CROSS JOIN pg_catalog.pg_namespace n
+    WHERE n.nspname !~ '^pg_' AND has_schema_privilege(r.oid,n.oid,'CREATE')
+  UNION ALL
+  SELECT 'unexpected_column_access', c.nspname || '.' || c.relname || '.' || c.attname
+    FROM r CROSS JOIN columns c
+    WHERE (has_column_privilege(r.oid,c.oid,c.attnum,'SELECT') AND
+              NOT (c.allowed_table AND c.attname IN ('id','dedupe_key','request_kind','status','completed_at')))
+       OR (has_column_privilege(r.oid,c.oid,c.attnum,'INSERT') AND
+              NOT (c.allowed_table AND c.attname IN ('id','dedupe_key','request_kind','status','completed_at','deadline_at','next_attempt_at','required_checks','checks')))
+       OR (has_column_privilege(r.oid,c.oid,c.attnum,'UPDATE') AND NOT (c.allowed_table AND c.attname='checks'))
+       OR has_column_privilege(r.oid,c.oid,c.attnum,'REFERENCES')
+       OR has_column_privilege(r.oid,c.oid,c.attnum,'SELECT WITH GRANT OPTION,INSERT WITH GRANT OPTION,UPDATE WITH GRANT OPTION,REFERENCES WITH GRANT OPTION')
+  UNION ALL
+  SELECT 'unexpected_table_access', n.nspname || '.' || c.relname
+    FROM r CROSS JOIN pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE c.relkind IN ('r','p','v','m','f') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+      AND has_table_privilege(r.oid,c.oid,'DELETE,TRUNCATE,TRIGGER')
+  UNION ALL
+  SELECT 'sequence_access', n.nspname || '.' || c.relname
+    FROM r CROSS JOIN pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE c.relkind='S' AND n.nspname !~ '^pg_' AND has_sequence_privilege(r.oid,c.oid,'SELECT,UPDATE,USAGE')
+  UNION ALL
+  SELECT 'user_routine_execute', n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+    FROM r CROSS JOIN pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+      AND p.prorettype NOT IN ('trigger'::regtype,'event_trigger'::regtype)
+      AND has_function_privilege(r.oid,p.oid,'EXECUTE')
+  UNION ALL
+  SELECT 'identity_parameter_write', s.name FROM r CROSS JOIN pg_catalog.pg_settings s
+    WHERE s.name IN ('neon.project_id','neon.branch_id','neon.endpoint_id')
+      AND has_parameter_privilege(r.oid,s.name,'SET,ALTER SYSTEM')
+  UNION ALL
+  SELECT 'object_ownership', n.nspname || '.' || c.relname
+    FROM r JOIN pg_catalog.pg_class c ON c.relowner=r.oid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+  UNION ALL
+  SELECT 'database_ownership', d.datname FROM r JOIN pg_catalog.pg_database d ON d.datdba=r.oid
+  UNION ALL
+  SELECT 'schema_ownership', n.nspname FROM r JOIN pg_catalog.pg_namespace n ON n.nspowner=r.oid
+)
+SELECT EXISTS(SELECT 1 FROM r) AS role_exists,
+       COALESCE((SELECT jsonb_agg(jsonb_build_object('issue',issue,'object',object_name) ORDER BY issue,object_name)
+                 FROM violations),'[]'::jsonb) AS blockers,
+       (SELECT has_database_privilege(oid,'neondb','CONNECT') AND has_schema_privilege(oid,'public','USAGE')
+         AND has_column_privilege(oid,'public.shopify_privacy_erasure_tasks','id','SELECT')
+         AND has_column_privilege(oid,'public.shopify_privacy_erasure_tasks','checks','UPDATE') FROM r) AS basic_grants_present;
+```
 
 ## Runner-only configuration (after separate approval)
 
