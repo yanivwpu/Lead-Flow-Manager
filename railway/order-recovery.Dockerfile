@@ -1,9 +1,7 @@
 FROM node:22-bookworm-slim
 WORKDIR /app
 COPY --chown=node:node package.json package-lock.json ./
-RUN --mount=type=secret,id=proxy_ca \
-    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    npm ci --ignore-scripts --strict-ssl=true
+RUN npm ci --ignore-scripts --strict-ssl=true
 # Deliberate allowlist: no .env, .git, customer exports, web app or other startup scripts.
 COPY --chown=node:node tsconfig.json ./
 COPY --chown=node:node shared ./shared
