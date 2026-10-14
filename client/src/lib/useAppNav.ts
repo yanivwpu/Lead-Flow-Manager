@@ -1,5 +1,6 @@
 import {
   Inbox,
+  Package,
   ListTodo,
   Users,
   Search,
@@ -50,6 +51,7 @@ const APP_NAV_ICONS: Record<AppNavItemId, LucideIcon> = {
   followups: ListTodo,
   contacts: Users,
   search: Search,
+  salesCatalog: Package,
   widget: Globe,
   chatbot: Bot,
   automations: Zap,

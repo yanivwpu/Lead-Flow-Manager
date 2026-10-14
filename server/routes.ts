@@ -179,6 +179,8 @@ import {
 import { putWebsiteKnowledgeDraft, takeWebsiteKnowledgeDraft } from "./websiteKnowledgeDraftCache";
 import { registerKnowledgeV2Routes } from "./websiteKnowledge/knowledgeRoutes";
 import { registerLiveBusinessDataRoutes } from "./aiLiveBusinessData/routes";
+import { salesCatalog } from "./salesCatalog";
+import { registerSalesCatalogRoutes } from "./salesCatalog/routes";
 import { registerWorkspaceOfferRoutes } from "./workspaceOffers/routes";
 import { registerMarketingAssetRoutes } from "./marketingAssets/routes";
 import {
@@ -11073,6 +11075,7 @@ export async function registerRoutes(
 
   // Workspace Offers & Payment Links (Settings editor + Business Packages source of truth).
   registerWorkspaceOfferRoutes(app);
+  registerSalesCatalogRoutes(app, salesCatalog);
 
   // Approved Marketing Materials (AI Brain / Settings library + Website Chat send).
   registerMarketingAssetRoutes(app);

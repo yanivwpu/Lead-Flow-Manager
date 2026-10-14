@@ -1,3 +1,4 @@
+import type { CatalogReadiness } from "./salesCatalog";
 /**
  * AI Brain Live Business Data — Phase 1 registry + decision model.
  *
@@ -76,6 +77,7 @@ export type LiveBusinessDataProviderView = LiveBusinessDataProviderDescriptor & 
   status: LiveBusinessDataProviderStatus;
   /** Short merchant-facing detail, e.g. "2,483 Products" or "Connected". */
   detail: string | null;
+  catalogReadiness?: CatalogReadiness;
 };
 
 /** Structured record returned by a live provider (not a knowledge document). */

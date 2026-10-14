@@ -1,3 +1,4 @@
+import type { CatalogReadiness } from "@shared/salesCatalog";
 /**
  * Live Business Data provider contract.
  * Providers expose typed query APIs — they are never indexed as Knowledge Source documents.
@@ -22,6 +23,7 @@ export type LiveBusinessDataQueryContext = {
 export type LiveBusinessDataProviderStatusResult = {
   status: LiveBusinessDataProviderStatus;
   detail: string | null;
+  catalogReadiness?: CatalogReadiness;
 };
 
 export interface LiveBusinessDataProvider {

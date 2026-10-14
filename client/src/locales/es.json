@@ -1,4 +1,22 @@
 {
+  "salesCatalog": {
+  "approval": "Los enlaces de pago requieren aprobación humana antes del envío.",
+  "intro": "Gestiona las ofertas y los paquetes que tu equipo y AI Brain usan en las conversaciones.",
+  "shopifyNote": "La conexión con Shopify aún no incluye productos. La sincronización estará disponible en una fase posterior.",
+  "search": "Buscar en el catálogo",
+  "status": "Estado",
+  "category": "Categoría",
+  "all": "Todos",
+  "active": "Activos",
+  "inactive": "Inactivos",
+  "archived": "Archivados",
+  "purchasable": "Disponibles para recomendar",
+  "retry": "Reintentar",
+  "empty": "No hay resultados. Cambia los filtros o añade una oferta.",
+  "previous": "Anterior",
+  "next": "Siguiente",
+  "page": "Página"
+},
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",
@@ -46,6 +64,7 @@
     "businessTypePlaceholder": "Ingresa un tipo de negocio en tu idioma, por ejemplo: plomeros, dentistas, agentes inmobiliarios"
   },
   "nav": {
+    "salesCatalog": "Catálogo de ventas",
     "main": "Principal",
     "automationAi": "Automatización e IA",
     "toolsSetup": "Herramientas y Configuración",

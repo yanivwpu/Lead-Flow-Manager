@@ -407,6 +407,7 @@ function SectionBlock({
 // ---------------------------------------------------------------------------
 
 type LiveBusinessDataProviderRow = {
+  catalogReadiness?: import("@shared/salesCatalog").CatalogReadiness;
   id: string;
   name: string;
   icon: string;
@@ -494,12 +495,12 @@ function LiveBusinessDataPanel({
             {rows.map((provider) => {
               const Icon = liveProviderIcon(provider.icon);
               const statusLabel = liveProviderStatusLabel(provider);
-              const connected = provider.status === "connected";
+              const connected = provider.status === "connected" && provider.catalogReadiness?.catalog !== "not_implemented";
               const comingSoon = provider.status === "coming_soon";
               return (
                 <li
                   key={provider.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
+                  className="flex flex-wrap items-center gap-3 px-3 py-2.5"
                   data-testid={`live-provider-${provider.id}`}
                 >
                   <Icon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
