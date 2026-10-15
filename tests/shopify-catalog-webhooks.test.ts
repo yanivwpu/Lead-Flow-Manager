@@ -97,6 +97,15 @@ test("signed raw events are deduplicated, routed to one installation and stopped
     assert.equal(events.length, 1);
     assert.equal(events[0].sourceId, a.id);
     assert.equal(events[0].userId, "tenant-a");
+    const backoffUntil = new Date(Date.now() + 5 * 60_000);
+    await db
+      .update(catalogSources)
+      .set({
+        status: "error",
+        errorCode: "throttled",
+        nextAttemptAt: backoffUntil,
+      })
+      .where(eq(catalogSources.id, b.id));
     assert.equal(
       (
         await send(
@@ -108,6 +117,15 @@ test("signed raw events are deduplicated, routed to one installation and stopped
       200,
     );
     assert.equal((await db.select().from(catalogEvents)).length, 2);
+    assert.equal(
+      (
+        await db
+          .select()
+          .from(catalogSources)
+          .where(eq(catalogSources.id, b.id))
+      )[0].nextAttemptAt.getTime(),
+      backoffUntil.getTime(),
+    );
     await db.transaction(async (tx: any) => {
       await cleanupShopifyCatalog(tx, "fixture-a.myshopify.com", false);
       await tx
@@ -124,6 +142,15 @@ test("signed raw events are deduplicated, routed to one installation and stopped
     });
     assert.equal((await send("fixture-a.myshopify.com", "late")).status, 200);
     assert.equal((await db.select().from(catalogEvents)).length, 2);
+    assert.equal(
+      (
+        await db
+          .select()
+          .from(catalogSources)
+          .where(eq(catalogSources.id, b.id))
+      )[0].nextAttemptAt.getTime(),
+      backoffUntil.getTime(),
+    );
     let calls = 0;
     const sync = createShopifyCatalogSync(db, () => async () => {
       calls++;

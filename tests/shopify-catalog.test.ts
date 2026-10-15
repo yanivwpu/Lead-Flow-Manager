@@ -440,6 +440,11 @@ test("multi-batch import resumes durable work after a worker restart and mid-pas
     assert.equal(source.initialSyncCompletedAt, null);
     assert.equal(source.status, "syncing");
     assert.equal((await db.select().from(tables.catalogProducts)).length, 5);
+    const generation = source.generation;
+    await db
+      .update(tables.catalogSources)
+      .set({ requestedAt: new Date() })
+      .where(eq(tables.catalogSources.id, src.id));
     failAtEight = true;
     await createShopifyCatalogSync(db, factory).tick();
     [source] = await db
@@ -447,6 +452,7 @@ test("multi-batch import resumes durable work after a worker restart and mid-pas
       .from(tables.catalogSources)
       .where(eq(tables.catalogSources.id, src.id));
     assert.equal(source.status, "error");
+    assert.equal(source.generation, generation);
     assert.equal((await db.select().from(tables.catalogProducts)).length, 7);
     assert.ok((source.checkpoint as any).pending.length > 0);
     await db
@@ -464,6 +470,7 @@ test("multi-batch import resumes durable work after a worker restart and mid-pas
     assert.equal(source.status, "ready");
     assert.ok(source.initialSyncCompletedAt);
     assert.equal(listings, 1);
+    assert.equal(await createShopifyCatalogSync(db, factory).tick(), false);
     assert.equal((await db.select().from(tables.catalogProducts)).length, 13);
     assert.ok(
       (await db.select().from(tables.catalogProducts)).every(
@@ -512,4 +519,209 @@ test("startup catalog SQL exactly matches the reviewed additive migration", () =
     COMMERCE_CATALOG_SCHEMA_SQL,
     readFileSync("migrations/0107_shared_commerce_catalog.sql", "utf8"),
   );
+});
+
+test("daily reconciliation stays idle between passes, targeted events never list the full catalog, and manual recovery coalesces", async () => {
+  const f = await catalogFixture(),
+    db = f.database;
+  let price = "19.99",
+    mappingThrottle = false;
+  const requested: string[] = [];
+  let listingCalls = 0,
+    collectionPages = 0;
+  const factory =
+    () => async (query: string, vars?: Record<string, unknown>) => {
+      if (query.includes("CatalogMeta"))
+        return {
+          currentAppInstallation: {
+            accessScopes: [{ handle: "read_products" }],
+          },
+          shop: {
+            currencyCode: "USD",
+            myshopifyDomain: "fixture-a.myshopify.com",
+            primaryDomain: { host: "fixture-a.myshopify.com" },
+          },
+        };
+      if (query.includes("CatalogIds")) {
+        listingCalls++;
+        return {
+          products: connect(
+            [1, 2].map((id) => ({ id: `gid://shopify/Product/${id}` })),
+          ),
+        };
+      }
+      if (query.includes("CatalogInventoryProduct"))
+        return {
+          inventoryItem: {
+            id: vars!.id,
+            variant: { product: { id: "gid://shopify/Product/2" } },
+          },
+          ...(mappingThrottle
+            ? { __throttle: { currentlyAvailable: 150, restoreRate: 50 } }
+            : {}),
+        };
+      if (query.includes("CatalogCollectionProducts")) {
+        collectionPages++;
+        const ids = vars!.after
+          ? [51, 52, 53]
+          : Array.from({ length: 50 }, (_, i) => i + 1);
+        return {
+          collection: {
+            id: vars!.id,
+            products: connect(
+              ids.map((id) => ({ id: `gid://shopify/Product/${id}` })),
+              vars!.after ? null : "collection-page-2",
+            ),
+          },
+        };
+      }
+      const id = Number(String(vars!.id).split("/").pop());
+      requested.push(String(vars!.id));
+      const p = product(id);
+      p.variants.nodes[0].price = price;
+      return { product: p };
+    };
+  try {
+    const src = (await ensureCatalogSource(db, "tenant-a"))!;
+    await createShopifyCatalogSync(db, factory).tick();
+    assert.equal(listingCalls, 1);
+    const lastFull = new Date(Date.now() - 12 * 60 * 60_000);
+    await db
+      .update(tables.catalogSources)
+      .set({
+        lastSyncAt: lastFull,
+        requestedAt: lastFull,
+        nextAttemptAt: new Date(),
+      })
+      .where(eq(tables.catalogSources.id, src.id));
+    const snapshots = await db.select().from(tables.catalogProducts);
+    requested.length = 0;
+    const engine = createShopifyCatalogSync(db, factory);
+    await engine.tick();
+    let [source] = await db
+      .select()
+      .from(tables.catalogSources)
+      .where(eq(tables.catalogSources.id, src.id));
+    assert.equal(listingCalls, 1);
+    assert.deepEqual(requested, []);
+    assert.deepEqual(await db.select().from(tables.catalogProducts), snapshots);
+    assert.equal(
+      source.nextAttemptAt.getTime(),
+      lastFull.getTime() + 24 * 60 * 60_000,
+    );
+    assert.equal(await engine.tick(), false);
+    const event = async (id: string, topic: string, resourceId: string) => {
+      await db.insert(tables.catalogEvents).values({
+        sourceId: src.id,
+        userId: "tenant-a",
+        eventId: id,
+        topic,
+        resourceId,
+      });
+      await db
+        .update(tables.catalogSources)
+        .set({ nextAttemptAt: new Date() })
+        .where(eq(tables.catalogSources.id, src.id));
+    };
+    price = "21.000001";
+    await event("product", "products/update", "1");
+    await event("inventory", "inventory_levels/update", "1");
+    await engine.tick();
+    assert.deepEqual(requested, ["gid://shopify/Product/1"]);
+    assert.equal(listingCalls, 1);
+    assert.equal(
+      (
+        await db
+          .select()
+          .from(tables.catalogSources)
+          .where(eq(tables.catalogSources.id, src.id))
+      )[0].lastSyncAt!.getTime(),
+      lastFull.getTime(),
+    );
+    const untouched = (
+      await db
+        .select()
+        .from(tables.catalogProducts)
+        .where(eq(tables.catalogProducts.externalId, "gid://shopify/Product/2"))
+    )[0];
+    assert.deepEqual(
+      untouched,
+      snapshots.find((p) => p.externalId === untouched.externalId),
+    );
+    // An unknown inventory mapping stays targeted and obeys the mapping call's quota delay.
+    requested.length = 0;
+    mappingThrottle = true;
+    await event("unknown-stock", "inventory_levels/update", "99");
+    await engine.tick();
+    [source] = await db
+      .select()
+      .from(tables.catalogSources)
+      .where(eq(tables.catalogSources.id, src.id));
+    assert.equal(source.status, "syncing");
+    assert.deepEqual((source.checkpoint as any).pending, [
+      "gid://shopify/Product/2",
+    ]);
+    assert.ok(source.nextAttemptAt.getTime() > Date.now());
+    assert.equal(await engine.tick(), false);
+    assert.equal(listingCalls, 1);
+    mappingThrottle = false;
+    await db
+      .update(tables.catalogSources)
+      .set({ nextAttemptAt: new Date() })
+      .where(eq(tables.catalogSources.id, src.id));
+    await engine.tick();
+    assert.deepEqual(requested, ["gid://shopify/Product/2"]);
+    // Collection changes use 50-ID checkpoints, never a global products listing.
+    await event("collection", "collections/update", "1");
+    await engine.tick();
+    [source] = await db
+      .select()
+      .from(tables.catalogSources)
+      .where(eq(tables.catalogSources.id, src.id));
+    assert.equal((source.checkpoint as any).mode, "events");
+    assert.ok((source.checkpoint as any).pending.length <= 60);
+    assert.equal(source.initialSyncCompletedAt !== null, true);
+    for (let i = 0; i < 30 && source.status !== "ready"; i++) {
+      await createShopifyCatalogSync(db, factory).tick();
+      [source] = await db
+        .select()
+        .from(tables.catalogSources)
+        .where(eq(tables.catalogSources.id, src.id));
+      assert.ok(((source.checkpoint as any).pending?.length ?? 0) <= 60);
+    }
+    assert.equal(source.status, "ready");
+    assert.equal(collectionPages, 2);
+    assert.equal(listingCalls, 1);
+    assert.equal(source.lastSyncAt!.getTime(), lastFull.getTime());
+    assert.equal((await db.select().from(tables.catalogProducts)).length, 53);
+    // Manual recovery runs one full pass. Requests while it is in progress do not restart its generation.
+    await db
+      .update(tables.catalogSources)
+      .set({ requestedAt: new Date(), nextAttemptAt: new Date() })
+      .where(eq(tables.catalogSources.id, src.id));
+    await engine.tick();
+    [source] = await db
+      .select()
+      .from(tables.catalogSources)
+      .where(eq(tables.catalogSources.id, src.id));
+    assert.equal(source.status, "ready");
+    assert.equal(listingCalls, 2);
+    assert.ok(
+      source.nextAttemptAt.getTime() >=
+        source.lastSyncAt!.getTime() + 24 * 60 * 60_000,
+    );
+    for (let i = 0; i < 5; i++) assert.equal(await engine.tick(), false);
+    assert.equal(listingCalls, 2);
+    // At the next daily boundary, exactly one automatic recovery becomes eligible.
+    const due = new Date(Date.now() - 24 * 60 * 60_000 - 1000);
+    await db
+      .update(tables.catalogSources)
+      .set({ lastSyncAt: due, requestedAt: due, nextAttemptAt: new Date() })
+      .where(eq(tables.catalogSources.id, src.id));
+    await engine.tick();
+    assert.equal(listingCalls, 3);
+    assert.equal(await engine.tick(), false);
+  } finally {
+    await f.cleanup();
+  }
 });

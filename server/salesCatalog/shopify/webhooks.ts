@@ -105,7 +105,9 @@ export function createCatalogWebhookHandler(
         if (inserted)
           await tx
             .update(catalogSources)
-            .set({ nextAttemptAt: new Date() })
+            .set({
+              nextAttemptAt: sql`CASE WHEN (${catalogSources.status}='syncing' OR ${catalogSources.errorCode} IS NOT NULL) AND ${catalogSources.nextAttemptAt}>NOW() THEN ${catalogSources.nextAttemptAt} ELSE NOW() END`,
+            })
             .where(eq(catalogSources.id, source.id));
       });
       return res.json({ received: true });

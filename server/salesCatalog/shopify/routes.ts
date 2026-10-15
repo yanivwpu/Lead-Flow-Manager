@@ -51,7 +51,7 @@ export function registerShopifyCatalogRoutes(
         .set({
           requestedAt: new Date(),
           lastRequestedAt: new Date(),
-          nextAttemptAt: new Date(),
+          nextAttemptAt: sql`CASE WHEN (${catalogSources.status}='syncing' OR ${catalogSources.errorCode} IS NOT NULL) AND ${catalogSources.nextAttemptAt}>NOW() THEN ${catalogSources.nextAttemptAt} ELSE NOW() END`,
         })
         .where(
           and(

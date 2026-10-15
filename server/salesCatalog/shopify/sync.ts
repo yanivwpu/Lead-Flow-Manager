@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { catalogReconciliationIntervalMs } from "./reconciliation";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
   catalogSources,
@@ -20,6 +21,8 @@ import {
   SHOPIFY_CATALOG_META_QUERY,
   SHOPIFY_CATALOG_IDS_QUERY,
   SHOPIFY_CATALOG_PRODUCT_QUERY,
+  SHOPIFY_CATALOG_INVENTORY_PRODUCT_QUERY,
+  SHOPIFY_CATALOG_COLLECTION_PRODUCTS_QUERY,
   readConnection,
   decimalPrice,
   type CatalogRequest,
@@ -31,6 +34,15 @@ type Checkpoint = {
   pending: string[];
   end: boolean;
   events: string[];
+  startedAt?: string;
+  lastFullDurationMs?: number;
+  collection?: {
+    id: string;
+    providerAfter: string | null;
+    providerDone: boolean;
+    localAfter: string | null;
+    localDone: boolean;
+  };
   current?: {
     id: string;
     version: string;
@@ -60,6 +72,19 @@ export function createShopifyCatalogSync(
   database: CatalogDb,
   requestFor: (shop: string, token: string) => CatalogRequest,
 ) {
+  async function productCount(userId: string, sourceId: string, db = database) {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(catalogProducts)
+      .where(
+        and(
+          eq(catalogProducts.sourceId, sourceId),
+          eq(catalogProducts.userId, userId),
+          isNull(catalogProducts.deletedAt),
+        ),
+      );
+    return row.count;
+  }
   async function work(sourceId: string, leaseToken: string) {
     let [source] = await database
       .select()
@@ -163,8 +188,12 @@ export function createShopifyCatalogSync(
         const full =
           !source.initialSyncCompletedAt ||
           !source.lastSyncAt ||
-          Date.now() - source.lastSyncAt.getTime() > 5 * 60_000 ||
-          pending.some((e) => e.topic.startsWith("collections/")) ||
+          Date.now() >=
+            source.lastSyncAt.getTime() +
+              catalogReconciliationIntervalMs(
+                await productCount(install.userId, sourceId),
+                checkpoint.lastFullDurationMs,
+              ) ||
           source.requestedAt.getTime() > source.lastSyncAt.getTime();
         if (!full && !pending.length) {
           await database
@@ -173,7 +202,11 @@ export function createShopifyCatalogSync(
               leaseToken: null,
               leaseExpiresAt: null,
               nextAttemptAt: new Date(
-                source.lastSyncAt!.getTime() + 5 * 60_000,
+                source.lastSyncAt!.getTime() +
+                  catalogReconciliationIntervalMs(
+                    await productCount(install.userId, sourceId),
+                    checkpoint.lastFullDurationMs,
+                  ),
               ),
             })
             .where(
@@ -189,7 +222,9 @@ export function createShopifyCatalogSync(
           for (const event of pending) {
             if (event.topic.startsWith("products/"))
               ids.push(`gid://shopify/Product/${event.resourceId}`);
-            else {
+            else if (event.topic.startsWith("collections/"))
+              ids.push(`gid://shopify/Collection/${event.resourceId}`);
+            else if (event.topic.startsWith("inventory_")) {
               const rows = await database
                 .select({ externalId: catalogProducts.externalId })
                 .from(catalogVariants)
@@ -209,15 +244,18 @@ export function createShopifyCatalogSync(
                 )
                 .limit(10);
               ids.push(...rows.map((r) => r.externalId));
+              if (!rows.length)
+                ids.push(`gid://shopify/InventoryItem/${event.resourceId}`);
             }
           }
-        // Unknown inventory mappings are recovered by a full reconciliation, never ignored.
-        const mode =
-          full || (pending.length > 0 && ids.length === 0) ? "full" : "events";
+        // Inventory and collection markers resolve to bounded targeted product pages inside the chunk budget.
+        const mode = full ? "full" : "events";
         checkpoint = {
           mode,
+          startedAt: mode === "full" ? new Date().toISOString() : undefined,
+          lastFullDurationMs: checkpoint.lastFullDurationMs,
           after: null,
-          pending: [...new Set(ids)],
+          pending: full ? [] : [...new Set(ids)],
           end: mode === "events",
           events: pending.map((e) => e.id),
         };
@@ -239,6 +277,18 @@ export function createShopifyCatalogSync(
         });
       }
       let delay = 0;
+      function observeQuota(data: any) {
+        const throttle = data.__throttle;
+        if (throttle && throttle.currentlyAvailable < 300)
+          delay = Math.max(
+            1000,
+            Math.ceil(
+              ((300 - throttle.currentlyAvailable) /
+                Math.max(1, throttle.restoreRate ?? 50)) *
+                1000,
+            ),
+          );
+      }
       for (let budget = 0; budget < 6; budget++) {
         if (!checkpoint.pending!.length) {
           if (checkpoint.end) {
@@ -267,19 +317,51 @@ export function createShopifyCatalogSync(
                       )})`,
                     ),
                   );
+              const completedAt = new Date();
+              const lastFull =
+                checkpoint.mode === "full" ? completedAt : source.lastSyncAt!;
+              const start = Date.parse(checkpoint.startedAt ?? "");
+              const lastFullDurationMs =
+                checkpoint.mode === "full" && Number.isFinite(start)
+                  ? Math.max(0, completedAt.getTime() - start)
+                  : (checkpoint.lastFullDurationMs ?? 0);
+              const [remaining] = await tx
+                .select({ id: catalogEvents.id })
+                .from(catalogEvents)
+                .where(
+                  and(
+                    eq(catalogEvents.sourceId, sourceId),
+                    isNull(catalogEvents.processedAt),
+                  ),
+                )
+                .limit(1);
+              const [latest] = await tx
+                .select({ requestedAt: catalogSources.requestedAt })
+                .from(catalogSources)
+                .where(eq(catalogSources.id, sourceId))
+                .limit(1);
+              const manualPending =
+                checkpoint.mode === "events" && latest.requestedAt > lastFull;
+              const reconcileAt = new Date(
+                lastFull.getTime() +
+                  catalogReconciliationIntervalMs(
+                    await productCount(install.userId, sourceId, tx),
+                    lastFullDurationMs,
+                  ),
+              );
               await tx
                 .update(catalogSources)
                 .set({
                   status: "ready",
                   initialSyncCompletedAt:
-                    source.initialSyncCompletedAt ?? new Date(),
-                  lastSyncAt:
-                    checkpoint.mode === "full" ? new Date() : source.lastSyncAt,
-                  checkpoint: {},
+                    source.initialSyncCompletedAt ?? completedAt,
+                  lastSyncAt: lastFull,
+                  checkpoint: { lastFullDurationMs },
                   generation: null,
                   errorCode: null,
                   attempts: 0,
-                  nextAttemptAt: new Date(Date.now() + 60_000),
+                  nextAttemptAt:
+                    remaining || manualPending ? completedAt : reconcileAt,
                   leaseToken: null,
                   leaseExpiresAt: null,
                 })
@@ -290,6 +372,7 @@ export function createShopifyCatalogSync(
           const data = await request(SHOPIFY_CATALOG_IDS_QUERY, {
             after: checkpoint.after,
           });
+          observeQuota(data);
           const page = readConnection(data.products);
           if (page.cursor === checkpoint.after && page.cursor !== null)
             throw new CatalogApiError("invalid_response");
@@ -302,9 +385,113 @@ export function createShopifyCatalogSync(
               .set({ checkpoint })
               .where(eq(catalogSources.id, sourceId));
           });
+          if (delay > 0) break;
           continue;
         }
         const id = checkpoint.pending![0];
+        if (id.startsWith("gid://shopify/InventoryItem/")) {
+          const data = await request(SHOPIFY_CATALOG_INVENTORY_PRODUCT_QUERY, {
+            id,
+          });
+          observeQuota(data);
+          if (
+            data.inventoryItem !== null &&
+            (!data.inventoryItem || data.inventoryItem.id !== id)
+          )
+            throw new CatalogApiError("invalid_response");
+          const productId =
+            data.inventoryItem === null
+              ? null
+              : gid(data.inventoryItem.variant?.product?.id, "Product");
+          await persist(async (tx) => {
+            checkpoint.pending!.shift();
+            if (productId && !checkpoint.pending!.includes(productId))
+              checkpoint.pending!.unshift(productId);
+            await tx
+              .update(catalogSources)
+              .set({ checkpoint })
+              .where(eq(catalogSources.id, sourceId));
+          });
+          if (delay > 0) break;
+          continue;
+        }
+        if (id.startsWith("gid://shopify/Collection/")) {
+          const current = checkpoint.collection ?? {
+            id,
+            providerAfter: null,
+            providerDone: false,
+            localAfter: null,
+            localDone: false,
+          };
+          if (current.id !== id) throw new CatalogApiError("invalid_response");
+          let ids: string[] = [];
+          if (!current.providerDone) {
+            const data = await request(
+              SHOPIFY_CATALOG_COLLECTION_PRODUCTS_QUERY,
+              { id, after: current.providerAfter },
+            );
+            observeQuota(data);
+            if (
+              data.collection !== null &&
+              (!data.collection || data.collection.id !== id)
+            )
+              throw new CatalogApiError("invalid_response");
+            const page =
+              data.collection === null
+                ? { nodes: [], cursor: null }
+                : readConnection(data.collection.products);
+            if (page.cursor && page.cursor === current.providerAfter)
+              throw new CatalogApiError("invalid_response");
+            current.providerAfter = page.cursor;
+            current.providerDone = page.cursor === null;
+            ids = page.nodes.map((n) => gid(n.id, "Product"));
+          } else if (!current.localDone) {
+            const rows = await database
+              .select({ externalId: catalogProducts.externalId })
+              .from(catalogMemberships)
+              .innerJoin(
+                catalogProducts,
+                eq(catalogProducts.id, catalogMemberships.productId),
+              )
+              .innerJoin(
+                catalogCollections,
+                eq(catalogCollections.id, catalogMemberships.collectionId),
+              )
+              .where(
+                and(
+                  eq(catalogProducts.userId, install.userId),
+                  eq(catalogProducts.sourceId, sourceId),
+                  eq(catalogCollections.userId, install.userId),
+                  eq(catalogCollections.sourceId, sourceId),
+                  eq(catalogCollections.externalId, id),
+                  current.localAfter
+                    ? sql`${catalogProducts.externalId}>${current.localAfter}`
+                    : undefined,
+                ),
+              )
+              .orderBy(catalogProducts.externalId)
+              .limit(50);
+            ids = rows.map((r) => r.externalId);
+            current.localAfter = ids[ids.length - 1] ?? current.localAfter;
+            current.localDone = rows.length < 50;
+          }
+          await persist(async (tx) => {
+            checkpoint.pending!.shift();
+            if (current.providerDone && current.localDone)
+              delete checkpoint.collection;
+            else {
+              checkpoint.collection = current;
+              checkpoint.pending!.unshift(id);
+            }
+            checkpoint.pending!.unshift(...new Set(ids));
+            await tx
+              .update(catalogSources)
+              .set({ checkpoint })
+              .where(eq(catalogSources.id, sourceId));
+          });
+          if (delay > 0) break;
+          continue;
+        }
         const current = checkpoint.current;
         const data = await request(SHOPIFY_CATALOG_PRODUCT_QUERY, {
           id,
@@ -315,6 +502,7 @@ export function createShopifyCatalogSync(
           includeMedia: !current?.mediaDone,
           includeCollections: !current?.collectionsDone,
         });
+        observeQuota(data);
         const product = data.product;
         if (product === null) {
           await persist(async (tx) => {
@@ -335,6 +523,7 @@ export function createShopifyCatalogSync(
               .set({ checkpoint })
               .where(eq(catalogSources.id, sourceId));
           });
+          if (delay > 0) break;
           continue;
         }
         if (
@@ -355,6 +544,7 @@ export function createShopifyCatalogSync(
               .set({ checkpoint })
               .where(eq(catalogSources.id, sourceId));
           });
+          if (delay > 0) break;
           continue;
         }
         const empty = { nodes: [], cursor: null };
@@ -588,18 +778,7 @@ export function createShopifyCatalogSync(
             .set({ checkpoint, errorCode: null })
             .where(eq(catalogSources.id, sourceId));
         });
-        const throttle = data.__throttle;
-        if (throttle && throttle.currentlyAvailable < 300) {
-          delay = Math.max(
-            1000,
-            Math.ceil(
-              ((300 - throttle.currentlyAvailable) /
-                Math.max(1, throttle.restoreRate ?? 50)) *
-                1000,
-            ),
-          );
-          break;
-        }
+        if (delay > 0) break;
       }
       await database
         .update(catalogSources)

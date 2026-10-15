@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createShopifyCatalogSync } from "../server/salesCatalog/shopify/sync";
 import { eq, sql } from "drizzle-orm";
 import { catalogFixture } from "./shopify-catalog-fixture";
 import {
@@ -139,11 +140,69 @@ test("indexed connected search across 10000 products is bounded, deterministic, 
         indexedPlan: true,
       }),
     );
+    // A large catalog cannot run continuously even with a deliberately short configured base.
+    const oldSetting = process.env.SHOPIFY_CATALOG_RECONCILE_INTERVAL_HOURS;
+    process.env.SHOPIFY_CATALOG_RECONCILE_INTERVAL_HOURS = "1";
+    try {
+      const lastFull = new Date(Date.now() - 2 * 60 * 60_000);
+      await db
+        .update(catalogSources)
+        .set({
+          lastSyncAt: lastFull,
+          requestedAt: lastFull,
+          nextAttemptAt: new Date(),
+          checkpoint: { lastFullDurationMs: 8 * 60 * 60_000 },
+        })
+        .where(eq(catalogSources.id, source.id));
+      await db
+        .update(catalogSources)
+        .set({ nextAttemptAt: new Date(Date.now() + 24 * 60 * 60_000) })
+        .where(eq(catalogSources.id, other.id));
+      let metaCalls = 0;
+      const sync = createShopifyCatalogSync(db, () => async (query) => {
+        assert.match(
+          query,
+          /CatalogMeta/,
+          "large source must not re-import its catalog",
+        );
+        metaCalls++;
+        return {
+          currentAppInstallation: {
+            accessScopes: [{ handle: "read_products" }],
+          },
+          shop: {
+            currencyCode: "USD",
+            myshopifyDomain: "fixture-a.myshopify.com",
+            primaryDomain: { host: "fixture-a.myshopify.com" },
+          },
+        };
+      });
+      await sync.tick();
+      for (let i = 0; i < 10; i++) assert.equal(await sync.tick(), false);
+      assert.equal(metaCalls, 1);
+      const [scheduled] = await db
+        .select()
+        .from(catalogSources)
+        .where(eq(catalogSources.id, source.id));
+      assert.equal(
+        scheduled.nextAttemptAt.getTime(),
+        lastFull.getTime() + 32 * 60 * 60_000,
+      );
+      assert.equal(
+        (scheduled.checkpoint as any).lastFullDurationMs,
+        8 * 60 * 60_000,
+      );
+    } finally {
+      if (oldSetting === undefined)
+        delete process.env.SHOPIFY_CATALOG_RECONCILE_INTERVAL_HOURS;
+      else process.env.SHOPIFY_CATALOG_RECONCILE_INTERVAL_HOURS = oldSetting;
+    }
     await assert.rejects(
       db
         .insert(catalogProducts)
         .values({ ...products[0], id: "cross-tenant", sourceId: other.id }),
-      (error: any) => /foreign key|violates/i.test(String(error.cause?.message)),
+      (error: any) =>
+        /foreign key|violates/i.test(String(error.cause?.message)),
     );
   } finally {
     await f.cleanup();

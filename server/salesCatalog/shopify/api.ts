@@ -90,6 +90,8 @@ export const SHOPIFY_CATALOG_PRODUCT_QUERY = `query CatalogProduct($id:ID!,$vari
  collections(first:50,after:$collections) @include(if:$includeCollections) { nodes { id title } pageInfo { hasNextPage endCursor } }
  }
 }`;
+export const SHOPIFY_CATALOG_INVENTORY_PRODUCT_QUERY = `query CatalogInventoryProduct($id:ID!) { inventoryItem(id:$id) { id variant { product { id } } } }`;
+export const SHOPIFY_CATALOG_COLLECTION_PRODUCTS_QUERY = `query CatalogCollectionProducts($id:ID!,$after:String) { collection(id:$id) { id products(first:50,after:$after,sortKey:ID) { nodes { id } pageInfo { hasNextPage endCursor } } } }`;
 export const SHOPIFY_CATALOG_VERIFY_VARIANT_QUERY = `query VerifyCatalogVariant($id:ID!) { productVariant(id:$id) { id title price compareAtPrice inventoryPolicy inventoryQuantity availableForSale requiresComponents updatedAt inventoryItem { id tracked } product { id status publishedAt onlineStoreUrl requiresSellingPlan } } shop { currencyCode } }`;
 export function readConnection(raw: any): {
   nodes: any[];

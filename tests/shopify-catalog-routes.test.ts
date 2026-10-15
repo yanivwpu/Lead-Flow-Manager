@@ -152,6 +152,34 @@ test("merchant HTTP uses existing owner access, rejects provider edits, throttle
       (await call(`${base}/sync`, "tenant-a", "POST", {})).status,
       429,
     );
+    // Accepted recovery requests retain server-side API backoff and low-quota continuation delays.
+    for (const state of [
+      { status: "error", errorCode: "throttled" },
+      { status: "syncing", errorCode: null },
+    ]) {
+      const retryAt = new Date(Date.now() + 5 * 60_000);
+      await db
+        .update(catalogSources)
+        .set({
+          ...state,
+          nextAttemptAt: retryAt,
+          lastRequestedAt: new Date(Date.now() - 2 * 60_000),
+        })
+        .where(eq(catalogSources.id, source.id));
+      assert.equal(
+        (await call(`${base}/sync`, "tenant-a", "POST", {})).status,
+        202,
+      );
+      assert.equal(
+        (
+          await db
+            .select()
+            .from(catalogSources)
+            .where(eq(catalogSources.id, source.id))
+        )[0].nextAttemptAt.getTime(),
+        retryAt.getTime(),
+      );
+    }
     const before = process.env.SHOPIFY_CATALOG_AUTH_ENABLED;
     delete process.env.SHOPIFY_CATALOG_AUTH_ENABLED;
     assert.equal((await call("/api/shopify/catalog/authorize")).status, 409);
