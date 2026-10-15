@@ -17,4 +17,3 @@ export function verifyWebhookHmac(rawBody: Buffer | string, hmac: string): boole
     return false;
   }
 }
-
