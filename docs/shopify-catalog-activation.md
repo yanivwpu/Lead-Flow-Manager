@@ -1,87 +1,73 @@
-# Phase 1B production Shopify catalog configuration
+# Phase 1B production Shopify catalog activation
 
-This PR prepares configuration only, on top of merged PR #83 (`cdc9a5e2b8d688801e69aa23033362103995e914`). It does not publish an app version, enable `SHOPIFY_CATALOG_AUTH_ENABLED`, change production hosting, or authorize a merchant.
+## Correction to PR #84
 
-## Production target and preserved behavior
+Shopify's server rejected the Phase 1B upload with **“Missing scope for webhook topic”** for all ten product, inventory and collection topics. Local TOML schema validation did not establish that Shopify would accept those subscriptions with optional scopes. They must not be app-managed in this configuration.
 
-Use **`shopify.app.whachatcrm.toml`**, selected by `--config whachatcrm`. It targets production client ID **`e4585d4da1434c9e5649a2269e716076`** at `https://app.whachatcrm.com`. Do not select the staging app or the separate reference `shopify.app.toml`.
+`shopify.app.whachatcrm.toml` keeps `read_products` and `read_inventory` **optional**. Required scopes remain `read_customers,read_orders` in both TOML and server `SHOPIFY_SCOPES`; `use_legacy_install_flow = false` stays unchanged. The correction removes only those ten webhook declarations. The final TOML has **seven** subscriptions: existing customer create/update, order create, three privacy subscriptions, and `app/scopes_update`. OAuth, Managed Pricing, app identity and per-shop uninstall handling remain unchanged. No staging/reference configuration is changed.
 
-Required scopes remain `read_customers,read_orders` in both TOML and server `SHOPIFY_SCOPES`. The existing `use_legacy_install_flow = false` supports Shopify-managed optional scope requests, so no required-scope expansion is needed. The OAuth callback remains `https://app.whachatcrm.com/api/shopify/callback`. Managed Pricing, original customer/order subscriptions, three privacy subscriptions, and per-shop uninstall registration retain their existing behavior. No billing or runtime code is changed.
+Use `--config whachatcrm`: production client ID **`e4585d4da1434c9e5649a2269e716076`**, origin `https://app.whachatcrm.com`, callback `https://app.whachatcrm.com/api/shopify/callback`, webhook API **2026-01**. Do not select the separate reference `shopify.app.toml`. The owner reported the active production version as `whachatcrm-9`; this is not independently verified by local tests.
 
-The only scope addition is:
+## Shop-specific subscriptions after consent
 
-```toml
-optional_scopes = [ "read_products", "read_inventory" ]
+Shopify supports shop-specific subscriptions through Admin GraphQL [`webhookSubscriptionCreate`](https://shopify.dev/docs/api/admin-graphql/2026-01/mutations/webhookSubscriptionCreate), using the installed shop's token and granted topic scopes. Unlike app-managed TOML subscriptions, they are registered separately for each consenting installation. App-managed subscriptions are not returned by the shop-specific subscription query: keep an explicit ownership manifest and never create parallel subscriptions for those topics. See [subscription configuration](https://shopify.dev/docs/apps/build/webhooks/subscribe).
+
+The existing leased catalog worker now reuses `registerVerifiedShopWebhooks`, its actual-grant verification, read-before-create and callback read-back checks. The SDK and webhook payload version remain **2026-01**. Catalog topics from the [versioned enum](https://shopify.dev/docs/api/admin-graphql/2026-01/enums/WebhookSubscriptionTopic) map to the existing signed handlers:
+
+| Topic | GraphQL enum | Callback suffix | Worker requires |
+| --- | --- | --- | --- |
+| `products/create` | `PRODUCTS_CREATE` | `products-create` | `read_products` |
+| `products/update` | `PRODUCTS_UPDATE` | `products-update` | `read_products` |
+| `products/delete` | `PRODUCTS_DELETE` | `products-delete` | `read_products` |
+| `inventory_items/update` | `INVENTORY_ITEMS_UPDATE` | `inventory_items-update` | `read_products` |
+| `inventory_levels/update` | `INVENTORY_LEVELS_UPDATE` | `inventory_levels-update` | `read_inventory` |
+| `inventory_levels/connect` | `INVENTORY_LEVELS_CONNECT` | `inventory_levels-connect` | `read_inventory` |
+| `inventory_levels/disconnect` | `INVENTORY_LEVELS_DISCONNECT` | `inventory_levels-disconnect` | `read_inventory` |
+| `collections/create` | `COLLECTIONS_CREATE` | `collections-create` | `read_products` |
+| `collections/update` | `COLLECTIONS_UPDATE` | `collections-update` | `read_products` |
+| `collections/delete` | `COLLECTIONS_DELETE` | `collections-delete` | `read_products` |
+
+Each callback starts with `https://app.whachatcrm.com/api/shopify/catalog-webhooks/`. Slashes become hyphens; underscores stay unchanged. Inventory-item subscriptions can also be authorized by `read_inventory`, but this product catalog worker requires `read_products` to run. Product update events cover variant changes. Existing signed handlers verify raw-body HMAC, shop ownership and deduplication, then queue bounded targeted product/variant refreshes; collection changes use existing bounded membership refreshes. Reads do not trigger messages, campaigns or workflows.
+
+Registration is one topic per durable worker chunk, serialized under the existing source lease. The source/user/integration/shop/token and active installation are verified before requests and under the shop advisory lock across each bounded mutation. Callback origins come from the existing server `HOST`, not webhook/browser input. Actual provider grants are checked again before create. Unknown grants, conflicting callbacks, duplicate subscriptions or incomplete listings fail closed; nothing is deleted. A lost create response/read-back retries by listing first, so an already-created subscription is reused.
+
+Each initial/read-back scan is capped at two pages of 50. SDK retries are disabled for this path; existing ten-second request bounds, throttle observations and source continuation delays limit work. Failure retries after five minutes; successful cycles recheck subscriptions after 24 hours and repair missing ones without forcing another catalog import. Scope-set changes reset the registration cycle. Readiness reports pending/retrying/partial/verified registration separately from catalog availability. If an installation has more than 100 app-owned shop-specific subscriptions or conflicting callbacks, operator review is required; registration does not scan without bound or delete existing subscriptions.
+
+Registration metadata lives in the existing durable source checkpoint and survives full/import/event checkpoints; no schema migration is needed. Existing generation-safe pruning, installation ownership, incremental queues, error retries, merchant recovery limits and configurable daily/size-aware full reconciliation remain intact. Registration failure does not prevent the subsequent polling recovery pass. Permission-restricted stores can operate with partial webhook coverage and reconciliation; do not claim verified inventory events without the actual grant and subscription read-back. No live subscriptions are created during this PR or its fixture tests.
+
+## Owner commands after merging — create an unreleased version only
+
+The correction includes server changes as well as configuration. Merge and deploy the reviewed server correction through a **separately approved** deployment before merchant activation; neither deployment nor merge is performed by this task. Keep `SHOPIFY_CATALOG_AUTH_ENABLED` disabled throughout preparation.
+
+From the merged checkout on the owner's authenticated workstation:
+
+```sh
+shopify auth login
+shopify app config validate --config whachatcrm
+shopify app deploy --config whachatcrm --version phase-1b-catalog-activation-v2 --no-release
 ```
 
-Declaring optional scopes does **not** grant them to existing installations or force approval on ordinary app opening. Grants change only after an explicit dynamic request and merchant consent. See Shopify's [managed scope documentation](https://shopify.dev/docs/apps/build/authentication-authorization/manage-access-scopes).
+Login is only needed if not already authenticated. Confirm the client ID above. This uploads an **unreleased** candidate; do not reuse the rejected candidate name. Inspect the server-validated diff: two optional scopes, seven subscriptions, no product/inventory/collection TOML subscriptions, unchanged required scopes/OAuth/billing/privacy and unrelated settings/extensions. Stop on unexpected removals or scope changes; do not use force/deletion flags. Local CLI schemas and CI cannot substitute for this authenticated Shopify server validation. No upload or release is performed in this correction.
 
-## Versioned catalog topics and callbacks
+## Later activation sequence — requires separate approval
 
-The webhook payload API version stays **2026-01**, matching Phase 1B. All eleven topics below are available in Shopify's [2026-01 topic enum](https://shopify.dev/docs/api/admin-graphql/2026-01/enums/WebhookSubscriptionTopic) and [2026-01 TOML webhook reference](https://shopify.dev/docs/api/webhooks/2026-01?reference=toml). They match the deployed `SHOPIFY_CATALOG_TOPICS` allowlist exactly.
-
-All catalog URLs start with `https://app.whachatcrm.com/api/shopify/catalog-webhooks/`:
-
-| Topic | Callback suffix | Grant required |
-| --- | --- | --- |
-| `app/scopes_update` | `app-scopes_update` | Existing app installation |
-| `products/create` | `products-create` | `read_products` |
-| `products/update` | `products-update` | `read_products` |
-| `products/delete` | `products-delete` | `read_products` |
-| `inventory_items/update` | `inventory_items-update` | `read_products` or `read_inventory` |
-| `inventory_levels/update` | `inventory_levels-update` | `read_inventory` |
-| `inventory_levels/connect` | `inventory_levels-connect` | `read_inventory` |
-| `inventory_levels/disconnect` | `inventory_levels-disconnect` | `read_inventory` |
-| `collections/create` | `collections-create` | `read_products` |
-| `collections/update` | `collections-update` | `read_products` |
-| `collections/delete` | `collections-delete` | `read_products` |
-
-Suffixes replace **slashes only**, preserving underscores, as the existing signed handler requires. Product update events cover variant changes. Collection events cover manual membership/rule changes; attribute-driven automatic membership changes still need the bounded recovery policy in Phase 1B. No location, payment, checkout, marketing, write or publication-specific scopes/topics are added.
-
-These are app-managed subscriptions. Keep existing per-shop uninstall handling; do not create duplicate per-shop catalog subscriptions. The final TOML has **17 subscriptions: six existing plus eleven catalog**. Actual delivery is conditional on the installation's granted access; declarations alone are not proof of delivery or catalog readiness.
-
-## Validation performed and release prerequisite
-
-- Python TOML/config tests verify exact production identity, unchanged required scopes/install mode/OAuth, all original callbacks, privacy subscription ownership, absence of duplicates, and parity with the deployed catalog topics/scopes. Staging tests remain unchanged and pass.
-- Shopify CLI **4.9.4** bundled local app-loader schemas validate this production TOML successfully: 17 subscriptions and the two expected optional scopes. This check uses the CLI's local schema path without loading remote app settings.
-- The normal `shopify app config validate --config whachatcrm --no-input --json` command was attempted but could not complete its linked-app authentication lookup: `accounts.shopify.com` was unreachable (`EAI_AGAIN`). No account login, app release or merchant authorization was completed. Local schema checks and CI do not substitute for the authenticated owner validation immediately before release.
-- Existing catalog authorization/recovery/signed-webhook, OAuth, Managed Pricing, webhook health/registration and customer-privacy fixture tests pass. CI also runs the existing production/staging config and Shopify regression checks.
-
-## Exact activation sequence — future operator actions only
-
-Do not run the publishing or authorization steps as part of preparing this PR. Each release/runtime/merchant step below requires the later approval requested by the owner.
-
-1. Review and approve this configuration PR and its CI, then merge it through the normal approved process. Keep the authorization flag disabled. Phase 1B web handlers must already be deployed, as reported for PR #83.
-2. On an authenticated owner's workstation, select this checkout and validate the named production configuration:
+1. Review the exact unreleased candidate and deploy the reviewed server correction through approved production operations. Confirm the callback host, signing credentials and API version. Keep the authorization gate disabled until the corrected candidate is approved and released.
+2. Only after explicit release approval, the owner may run:
 
    ```sh
-   shopify app config validate --config whachatcrm
+   shopify app release --config whachatcrm --version phase-1b-catalog-activation-v2
    ```
 
-   Confirm the production client ID above. Complete any Shopify app-review/access requirements before proceeding. Preserve existing Managed Pricing plans and customer-data approvals.
-3. Only after release preparation is approved, create an **unreleased** version:
-
-   ```sh
-   shopify app deploy --config whachatcrm --version phase-1b-catalog-activation --no-release
-   ```
-
-   This uploads a version but does not activate it for merchants. Review its complete diff in Shopify: two optional scopes, eleven new catalog callbacks, unchanged six original callbacks, required scopes, OAuth, app identity, API version and existing extensions/billing. Stop if the diff removes or alters unrelated settings; do not use deletion/force flags.
-4. Only after that exact version is approved for publication, release it:
-
-   ```sh
-   shopify app release --config whachatcrm --version phase-1b-catalog-activation
-   ```
-
-   Verify the active production version and configured catalog callbacks in the Dev Dashboard. These CLI operations publish Shopify configuration; they do not deploy the WhachatCRM web server. No such operation was performed in this PR. See [deploy](https://shopify.dev/docs/api/shopify-cli/app/app-deploy) and [release](https://shopify.dev/docs/api/shopify-cli/app/app-release).
-5. Separately approve runtime activation, then set `SHOPIFY_CATALOG_AUTH_ENABLED=true` through existing production operations and apply the required process restart. Do not change `SHOPIFY_SCOPES`. This is a later operator action, not a change in this PR.
-6. An explicitly consenting existing merchant opens **Sales Catalog → Shopify Products → Approve Product Access**. The existing authenticated route `/api/shopify/catalog/authorize` resolves their owned installation, ensures its catalog source, and redirects the top-level browser to:
+   Verify the active version and seven app-managed subscriptions in Shopify's Dev Dashboard. This command does not deploy the WhachatCRM server.
+3. Separately approve enabling `SHOPIFY_CATALOG_AUTH_ENABLED` through normal production operations. Do not change `SHOPIFY_SCOPES`. This task makes no Railway variable changes.
+4. A consenting merchant opens **Sales Catalog → Shopify Products → Approve Product Access**. The existing authenticated `/api/shopify/catalog/authorize` route resolves their owned installation and redirects the top-level browser to:
 
    ```text
    https://admin.shopify.com/store/{STORE_NAME}/oauth/install?client_id=e4585d4da1434c9e5649a2269e716076&optional_scopes=read_products,read_inventory
    ```
 
-   Shopify asks that merchant to approve the additional read access. They can decline without uninstalling or changing their current customer/order access, billing or plan. The declared optional scopes are not appended to the original required-scope OAuth request. The original OAuth callback stays available for its existing installation flow.
-7. After consent, return to `/app/sales-catalog?source=shopify`. `app/scopes_update` wakes the existing source; **Retry Sync** also queues recovery. Existing quota/error backoff, distributed leases and the one-request-per-minute limit still apply. The worker verifies actual `currentAppInstallation.accessScopes` through the installed token; do not infer access from the TOML, browser return or webhook alone. If either requested scope is missing or the installed token cannot read the provider, keep the blocked/limited state and resolve it before claiming full inventory capability.
-8. Allow initial bounded import to complete, then verify readiness, actual products/variants and current inventory snapshots. With an explicitly approved test shop or pilot, verify signed product/inventory/collection delivery, tenant ownership, incremental price/stock refresh and preserved customer/order/privacy processing. Use the Dev Dashboard for app-managed subscriptions/delivery; do not rely solely on the per-shop GraphQL subscription list. No customer messages or campaigns should be triggered. Catalog ready requires a successful import, not just OAuth connection or consent.
+   Shopify asks the merchant to approve the optional read access. App opening and TOML declaration alone do not grant permissions; no reinstall or required-scope OAuth expansion is needed. The merchant can decline while retaining existing access and billing. No merchant is reauthorized in this task.
+5. Return to `/app/sales-catalog?source=shopify`. The signed app-managed `app/scopes_update` wakes an existing source; **Retry Sync** also queues work under the existing one-per-minute recovery/backoff limits. The worker verifies actual installation scopes and performs bounded shop-specific registration before import chunks. Missing `read_inventory` leaves inventory-level subscriptions skipped and readiness partial. Never infer grants from a browser return or webhook alone.
+6. Inspect `catalogWebhooks` readiness and the shop-specific GraphQL subscription list for the ten granted catalog topics and exact callbacks; use the Dev Dashboard for the seven app-managed subscriptions. With an explicitly approved test/pilot shop, verify signed product/variant/inventory/collection changes trigger targeted refresh, customer/order/privacy processing remains intact, and daily reconciliation recovers missed events. Confirm initial import and current inventory before declaring products ready. Registration confirmation is not proof of successful event delivery.
 
-No merchant has been reauthorized during preparation. No published settings, environment flags, production records or subscriptions were mutated.
+No app version is published, no authorization gate is enabled, and no merchant grants or production records are modified by preparing this correction.

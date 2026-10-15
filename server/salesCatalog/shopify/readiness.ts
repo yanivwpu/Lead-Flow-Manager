@@ -2,6 +2,7 @@ import {
   CATALOG_FRESH_MS,
   SHOPIFY_CATALOG_SCOPES,
 } from "@shared/commerceCatalog";
+import type { CatalogWebhookState } from "./registration";
 import { resolveCatalogInstallation } from "./installation";
 import type { CatalogDb, createCommerceStore } from "../commerceStore";
 export async function catalogReadiness(
@@ -22,7 +23,34 @@ export async function catalogReadiness(
     completed &&
     scopes.includes("read_products") &&
     !["permission_required", "disconnected"].includes(source!.status);
+  const savedHooks = (
+    source?.checkpoint as { webhooks?: CatalogWebhookState } | undefined
+  )?.webhooks;
+  const hooks =
+    savedHooks?.scopesKey === [...scopes].sort().join(",")
+      ? savedHooks
+      : undefined;
+  const hookStatuses = Object.values(hooks?.statuses ?? {});
+  const hookRetry = hookStatuses.some(
+    (s) => !["registered", "already_registered", "skipped_scope"].includes(s),
+  );
   return {
+    catalogWebhooks: {
+      status: !hooks
+        ? "pending"
+        : hookRetry
+          ? "retrying"
+          : !hooks.completedAt || hooks.cursor !== 0
+            ? "pending"
+            : hookStatuses.includes("skipped_scope")
+              ? "partial"
+              : "verified",
+      verifiedAt: hooks?.completedAt ?? null,
+      nextCheckAt: hooks?.nextCheckAt ?? null,
+      registeredCount: hookStatuses.filter((s) =>
+        ["registered", "already_registered"].includes(s),
+      ).length,
+    },
     connection: install ? "connected" : "disconnected",
     sourceId: source?.id ?? null,
     status: !install

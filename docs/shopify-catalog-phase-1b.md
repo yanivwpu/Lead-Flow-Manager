@@ -75,7 +75,7 @@ References: [ProductVariant 2026-01](https://shopify.dev/docs/api/admin-graphql/
 
 ## Webhook configuration required after review
 
-Catalog handlers exist at `/api/shopify/catalog-webhooks/{topic-with-slashes-replaced-by-hyphens}`. No external subscription was created. The existing registration code manages its existing customer/order/uninstall specs; this PR does not silently expand those subscriptions or alter existing callbacks.
+Catalog handlers exist at `/api/shopify/catalog-webhooks/{topic-with-slashes-replaced-by-hyphens}`. Shopify rejected the ten scope-dependent app-managed declarations from PR #84 while catalog scopes are optional. The correction uses the existing verified per-shop registration infrastructure after actual merchant consent, through bounded leased catalog worker chunks. No external subscription is created during development or tests; existing customer/order/privacy/uninstall callbacks retain their ownership. See the [corrected activation runbook](shopify-catalog-activation.md).
 
 | Topics | Scope |
 | --- | --- |
@@ -85,7 +85,7 @@ Catalog handlers exist at `/api/shopify/catalog-webhooks/{topic-with-slashes-rep
 | `inventory_levels/update`, `inventory_levels/connect`, `inventory_levels/disconnect` | `read_inventory` |
 | `app/scopes_update` | Existing app installation |
 
-Example callback: `products/update` → `/api/shopify/catalog-webhooks/products-update`. Configure these app-managed subscriptions in the approved app version, using the same reviewed origin and signing secret as that installation. Keep existing privacy, uninstall, customer and order subscriptions. Verify actual subscriptions/delivery before claiming event latency in a live environment. Polling reconciliation remains the recovery path; the readiness API reports scope/data capability, not unverified subscription delivery.
+Example callback: `products/update` → `/api/shopify/catalog-webhooks/products-update`. Only `app/scopes_update` stays app-managed in the production TOML. The ten scope-dependent topics are created shop-specifically with the installed token after grant verification, using API 2026-01 and the same reviewed origin/signing secret. Registration checks existing callbacks before create and reads them back, preserves installation/tenant fences and quota delays, and rechecks daily. Keep existing privacy, uninstall, customer and order subscriptions. Readiness reports registration status separately; verify actual delivery before claiming event latency. Daily/size-aware polling reconciliation remains the recovery path.
 
 ## Availability and AI authority
 
@@ -117,4 +117,4 @@ Automated fixture tests cover independent child pagination, 51 variants, resume/
 
 The native 10,000-product fixture returned 100 filtered hydrated candidates in approximately **264 ms** in the development container; the SKU query plan uses the catalog GIN index. This is a fixture observation, not a production SLA. Initial synchronization uses one product hydration request per product plus 50-record child pages; large-store completion depends on actual Shopify quotas. It remains bounded/resumable and does not load the whole catalog into memory. Real synchronization latency and channel eligibility must be verified on an explicitly authorized test shop after configuration review.
 
-Before live operation: review/deploy this PR and additive migration separately; release optional read scopes and catalog webhook subscriptions in the correct app version; verify signing/origin/API configuration; enable the authorization flag only after that release; obtain explicit merchant approval; request initial sync and inspect readiness and event delivery. These steps were not performed in this PR. Phase 2 shopping/chatbot flows, checkout and Growth Engine installation remain outside scope.
+Before live operation: review/deploy this PR and additive migration separately; release optional read scopes and the app-managed scope-change subscription in the correct app version; verify signing/origin/API configuration; enable the authorization flag only after that release; obtain explicit merchant approval; request initial sync and inspect readiness and event delivery. These steps were not performed in this PR. Phase 2 shopping/chatbot flows, checkout and Growth Engine installation remain outside scope.
