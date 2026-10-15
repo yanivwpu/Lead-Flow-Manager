@@ -34,10 +34,56 @@ api_version = "2026-01"
   topics = [ "customers/update" ]
   uri = "https://app.whachatcrm.com/api/shopify/webhooks/customers-update"
 
+  # Phase 1B catalog — app-managed subscriptions; delivery requires the corresponding granted scopes.
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/app-scopes_update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/create" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/products-create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/products-update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "products/delete" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/products-delete"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/inventory_levels-update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/connect" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/inventory_levels-connect"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/disconnect" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/inventory_levels-disconnect"
+
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_items/update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/inventory_items-update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "collections/create" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/collections-create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "collections/update" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/collections-update"
+
+  [[webhooks.subscriptions]]
+  topics = [ "collections/delete" ]
+  uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/collections-delete"
+
 [access_scopes]
-# Kept in sync with server/shopify.ts
+# Required install scopes stay in sync with server/shopify.ts.
+# Catalog access is approved explicitly through the existing optional-scope flow.
 scopes = "read_customers,read_orders"
-optional_scopes = [ ]
+optional_scopes = [ "read_products", "read_inventory" ]
 use_legacy_install_flow = false
 
 [auth]
