@@ -1,4 +1,8 @@
 import crypto from "node:crypto";
+import type {
+  CatalogWebhookRegistrar,
+  CatalogWebhookState,
+} from "./registration";
 import { catalogReconciliationIntervalMs } from "./reconciliation";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import {
@@ -29,6 +33,7 @@ import {
 } from "./api";
 
 type Checkpoint = {
+  webhooks?: CatalogWebhookState;
   mode: "full" | "events";
   after: string | null;
   pending: string[];
@@ -71,6 +76,7 @@ const gid = (v: unknown, kind: string) => {
 export function createShopifyCatalogSync(
   database: CatalogDb,
   requestFor: (shop: string, token: string) => CatalogRequest,
+  registerWebhooks?: CatalogWebhookRegistrar,
 ) {
   async function productCount(userId: string, sourceId: string, db = database) {
     const [row] = await db
@@ -173,6 +179,41 @@ export function createShopifyCatalogSync(
           await run(tx);
         });
       }
+      function webhookDeadline() {
+        const at = Date.parse(checkpoint.webhooks?.nextCheckAt ?? "");
+        return registerWebhooks && Number.isFinite(at) ? at : Infinity;
+      }
+      if (registerWebhooks) {
+        const registration = await registerWebhooks({
+          install,
+          sourceId,
+          leaseToken,
+          scopes,
+          state: checkpoint.webhooks,
+        });
+        if (registration.didWork) {
+          checkpoint.webhooks = registration.state;
+          await persist(async (tx) => {
+            await tx
+              .update(catalogSources)
+              .set({
+                checkpoint,
+                status:
+                  checkpoint.mode ||
+                  !source.initialSyncCompletedAt ||
+                  registration.delayMs > 0
+                    ? "syncing"
+                    : source.status,
+                grantedScopes: scopes,
+                leaseToken: null,
+                leaseExpiresAt: null,
+                nextAttemptAt: new Date(Date.now() + registration.delayMs),
+              })
+              .where(eq(catalogSources.id, sourceId));
+          });
+          return;
+        }
+      }
       if (!checkpoint.mode) {
         const pending = await database
           .select()
@@ -199,14 +240,18 @@ export function createShopifyCatalogSync(
           await database
             .update(catalogSources)
             .set({
+              status: source.errorCode ? source.status : "ready",
               leaseToken: null,
               leaseExpiresAt: null,
               nextAttemptAt: new Date(
-                source.lastSyncAt!.getTime() +
-                  catalogReconciliationIntervalMs(
-                    await productCount(install.userId, sourceId),
-                    checkpoint.lastFullDurationMs,
-                  ),
+                Math.min(
+                  webhookDeadline(),
+                  source.lastSyncAt!.getTime() +
+                    catalogReconciliationIntervalMs(
+                      await productCount(install.userId, sourceId),
+                      checkpoint.lastFullDurationMs,
+                    ),
+                ),
               ),
             })
             .where(
@@ -254,6 +299,7 @@ export function createShopifyCatalogSync(
           mode,
           startedAt: mode === "full" ? new Date().toISOString() : undefined,
           lastFullDurationMs: checkpoint.lastFullDurationMs,
+          webhooks: checkpoint.webhooks,
           after: null,
           pending: full ? [] : [...new Set(ids)],
           end: mode === "events",
@@ -356,12 +402,19 @@ export function createShopifyCatalogSync(
                   initialSyncCompletedAt:
                     source.initialSyncCompletedAt ?? completedAt,
                   lastSyncAt: lastFull,
-                  checkpoint: { lastFullDurationMs },
+                  checkpoint: {
+                    lastFullDurationMs,
+                    webhooks: checkpoint.webhooks,
+                  },
                   generation: null,
                   errorCode: null,
                   attempts: 0,
                   nextAttemptAt:
-                    remaining || manualPending ? completedAt : reconcileAt,
+                    remaining || manualPending
+                      ? completedAt
+                      : new Date(
+                          Math.min(reconcileAt.getTime(), webhookDeadline()),
+                        ),
                   leaseToken: null,
                   leaseExpiresAt: null,
                 })

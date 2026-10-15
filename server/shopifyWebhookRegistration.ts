@@ -1,4 +1,4 @@
-import { SHOPIFY_GRAPHQL_WEBHOOK_SPECS, type ShopifyWebhookRegistrationAttempt } from "../shared/shopifyWebhookHealth";
+import { SHOPIFY_GRAPHQL_WEBHOOK_SPECS, type ShopifyGraphqlWebhookSpec, type ShopifyWebhookRegistrationAttempt } from "../shared/shopifyWebhookHealth";
 import { boundedRequest, classifyRegistrationFailure, listVerifiedWebhookSubscriptions, verifyShopScopes, type ListedWebhook } from "./shopifyWebhookHealthAudit";
 
 const STAGING_ORIGIN = "https://whachatcrm-staging-app-staging.up.railway.app";
@@ -9,24 +9,30 @@ const sameUrl = (a: string, b: string) => { try { return new URL(a).href === new
 /** Read before creating. App-scoped staging commerce is owned by the staging TOML. */
 export async function registerVerifiedShopWebhooks(options: {
   getClient: () => Client; host: string; requestedScopes: readonly string[];
+  specs?: readonly ShopifyGraphqlWebhookSpec[];
+  appManagedTopics?: readonly string[];
+  maxSubscriptionPages?: number;
+  mutate?: (operation: () => Promise<any>) => Promise<any>;
 }): Promise<ShopifyWebhookRegistrationAttempt[]> {
   const { getClient, host, requestedScopes } = options;
+  const specs = options.specs ?? SHOPIFY_GRAPHQL_WEBHOOK_SPECS;
   const scopes = await verifyShopScopes(getClient);
   const grantedScopes: string[] = [...scopes.grantedScopes];
   let client: Client;
   let listed: ListedWebhook[];
   try {
     client = getClient();
-    listed = await listVerifiedWebhookSubscriptions(client);
+    listed = await listVerifiedWebhookSubscriptions(client, 10_000, options.maxSubscriptionPages);
   } catch {
-    return SHOPIFY_GRAPHQL_WEBHOOK_SPECS.map(spec => ({ topic: spec.topic,
+    return specs.map(spec => ({ topic: spec.topic,
       address: `${host.replace(/\/+$/, "")}${spec.pathSuffix}`, status: "skipped_verification",
       message: "Existing subscriptions could not be verified; no registrations created." }));
   }
   const results: ShopifyWebhookRegistrationAttempt[] = [];
-  for (const spec of SHOPIFY_GRAPHQL_WEBHOOK_SPECS) {
+  for (const spec of specs) {
     const address = `${host.replace(/\/+$/, "")}${spec.pathSuffix}`;
     const result = (status: ShopifyWebhookRegistrationAttempt["status"], message?: string) => results.push({ topic: spec.topic, address, status, ...(message ? { message } : {}) });
+    if (options.appManagedTopics?.some(topic => sameTopic(topic,spec.topic))) { result("skipped_verification", "Topic is app-managed; no parallel per-shop subscription created."); continue; }
     if (spec.requiredScopes?.length && scopes.status === "unknown") {
       result("skipped_verification", "OAuth permissions could not be verified. Retry read-only verification."); continue;
     }
@@ -39,15 +45,16 @@ export async function registerVerifiedShopWebhooks(options: {
       else result("failed", "Existing duplicate or conflicting subscriptions require operator review; no subscription created or deleted.");
       continue;
     }
-    if (new URL(host).origin === STAGING_ORIGIN && spec.topic !== "APP_UNINSTALLED") {
+    if (!options.specs && new URL(host).origin === STAGING_ORIGIN && spec.topic !== "APP_UNINSTALLED") {
       result("skipped_verification", "Staging commerce is app-managed. Confirm the active staging app version and delivery; do not create a parallel per-shop subscription."); continue;
     }
     try {
-      const response = await boundedRequest(client, `mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+      const operation = () => boundedRequest(client, `mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
         webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
           webhookSubscription { id } userErrors { message }
         }
       }`, { variables: { topic: spec.topic, webhookSubscription: { callbackUrl: address, format: "JSON" } } });
+      const response = await (options.mutate ? options.mutate(operation) : operation());
       const payload = response.data?.webhookSubscriptionCreate;
       if (!Array.isArray(payload?.userErrors)) throw new Error("Shopify did not confirm registration.");
       const errors = payload.userErrors;
@@ -55,7 +62,7 @@ export async function registerVerifiedShopWebhooks(options: {
       if (errors.length && !duplicate) throw new Error(errors.map((e: { message?: string }) => e.message || "Unknown Shopify rejection").join("; "));
       if (!duplicate && !payload.webhookSubscription?.id) throw new Error("Shopify did not confirm a created subscription.");
       // A conflict error or mutation ID alone does not verify the actual callback.
-      listed = await listVerifiedWebhookSubscriptions(client);
+      listed = await listVerifiedWebhookSubscriptions(client, 10_000, options.maxSubscriptionPages);
       const confirmed = listed.filter(h => sameTopic(h.topic, spec.topic));
       if (confirmed.length !== 1 || !sameUrl(confirmed[0].callbackUrl, address)) throw new Error("Shopify did not verify one matching subscription after registration.");
       result(duplicate ? "already_registered" : "registered");

@@ -40,11 +40,13 @@ export async function verifyShopScopes(getClient: () => GraphqlClient, timeoutMs
   }
 }
 
-export async function listVerifiedWebhookSubscriptions(client: GraphqlClient, timeoutMs = 10_000): Promise<ListedWebhook[]> {
+export async function listVerifiedWebhookSubscriptions(client: GraphqlClient, timeoutMs = 10_000, maxPages = Infinity): Promise<ListedWebhook[]> {
   const listed: ListedWebhook[] = [];
   let cursor: string | null = null;
   const cursors = new Set<string>();
+  let pages = 0;
   do {
+    if (++pages > maxPages) throw new Error("Subscription verification page limit reached");
     const response = await boundedRequest(client, `query listWebhookSubscriptions($cursor: String) {
       webhookSubscriptions(first: 50, after: $cursor) {
         pageInfo { hasNextPage endCursor }

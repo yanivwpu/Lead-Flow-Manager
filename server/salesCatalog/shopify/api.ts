@@ -17,17 +17,20 @@ export type CatalogRequest = (
   query: string,
   variables?: Record<string, unknown>,
 ) => Promise<any>;
-export function shopifyCatalogRequest(
-  shop: string,
-  token: string,
-): CatalogRequest {
+export function shopifyCatalogClient(shop: string, token: string) {
   const normalized = normalizeShopifyShopDomain(shop);
   const api = getShopifyApi();
   if (!normalized || !token || !api) throw new CatalogApiError("unavailable");
   const client = new api.clients.Graphql({
     session: { shop: normalized, accessToken: token } as any,
   });
-  return createCatalogRequest(client);
+  return client;
+}
+export function shopifyCatalogRequest(
+  shop: string,
+  token: string,
+): CatalogRequest {
+  return createCatalogRequest(shopifyCatalogClient(shop, token));
 }
 export function createCatalogRequest(client: {
   request(query: string, options?: any): Promise<any>;

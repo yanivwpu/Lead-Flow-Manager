@@ -1,9 +1,12 @@
 import { db } from "../../../drizzle/db";
 import { createShopifyCatalogSync } from "./sync";
-import { shopifyCatalogRequest } from "./api";
+import { HOST } from "../../shopify";
+import { createCatalogWebhookRegistrar } from "./registration";
+import { shopifyCatalogClient, shopifyCatalogRequest } from "./api";
 export const shopifyCatalogSync = createShopifyCatalogSync(
   db,
   shopifyCatalogRequest,
+  createCatalogWebhookRegistrar(db, shopifyCatalogClient, HOST),
 );
 let running = false;
 export async function runShopifyCatalogTick() {
