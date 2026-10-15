@@ -1,3 +1,4 @@
+import { commerceFiltersSchema } from "@shared/commerceCatalog";
 import { z } from "zod";
 import { SALES_CATALOG_PAGE_MAX } from "@shared/salesCatalog";
 
@@ -5,6 +6,7 @@ const requestSchema = z
   .object({
     sourceId: z.string().trim().min(1).max(160),
     query: z.string().trim().min(1).max(200),
+    filters: commerceFiltersSchema.optional(),
     hint: z.string().trim().max(160).nullable().optional(),
     limit: z.number().int().min(1).max(SALES_CATALOG_PAGE_MAX).default(25),
   })

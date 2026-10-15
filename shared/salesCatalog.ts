@@ -22,8 +22,9 @@ export type SalesCatalogPage = {
 };
 export type CatalogReadiness = {
   connection: "connected" | "disconnected" | "error";
-  catalog: "ready" | "not_implemented";
+  catalog: "ready" | "not_implemented" | "permission_required" | "syncing" | "stale" | "error";
 };
+/** Legacy connection-only helper. Actual provider readiness uses catalogReadiness in the server service. */
 export function shopifyCatalogReadiness(connected: boolean): CatalogReadiness {
   return {
     connection: connected ? "connected" : "disconnected",

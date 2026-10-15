@@ -3308,3 +3308,225 @@ export const seoGithubExecutions = pgTable("seo_github_executions", {
   publicationRequestedAt:timestamp("publication_requested_at"),publicationRequestedBy:text("publication_requested_by"),mergeSha:varchar("merge_sha",{length:64}),liveAt:timestamp("live_at"),performance:jsonb("performance").notNull().default({}),failureCode:text("failure_code"),
   id:varchar("id").primaryKey().default(sql`gen_random_uuid()`), actionId:varchar("action_id").notNull(), actionVersion:integer("action_version").notNull(), status:text("status").notNull().default("pending"), leaseToken:text("lease_token"), leaseExpiresAt:timestamp("lease_expires_at"), branchName:text("branch_name"), commitSha:varchar("commit_sha",{length:64}), prNumber:integer("pr_number"), prUrl:text("pr_url"), errorMessage:text("error_message"), startedAt:timestamp("started_at"), completedAt:timestamp("completed_at"), createdAt:timestamp("created_at").notNull().defaultNow(), updatedAt:timestamp("updated_at").notNull().defaultNow(),
 }, t=>({actionVersionKey:uniqueIndex("seo_github_executions_action_version_uidx").on(t.actionId,t.actionVersion),statusLeaseIdx:index("seo_github_executions_status_lease_idx").on(t.status,t.leaseExpiresAt,t.createdAt)}));
+
+// Shared commerce catalog: manual workspace_offers retain their original identities.
+export const catalogSources = pgTable(
+  "catalog_sources",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    integrationId: varchar("integration_id")
+      .notNull()
+      .references(() => integrations.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    shop: text("shop").notNull(),
+    status: text("status").notNull().default("permission_required"),
+    grantedScopes: jsonb("granted_scopes").notNull().default([]),
+    initialSyncCompletedAt: timestamp("initial_sync_completed_at"),
+    lastSyncAt: timestamp("last_sync_at"),
+    nextAttemptAt: timestamp("next_attempt_at").notNull().defaultNow(),
+    requestedAt: timestamp("requested_at").notNull().defaultNow(),
+    lastRequestedAt: timestamp("last_requested_at"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at"),
+    attempts: integer("attempts").notNull().default(0),
+    errorCode: text("error_code"),
+    checkpoint: jsonb("checkpoint").notNull().default({}),
+    currency: text("currency"),
+    allowedHosts: jsonb("allowed_hosts").notNull().default([]),
+    generation: text("generation"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    installation: uniqueIndex("catalog_source_installation").on(
+      t.userId,
+      t.provider,
+      t.shop,
+    ),
+    due: index("catalog_source_due").on(t.nextAttemptAt),
+  }),
+);
+export const catalogProducts = pgTable(
+  "catalog_products",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceId: varchar("source_id")
+      .notNull()
+      .references(() => catalogSources.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    productType: text("product_type"),
+    vendor: text("vendor"),
+    status: text("status").notNull(),
+    published: boolean("published").notNull().default(false),
+    productUrl: text("product_url"),
+    options: jsonb("options").notNull().default([]),
+    providerTags: jsonb("provider_tags").notNull().default([]),
+    variantCount: integer("variant_count").notNull().default(0),
+    searchText: text("search_text").notNull().default(""),
+    complete: boolean("complete").notNull().default(false),
+    providerUpdatedAt: timestamp("provider_updated_at").notNull(),
+    syncedAt: timestamp("synced_at").notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at"),
+    seenGeneration: text("seen_generation"),
+    hydrationGeneration: text("hydration_generation"),
+    aiGuidance: text("ai_guidance"),
+    notes: text("notes"),
+    merchantTags: jsonb("merchant_tags").notNull().default([]),
+  },
+  (t) => ({
+    external: uniqueIndex("catalog_product_external").on(
+      t.sourceId,
+      t.externalId,
+    ),
+    tenant: index("catalog_product_tenant").on(t.userId, t.sourceId, t.id),
+    search: index("catalog_product_search").using(
+      "gin",
+      sql`to_tsvector('simple', ${t.searchText})`,
+    ),
+  }),
+);
+export const catalogVariants = pgTable(
+  "catalog_variants",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    sourceId: varchar("source_id")
+      .notNull()
+      .references(() => catalogSources.id, { onDelete: "cascade" }),
+    productId: varchar("product_id")
+      .notNull()
+      .references(() => catalogProducts.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+    sku: text("sku"),
+    options: jsonb("options").notNull().default([]),
+    price: numeric("price"),
+    compareAtPrice: numeric("compare_at_price"),
+    currency: text("currency"),
+    inventoryItemId: text("inventory_item_id"),
+    tracked: boolean("tracked"),
+    quantity: integer("quantity"),
+    sellableOnlineQuantity: integer("sellable_online_quantity"),
+    inventoryPolicy: text("inventory_policy"),
+    availableForSale: boolean("available_for_sale"),
+    requiresComponents: boolean("requires_components").notNull().default(false),
+    providerUpdatedAt: timestamp("provider_updated_at").notNull(),
+    verifiedAt: timestamp("verified_at").notNull(),
+    generation: text("generation").notNull(),
+  },
+  (t) => ({
+    external: uniqueIndex("catalog_variant_external").on(
+      t.sourceId,
+      t.externalId,
+    ),
+    parent: index("catalog_variant_parent").on(
+      t.userId,
+      t.sourceId,
+      t.productId,
+      t.externalId,
+    ),
+    inventory: index("catalog_variant_inventory").on(
+      t.sourceId,
+      t.inventoryItemId,
+    ),
+    price: index("catalog_variant_price").on(t.sourceId, t.price),
+  }),
+);
+export const catalogMedia = pgTable(
+  "catalog_media",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    sourceId: varchar("source_id").notNull(),
+    productId: varchar("product_id")
+      .notNull()
+      .references(() => catalogProducts.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    url: text("url").notNull(),
+    altText: text("alt_text"),
+    generation: text("generation").notNull(),
+  },
+  (t) => ({
+    external: uniqueIndex("catalog_media_external").on(
+      t.productId,
+      t.externalId,
+    ),
+  }),
+);
+export const catalogCollections = pgTable(
+  "catalog_collections",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull(),
+    sourceId: varchar("source_id")
+      .notNull()
+      .references(() => catalogSources.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    title: text("title").notNull(),
+  },
+  (t) => ({
+    external: uniqueIndex("catalog_collection_external").on(
+      t.sourceId,
+      t.externalId,
+    ),
+  }),
+);
+export const catalogMemberships = pgTable(
+  "catalog_memberships",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    productId: varchar("product_id")
+      .notNull()
+      .references(() => catalogProducts.id, { onDelete: "cascade" }),
+    collectionId: varchar("collection_id")
+      .notNull()
+      .references(() => catalogCollections.id, { onDelete: "cascade" }),
+    generation: text("generation").notNull(),
+  },
+  (t) => ({
+    membership: uniqueIndex("catalog_membership_unique").on(
+      t.productId,
+      t.collectionId,
+    ),
+  }),
+);
+export const catalogEvents = pgTable(
+  "catalog_events",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    sourceId: varchar("source_id")
+      .notNull()
+      .references(() => catalogSources.id, { onDelete: "cascade" }),
+    userId: varchar("user_id").notNull(),
+    eventId: text("event_id").notNull(),
+    topic: text("topic").notNull(),
+    resourceId: text("resource_id").notNull(),
+    receivedAt: timestamp("received_at").notNull().defaultNow(),
+    processedAt: timestamp("processed_at"),
+  },
+  (t) => ({
+    dedupe: uniqueIndex("catalog_event_dedupe").on(t.sourceId, t.eventId),
+    due: index("catalog_event_due").on(t.sourceId, t.processedAt),
+  }),
+);

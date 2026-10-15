@@ -1,3 +1,4 @@
+import { verifyWebhookHmac } from "./shopifyWebhookSignature";
 import { createShopifyOrderWebhookHandler } from "./shopifyOrderWebhookHandler";
 import { createShopifyCustomerWebhookHandler } from "./shopifyCustomerWebhookHandler";
 import { syncShopifyCustomer } from "./shopifyCustomerSync";
@@ -496,23 +497,6 @@ router.get('/subscription', shopifySessionMiddleware(), async (req: Request, res
   }
 });
 
-function verifyWebhookHmac(rawBody: Buffer | string, hmac: string): boolean {
-  if (!SHOPIFY_API_SECRET || !hmac) return false;
-
-  const calculatedHmac = crypto
-    .createHmac('sha256', SHOPIFY_API_SECRET)
-    .update(rawBody)
-    .digest('base64');
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(hmac),
-      Buffer.from(calculatedHmac)
-    );
-  } catch {
-    return false;
-  }
-}
 
 async function resolveSessionShopifyMerchant(userId: string) {
   const user = await storage.getUserForSession(userId);

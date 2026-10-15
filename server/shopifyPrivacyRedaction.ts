@@ -1,3 +1,4 @@
+import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { enqueuePrivacyRequest } from "./shopifyPrivacyRequests";
 import crypto from "crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -114,6 +115,7 @@ export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
       }
     }
     // Includes legacy partial redactions where users.shopifyShop was already cleared.
+    await cleanupShopifyCatalog(tx as any, shop, true);
     await tx.delete(integrations).where(and(eq(integrations.type, "shopify"),
       or(sql`${integrations.config}->>'shopUrl' = ${shop}`,
         ids.length ? and(inArray(integrations.userId, ids), sql`COALESCE(${integrations.config}->>'shopUrl', '') = ''`) : sql`false`)));

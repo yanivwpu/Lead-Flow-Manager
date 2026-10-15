@@ -82,7 +82,7 @@ const SKIP_AMOUNT_FACT_TYPES = new Set<string>([
 const INACTIVE_STATUSES = new Set(["unavailable", "draft", "inactive", "archived", "waitlist"]);
 
 function normalizeAmount(raw: string): string {
-  return raw.replace(/[^\d.,]/g, "").replace(/,(?=\d{3}\b)/g, "");
+  return raw.replace(/[^\d.,]/g, "").replace(/,(?=\d{3}\b)/g, "").replace(/[.,]+$/, "");
 }
 
 function integerDigitCount(amount: string): number {
@@ -265,20 +265,23 @@ export function buildTurnEvidenceBundle(params: {
   for (const record of params.liveRecords ?? []) {
     const summary = String(record.summary || "").trim();
     if (!summary) continue;
-    if (record.providerId && record.providerId !== "businessPackages") continue;
+    if (record.providerId && record.providerId !== "businessPackages" && record.providerId !== "shopify") continue;
+    const commerce = record.providerId === "shopify";
+    const commerceStale = commerce && record.data?.freshness !== "fresh";
     liveOfferRecordCount += 1;
     const inactive = liveOfferIsInactive(record.data);
     const identity = liveOfferIdentity(record.data ?? null, summary);
-    const amounts = extractSupportedAmountsFromText(summary, "live_offer").map((a) => ({
+    const authoritativeAmountText = commerce ? (record.data?.currency && record.data?.price != null ? `${record.data.currency} ${record.data.price}` : "") : summary;
+    const amounts = extractSupportedAmountsFromText(authoritativeAmountText, commerce ? "canonical_catalog" : "live_offer").map((a) => ({
       ...a,
       identity: a.identity || identity,
-      supportsAuto: !inactive,
+      supportsAuto: !inactive && !commerceStale,
     }));
     items.push({
-      sourceType: "live_offer",
+      sourceType: commerce ? "canonical_catalog" : "live_offer",
       text: summary,
       identity,
-      stale: false,
+      stale: commerceStale,
       inactive,
       amounts,
     });

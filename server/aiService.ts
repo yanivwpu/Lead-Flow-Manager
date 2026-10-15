@@ -1,3 +1,4 @@
+import { validateCommerceDraft } from "@shared/commerceGrounding";
 import { aiProvider } from "./aiProvider";
 import {
   extractWebsiteKnowledgeSummaryText,
@@ -311,8 +312,12 @@ export class AIService {
       grounding = excludeFactTypesFromGrounding(grounding, ["booking_link", "call_to_action"]);
     }
 
+    const connectedProductTurn = liveDecision.providerIds.includes("shopify");
+    if (connectedProductTurn) grounding = excludeFactTypesFromGrounding(grounding, ["product", "service", "pricing_plan"]);
     let liveBusinessDataBlock = "";
     let liveCheckoutUrls: string[] = [];
+    let connectedProductUrls: string[] = [];
+    let hasUnverifiedProductInventory = connectedProductTurn;
     let liveRecordsForBundle: Array<{
       providerId?: string;
       summary: string;
@@ -327,6 +332,9 @@ export class AIService {
           decision: liveDecision,
         });
         liveBusinessDataBlock = live.promptBlock;
+        const connectedRecords = live.records.filter(r => r.providerId === "shopify");
+        connectedProductUrls = connectedRecords.flatMap(r => [String(r.data.productUrl || ""), ...((r.data.images as Array<{url:string}> | undefined) ?? []).map(i => i.url)]).filter(u => /^https:\/\//i.test(u));
+        hasUnverifiedProductInventory = connectedRecords.length === 0 || connectedRecords.some(r => !["available", "not_tracked"].includes(String(r.data.availability)));
         liveRecordsForBundle = live.records.map((r) => ({
           providerId: r.providerId,
           summary: String(r.summary || "").trim(),
@@ -353,7 +361,7 @@ export class AIService {
       }
     }
 
-    const promptWebsiteTextRaw = selectWebsiteKnowledgeChunkForPrompt(
+    const promptWebsiteTextRaw = connectedProductTurn ? "" : selectWebsiteKnowledgeChunkForPrompt(
       (businessKnowledge as { websiteKnowledgeSummary?: unknown } | undefined)?.websiteKnowledgeSummary,
       WEBSITE_KNOWLEDGE_PROMPT_LIMIT,
     );
@@ -385,7 +393,7 @@ export class AIService {
         retrieved: grounding.retrieved,
         conflictingKeys: grounding.conflictingKeys,
         liveRecords: liveRecordsForBundle,
-        servicesProducts: businessKnowledge?.servicesProducts,
+        servicesProducts: connectedProductTurn ? undefined : businessKnowledge?.servicesProducts,
         websiteKnowledgeText: promptWebsiteText,
         supplementalEvidence: [...(savingsScripted?.evidence || []), ...pricingCompareEvidence],
       });
@@ -403,13 +411,13 @@ export class AIService {
         userId,
         retrieved: [],
         websiteKnowledgeText: promptWebsiteText,
-        servicesProducts: businessKnowledge?.servicesProducts,
+        servicesProducts: connectedProductTurn ? undefined : businessKnowledge?.servicesProducts,
         supplementalEvidence: pricingCompareEvidence,
       });
     }
     const evidenceDiag = evidenceDiagnostics(turnEvidence);
     const structuredPricesSelected = turnEvidence.supportedAmountSourceTypes.some(
-      (t) => t === "published_fact" || t === "live_offer",
+      (t) => t === "published_fact" || t === "live_offer" || t === "canonical_catalog",
     );
 
     let marketingMaterialsBlock = "";
@@ -436,7 +444,7 @@ export class AIService {
     }
 
     const systemPrompt = this.buildSystemPrompt(
-      businessKnowledge,
+      connectedProductTurn && businessKnowledge ? { ...businessKnowledge, servicesProducts: null, websiteKnowledgeSummary: null } : businessKnowledge,
       settings,
       tone,
       detectedLanguage,
@@ -458,6 +466,7 @@ export class AIService {
 
     const evaluateDraft = (draft: string, opts?: { skipCompleteness?: boolean }): GroundingCheck =>
       mergeGroundingChecks(
+        connectedProductTurn ? validateCommerceDraft({draft, productUrls:connectedProductUrls, inventoryUnverified:hasUnverifiedProductInventory}) : {ok:true,violations:[]},
         validateGroundedClaims({
           draft,
           retrieved: grounding.retrieved,
@@ -830,6 +839,7 @@ export class AIService {
       const allowedUrls = new Set<string>();
       if (verifiedBookingUrl) allowedUrls.add(verifiedBookingUrl);
       for (const url of liveCheckoutUrls) allowedUrls.add(url);
+      for (const url of connectedProductUrls) allowedUrls.add(url);
       suggestion = stripInventedMarketingMediaUrls(suggestion, allowedUrls);
       sendApprovedAssetId = parseSendApprovedAssetId(
         sendApprovedAssetId || matchedExplicitAsset?.id,

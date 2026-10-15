@@ -24,7 +24,7 @@ export function SalesCatalogView({ children }: { children: ReactNode }) {
         <aside className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
           {t(
             "salesCatalog.shopifyNote",
-            "Shopify connection does not yet provide products. Product synchronization will be available in a later phase.",
+            "Shopify prices and stock are read-only. Manage them in Shopify; AI guidance and merchant notes stay here.",
           )}
         </aside>
       </div>

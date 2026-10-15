@@ -1,3 +1,6 @@
+import { registerShopifyCatalogRoutes } from "./salesCatalog/shopify/routes";
+import { registerCatalogWebhooks } from "./salesCatalog/shopify/webhooks";
+import { verifyWebhookHmac } from "./shopifyWebhookSignature";
 import { registerShopifyPrivacyAdminRoutes } from "./shopifyPrivacyAdminRoutes";
 import { registerSalesAdminLoginRoute } from "./salesAdminLogin";
 import { validateNewPassword } from "./passwordPolicy";
@@ -11076,6 +11079,8 @@ export async function registerRoutes(
   // Workspace Offers & Payment Links (Settings editor + Business Packages source of truth).
   registerWorkspaceOfferRoutes(app);
   registerSalesCatalogRoutes(app, salesCatalog);
+  registerShopifyCatalogRoutes(app, db, salesCatalog.commerce);
+  registerCatalogWebhooks(app, db, verifyWebhookHmac);
 
   // Approved Marketing Materials (AI Brain / Settings library + Website Chat send).
   registerMarketingAssetRoutes(app);
