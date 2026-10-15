@@ -433,6 +433,7 @@ function liveProviderIcon(icon: string) {
 }
 
 function liveProviderStatusLabel(provider: LiveBusinessDataProviderRow): string {
+  if (provider.id === "shopify" && provider.catalogReadiness) return provider.detail || "Catalog unavailable";
   if (provider.id === "businessPackages") {
     if (provider.status === "connected") {
       return provider.detail || "Connected";
@@ -495,7 +496,7 @@ function LiveBusinessDataPanel({
             {rows.map((provider) => {
               const Icon = liveProviderIcon(provider.icon);
               const statusLabel = liveProviderStatusLabel(provider);
-              const connected = provider.status === "connected" && provider.catalogReadiness?.catalog !== "not_implemented";
+              const connected = provider.status === "connected" && (!provider.catalogReadiness || provider.catalogReadiness.catalog === "ready");
               const comingSoon = provider.status === "coming_soon";
               return (
                 <li

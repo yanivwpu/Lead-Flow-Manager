@@ -103,7 +103,7 @@ const PACKAGE_NAME_HINT_RE =
 const PACKAGE_QUESTION_RE =
   /\b(?:packages?|plans?|pricing\s+plans?|featured\s+business|business\s+listing|directory|advertis(?:e|ing)|checkout|sign\s*up\s+for|onboard(?:ing)?)\b/i;
 const SHOPIFY_PRODUCT_RE =
-  /\b(?:product|products|in\s+stock|sku|backpack|shirt|hoodie|variant|shopify|do\s+you\s+(?:sell|have|carry)|waterproof)\b/i;
+  /\b(?:product|products|in\s+stock|sku|backpack|shirt|hoodie|shoes?|sizes?|variant|shopify|this\s+in\s+(?:blue|black|red|white)|which\s+product|specific\s+product|do\s+you\s+(?:sell|have|carry)|waterproof)\b/i;
 const MLS_LISTING_RE =
   /\b(?:bedroom|bath(?:room)?|waterfront|listing|mls|sq\.?\s*ft|square\s+feet|homes?\s+for\s+sale|property|real\s+estate|condo|townhome)\b/i;
 const CALENDAR_RE =
@@ -123,17 +123,18 @@ export function resolveLiveBusinessDataDecision(input: {
   const sub = new Set((input.subIntents || []).map((s) => String(s).toLowerCase()));
   const providerIds: LiveBusinessDataProviderId[] = [];
 
-  const wantsPackages =
+  const explicitPackage = /\b(?:packages?|plans?|business\s+listing|featured\s+business|directory)\b/i.test(message);
+  const wantsShopify = SHOPIFY_PRODUCT_RE.test(message) && !explicitPackage;
+  const wantsPackages = !wantsShopify && (
     sub.has("pricing_question") ||
     sub.has("benefits_question") ||
     sub.has("listing_join_question") ||
     PACKAGE_QUESTION_RE.test(message) ||
-    PACKAGE_NAME_HINT_RE.test(message);
+    PACKAGE_NAME_HINT_RE.test(message));
 
-  const wantsShopify = SHOPIFY_PRODUCT_RE.test(message) && !wantsPackages;
   const wantsMls = MLS_LISTING_RE.test(message);
   const wantsCalendar =
-    sub.has("booking_question") || CALENDAR_RE.test(message);
+    sub.has("booking_question") || (CALENDAR_RE.test(message) && (!wantsShopify || /\b(?:schedule|book(?:ing)?|appointment|calendly|demo\s+call)\b/i.test(message)));
   const knowledgeOnlyHint =
     KNOWLEDGE_ONLY_RE.test(message) &&
     !wantsPackages &&
@@ -209,8 +210,9 @@ export function buildLiveBusinessDataPromptBlock(
   ] as LiveBusinessDataProviderId[];
   const lines = records.map((r) => `- [${r.providerId}/${r.recordType}] ${r.summary}`);
   const hasOffers = providerIds.includes("businessPackages");
+  const productRules = providerIds.includes("shopify") ? "\nSHOPIFY PRODUCT AUTHORITY: Use these exact variant prices/currencies and stored URLs. Website prices cannot override connected products. Stale/unknown inventory is unverified; never promise availability, discounts, shipping or payment status. Product URLs are browsing links, not checkout. No cart/payment tool is available. Do not initiate outbound sales messages." : "";
   const text = `${LIVE_BUSINESS_DATA_HEADER} (structured connectors — authoritative for offers/packages, products, listings, and availability when present; structured offers win over scanned website pricing):
-${lines.join("\n")}
+${lines.join("\n")}${productRules}
 
 When this section answers the customer, lead with it. Do not invent offers, prices, checkout URLs, or availability beyond these rows.${
     hasOffers

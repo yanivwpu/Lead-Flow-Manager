@@ -18,6 +18,7 @@ import {
   type SalesCatalogItem,
 } from "@shared/salesCatalog";
 import { toWorkspaceOfferView } from "../workspaceOffers/offerView";
+import { createCommerceStore, type CatalogDb } from "./commerceStore";
 import { createManualOfferAdapter } from "./manualOfferAdapter";
 
 type CatalogDatabase = Pick<NodePgDatabase, "select">;
@@ -84,6 +85,7 @@ export function createSalesCatalogService(database: CatalogDatabase) {
   }
   return {
     search,
+    commerce: createCommerceStore(database as CatalogDb),
     async lookup(
       userId: string,
       itemId: string,

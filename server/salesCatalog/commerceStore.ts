@@ -1,0 +1,389 @@
+import { and, asc, eq, isNull, sql, getTableColumns } from "drizzle-orm";
+import {
+  catalogSources,
+  catalogProducts,
+  catalogVariants,
+  catalogMedia,
+  catalogCollections,
+  catalogMemberships,
+} from "@shared/schema";
+import {
+  catalogSearchTerms,
+  commerceAnnotationSchema,
+  variantAvailability,
+  type CommerceProduct,
+} from "@shared/commerceCatalog";
+import {
+  createConnectedCommerceSearch,
+  type ConnectedCommerceSearchContext,
+} from "./connectedCommerceSearch";
+import { resolveCatalogInstallation } from "./shopify/installation";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+export type CatalogDb = NodePgDatabase<any>;
+export function createCommerceStore(database: CatalogDb) {
+  async function source(userId: string, sourceId?: string) {
+    const install = await resolveCatalogInstallation(database, userId);
+    if (!install) return null;
+    const [row] = await database
+      .select()
+      .from(catalogSources)
+      .where(
+        and(
+          eq(catalogSources.userId, userId),
+          eq(catalogSources.shop, install.shop),
+          eq(catalogSources.integrationId, install.integrationId),
+          ...(sourceId
+            ? [eq(catalogSources.id, sourceId)]
+            : [eq(catalogSources.provider, "shopify")]),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+  function variantFilters(
+    alias: string,
+    filters: ConnectedCommerceSearchContext["filters"],
+    healthy: boolean,
+  ) {
+    const f = filters ?? {},
+      v = sql.identifier(alias);
+    const fresh = sql`${v}.verified_at > NOW() - interval '15 minutes' AND ${healthy}`;
+    return sql`
+      ${f.minPrice ? sql`AND ${v}.price >= ${f.minPrice}::numeric` : sql``}
+      ${f.maxPrice ? sql`AND ${v}.price <= ${f.maxPrice}::numeric` : sql``}
+      ${f.currency ? sql`AND ${v}.currency = ${f.currency}` : sql``}
+      ${f.variantId ? sql`AND (${v}.id = ${f.variantId} OR ${v}.external_id = ${f.variantId})` : sql``}
+      ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR ${v}.quantity > 0)))` : sql``}
+      ${f.availability === "out_of_stock" ? sql`AND ${fresh} AND ${v}.requires_components = false AND (${v}.available_for_sale = false OR (${v}.available_for_sale = true AND ${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity <= 0))` : sql``}
+      ${f.availability === "not_tracked" ? sql`AND ${fresh} AND ${v}.requires_components = false AND ${v}.available_for_sale = true AND ${v}.tracked = false` : sql``}
+      ${f.availability === "unknown" ? sql`AND (NOT (${fresh}) OR ${v}.requires_components = true OR ${v}.available_for_sale IS NULL OR (${v}.available_for_sale = true AND (${v}.requires_components = true OR ${v}.tracked IS NULL OR (${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity IS NULL))))` : sql``}`;
+  }
+  async function products(
+    userId: string,
+    sourceId: string,
+    ids: string[],
+    filters: ConnectedCommerceSearchContext["filters"] = {},
+  ): Promise<CommerceProduct[]> {
+    if (ids.length > 100) throw new Error("catalog_candidate_limit");
+    if (!ids.length) return [];
+    const activeSource = await source(userId, sourceId);
+    if (!activeSource) return [];
+    const healthy =
+      !activeSource.errorCode &&
+      ["ready", "syncing"].includes(activeSource.status);
+    const records = await database
+      .select({
+        ...getTableColumns(catalogProducts),
+        minPrice: sql<
+          string | null
+        >`(SELECT min(price)::text FROM catalog_variants r WHERE r.product_id=catalog_products.id AND r.user_id=${userId} AND r.source_id=${sourceId})`,
+        maxPrice: sql<
+          string | null
+        >`(SELECT max(price)::text FROM catalog_variants r WHERE r.product_id=catalog_products.id AND r.user_id=${userId} AND r.source_id=${sourceId})`,
+        currency: sql<
+          string | null
+        >`(SELECT min(currency) FROM catalog_variants r WHERE r.product_id=catalog_products.id AND r.user_id=${userId} AND r.source_id=${sourceId})`,
+      })
+      .from(catalogProducts)
+      .where(
+        and(
+          eq(catalogProducts.userId, userId),
+          eq(catalogProducts.sourceId, sourceId),
+          sql`${catalogProducts.id} IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`,`,
+          )})`,
+        ),
+      );
+    const variants = await database
+      .select()
+      .from(catalogVariants)
+      .where(
+        and(
+          eq(catalogVariants.userId, userId),
+          eq(catalogVariants.sourceId, sourceId),
+          sql`${catalogVariants.productId} IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`,`,
+          )})`,
+          sql`${catalogVariants.id} IN (SELECT id FROM catalog_variants limited WHERE limited.product_id=${catalogVariants.productId} AND limited.user_id=${userId} AND limited.source_id=${sourceId} ${variantFilters("limited", filters, healthy)} ORDER BY external_id LIMIT 25)`,
+        ),
+      )
+      .orderBy(asc(catalogVariants.externalId));
+    const images = await database
+      .select()
+      .from(catalogMedia)
+      .where(
+        and(
+          eq(catalogMedia.userId, userId),
+          eq(catalogMedia.sourceId, sourceId),
+          sql`${catalogMedia.productId} IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`,`,
+          )})`,
+          sql`${catalogMedia.id} IN (SELECT id FROM catalog_media limited WHERE limited.product_id=${catalogMedia.productId} AND limited.user_id=${userId} AND limited.source_id=${sourceId} ORDER BY external_id LIMIT 50)`,
+        ),
+      )
+      .orderBy(asc(catalogMedia.externalId));
+    const collections = await database
+      .select({
+        productId: catalogMemberships.productId,
+        id: catalogCollections.externalId,
+        title: catalogCollections.title,
+      })
+      .from(catalogMemberships)
+      .innerJoin(
+        catalogCollections,
+        eq(catalogCollections.id, catalogMemberships.collectionId),
+      )
+      .where(
+        and(
+          eq(catalogCollections.userId, userId),
+          eq(catalogCollections.sourceId, sourceId),
+          sql`${catalogMemberships.productId} IN (${sql.join(
+            ids.map((id) => sql`${id}`),
+            sql`,`,
+          )})`,
+          sql`${catalogMemberships.id} IN (SELECT id FROM catalog_memberships limited WHERE limited.product_id=${catalogMemberships.productId} ORDER BY collection_id LIMIT 50)`,
+        ),
+      );
+    return ids.flatMap((id) => {
+      const p = records.find((r) => r.id === id);
+      if (!p) return [];
+      const vs = variants
+        .filter((v) => v.productId === id)
+        .map((v) => ({
+          ...v,
+          availability: variantAvailability(v, {
+            published:
+              p.published &&
+              p.status === "ACTIVE" &&
+              !p.deletedAt &&
+              p.complete,
+            sourceHealthy: healthy,
+          }),
+        }));
+      return [
+        {
+          ...p,
+          freshness:
+            !healthy ||
+            !p.complete ||
+            !vs.length ||
+            vs.some((v) => v.availability === "stale")
+              ? "stale"
+              : "fresh",
+          variants: vs,
+          images: images.filter((i) => i.productId === id),
+          collections: collections.filter((c) => c.productId === id),
+        },
+      ] as CommerceProduct[];
+    });
+  }
+  async function searchCandidates(
+    ctx: ConnectedCommerceSearchContext,
+  ): Promise<CommerceProduct[]> {
+    const src = await source(ctx.userId, ctx.sourceId);
+    if (
+      !src?.initialSyncCompletedAt ||
+      src.status === "disconnected" ||
+      src.status === "permission_required"
+    )
+      return [];
+    const terms = catalogSearchTerms(ctx.hint || ctx.query);
+    const filters = ctx.filters ?? {};
+    const variant = sql`EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id = ${catalogProducts.id} AND v.user_id = ${ctx.userId} AND v.source_id = ${ctx.sourceId} ${variantFilters("v", filters, !src.errorCode && ["ready", "syncing"].includes(src.status))})`;
+    const where = and(
+      eq(catalogProducts.userId, ctx.userId),
+      eq(catalogProducts.sourceId, ctx.sourceId),
+      eq(catalogProducts.status, "ACTIVE"),
+      eq(catalogProducts.published, true),
+      eq(catalogProducts.complete, true),
+      isNull(catalogProducts.deletedAt),
+      variant,
+      terms
+        ? sql`to_tsvector('simple',${catalogProducts.searchText}) @@ plainto_tsquery('simple',${terms})`
+        : undefined,
+      filters.category
+        ? eq(catalogProducts.productType, filters.category)
+        : undefined,
+      filters.collectionId
+        ? sql`EXISTS (SELECT 1 FROM catalog_memberships m JOIN catalog_collections c ON c.id=m.collection_id WHERE m.product_id=${catalogProducts.id} AND c.source_id=${ctx.sourceId} AND c.user_id=${ctx.userId} AND (c.id=${filters.collectionId} OR c.external_id=${filters.collectionId}))`
+        : undefined,
+    );
+    const ranked = await database
+      .select({ id: catalogProducts.id })
+      .from(catalogProducts)
+      .where(where)
+      .orderBy(
+        terms
+          ? sql`ts_rank(to_tsvector('simple',${catalogProducts.searchText}),plainto_tsquery('simple',${terms})) DESC`
+          : asc(catalogProducts.title),
+        asc(catalogProducts.id),
+      )
+      .limit(ctx.limit);
+    return products(
+      ctx.userId,
+      ctx.sourceId,
+      ranked.map((r) => r.id),
+      filters,
+    );
+  }
+  async function browse(
+    userId: string,
+    sourceId: string,
+    input: {
+      query?: string;
+      cursor?: string;
+      limit?: number;
+      status?: string;
+      category?: string;
+    },
+  ) {
+    if (!(await source(userId, sourceId)))
+      return { items: [], nextCursor: null };
+    const limit = Math.max(1, Math.min(100, input.limit ?? 25));
+    const terms = catalogSearchTerms(input.query ?? "");
+    const rows = await database
+      .select({ id: catalogProducts.id })
+      .from(catalogProducts)
+      .where(
+        and(
+          eq(catalogProducts.userId, userId),
+          eq(catalogProducts.sourceId, sourceId),
+          isNull(catalogProducts.deletedAt),
+          input.cursor ? sql`${catalogProducts.id}>${input.cursor}` : undefined,
+          input.status ? eq(catalogProducts.status, input.status) : undefined,
+          input.category
+            ? eq(catalogProducts.productType, input.category)
+            : undefined,
+          terms
+            ? sql`to_tsvector('simple',${catalogProducts.searchText}) @@ plainto_tsquery('simple',${terms})`
+            : undefined,
+        ),
+      )
+      .orderBy(asc(catalogProducts.id))
+      .limit(limit + 1);
+    return {
+      items: await products(
+        userId,
+        sourceId,
+        rows.slice(0, limit).map((r) => r.id),
+      ),
+      nextCursor: rows.length > limit ? rows[limit - 1].id : null,
+    };
+  }
+  async function lookup(userId: string, sourceId: string, id: string) {
+    return (await products(userId, sourceId, [id]))[0] ?? null;
+  }
+  const connected = createConnectedCommerceSearch({ searchCandidates });
+  return {
+    source,
+    products,
+    browse,
+    searchCandidates: connected.searchCandidates,
+    lookup,
+    async variantPage(
+      userId: string,
+      sourceId: string,
+      productId: string,
+      cursor?: string,
+    ) {
+      const product = await lookup(userId, sourceId, productId);
+      if (!product) return null;
+      const src = await source(userId, sourceId);
+      const rows = await database
+        .select()
+        .from(catalogVariants)
+        .where(
+          and(
+            eq(catalogVariants.userId, userId),
+            eq(catalogVariants.sourceId, sourceId),
+            eq(catalogVariants.productId, productId),
+            cursor ? sql`${catalogVariants.externalId}>${cursor}` : undefined,
+          ),
+        )
+        .orderBy(asc(catalogVariants.externalId))
+        .limit(26);
+      return {
+        items: rows.slice(0, 25).map((v) => ({
+          ...v,
+          availability: variantAvailability(v, {
+            published:
+              product.published &&
+              product.status === "ACTIVE" &&
+              !!(product as any).complete &&
+              !(product as any).deletedAt,
+            sourceHealthy:
+              !!src &&
+              !src.errorCode &&
+              ["ready", "syncing"].includes(src.status),
+          }),
+        })),
+        nextCursor: rows.length > 25 ? rows[24].externalId : null,
+      };
+    },
+    async lookupVariant(
+      userId: string,
+      sourceId: string,
+      productId: string,
+      variantId: string,
+    ) {
+      if (!(await source(userId, sourceId))) return null;
+      const [v] = await database
+        .select()
+        .from(catalogVariants)
+        .where(
+          and(
+            eq(catalogVariants.userId, userId),
+            eq(catalogVariants.sourceId, sourceId),
+            eq(catalogVariants.productId, productId),
+            sql`(${catalogVariants.id}=${variantId} OR ${catalogVariants.externalId}=${variantId})`,
+          ),
+        )
+        .limit(1);
+      return v ?? null;
+    },
+    async annotate(
+      userId: string,
+      sourceId: string,
+      id: string,
+      input: {
+        aiGuidance?: string | null;
+        notes?: string | null;
+        merchantTags?: string[];
+      },
+    ) {
+      if (!(await source(userId, sourceId))) return false;
+      const safe = commerceAnnotationSchema.parse(input);
+      const [p] = await database
+        .update(catalogProducts)
+        .set(safe)
+        .where(
+          and(
+            eq(catalogProducts.id, id),
+            eq(catalogProducts.userId, userId),
+            eq(catalogProducts.sourceId, sourceId),
+          ),
+        )
+        .returning({ id: catalogProducts.id });
+      return !!p;
+    },
+    async eligibleCount(userId: string, sourceId: string) {
+      const [row] = await database
+        .select({ count: sql<number>`count(*)::int` })
+        .from(catalogProducts)
+        .where(
+          and(
+            eq(catalogProducts.userId, userId),
+            eq(catalogProducts.sourceId, sourceId),
+            eq(catalogProducts.complete, true),
+            eq(catalogProducts.status, "ACTIVE"),
+            eq(catalogProducts.published, true),
+            isNull(catalogProducts.deletedAt),
+          ),
+        );
+      return row?.count ?? 0;
+    },
+  };
+}

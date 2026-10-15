@@ -3,7 +3,6 @@ import test from "node:test";
 import { businessPackagesProvider } from "../server/aiLiveBusinessData/providers/businessPackagesProvider";
 import { shopifyProvider } from "../server/aiLiveBusinessData/providers/shopifyProvider";
 import { salesCatalog } from "../server/salesCatalog";
-import { storage } from "../server/storage";
 import {
   PAYMENT_LINK_HUMAN_APPROVAL_REASON,
   draftContainsCheckoutUrl,
@@ -72,35 +71,5 @@ test("AI provider uses the shared service without changing offer records or paym
     assert.match(missing[0].summary, /do not invent/i);
   } finally {
     salesCatalog.recommend = original;
-  }
-});
-
-test("connected Shopify status explicitly distinguishes unimplemented product availability", async () => {
-  const original = storage.getUser;
-  storage.getUser = async () =>
-    ({
-      shopifyShop: "fixture.myshopify.com",
-      shopifyInstalledAt: new Date(),
-    }) as Awaited<ReturnType<typeof original>>;
-  try {
-    const status = await shopifyProvider.getStatus("merchant");
-    assert.equal(status.status, "connected");
-    assert.match(status.detail!, /Product catalog unavailable/);
-    assert.deepEqual(status.catalogReadiness, {
-      connection: "connected",
-      catalog: "not_implemented",
-    });
-    assert.deepEqual(
-      await shopifyProvider.query({ userId: "merchant", message: "products" }),
-      [],
-    );
-    storage.getUser = async () => undefined;
-    assert.equal(
-      (await shopifyProvider.getStatus("merchant")).catalogReadiness
-        ?.connection,
-      "disconnected",
-    );
-  } finally {
-    storage.getUser = original;
   }
 });

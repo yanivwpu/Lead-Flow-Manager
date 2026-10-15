@@ -27,6 +27,8 @@ async function processDueJobs(): Promise<void> {
   let timerFailed = 0;
 
   try {
+    const { runShopifyCatalogTick } = await import("./salesCatalog/shopify/runtime");
+    void runShopifyCatalogTick();
     const stuckFlow = await storage.recoverStuckFlowJobs();
     const stuckNr = await storage.recoverStuckNoReplyJobs();
     const stuckT = await storage.recoverStuckAutomationTimerJobs();

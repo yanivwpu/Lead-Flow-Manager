@@ -1,3 +1,4 @@
+import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { isEarlyShopifyUninstall } from "@shared/shopifyOnboarding";
 import { logShopifyActivation } from "./shopifyActivationTelemetry";
 import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
@@ -116,6 +117,7 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
     if (isEarlyShopifyUninstall(typeof lastInstalledAt === "string" ? lastInstalledAt : user.shopifyInstalledAt)) {
       logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
     }
+    await cleanupShopifyCatalog(tx as any, shop, false);
     await tx.update(users).set({
       shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
       shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",
