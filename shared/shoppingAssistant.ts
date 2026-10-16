@@ -33,7 +33,7 @@ export function shoppingIntent(text: string): ShoppingIntent {
   if (/\b(?:restart|start over|otra búsqueda|empezar de nuevo)\b|מחדש/.test(t)) return "restart";
   if (/^(?:retry|try again|reintentar|intenta de nuevo|נסה שוב|נסו שוב)[.!\s]*$/iu.test(t)) return "retry";
   if (/\b(?:order|tracking|refund|pedido|seguimiento|reembolso)\b|הזמנה|משלוח|החזר/.test(t)) return "order";
-  if (/^(?:yes|confirm|confirmed|checkout|pay|sí|si|confirmo|pagar|כן|מאשר|לתשלום)[.!\s]*$/iu.test(t)) return "confirm";
+  if (/^(?:yes(?:,?\s+confirm)?|confirm|confirmed|checkout|pay|sí|si|confirmo|pagar|כן|מאשר|לתשלום)[.!\s]*$/iu.test(t)) return "confirm";
   if (/\b(?:compare|comparison|comparar|compara)\b|השוו|השווא/.test(t)) return "compare";
   if (/\b(?:options|variants|sizes|colors|colours|opciones|variantes|tallas|colores)\b|אפשרויות|מידות|צבעים/.test(t)) return "variants";
   if (/\b(?:stock|available|availability|disponib\w*)\b|במלאי|זמין|זמינות/.test(t)) return "availability";

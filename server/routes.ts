@@ -1,3 +1,9 @@
+import { aiService } from "./aiService";
+import { registerTestChatRoutes } from "./aiTestChat/routes";
+import { createTestChatGenerator } from "./aiTestChat/generate";
+import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
+import { readShoppingSettings } from "./shopping/runtime";
+import { inventoryState } from "./salesCatalog/shopify/inventory";
 import { registerShoppingRoutes } from "./shopping/routes";
 import { shoppingEntitled } from "./shopping/runtime";
 import { registerShopifyCatalogRoutes } from "./salesCatalog/shopify/routes";
@@ -11083,6 +11089,37 @@ export async function registerRoutes(
   registerSalesCatalogRoutes(app, salesCatalog);
   registerShopifyCatalogRoutes(app, db, salesCatalog.commerce);
   registerShoppingRoutes(app, db, shoppingEntitled);
+  registerTestChatRoutes(app, {
+    db,
+    authorize: requireWorkspaceOffersAdmin,
+    access: async (userId, generating) => {
+      const access = await checkAiBrainAccess(userId, "suggest");
+      if (!access.hasAccess || !access.hasAIBrain) return { allowed: false };
+      if (!generating) return { allowed: true };
+      const usage = await storage.getCurrentAiUsage(userId);
+      const fairUse = await checkFairUseBehavior(userId);
+      const limited = !fairUse.canProceed || (access.monthlyLimit > 0 && countInboxAiReplyGenerations(usage) >= access.monthlyLimit);
+      return { allowed: !limited, limited };
+    },
+    generate: createTestChatGenerator({
+      ai: aiService, commerce: salesCatalog.commerce, settings: readShoppingSettings, entitled: shoppingEntitled,
+      knowledge: async id => (await storage.getAiBusinessKnowledge(id)) || undefined,
+      aiSettings: async id => (await storage.getAiSettings(id)) || undefined,
+      meter: async id => { await storage.incrementAiUsage(id, "repliesSuggested"); },
+    }),
+    diagnostics: async userId => {
+      const source = await salesCatalog.commerce.source(userId);
+      const inventory = inventoryState(source?.checkpoint);
+      const settings = await storage.getAiSettings(userId);
+      const shopping = await readShoppingSettings(userId);
+      // Deliberately whitelist safe operational facts; no installation/provider payloads.
+      return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
+        shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && await shoppingEntitled(userId),
+        catalogConnected: !!source, catalogStatus: source?.status ?? "disconnected",
+        inventoryStatus: inventory.errorCode ? "temporarily_unavailable" : (inventory.apiAfter ?? 0) > Date.now() ? "cooldown" : "ready_to_check",
+        retryAt: Math.max(inventory.apiAfter ?? 0, inventory.errorCode ? inventory.nextAt ?? 0 : 0) || null };
+    },
+  });
   registerCatalogWebhooks(app, db, verifyWebhookHmac);
 
   // Approved Marketing Materials (AI Brain / Settings library + Website Chat send).

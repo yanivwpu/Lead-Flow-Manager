@@ -1,3 +1,4 @@
+import { AiTestChat } from "@/components/AiTestChat";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -624,6 +625,7 @@ function AIBrainContent() {
             <div className="min-w-0 space-y-2 pt-0.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-600/90">WhachatCRM</p>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.65rem]">AI workspace</h1>
+              {effectiveHasAIBrain && <AiTestChat/>}
               <div className="max-w-lg text-sm leading-relaxed text-slate-600">
                 <p>
                   <span className="font-medium text-slate-900">AI Assist</span> is included with your plan — smart

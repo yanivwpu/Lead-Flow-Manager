@@ -1528,6 +1528,7 @@
     }
   },
   "shopping": {
+    "priceChecked": "Price checked at",
     "title": "AI Shopping Assistant",
     "enable": "Enable shopping assistance",
     "pro": "Included with Pro and AI Brain.",
@@ -1546,6 +1547,33 @@
       "confirmed": "Selection confirmed",
       "handoff": "Needs human assistance",
       "cancelled": "Cancelled"
+    }
+  },
+  "testChat": {
+    "title": "Test Chat",
+    "mode": "TEST MODE",
+    "description": "Private internal testing. No messages are sent to customers.",
+    "channel": "Test channel",
+    "aiMode": "Current AI mode",
+    "scope": "Uses AI Brain and the shopping action. Workflow triggers and actions are not executed. Live provider checks and normal AI usage limits apply.",
+    "transcript": "Internal test transcript",
+    "processing": "Processing…",
+    "diagnostics": "Test diagnostics",
+    "connected": "Shopify catalog connected",
+    "disconnected": "No connected Shopify catalog",
+    "retryAt": "Retry after",
+    "shoppingOff": "Shopping is not enabled or eligible for Web Chat. Existing settings are unchanged.",
+    "message": "Type a customer question",
+    "send": "Send",
+    "reset": "Reset test conversation",
+    "retry": "Try again",
+    "error": "Unable to complete this request. Check AI Brain access, usage limits and session expiry. Retry shortly, or reset the test conversation.",
+    "user": "You (test customer)",
+    "assistant": "AI",
+    "inventory": {
+      "temporarily_unavailable": "Inventory temporarily unavailable. Selection is not reserved; retry after the cooldown.",
+      "cooldown": "Shopify API cooldown. Price and availability must be checked again for a new selection.",
+      "ready_to_check": "Inventory will be checked when requested. Saved prices are historical verification results."
     }
   }
 }
