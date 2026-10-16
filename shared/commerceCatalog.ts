@@ -100,10 +100,17 @@ export function variantAvailability(
     return "stale";
   if (variant.availableForSale === null || variant.requiresComponents)
     return "unknown";
-  if (!variant.availableForSale) return "out_of_stock";
+  if (!variant.availableForSale)
+    return variant.tracked === true &&
+      variant.inventoryPolicy === "DENY" &&
+      variant.quantity !== null &&
+      variant.quantity <= 0
+      ? "out_of_stock"
+      : "unknown";
   if (variant.tracked === false) return "not_tracked";
   if (variant.tracked === null) return "unknown";
   if (variant.inventoryPolicy === "CONTINUE") return "available";
+  if (variant.inventoryPolicy !== "DENY") return "unknown";
   return variant.quantity === null
     ? "unknown"
     : variant.quantity > 0

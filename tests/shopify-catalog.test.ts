@@ -333,7 +333,7 @@ test("authoritative availability, exact URLs and least-privilege optional author
   assert.equal(variantAvailability(v, context), "available");
   assert.equal(
     variantAvailability({ ...v, availableForSale: false }, context),
-    "out_of_stock",
+    "unknown",
   );
   assert.equal(
     variantAvailability(

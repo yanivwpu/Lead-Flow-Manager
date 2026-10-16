@@ -65,10 +65,10 @@ export function createCommerceStore(
       ${f.maxPrice ? sql`AND ${v}.price <= ${f.maxPrice}::numeric` : sql``}
       ${f.currency ? sql`AND ${v}.currency = ${f.currency}` : sql``}
       ${f.variantId ? sql`AND (${v}.id = ${f.variantId} OR ${v}.external_id = ${f.variantId})` : sql``}
-      ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR ${v}.quantity > 0)))` : sql``}
-      ${f.availability === "out_of_stock" ? sql`AND ${fresh} AND ${v}.requires_components = false AND (${v}.available_for_sale = false OR (${v}.available_for_sale = true AND ${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity <= 0))` : sql``}
+      ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))` : sql``}
+      ${f.availability === "out_of_stock" ? sql`AND ${fresh} AND ${v}.requires_components = false AND (${v}.available_for_sale IS NOT NULL AND ${v}.tracked = true AND ${v}.inventory_policy = 'DENY' AND ${v}.quantity <= 0)` : sql``}
       ${f.availability === "not_tracked" ? sql`AND ${fresh} AND ${v}.requires_components = false AND ${v}.available_for_sale = true AND ${v}.tracked = false` : sql``}
-      ${f.availability === "unknown" ? sql`AND (NOT (${fresh}) OR ${v}.requires_components = true OR ${v}.available_for_sale IS NULL OR (${v}.available_for_sale = true AND (${v}.requires_components = true OR ${v}.tracked IS NULL OR (${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity IS NULL))))` : sql``}`;
+      ${f.availability === "unknown" ? sql`AND (NOT (${fresh}) OR ${v}.requires_components = true OR NOT COALESCE(((${v}.available_for_sale = true AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))) OR (${v}.available_for_sale IS NOT NULL AND ${v}.tracked = true AND ${v}.inventory_policy = 'DENY' AND ${v}.quantity <= 0)), false))` : sql``}`;
   }
   async function products(
     userId: string,
@@ -99,8 +99,7 @@ export function createCommerceStore(
             AND NOT EXISTS (SELECT 1 FROM catalog_variants a WHERE a.product_id=catalog_products.id
               AND a.user_id=${userId} AND a.source_id=${sourceId} AND NOT COALESCE((
                 a.verified_at > NOW() - interval '15 minutes' AND a.requires_components=false
-                AND (a.available_for_sale=false OR (a.available_for_sale=true AND a.tracked=true
-                  AND a.inventory_policy <> 'CONTINUE' AND a.quantity <= 0))), false)) THEN 'out_of_stock'
+                AND (a.available_for_sale IS NOT NULL AND a.tracked=true AND a.inventory_policy='DENY' AND a.quantity <= 0)), false)) THEN 'out_of_stock'
           ELSE 'unavailable' END`,
         minPrice: sql<
           string | null
@@ -319,7 +318,7 @@ export function createCommerceStore(
       const [row] = await database
         .select({
           published: sql<number>`count(*)::int`,
-          unverified: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} ${variantFilters("v", { availability: "available" }, true)}) AND (NOT catalog_products.complete OR NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId}) OR EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} AND NOT COALESCE((v.verified_at>NOW()-interval '15 minutes' AND v.requires_components=false AND (v.available_for_sale=false OR (v.available_for_sale=true AND v.tracked=true AND v.inventory_policy<>'CONTINUE' AND v.quantity<=0))),false))))::int`,
+          unverified: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} ${variantFilters("v", { availability: "available" }, true)}) AND (NOT catalog_products.complete OR NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId}) OR EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} AND NOT COALESCE((v.verified_at>NOW()-interval '15 minutes' AND v.requires_components=false AND (v.available_for_sale IS NOT NULL AND v.tracked=true AND v.inventory_policy='DENY' AND v.quantity<=0)),false))))::int`,
         })
         .from(catalogProducts)
         .where(

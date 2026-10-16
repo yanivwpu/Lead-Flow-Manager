@@ -1,3 +1,4 @@
+import { variantAvailability } from "../shared/commerceCatalog";
 import { validateCommerceDraft } from "../shared/commerceGrounding";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -503,15 +504,13 @@ test("foreground verification does not postpone periodic work and queued events 
       due,
       "live demand must not slide the sweep deadline",
     );
-    await db
-      .insert(catalogEvents)
-      .values({
-        userId: "tenant-a",
-        sourceId: source.id,
-        eventId: "busy-inventory-event",
-        topic: "inventory_levels/update",
-        resourceId: "1",
-      });
+    await db.insert(catalogEvents).values({
+      userId: "tenant-a",
+      sourceId: source.id,
+      eventId: "busy-inventory-event",
+      topic: "inventory_levels/update",
+      resourceId: "1",
+    });
     await inventoryDue(db, source.id);
     await sync.tick();
     assert.equal(calls, 2);
@@ -524,4 +523,32 @@ test("foreground verification does not postpone periodic work and queued events 
   } finally {
     await f.cleanup();
   }
+});
+
+test("unavailable storefront variants are not called out of stock without verified negative inventory", () => {
+  const context = { published: true, sourceHealthy: true };
+  const v = {
+    tracked: true,
+    quantity: 5,
+    inventoryPolicy: "DENY",
+    availableForSale: false,
+    requiresComponents: false,
+    verifiedAt: new Date(),
+  };
+  assert.equal(variantAvailability(v, context), "unknown");
+  assert.equal(
+    variantAvailability({ ...v, quantity: 0 }, context),
+    "out_of_stock",
+  );
+  assert.equal(
+    variantAvailability({ ...v, tracked: false, quantity: 0 }, context),
+    "unknown",
+  );
+  assert.equal(
+    variantAvailability(
+      { ...v, availableForSale: true, inventoryPolicy: null },
+      context,
+    ),
+    "unknown",
+  );
 });
