@@ -1458,6 +1458,7 @@
     }
   },
   "shopping": {
+    "priceChecked": "Precio verificado a las",
     "title": "Asistente de compras IA",
     "enable": "Activar asistencia de compras",
     "pro": "Incluido con Pro y AI Brain.",
@@ -1476,6 +1477,33 @@
       "confirmed": "Selección confirmada",
       "handoff": "Necesita ayuda humana",
       "cancelled": "Cancelado"
+    }
+  },
+  "testChat": {
+    "title": "Chat de prueba",
+    "mode": "MODO DE PRUEBA",
+    "description": "Prueba interna privada. No se envían mensajes a clientes.",
+    "channel": "Canal de prueba",
+    "aiMode": "Modo de IA actual",
+    "scope": "Utiliza AI Brain y la acción de compras. No ejecuta flujos ni acciones de automatización. Se aplican las verificaciones reales y los límites de uso de IA.",
+    "transcript": "Transcripción interna de prueba",
+    "processing": "Procesando…",
+    "diagnostics": "Diagnóstico de prueba",
+    "connected": "Catálogo Shopify conectado",
+    "disconnected": "Sin catálogo Shopify conectado",
+    "retryAt": "Reintentar después de",
+    "shoppingOff": "Compras no está activado o disponible para Web Chat. No se cambió la configuración.",
+    "message": "Escribe una pregunta de cliente",
+    "send": "Enviar",
+    "reset": "Reiniciar conversación de prueba",
+    "retry": "Reintentar",
+    "error": "No se pudo completar la solicitud. Revisa el acceso a AI Brain, los límites de uso y la caducidad de la sesión. Reintenta más tarde o reinicia la prueba.",
+    "user": "Tú (cliente de prueba)",
+    "assistant": "IA",
+    "inventory": {
+      "temporarily_unavailable": "Inventario temporalmente no disponible. La selección no está reservada; reintenta tras la pausa.",
+      "cooldown": "Pausa de la API de Shopify. Deben verificarse otra vez el precio y la disponibilidad.",
+      "ready_to_check": "El inventario se verificará al solicitarlo. Los precios guardados son resultados históricos."
     }
   }
 }

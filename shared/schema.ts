@@ -3532,3 +3532,16 @@ export const catalogEvents = pgTable(
     due: index("catalog_event_due").on(t.sourceId, t.processedAt),
   }),
 );
+
+// Internal testing only: never consumed by CRM delivery/automation workers.
+export const aiTestSessions = pgTable("ai_test_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  actorId: varchar("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  transcript: jsonb("transcript").notNull().default([]),
+  shoppingState: jsonb("shopping_state").notNull().default({}),
+  expiresAt: timestamp("expires_at").notNull(),
+  leaseToken: text("lease_token"),
+  leaseUntil: timestamp("lease_until"),
+  lastTurnAt: timestamp("last_turn_at"),
+}, table => [uniqueIndex("ai_test_sessions_user_id_actor_id_key").on(table.userId, table.actorId)]);

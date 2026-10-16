@@ -1,3 +1,4 @@
+import { AI_TEST_CHAT_SCHEMA_SQL } from "./aiTestChat/schemaSql";
 import { SHOPPING_SCHEMA_SQL } from "./shopping/schemaSql";
 import { COMMERCE_CATALOG_SCHEMA_SQL } from "./salesCatalog/schemaSql";
 import { sql } from "drizzle-orm";
@@ -21,6 +22,7 @@ type StartupPatchStep = { step: string; sql: string };
 type StartupPatch = { tag: string; sql: string | StartupPatchStep[] };
 
 const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
+  { tag: "0109_private_ai_test_chat", sql: AI_TEST_CHAT_SCHEMA_SQL },
   { tag: "0107_shared_commerce_catalog", sql: COMMERCE_CATALOG_SCHEMA_SQL },
   { tag: "0108_conversation_shopping", sql: SHOPPING_SCHEMA_SQL },
   {

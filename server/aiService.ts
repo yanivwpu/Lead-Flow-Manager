@@ -150,6 +150,8 @@ export class AIService {
     },
     routing?: AiRoutingResult,
     channel?: string | null,
+    // Trusted server dependency for internal transports; never accepted from a request body.
+    execution?: { shoppingSuggestion: typeof import("./shopping/runtime").shoppingSuggestion },
   ): Promise<{
     suggestion: string;
     confidence: number;
@@ -208,7 +210,7 @@ export class AIService {
     // Deterministic commerce actions return facts from the shared live catalog.
     // Sending still belongs to the existing AI Brain/channel authorization gates.
     const { shoppingSuggestion } = await import("./shopping/runtime");
-    const shopping = await shoppingSuggestion({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
+    const shopping = await (execution?.shoppingSuggestion ?? shoppingSuggestion)({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
     if (shopping) return {
       suggestion: shopping.reply,
       confidence: shopping.handoff ? 0 : 1,
