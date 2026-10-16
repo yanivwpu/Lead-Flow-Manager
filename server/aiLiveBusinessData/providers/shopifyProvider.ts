@@ -65,7 +65,7 @@ export function createShopifyLiveProvider(
         /\b(?:under|below|less than|hasta|menos de)\s*[$€£₪]?\s*(\d+(?:\.\d+)?)/i,
       );
       const recommendation =
-        /\b(?:recommend\w*|buy|purchase|available|availability|in stock|comprar|disponible|recomiend\w*|recomend\w*)\b|המלצ|ממליצ|לקנות|לרכוש|במלאי|זמין/iu.test(
+        /\b(?:recommend\w*|buy|purchase|available|availability|in stock|comprar|disponib\w*|recomiend\w*|recomend\w*)\b|המלצ|ממליצ|לקנות|לרכוש|במלאי|זמין/iu.test(
           ctx.message,
         );
       if (recommendation && !source.currency) return [];
@@ -157,3 +157,4 @@ export function createShopifyLiveProvider(
   };
 }
 export const shopifyProvider = createShopifyLiveProvider();
+

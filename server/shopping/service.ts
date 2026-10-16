@@ -1,0 +1,119 @@
+import type { createCommerceStore } from "../salesCatalog/commerceStore";
+import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale } from "@shared/shoppingAssistant";
+export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant">;
+export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
+export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean};
+export interface ShoppingSessionStore {
+  // Must serialize per owned conversation, verify persisted inbound and commit state atomically.
+  withTurn<T>(turn:ShoppingTurn, run:(state:ShoppingState|null, save:(next:ShoppingState)=>Promise<void>)=>Promise<T>):Promise<T|null>;
+}
+const SESSION_MS=30*60_000;
+const REPLAY_MS=60_000;
+function safeLabel(s:string) { return s.replace(/https?:\/\/\S+/gi,"").replace(/[\r\n\u0000-\u001f]/g," ").slice(0,180); }
+function line(c:ShoppingChoice) {return `${safeLabel(c.productTitle)} / ${safeLabel(c.variantTitle)} — ${c.currency} ${c.price}`;}
+function options(raw:unknown):ShoppingChoice["options"] {return Array.isArray(raw)?raw.filter(o=>typeof o?.name==="string"&&typeof o?.value==="string").map(o=>({name:o.name,value:o.value})):[];}
+export function createShoppingService(deps:{commerce:CommerceShoppingProvider; sessions:ShoppingSessionStore; settings:(userId:string)=>Promise<ShoppingSettings>; entitled:(userId:string)=>Promise<boolean>; now?:()=>number}) {
+ const now=deps.now??Date.now;
+ return { async turn(turn:ShoppingTurn):Promise<ShoppingResult|null> {
+  const config=await deps.settings(turn.userId);
+  if(!config.enabled || !config.allowedChannels.includes(turn.channel as any) || !await deps.entitled(turn.userId)) return null;
+  return deps.sessions.withTurn(turn,async(stored,save)=>{
+   const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
+   const requestedIntent=shoppingIntent(turn.text);
+   const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
+   const intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
+   const expired=stored && (stamp-new Date(stored.updatedAt).getTime()>SESSION_MS || !Number.isFinite(new Date(stored.updatedAt).getTime()));
+   const source=await deps.commerce.source(turn.userId);
+   if(!source) return null;
+   if(stored?.sourceId===source.id && stored.pending && stored.lastEventId===turn.eventId) {
+    return {reply:copy.pending,state:stored,handoff:false};
+   }
+   if(stored?.sourceId===source.id && stored?.consumedEventIds.includes(turn.eventId)) {
+    // Never replay an older turn or a stock claim beyond its short response lifetime.
+    const reply=stored.lastEventId===turn.eventId && stamp-new Date(stored.updatedAt).getTime()<REPLAY_MS ? stored.reply:copy.busy;
+    return {reply,state:stored,handoff:stored.step==="handoff"};
+   }
+   if(!stored && intent==="other") return null;
+   const previous=!expired && stored?.sourceId===source.id
+    ? {...stored,step:stored.step==="pending"?(stored.pending?.resumeStep??"discovering"):stored.step}:null;
+   let state:ShoppingState=previous?{...previous,choices:[...previous.choices]}:{version:1,sourceId:source.id,step:"discovering",intent,choices:[],quantity:1,updatedAt:new Date(stamp).toISOString(),lastEventId:turn.eventId,reply:"",consumedEventIds:[]};
+   async function finish(reply:string, step=state.step):Promise<ShoppingResult> {
+    state={...state,pending:undefined,step,intent,reply,lastEventId:turn.eventId,updatedAt:new Date(stamp).toISOString(),consumedEventIds:[...(stored?.consumedEventIds??[]),turn.eventId].slice(-50)};
+    await save(state); return {reply,state,handoff:step==="handoff"};
+   }
+   async function pending(action:"discover"|"select"|"confirm"):Promise<ShoppingResult> {
+    // Empty live results cannot distinguish rate limits, leases and provider outages from missing data.
+    // Keep the chosen IDs/quantity and budget, without treating snapshots as newly verified.
+    const resumeStep=state.step==="pending"?(state.pending?.resumeStep??"discovering"):state.step;
+    state={...state,step:"pending",pending:{action,resumeStep},intent,reply:copy.pending,lastEventId:turn.eventId,updatedAt:new Date(stamp).toISOString()};
+    await save(state);return {reply:copy.pending,state,handoff:false};
+   }
+   async function verify(ids:string[]) {
+    try {return await deps.commerce.verifyForPurchase(turn.userId,source!.id,ids);} catch {return [];}
+   }
+   async function unavailable() {
+    state.selected=undefined; state.choices=[];
+    return finish(copy.unavailable,config.handoffOnFailure?"handoff":"discovering");
+   }
+   if(intent==="cancel"||intent==="restart") {state.choices=[];state.selected=undefined;state.quantity=1;state.query=undefined;state.maxPrice=undefined;state.minPrice=undefined;return finish(intent==="cancel"?copy.cancel:copy.clarify,intent==="cancel"?"cancelled":"discovering");}
+   if(intent==="handoff"||intent==="order") {state.selected=undefined;state.choices=[];return finish(intent==="order"?copy.order:copy.handoff,"handoff");}
+   // A handoff is sticky until a human resumes shopping or the customer restarts.
+   if(previous?.step==="handoff") return finish(copy.handoff,"handoff");
+   if(!source.currency) return pending(state.selected?"select":"discover");
+   const filters=shoppingFilters(turn.text,source.currency);
+   if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
+   const quantity=turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*(\d+)/iu);
+   if(quantity) {
+    const n=Number(quantity[1]);
+    if(!Number.isSafeInteger(n)||n<1||n>99) return unavailable();
+    state.quantity=n;
+   }
+   const chosen=quantity?undefined:matchShoppingChoice(turn.text,state.choices);
+   const selection=chosen??((intent==="confirm"||quantity||(retryTurn && (stored?.pending?stored.pending.action==="select":!!state.selected)))?state.selected:undefined);
+   if(selection) {
+    state.selected=selection;
+    const live=await verify([selection.variantId]);
+    if(!live.length) return pending(intent==="confirm"?"confirm":"select");
+    const v=live.find(v=>v.variant.id===selection.variantId && v.product.id===selection.productId);
+    if(!v) return pending(intent==="confirm"?"confirm":"select");
+    if(["unknown","stale"].includes(v.availability) || v.variant.price===null ||
+      !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS ||
+      (v.variant.tracked && v.variant.inventoryPolicy!=="CONTINUE" && v.variant.quantity===null)) return pending(intent==="confirm"?"confirm":"select");
+    if(!["available","not_tracked"].includes(v.availability) || !v.product.published || v.product.status!=="ACTIVE" || v.variant.currency!==source.currency || v.variant.price===null ||
+      !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS ||
+      (v.variant.tracked && v.variant.inventoryPolicy!=="CONTINUE" && (v.variant.quantity===null || v.variant.quantity<state.quantity))) return unavailable();
+    const current:ShoppingChoice={productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency,verifiedAt:new Date(v.variant.verifiedAt).toISOString()};
+    const changed=compareMoney(current.price,selection.price)!==0 || JSON.stringify(current.options)!==JSON.stringify(selection.options) || current.variantTitle!==selection.variantTitle;
+    state.selected=current;state.choices=state.choices.map(c=>c.variantId===current.variantId?current:c);state.currency=current.currency;
+    if(changed) return finish(`${copy.changed}\n${line(current)} × ${state.quantity}`,"confirming");
+    if(intent==="confirm" && previous?.step==="confirming" && !chosen && !quantity) return finish(copy.disabled,"confirmed");
+    return finish(`${line(current)} × ${state.quantity}\n${copy.confirm}`,"confirming");
+   }
+   if(intent==="confirm" && !state.query) return finish(copy.options,"selecting");
+   // Variant/availability follow-ups reuse the last discovery query; never use a model ID.
+   const query=(retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query;
+   if(!query) return finish(copy.clarify,"discovering");
+   if(!retryTurn && (intent==="search" || intent==="select" || !state.query)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
+   state.query=query;state.currency=source.currency;
+   let products;
+   try { products=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
+   const candidates=products.flatMap(p=>p.variants.map(v=>({p,v}))).slice(0,8);
+   if(!candidates.length) return unavailable();
+   const live=await verify(candidates.map(c=>c.v.id));
+   if(!live.length) return pending("discover");
+   const choices=live.filter(v=>candidates.some(c=>c.v.id===v.variant.id&&c.p.id===v.product.id) &&
+     ["available","not_tracked"].includes(v.availability) && v.product.published && v.product.status==="ACTIVE" &&
+     v.variant.currency===source.currency && v.variant.price!==null && Number.isFinite(new Date(v.variant.verifiedAt).getTime()) &&
+     stamp-new Date(v.variant.verifiedAt).getTime()<=REPLAY_MS &&
+     (!state.maxPrice || compareMoney(v.variant.price,state.maxPrice)<=0) && (!state.minPrice || compareMoney(v.variant.price,state.minPrice)>=0))
+    .slice(0,config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString()}));
+   if(!choices.length) {
+    if(live.some(v=>["unknown","stale"].includes(v.availability) || v.variant.price===null || !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS)) return pending("discover");
+    return unavailable();
+   }
+   state.choices=choices;state.selected=undefined;state.quantity=1;
+   return finish(state.choices.map((c,i)=>`${i+1}. ${line(c)}`).join("\n")+`\n${copy.choose}`,"selecting");
+  });
+ }};
+}

@@ -1526,5 +1526,26 @@
         "recovery": "Allow pop-ups for this site, then click Connect WhatsApp again."
       }
     }
+  },
+  "shopping": {
+    "title": "AI Shopping Assistant",
+    "enable": "Enable shopping assistance",
+    "pro": "Included with Pro and AI Brain.",
+    "max": "Maximum recommendations",
+    "channels": "Allowed channels",
+    "fallback": "Transfer to a person when products cannot be verified",
+    "checkoutDisabled": "Checkout assistance is awaiting review and remains disabled.",
+    "save": "Save",
+    "saveError": "Could not save shopping settings.",
+    "activity": "Shopping activity",
+    "steps": {
+      "pending": "Verification pending — selection saved",
+      "discovering": "Product discovery",
+      "selecting": "Choosing an option",
+      "confirming": "Awaiting confirmation",
+      "confirmed": "Selection confirmed",
+      "handoff": "Needs human assistance",
+      "cancelled": "Cancelled"
+    }
   }
 }

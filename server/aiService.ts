@@ -205,6 +205,20 @@ export class AIService {
       (await this.detectMessageLanguage(lastMessage));
     const isFirstMessage = conversationHistory.length <= 2;
 
+    // Deterministic commerce actions return facts from the shared live catalog.
+    // Sending still belongs to the existing AI Brain/channel authorization gates.
+    const { shoppingSuggestion } = await import("./shopping/runtime");
+    const shopping = await shoppingSuggestion({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
+    if (shopping) return {
+      suggestion: shopping.reply,
+      confidence: shopping.handoff ? 0 : 1,
+      confidenceProvided: true,
+      knowledgeGrounded: !shopping.handoff,
+      groundingViolations: shopping.handoff ? ["shopping_handoff"] : [],
+      retrievalIntent: "shopping_assistant",
+      modelGenerationSucceeded: false,
+    };
+
     if (
       contactContext?.journeyTrusted &&
       (contactContext.journeyKind === "pricing_savings" || contactContext.journeyKind === "calculate_savings") &&
@@ -1606,3 +1620,4 @@ When replying, work through these qualification questions in order. Ask only ONE
 }
 
 export const aiService = new AIService();
+

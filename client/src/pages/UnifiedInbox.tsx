@@ -1,3 +1,4 @@
+import { ShoppingActivity } from "@/components/inbox/ShoppingActivity";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, type ComponentProps } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { WHATSAPP_FREE_FORM_BUFFER_MS } from "@shared/conversationReplyWindow";
@@ -4032,6 +4033,7 @@ export function UnifiedInbox() {
               </div>
             </div>
 
+            <ShoppingActivity conversationId={selectedConversationId || activeConversationId} />
             {/* Messages area — channel-adaptive chrome (email document vs chat bubbles) */}
             <UnifiedConversationMessagesPane
               channel={activeChannel}

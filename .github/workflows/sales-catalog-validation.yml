@@ -3,6 +3,15 @@ on:
   pull_request:
     paths:
       - "server/salesCatalog/**"
+      - "server/shopping/**"
+      - "shared/shoppingAssistant.ts"
+      - "tests/shopping-assistant*.test.ts"
+      - "migrations/0108_conversation_shopping.sql"
+      - "server/chatbotEngine.ts"
+      - "client/src/components/ShoppingSettings.tsx"
+      - "client/src/components/inbox/ShoppingActivity.tsx"
+      - "client/src/pages/ChatbotBuilder.tsx"
+      - "client/src/pages/UnifiedInbox.tsx"
       - "shared/salesCatalog.ts"
       - "shared/commerce*.ts"
       - "shared/turnEvidence.ts"
@@ -62,6 +71,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Native PostgreSQL catalog sync, search, HTTP, grounding and UI
         run: node --import tsx --test tests/shopify-billing-return.test.ts tests/shopify-catalog-inventory.test.ts tests/shopify-catalog.test.ts tests/shopify-catalog-registration.test.ts tests/shopify-catalog-authorization.test.ts tests/shopify-catalog-publication.test.ts tests/shopify-catalog-card-state.test.ts tests/shopify-catalog-reconciliation.test.ts tests/shopify-catalog-search.test.ts tests/shopify-catalog-webhooks.test.ts tests/shopify-catalog-ai.test.ts tests/shopify-catalog-routes.test.ts tests/shopify-catalog-ui.test.tsx
+      - name: Conversational shopping and PostgreSQL session integration
+        run: |
+          node --import tsx tests/shopping-assistant.test.ts
+          node --import tsx tests/shopping-assistant-postgres.test.ts
       - name: Catalog integration and offer, AI, navigation compatibility
         run: |
           node --import tsx --test tests/sales-catalog-ui.test.tsx tests/sales-catalog-retrieval.test.ts tests/sales-catalog.test.ts tests/sales-catalog-provider.test.ts tests/workspace-offers.test.ts tests/ai-live-business-data.test.ts tests/app-nav-ia.test.ts tests/knowledge-fact-grounding.test.ts tests/growth-engine-pro-entitlement.test.ts
@@ -73,3 +86,4 @@ jobs:
         run: node scripts/check-types-against-base.mjs
       - name: Build
         run: npm run build
+
