@@ -88,3 +88,37 @@ test("a pending discovery retains its budget and supports retry/cancel/restart w
  f.mode("empty");await f.turn("Ice");const cancelled=await f.turn("cancel");assert.equal(cancelled!.state.step,"cancelled");assert.equal(cancelled!.state.pending,undefined);
  assert.equal((await f.turn("restart"))!.state.step,"discovering");
 });
+
+test("numbered and ordinal replies select only the saved offered order in English, Spanish and Hebrew",async()=>{
+ for(const text of ["1","option 1","I'll take option 1","the first one","I'll take the first one","opción 1","quiero la opción 1","el primero","la primera opción","me quedo con la primera","אפשרות 1","אקח את הראשון","האפשרות הראשונה","אני רוצה את הראשון","אני בוחר באפשרות הראשונה","אני אקח אפשרות מספר 1"]) {
+  const f=fixture();const offered=await f.turn("show snowboard under 750");f.mode("empty");
+  const r=await f.turn(text);assert.equal(r!.state.step,"pending",text);assert.equal(r!.state.selected?.variantId,offered!.state.choices[0].variantId,text);assert.equal(r!.state.maxPrice,"750",text);assert.deepEqual(r!.state.choices,offered!.state.choices,text);
+  f.mode("live");assert.equal((await f.turn("retry"))!.state.selected?.variantId,"v1",text);
+ }
+ const f=fixture();await f.turn("show snowboard");assert.equal((await f.turn("the second one"))!.state.selected?.variantId,"v2");
+});
+test("missing/expired lists, out-of-range references and unmatched selection requests never search or discard pending context",async()=>{
+ for(const text of ["1","option 1","the first one","9","0","opción 1","האפשרות הראשונה"]) {
+  const f=fixture();assert.match((await f.turn(text))!.reply,/repeat your product search/);
+  assert.equal(f.calls(),0,text);
+  await f.turn("show snowboard under 750");f.advance(31*60_000);
+  const expired=await f.turn(text);assert.match(expired!.reply,/repeat your product search/);assert.equal(expired!.state.choices.length,0);assert.equal(expired!.state.selected,undefined);assert.equal(f.calls(),1,text);
+ }
+ const f=fixture();const offered=await f.turn("show snowboard under 750");f.mode("empty");await f.turn("option 1");
+ for(const text of ["9","I'll take an unknown option","not sure"]) {
+  const r=await f.turn(text);assert.equal(r!.state.step,"pending");assert.equal(r!.state.selected?.variantId,"v1");assert.equal(r!.state.pending?.action,"select");assert.equal(r!.state.maxPrice,"750");assert.deepEqual(r!.state.choices,offered!.state.choices);
+ }
+ f.mode("live");assert.equal((await f.turn("retry"))!.state.step,"confirming");
+});
+test("intentional new searches and budget-only updates replace preferences without interpreting list numbers as budgets",async()=>{
+ const f=fixture();await f.turn("show snowboard under 750");await f.turn("option 1");
+ let r=await f.turn("show Fire under 900");assert.equal(r!.state.query,"Fire");assert.equal(r!.state.selected,undefined);assert.equal(r!.state.maxPrice,"900");
+ r=await f.turn("show skis under 1000");assert.equal(r!.state.maxPrice,"1000");assert.equal(r!.state.query,"skis");assert.equal(r!.state.selected,undefined);
+ r=await f.turn("under 800");assert.equal(r!.state.maxPrice,"800");assert.equal(r!.state.query,"skis");
+ r=await f.turn("show boots");assert.equal(r!.state.query,"boots");assert.equal(r!.state.maxPrice,"800");
+});
+
+test("expired pending-event replays ask for a new search without reverifying or retaining stale choices",async()=>{
+ const f=fixture();await f.turn("show snowboard under 750");f.mode("empty");await f.turn("option 1",{eventId:"pending"});f.advance(31*60_000);
+ const calls=f.calls(),r=await f.turn("option 1",{eventId:"pending"});assert.match(r!.reply,/repeat your product search/);assert.equal(r!.state.selected,undefined);assert.deepEqual(r!.state.choices,[]);assert.equal(f.calls(),calls);
+});
