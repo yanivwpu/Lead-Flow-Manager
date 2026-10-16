@@ -31,6 +31,7 @@ export type InventoryState = {
   apiAfter?: number;
   failures?: number;
   errorCode?: string | null;
+  errorDetail?: import("./api").CatalogErrorDetail | null;
   lastVerifiedAt?: number;
 };
 export function inventoryState(checkpoint: unknown): InventoryState {
@@ -43,7 +44,7 @@ export function inventoryWake(checkpoint: unknown, now = Date.now()) {
     : Infinity;
 }
 export const SHOPIFY_INVENTORY_BATCH_QUERY = `query VerifyInventoryBatch($ids:[ID!]!) {
- nodes(ids:$ids) { ... on ProductVariant { id title sku selectedOptions price compareAtPrice inventoryPolicy inventoryQuantity availableForSale requiresComponents updatedAt inventoryItem { id tracked }
+ nodes(ids:$ids) { ... on ProductVariant { id title sku selectedOptions { name value } price compareAtPrice inventoryPolicy inventoryQuantity availableForSale requiresComponents updatedAt inventoryItem { id tracked }
  product { id title status publishedAt onlineStoreUrl requiresSellingPlan } } }
  shop { currencyCode myshopifyDomain }
 }`;
@@ -130,13 +131,12 @@ export async function refreshInventoryBatch(
       SHOPIFY_INVENTORY_BATCH_QUERY,
       { ids: rows.map((r) => r.variant.externalId) },
     );
-    if (
-      !Array.isArray(data.nodes) ||
-      data.nodes.length !== rows.length ||
-      data.shop?.myshopifyDomain !== install.shop ||
-      !/^[A-Z]{3}$/.test(data.shop?.currencyCode ?? "")
-    )
-      throw new CatalogApiError("invalid_response");
+    if (!Array.isArray(data.nodes) || data.nodes.length !== rows.length)
+      throw new CatalogApiError("invalid_response", 30_000, "inventory_nodes_shape");
+    if (data.shop?.myshopifyDomain !== install.shop)
+      throw new CatalogApiError("invalid_response", 30_000, "inventory_shop_identity");
+    if (!/^[A-Z]{3}$/.test(data.shop?.currencyCode ?? ""))
+      throw new CatalogApiError("invalid_response", 30_000, "inventory_currency");
     const now = Date.now(),
       seen = new Set<string>();
     const verified = rows.map((row) => {
@@ -148,9 +148,10 @@ export async function refreshInventoryBatch(
         seen.has(current.id) ||
         current.product?.id !== row.product.externalId ||
         typeof current.title !== "string" ||
-        !Array.isArray(current.selectedOptions)
+        !Array.isArray(current.selectedOptions) ||
+        current.selectedOptions.some((option: any) => typeof option?.name !== "string" || typeof option?.value !== "string")
       )
-        throw new CatalogApiError("invalid_response");
+        throw new CatalogApiError("invalid_response", 30_000, "inventory_variant_shape_or_identity");
       seen.add(current.id);
       const variant = {
         ...row.variant,
@@ -217,6 +218,7 @@ export async function refreshInventoryBatch(
       ...state,
       failures: 0,
       errorCode: null,
+      errorDetail: null,
       lastVerifiedAt: now,
       nextAt: backgroundSweep ? now + INVENTORY_POLL_MS : (state.nextAt ?? now),
       apiAfter: now + Math.max(2000, quotaDelay),
@@ -297,6 +299,7 @@ export async function refreshInventoryBatch(
       ...state,
       failures,
       errorCode: error instanceof CatalogApiError ? error.code : "unavailable",
+      errorDetail: error instanceof CatalogApiError ? error.detail ?? null : null,
       nextAt: Date.now() + delay,
       apiAfter: Date.now() + delay,
     };
@@ -371,3 +374,4 @@ export async function verifyInventoryForPurchase(
 export type VerifiedInventoryVariant = Awaited<
   ReturnType<typeof refreshInventoryBatch>
 >[number];
+
