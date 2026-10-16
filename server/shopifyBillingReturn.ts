@@ -10,21 +10,21 @@ export async function respondShopifyBillingReturn(
   mode: "redirect" | "json",
 ) {
   res.setHeader("Cache-Control", "no-store");
+  const hasQuery = (key: string) =>
+    Object.prototype.hasOwnProperty.call(req.query, key);
   // Presence only: never log raw URLs, query values, cookies, signatures or tokens.
   console.info("[ShopifyBilling] approval_return", {
     hasSession: !!req.user,
-    hasShop: Object.hasOwn(req.query, "shop"),
-    hasPlanHandle: Object.hasOwn(req.query, "plan_handle"),
-    hasChargeId: Object.hasOwn(req.query, "charge_id"),
+    hasShop: hasQuery("shop"),
+    hasPlanHandle: hasQuery("plan_handle"),
+    hasChargeId: hasQuery("charge_id"),
   });
   if (!req.user)
-    return res
-      .status(401)
-      .json({
-        error:
-          "Sign in to WhachatCRM to verify this subscription. No new approval is required.",
-        code: "SESSION_REQUIRED",
-      });
+    return res.status(401).json({
+      error:
+        "Sign in to WhachatCRM to verify this subscription. No new approval is required.",
+      code: "SESSION_REQUIRED",
+    });
   try {
     const resolved = await resolveShopifyMerchantForBilling(
       req,
@@ -37,15 +37,15 @@ export async function respondShopifyBillingReturn(
         .json({ error: resolved.error, code: resolved.code });
     const merchant = resolved.merchant;
     if (
-      Object.hasOwn(req.query, "shop") &&
-      normalizeShopifyShopDomain(req.query.shop) !== merchant.shop
+      hasQuery("shop") &&
+      normalizeShopifyShopDomain(
+        typeof req.query.shop === "string" ? req.query.shop : null,
+      ) !== merchant.shop
     )
-      return res
-        .status(400)
-        .json({
-          error: "Shop does not match the authenticated installation",
-          code: "SHOPIFY_SHOP_MISMATCH",
-        });
+      return res.status(400).json({
+        error: "Shop does not match the authenticated installation",
+        code: "SHOPIFY_SHOP_MISMATCH",
+      });
     const synced = await syncShopifyBillingToUser(
       merchant.billingUserId,
       merchant.shop,
@@ -63,12 +63,10 @@ export async function respondShopifyBillingReturn(
     });
   } catch {
     console.warn("[ShopifyBilling] approval_verification_pending");
-    return res
-      .status(503)
-      .json({
-        error:
-          "Subscription verification is temporarily unavailable. Retry without approving another charge.",
-        code: "SHOPIFY_BILLING_VERIFICATION_PENDING",
-      });
+    return res.status(503).json({
+      error:
+        "Subscription verification is temporarily unavailable. Retry without approving another charge.",
+      code: "SHOPIFY_BILLING_VERIFICATION_PENDING",
+    });
   }
 }
