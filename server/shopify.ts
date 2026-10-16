@@ -9,6 +9,8 @@ import { PRO_AI_TRIAL_DAYS } from '@shared/trialPolicy';
 import { getAppOrigin } from './urlOrigins';
 import { getShopifyOAuthOrigin } from './shopifyOAuthOrigin';
 import { storage } from './storage';
+import { persistVerifiedShopifyBilling } from './shopifyBillingPersistence';
+import { isShopifyContactInstallationActive } from '@shared/shopifyContactPrivacy';
 
 /** Align with shopify.app.whachatcrm.toml webhooks `api_version` (2026-01). */
 const API_VERSION = ApiVersion.January26;
@@ -430,6 +432,9 @@ export type ShopifyAppSubscription = {
   id: string;
   name: string;
   status: string;
+  lineItems?: Array<{
+    plan: { pricingDetails: { planHandle?: string | null } };
+  }>;
 };
 
 export async function listShopifyActiveSubscriptions(
@@ -437,33 +442,45 @@ export async function listShopifyActiveSubscriptions(
   accessToken: string,
 ): Promise<ShopifyAppSubscription[]> {
   const shopify = getShopifyApi();
-  if (!shopify) return [];
-
+  if (!shopify) throw new Error("SHOPIFY_BILLING_UNAVAILABLE");
   try {
     const client = new shopify.clients.Graphql({
       session: { shop, accessToken } as Session,
     });
-
-    const response = await client.request(`
-      query {
+    const response = await client.request(
+      `
+      query VerifiedBillingSubscription {
         currentAppInstallation {
           activeSubscriptions {
-            id
-            name
-            status
+            id name status
+            lineItems { plan { pricingDetails { ... on AppRecurringPricing { planHandle } } } }
           }
         }
       }
-    `);
-
-    const data = response.data as any;
-    const subscriptions = data?.currentAppInstallation?.activeSubscriptions || [];
-    return subscriptions.filter(
-      (s: ShopifyAppSubscription) => s?.id && (s.status || '').toUpperCase() === 'ACTIVE',
+    `,
+      { retries: 0 },
     );
-  } catch (error) {
-    console.error('[ShopifyBilling] Failed to list active subscriptions:', error);
-    return [];
+    const subscriptions = (response.data as any)?.currentAppInstallation
+      ?.activeSubscriptions;
+    if (
+      (response as any).errors ||
+      !Array.isArray(subscriptions) ||
+      subscriptions.some(
+        (s) =>
+          !s ||
+          typeof s.id !== "string" ||
+          typeof s.name !== "string" ||
+          typeof s.status !== "string",
+      )
+    )
+      throw new Error("invalid_billing_response");
+    return subscriptions.filter(
+      (s: ShopifyAppSubscription) => s.status.toUpperCase() === "ACTIVE",
+    );
+  } catch {
+    // Never turn provider errors into an authoritative empty subscription list.
+    console.warn("[ShopifyBilling] subscription_verification_unavailable");
+    throw new Error("SHOPIFY_BILLING_VERIFICATION_FAILED");
   }
 }
 
@@ -476,32 +493,34 @@ export async function getActiveShopifySubscription(
 }
 
 function isAIBrainSubscriptionName(name: string): boolean {
-  return name.toLowerCase().includes('ai brain');
+  return name.toLowerCase().includes("ai brain");
 }
 
 export function pickPrimaryShopifySubscription(
   subscriptions: ShopifyAppSubscription[],
 ): ShopifyAppSubscription | null {
   if (!subscriptions.length) return null;
-  const base = subscriptions.find((s) => !isAIBrainSubscriptionName(s.name || ''));
+  const base = subscriptions.find(
+    (s) => !isAIBrainSubscriptionName(s.name || ""),
+  );
   return base ?? subscriptions[0];
 }
 
 export function mapShopifyPlanFromHints(
   subscriptionName: string,
   planHandle?: string | null,
-): 'free' | 'starter' | 'pro' {
-  const handle = (planHandle || '').toLowerCase();
-  const name = (subscriptionName || '').toLowerCase();
-  if (handle.includes('pro') || name.includes('pro')) return 'pro';
-  if (handle.includes('starter') || name.includes('starter')) return 'starter';
-  return 'free';
+): "free" | "starter" | "pro" {
+  const handle = (planHandle || "").toLowerCase();
+  const name = (subscriptionName || "").toLowerCase();
+  if (handle.includes("pro") || name.includes("pro")) return "pro";
+  if (handle.includes("starter") || name.includes("starter")) return "starter";
+  return "free";
 }
 
 export type ShopifyBillingSyncResult = {
   ok: boolean;
-  shopifySubscriptionStatus: 'active' | 'pending' | 'cancelled';
-  billingPlan: 'free' | 'starter' | 'pro';
+  shopifySubscriptionStatus: "active" | "pending" | "cancelled";
+  billingPlan: "free" | "starter" | "pro";
   shopifyChargeId: string | null;
   aiBrainAddon: boolean;
 };
@@ -513,73 +532,64 @@ export async function syncShopifyBillingToUser(
   accessToken: string,
   planHandleHint?: string | null,
 ): Promise<ShopifyBillingSyncResult> {
+  // The return hint is retained in the signature for compatibility, never used as evidence.
+  const user = await storage.getUserForSession(userId);
+  if (
+    !user ||
+    normalizeShopifyShopDomain(user.shopifyShop) !==
+      normalizeShopifyShopDomain(shop) ||
+    user.shopifyAccessToken !== accessToken ||
+    !isShopifyContactInstallationActive(user)
+  )
+    throw new Error("SHOPIFY_INSTALLATION_CHANGED");
   const subscriptions = await listShopifyActiveSubscriptions(shop, accessToken);
   const primary = pickPrimaryShopifySubscription(subscriptions);
-  const aiBrain = subscriptions.some((s) => isAIBrainSubscriptionName(s.name || ''));
-
+  const aiBrain = subscriptions.some((s) =>
+    isAIBrainSubscriptionName(s.name || ""),
+  );
   if (primary) {
-    const billingPlan = mapShopifyPlanFromHints(primary.name, planHandleHint);
-    await storage.updateUser(userId, {
-      shopifySubscriptionStatus: 'active',
-      shopifyChargeId: primary.id,
-      subscriptionPlan: billingPlan,
-      billingPlan,
-      subscriptionStatus: 'active',
-      ...(billingPlan === "starter"
-        ? { shopifyAIBrainEnabled: aiBrain }
-        : billingPlan === "free"
-          ? { shopifyAIBrainEnabled: false }
-          : {}),
-    });
-    console.log('[ShopifyBilling] Synced active subscription', {
+    const providerHandle = primary.lineItems
+      ?.map((item) => item.plan?.pricingDetails?.planHandle)
+      .find(Boolean);
+    // Only provider-returned plan identity can affect the entitlement (including $0 test plans).
+    const billingPlan = mapShopifyPlanFromHints(primary.name, providerHandle);
+    const persisted = await persistVerifiedShopifyBilling({
       userId,
       shop,
-      billingPlan,
-      subscriptionId: primary.id,
-      planHandleHint: planHandleHint ?? null,
+      accessToken,
+      patch: {
+        shopifySubscriptionStatus: "active",
+        shopifyChargeId: primary.id,
+        subscriptionPlan: billingPlan,
+        billingPlan,
+        subscriptionStatus: "active",
+        ...(billingPlan === "starter"
+          ? { shopifyAIBrainEnabled: aiBrain }
+          : billingPlan === "free"
+            ? { shopifyAIBrainEnabled: false }
+            : {}),
+      },
     });
+    if (!persisted) throw new Error("SHOPIFY_INSTALLATION_CHANGED");
     return {
       ok: true,
-      shopifySubscriptionStatus: 'active',
+      shopifySubscriptionStatus: "active",
       billingPlan,
       shopifyChargeId: primary.id,
       aiBrainAddon: aiBrain,
     };
   }
-
-  if (planHandleHint) {
-    const billingPlan = mapShopifyPlanFromHints('', planHandleHint);
-    await storage.updateUser(userId, {
-      shopifySubscriptionStatus: 'active',
-      shopifyChargeId: null,
-      subscriptionPlan: billingPlan,
-      billingPlan,
-      subscriptionStatus: 'active',
-    });
-    console.log('[ShopifyBilling] Synced plan from Shopify return handle (no active subscription row)', {
-      userId,
-      shop,
-      billingPlan,
-      planHandleHint,
-    });
-    return {
-      ok: true,
-      shopifySubscriptionStatus: 'active',
-      billingPlan,
-      shopifyChargeId: null,
-      aiBrainAddon: false,
-    };
-  }
-
-  await storage.updateUser(userId, {
-    shopifySubscriptionStatus: 'pending',
-  });
+  // Empty results can be propagation delay. Neither a return nor a failed verification cancels access.
   return {
     ok: false,
-    shopifySubscriptionStatus: 'pending',
-    billingPlan: 'free',
-    shopifyChargeId: null,
-    aiBrainAddon: false,
+    shopifySubscriptionStatus:
+      user.shopifySubscriptionStatus === "active" ? "active" : "pending",
+    billingPlan:
+      user.billingPlan === "pro" || user.billingPlan === "starter"
+        ? user.billingPlan
+        : "free",
+    shopifyChargeId: user.shopifyChargeId ?? null,
+    aiBrainAddon: !!user.shopifyAIBrainEnabled,
   };
 }
 
