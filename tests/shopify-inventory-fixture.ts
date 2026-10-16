@@ -13,6 +13,10 @@ export function fixtureInventoryRequest(
   return (shop, token) => async (query, variables) => {
     if (!query.includes("VerifyInventoryBatch"))
       throw Error("only inventory verification expected");
+    // Shopify 2026-01: selectedOptions is [SelectedOption!]!, not a scalar.
+    // Existing fixtures accepted invalid query text and therefore missed PR #90's defect.
+    if (!/\bselectedOptions\s*\{\s*name\s+value\s*\}/.test(query))
+      throw Error("fixture_inventory_selected_options_selection_required");
     const tenant = shop === "fixture-a.myshopify.com" ? "tenant-a" : "tenant-b";
     if (
       token !== (tenant === "tenant-a" ? "fixture-token-a" : "fixture-token-b")
@@ -73,3 +77,4 @@ export async function inventoryDue(db: CatalogDb, sourceId: string) {
     })
     .where(eq(catalogSources.id, sourceId));
 }
+

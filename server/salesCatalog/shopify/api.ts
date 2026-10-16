@@ -1,5 +1,13 @@
 import { boundedRequest } from "../../shopifyWebhookHealthAudit";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+/** Bounded diagnostics only: no provider messages, query variables, tokens or payloads. */
+export type CatalogErrorDetail =
+  | "graphql_selection_mismatch"
+  | "graphql_error"
+  | "inventory_nodes_shape"
+  | "inventory_shop_identity"
+  | "inventory_currency"
+  | "inventory_variant_shape_or_identity";
 export class CatalogApiError extends Error {
   constructor(
     public code:
@@ -8,6 +16,7 @@ export class CatalogApiError extends Error {
       | "unavailable"
       | "invalid_response",
     public retryMs = 30_000,
+    public detail?: CatalogErrorDetail,
   ) {
     super(code);
   }
@@ -87,7 +96,10 @@ function classifyApiError(error: any): CatalogApiError {
     codes.some((e: any) => e.extensions?.code === "ACCESS_DENIED")
   )
     return new CatalogApiError("access_denied", 600_000);
-  return new CatalogApiError(codes.length ? "invalid_response" : "unavailable");
+  return new CatalogApiError(codes.length ? "invalid_response" : "unavailable", 30_000,
+    codes.length ? codes.some((e: any) => e.extensions?.code === "selectionMismatch")
+      ? "graphql_selection_mismatch" : "graphql_error" : undefined);
+
 }
 export const SHOPIFY_CATALOG_META_QUERY = `query CatalogMeta { currentAppInstallation { accessScopes { handle } } shop { currencyCode myshopifyDomain primaryDomain { host } } }`;
 export const SHOPIFY_CATALOG_IDS_QUERY = `query CatalogIds($after:String) { products(first:50,after:$after,sortKey:ID) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
@@ -124,3 +136,4 @@ export function decimalPrice(value: unknown): string | null {
     throw new CatalogApiError("invalid_response");
   return value;
 }
+

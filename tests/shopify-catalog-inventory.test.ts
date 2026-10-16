@@ -608,3 +608,94 @@ test("inventory renewal interleaves with a long catalog pass without restarting 
     await f.cleanup();
   }
 });
+
+
+test("Shopify 2026-01 rejects the old batch query before data validation; durable failure recovers with inventory-only demand",async()=>{
+ const f=await setup(17),{db,source}=f;
+ try {
+  for(let i=13;i<17;i++)await db.update(catalogProducts).set({published:false}).where(eq(catalogProducts.id,`p${i}`));
+  const {createCatalogRequest}=await import("../server/salesCatalog/shopify/api");
+  const {SHOPIFY_INVENTORY_BATCH_QUERY}=await import("../server/salesCatalog/shopify/inventory");
+  // Synthetic response contract, not a captured production payload. No credentials/customer data.
+  const invalidQuery=SHOPIFY_INVENTORY_BATCH_QUERY.replace(/selectedOptions\s*\{[^}]+\}/,"selectedOptions");
+  let badQuery=true,calls=0;
+  const fixture=fixtureInventoryRequest(db);
+  const requestFor=(shop:string,token:string)=>createCatalogRequest({request:async(q,opts)=>{
+   calls++;assert.equal(opts.retries,0);
+   const actual=badQuery?invalidQuery:q;
+   if(!/selectedOptions\s*\{/.test(actual))return {errors:{graphQLErrors:[{
+    message:"Synthetic sensitive provider message must never be retained",
+    extensions:{code:"selectionMismatch",nodeName:"field 'selectedOptions'",typeName:"SelectedOption"},
+   }]}};
+   return {data:await fixture(shop,token)(q,opts.variables)};
+  }});
+  const store=createCommerceStore(db,requestFor),sync=createShopifyCatalogSync(db,requestFor);
+  await store.markInventoryActivity("tenant-a",source.id);
+  assert.equal(await sync.tick(),true);
+  let [current]=await db.select().from(catalogSources).where(eq(catalogSources.id,source.id));
+  assert.equal((current.checkpoint as any).inventory.errorCode,"invalid_response");
+  assert.equal((current.checkpoint as any).inventory.errorDetail,"graphql_selection_mismatch");
+  assert.equal((current.checkpoint as any).inventory.failures,1);
+  assert.doesNotMatch(JSON.stringify(current.checkpoint),/Synthetic sensitive|SelectedOption|fixture-token/);
+  assert.equal(await store.eligibleCount("tenant-a",source.id),0);
+  // Six actual failed attempts, each after simulated deadline expiry, reproduce the capped failure counter from production.
+  for(let attempt=2;attempt<=6;attempt++) {await inventoryDue(db,source.id);assert.equal(await sync.tick(),true);}
+  [current]=await db.select().from(catalogSources).where(eq(catalogSources.id,source.id));
+  assert.equal((current.checkpoint as any).inventory.failures,6);
+  assert.ok((current.checkpoint as any).inventory.apiAfter>Date.now()+15*60_000);
+  assert.ok((current.checkpoint as any).inventory.apiAfter<Date.now()+17*60_000);
+  assert.equal(calls,6,"one API attempt per failure, with no inline retries");
+  const beforeCalls=calls;
+  await store.markInventoryActivity("tenant-a",source.id);await sync.tick();
+  assert.equal(calls,beforeCalls,"no quota bypass while durable backoff is active");
+  badQuery=false;
+  // Advance ONLY the disposable fixture's retry deadline to model natural backoff expiry.
+  await inventoryDue(db,source.id);
+  assert.equal(await sync.tick(),true);
+  [current]=await db.select().from(catalogSources).where(eq(catalogSources.id,source.id));
+  assert.equal((current.checkpoint as any).inventory.errorCode,null);
+  assert.equal((current.checkpoint as any).inventory.errorDetail,null);
+  assert.equal((current.checkpoint as any).inventory.failures,0);
+  assert.equal(await store.eligibleCount("tenant-a",source.id),13);
+  assert.equal(current.lastSyncAt!.getTime(),f.full.getTime(),"inventory renewal is not a full catalog sync");
+  assert.equal(current.requestedAt!.getTime(),f.full.getTime());
+  // The same exact-variant contract continues to feed AI discovery after background recovery.
+  await inventoryDue(db,source.id);
+  const provider=createShopifyLiveProvider(store,async()=>catalogReadiness(db,store,"tenant-a"));
+  const records=await provider.query({userId:"tenant-a",message:"recommend snowboard under 750",limit:3} as any);
+  assert.ok(records.length>0);assert.ok(records.every(r=>r.data.purchaseVerified===true));
+ }finally{await f.cleanup();}
+});
+
+test("batch data guards distinguish null nodes, malformed shapes, currency and store identity without trusting unsafe data",async()=>{
+ for(const failure of ["null","nodes","shop","currency","options"] as const){
+  const f=await setup(1),{db,source}=f;
+  try {
+   const {refreshInventoryBatch}=await import("../server/salesCatalog/shopify/inventory");
+   const fixture=fixtureInventoryRequest(db);
+   const lease="fixture-contract";
+   await db.update(catalogSources).set({leaseToken:lease,leaseExpiresAt:new Date(Date.now()+60_000)}).where(eq(catalogSources.id,source.id));
+   const result=await refreshInventoryBatch(db,source.id,lease,["v0"],(shop,token)=>async(q,v)=>{
+    const data=await fixture(shop,token)(q,v);
+    if(failure==="null")data.nodes=[null];
+    if(failure==="nodes")data.nodes=[];
+    if(failure==="shop")data.shop.myshopifyDomain="other.myshopify.com";
+    if(failure==="currency")data.shop.currencyCode=null;
+    if(failure==="options")data.nodes[0].selectedOptions=[{name:"Size"}];
+    return data;
+   });
+   const [current]=await db.select().from(catalogSources).where(eq(catalogSources.id,source.id));
+   assert.equal(result.length,0);
+   const state=(current.checkpoint as any).inventory;
+   if(failure==="null") {
+    assert.equal(state.errorCode,null,"a deleted/null node invalidates only its snapshot; it is not a GraphQL validation error");
+    const [variant]=await db.select().from(catalogVariants).where(eq(catalogVariants.id,"v0"));
+    assert.equal(variant.verifiedAt.getTime(),0);
+   } else {
+    assert.equal(state.errorCode,"invalid_response");
+    assert.equal(state.errorDetail,({nodes:"inventory_nodes_shape",shop:"inventory_shop_identity",currency:"inventory_currency",options:"inventory_variant_shape_or_identity"} as const)[failure]);
+   }
+   assert.equal(await createCommerceStore(db).eligibleCount("tenant-a",source.id),0);
+  }finally{await f.cleanup();}
+ }
+});

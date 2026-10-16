@@ -258,3 +258,20 @@ test("bounded API wrapper classifies response and SDK errors without leaking cre
   });
   await assert.rejects(request("fixture"), (e: any) => e.code === "throttled");
 });
+
+test("GraphQL selection errors are rejected before data validation and expose only bounded diagnostic codes",async()=>{
+ const errors=[{message:"secret-token and private response",extensions:{code:"selectionMismatch",nodeName:"field 'selectedOptions'",typeName:"SelectedOption"}}];
+ for(const shape of ["array","sdk","thrown","partial"]){
+  let calls=0;
+  const request=createCatalogRequest({request:async()=>{
+   calls++;
+   if(shape==="thrown")throw {response:{errors:{graphQLErrors:errors}}};
+   return {errors:shape==="sdk"?{graphQLErrors:errors}:errors,...(shape==="partial"?{data:{shop:{myshopifyDomain:"other.invalid"},nodes:[null]}}:{})};
+  }});
+  await assert.rejects(request("query fixture"),(e:any)=>{
+   assert.equal(e.code,"invalid_response");assert.equal(e.detail,"graphql_selection_mismatch");
+   assert.doesNotMatch(JSON.stringify(e),/secret-token|private response|other.invalid|SelectedOption/);return true;
+  });
+  assert.equal(calls,1);
+ }
+});
