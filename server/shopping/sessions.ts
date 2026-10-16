@@ -23,7 +23,8 @@ export function createShoppingSessions(database:CatalogDb):ShoppingSessionStore 
    const conv=await owned(tx,turn);if(!conv)return null;
    const raw=conv.shoppingState as any;
    if(raw?._lease?.until>Date.now())throw Error("shopping_busy");
-   const state=raw?.version===1&&Array.isArray(raw.choices)&&Array.isArray(raw.consumedEventIds)?raw as ShoppingState:null;
+   const {_lease,...snapshot}=raw??{};
+   const state=snapshot?.version===1&&Array.isArray(snapshot.choices)&&Array.isArray(snapshot.consumedEventIds)?snapshot as ShoppingState:null;
    await tx.update(conversations).set({shoppingState:{...raw,_lease:{token,until:Date.now()+120_000}}}).where(and(eq(conversations.id,conv.id),eq(conversations.userId,turn.userId)));
    return {state};
   });

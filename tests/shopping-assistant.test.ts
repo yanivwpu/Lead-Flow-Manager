@@ -3,16 +3,17 @@ import test from "node:test";
 import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
 function fixture() {
+ let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
  let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5, entitled=true;
  const config=shoppingSettings({enabled:true,handoffOnFailure:true});
  const product={id:"p1",title:"Snowboard",published:true,status:"ACTIVE",userId:"tenant-a"};
  const variants=[{id:"v1",title:"Ice",options:[{name:"Color",value:"Ice"}]},{id:"v2",title:"Fire",options:[{name:"Color",value:"Fire"}]}];
  const commerce={source:async(id:string)=>id==="tenant-a"?{id:"s1",currency:"USD"}:null,purchaseCandidates:async(_id:string,request:any)=>{assert.equal(request.filters.currency,"USD");return [{...product,variants}];},lookupVariant:async()=>null,
- verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked:true,inventoryPolicy:"DENY",verifiedAt:new Date()},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
+ verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;if(mode==="empty")return [];if(mode==="throw")throw Error("provider_unavailable");return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked:true,inventoryPolicy:"DENY",verifiedAt:new Date(mode==="stale"?clock-120_000:clock)},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
  const sessions:ShoppingSessionStore={async withTurn(turn,run){if(turn.userId!=="tenant-a")return null;return run(state,async s=>{state=s;});}};
- const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled});
+ const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled,now:()=>clock});
  let event=0;
- return {service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number)=>quantity=n,config,entitled:(b:boolean)=>entitled=b};
+ return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number)=>quantity=n,config,entitled:(b:boolean)=>entitled=b};
 }
 test("multilingual shopping intent, budget and exact currency/decimal handling",()=>{
  for(const s of ["Show snowboard options","Muéstrame las opciones","אפשרויות של סנובורד"])assert.equal(shoppingIntent(s),"variants");
@@ -63,4 +64,27 @@ test("selections can change without model identifiers or premature checkout",asy
  const f=fixture();await f.turn("show snowboard");await f.turn("Ice");
  const changed=await f.turn("I'll take Fire");assert.equal(changed!.state.selected?.variantId,"v2");assert.equal(changed!.state.step,"confirming");
  await f.turn("restart");const next=await f.turn("compare snowboards",{locale:"es"});assert.equal(next!.state.step,"selecting");
+});
+
+
+test("empty, stale and failed verification keep a recoverable selection; retries cannot silently accept a changed price",async()=>{
+ for(const mode of ["empty","throw","stale"] as const){
+  const f=fixture();await f.turn("show snowboard under 750");
+  f.mode(mode);const pending=await f.turn("Ice",{eventId:"select"});
+  assert.equal(pending!.state.step,"pending");assert.equal(pending!.state.selected?.variantId,"v1");assert.equal(pending!.state.choices.length,2);assert.equal(pending!.state.maxPrice,"750");assert.equal(pending!.handoff,false);
+  const before=f.calls();f.advance(65_000);
+  assert.equal((await f.turn("Ice",{eventId:"select"}))!.reply,pending!.reply);assert.equal(f.calls(),before,"same pending event is prepared only once, even after cooldown");
+  f.mode("live");assert.equal((await f.turn("retry"))!.state.step,"confirming");
+  f.mode("empty");assert.equal((await f.turn("yes"))!.state.step,"pending");
+  f.price("710");f.mode("live");const changed=await f.turn("retry");
+  assert.equal(changed!.state.step,"confirming");assert.match(changed!.reply,/changed/);
+  assert.equal((await f.turn("yes"))!.state.step,"confirmed");
+ }
+});
+test("a pending discovery retains its budget and supports retry/cancel/restart without a stock claim",async()=>{
+ const f=fixture();f.mode("empty");const pending=await f.turn("show snowboard under 750");
+ assert.equal(pending!.state.step,"pending");assert.equal(pending!.state.maxPrice,"750");assert.doesNotMatch(pending!.reply,/available now|699\.95/);
+ f.mode("live");const r=await f.turn("retry");assert.equal(r!.state.maxPrice,"750");assert.equal(r!.state.step,"selecting");
+ f.mode("empty");await f.turn("Ice");const cancelled=await f.turn("cancel");assert.equal(cancelled!.state.step,"cancelled");assert.equal(cancelled!.state.pending,undefined);
+ assert.equal((await f.turn("restart"))!.state.step,"discovering");
 });

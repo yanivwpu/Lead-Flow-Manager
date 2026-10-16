@@ -1539,6 +1539,7 @@
     "saveError": "Could not save shopping settings.",
     "activity": "Shopping activity",
     "steps": {
+      "pending": "Verification pending — selection saved",
       "discovering": "Product discovery",
       "selecting": "Choosing an option",
       "confirming": "Awaiting confirmation",
