@@ -119,3 +119,53 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
     assert.match(authorized, /href="\/api\/shopify\/catalog\/authorize"/);
   }
 });
+
+test("cards show independent localized publication and product-wide availability labels", async () => {
+  for (const [lng, resource] of Object.entries({ en, es, he })) {
+    const i18n = createInstance();
+    await i18n.init({
+      lng,
+      resources: { [lng]: { translation: resource } },
+      interpolation: { escapeValue: false },
+    });
+    for (const [published, availability] of [
+      [true, "available"],
+      [true, "out_of_stock"],
+      [true, "unavailable"],
+      [false, "unavailable"],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        <I18nextProvider i18n={i18n}>
+          <ShopifyCatalogView
+            items={[
+              {
+                ...uiProduct,
+                published,
+                availability,
+                variants: [
+                  { ...uiProduct.variants[0], availability: "not_published" },
+                ],
+              },
+            ]}
+            loading={false}
+            query=""
+            onQuery={() => {}}
+            onSync={() => {}}
+            syncing={false}
+            onSelect={() => {}}
+          />
+        </I18nextProvider>,
+      );
+      assert.ok(
+        html.includes(
+          resource.salesCatalog.commerce[
+            published ? "published" : "unpublished"
+          ],
+        ),
+      );
+      assert.ok(html.includes(resource.salesCatalog.commerce[availability]));
+      if (published)
+        assert.ok(!html.includes(resource.salesCatalog.commerce.not_published));
+    }
+  }
+});

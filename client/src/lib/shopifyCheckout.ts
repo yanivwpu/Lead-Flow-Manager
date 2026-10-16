@@ -1,10 +1,6 @@
-import {
-  getShopifyShopHint,
-  resolveShopifyShopForCheckout,
-} from "@/lib/shopifyBillingHint";
+import { resolveShopifyShopForCheckout } from "@/lib/shopifyBillingHint";
 import { markShopifyPlanPickerOpened } from "@/lib/shopifyBootstrap";
 import {
-  buildShopifyManagedPricingUrl,
   DEFAULT_SHOPIFY_APP_HANDLE,
   resolveShopifyAppStoreListingUrl,
   SHOPIFY_MANAGED_PRICING_CODE,
@@ -80,33 +76,16 @@ export async function openShopifyManagedPricing(
   shopHint?: string | null,
 ): Promise<boolean> {
   const shop = resolveShopifyShopForCheckout(shopHint);
-  const appHandle = getClientShopifyAppHandle();
-
-  if (import.meta.env.DEV) {
-    console.log("[ShopifyBilling] openShopifyManagedPricing", {
-      shopHint: shopHint ?? null,
-      resolvedShop: shop ?? null,
-      appHandle,
-      locationSearch: typeof window !== "undefined" ? window.location.search : null,
-      getShopifyShopHint: getShopifyShopHint() ?? null,
-    });
-  }
-
-  if (shop) {
-    const localUrl = buildShopifyManagedPricingUrl(shop, appHandle);
-    if (localUrl) {
-      navigateToShopifyAdmin(localUrl);
-      return true;
-    }
-  }
-
+  // URL/localStorage hints never authorize a store. The session-owned shop wins server-side.
   const query = shop ? `?shop=${encodeURIComponent(shop)}` : "";
   const res = await fetch(`/api/shopify/billing/managed-pricing-url${query}`, {
     method: "GET",
     credentials: "include",
   });
 
-  const data = (await res.json().catch(() => ({}))) as ShopifyManagedPricingResponse;
+  const data = (await res
+    .json()
+    .catch(() => ({}))) as ShopifyManagedPricingResponse;
 
   if (res.status === 401) {
     const err = new Error("session_expired") as Error & { code?: string };

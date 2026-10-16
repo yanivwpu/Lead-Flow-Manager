@@ -74,6 +74,20 @@ export function createCommerceStore(database: CatalogDb) {
     const records = await database
       .select({
         ...getTableColumns(catalogProducts),
+        availability: sql<"available" | "out_of_stock" | "unavailable">`CASE
+          WHEN NOT (${healthy} AND catalog_products.complete AND catalog_products.published
+            AND catalog_products.status='ACTIVE' AND catalog_products.deleted_at IS NULL) THEN 'unavailable'
+          WHEN EXISTS (SELECT 1 FROM catalog_variants a WHERE a.product_id=catalog_products.id
+            AND a.user_id=${userId} AND a.source_id=${sourceId}
+            ${variantFilters("a", { availability: "available" }, healthy)}) THEN 'available'
+          WHEN EXISTS (SELECT 1 FROM catalog_variants a WHERE a.product_id=catalog_products.id
+            AND a.user_id=${userId} AND a.source_id=${sourceId})
+            AND NOT EXISTS (SELECT 1 FROM catalog_variants a WHERE a.product_id=catalog_products.id
+              AND a.user_id=${userId} AND a.source_id=${sourceId} AND NOT COALESCE((
+                a.verified_at > NOW() - interval '15 minutes' AND a.requires_components=false
+                AND (a.available_for_sale=false OR (a.available_for_sale=true AND a.tracked=true
+                  AND a.inventory_policy <> 'CONTINUE' AND a.quantity <= 0))), false)) THEN 'out_of_stock'
+          ELSE 'unavailable' END`,
         minPrice: sql<
           string | null
         >`(SELECT min(price)::text FROM catalog_variants r WHERE r.product_id=catalog_products.id AND r.user_id=${userId} AND r.source_id=${sourceId})`,

@@ -139,7 +139,12 @@ export function ShopifyCatalogView(props: {
               </p>
               <p className="mt-2 text-xs font-medium">
                 {t(
-                  `salesCatalog.commerce.${p.freshness === "stale" ? "stale" : (p.variants[0]?.availability ?? "unknown")}`,
+                  `salesCatalog.commerce.${p.published ? "published" : "unpublished"}`,
+                )}
+                {" · "}
+                {t(`salesCatalog.commerce.${p.availability ?? "unavailable"}`)}
+                {p.freshness === "stale" && (
+                  <> · {t("salesCatalog.commerce.stale")}</>
                 )}
               </p>
             </button>

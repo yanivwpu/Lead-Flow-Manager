@@ -62,6 +62,8 @@ export type CommerceProduct = {
   vendor: string | null;
   status: string;
   published: boolean;
+  /** Summary across all variants, independent of the bounded variant preview. */
+  availability?: "available" | "out_of_stock" | "unavailable";
   productUrl: string | null;
   aiGuidance: string | null;
   notes: string | null;
