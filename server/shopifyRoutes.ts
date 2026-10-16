@@ -1,3 +1,4 @@
+import { catalogAuthorizationReturnPath } from "./salesCatalog/shopify/authorization";
 import { verifyWebhookHmac } from "./shopifyWebhookSignature";
 import { createShopifyOrderWebhookHandler } from "./shopifyOrderWebhookHandler";
 import { createShopifyCustomerWebhookHandler } from "./shopifyCustomerWebhookHandler";
@@ -182,7 +183,7 @@ router.get('/install', (req: Request, res: Response) => {
   // An existing authenticated merchant can reopen without another token exchange.
   const merchant = req.user as { shopifyShop?: string; shopifyAccessToken?: string } | undefined;
   if (merchant?.shopifyAccessToken && normalizeShopifyShopDomain(merchant.shopifyShop) === shop) {
-    return sendShopifyOAuthNavigation(res, `/shopify/start?shop=${encodeURIComponent(shop)}`);
+    return sendShopifyOAuthNavigation(res, catalogAuthorizationReturnPath(req, shop) ?? `/shopify/start?shop=${encodeURIComponent(shop)}`);
   }
 
   const { url } = generateShopifyInstallUrl(shop);
