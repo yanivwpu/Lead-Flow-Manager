@@ -52,7 +52,12 @@ export function createShopifyLiveProvider(
       const budget = ctx.message.match(
         /\b(?:under|below|less than|hasta|menos de)\s*[$€£₪]?\s*(\d+(?:\.\d+)?)/i,
       );
+      const recommendation =
+        /\brecommend\w*\b|\brecomiend\w*\b|\brecomend\w*\b|המלצ|ממליצ/iu.test(
+          ctx.message,
+        );
       const filters: CommerceFilters = {
+        ...(recommendation ? { availability: "available" as const } : {}),
         ...(budget
           ? {
               maxPrice: budget[1],

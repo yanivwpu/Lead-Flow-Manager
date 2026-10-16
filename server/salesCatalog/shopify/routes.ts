@@ -1,3 +1,4 @@
+import { isShopifyProductPublished } from "./publication";
 import type { Express } from "express";
 import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
@@ -28,7 +29,6 @@ import {
 } from "./api";
 import {
   variantAvailability,
-  verifiedProductUrl,
   commerceAnnotationSchema,
 } from "@shared/commerceCatalog";
 export function registerShopifyCatalogRoutes(
@@ -310,14 +310,7 @@ export async function verifyCatalogVariant(
         verifiedAt: new Date(),
       },
       {
-        published:
-          current.product.status === "ACTIVE" &&
-          !!current.product.publishedAt &&
-          !!verifiedProductUrl(
-            current.product.onlineStoreUrl,
-            src.allowedHosts as string[],
-          ) &&
-          !current.product.requiresSellingPlan,
+        published: isShopifyProductPublished(current.product),
         sourceHealthy: true,
       },
     ),
