@@ -552,3 +552,59 @@ test("unavailable storefront variants are not called out of stock without verifi
     "unknown",
   );
 });
+
+test("inventory renewal interleaves with a long catalog pass without restarting its generation or cursor", async () => {
+  const f = await setup(65),
+    { db, source } = f;
+  const fixture = fixtureInventoryRequest(db);
+  let calls = 0;
+  const factory =
+    (shop: string, token: string) =>
+    async (q: string, v?: Record<string, unknown>) => {
+      calls++;
+      assert.match(q, /VerifyInventoryBatch/);
+      return fixture(shop, token)(q, v);
+    };
+  const store = createCommerceStore(db, factory),
+    sync = createShopifyCatalogSync(db, factory);
+  const progress = {
+    mode: "full",
+    after: "durable-page-cursor",
+    pending: ["gid://shopify/Product/999999"],
+    end: false,
+    events: [],
+    startedAt: new Date().toISOString(),
+  };
+  try {
+    await db
+      .update(catalogSources)
+      .set({
+        status: "syncing",
+        generation: "existing-generation",
+        nextAttemptAt: new Date(),
+        checkpoint: {
+          ...progress,
+          inventory: {
+            activeUntil: Date.now() + 30 * 60_000,
+            nextAt: 0,
+            apiAfter: 0,
+          },
+        },
+      })
+      .where(eq(catalogSources.id, source.id));
+    await sync.tick();
+    assert.equal(calls, 1);
+    assert.equal(await store.eligibleCount("tenant-a", source.id), 50);
+    const [after] = await db
+      .select()
+      .from(catalogSources)
+      .where(eq(catalogSources.id, source.id));
+    for (const [key, value] of Object.entries(progress))
+      assert.deepEqual((after.checkpoint as any)[key], value);
+    assert.equal(after.generation, "existing-generation");
+    assert.deepEqual(after.lastSyncAt, f.full);
+    assert.equal(after.status, "syncing");
+  } finally {
+    await f.cleanup();
+  }
+});

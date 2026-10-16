@@ -163,12 +163,13 @@ export function createShopifyCatalogSync(
           : Date.parse(checkpoint.webhooks?.nextCheckAt ?? "")
         : Infinity;
       if (
-        !checkpoint.mode &&
+        (!checkpoint.mode || inventoryWake(checkpoint) <= Date.now()) &&
         source.initialSyncCompletedAt &&
         !source.errorCode &&
-        source.status === "ready" &&
-        reconcileAt > Date.now() &&
-        source.requestedAt <= source.lastSyncAt! &&
+        ["ready", "syncing"].includes(source.status) &&
+        (checkpoint.mode ||
+          (reconcileAt > Date.now() &&
+            source.requestedAt <= source.lastSyncAt!)) &&
         (!registerWebhooks || hooksAt > Date.now())
       ) {
         const pendingInventory = await database
@@ -372,16 +373,21 @@ export function createShopifyCatalogSync(
               leaseToken: null,
               leaseExpiresAt: null,
               nextAttemptAt: new Date(
-                Math.min(
-                  reconcileAt,
-                  Number.isFinite(hooksAt) ? hooksAt : Infinity,
-                  arrived
-                    ? Math.max(
-                        Date.now(),
-                        inventoryState(latest?.checkpoint).apiAfter ?? 0,
-                      )
-                    : inventoryWake(latest?.checkpoint),
-                ),
+                checkpoint.mode
+                  ? Math.max(
+                      Date.now(),
+                      inventoryState(latest?.checkpoint).apiAfter ?? 0,
+                    )
+                  : Math.min(
+                      reconcileAt,
+                      Number.isFinite(hooksAt) ? hooksAt : Infinity,
+                      arrived
+                        ? Math.max(
+                            Date.now(),
+                            inventoryState(latest?.checkpoint).apiAfter ?? 0,
+                          )
+                        : inventoryWake(latest?.checkpoint),
+                    ),
               ),
             })
             .where(
