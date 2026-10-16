@@ -1533,5 +1533,25 @@
         "recovery": "Allow pop-ups for this site, then click Connect WhatsApp again."
       }
     }
+  },
+  "shopping": {
+    "title": "עוזר קניות AI",
+    "enable": "הפעלת סיוע בקניות",
+    "pro": "כלול ב-Pro וב-AI Brain.",
+    "max": "מספר המלצות מרבי",
+    "channels": "ערוצים מותרים",
+    "fallback": "העברה לנציג כאשר לא ניתן לאמת מוצרים",
+    "checkoutDisabled": "סיוע בתשלום ממתין לבדיקה ונשאר כבוי.",
+    "save": "שמירה",
+    "saveError": "לא ניתן לשמור את ההגדרות.",
+    "activity": "פעילות קניות",
+    "steps": {
+      "discovering": "חיפוש מוצרים",
+      "selecting": "בחירת אפשרות",
+      "confirming": "ממתין לאישור",
+      "confirmed": "הבחירה אושרה",
+      "handoff": "נדרש נציג",
+      "cancelled": "בוטל"
+    }
   }
 }

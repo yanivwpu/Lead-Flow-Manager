@@ -261,6 +261,7 @@ const MESSAGE_TYPES: { value: MessageType; label: string; icon: any }[] = [
 ];
 
 const ACTION_TYPES = [
+  { value: "shopping_assistant", label: "AI Shopping Assistant" },
   { value: "set_tag", label: "Add Tag" },
   { value: "set_status", label: "Set Status" },
   { value: "assign", label: "Assign to Team" },
@@ -1861,7 +1862,8 @@ export function ChatbotBuilder() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  {selectedStep.data.action?.type === "shopping_assistant" && <p className="text-sm text-muted-foreground">Uses the customer's message to search verified products and select options. Enable AI Shopping Assistant in Shopify Products. AI Brain controls reply approval and delivery.</p>}
+                  <div hidden={selectedStep.data.action?.type === "shopping_assistant"}>
                     <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
                       {selectedStep.data.action?.type === "assign" ? "Team member" : "Value"}
                     </Label>

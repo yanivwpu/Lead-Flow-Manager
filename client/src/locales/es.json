@@ -1456,5 +1456,25 @@
         "recovery": "Allow pop-ups for this site, then click Connect WhatsApp again."
       }
     }
+  },
+  "shopping": {
+    "title": "Asistente de compras IA",
+    "enable": "Activar asistencia de compras",
+    "pro": "Incluido con Pro y AI Brain.",
+    "max": "Máximo de recomendaciones",
+    "channels": "Canales permitidos",
+    "fallback": "Transferir a una persona si no se pueden verificar los productos",
+    "checkoutDisabled": "La asistencia de pago está pendiente de revisión y sigue desactivada.",
+    "save": "Guardar",
+    "saveError": "No se pudo guardar la configuración.",
+    "activity": "Actividad de compras",
+    "steps": {
+      "discovering": "Búsqueda de productos",
+      "selecting": "Selección de opción",
+      "confirming": "Esperando confirmación",
+      "confirmed": "Selección confirmada",
+      "handoff": "Necesita ayuda humana",
+      "cancelled": "Cancelado"
+    }
   }
 }

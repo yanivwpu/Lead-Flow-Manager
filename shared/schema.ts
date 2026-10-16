@@ -1317,6 +1317,7 @@ export const conversations = pgTable("conversations", {
   reEngagement: jsonb("re_engagement").notNull().default(sql`'{}'::jsonb`),
   /** AI Brain pause/resume for this conversation (not contact-level Pause Automations). */
   aiControl: jsonb("ai_control").notNull().default(sql`'{}'::jsonb`),
+  shoppingState: jsonb("shopping_state").notNull().default(sql`'{}'::jsonb`),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -1966,6 +1967,7 @@ export type AiKnowledgeScanJobRow = typeof aiKnowledgeScanJobs.$inferSelect;
 
 // AI Settings - per-user AI behavior configuration
 export const aiSettings = pgTable("ai_settings", {
+  shoppingAssistant: jsonb("shopping_assistant").notNull().default(sql`'{}'::jsonb`),
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   // AI Mode: off, suggest_only, full_auto

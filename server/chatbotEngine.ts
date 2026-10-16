@@ -952,6 +952,13 @@ async function executeActionNode(
   const { type, value } = node.data.action;
   try {
     switch (type) {
+      case "shopping_assistant": {
+        // Prepare only; AI Brain owns reply approval, hours and delivery policy.
+        // Node configuration can never authorize checkout or supply variant IDs.
+        const { shoppingSuggestion } = await import("./shopping/runtime");
+        await shoppingSuggestion({userId:ctx.userId,conversationId:ctx.conversationId,text:ctx.message,channel:ctx.channel,locale:ctx.locale});
+        break;
+      }
       case "set_tag":
         if (value) {
           await storage.updateContact(ctx.contactId, { tag: value });

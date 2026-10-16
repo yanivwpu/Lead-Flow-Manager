@@ -1,3 +1,5 @@
+import { registerShoppingRoutes } from "./shopping/routes";
+import { shoppingEntitled } from "./shopping/runtime";
 import { registerShopifyCatalogRoutes } from "./salesCatalog/shopify/routes";
 import { registerCatalogWebhooks } from "./salesCatalog/shopify/webhooks";
 import { verifyWebhookHmac } from "./shopifyWebhookSignature";
@@ -11080,6 +11082,7 @@ export async function registerRoutes(
   registerWorkspaceOfferRoutes(app);
   registerSalesCatalogRoutes(app, salesCatalog);
   registerShopifyCatalogRoutes(app, db, salesCatalog.commerce);
+  registerShoppingRoutes(app, db, shoppingEntitled);
   registerCatalogWebhooks(app, db, verifyWebhookHmac);
 
   // Approved Marketing Materials (AI Brain / Settings library + Website Chat send).
