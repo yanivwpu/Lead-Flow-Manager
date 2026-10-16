@@ -63,7 +63,8 @@ export function ShopifyCatalog() {
     ],
     enabled: !!user && sessionAligned && !!status.data?.sourceId,
     retry: false,
-    refetchInterval: status.data?.status === "syncing" ? 15_000 : false,
+    // Keep the visible bounded page current even when a short webhook sync is missed.
+    refetchInterval: 15_000,
     queryFn: async () => {
       const params = new URLSearchParams({
         query: searchQuery,

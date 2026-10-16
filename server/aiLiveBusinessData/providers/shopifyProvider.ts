@@ -56,8 +56,15 @@ export function createShopifyLiveProvider(
         /\brecommend\w*\b|\brecomiend\w*\b|\brecomend\w*\b|המלצ|ממליצ/iu.test(
           ctx.message,
         );
+      if (recommendation && !source.currency) return [];
       const filters: CommerceFilters = {
-        ...(recommendation ? { availability: "available" as const } : {}),
+        ...(recommendation
+          ? {
+              availability: "available" as const,
+              minPrice: "0",
+              currency: source.currency!,
+            }
+          : {}),
         ...(budget
           ? {
               maxPrice: budget[1],

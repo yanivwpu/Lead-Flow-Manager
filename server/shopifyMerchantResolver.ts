@@ -7,7 +7,10 @@ import {
 import { shopDomainFromRequest } from "./shopifyBillingGuard";
 import { storage } from "./storage";
 
-export type ShopifyMerchantShopSource = "user.shopifyShop" | "request.shop" | "install.lookup";
+export type ShopifyMerchantShopSource =
+  | "user.shopifyShop"
+  | "request.shop"
+  | "install.lookup";
 
 export type ResolvedShopifyMerchant = {
   shop: string;
@@ -56,7 +59,8 @@ function buildLogContext(input: {
 
 /**
  * Resolves Shopify shop + access token for session-authenticated billing (checkout-web).
- * Priority: authenticated user.shopifyShop → request shop param → install row by shop.
+ * Canonical session user owns the shop. Request hints can only find that same user.
+ * This read never repairs installation, trial, or billing records.
  */
 export async function resolveShopifyMerchantForBilling(
   req: Request,
@@ -64,7 +68,16 @@ export async function resolveShopifyMerchantForBilling(
   context: string,
   plan?: string,
 ): Promise<ResolveShopifyMerchantResult> {
-  const currentUser = await storage.getUser(currentUserId);
+  const currentUser = await storage.getUserForSession(currentUserId);
+  if (!currentUser) {
+    return {
+      ok: false,
+      status: 401,
+      code: "SESSION_REQUIRED",
+      error: "Session expired. Please sign in again.",
+      reason: "missing_user",
+    };
+  }
   const shopParam = shopDomainFromRequest(req);
   const userShop = normalizeShopifyShopDomain(currentUser?.shopifyShop);
 
@@ -91,7 +104,8 @@ export async function resolveShopifyMerchantForBilling(
       ok: false,
       status: 400,
       code: "SHOPIFY_SHOP_REQUIRED",
-      error: "Shopify shop context is required. Open WhachatCRM from your Shopify admin.",
+      error:
+        "Shopify shop context is required. Open WhachatCRM from your Shopify admin.",
       reason: "no_shop_context",
     };
   }
@@ -164,29 +178,6 @@ export async function resolveShopifyMerchantForBilling(
       error: SHOPIFY_RECONNECT_REQUIRED_MESSAGE,
       reason: "missing_token",
     };
-  }
-
-  if (currentUser && currentUser.id === billingUserId) {
-    const patch: {
-      shopifyShop?: string;
-      shopifyAccessToken?: string;
-      shopifyInstalledAt?: Date;
-    } = {};
-    if (!currentUser.shopifyShop) patch.shopifyShop = resolvedShop;
-    if (!currentUser.shopifyAccessToken) patch.shopifyAccessToken = accessToken;
-    if (!currentUser.shopifyInstalledAt && installUser?.shopifyInstalledAt) {
-      patch.shopifyInstalledAt = installUser.shopifyInstalledAt;
-    } else if (!currentUser.shopifyInstalledAt && Object.keys(patch).length > 0) {
-      patch.shopifyInstalledAt = new Date();
-    }
-    if (Object.keys(patch).length > 0) {
-      await storage.updateUser(currentUser.id, patch);
-      console.log("[ShopifyBilling] Linked shopifyShop to current user", {
-        userId: currentUser.id,
-        shop: resolvedShop,
-        fields: Object.keys(patch),
-      });
-    }
   }
 
   return {
