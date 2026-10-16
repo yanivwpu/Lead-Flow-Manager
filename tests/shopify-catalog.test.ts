@@ -1,3 +1,4 @@
+import { inventoryDue } from "./shopify-inventory-fixture";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { COMMERCE_CATALOG_SCHEMA_SQL } from "../server/salesCatalog/schemaSql";
@@ -332,7 +333,7 @@ test("authoritative availability, exact URLs and least-privilege optional author
   assert.equal(variantAvailability(v, context), "available");
   assert.equal(
     variantAvailability({ ...v, availableForSale: false }, context),
-    "out_of_stock",
+    "unknown",
   );
   assert.equal(
     variantAvailability(
@@ -665,6 +666,8 @@ test("daily reconciliation stays idle between passes, targeted events never list
     assert.equal(await engine.tick(), false);
     assert.equal(listingCalls, 1);
     mappingThrottle = false;
+    // Simulate the shared durable quota cooldown expiring before resuming the fixture.
+    await inventoryDue(db, src.id);
     await db
       .update(tables.catalogSources)
       .set({ nextAttemptAt: new Date() })

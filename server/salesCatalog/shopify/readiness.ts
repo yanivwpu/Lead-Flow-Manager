@@ -1,3 +1,4 @@
+import { inventoryState } from "./inventory";
 import {
   CATALOG_FRESH_MS,
   SHOPIFY_CATALOG_SCOPES,
@@ -14,10 +15,15 @@ export async function catalogReadiness(
   const source = install ? await store.source(userId) : null;
   const scopes = (source?.grantedScopes ?? []) as string[];
   const completed = !!source?.initialSyncCompletedAt;
+  const summary = source
+    ? await store.inventorySummary(userId, source.id)
+    : { published: 0, unverified: 0, lastVerifiedAt: null };
   const fresh =
-    !!source?.lastSyncAt &&
-    Date.now() - source.lastSyncAt.getTime() < CATALOG_FRESH_MS &&
-    !source.errorCode;
+    summary.unverified === 0 &&
+    !!summary.lastVerifiedAt &&
+    Date.now() - new Date(summary.lastVerifiedAt).getTime() <
+      CATALOG_FRESH_MS &&
+    !source?.errorCode;
   const searchable =
     !!install &&
     completed &&
@@ -34,7 +40,17 @@ export async function catalogReadiness(
   const hookRetry = hookStatuses.some(
     (s) => !["registered", "already_registered", "skipped_scope"].includes(s),
   );
+  const inventory = inventoryState(source?.checkpoint);
   return {
+    inventoryRefresh: {
+      status: inventory.errorCode
+        ? "backoff"
+        : (inventory.activeUntil ?? 0) > Date.now()
+          ? "active"
+          : "idle",
+      errorCode: inventory.errorCode ?? null,
+      nextCheckAt: inventory.nextAt ?? null,
+    },
     catalogWebhooks: {
       status: !hooks
         ? "pending"
@@ -59,6 +75,9 @@ export async function catalogReadiness(
     missingScopes: SHOPIFY_CATALOG_SCOPES.filter((s) => !scopes.includes(s)),
     permissionsVerified: !!source && scopes.length > 0,
     initialSyncCompleted: completed,
+    publishedProductCount: summary.published,
+    inventoryUnverifiedProductCount: summary.unverified,
+    inventoryVerifiedAt: summary.lastVerifiedAt,
     eligibleProductCount: source
       ? await store.eligibleCount(userId, source.id)
       : 0,

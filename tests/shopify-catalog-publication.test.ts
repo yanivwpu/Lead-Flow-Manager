@@ -1,3 +1,7 @@
+import {
+  fixtureInventoryRequest,
+  inventoryDue,
+} from "./shopify-inventory-fixture";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
@@ -55,7 +59,7 @@ test("2026-01 Online Store publication is independent of public URL and fails cl
 test("password-protected Online Store products sync, refresh at the same provider version and produce only eligible priced AI recommendations", async () => {
   const f = await catalogFixture(),
     db = f.database,
-    store = createCommerceStore(db);
+    store = createCommerceStore(db, fixtureInventoryRequest(db));
   let server: ReturnType<typeof express.prototype.listen> | undefined;
   const date = new Date(Date.now() - 60_000).toISOString();
   const products = new Map<number, any>();
@@ -291,6 +295,7 @@ test("password-protected Online Store products sync, refresh at the same provide
       .update(catalogSources)
       .set({ lastSyncAt: new Date(Date.now() - 1000) })
       .where(eq(catalogSources.id, source.id));
+    await inventoryDue(db, source.id);
     const app = express();
     app.use(express.json());
     registerShopifyCatalogRoutes(app, db, store, async () => ({
@@ -327,13 +332,17 @@ test("password-protected Online Store products sync, refresh at the same provide
       .set({ verifiedAt: new Date(Date.now() - 20 * 60000) })
       .where(eq(catalogVariants.productId, snowboard.id));
     assert.equal(await store.eligibleCount("tenant-a", source.id), 0);
-    assert.deepEqual(
-      await provider.query({
-        userId: "tenant-a",
-        message: "Recommend a snowboard",
-      }),
-      [],
+    await inventoryDue(db, source.id);
+    const recovered = await provider.query({
+      userId: "tenant-a",
+      message: "Recommend a snowboard",
+    });
+    assert.equal(
+      recovered.length,
+      3,
+      "expired snapshots can be reverified live, never used directly",
     );
+    assert.ok(recovered.every((r) => r.data.purchaseVerified === true));
   } finally {
     if (server)
       await new Promise<void>((resolve) => server!.close(() => resolve()));

@@ -100,10 +100,17 @@ export function variantAvailability(
     return "stale";
   if (variant.availableForSale === null || variant.requiresComponents)
     return "unknown";
-  if (!variant.availableForSale) return "out_of_stock";
+  if (!variant.availableForSale)
+    return variant.tracked === true &&
+      variant.inventoryPolicy === "DENY" &&
+      variant.quantity !== null &&
+      variant.quantity <= 0
+      ? "out_of_stock"
+      : "unknown";
   if (variant.tracked === false) return "not_tracked";
   if (variant.tracked === null) return "unknown";
   if (variant.inventoryPolicy === "CONTINUE") return "available";
+  if (variant.inventoryPolicy !== "DENY") return "unknown";
   return variant.quantity === null
     ? "unknown"
     : variant.quantity > 0
@@ -129,7 +136,7 @@ export function verifiedProductUrl(
 }
 export function catalogSearchTerms(message: string): string {
   const stop = new Set(
-    "do you have this that item product products recommend which what how much does specific cost sizes size available availability is it in stock under over between and the a an please me show would can for i want buy to of color colour cuanto tienes precio producto productos en de el la hay azul talla comprar".split(
+    "do you have this that item product products recommend which what how much does specific cost sizes size available availability is it in stock under over between and the a an please me show would can for i want buy purchase to of color colour cuanto tienes precio producto productos en de el la hay azul talla comprar".split(
       " ",
     ),
   );

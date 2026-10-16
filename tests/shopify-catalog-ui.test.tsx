@@ -60,6 +60,8 @@ export const uiStatus = {
   connection: "connected",
   missingScopes: [],
   eligibleProductCount: 10000,
+  publishedProductCount: 10000,
+  inventoryUnverifiedProductCount: 0,
   inventoryCapability: "aggregate_polling",
   lastSyncAt: new Date().toISOString(),
   freshness: "fresh",
@@ -99,6 +101,10 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
     assert.match(html, /19.990001 – 69.990001/);
     assert.match(html, /51/);
     assert.ok(html.includes(resource.salesCatalog.commerce.ready));
+    assert.ok(html.includes(resource.salesCatalog.commerce.publishedProducts));
+    assert.ok(
+      html.includes(resource.salesCatalog.commerce.inventoryUnverified),
+    );
     assert.ok(html.includes(lng === "he" ? 'dir="rtl"' : 'dir="ltr"'));
     assert.match(html, /sm:grid-cols-2 lg:grid-cols-3/);
     const blocked = render({

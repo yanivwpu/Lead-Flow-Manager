@@ -1,4 +1,3 @@
-import { getShopifyApi } from "../../shopify";
 import { boundedRequest } from "../../shopifyWebhookHealthAudit";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 export class CatalogApiError extends Error {
@@ -19,12 +18,19 @@ export type CatalogRequest = (
 ) => Promise<any>;
 export function shopifyCatalogClient(shop: string, token: string) {
   const normalized = normalizeShopifyShopDomain(shop);
-  const api = getShopifyApi();
-  if (!normalized || !token || !api) throw new CatalogApiError("unavailable");
-  const client = new api.clients.Graphql({
-    session: { shop: normalized, accessToken: token } as any,
-  });
-  return client;
+  if (!normalized || !token) throw new CatalogApiError("unavailable");
+  // Shared catalog reads do not initialize Shopify's billing/OAuth runtime.
+  return {
+    request: async (query: string, options?: any) => {
+      const { getShopifyApi } = await import("../../shopify");
+      const api = getShopifyApi();
+      if (!api) throw new CatalogApiError("unavailable");
+      const client = new api.clients.Graphql({
+        session: { shop: normalized, accessToken: token } as any,
+      });
+      return client.request(query, options);
+    },
+  };
 }
 export function shopifyCatalogRequest(
   shop: string,

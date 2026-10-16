@@ -1,3 +1,9 @@
+import {
+  markInventoryActivity,
+  verifyInventoryForPurchase,
+  inventoryState,
+} from "./shopify/inventory";
+import { shopifyCatalogRequest } from "./shopify/api";
 import { and, asc, eq, isNull, sql, getTableColumns } from "drizzle-orm";
 import {
   catalogSources,
@@ -20,7 +26,10 @@ import {
 import { resolveCatalogInstallation } from "./shopify/installation";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 export type CatalogDb = NodePgDatabase<any>;
-export function createCommerceStore(database: CatalogDb) {
+export function createCommerceStore(
+  database: CatalogDb,
+  requestFor = shopifyCatalogRequest,
+) {
   async function source(userId: string, sourceId?: string) {
     const install = await resolveCatalogInstallation(database, userId);
     if (!install) return null;
@@ -44,25 +53,29 @@ export function createCommerceStore(database: CatalogDb) {
     alias: string,
     filters: ConnectedCommerceSearchContext["filters"],
     healthy: boolean,
+    allowStale = false,
   ) {
     const f = filters ?? {},
       v = sql.identifier(alias);
-    const fresh = sql`${v}.verified_at > NOW() - interval '15 minutes' AND ${healthy}`;
+    const fresh = allowStale
+      ? sql`${healthy}`
+      : sql`${v}.verified_at > NOW() - interval '15 minutes' AND ${healthy}`;
     return sql`
       ${f.minPrice ? sql`AND ${v}.price >= ${f.minPrice}::numeric` : sql``}
       ${f.maxPrice ? sql`AND ${v}.price <= ${f.maxPrice}::numeric` : sql``}
       ${f.currency ? sql`AND ${v}.currency = ${f.currency}` : sql``}
       ${f.variantId ? sql`AND (${v}.id = ${f.variantId} OR ${v}.external_id = ${f.variantId})` : sql``}
-      ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR ${v}.quantity > 0)))` : sql``}
-      ${f.availability === "out_of_stock" ? sql`AND ${fresh} AND ${v}.requires_components = false AND (${v}.available_for_sale = false OR (${v}.available_for_sale = true AND ${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity <= 0))` : sql``}
+      ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))` : sql``}
+      ${f.availability === "out_of_stock" ? sql`AND ${fresh} AND ${v}.requires_components = false AND (${v}.available_for_sale IS NOT NULL AND ${v}.tracked = true AND ${v}.inventory_policy = 'DENY' AND ${v}.quantity <= 0)` : sql``}
       ${f.availability === "not_tracked" ? sql`AND ${fresh} AND ${v}.requires_components = false AND ${v}.available_for_sale = true AND ${v}.tracked = false` : sql``}
-      ${f.availability === "unknown" ? sql`AND (NOT (${fresh}) OR ${v}.requires_components = true OR ${v}.available_for_sale IS NULL OR (${v}.available_for_sale = true AND (${v}.requires_components = true OR ${v}.tracked IS NULL OR (${v}.tracked = true AND ${v}.inventory_policy <> 'CONTINUE' AND ${v}.quantity IS NULL))))` : sql``}`;
+      ${f.availability === "unknown" ? sql`AND (NOT (${fresh}) OR ${v}.requires_components = true OR NOT COALESCE(((${v}.available_for_sale = true AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))) OR (${v}.available_for_sale IS NOT NULL AND ${v}.tracked = true AND ${v}.inventory_policy = 'DENY' AND ${v}.quantity <= 0)), false))` : sql``}`;
   }
   async function products(
     userId: string,
     sourceId: string,
     ids: string[],
     filters: ConnectedCommerceSearchContext["filters"] = {},
+    allowStale = false,
   ): Promise<CommerceProduct[]> {
     if (ids.length > 100) throw new Error("catalog_candidate_limit");
     if (!ids.length) return [];
@@ -70,6 +83,7 @@ export function createCommerceStore(database: CatalogDb) {
     if (!activeSource) return [];
     const healthy =
       !activeSource.errorCode &&
+      !inventoryState(activeSource.checkpoint).errorCode &&
       ["ready", "syncing"].includes(activeSource.status);
     const records = await database
       .select({
@@ -85,8 +99,7 @@ export function createCommerceStore(database: CatalogDb) {
             AND NOT EXISTS (SELECT 1 FROM catalog_variants a WHERE a.product_id=catalog_products.id
               AND a.user_id=${userId} AND a.source_id=${sourceId} AND NOT COALESCE((
                 a.verified_at > NOW() - interval '15 minutes' AND a.requires_components=false
-                AND (a.available_for_sale=false OR (a.available_for_sale=true AND a.tracked=true
-                  AND a.inventory_policy <> 'CONTINUE' AND a.quantity <= 0))), false)) THEN 'out_of_stock'
+                AND (a.available_for_sale IS NOT NULL AND a.tracked=true AND a.inventory_policy='DENY' AND a.quantity <= 0)), false)) THEN 'out_of_stock'
           ELSE 'unavailable' END`,
         minPrice: sql<
           string | null
@@ -120,7 +133,7 @@ export function createCommerceStore(database: CatalogDb) {
             ids.map((id) => sql`${id}`),
             sql`,`,
           )})`,
-          sql`${catalogVariants.id} IN (SELECT id FROM catalog_variants limited WHERE limited.product_id=${catalogVariants.productId} AND limited.user_id=${userId} AND limited.source_id=${sourceId} ${variantFilters("limited", filters, healthy)} ORDER BY external_id LIMIT 25)`,
+          sql`${catalogVariants.id} IN (SELECT id FROM catalog_variants limited WHERE limited.product_id=${catalogVariants.productId} AND limited.user_id=${userId} AND limited.source_id=${sourceId} ${variantFilters("limited", filters, allowStale ? !activeSource.errorCode : healthy, allowStale)} ORDER BY external_id LIMIT 25)`,
         ),
       )
       .orderBy(asc(catalogVariants.externalId));
@@ -196,6 +209,7 @@ export function createCommerceStore(database: CatalogDb) {
   }
   async function searchCandidates(
     ctx: ConnectedCommerceSearchContext,
+    allowStale = false,
   ): Promise<CommerceProduct[]> {
     const src = await source(ctx.userId, ctx.sourceId);
     if (
@@ -206,7 +220,7 @@ export function createCommerceStore(database: CatalogDb) {
       return [];
     const terms = catalogSearchTerms(ctx.hint || ctx.query);
     const filters = ctx.filters ?? {};
-    const variant = sql`EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id = ${catalogProducts.id} AND v.user_id = ${ctx.userId} AND v.source_id = ${ctx.sourceId} ${variantFilters("v", filters, !src.errorCode && ["ready", "syncing"].includes(src.status))})`;
+    const variant = sql`EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id = ${catalogProducts.id} AND v.user_id = ${ctx.userId} AND v.source_id = ${ctx.sourceId} ${variantFilters("v", filters, !src.errorCode && (allowStale || !inventoryState(src.checkpoint).errorCode) && ["ready", "syncing"].includes(src.status), allowStale)})`;
     const where = and(
       eq(catalogProducts.userId, ctx.userId),
       eq(catalogProducts.sourceId, ctx.sourceId),
@@ -241,6 +255,7 @@ export function createCommerceStore(database: CatalogDb) {
       ctx.sourceId,
       ranked.map((r) => r.id),
       filters,
+      allowStale,
     );
   }
   async function browse(
@@ -292,6 +307,52 @@ export function createCommerceStore(database: CatalogDb) {
   }
   const connected = createConnectedCommerceSearch({ searchCandidates });
   return {
+    markInventoryActivity: (userId: string, sourceId: string) =>
+      markInventoryActivity(database, userId, sourceId),
+    verifyForPurchase: (userId: string, sourceId: string, ids: string[]) =>
+      verifyInventoryForPurchase(database, userId, sourceId, ids, requestFor),
+    async inventorySummary(userId: string, sourceId: string) {
+      const currentSource = await source(userId, sourceId);
+      if (!currentSource)
+        return { published: 0, unverified: 0, lastVerifiedAt: null };
+      const [row] = await database
+        .select({
+          published: sql<number>`count(*)::int`,
+          unverified: sql<number>`count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} ${variantFilters("v", { availability: "available" }, true)}) AND (NOT catalog_products.complete OR NOT EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId}) OR EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=catalog_products.id AND v.user_id=${userId} AND v.source_id=${sourceId} AND NOT COALESCE((v.verified_at>NOW()-interval '15 minutes' AND v.requires_components=false AND (v.available_for_sale IS NOT NULL AND v.tracked=true AND v.inventory_policy='DENY' AND v.quantity<=0)),false))))::int`,
+        })
+        .from(catalogProducts)
+        .where(
+          and(
+            eq(catalogProducts.userId, userId),
+            eq(catalogProducts.sourceId, sourceId),
+            eq(catalogProducts.status, "ACTIVE"),
+            eq(catalogProducts.published, true),
+            isNull(catalogProducts.deletedAt),
+          ),
+        );
+      const [latest] = await database
+        .select({ at: sql<Date | null>`max(${catalogVariants.verifiedAt})` })
+        .from(catalogVariants)
+        .where(
+          and(
+            eq(catalogVariants.userId, userId),
+            eq(catalogVariants.sourceId, sourceId),
+          ),
+        );
+      return {
+        ...row,
+        unverified:
+          currentSource.errorCode ||
+          inventoryState(currentSource.checkpoint).errorCode
+            ? row.published
+            : row.unverified,
+        lastVerifiedAt: latest?.at ?? null,
+      };
+    },
+    /** Discovery only: require verifyForPurchase before recommending or claiming current stock. */
+    purchaseCandidates: createConnectedCommerceSearch({
+      searchCandidates: (ctx) => searchCandidates(ctx, true),
+    }).searchCandidates,
     source,
     products,
     browse,
@@ -331,6 +392,7 @@ export function createCommerceStore(database: CatalogDb) {
             sourceHealthy:
               !!src &&
               !src.errorCode &&
+              !inventoryState(src.checkpoint).errorCode &&
               ["ready", "syncing"].includes(src.status),
           }),
         })),
@@ -390,7 +452,8 @@ export function createCommerceStore(database: CatalogDb) {
         !Array.isArray(src.grantedScopes) ||
         !src.grantedScopes.includes("read_products") ||
         !["ready", "syncing"].includes(src.status) ||
-        src.errorCode
+        src.errorCode ||
+        inventoryState(src.checkpoint).errorCode
       )
         return 0;
       const [row] = await database
@@ -411,3 +474,7 @@ export function createCommerceStore(database: CatalogDb) {
     },
   };
 }
+
+export type InventorySummary = Awaited<
+  ReturnType<ReturnType<typeof createCommerceStore>["inventorySummary"]>
+>;

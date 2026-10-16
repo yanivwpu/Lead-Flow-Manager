@@ -43,6 +43,8 @@ export function registerShopifyCatalogRoutes(
     if (!auth) return;
     res.set("Cache-Control", "private, no-store");
     try {
+      const source = await store.source(auth.workspaceUserId);
+      if (source) await store.markInventoryActivity(auth.workspaceUserId, source.id);
       res.json(await catalogReadiness(database, store, auth.workspaceUserId));
     } catch {
       res.status(503).json({ error: "Catalog status unavailable" });
