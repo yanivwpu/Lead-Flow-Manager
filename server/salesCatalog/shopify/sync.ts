@@ -1,3 +1,4 @@
+import { isShopifyProductPublished } from "./publication";
 import crypto from "node:crypto";
 import type {
   CatalogWebhookRegistrar,
@@ -650,8 +651,7 @@ export function createShopifyCatalogSync(
             productType: product.productType ?? null,
             vendor: product.vendor ?? null,
             status: product.status,
-            published:
-              !!product.publishedAt && !!url && !product.requiresSellingPlan,
+            published: isShopifyProductPublished(product),
             productUrl: url,
             variantCount: Number.isSafeInteger(product.variantsCount?.count)
               ? product.variantsCount.count
@@ -703,7 +703,7 @@ export function createShopifyCatalogSync(
                 : null,
               inventoryPolicy: v.inventoryPolicy ?? null,
               availableForSale: v.availableForSale,
-              requiresComponents: v.requiresComponents === true,
+              requiresComponents: v.requiresComponents !== false,
               providerUpdatedAt: safeDate(v.updatedAt),
               verifiedAt: new Date(),
               generation,

@@ -370,6 +370,15 @@ export function createCommerceStore(database: CatalogDb) {
       return !!p;
     },
     async eligibleCount(userId: string, sourceId: string) {
+      const src = await source(userId, sourceId);
+      if (
+        !src?.initialSyncCompletedAt ||
+        !Array.isArray(src.grantedScopes) ||
+        !src.grantedScopes.includes("read_products") ||
+        !["ready", "syncing"].includes(src.status) ||
+        src.errorCode
+      )
+        return 0;
       const [row] = await database
         .select({ count: sql<number>`count(*)::int` })
         .from(catalogProducts)
@@ -381,6 +390,7 @@ export function createCommerceStore(database: CatalogDb) {
             eq(catalogProducts.status, "ACTIVE"),
             eq(catalogProducts.published, true),
             isNull(catalogProducts.deletedAt),
+            sql`EXISTS (SELECT 1 FROM catalog_variants v WHERE v.product_id=${catalogProducts.id} AND v.user_id=${userId} AND v.source_id=${sourceId} AND v.price IS NOT NULL AND v.currency=${src.currency} ${variantFilters("v", { availability: "available" }, true)})`,
           ),
         );
       return row?.count ?? 0;
