@@ -10,7 +10,17 @@ import {
   resolveCatalogInstallation,
   assertCatalogInstallation,
 } from "./installation";
-import { catalogAuthorizationUrl } from "./authorization";
+import {
+  catalogAuthorizationUrl,
+  createCatalogAuthorizationIntent,
+  catalogAuthorizationIntentMatches,
+  catalogAuthorizationInstallationMatches,
+  CATALOG_PAGE_PATH,
+  CATALOG_RETURN_PATH,
+  type CatalogAuthorizationSession,
+} from "./authorization";
+import { verifyCatalogAccess, refreshCatalogAccess } from "./access";
+import { SHOPIFY_CATALOG_SCOPES } from "@shared/commerceCatalog";
 import {
   decimalPrice,
   SHOPIFY_CATALOG_VERIFY_VARIANT_QUERY,
@@ -26,6 +36,7 @@ export function registerShopifyCatalogRoutes(
   database: CatalogDb,
   store: ReturnType<typeof createCommerceStore>,
   authorize = requireWorkspaceOffersAdmin,
+  requestFor = shopifyCatalogRequest,
 ) {
   app.get("/api/sales-catalog/commerce/status", async (req, res) => {
     const auth = await authorize(req, res);
@@ -166,24 +177,82 @@ export function registerShopifyCatalogRoutes(
   app.get("/api/shopify/catalog/authorize", async (req, res) => {
     const auth = await authorize(req, res);
     if (!auth) return;
+    res.set("Cache-Control", "private, no-store");
     if (process.env.SHOPIFY_CATALOG_AUTH_ENABLED !== "true")
-      return res.status(409).json({
-        error: "Product access requires an approved Shopify app version",
-      });
-    const install = await resolveCatalogInstallation(
-      database,
-      auth.workspaceUserId,
-    );
-    if (!install)
-      return res.status(409).json({ error: "Reconnect Shopify first" });
-    await ensureCatalogSource(database, auth.workspaceUserId);
-    const url = catalogAuthorizationUrl(
-      install.shop,
-      process.env.SHOPIFY_API_KEY ?? "",
-    );
-    if (!url)
-      return res.status(503).json({ error: "Authorization unavailable" });
-    return res.redirect(url);
+      return res
+        .status(409)
+        .json({
+          error: "Product access requires an approved Shopify app version",
+        });
+    try {
+      const install = await resolveCatalogInstallation(
+        database,
+        auth.workspaceUserId,
+      );
+      if (!install)
+        return res.status(409).json({ error: "Reconnect Shopify first" });
+      const scopes = await verifyCatalogAccess(install, requestFor);
+      await ensureCatalogSource(database, auth.workspaceUserId);
+      await refreshCatalogAccess(database, install, scopes);
+      // Repair stale recorded grants without another merchant approval or token exchange.
+      if (SHOPIFY_CATALOG_SCOPES.every((s) => scopes.includes(s)))
+        return res.redirect(CATALOG_PAGE_PATH);
+      const url = catalogAuthorizationUrl(
+        install.shop,
+        process.env.SHOPIFY_API_KEY ?? "",
+      );
+      if (!url || !req.session)
+        return res.status(503).json({ error: "Authorization unavailable" });
+      (req.session as CatalogAuthorizationSession).catalogAuthorization =
+        createCatalogAuthorizationIntent(install, auth.actorUserId);
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((error) => (error ? reject(error) : resolve())),
+      );
+      return res.redirect(url);
+    } catch {
+      return res
+        .status(503)
+        .json({ error: "Product access could not be verified. Please retry." });
+    }
+  });
+  app.get(CATALOG_RETURN_PATH, async (req, res) => {
+    const auth = await authorize(req, res);
+    if (!auth) return;
+    res.set("Cache-Control", "private, no-store");
+    try {
+      const install = await resolveCatalogInstallation(
+        database,
+        auth.workspaceUserId,
+      );
+      const intent = (req.session as CatalogAuthorizationSession | undefined)
+        ?.catalogAuthorization;
+      if (
+        !install ||
+        !catalogAuthorizationIntentMatches(
+          intent,
+          auth.actorUserId,
+          install.shop,
+        ) ||
+        !catalogAuthorizationInstallationMatches(intent, install)
+      )
+        return res
+          .status(409)
+          .json({
+            error: "Product access return expired. Open Sales Catalog again.",
+          });
+      const scopes = await verifyCatalogAccess(install, requestFor);
+      await refreshCatalogAccess(database, install, scopes);
+      delete (req.session as CatalogAuthorizationSession).catalogAuthorization;
+      await new Promise<void>((resolve, reject) =>
+        req.session.save((error) => (error ? reject(error) : resolve())),
+      );
+      // Declining optional permissions returns to the same catalog with verified missing-scope state.
+      return res.redirect(CATALOG_PAGE_PATH);
+    } catch {
+      return res
+        .status(503)
+        .json({ error: "Product access could not be verified. Please retry." });
+    }
   });
 }
 /** Read-only verification for future checkout callers. Never constructs checkout links. */

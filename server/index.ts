@@ -1,3 +1,4 @@
+import { registerShopifyWebhookBodyParser } from "./shopifyWebhookBodyParser";
 import { registerShopifyPrivacyAlertReceiver } from "./shopifyPrivacyAlertEmail";
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
@@ -242,11 +243,7 @@ app.post(
 );
 
 // Shopify: capture raw bytes in verify callback; HMAC checked via x-shopify-hmac-sha256.
-app.use('/api/shopify/webhooks', express.json({
-  verify: (req: any, _res, buf) => {
-    req.rawBody = buf;
-  }
-}));
+registerShopifyWebhookBodyParser(app);
 
 // Meta: capture raw bytes for X-Hub-Signature-256 (see verifyMetaWebhookSignature).
 // MUST be registered before the global express.json() middleware.

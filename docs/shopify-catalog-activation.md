@@ -71,3 +71,25 @@ Login is only needed if not already authenticated. Confirm the client ID above. 
 6. Inspect `catalogWebhooks` readiness and the shop-specific GraphQL subscription list for the ten granted catalog topics and exact callbacks; use the Dev Dashboard for the seven app-managed subscriptions. With an explicitly approved test/pilot shop, verify signed product/variant/inventory/collection changes trigger targeted refresh, customer/order/privacy processing remains intact, and daily reconciliation recovers missed events. Confirm initial import and current inventory before declaring products ready. Registration confirmation is not proof of successful event delivery.
 
 No app version is published, no authorization gate is enabled, and no merchant grants or production records are modified by preparing this correction.
+
+## Optional-access return correction
+
+The standalone optional-scope request above returns through the app URL, rather than the normal OAuth code callback. It must not run installation provisioning or subscription onboarding. The catalog authorization route now verifies the owned installation's actual grants before asking for consent: if both optional scopes are already granted, it repairs stale catalog metadata and queues the existing worker without asking again.
+
+When consent is needed, the route saves a 15-minute server-session intent bound to the initiating actor, workspace, canonical shop, integration and a token fingerprint before leaving for Shopify. On the app-URL return, normal bootstrap reaches `/api/shopify/install`; a matching existing session routes to `/api/shopify/catalog/return` instead of `/shopify/start`. The return rechecks the current installation and actual Admin API grants, updates only the owned catalog source, consumes the intent and returns to `/app/sales-catalog?source=shopify`. Declined scopes return to the same page with verified missing-permission state. Browser/query claims never grant access. Expired launch intents are consumed and return to Sales Catalog without making provider calls; missing/mismatched return sessions or replaced tokens fail closed; API verification failure leaves a valid intent available to retry. Other app opens and new installations retain existing onboarding behavior.
+
+This path does not exchange a token, recreate an integration/workspace, claim/reset a trial, synchronize billing, grant paid access or send mail/messages. It preserves worker checkpoints, generation and leases, as well as quota/API-error delays. Successful permission verification does not declare products imported or inventory fresh.
+
+Production middleware now captures exact raw bytes for both `/api/shopify/webhooks/*` and `/api/shopify/catalog-webhooks/*` before global parsing. Catalog handlers still require a valid HMAC and installation ownership; no signature check is bypassed. Signed `app/scopes_update` only queues a verified worker check, never copies payload scopes into authorization state. Subscription declarations/registration and optional/required scopes are unchanged by this correction.
+
+### Incident evidence and safe verification
+
+Read-only inspection during investigation found the test source already `ready`, with all four scopes, a completed initial import of 17 products, and successful read-back registration of all ten catalog topics. The completion time was 2026-10-15T06:08:54.699Z. Earlier permission-required state was therefore stale. Request logs showed the approval return traversing `/` → `/api/shopify/install` → `/shopify/start`, while scope-update deliveries returned 401 and no catalog events were persisted. Existing polling recovery completed the import despite the rejected event.
+
+That source snapshot records the worker's successful provider verification; it is not a new live API check. When shell credentials/network access are unavailable, an owner already signed in to the correct merchant can make the existing **read-only** request:
+
+```text
+GET https://app.whachatcrm.com/api/shopify/webhooks/health
+```
+
+Check that `report.permissionVerification` is `verified` and `report.grantedScopes` includes `read_products` plus `read_inventory`. A verification-unavailable result is unknown, not evidence that Shopify denied approval. This endpoint does not register subscriptions. Share only verification status and granted scope names, never tokens or cookies. Do not request another approval, force an import or change billing to resolve a previously stale snapshot. After separately approved deployment, test the optional-access return with an expired-trial fixture/test merchant and confirm unchanged trial, billing and workspace records.
