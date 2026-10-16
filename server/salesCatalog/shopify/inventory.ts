@@ -81,6 +81,7 @@ export async function refreshInventoryBatch(
     shop: string,
     token: string,
   ) => CatalogRequest = shopifyCatalogRequest,
+  backgroundSweep = false,
 ) {
   if (!variantIds.length || variantIds.length > INVENTORY_BATCH_MAX) return [];
   const [source] = await database
@@ -217,7 +218,7 @@ export async function refreshInventoryBatch(
       failures: 0,
       errorCode: null,
       lastVerifiedAt: now,
-      nextAt: now + INVENTORY_POLL_MS,
+      nextAt: backgroundSweep ? now + INVENTORY_POLL_MS : (state.nextAt ?? now),
       apiAfter: now + Math.max(2000, quotaDelay),
     };
     await database.transaction(async (tx: any) => {

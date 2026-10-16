@@ -184,7 +184,8 @@ export function createShopifyCatalogSync(
           .limit(10);
         if (
           pendingInventory.length &&
-          pendingInventory.every((e) => e.topic.startsWith("inventory_"))
+          pendingInventory.every((e) => e.topic.startsWith("inventory_")) &&
+          inventoryWake(checkpoint) > Date.now()
         ) {
           const resourceIds = [
             ...new Set(
@@ -278,7 +279,10 @@ export function createShopifyCatalogSync(
             return;
           }
         }
-        if (!pendingInventory.length) {
+        if (
+          !pendingInventory.length ||
+          inventoryWake(checkpoint) <= Date.now()
+        ) {
           if (inventoryWake(checkpoint) > Date.now()) {
             await database
               .update(catalogSources)
@@ -333,6 +337,7 @@ export function createShopifyCatalogSync(
               leaseToken,
               variants.map((v) => v.id),
               requestFor,
+              true,
             );
           else
             await database

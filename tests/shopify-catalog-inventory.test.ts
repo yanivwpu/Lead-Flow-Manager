@@ -454,3 +454,74 @@ test("mismatched live identities and installation changes cannot renew inventory
     await f.cleanup();
   }
 });
+
+test("foreground verification does not postpone periodic work and queued events cannot starve an overdue sweep", async () => {
+  const f = await setup(65),
+    { db, source } = f;
+  let calls = 0;
+  const sizes: number[] = [];
+  const fixture = fixtureInventoryRequest(db);
+  const factory =
+    (shop: string, token: string) =>
+    async (q: string, v?: Record<string, unknown>) => {
+      calls++;
+      sizes.push((v!.ids as string[]).length);
+      return fixture(shop, token)(q, v);
+    };
+  const store = createCommerceStore(db, factory),
+    sync = createShopifyCatalogSync(db, factory);
+  try {
+    await store.markInventoryActivity("tenant-a", source.id);
+    const due = Date.now() - 1000;
+    const [s] = await db
+      .select()
+      .from(catalogSources)
+      .where(eq(catalogSources.id, source.id));
+    await db
+      .update(catalogSources)
+      .set({
+        checkpoint: {
+          ...(s.checkpoint as any),
+          inventory: {
+            ...(s.checkpoint as any).inventory,
+            nextAt: due,
+            apiAfter: 0,
+          },
+        },
+      })
+      .where(eq(catalogSources.id, source.id));
+    assert.equal(
+      (await store.verifyForPurchase("tenant-a", source.id, ["v0"])).length,
+      1,
+    );
+    const [after] = await db
+      .select()
+      .from(catalogSources)
+      .where(eq(catalogSources.id, source.id));
+    assert.equal(
+      (after.checkpoint as any).inventory.nextAt,
+      due,
+      "live demand must not slide the sweep deadline",
+    );
+    await db
+      .insert(catalogEvents)
+      .values({
+        userId: "tenant-a",
+        sourceId: source.id,
+        eventId: "busy-inventory-event",
+        topic: "inventory_levels/update",
+        resourceId: "1",
+      });
+    await inventoryDue(db, source.id);
+    await sync.tick();
+    assert.equal(calls, 2);
+    assert.deepEqual(sizes, [1, 50]);
+    assert.equal(
+      (await db.select().from(catalogEvents))[0].processedAt,
+      null,
+      "due sweep gets one bounded turn before processing more events",
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
