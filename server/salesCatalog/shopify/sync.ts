@@ -1,3 +1,10 @@
+import {
+  inventoryState,
+  inventoryWake,
+  refreshInventoryBatch,
+  INVENTORY_POLL_MS,
+  type InventoryState,
+} from "./inventory";
 import { isShopifyProductPublished } from "./publication";
 import crypto from "node:crypto";
 import type {
@@ -34,6 +41,7 @@ import {
 } from "./api";
 
 type Checkpoint = {
+  inventory?: InventoryState;
   webhooks?: CatalogWebhookState;
   mode: "full" | "events";
   after: string | null;
@@ -124,7 +132,262 @@ export function createShopifyCatalogSync(
     const install = maybeInstall;
     let checkpoint = source.checkpoint as Partial<Checkpoint>;
     try {
+      if ((inventoryState(checkpoint).apiAfter ?? 0) > Date.now()) {
+        await database
+          .update(catalogSources)
+          .set({
+            leaseToken: null,
+            leaseExpiresAt: null,
+            nextAttemptAt: new Date(inventoryState(checkpoint).apiAfter!),
+          })
+          .where(
+            and(
+              eq(catalogSources.id, sourceId),
+              eq(catalogSources.leaseToken, leaseToken),
+            ),
+          );
+        return;
+      }
       const request = requestFor(install.shop, install.token);
+      const reconcileAt = source.lastSyncAt
+        ? source.lastSyncAt.getTime() +
+          catalogReconciliationIntervalMs(
+            await productCount(install.userId, sourceId),
+            checkpoint.lastFullDurationMs,
+          )
+        : 0;
+      const hooksAt = registerWebhooks
+        ? checkpoint.webhooks?.scopesKey !==
+          [...(source.grantedScopes as string[])].sort().join(",")
+          ? 0
+          : Date.parse(checkpoint.webhooks?.nextCheckAt ?? "")
+        : Infinity;
+      if (
+        !checkpoint.mode &&
+        source.initialSyncCompletedAt &&
+        !source.errorCode &&
+        source.status === "ready" &&
+        reconcileAt > Date.now() &&
+        source.requestedAt <= source.lastSyncAt! &&
+        (!registerWebhooks || hooksAt > Date.now())
+      ) {
+        const pendingInventory = await database
+          .select()
+          .from(catalogEvents)
+          .where(
+            and(
+              eq(catalogEvents.sourceId, sourceId),
+              isNull(catalogEvents.processedAt),
+            ),
+          )
+          .orderBy(catalogEvents.receivedAt, catalogEvents.id)
+          .limit(10);
+        if (
+          pendingInventory.length &&
+          pendingInventory.every((e) => e.topic.startsWith("inventory_"))
+        ) {
+          const resourceIds = [
+            ...new Set(
+              pendingInventory.map(
+                (e) => `gid://shopify/InventoryItem/${e.resourceId}`,
+              ),
+            ),
+          ];
+          const mapped = await database
+            .select({
+              id: catalogVariants.id,
+              item: catalogVariants.inventoryItemId,
+            })
+            .from(catalogVariants)
+            .where(
+              and(
+                eq(catalogVariants.userId, install.userId),
+                eq(catalogVariants.sourceId, sourceId),
+                sql`${catalogVariants.inventoryItemId} IN (${sql.join(
+                  resourceIds.map((id) => sql`${id}`),
+                  sql`,`,
+                )})`,
+              ),
+            )
+            .limit(50);
+          if (resourceIds.every((id) => mapped.some((v) => v.item === id))) {
+            await refreshInventoryBatch(
+              database,
+              sourceId,
+              leaseToken,
+              mapped.map((v) => v.id),
+              requestFor,
+            );
+            await database.transaction(async (tx: any) => {
+              await assertCatalogInstallation(tx, install);
+              const [owned] = await tx
+                .select()
+                .from(catalogSources)
+                .where(
+                  and(
+                    eq(catalogSources.id, sourceId),
+                    eq(catalogSources.leaseToken, leaseToken),
+                    sql`${catalogSources.leaseExpiresAt}>NOW()`,
+                  ),
+                )
+                .for("update");
+              if (!owned) return;
+              if (!inventoryState(owned.checkpoint).errorCode)
+                await tx
+                  .update(catalogEvents)
+                  .set({ processedAt: new Date() })
+                  .where(
+                    and(
+                      eq(catalogEvents.sourceId, sourceId),
+                      sql`${catalogEvents.id} IN (${sql.join(
+                        pendingInventory.map((e) => sql`${e.id}`),
+                        sql`,`,
+                      )})`,
+                    ),
+                  );
+              const [remaining] = await tx
+                .select({ id: catalogEvents.id })
+                .from(catalogEvents)
+                .where(
+                  and(
+                    eq(catalogEvents.sourceId, sourceId),
+                    isNull(catalogEvents.processedAt),
+                  ),
+                )
+                .limit(1);
+              await tx
+                .update(catalogSources)
+                .set({
+                  leaseToken: null,
+                  leaseExpiresAt: null,
+                  nextAttemptAt: new Date(
+                    Math.max(
+                      inventoryState(owned.checkpoint).apiAfter ?? 0,
+                      remaining
+                        ? Date.now()
+                        : Math.min(
+                            reconcileAt,
+                            Number.isFinite(hooksAt) ? hooksAt : Infinity,
+                            inventoryWake(owned.checkpoint),
+                          ),
+                    ),
+                  ),
+                })
+                .where(eq(catalogSources.id, sourceId));
+            });
+            return;
+          }
+        }
+        if (!pendingInventory.length) {
+          if (inventoryWake(checkpoint) > Date.now()) {
+            await database
+              .update(catalogSources)
+              .set({
+                leaseToken: null,
+                leaseExpiresAt: null,
+                nextAttemptAt: new Date(
+                  Math.min(
+                    reconcileAt,
+                    Number.isFinite(hooksAt) ? hooksAt : Infinity,
+                    inventoryWake(checkpoint),
+                  ),
+                ),
+              })
+              .where(
+                and(
+                  eq(catalogSources.id, sourceId),
+                  eq(catalogSources.leaseToken, leaseToken),
+                ),
+              );
+            return;
+          }
+          const variants = await database
+            .select({ id: catalogVariants.id })
+            .from(catalogVariants)
+            .innerJoin(
+              catalogProducts,
+              eq(catalogProducts.id, catalogVariants.productId),
+            )
+            .where(
+              and(
+                eq(catalogVariants.sourceId, sourceId),
+                eq(catalogVariants.userId, install.userId),
+                eq(catalogProducts.sourceId, sourceId),
+                eq(catalogProducts.userId, install.userId),
+                eq(catalogProducts.status, "ACTIVE"),
+                eq(catalogProducts.published, true),
+                eq(catalogProducts.complete, true),
+                isNull(catalogProducts.deletedAt),
+                eq(catalogVariants.requiresComponents, false),
+                sql`${catalogVariants.price} IS NOT NULL`,
+                eq(catalogVariants.currency, source.currency!),
+                sql`${catalogVariants.verifiedAt}<NOW()-interval '10 minutes'`,
+              ),
+            )
+            .orderBy(catalogVariants.verifiedAt, catalogVariants.id)
+            .limit(50);
+          if (variants.length)
+            await refreshInventoryBatch(
+              database,
+              sourceId,
+              leaseToken,
+              variants.map((v) => v.id),
+              requestFor,
+            );
+          else
+            await database
+              .update(catalogSources)
+              .set({
+                checkpoint: sql`jsonb_set(${catalogSources.checkpoint},'{inventory}',COALESCE(${catalogSources.checkpoint}->'inventory','{}'::jsonb) || ${JSON.stringify({ nextAt: Date.now() + INVENTORY_POLL_MS })}::jsonb)`,
+              })
+              .where(
+                and(
+                  eq(catalogSources.id, sourceId),
+                  eq(catalogSources.leaseToken, leaseToken),
+                ),
+              );
+          const [arrived] = await database
+            .select({ id: catalogEvents.id })
+            .from(catalogEvents)
+            .where(
+              and(
+                eq(catalogEvents.sourceId, sourceId),
+                isNull(catalogEvents.processedAt),
+              ),
+            )
+            .limit(1);
+          const [latest] = await database
+            .select({ checkpoint: catalogSources.checkpoint })
+            .from(catalogSources)
+            .where(eq(catalogSources.id, sourceId))
+            .limit(1);
+          await database
+            .update(catalogSources)
+            .set({
+              leaseToken: null,
+              leaseExpiresAt: null,
+              nextAttemptAt: new Date(
+                Math.min(
+                  reconcileAt,
+                  Number.isFinite(hooksAt) ? hooksAt : Infinity,
+                  arrived
+                    ? Math.max(
+                        Date.now(),
+                        inventoryState(latest?.checkpoint).apiAfter ?? 0,
+                      )
+                    : inventoryWake(latest?.checkpoint),
+                ),
+              ),
+            })
+            .where(
+              and(
+                eq(catalogSources.id, sourceId),
+                eq(catalogSources.leaseToken, leaseToken),
+              ),
+            );
+          return;
+        }
+      }
       const meta = await request(SHOPIFY_CATALOG_META_QUERY);
       const scopes = meta.currentAppInstallation?.accessScopes?.map(
         (s: any) => s.handle,
@@ -177,6 +440,14 @@ export function createShopifyCatalogSync(
             )
             .for("update");
           if (!owned) throw new Error("lease_lost");
+          const demand = inventoryState(owned.checkpoint);
+          checkpoint.inventory = {
+            ...inventoryState(checkpoint),
+            activeUntil: Math.max(
+              inventoryState(checkpoint).activeUntil ?? 0,
+              demand.activeUntil ?? 0,
+            ),
+          };
           await run(tx);
         });
       }
@@ -247,6 +518,7 @@ export function createShopifyCatalogSync(
               nextAttemptAt: new Date(
                 Math.min(
                   webhookDeadline(),
+                  inventoryWake(checkpoint),
                   source.lastSyncAt!.getTime() +
                     catalogReconciliationIntervalMs(
                       await productCount(install.userId, sourceId),
@@ -301,6 +573,7 @@ export function createShopifyCatalogSync(
           startedAt: mode === "full" ? new Date().toISOString() : undefined,
           lastFullDurationMs: checkpoint.lastFullDurationMs,
           webhooks: checkpoint.webhooks,
+          inventory: checkpoint.inventory,
           after: null,
           pending: full ? [] : [...new Set(ids)],
           end: mode === "events",
@@ -335,6 +608,14 @@ export function createShopifyCatalogSync(
                 1000,
             ),
           );
+        if (delay > 0)
+          checkpoint.inventory = {
+            ...inventoryState(checkpoint),
+            apiAfter: Math.max(
+              inventoryState(checkpoint).apiAfter ?? 0,
+              Date.now() + delay,
+            ),
+          };
       }
       for (let budget = 0; budget < 6; budget++) {
         if (!checkpoint.pending!.length) {
@@ -406,6 +687,7 @@ export function createShopifyCatalogSync(
                   checkpoint: {
                     lastFullDurationMs,
                     webhooks: checkpoint.webhooks,
+                    inventory: checkpoint.inventory,
                   },
                   generation: null,
                   errorCode: null,
@@ -414,7 +696,11 @@ export function createShopifyCatalogSync(
                     remaining || manualPending
                       ? completedAt
                       : new Date(
-                          Math.min(reconcileAt.getTime(), webhookDeadline()),
+                          Math.min(
+                            reconcileAt.getTime(),
+                            webhookDeadline(),
+                            inventoryWake(checkpoint),
+                          ),
                         ),
                   leaseToken: null,
                   leaseExpiresAt: null,
@@ -812,6 +1098,11 @@ export function createShopifyCatalogSync(
                 searchText: sql`${record.title} || ' ' || ${record.description} || ' ' || ${record.productType ?? ""} || ' ' || COALESCE((SELECT string_agg(COALESCE(sku,'') || ' ' || title || ' ' || options::text,' ') FROM catalog_variants WHERE product_id=${record.id}),'') || ' ' || COALESCE((SELECT string_agg(c.title,' ') FROM catalog_memberships m JOIN catalog_collections c ON c.id=m.collection_id WHERE m.product_id=${record.id}),'')`,
               })
               .where(eq(catalogProducts.id, record.id));
+            checkpoint.inventory = {
+              ...inventoryState(checkpoint),
+              errorCode: null,
+              failures: 0,
+            };
             checkpoint.pending!.shift();
             delete checkpoint.current;
           } else

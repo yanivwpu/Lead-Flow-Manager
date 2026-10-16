@@ -129,7 +129,7 @@ export function verifiedProductUrl(
 }
 export function catalogSearchTerms(message: string): string {
   const stop = new Set(
-    "do you have this that item product products recommend which what how much does specific cost sizes size available availability is it in stock under over between and the a an please me show would can for i want buy to of color colour cuanto tienes precio producto productos en de el la hay azul talla comprar".split(
+    "do you have this that item product products recommend which what how much does specific cost sizes size available availability is it in stock under over between and the a an please me show would can for i want buy purchase to of color colour cuanto tienes precio producto productos en de el la hay azul talla comprar".split(
       " ",
     ),
   );

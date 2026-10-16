@@ -179,7 +179,11 @@ test("indexed connected search across 10000 products is bounded, deterministic, 
       });
       await sync.tick();
       for (let i = 0; i < 10; i++) assert.equal(await sync.tick(), false);
-      assert.equal(metaCalls, 1);
+      assert.equal(
+        metaCalls,
+        0,
+        "idle inventory recovery must not add metadata API calls",
+      );
       const [scheduled] = await db
         .select()
         .from(catalogSources)

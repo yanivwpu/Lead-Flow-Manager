@@ -12,7 +12,7 @@ export function validateCommerceDraft(input: {
     ) ||
     /\b\d+\s+(?:units|left|in stock|unidades)\b/i.test(draft) ||
     (input.inventoryUnverified &&
-      /\b(?:in stock|available now|ready to ship|en stock|disponible ahora)\b|במלאי|זמין עכשיו/i.test(
+      /\b(?:recommend\w*|buy|purchase|in stock|available|ready to ship|en stock|disponib\w*|recomiend\w*)\b|במלאי|זמין|ממליצ|המלצ|לקנות|לרכוש/i.test(
         draft,
       )) ||
     (draft.match(/https?:\/\/[^\s<>]+/g) ?? []).some(

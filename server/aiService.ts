@@ -334,7 +334,7 @@ export class AIService {
         liveBusinessDataBlock = live.promptBlock;
         const connectedRecords = live.records.filter(r => r.providerId === "shopify");
         connectedProductUrls = connectedRecords.flatMap(r => [String(r.data.productUrl || ""), ...((r.data.images as Array<{url:string}> | undefined) ?? []).map(i => i.url)]).filter(u => /^https:\/\//i.test(u));
-        hasUnverifiedProductInventory = connectedRecords.length === 0 || connectedRecords.some(r => !["available", "not_tracked"].includes(String(r.data.availability)));
+        hasUnverifiedProductInventory = connectedRecords.length === 0 || connectedRecords.some(r => r.data.purchaseVerified !== true || !["available", "not_tracked"].includes(String(r.data.availability)));
         liveRecordsForBundle = live.records.map((r) => ({
           providerId: r.providerId,
           summary: String(r.summary || "").trim(),

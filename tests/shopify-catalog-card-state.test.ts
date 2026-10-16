@@ -1,3 +1,4 @@
+import { fixtureInventoryRequest } from "./shopify-inventory-fixture";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { eq } from "drizzle-orm";
@@ -18,7 +19,12 @@ import { validateCommerceDraft } from "../shared/commerceGrounding";
 test("all-variant summary separates publication, out of stock, unavailable and a purchasable variant beyond the preview", async () => {
   const f = await catalogFixture(),
     db = f.database,
-    store = createCommerceStore(db);
+    store = createCommerceStore(
+      db,
+      fixtureInventoryRequest(db, (n) =>
+        n.product.id === "gid://shopify/Product/stale" ? null : n,
+      ),
+    );
   try {
     const source = (await ensureCatalogSource(db, "tenant-a"))!;
     await db
@@ -45,29 +51,23 @@ test("all-variant summary separates publication, out of stock, unavailable and a
       "no-currency",
     ];
     for (const id of states) {
-      await db
-        .insert(catalogProducts)
-        .values({
-          id,
-          userId: "tenant-a",
-          sourceId: source.id,
-          externalId: `gid://shopify/Product/${id}`,
-          title: `Snowboard ${id}`,
-          searchText: "snowboard",
-          description: "Provider description",
-          status:
-            id === "draft"
-              ? "DRAFT"
-              : id === "archived"
-                ? "ARCHIVED"
-                : "ACTIVE",
-          published: id !== "unpublished",
-          complete: id !== "incomplete",
-          variantCount: id === "mixed" ? 51 : 1,
-          productUrl: null,
-          providerUpdatedAt: new Date(),
-          syncedAt: new Date(),
-        });
+      await db.insert(catalogProducts).values({
+        id,
+        userId: "tenant-a",
+        sourceId: source.id,
+        externalId: `gid://shopify/Product/${id}`,
+        title: `Snowboard ${id}`,
+        searchText: "snowboard",
+        description: "Provider description",
+        status:
+          id === "draft" ? "DRAFT" : id === "archived" ? "ARCHIVED" : "ACTIVE",
+        published: id !== "unpublished",
+        complete: id !== "incomplete",
+        variantCount: id === "mixed" ? 51 : 1,
+        productUrl: null,
+        providerUpdatedAt: new Date(),
+        syncedAt: new Date(),
+      });
       await db.insert(catalogVariants).values(
         Array.from({ length: id === "mixed" ? 51 : 1 }, (_, index) => ({
           id: `${id}-${index}`,
@@ -139,6 +139,7 @@ test("all-variant summary separates publication, out of stock, unavailable and a
       currency: "USD",
       availability: "available",
       freshness: "fresh",
+      purchaseVerified: true,
       productUrl: null,
       images: [],
       options: [{ name: "Size", value: "50" }],

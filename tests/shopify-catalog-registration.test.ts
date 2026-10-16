@@ -204,6 +204,15 @@ test("leased worker registers only granted catalog topics, preserves checkpoints
     // Additional actual grants reset the cycle; existing topics are read back, not duplicated.
     p.grants.push("read_inventory");
     await db
+      .insert(catalogEvents)
+      .values({
+        userId: "tenant-a",
+        sourceId: source.id,
+        eventId: "actual-scope-update",
+        topic: "app/scopes_update",
+        resourceId: "0",
+      });
+    await db
       .update(catalogSources)
       .set({ nextAttemptAt: new Date() })
       .where(eq(catalogSources.id, source.id));

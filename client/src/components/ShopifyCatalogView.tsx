@@ -8,6 +8,8 @@ export function ShopifyCatalogView(props: {
     connection: string;
     missingScopes: string[];
     eligibleProductCount: number;
+    publishedProductCount?: number;
+    inventoryUnverifiedProductCount?: number;
     inventoryCapability: string;
     lastSyncAt: string | null;
     freshness: string;
@@ -65,6 +67,18 @@ export function ShopifyCatalogView(props: {
             <span>
               {s.eligibleProductCount} {t("salesCatalog.commerce.products")}
             </span>
+            {s.publishedProductCount !== undefined && (
+              <span>
+                {s.publishedProductCount}{" "}
+                {t("salesCatalog.commerce.publishedProducts")}
+              </span>
+            )}
+            {s.inventoryUnverifiedProductCount !== undefined && (
+              <span>
+                {s.inventoryUnverifiedProductCount}{" "}
+                {t("salesCatalog.commerce.inventoryUnverified")}
+              </span>
+            )}
             <span>
               {t("salesCatalog.commerce.freshness")}:{" "}
               {t(
