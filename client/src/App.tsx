@@ -421,17 +421,17 @@ function Router() {
             enterInbox(
               typeof data.redirectTo === "string"
                 ? data.redirectTo
-                : `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+                : "/app/inbox?shopify_billing=verification_pending",
             );
             return;
           }
           enterInbox(
-            `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+            "/app/inbox?shopify_billing=verification_pending",
           );
         })
         .catch(() => {
           enterInbox(
-            `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planHandle || "free")}`,
+            "/app/inbox?shopify_billing=verification_pending",
           );
         });
       return;

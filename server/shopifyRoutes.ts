@@ -1,3 +1,4 @@
+import { respondShopifyBillingReturn } from "./shopifyBillingReturn";
 import { catalogAuthorizationReturnPath } from "./salesCatalog/shopify/authorization";
 import { verifyWebhookHmac } from "./shopifyWebhookSignature";
 import { createShopifyOrderWebhookHandler } from "./shopifyOrderWebhookHandler";
@@ -402,53 +403,7 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/billing/callback', async (req: Request, res: Response) => {
-  console.log("[Shopify Billing Callback] Host:", {
-    host: req.get("host"),
-    "x-forwarded-host": req.headers["x-forwarded-host"],
-    "x-forwarded-proto": req.headers["x-forwarded-proto"],
-  });
-  const { shop, charge_id } = req.query;
-
-  if (!shop || typeof shop !== 'string') {
-    return res.status(400).json({ error: 'Missing shop parameter' });
-  }
-
-  try {
-    const user = await storage.getUserByShopifyShop(shop);
-
-    if (!user || !user.shopifyAccessToken) {
-      return res.status(404).json({ error: 'Shop not found' });
-    }
-
-    const planHandle =
-      typeof req.query.plan_handle === 'string' ? req.query.plan_handle.trim() : undefined;
-
-    const synced = await syncShopifyBillingToUser(
-      user.id,
-      shop,
-      user.shopifyAccessToken,
-      planHandle,
-    );
-
-    if (synced.ok) {
-      const planParam =
-        synced.aiBrainAddon && synced.billingPlan !== 'free'
-          ? 'ai-brain'
-          : synced.billingPlan;
-      return res.redirect(`/app/inbox?shopify_billing=success&plan=${encodeURIComponent(planParam)}`);
-    }
-
-    await storage.updateUser(user.id, {
-      shopifySubscriptionStatus: 'cancelled',
-    });
-
-    res.redirect(`/app/inbox?shopify_billing=declined`);
-  } catch (error) {
-    console.error('Shopify billing callback error:', error);
-    res.status(500).json({ error: 'Billing verification failed' });
-  }
-});
+router.get('/billing/callback', (req, res) => respondShopifyBillingReturn(req, res, 'redirect'));
 
 router.post('/billing/change-plan', shopifySessionMiddleware(), async (req: Request, res: Response) => {
   const { shop } = (req as any).shopifySession;
@@ -692,39 +647,7 @@ router.post('/webhooks/customers-update', createShopifyCustomerWebhookHandler("c
 }));
 
 /** After Managed Pricing approval redirect (?plan_handle=) — sync Shopify → DB (session auth). */
-router.get('/billing/sync-return', async (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const userId = (req.user as { id: string }).id;
-  const planHandle =
-    typeof req.query.plan_handle === 'string' ? req.query.plan_handle.trim() : undefined;
-
-  try {
-    const user = await storage.getUserForSession(userId);
-    if (!user?.shopifyShop || !user.shopifyAccessToken) {
-      return res.status(400).json({ error: 'Shopify shop not linked' });
-    }
-
-    const synced = await syncShopifyBillingToUser(
-      user.id,
-      user.shopifyShop,
-      user.shopifyAccessToken,
-      planHandle,
-    );
-
-    res.json({
-      ok: synced.ok,
-      billingPlan: synced.billingPlan,
-      shopifySubscriptionStatus: synced.shopifySubscriptionStatus,
-      redirectTo: `/app/inbox?shopify_billing=success&plan=${encodeURIComponent(synced.billingPlan)}`,
-    });
-  } catch (error) {
-    console.error('[ShopifyBilling] sync-return error:', error);
-    res.status(500).json({ error: 'Failed to sync Shopify subscription' });
-  }
-});
+router.get('/billing/sync-return', (req, res) => respondShopifyBillingReturn(req, res, 'json'));
 
 /** Shopify App Pricing — plan selection URL for session-authenticated web app users. */
 router.get('/billing/managed-pricing-url', async (req: Request, res: Response) => {
