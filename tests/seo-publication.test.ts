@@ -10,6 +10,16 @@ import { publishedSeoHtml,seoContentBlocks,supportsSeoContentRoute } from "../sh
 process.env.DATABASE_URL ||= "postgres://test:test@localhost/test";
 const {db}=await import("../drizzle/db");
 const {requestSeoPublication,runSeoPublicationOnce}=await import("../server/seo/publicationService");
+const {seoAutopilotRefreshEligible}=await import("../server/seo/autopilotService");
+const attemptTime=Date.parse("2026-10-17T15:00:00Z");
+const refreshRow=(status:string,category:string|null,updatedAt:string)=>({status,refresh_failure_category:category,updated_at:updatedAt});
+assert.equal(seoAutopilotRefreshEligible(refreshRow("revision_required",null,"2026-10-17T14:59:00Z"),attemptTime),true,"first refresh is immediately eligible");
+assert.equal(seoAutopilotRefreshEligible(refreshRow("revision_required","NO_MATERIAL_IMPROVEMENT","2026-10-15T00:00:00Z"),attemptTime),false,"materiality failures must not retry without a changed proposal");
+assert.equal(seoAutopilotRefreshEligible(refreshRow("revision_required","REFRESH_DATA_UNAVAILABLE","2026-10-17T14:59:00Z"),attemptTime),false,"transient failures respect the 24-hour cooldown");
+assert.equal(seoAutopilotRefreshEligible(refreshRow("revision_required","REFRESH_DATA_UNAVAILABLE","2026-10-16T14:59:00Z"),attemptTime),true,"transient failures retry after cooldown");
+assert.equal(seoAutopilotRefreshEligible(refreshRow("proposed",null,"2026-10-15T00:00:00Z"),attemptTime),false,"only revision-required rows can refresh");
+assert.equal(seoAutopilotRefreshEligible(refreshRow("revision_required","REFRESH_DATA_UNAVAILABLE","invalid"),attemptTime),false,"invalid timestamps do not bypass retry backoff");
+
 const content="### Evaluating your team workflow\n\n"+"A shared inbox helps a team manage WhatsApp conversations and follow-ups together. ".repeat(10).trim();
 const proposal={actionType:"content_expansion" as const,proposedContent:content,explanation:"Help the visitor compare their actual team workflow before choosing an alternative.",insertionLocation:"Insert after: existing heading",expectedBenefit:"More useful guidance for visitors.",risk:"medium" as const,confidence:.8,automaticExecutionEligible:false,rollbackConcept:"Restore the prior version in Git history.",evidenceIds:["e1"],factValidationStatus:"passed" as const,generatedAt:new Date().toISOString()};
 const action={status:"approved",actionType:"content_expansion",targetPage:"https://www.whachatcrm.com/respond-io-alternative",currentVersion:1};
