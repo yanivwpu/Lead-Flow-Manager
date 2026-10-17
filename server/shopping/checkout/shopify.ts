@@ -48,12 +48,12 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
     }
     if ([401,403].includes(response.status)) throw new CheckoutError("setup_required",600_000);
     if (!response.ok) throw new CheckoutError(mutation ? "ambiguous" : "unavailable");
-    if (response.headers.get("x-shopify-api-version") !== STOREFRONT_API_VERSION) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response");
+    if (response.headers.get("x-shopify-api-version") !== STOREFRONT_API_VERSION) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"api_version_mismatch");
     let body: any;
-    try { body = await response.json(); } catch { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response"); }
+    try { body = await response.json(); } catch { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"invalid_json"); }
     if (body?.errors?.length) {
       if (!body.data && body.errors.every((e:any)=>e?.extensions?.code === "THROTTLED")) { nextRequestAt=Date.now()+60_000; throw new CheckoutError("throttled",60_000); }
-      throw new CheckoutError(mutation ? "ambiguous" : "invalid_response");
+      throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"graphql_error");
     }
     if (!body?.data) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response");
     return body.data;

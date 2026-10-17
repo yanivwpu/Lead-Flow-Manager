@@ -1,3 +1,4 @@
+import { CheckoutGuardError, verificationStage, verificationFailure } from './preflightDiagnostics';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { compareMoney } from '../../../shared/shoppingAssistant';
@@ -39,19 +40,24 @@ export async function runValidation(raw: unknown, deps: {
   consume: () => Promise<void>;
   saveReceipt: (receipt: unknown)=>Promise<void>;
 }) {
-  const selection = selectionSchema.parse(raw);
+  const selection = await verificationStage('selection',async()=>selectionSchema.parse(raw));
   if (deps.approval !== undefined) authorize(selection,deps.approval);
-  const install = await deps.installation();
-  if (!install || install.shop !== SHOP) throw Error('installation_unavailable');
-  const request = deps.requestFor(SHOP, install.token);
-  const meta = await request(META);
-  const scopes = meta.currentAppInstallation?.accessScopes?.map((s:any)=>s.handle);
-  if (meta.shop?.myshopifyDomain !== SHOP || meta.shop?.plan?.partnerDevelopment !== true ||
-      meta.currentAppInstallation?.app?.apiKey !== 'e4585d4da1434c9e5649a2269e716076' ||
-      !Array.isArray(scopes) || !['read_products','read_inventory'].every(s=>scopes.includes(s)))
-    throw Error('development_installation_not_attested');
+  const install = await verificationStage('installation',deps.installation);
+  if (!install || install.shop !== SHOP) verificationFailure('installation','unavailable');
+  const request = (query:string, variables?:Record<string,unknown>)=>verificationStage(
+    query===META ? 'admin_metadata' : 'admin_variant',()=>deps.requestFor(SHOP,install.token)(query,variables));
+  const meta = await verificationStage('admin_metadata',()=>request(META));
+  const grants = meta?.currentAppInstallation?.accessScopes;
+  const scopes = Array.isArray(grants) ? grants.map((s:any)=>s?.handle) : null;
+  if (meta?.shop?.myshopifyDomain !== SHOP) throw new CheckoutGuardError('development_installation_not_attested_shop');
+  if (meta.shop?.plan?.partnerDevelopment !== true) throw new CheckoutGuardError('development_installation_not_attested_plan');
+  if (meta.currentAppInstallation?.app?.apiKey !== 'e4585d4da1434c9e5649a2269e716076')
+    throw new CheckoutGuardError('development_installation_not_attested_app');
+  if (!Array.isArray(scopes) || !['read_products','read_inventory'].every(s=>scopes.includes(s)))
+    throw new CheckoutGuardError('development_installation_not_attested_scopes');
   const data = await request(SHOPIFY_INVENTORY_BATCH_QUERY,{ids:[selection.variantId]});
-  const v = data.nodes?.[0];
+  if (!data || !Array.isArray(data.nodes) || !data.shop) verificationFailure('admin_variant','invalid_response');
+  const v = data.nodes[0];
   if (data.shop?.myshopifyDomain !== SHOP || data.shop.currencyCode !== selection.currency ||
       !Array.isArray(data.nodes) || data.nodes.length !== 1 || v?.id !== selection.variantId ||
       v.product?.id !== selection.productId || !isShopifyProductPublished(v.product) ||
@@ -59,19 +65,19 @@ export async function runValidation(raw: unknown, deps: {
       typeof v.price !== 'string' || !/^\d+(?:\.\d{1,6})?$/.test(v.price) || compareMoney(v.price,selection.price)!==0 ||
       JSON.stringify(v.selectedOptions)!==JSON.stringify(selection.options) ||
       typeof v.inventoryItem?.tracked !== 'boolean' || !['CONTINUE','DENY'].includes(v.inventoryPolicy))
-    throw Error('catalog_selection_unavailable_or_changed');
+    throw new CheckoutGuardError('catalog_selection_unavailable_or_changed');
   const unrestricted = v.inventoryItem.tracked === false || v.inventoryPolicy === 'CONTINUE';
   if (!unrestricted && (!Number.isSafeInteger(v.inventoryQuantity) || v.inventoryQuantity < selection.quantity))
-    throw Error('inventory_insufficient');
+    throw new CheckoutGuardError('inventory_insufficient');
   const {shop,userId,...item} = selection;
   const verified = {...item,inventoryProof:{at:Date.now(),quantity:v.inventoryQuantity ?? null,unrestricted}};
   const provider = createShopifyCheckoutProvider({shop:SHOP,credential:{kind:'tokenless'},fetch:deps.storefrontFetch});
-  await provider.verify(verified);
+  await verificationStage('storefront',()=>provider.verify(verified));
   if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false};
   authorize(selection,deps.approval);
-  const current = await deps.installation();
+  const current = await verificationStage('installation',deps.installation);
   if (!current || current.shop!==SHOP || current.integrationId!==install.integrationId || current.token!==install.token)
-    throw Error('installation_changed');
+    throw new CheckoutGuardError('installation_changed');
   // Caller must commit a durable claim before prepare; never clear it after failure.
   await deps.consume();
   const receipt = await provider.prepare(verified);
