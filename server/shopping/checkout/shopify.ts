@@ -16,7 +16,11 @@ export function validateCheckoutUrl(raw: unknown, shop: string, attestedHost?:st
     return u.href;
   } catch { throw new CheckoutError("invalid_response"); }
 }
-const VERIFY = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { id availableForSale quantityAvailable quantityRule { minimum maximum increment } currentlyNotInStock requiresComponents selectedOptions { name value } price { amount currencyCode } product { id requiresSellingPlan } } } }`;
+// Audited against the 2026-10 field reference; see docs/shopify-checkout-phase2b-handoff.md.
+// Keep token-only inventory out of the tokenless document, rather than removing fields by string replacement.
+const VERIFY_FIELDS = `id availableForSale quantityRule { minimum maximum increment } requiresComponents selectedOptions { name value } price { amount currencyCode } product { id requiresSellingPlan }`;
+const VERIFY_TOKENLESS = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { ${VERIFY_FIELDS} } } }`;
+const VERIFY = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { ${VERIFY_FIELDS} quantityAvailable currentlyNotInStock } } }`;
 const CART_FIELDS = `id checkoutUrl totalQuantity lines(first:2) { nodes { quantity merchandise { ... on ProductVariant { id product { id } } } cost { amountPerQuantity { amount currencyCode } } } }`;
 const CREATE = `mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${CART_FIELDS} } userErrors { code } warnings { code } } }`;
 const STATUS = `query CheckoutStatus($id:ID!) { cart(id:$id) { ${CART_FIELDS} } }`;
@@ -74,7 +78,7 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
         const proof = item.inventoryProof, age = Date.now() - (proof?.at ?? 0);
         if (!proof || !Number.isFinite(age) || age < 0 || age > 60_000 || (!proof.unrestricted && (!Number.isInteger(proof.quantity) || proof.quantity! < item.quantity))) throw new CheckoutError("unavailable");
       }
-      const v=(await request(tokenless ? VERIFY.replace("quantityAvailable ", "") : VERIFY,{id:item.variantId})).node;
+      const v=(await request(tokenless ? VERIFY_TOKENLESS : VERIFY,{id:item.variantId})).node;
       if(!v || v.id!==item.variantId || v.product?.id!==item.productId || v.availableForSale!==true || v.requiresComponents!==false || v.product.requiresSellingPlan!==false || (!tokenless && v.currentlyNotInStock!==true && (!Number.isInteger(v.quantityAvailable) || v.quantityAvailable<item.quantity))) throw new CheckoutError("unavailable");
       const rule=v.quantityRule;
       if(!rule || !Number.isInteger(rule.minimum) || rule.minimum<1 || !Number.isInteger(rule.increment) || rule.increment<1 || (rule.maximum!==null && (!Number.isInteger(rule.maximum)||rule.maximum<rule.minimum)) || item.quantity<rule.minimum || (rule.maximum!==null && item.quantity>rule.maximum) || item.quantity%rule.increment!==0) throw new CheckoutError("unavailable");
