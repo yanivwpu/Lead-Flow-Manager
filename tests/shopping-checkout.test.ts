@@ -46,6 +46,9 @@ test("wrong store product, unavailable/unpublished Storefront node, insufficient
 });
 test("checkout destination rejects unrelated stores, open redirects, userinfo, ports, insecure protocols and fabricated paths",()=>{
  assert.equal(validateCheckoutUrl(url,shop),url);
+ assert.equal(validateCheckoutUrl("https://store.example.invalid/cart/c/real",shop,"store.example.invalid"),"https://store.example.invalid/cart/c/real");
+ assert.throws(()=>validateCheckoutUrl("https://store.example.invalid/cart/c/real",shop),/invalid_response/);
+ assert.throws(()=>validateCheckoutUrl("https://store.example.invalid.evil.invalid/cart/c/real",shop,"store.example.invalid"),/invalid_response/);
  for(const raw of ["http://"+shop+"/cart/c/a",`https://${shop}.evil.invalid/cart/c/a`,`https://fixture-b.myshopify.com/cart/c/a`,`https://evil@${shop}/cart/c/a`,`https://${shop}:8443/cart/c/a`,`https://${shop}/products/snowboard`,`https://${shop}/cart/c/a?redirect=https://evil.invalid`,`https://${shop}/cart/c/a#evil`,"javascript:alert(1)"])assert.throws(()=>validateCheckoutUrl(raw,shop),/invalid_response/);
 });
 test("cart response must preserve exact variant, quantity and price; warnings are never silently accepted",async()=>{
@@ -75,4 +78,84 @@ test("encrypted receipt is bound to owned request; key includes tenant, confirma
  assert.throws(()=>codec.open(encrypted,"tenant-b"),/invalid_response/);
  for(const patch of [{userId:"b"},{conversationId:"other"},{confirmationId:"new"},{item:{...item,quantity:3}},{integrationId:"reinstalled"}])assert.notEqual(checkoutRequestKey({...context,...patch}),key);
  assert.throws(()=>checkoutReceiptCodec(Buffer.alloc(0)),/setup_required/);
+});
+
+test("official tokenless Cart requests omit tokens and token-only inventory field; fresh owned Admin inventory proof is mandatory",async()=>{
+ const calls:any[]=[];
+ const p=createShopifyCheckoutProvider({shop,credential:{kind:"tokenless"},fetch:async(u,init)=>{
+  calls.push(init);const body=JSON.parse(init!.body as string);
+  assert.doesNotMatch(body.query,/quantityAvailable|currentlyNotInStock/);
+  assert.deepEqual(init!.headers,{"Content-Type":"application/json"});
+  const {quantityAvailable,currentlyNotInStock,...tokenlessVariant}=variant();
+  return new Response(JSON.stringify({data:body.query.startsWith("mutation")?{cartCreate:{cart:cart(),userErrors:[],warnings:[]}}:{node:tokenlessVariant}}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}});
+ }});
+ for(const inventoryProof of [undefined,{at:Date.now()-61_000,quantity:5,unrestricted:false},{at:Date.now()+60_000,quantity:5,unrestricted:false},{at:Date.now(),quantity:1,unrestricted:false},{at:Date.now(),quantity:null,unrestricted:false}])await assert.rejects(p.prepare({...item,inventoryProof}),/unavailable/);
+ assert.equal(calls.length,0);
+ assert.equal((await p.prepare({...item,inventoryProof:{at:Date.now(),quantity:5,unrestricted:false}})).checkoutUrl,url);
+ assert.equal(calls.length,2);
+});
+test("refreshed inventory proof does not change durable identity; reused cart content must still match",async()=>{
+ const context={userId:"a",conversationId:"c",sourceId:"s",integrationId:"i",confirmationId:"e",item:{...item,inventoryProof:{at:1,quantity:5,unrestricted:false}}};
+ assert.equal(checkoutRequestKey(context),checkoutRequestKey({...context,item:{...context.item,inventoryProof:{at:2,quantity:6,unrestricted:false}}}));
+ const p=provider({response:()=>new Response(JSON.stringify({data:{cart:{...cart(),totalQuantity:1}}}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}})}).p;
+ await assert.rejects(p.status!({checkoutUrl:url,providerCartId:cart().id,paymentStatus:"unknown"},item),/changed/);
+});
+
+// Independently reviewed 2026-10 request contracts. These fixtures intentionally expose no
+// token-only inventory/backorder fields, so permissive provider mocks cannot hide a dependency.
+const tokenlessVerifyContract = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant {
+ id availableForSale quantityRule { minimum maximum increment } requiresComponents
+ selectedOptions { name value } price { amount currencyCode } product { id requiresSellingPlan }
+} } }`;
+const tokenlessCartContract = `id checkoutUrl totalQuantity lines(first:2) { nodes {
+ quantity merchandise { ... on ProductVariant { id product { id } } }
+ cost { amountPerQuantity { amount currencyCode } }
+} }`;
+const compact = (query:string) => query.replace(/\s+/g,"").trim();
+function tokenlessProvider(change:{variant?:(v:any)=>any;payload?:(p:any)=>any;errorAt?:"verify"|"create"|"status"}={}) {
+ const calls:string[]=[];
+ const provider=createShopifyCheckoutProvider({shop,credential:{kind:"tokenless"},fetch:async(_u,init)=>{
+  assert.deepEqual(init!.headers,{"Content-Type":"application/json"});
+  const {query}=JSON.parse(init!.body as string);calls.push(query);
+  const operation=query.startsWith("mutation")?"create":query.includes("CheckoutStatus")?"status":"verify";
+  const contracts={verify:tokenlessVerifyContract,create:`mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${tokenlessCartContract} } userErrors { code } warnings { code } } }`,status:`query CheckoutStatus($id:ID!) { cart(id:$id) { ${tokenlessCartContract} } }`};
+  assert.equal(compact(query),compact(contracts[operation]),"new selections require a renewed field-level authorization audit");
+  assert.doesNotMatch(query,/quantityAvailable|metafields?|buyerIdentity|customerAccessToken|shopPayInstallmentsPricing/);
+  if(change.errorAt===operation)return new Response(JSON.stringify({data:null,errors:[{message:"synthetic denied field",extensions:{code:"ACCESS_DENIED"}}]}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}});
+  const {quantityAvailable,currentlyNotInStock,...sparse}=variant();
+  const data=operation==="verify"?{node:change.variant?.(sparse)??sparse}:operation==="create"?{cartCreate:change.payload?.({cart:cart(),userErrors:[],warnings:[]})??{cart:cart(),userErrors:[],warnings:[]}}:{cart:cart()};
+  return new Response(JSON.stringify({data}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}});
+ }});
+ return {provider,calls};
+}
+const tokenlessItem=()=>({...item,inventoryProof:{at:Date.now(),quantity:5,unrestricted:false}});
+test("all three tokenless operations match the audited 2026-10 field contract and consume sparse responses",async()=>{
+ const {provider,calls}=tokenlessProvider();
+ const receipt=await provider.prepare(tokenlessItem());
+ assert.equal(receipt.checkoutUrl,url);assert.equal(await provider.status!(receipt,item),"available");assert.equal(calls.length,3);
+});
+test("tokenless quantity rules, bundle/selling-plan restrictions and exact selected options still fail closed",async()=>{
+ for(const variant of [
+  (v:any)=>({...v,quantityRule:null}),
+  (v:any)=>({...v,quantityRule:{minimum:3,maximum:null,increment:1}}),
+  (v:any)=>({...v,quantityRule:{minimum:1,maximum:1,increment:1}}),
+  (v:any)=>({...v,quantityRule:{minimum:1,maximum:null,increment:3}}),
+  (v:any)=>({...v,requiresComponents:true}),
+  (v:any)=>({...v,requiresComponents:undefined}),
+  (v:any)=>({...v,product:{...v.product,requiresSellingPlan:true}}),
+  (v:any)=>({...v,selectedOptions:[]}),
+  (v:any)=>({...v,price:{amount:"601",currencyCode:"USD"}}),
+  (v:any)=>({...v,price:{amount:"600",currencyCode:"EUR"}}),
+ ]){
+  const {provider,calls}=tokenlessProvider({variant});await assert.rejects(provider.prepare(tokenlessItem()),/unavailable|changed/);assert.equal(calls.length,1,"invalid selection must never dispatch cartCreate");
+ }
+});
+test("tokenless Cart warnings, partial quantities and authorization errors cannot produce a checkout link or retry a mutation",async()=>{
+ for(const payload of [(p:any)=>({...p,warnings:[{code:"MERCHANDISE_NOT_ENOUGH_STOCK"}]}),(p:any)=>({...p,cart:{...p.cart,totalQuantity:1}})]){
+  const {provider,calls}=tokenlessProvider({payload});await assert.rejects(provider.prepare(tokenlessItem()));assert.equal(calls.length,2);
+ }
+ for(const errorAt of ["verify","create"] as const){
+  const {provider,calls}=tokenlessProvider({errorAt});await assert.rejects(provider.prepare(tokenlessItem()),errorAt==="verify"?/invalid_response/:/ambiguous/);assert.equal(calls.length,errorAt==="verify"?1:2);
+ }
+ const {provider}=tokenlessProvider({errorAt:"status"});await assert.rejects(provider.status!({checkoutUrl:url,providerCartId:cart().id,paymentStatus:"unknown"},item),/invalid_response/);
 });

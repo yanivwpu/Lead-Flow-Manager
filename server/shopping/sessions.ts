@@ -31,13 +31,17 @@ export function createShoppingSessions(database:CatalogDb):ShoppingSessionStore 
   if(!claim)return null;
   let next:ShoppingState|undefined;
   try {
-   const result=await run(claim.state,async s=>{next=s;});
+   const check=async()=>database.transaction(async tx=>{
+    const conv=await owned(tx,turn);
+    if(!conv||(conv.shoppingState as any)?._lease?.token!==token||(conv.shoppingState as any)?._lease?.until<=Date.now())throw Error("shopping_turn_superseded");
+   });
+   const result=await run(claim.state,async s=>{next=s;},{token,check});
    if(!next)return result;
    await database.transaction(async tx=>{
     const conv=await owned(tx,turn);
     if(!conv||(conv.shoppingState as any)?._lease?.token!==token||(conv.shoppingState as any)?._lease?.until<Date.now())throw Error("shopping_turn_superseded");
     await tx.update(conversations).set({shoppingState:next,updatedAt:new Date()}).where(and(eq(conversations.id,conv.id),eq(conversations.userId,turn.userId)));
-    await tx.insert(activityEvents).values({userId:turn.userId,contactId:conv.contactId,conversationId:conv.id,eventType:"shopping_activity",actorType:"system",eventData:{intent:next!.intent,step:next!.step,recommendedProducts:next!.choices.map(c=>({productId:c.productId,variantId:c.variantId})),selectedVariantId:next!.selected?.variantId??null,quantity:next!.quantity,checkoutCreated:false}});
+    await tx.insert(activityEvents).values({userId:turn.userId,contactId:conv.contactId,conversationId:conv.id,eventType:"shopping_activity",actorType:"system",eventData:{intent:next!.intent,step:next!.step,recommendedProducts:next!.choices.map(c=>({productId:c.productId,variantId:c.variantId})),selectedVariantId:next!.selected?.variantId??null,quantity:next!.quantity,checkoutCreated:next!.checkout?.status==="ready",checkoutStatus:next!.checkout?.status??null}});
     if(next!.step==="handoff"&&claim.state?.step!=="handoff")await tx.insert(activityEvents).values({userId:turn.userId,contactId:conv.contactId,conversationId:conv.id,eventType:"ai_handoff",actorType:"system",eventData:{reason:"shopping_assistance",shoppingIntent:next!.intent}});
    });
    return result;

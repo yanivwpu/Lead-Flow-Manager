@@ -40,8 +40,11 @@ export function createTestChatGenerator(deps: {
     const shopping = createShoppingService({
       commerce: deps.commerce,
       sessions: input.sessions,
-      settings: deps.settings,
+      settings: async id => ({...await deps.settings(id),checkoutEnabled:true}),
       entitled: deps.entitled,
+      // Pure preview: this generator has no provider/cart capability or customer-message sender.
+      checkout: async () => ({status:"ready"}),
+      checkoutPreview: true,
     });
     const suggestion = createShoppingSuggestion({
       settings: deps.settings,

@@ -128,6 +128,7 @@ export function registerCatalogWebhooks(
     createCatalogWebhookHandler(database, verify),
   );
 }
+import { cleanupCheckout } from "../../shopping/checkout/cleanup";
 export async function cleanupShopifyCatalog(
   tx: CatalogDb,
   shop: string,
@@ -137,6 +138,7 @@ export async function cleanupShopifyCatalog(
     sql`SELECT to_regclass('catalog_sources') AS table_name`,
   );
   if (!(result as any).rows?.[0]?.table_name) return;
+  await cleanupCheckout(tx,shop);
   if (erase)
     await tx
       .delete(catalogSources)
