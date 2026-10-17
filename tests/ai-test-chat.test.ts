@@ -446,3 +446,202 @@ test("ordinary Test Chat invokes the real AI Brain reply model path and meters s
     aiProvider.complete = original;
   }
 });
+
+test("reported numbered selection sequence retains the original under-$750 recommendations through real private-session cooldown and retry", async () => {
+  const f = await fixture();
+  try {
+    await f.db.delete(schema.catalogVariants);
+    await f.db.delete(schema.catalogProducts);
+    const products = [
+      ["a-hydrogen", "Hydrogen Snowboard", "600.00", "snowboard"],
+      ["c-liquid", "Liquid Snowboard", "749.95", "snowboard"],
+      ["d-multi", "Multi-location Snowboard", "729.95", "snowboard"],
+      ["b-expensive", "Collective Snowboard", "2629.95", "snowboard"],
+      ["0-wax", "Ski wax", "9.95", "ski wax"],
+    ];
+    for (const [i, [id, title, price, searchText]] of products.entries()) {
+      await f.db
+        .insert(schema.catalogProducts)
+        .values({
+          id,
+          userId: "tenant-a",
+          sourceId: f.source.id,
+          externalId: `gid://shopify/Product/${i + 10}`,
+          title,
+          searchText,
+          status: "ACTIVE",
+          published: true,
+          complete: true,
+          variantCount: 1,
+          providerUpdatedAt: new Date(),
+        });
+      await f.db
+        .insert(schema.catalogVariants)
+        .values({
+          id: `${id}-variant`,
+          userId: "tenant-a",
+          sourceId: f.source.id,
+          productId: id,
+          externalId: `gid://shopify/ProductVariant/${i + 10}`,
+          inventoryItemId: `gid://shopify/InventoryItem/${i + 10}`,
+          title: "Default Title",
+          options: [{ name: "Title", value: "Default Title" }],
+          price,
+          currency: "USD",
+          tracked: true,
+          quantity: 5,
+          inventoryPolicy: "DENY",
+          availableForSale: true,
+          requiresComponents: false,
+          verifiedAt: new Date(0),
+          providerUpdatedAt: new Date(),
+          generation: "fixture",
+        });
+    }
+    let clock = Date.now(),
+      searches = 0;
+    const requestedIds: string[][] = [];
+    const sessions = createTestChatSessions(f.db, () => clock),
+      request = fixtureInventoryRequest(f.db);
+    const real = createCommerceStore(f.db, (shop, token) => async (q, v) => {
+      requestedIds.push(v!.ids as string[]);
+      return request(shop, token)(q, v);
+    });
+    const commerce = {
+      ...real,
+      purchaseCandidates: async (
+        ...args: Parameters<typeof real.purchaseCandidates>
+      ) => {
+        searches++;
+        return real.purchaseCandidates(...args);
+      },
+    };
+    const generate = createTestChatGenerator({
+      ai: aiService,
+      commerce,
+      settings: async () => shoppingSettings({ enabled: true }),
+      entitled: async () => true,
+      knowledge: async () => undefined,
+      aiSettings: async () => undefined,
+      meter: async () => {
+        throw Error("shopping must not use the model");
+      },
+    });
+    const chat = await sessions.create(auth);
+    async function send(text: string, due = false) {
+      clock += 1100;
+      if (due) await inventoryDue(f.db, f.source.id);
+      return sessions.turn(
+        auth,
+        chat.id,
+        randomUUID(),
+        text,
+        ({ history, sessions: adapter }) =>
+          generate({
+            userId: "tenant-a",
+            sessionId: chat.id,
+            history,
+            sessions: adapter,
+          }),
+      );
+    }
+    async function fullState() {
+      return (
+        await f.db
+          .select()
+          .from(schema.aiTestSessions)
+          .where(eq(schema.aiTestSessions.id, chat.id))
+      )[0].shoppingState as import("../shared/shoppingAssistant").ShoppingState;
+    }
+    let result = await send(
+      "I'm looking for a snowboard under $750. What do you recommend?",
+      true,
+    );
+    assert.equal(result.state.step, "selecting");
+    assert.equal(result.state.choices?.length, 3);
+    const offered = await fullState();
+    assert.equal(offered.maxPrice, "750");
+    assert.equal(offered.choices[0].productId, "a-hydrogen");
+    const first = offered.choices[0];
+    result = await send("I'll take option 1");
+    assert.equal(result.state.step, "pending");
+    assert.equal(result.state.selected?.variantId, first.variantId);
+    result = await send("1");
+    assert.equal(result.state.step, "pending");
+    assert.equal(result.state.selected?.variantId, first.variantId);
+    result = await send("quantity 2");
+    assert.equal(result.state.quantity, 2);
+    const pending = await fullState();
+    assert.equal(pending.maxPrice, "750");
+    assert.equal(pending.query, offered.query);
+    assert.deepEqual(pending.choices, offered.choices);
+    assert.equal(searches, 1);
+    assert.equal(requestedIds.length, 1);
+    result = await send("Retry.", true);
+    assert.equal(result.state.step, "confirming");
+    assert.equal(result.state.quantity, 2);
+    assert.equal(result.state.selected?.variantId, first.variantId);
+    assert.deepEqual(requestedIds.at(-1), ["gid://shopify/ProductVariant/10"]);
+    assert.equal((await fullState()).maxPrice, "750");
+    assert.equal(searches, 1);
+    result = await send("Yes, confirm.", true);
+    assert.equal(result.state.step, "confirmed");
+    for (const message of result.transcript.filter(
+      (m) => m.role === "assistant",
+    ))
+      assert.doesNotMatch(message.content, /2629|2,629|wax|https?:/i);
+    // Explicit new searches may replace preferences/budgets; list replies may not.
+    result = await send("show snowboard under 3000", true);
+    assert.equal((await fullState()).maxPrice, "3000");
+    assert.ok(result.state.choices?.some((c) => c.productId === "b-expensive"));
+    result = await send("show ski wax under 20", true);
+    assert.equal((await fullState()).maxPrice, "20");
+    assert.deepEqual(
+      result.state.choices?.map((c) => c.productId),
+      ["0-wax"],
+    );
+    // A genuinely stale shopping state cannot bind a number to a new search/list.
+    const expired = {
+      ...(await fullState()),
+      updatedAt: new Date(Date.now() - 31 * 60_000).toISOString(),
+    };
+    await f.db
+      .update(schema.aiTestSessions)
+      .set({ shoppingState: expired })
+      .where(eq(schema.aiTestSessions.id, chat.id));
+    const beforeSearches = searches,
+      beforeRequests = requestedIds.length;
+    result = await send("1");
+    assert.match(
+      result.transcript.at(-1)!.content,
+      /repeat your product search/,
+    );
+    assert.equal(searches, beforeSearches);
+    assert.equal(requestedIds.length, beforeRequests);
+    assert.equal(result.state.selected, undefined);
+    assert.deepEqual(result.state.choices, []);
+    await sessions.reset(auth, chat.id);
+    const fresh = await sessions.create(auth);
+    result = await sessions.turn(
+      auth,
+      fresh.id,
+      randomUUID(),
+      "option 1",
+      ({ history, sessions: adapter }) =>
+        generate({
+          userId: "tenant-a",
+          sessionId: fresh.id,
+          history,
+          sessions: adapter,
+        }),
+    );
+    assert.match(
+      result.transcript.at(-1)!.content,
+      /repeat your product search/,
+    );
+    assert.equal(searches, beforeSearches);
+    assert.equal(requestedIds.length, beforeRequests);
+  } finally {
+    await f.cleanup();
+  }
+});

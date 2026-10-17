@@ -1,6 +1,7 @@
+import { catalogSearchTerms } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
-import { shoppingIntent, shoppingFilters, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale } from "@shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale } from "@shared/shoppingAssistant";
 export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant">;
 export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
 export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean};
@@ -20,16 +21,17 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   if(!config.enabled || !config.allowedChannels.includes(turn.channel as any) || !await deps.entitled(turn.userId)) return null;
   return deps.sessions.withTurn(turn,async(stored,save)=>{
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
+   const numberedSelection=shoppingChoiceNumber(turn.text);
    const requestedIntent=shoppingIntent(turn.text);
    const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
    const intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
    const expired=stored && (stamp-new Date(stored.updatedAt).getTime()>SESSION_MS || !Number.isFinite(new Date(stored.updatedAt).getTime()));
    const source=await deps.commerce.source(turn.userId);
    if(!source) return null;
-   if(stored?.sourceId===source.id && stored.pending && stored.lastEventId===turn.eventId) {
+   if(!expired && stored?.sourceId===source.id && stored.pending && stored.lastEventId===turn.eventId) {
     return {reply:copy.pending,state:stored,handoff:false};
    }
-   if(stored?.sourceId===source.id && stored?.consumedEventIds.includes(turn.eventId)) {
+   if(!expired && stored?.sourceId===source.id && stored?.consumedEventIds.includes(turn.eventId)) {
     // Never replay an older turn or a stock claim beyond its short response lifetime.
     const reply=stored.lastEventId===turn.eventId && stamp-new Date(stored.updatedAt).getTime()<REPLAY_MS ? stored.reply:copy.busy;
     return {reply,state:stored,handoff:stored.step==="handoff"};
@@ -38,9 +40,13 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    const previous=!expired && stored?.sourceId===source.id
     ? {...stored,step:stored.step==="pending"?(stored.pending?.resumeStep??"discovering"):stored.step}:null;
    let state:ShoppingState=previous?{...previous,choices:[...previous.choices]}:{version:1,sourceId:source.id,step:"discovering",intent,choices:[],quantity:1,updatedAt:new Date(stamp).toISOString(),lastEventId:turn.eventId,reply:"",consumedEventIds:[]};
-   async function finish(reply:string, step=state.step):Promise<ShoppingResult> {
-    state={...state,pending:undefined,step,intent,reply,lastEventId:turn.eventId,updatedAt:new Date(stamp).toISOString(),consumedEventIds:[...(stored?.consumedEventIds??[]),turn.eventId].slice(-50)};
+   async function finish(reply:string, step=state.step, preservePending=false):Promise<ShoppingResult> {
+    state={...state,pending:preservePending?state.pending:undefined,step,intent,reply,lastEventId:turn.eventId,updatedAt:new Date(stamp).toISOString(),consumedEventIds:[...(stored?.consumedEventIds??[]),turn.eventId].slice(-50)};
     await save(state); return {reply,state,handoff:step==="handoff"};
+   }
+   function clarify(reply:string) {
+    // A clarification must not discard an outstanding exact-variant verification.
+    return finish(reply,previous && stored?.pending?"pending":state.step,true);
    }
    async function pending(action:"discover"|"select"|"confirm"):Promise<ShoppingResult> {
     // Empty live results cannot distinguish rate limits, leases and provider outages from missing data.
@@ -60,8 +66,15 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(intent==="handoff"||intent==="order") {state.selected=undefined;state.choices=[];return finish(intent==="order"?copy.order:copy.handoff,"handoff");}
    // A handoff is sticky until a human resumes shopping or the customer restarts.
    if(previous?.step==="handoff") return finish(copy.handoff,"handoff");
+   const filters=shoppingFilters(turn.text,source.currency??"");
+   const hasProductQuery=!!catalogSearchTerms(filters.query);
+   if(expired && stored?.lastEventId===turn.eventId) return finish(copy.repeatSearch,"discovering");
+   // Follow-ups need the offered list from this source and an unexpired session.
+   // Never turn an orphaned list reference (including a bare number) into a catalog query.
+   const needsPriorSearch=["confirm","retry"].includes(requestedIntent) || (["variants","availability","compare"].includes(requestedIntent) && !hasProductQuery);
+   if(!previous && (numberedSelection!==undefined || needsPriorSearch)) return finish(copy.repeatSearch,"discovering");
+   if(numberedSelection!==undefined && !state.choices[numberedSelection-1]) return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(!source.currency) return pending(state.selected?"select":"discover");
-   const filters=shoppingFilters(turn.text,source.currency);
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
    const quantity=turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*(\d+)/iu);
    if(quantity) {
@@ -69,7 +82,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     if(!Number.isSafeInteger(n)||n<1||n>99) return unavailable();
     state.quantity=n;
    }
-   const chosen=quantity?undefined:matchShoppingChoice(turn.text,state.choices);
+   const chosen=quantity || intent==="search"?undefined:matchShoppingChoice(turn.text,state.choices);
    const selection=chosen??((intent==="confirm"||quantity||(retryTurn && (stored?.pending?stored.pending.action==="select":!!state.selected)))?state.selected:undefined);
    if(selection) {
     state.selected=selection;
@@ -90,11 +103,16 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     if(intent==="confirm" && previous?.step==="confirming" && !chosen && !quantity) return finish(copy.disabled,"confirmed");
     return finish(`${line(current)} × ${state.quantity}\n${copy.confirm}`,"confirming");
    }
-   if(intent==="confirm" && !state.query) return finish(copy.options,"selecting");
+   if(intent==="confirm" && !state.query) return clarify(copy.repeatSearch);
+   // An unrecognized selection or contextual reply cannot replace the search/filters.
+   // An initial product purchase request can still start discovery.
+   if((intent==="select" && !!previous?.choices.length) || intent==="other") return clarify(state.choices.length?copy.options:copy.repeatSearch);
+   if(["variants","availability","compare"].includes(intent) && !state.query && !hasProductQuery) return clarify(copy.repeatSearch);
    // Variant/availability follow-ups reuse the last discovery query; never use a model ID.
-   const query=(retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query;
-   if(!query) return finish(copy.clarify,"discovering");
-   if(!retryTurn && (intent==="search" || intent==="select" || !state.query)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
+   const query=(retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query || state.query;
+   if(!query || !catalogSearchTerms(query)) return clarify(copy.repeatSearch);
+   if(!retryTurn && (filters.maxPrice || filters.minPrice)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
+   if(intent==="search" && !retryTurn) {state.choices=[];state.selected=undefined;state.quantity=1;}
    state.query=query;state.currency=source.currency;
    let products;
    try { products=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
