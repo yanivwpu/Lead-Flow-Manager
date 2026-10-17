@@ -11,6 +11,7 @@ import { SHOP, META } from '../server/shopping/checkout/controlledValidation';
 const prefix='/api/sales-catalog/commerce/checkout-test/';
 async function fixture(options:{missing?:boolean;ambiguous?:boolean;installationError?:boolean;
  adminFailure?:{query:'meta'|'variant';error:unknown};metaPatch?:(v:any)=>any;variantPatch?:(v:any)=>any;
+ httpResponse?:{status:number;contentType?:string;apiVersion?:string;redirected?:boolean};
  storefront?:'version'|'graphql'|'json'|'denied'|'unavailable'|'changed'|'network'}={}) {
  const f=await catalogFixture();
  await f.database.update(users).set({shopifyShop:SHOP}).where(eq(users.id,'tenant-a'));
@@ -28,6 +29,13 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
  return q===META&&options.metaPatch?options.metaPatch(data):data;};
  const storefrontFetch=(async(_url:unknown,init:any)=>{
    const {query}=JSON.parse(init.body);
+   if(options.httpResponse){
+     assert.match(query,/^query CheckoutVariant/);
+     const {status,contentType,apiVersion,redirected}=options.httpResponse;
+     const response=new Response('private body token=do-not-leak',{status,headers:{...(contentType?{'content-type':contentType}:{}),...(apiVersion?{'x-shopify-api-version':apiVersion}:{}),'set-cookie':'private=do-not-leak','location':'https://private.invalid/?key=do-not-leak'}});
+     if(redirected)Object.defineProperty(response,'redirected',{value:true});
+     return response;
+   }
    if(options.storefront==='network')throw Error('private Shopify diagnostic token=do-not-leak');
    if(options.storefront==='version')return new Response(JSON.stringify({data:{}}),{headers:{'x-shopify-api-version':'2026-07'}});
    if(options.storefront==='graphql')return new Response(JSON.stringify({errors:[{message:'private response token=do-not-leak'}]}),{headers:{'x-shopify-api-version':'2026-10'}});
@@ -152,3 +160,36 @@ test('tokenless Storefront version, GraphQL, JSON, auth, transport and changed-s
   await expectSafeFailure({storefront},`checkout_test_storefront_${reason}`);
 });
 
+
+
+async function expectDiagnostic(options:Parameters<typeof fixture>[0],expected:unknown){
+ config();const f=await fixture(options);try{
+  const result=await f.call('diagnose');
+  assert.deepEqual(result.data,expected);
+  assert.doesNotMatch(JSON.stringify(result.data),/private|do-not-leak|token=|key=|https:|set-cookie|location/);
+  assert.equal(f.creates(),0);
+  const journal=await f.pg.query('SELECT count(*)::int AS count FROM shopify_checkout_admin_tests');
+  assert.equal(journal.rows[0].count,0);
+ }finally{await f.cleanup();}
+}
+test('admin-only diagnose returns exact five allowlisted response fields and never journals',async()=>{
+ for(const [status,contentType,category] of [[400,'application/json','http_client_error'],[401,'text/html','setup_required'],[403,'application/problem+json','setup_required'],[404,'text/html','http_client_error'],[429,'text/plain','throttled'],[503,'text/plain','http_server_error']] as const)
+  await expectDiagnostic({httpResponse:{status,contentType,apiVersion:'private header value never exposed'}},{httpStatus:status,redirectOccurred:false,contentTypeFamily:contentType==='text/html'?'HTML':contentType==='text/plain'?'other':'JSON',apiVersionHeaderPresent:true,errorCategory:`checkout_test_storefront_${category}`});
+});
+test('diagnose preserves header absence and redirect evidence without returning Location',async()=>{
+ await expectDiagnostic({httpResponse:{status:302,contentType:'text/html'}},{httpStatus:302,redirectOccurred:false,contentTypeFamily:'HTML',apiVersionHeaderPresent:false,errorCategory:'checkout_test_storefront_http_redirect'});
+ await expectDiagnostic({httpResponse:{status:404,redirected:true}},{httpStatus:404,redirectOccurred:true,contentTypeFamily:'other',apiVersionHeaderPresent:false,errorCategory:'checkout_test_storefront_http_client_error'});
+});
+test('diagnose has no invented HTTP status on transport failure, and no writes even on success',async()=>{
+ await expectDiagnostic({storefront:'network'},{httpStatus:null,redirectOccurred:null,contentTypeFamily:null,apiVersionHeaderPresent:null,errorCategory:'checkout_test_storefront_transport_unknown'});
+ await expectDiagnostic({}, {httpStatus:200,redirectOccurred:false,contentTypeFamily:'other',apiVersionHeaderPresent:true,errorCategory:'verified'});
+});
+test('diagnose authorization and request validation precede all upstream reads',async()=>{
+ config();const f=await fixture();try{
+  for(const patch of [{actor:null},{workspace:'tenant-b'},{actor:'tenant-b'},{sessionID:null},{get:()=> 'cross-site'},{is:()=>false}]){
+   assert.notEqual((await f.call('diagnose',{},patch)).status,200);
+  }
+  assert.equal((await f.call('diagnose',{arbitrary:true})).status,400);
+  assert.equal(f.reads(),0);assert.equal(f.creates(),0);
+ }finally{await f.cleanup();}
+});

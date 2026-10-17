@@ -1,3 +1,4 @@
+import { emptyHttpSummary, storefrontHttpSummary } from './httpDiagnostic';
 import { CheckoutVerificationError, controlledFailureCode, verificationStage } from './preflightDiagnostics';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
@@ -41,9 +42,10 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
       fence.predicate !== '(claimed_at IS NOT NULL)')
       throw new TestError(503,'checkout_test_setup_required_apply_reviewed_0112');
   }
-  for (const action of ['access','preflight','approve','create'] as const) {
+  for (const action of ['access','preflight','diagnose','approve','create'] as const) {
     app[action === 'access' ? 'get' : 'post'](`${base}/${action}`, async(req,res)=>{
       res.set({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});
+      let http = emptyHttpSummary();
       try {
         const auth = await authorize(req,res);
         if (!auth) return;
@@ -60,11 +62,15 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         const sessionDigest = hash(req.sessionID);
         const deps = {
           installation:()=>resolveCatalogInstallation(database,auth.workspaceUserId,SHOP),
-          requestFor, storefrontFetch,
+          requestFor, storefrontFetch: action === 'diagnose' ? (async(input,init)=>{
+            const response = await storefrontFetch(input,init);
+            http = storefrontHttpSummary(response);
+            return response;
+          }) as typeof fetch : storefrontFetch,
           consume:async()=>{throw new TestError(403,'approval_required');},
           saveReceipt:async()=>{},
         };
-        if (action === 'preflight') {
+        if (action === 'preflight' || action === 'diagnose') {
           if (!z.object({}).strict().safeParse(req.body).success) throw new TestError(400,'invalid_request');
           const live = await verificationStage('admin_variant',()=>requestFor(SHOP,install.token)(SHOPIFY_INVENTORY_BATCH_QUERY,{ids:[TEST_VARIANT]}));
           const v = live?.nodes?.[0];
@@ -73,6 +79,8 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
             productId:TEST_PRODUCT,variantId:TEST_VARIANT,quantity:1,
             price:v?.price,currency:live?.shop?.currencyCode,options:v?.selectedOptions}));
           await runValidation(selection,deps); // Strict identity/publication/inventory + tokenless verification, no cart.
+          // Diagnosis is read-only even on success: no readiness journal, approval or dispatch.
+          if (action === 'diagnose') return res.json({...http,errorCategory:'verified'});
           const requestId = randomUUID(), digest = selectionDigest(selection);
           const expiresAt = new Date(Date.now()+10*60_000).toISOString();
           await verificationStage('journal',()=>database.execute(sql`INSERT INTO public.shopify_checkout_admin_tests
@@ -129,6 +137,9 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         const code = failure?.code ?? failure?.cause?.code;
         const known = error instanceof TestError;
         const diagnostic = error instanceof CheckoutVerificationError ? error.code : controlledFailureCode(error);
+        if (action === 'diagnose') return res.status(known ? error.status : 503).json({
+          ...http,errorCategory: known ? error.code : diagnostic ?? 'checkout_test_failed_closed',
+        });
         res.status(known ? error.status : code==='23505' ? 409 : 503).json({error:known ? error.code :
           code==='42P01' || code==='42703' ? 'checkout_test_setup_required_apply_reviewed_0112' :
           code==='23505' ? 'development_store_dispatch_already_consumed' : diagnostic ?? 'checkout_test_failed_closed_do_not_retry_cart'});
@@ -136,3 +147,4 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
     });
   }
 }
+
