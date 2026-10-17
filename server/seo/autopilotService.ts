@@ -25,7 +25,7 @@ export function seoAutopilotConfig(env:NodeJS.ProcessEnv=process.env){
 }
 type OpenRow={
   id:string;target_page:string;query_cluster:unknown;action_type:string;status:string;risk:string;confidence:number;
-  stale_at:unknown;current_version:number;proposal:unknown;updated_at:unknown;
+  stale_at:unknown;current_version:number;proposal:unknown;updated_at:unknown;refresh_failure_category?:string|null;
   execution_status?:string|null;publication_requested_at?:unknown;pr_number?:number|null;
 };
 const queries=(value:unknown)=>Array.isArray(value)?value.filter((v):v is string=>typeof v==="string").map(v=>v.trim().toLowerCase()).filter(Boolean):[];
@@ -44,8 +44,16 @@ export function isSeoAutopilotPublishEligible(row:OpenRow,minConfidence=SEO_AUTO
   return row.status==="proposed"&&isAutopilotDraftEligible(row,minConfidence);
 }
 
+export function seoAutopilotRefreshEligible(row:Pick<OpenRow,"status"|"refresh_failure_category"|"updated_at">,now=Date.now()){
+  if(row.status!=="revision_required")return false;
+  if(row.refresh_failure_category==="NO_MATERIAL_IMPROVEMENT")return false;
+  if(!row.refresh_failure_category)return true;
+  const lastAttempt=new Date(String(row.updated_at)).getTime();
+  return Number.isFinite(lastAttempt)&&now-lastAttempt>=24*60*60_000;
+}
+
 async function loadOpenRows():Promise<OpenRow[]>{
-  const result=await db.execute(sql`SELECT a.id,a.target_page,a.query_cluster,a.action_type,a.status,a.risk,a.confidence,a.stale_at,a.current_version,a.updated_at,v.proposal,
+  const result=await db.execute(sql`SELECT a.id,a.target_page,a.query_cluster,a.action_type,a.status,a.risk,a.confidence,a.stale_at,a.current_version,a.updated_at,a.refresh_failure_category,v.proposal,
       g.status execution_status,g.publication_requested_at,g.pr_number
     FROM seo_actions a
     JOIN seo_action_versions v ON v.action_id=a.id AND v.version=a.current_version
@@ -85,7 +93,12 @@ export async function runSeoAutopilot(actor="seo-autopilot"){
   rows=await loadOpenRows();
 
   let refreshed=0,refreshFailed=0;
-  for(const row of rows.filter(item=>item.status==="revision_required").slice(0,config.maxRefresh)){
+  // A materiality rejection is terminal for the current proposal. Transient
+  // data failures back off for 24 hours; unfailed rows may run immediately.
+  const refreshCandidates=rows.filter(item=>seoAutopilotRefreshEligible(item)).sort(
+    (a,b)=>new Date(String(a.updated_at)).getTime()-new Date(String(b.updated_at)).getTime()
+  );
+  for(const row of refreshCandidates.slice(0,config.maxRefresh)){
     try{await refreshSeoAction(row.id,actor);refreshed++;}catch{refreshFailed++;}
   }
 
