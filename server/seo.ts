@@ -383,7 +383,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   "/best-whatsapp-crm-2026": {
     title: "Best WhatsApp CRM in 2026 | Omnichannel CRM Comparison",
     description:
-      "Compare the best WhatsApp CRM platforms in 2026 and learn why businesses are moving toward omnichannel inboxes with AI, automation, Shopify support, and team collaboration.",
+      "Compare WhatsApp CRM options for 2026, including shared team inboxes, AI-assisted follow-up, omnichannel conversations, automation, and Shopify workflows.",
     canonical: `${BASE_URL}/best-whatsapp-crm-2026`
   },
   "/contact": {
