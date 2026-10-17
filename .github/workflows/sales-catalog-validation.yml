@@ -90,7 +90,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Native PostgreSQL catalog sync, search, HTTP, grounding and UI
         run: node --import tsx --test tests/shopify-billing-return.test.ts tests/shopify-catalog-inventory.test.ts tests/shopify-catalog.test.ts tests/shopify-catalog-registration.test.ts tests/shopify-catalog-authorization.test.ts tests/shopify-catalog-publication.test.ts tests/shopify-catalog-card-state.test.ts tests/shopify-catalog-reconciliation.test.ts tests/shopify-catalog-search.test.ts tests/shopify-catalog-webhooks.test.ts tests/shopify-catalog-ai.test.ts tests/shopify-catalog-routes.test.ts tests/shopify-catalog-ui.test.tsx
-      - name: Admin Shopify checkout safety (seven tests)
+      - name: Admin Shopify checkout safety
         env:
           # Use the existing in-memory fixture: the admin journal intentionally requires public schema.
           CATALOG_TEST_DATABASE_URL: ""

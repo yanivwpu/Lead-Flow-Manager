@@ -21,7 +21,7 @@ export interface CommerceCheckoutProvider {
   status?: (receipt: CheckoutReceipt, item?: VerifiedCheckoutItem) => Promise<"available" | "expired" | "unknown">;
 }
 export class CheckoutError extends Error {
-  constructor(public code: "setup_required" | "not_confirmed" | "unavailable" | "changed" | "invalid_response" | "throttled" | "ambiguous" | "already_preparing" | "expired", public retryMs = 30_000) {
+  constructor(public code: "setup_required" | "not_confirmed" | "unavailable" | "changed" | "invalid_response" | "throttled" | "ambiguous" | "already_preparing" | "expired", public retryMs = 30_000, public detail?: "api_version_mismatch" | "graphql_error" | "invalid_json") {
     super(code); // Never include provider messages, bodies, URLs or tokens.
   }
 }

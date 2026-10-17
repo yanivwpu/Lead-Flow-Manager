@@ -1,3 +1,4 @@
+import { CheckoutVerificationError, controlledFailureCode, verificationStage } from './preflightDiagnostics';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import type { Express, Request, Response } from 'express';
@@ -53,7 +54,7 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         if (!req.is('application/json') || req.get('sec-fetch-site') === 'cross-site')
           throw new TestError(403,'same_origin_json_required');
         await setup();
-        const install = await resolveCatalogInstallation(database,auth.workspaceUserId,SHOP);
+        const install = await verificationStage('installation',()=>resolveCatalogInstallation(database,auth.workspaceUserId,SHOP));
         if (!install) throw new TestError(409,'active_development_installation_required');
         const installationDigest = hash(install.token);
         const sessionDigest = hash(req.sessionID);
@@ -65,18 +66,18 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         };
         if (action === 'preflight') {
           if (!z.object({}).strict().safeParse(req.body).success) throw new TestError(400,'invalid_request');
-          const live = await requestFor(SHOP,install.token)(SHOPIFY_INVENTORY_BATCH_QUERY,{ids:[TEST_VARIANT]});
-          const v = live.nodes?.[0];
+          const live = await verificationStage('admin_variant',()=>requestFor(SHOP,install.token)(SHOPIFY_INVENTORY_BATCH_QUERY,{ids:[TEST_VARIANT]}));
+          const v = live?.nodes?.[0];
           // Price/options/currency come from live Admin data, never cached values or browser input.
-          const selection = selectionSchema.parse({shop:SHOP,userId:auth.workspaceUserId,
+          const selection = await verificationStage('selection',async()=>selectionSchema.parse({shop:SHOP,userId:auth.workspaceUserId,
             productId:TEST_PRODUCT,variantId:TEST_VARIANT,quantity:1,
-            price:v?.price,currency:live.shop?.currencyCode,options:v?.selectedOptions});
+            price:v?.price,currency:live?.shop?.currencyCode,options:v?.selectedOptions}));
           await runValidation(selection,deps); // Strict identity/publication/inventory + tokenless verification, no cart.
           const requestId = randomUUID(), digest = selectionDigest(selection);
           const expiresAt = new Date(Date.now()+10*60_000).toISOString();
-          await database.execute(sql`INSERT INTO public.shopify_checkout_admin_tests
+          await verificationStage('journal',()=>database.execute(sql`INSERT INTO public.shopify_checkout_admin_tests
             (request_id,workspace_id,operator_id,session_digest,shop,integration_id,installation_digest,selection,selection_digest,expires_at)
-            VALUES (${requestId},${auth.workspaceUserId},${auth.actorUserId},${sessionDigest},${SHOP},${install.integrationId},${installationDigest},${JSON.stringify(selection)}::jsonb,${digest},${expiresAt}::timestamptz)`);
+            VALUES (${requestId},${auth.workspaceUserId},${auth.actorUserId},${sessionDigest},${SHOP},${install.integrationId},${installationDigest},${JSON.stringify(selection)}::jsonb,${digest},${expiresAt}::timestamptz)`));
           return res.json({requestId,selectionSha256:digest,expiresAt,selection,
             productTitle:v.product?.title,inventory:'verified',developmentStore:true,publication:'verified',
             storefront:'verified',ready:true,cartCreated:false});
@@ -127,9 +128,10 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         const failure = error as {code?:string;cause?:{code?:string}};
         const code = failure?.code ?? failure?.cause?.code;
         const known = error instanceof TestError;
+        const diagnostic = error instanceof CheckoutVerificationError ? error.code : controlledFailureCode(error);
         res.status(known ? error.status : code==='23505' ? 409 : 503).json({error:known ? error.code :
           code==='42P01' || code==='42703' ? 'checkout_test_setup_required_apply_reviewed_0112' :
-          code==='23505' ? 'development_store_dispatch_already_consumed' : 'checkout_test_failed_closed_do_not_retry_cart'});
+          code==='23505' ? 'development_store_dispatch_already_consumed' : diagnostic ?? 'checkout_test_failed_closed_do_not_retry_cart'});
       }
     });
   }
