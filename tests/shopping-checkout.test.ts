@@ -46,6 +46,9 @@ test("wrong store product, unavailable/unpublished Storefront node, insufficient
 });
 test("checkout destination rejects unrelated stores, open redirects, userinfo, ports, insecure protocols and fabricated paths",()=>{
  assert.equal(validateCheckoutUrl(url,shop),url);
+ assert.equal(validateCheckoutUrl("https://store.example.invalid/cart/c/real",shop,"store.example.invalid"),"https://store.example.invalid/cart/c/real");
+ assert.throws(()=>validateCheckoutUrl("https://store.example.invalid/cart/c/real",shop),/invalid_response/);
+ assert.throws(()=>validateCheckoutUrl("https://store.example.invalid.evil.invalid/cart/c/real",shop,"store.example.invalid"),/invalid_response/);
  for(const raw of ["http://"+shop+"/cart/c/a",`https://${shop}.evil.invalid/cart/c/a`,`https://fixture-b.myshopify.com/cart/c/a`,`https://evil@${shop}/cart/c/a`,`https://${shop}:8443/cart/c/a`,`https://${shop}/products/snowboard`,`https://${shop}/cart/c/a?redirect=https://evil.invalid`,`https://${shop}/cart/c/a#evil`,"javascript:alert(1)"])assert.throws(()=>validateCheckoutUrl(raw,shop),/invalid_response/);
 });
 test("cart response must preserve exact variant, quantity and price; warnings are never silently accepted",async()=>{
@@ -75,4 +78,24 @@ test("encrypted receipt is bound to owned request; key includes tenant, confirma
  assert.throws(()=>codec.open(encrypted,"tenant-b"),/invalid_response/);
  for(const patch of [{userId:"b"},{conversationId:"other"},{confirmationId:"new"},{item:{...item,quantity:3}},{integrationId:"reinstalled"}])assert.notEqual(checkoutRequestKey({...context,...patch}),key);
  assert.throws(()=>checkoutReceiptCodec(Buffer.alloc(0)),/setup_required/);
+});
+
+test("official tokenless Cart requests omit tokens and token-only inventory field; fresh owned Admin inventory proof is mandatory",async()=>{
+ const calls:any[]=[];
+ const p=createShopifyCheckoutProvider({shop,credential:{kind:"tokenless"},fetch:async(u,init)=>{
+  calls.push(init);const body=JSON.parse(init!.body as string);
+  assert.doesNotMatch(body.query,/quantityAvailable/);
+  assert.deepEqual(init!.headers,{"Content-Type":"application/json"});
+  return new Response(JSON.stringify({data:body.query.startsWith("mutation")?{cartCreate:{cart:cart(),userErrors:[],warnings:[]}}:{node:variant()}}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}});
+ }});
+ for(const inventoryProof of [undefined,{at:Date.now()-61_000,quantity:5,unrestricted:false},{at:Date.now()+60_000,quantity:5,unrestricted:false},{at:Date.now(),quantity:1,unrestricted:false},{at:Date.now(),quantity:null,unrestricted:false}])await assert.rejects(p.prepare({...item,inventoryProof}),/unavailable/);
+ assert.equal(calls.length,0);
+ assert.equal((await p.prepare({...item,inventoryProof:{at:Date.now(),quantity:5,unrestricted:false}})).checkoutUrl,url);
+ assert.equal(calls.length,2);
+});
+test("refreshed inventory proof does not change durable identity; reused cart content must still match",async()=>{
+ const context={userId:"a",conversationId:"c",sourceId:"s",integrationId:"i",confirmationId:"e",item:{...item,inventoryProof:{at:1,quantity:5,unrestricted:false}}};
+ assert.equal(checkoutRequestKey(context),checkoutRequestKey({...context,item:{...context.item,inventoryProof:{at:2,quantity:6,unrestricted:false}}}));
+ const p=provider({response:()=>new Response(JSON.stringify({data:{cart:{...cart(),totalQuantity:1}}}),{headers:{"x-shopify-api-version":STOREFRONT_API_VERSION}})}).p;
+ await assert.rejects(p.status!({checkoutUrl:url,providerCartId:cart().id,paymentStatus:"unknown"},item),/changed/);
 });

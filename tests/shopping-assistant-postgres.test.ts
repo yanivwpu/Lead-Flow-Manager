@@ -85,7 +85,7 @@ test("PostgreSQL shopping integration: persisted inbound, live catalog, dedup, t
    await handlers.get(`${method} ${path}`)!({user:{id:user},params:{id:"conv-a"},body},res);return {status,data};
   }
   assert.equal((await routeRequest("PATCH","/api/ai/shopping-settings",{enabled:true})).status,403);
-  assert.equal((await routeRequest("PATCH","/api/ai/shopping-settings",{checkoutEnabled:true})).status,400);
+  assert.equal((await routeRequest("PATCH","/api/ai/shopping-settings",{checkoutEnabled:true})).status,409);
   assert.equal((await routeRequest("PATCH","/api/ai/shopping-settings",{enabled:false})).status,200);
   const settings=await routeRequest("GET","/api/ai/shopping-settings");assert.equal(settings.data.checkoutReady,false);
   const activity=await routeRequest("GET","/api/conversations/:id/shopping");assert.equal(activity.data.state.step,"handoff");

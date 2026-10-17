@@ -4,21 +4,26 @@ import { aiSettings, conversations } from "@shared/schema";
 import { shoppingSettings, shoppingSettingsSchema } from "@shared/shoppingAssistant";
 import { requireWorkspaceOffersAdmin } from "../workspaceOffers/offerAccess";
 import type { CatalogDb } from "../salesCatalog/commerceStore";
+import { checkoutAuthorization, CHECKOUT_ROLLOUT_APPROVED } from "./checkout/authorization";
 export function registerShoppingRoutes(app:Express,database:CatalogDb,entitled:(id:string)=>Promise<boolean>,authorize=requireWorkspaceOffersAdmin) {
  app.get("/api/ai/shopping-settings",async(req,res)=>{
   const auth=await authorize(req,res);if(!auth)return;
   res.set("Cache-Control","private, no-store");
   try {
    const [row]=await database.select({config:aiSettings.shoppingAssistant}).from(aiSettings).where(eq(aiSettings.userId,auth.workspaceUserId)).limit(1);
-   res.json({settings:shoppingSettings(row?.config),entitled:await entitled(auth.workspaceUserId),checkoutReady:false});
+   const pro=await entitled(auth.workspaceUserId);
+   const checkout=await checkoutAuthorization(database,auth.workspaceUserId,pro);
+   res.json({settings:shoppingSettings(row?.config),entitled:pro,checkoutReady:checkout.ready,checkout});
   }catch {res.status(503).json({error:"Shopping settings unavailable"});}
  });
  app.patch("/api/ai/shopping-settings",async(req,res)=>{
   const auth=await authorize(req,res);if(!auth)return;
   const parsed=shoppingSettingsSchema.safeParse(req.body);
   if(!parsed.success)return res.status(400).json({error:"Invalid shopping settings; checkout requires owner review"});
+  if(parsed.data.checkoutEnabled&&!CHECKOUT_ROLLOUT_APPROVED)return res.status(409).json({error:"Checkout assistance is awaiting review"});
   try {
-   if(parsed.data.enabled&&!await entitled(auth.workspaceUserId))return res.status(403).json({error:"Pro with AI Brain is required"});
+   if((parsed.data.enabled||parsed.data.checkoutEnabled)&&!await entitled(auth.workspaceUserId))return res.status(403).json({error:"Pro with AI Brain is required"});
+   if(parsed.data.checkoutEnabled&&!(await checkoutAuthorization(database,auth.workspaceUserId,true)).ready)return res.status(409).json({error:"Connect Shopify before enabling checkout"});
    // Lock the owner, not an untrusted request ID, to serialize first-time settings creation.
    await database.transaction(async tx=>{
     const {users}=await import("@shared/schema");
@@ -39,7 +44,9 @@ export function registerShoppingRoutes(app:Express,database:CatalogDb,entitled:(
    const raw=row.state as Record<string,unknown>;
    // Do not expose leases, consumed message IDs, cached replies or future cart secrets.
    const {version,step,intent,choices,selected,quantity,updatedAt}=raw;
-   res.json({state:{version,step,intent,choices,selected,quantity,updatedAt}});
+   const status=(raw?.checkout as any)?.status;
+   const checkout=status&&["ready","pending","expired","changed","unavailable","setup_required"].includes(status)?{status}:undefined;
+   res.json({state:{version,step,intent,choices,selected,quantity,updatedAt,checkout}});
   }catch {res.status(503).json({error:"Shopping activity unavailable"});}
  });
 }

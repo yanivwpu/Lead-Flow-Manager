@@ -24,7 +24,7 @@ test("multilingual shopping intent, budget and exact currency/decimal handling",
  assert.equal(shoppingFilters("סנובורד עד ₪750","USD").maxPrice,"750");
  assert.deepEqual(shoppingFilters("snowboard between 100 and 750","USD"),{currency:"USD",minPrice:"100",maxPrice:"750",query:"snowboard"});
  assert.equal(compareMoney("699.950000","699.95"),0);assert.equal(compareMoney("100000000000.01","99999999999.99"),1);
- assert.equal(shoppingSettingsSchema.safeParse({checkoutEnabled:true}).success,false);
+ assert.equal(shoppingSettingsSchema.safeParse({checkoutEnabled:true}).success,true);
 });
 test("discovery → exact multi-turn variant → explicit confirmation; no checkout URL",async()=>{
  const f=fixture();const discovery=await f.turn("I'm looking for a snowboard under $750");

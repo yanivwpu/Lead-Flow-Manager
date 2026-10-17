@@ -12,14 +12,22 @@ import { checkoutEligibility } from "../server/shopping/checkout/eligibility";
 import { createCheckoutAttempts, checkoutReceiptCodec, checkoutRequestKey } from "../server/shopping/checkout/attempts";
 import { CheckoutError } from "../server/shopping/checkout/contract";
 import { shoppingSettingsSchema } from "../shared/shoppingAssistant";
+import { shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
+import { CHECKOUT_ROLLOUT_APPROVED, checkoutAuthorization } from "../server/shopping/checkout/authorization";
+import { createCheckoutHandoff } from "../server/shopping/checkout/handoff";
+import { cleanupShopifyCatalog } from "../server/salesCatalog/shopify/webhooks";
+import { createShoppingSessions } from "../server/shopping/sessions";
+import { createShoppingService } from "../server/shopping/service";
+import { checkoutDomain } from "../server/shopping/checkout/domain";
 async function fixture(){
  const f=await catalogFixture(), db=f.database;
  try{
-  for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents]){
+  for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.aiSettings]){
    const c=getTableConfig(table);await f.pg.exec(`CREATE TABLE "${c.name}" (${c.columns.map(col=>`"${col.name}" ${col.enumValues?.length?"text":col.getSQLType()}${col.name==="id"?" PRIMARY KEY DEFAULT gen_random_uuid()":""}`).join(",")})`);
   }
   await f.pg.exec(readFileSync("migrations/0110_checkout_preparation_attempts.sql","utf8"));
   await f.pg.exec(readFileSync("migrations/0110_checkout_preparation_attempts.sql","utf8"));
+  await f.pg.exec(readFileSync("migrations/0111_checkout_provider_gates.sql","utf8"));
   await db.insert(schema.contacts).values({id:"contact-a",userId:"tenant-a",name:"Fixture"});
   const source=(await ensureCatalogSource(db,"tenant-a"))!;
   await db.update(schema.catalogSources).set({status:"ready",currency:"USD",allowedHosts:["fixture-a.myshopify.com"],initialSyncCompletedAt:new Date(),grantedScopes:["read_products","read_inventory"]}).where(eq(schema.catalogSources.id,source.id));
@@ -73,7 +81,98 @@ test("durable duplicate suppression across workers; encrypted reuse; no automati
   assert.deepEqual(await other.run(safe,async()=>receipt),receipt);
  }finally{await f.cleanup();}
 });
-test("runtime stays disabled and private Test Chat has no checkout operation",()=>{
- assert.equal(shoppingSettingsSchema.parse({}).checkoutEnabled,false);assert.equal(shoppingSettingsSchema.safeParse({checkoutEnabled:true}).success,false);
- for(const path of ["server/shopping/runtime.ts","server/aiTestChat/generate.ts"])assert.doesNotMatch(readFileSync(path,"utf8"),/checkout\/|cartCreate|createShopifyCheckoutProvider/);
+test("runtime rollout stays locked; private Test Chat has only a pure preview",()=>{
+ assert.equal(shoppingSettingsSchema.parse({}).checkoutEnabled,false);
+ assert.equal(CHECKOUT_ROLLOUT_APPROVED,false);
+ assert.doesNotMatch(readFileSync("server/aiTestChat/generate.ts","utf8"),/checkout\/|cartCreate|createShopifyCheckoutProvider/);
+});
+
+test("tokenless merchant authorization depends on owned active installation and Pro; no credentials disclosed or subscriptions changed",async()=>{
+ const f=await fixture();try {
+  const before=await f.db.select().from(schema.users);
+  assert.equal((await checkoutAuthorization(f.db,"tenant-a",true)).status,"awaiting_review");
+  assert.equal((await checkoutAuthorization(f.db,"tenant-a",false,true)).status,"pro_required");
+  assert.equal((await checkoutAuthorization(f.db,"missing",true,true)).status,"connect_shopify");
+  const ready=await checkoutAuthorization(f.db,"tenant-a",true,true);
+  assert.equal(ready.ready,true);assert.doesNotMatch(JSON.stringify(ready),/fixture-token|myshopify|integration/);
+  assert.deepEqual(await f.db.select().from(schema.users),before);
+ }finally {await f.cleanup();}
+});
+
+test("custom checkout host is attested through the owned installation, not supplied by a merchant; wrong shop and unsafe hosts fail closed",async()=>{
+ const f=await fixture();try {
+  let calls=0;
+  const requestFor=(shop:string,token:string)=>async()=>{calls++;assert.equal(shop,"fixture-a.myshopify.com");assert.equal(token,"fixture-token-a");return {shop:{myshopifyDomain:shop,primaryDomain:{host:"store.example.invalid"}}};};
+  assert.equal(await checkoutDomain(f.db,"tenant-a","fixture-a.myshopify.com",requestFor),"store.example.invalid");
+  await assert.rejects(checkoutDomain(f.db,"tenant-b","fixture-a.myshopify.com",requestFor),/setup_required/);assert.equal(calls,1);
+  for(const host of ["https://evil.invalid","evil.invalid:443","127.0.0.1","evil.invalid/path",""])await assert.rejects(checkoutDomain(f.db,"tenant-a","fixture-a.myshopify.com",()=>async()=>({shop:{myshopifyDomain:"fixture-a.myshopify.com",primaryDomain:{host}}})),/invalid_response/);
+  await assert.rejects(checkoutDomain(f.db,"tenant-a","fixture-a.myshopify.com",()=>async()=>({shop:{myshopifyDomain:"fixture-b.myshopify.com",primaryDomain:{host:"evil.invalid"}}})),/invalid_response/);
+ }finally {await f.cleanup();}
+});
+
+test("real Shopping session -> durable handoff -> existing reply; repeat confirmation reuses encrypted cart; safe Inbox activity and uninstall isolation",async()=>{
+ const f=await fixture();try {
+  const config=shoppingSettings({enabled:true,checkoutEnabled:true});let creates=0,checks=0;
+  const receipt={checkoutUrl:"https://fixture-a.myshopify.com/cart/c/test?key=cart-secret",providerCartId:"gid://shopify/Cart/test?key=cart-secret",paymentStatus:"unknown" as const};
+  const hook=createCheckoutHandoff({database:f.db,commerce:f.commerce,approved:()=>true,settings:async()=>config,entitled:async()=>true,codec:()=>checkoutReceiptCodec(Buffer.alloc(32,9)),provider:()=>({verify:async()=>{},prepare:async item=>{creates++;assert.equal(item.variantId,"gid://shopify/ProductVariant/2");assert.ok(item.inventoryProof);return receipt;},status:async()=>{checks++;return "available";}})});
+  const service=createShoppingService({commerce:f.commerce,sessions:createShoppingSessions(f.db),settings:async()=>config,entitled:async()=>true,checkout:hook});
+  await f.db.update(schema.conversations).set({shoppingState:{...f.state,step:"confirming"}}).where(eq(schema.conversations.id,"conv"));
+  await f.db.update(schema.contacts).set({automationsPaused:false}).where(eq(schema.contacts.id,"contact-a"));
+  let n=0;
+  async function turn(text="confirm") {
+   const id=`in-${++n}`;await f.db.insert(schema.messages).values({id,userId:"tenant-a",contactId:"contact-a",conversationId:"conv",direction:"inbound",contentType:"text",content:text,createdAt:new Date(Date.now()+n*1000)});
+   await inventoryDue(f.db,f.source.id);
+   return service.turn({userId:"tenant-a",conversationId:"conv",eventId:id,text,channel:"webchat"});
+  }
+  const first=await turn();assert.equal(first?.state.checkout?.status,"ready");assert.match(first!.reply,/cart-secret/);
+  const replay=await service.turn({userId:"tenant-a",conversationId:"conv",eventId:"in-1",text:"confirm",channel:"webchat"});
+  assert.equal(replay?.reply,first?.reply,"Builder and AI Brain read the same encrypted preparation");assert.equal(creates,1);assert.equal(checks,1);
+  assert.equal((await f.db.select().from(schema.activityEvents)).length,1,"readers do not duplicate shopping activity");
+  await f.db.execute(sql`UPDATE checkout_provider_gates SET next_request_at=NOW()-interval '1 second'`);
+  const second=await turn();assert.equal(second?.state.checkout?.status,"ready");assert.equal(creates,1);assert.equal(checks,2);
+  const [conv]=await f.db.select().from(schema.conversations);assert.doesNotMatch(JSON.stringify(conv.shoppingState),/cart-secret|https:/);
+  const events=await f.db.select().from(schema.activityEvents);assert.equal(events.length,2);assert.equal((events[0].eventData as any).checkoutCreated,true);assert.doesNotMatch(JSON.stringify(events),/cart-secret|https:/);
+  assert.equal((await f.db.select().from(schema.messages)).some(m=>m.direction==="outbound"),false);
+  assert.equal((await f.db.select().from(schema.contacts)).length,1);
+  const before=await f.db.select().from(schema.users);
+  await f.db.execute(sql`INSERT INTO checkout_provider_gates VALUES ('tenant-b','fixture-b.myshopify.com',NOW())`);
+  await f.db.transaction(tx=>cleanupShopifyCatalog(tx,"fixture-a.myshopify.com",false));
+  assert.equal((await f.db.execute(sql`SELECT * FROM checkout_preparation_attempts`)).rows.length,0);
+  assert.equal((await f.db.execute(sql`SELECT * FROM checkout_provider_gates`)).rows.length,1);
+  assert.deepEqual(await f.db.select().from(schema.users),before);
+ }finally {await f.cleanup();}
+});
+
+test("superseding inbound suppresses checkout reply; ambiguous provider failure keeps selection and never redispatches",async()=>{
+ const f=await fixture();try {
+  let creates=0,stale=false;const guard={token:"held",check:async()=>{if(stale)throw Error("shopping_turn_superseded");}};
+  await f.db.update(schema.conversations).set({shoppingState:{...f.state,_lease:{token:"held",until:Date.now()+120_000}}}).where(eq(schema.conversations.id,"conv"));
+  const state=f.state as ShoppingState;
+  const inventory=(await (async()=>{await inventoryDue(f.db,f.source.id);return f.commerce.verifyForPurchase("tenant-a",f.source.id,["v"]);})())[0];
+  const hook=createCheckoutHandoff({database:f.db,commerce:f.commerce,approved:()=>true,settings:async()=>shoppingSettings({enabled:true,checkoutEnabled:true}),entitled:async()=>true,codec:()=>checkoutReceiptCodec(Buffer.alloc(32,9)),provider:()=>({verify:async()=>{},prepare:async()=>{creates++;throw new CheckoutError("ambiguous");},status:async()=>"available"})});
+  const turn={userId:"tenant-a",conversationId:"conv",eventId:"confirmation",text:"confirm",channel:"webchat"};
+  assert.equal((await hook(turn,state,guard,inventory)).status,"pending");
+  assert.equal((await hook(turn,state,guard,inventory)).status,"pending");assert.equal(creates,1);assert.equal(state.selected?.variantId,"v");
+  stale=true;await assert.rejects(hook(turn,state,guard,inventory),/superseded/);assert.equal(creates,1);
+  const disabled=createCheckoutHandoff({database:f.db,commerce:f.commerce,approved:()=>false,settings:async()=>{throw Error("must not read");},entitled:async()=>true,codec:()=>{throw Error("must not read");}});
+  assert.equal((await disabled(turn,state,guard,inventory)).status,"setup_required");
+ }finally {await f.cleanup();}
+});
+
+test("late cancellation suppresses a completed cart; expired provider carts and cooldowns never create a replacement",async()=>{
+ const f=await fixture();try {
+  let creates=0,stale=false,expired=false;
+  await f.db.update(schema.conversations).set({shoppingState:{...f.state,_lease:{token:"held",until:Date.now()+120_000}}}).where(eq(schema.conversations.id,"conv"));
+  await inventoryDue(f.db,f.source.id);const inventory=(await f.commerce.verifyForPurchase("tenant-a",f.source.id,["v"]))[0];
+  const guard={token:"held",check:async()=>{if(stale)throw Error("shopping_turn_superseded");}};
+  const receipt={checkoutUrl:"https://fixture-a.myshopify.com/cart/c/late",providerCartId:"gid://shopify/Cart/late",paymentStatus:"unknown" as const};
+  const hook=createCheckoutHandoff({database:f.db,commerce:f.commerce,approved:()=>true,settings:async()=>shoppingSettings({enabled:true,checkoutEnabled:true}),entitled:async()=>true,codec:()=>checkoutReceiptCodec(Buffer.alloc(32,9)),provider:()=>({verify:async()=>{},prepare:async()=>{creates++;stale=true;return receipt;},status:async()=>expired?"expired":"available"})});
+  const turn={userId:"tenant-a",conversationId:"conv",eventId:"confirmation",text:"confirm",channel:"webchat"};
+  await assert.rejects(hook(turn,f.state as ShoppingState,guard,inventory),/superseded/);assert.equal(creates,1);
+  stale=false;
+  assert.equal((await hook(turn,f.state as ShoppingState,guard,inventory)).status,"pending","durable cooldown covers receipt status reads too");assert.equal(creates,1);
+  await f.db.execute(sql`UPDATE checkout_provider_gates SET next_request_at=NOW()-interval '1 second'`);expired=true;
+  assert.equal((await hook(turn,f.state as ShoppingState,guard,inventory)).status,"expired");assert.equal(creates,1);
+  assert.equal((await f.db.select().from(schema.messages)).length,0);
+ }finally {await f.cleanup();}
 });

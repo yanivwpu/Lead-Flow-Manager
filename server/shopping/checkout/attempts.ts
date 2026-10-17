@@ -24,11 +24,18 @@ export function checkoutReceiptCodec(key:Buffer):ReceiptCodec {
   };
 }
 export function checkoutRequestKey(context: {userId:string;conversationId:string;sourceId:string;integrationId:string;confirmationId:string;item:unknown}) {
-  return createHash("sha256").update(JSON.stringify([context.userId,context.conversationId,context.sourceId,context.integrationId,context.confirmationId,context.item])).digest("hex");
+  const {inventoryProof,...item} = (context.item ?? {}) as Record<string,unknown>;
+  return createHash("sha256").update(JSON.stringify([context.userId,context.conversationId,context.sourceId,context.integrationId,context.confirmationId,item])).digest("hex");
 }
 /** Durable at-most-one dispatch per confirmed selection, including process crashes. No lease steal. */
 export function createCheckoutAttempts(database:CatalogDb,codec:ReceiptCodec) {
-  return {async run(context:Parameters<typeof checkoutRequestKey>[0],prepare:()=>Promise<CheckoutReceipt>):Promise<CheckoutReceipt> {
+  return {
+   async readReady(key:string,userId:string,conversationId:string):Promise<CheckoutReceipt|undefined> {
+    const rows=await database.execute(sql`SELECT encrypted_receipt FROM checkout_preparation_attempts WHERE request_key=${key} AND user_id=${userId} AND conversation_id=${conversationId} AND status='ready' AND expires_at>NOW()`);
+    const value=rows.rows[0]?.encrypted_receipt;
+    return typeof value==="string"?codec.open(value,key):undefined;
+   },
+   async run(context:Parameters<typeof checkoutRequestKey>[0],prepare:()=>Promise<CheckoutReceipt>):Promise<CheckoutReceipt> {
     const key=checkoutRequestKey(context);
     const inserted=await database.execute(sql`INSERT INTO checkout_preparation_attempts(request_key,user_id,conversation_id,status,expires_at) VALUES (${key},${context.userId},${context.conversationId},'preparing',NOW()+interval '30 minutes') ON CONFLICT DO NOTHING RETURNING request_key`);
     if(!inserted.rows.length) {

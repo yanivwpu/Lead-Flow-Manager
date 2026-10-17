@@ -15,6 +15,8 @@ on:
       - "tests/shopping-assistant*.test.ts"
       - "tests/shopping-checkout*.test.ts"
       - "migrations/0110_checkout_preparation_attempts.sql"
+      - "migrations/0111_checkout_provider_gates.sql"
+      - "docs/shopify-checkout-phase2b-handoff.md"
       - "docs/shopify-checkout-phase2b.md"
       - "migrations/0108_conversation_shopping.sql"
       - "server/chatbotEngine.ts"

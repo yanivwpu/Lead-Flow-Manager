@@ -175,7 +175,7 @@ test("private transport executes real AI Brain shopping, live verification, mult
     assert.match(result.transcript.at(-1)!.content, /changed/i);
     result = await send("Yes, confirm.", true);
     assert.equal(result.state.step, "confirmed");
-    assert.match(result.transcript.at(-1)!.content, /not available yet/i);
+    assert.match(result.transcript.at(-1)!.content, /Private preview:.*No Shopify cart/i);
     assert.equal(result.state.selected?.price, "710.00");
     assert.equal(meter, 0, "deterministic shopping is not model usage");
     assert.equal((result.state as any).consumedEventIds, undefined);
