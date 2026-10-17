@@ -44,6 +44,14 @@ export function isSeoAutopilotPublishEligible(row:OpenRow,minConfidence=SEO_AUTO
   return row.status==="proposed"&&isAutopilotDraftEligible(row,minConfidence);
 }
 
+export function seoAutopilotRefreshEligible(row:Pick<OpenRow,"status"|"refresh_failure_category"|"updated_at">,now=Date.now()){
+  if(row.status!=="revision_required")return false;
+  if(row.refresh_failure_category==="NO_MATERIAL_IMPROVEMENT")return false;
+  if(!row.refresh_failure_category)return true;
+  const lastAttempt=new Date(String(row.updated_at)).getTime();
+  return Number.isFinite(lastAttempt)&&now-lastAttempt>=24*60*60_000;
+}
+
 async function loadOpenRows():Promise<OpenRow[]>{
   const result=await db.execute(sql`SELECT a.id,a.target_page,a.query_cluster,a.action_type,a.status,a.risk,a.confidence,a.stale_at,a.current_version,a.updated_at,a.refresh_failure_category,v.proposal,
       g.status execution_status,g.publication_requested_at,g.pr_number
@@ -85,14 +93,11 @@ export async function runSeoAutopilot(actor="seo-autopilot"){
   rows=await loadOpenRows();
 
   let refreshed=0,refreshFailed=0;
-  // Failed refreshes revert to revision_required. Back off those failures rather
-  // than retrying the same rows every five minutes and starving the queue.
-  // New/never-failed recommendations remain eligible immediately.
-  const retryCutoff=Date.now()-24*60*60_000;
-  const refreshCandidates=rows.filter(item=>item.status==="revision_required"&&(
-    !item.refresh_failure_category||
-    new Date(String(item.updated_at)).getTime()<=retryCutoff
-  )).sort((a,b)=>new Date(String(a.updated_at)).getTime()-new Date(String(b.updated_at)).getTime());
+  // A materiality rejection is terminal for the current proposal. Transient
+  // data failures back off for 24 hours; unfailed rows may run immediately.
+  const refreshCandidates=rows.filter(item=>seoAutopilotRefreshEligible(item)).sort(
+    (a,b)=>new Date(String(a.updated_at)).getTime()-new Date(String(b.updated_at)).getTime()
+  );
   for(const row of refreshCandidates.slice(0,config.maxRefresh)){
     try{await refreshSeoAction(row.id,actor);refreshed++;}catch{refreshFailed++;}
   }
