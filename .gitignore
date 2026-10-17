@@ -5,3 +5,6 @@ uploads/
 .tmp-review-screenshots/
 .tmp-i18n/
 .cursor/debug-*.log
+
+# Private operator checkout validation files
+work/checkout-validation/
