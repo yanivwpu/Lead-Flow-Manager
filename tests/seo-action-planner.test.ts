@@ -318,3 +318,12 @@ assert.match(identityReservationMigration,/CREATE UNIQUE INDEX IF NOT EXISTS seo
 assert.ok(identityReservationMigration.indexOf("CREATE UNIQUE INDEX")<identityReservationMigration.indexOf("DROP INDEX"),"replacement uniqueness is established before the old index is removed");
 assert.match(startup,/0101_seo_revision_identity_reservation/);assert.match(actionServiceSource,/status IN \('detected','researching','proposed','approved','revision_required'\) DO NOTHING/);assert.match(actionServiceSource,/loadOpenActions[\s\S]+revision_required/);
 const startup0101=startup.match(/tag: "0101_seo_revision_identity_reservation",\s+sql: `([\s\S]*?)`/)?.[1]??"";const normalizeStatements=(value:string)=>value.split(";").map(statement=>statement.replace(/\s+/g," ").trim().toLowerCase()).filter(Boolean);assert.deepEqual(normalizeStatements(startup0101),normalizeStatements(identityReservationMigration),"migration and startup provisioning remain equivalent");
+
+
+// SEO Admin UX: preserve full counts and history while collapsing older work by default.
+const seoActionsUi=readFileSync(new URL("../client/src/components/admin/SeoActionsPanel.tsx",import.meta.url),"utf8");
+assert.match(seoActionsUi,/olderActions\.slice\(0,3\)/,"older recommendations default to three visible cards");
+assert.match(seoActionsUi,/showAllOlder\|\|tab==="history"/,"Results history stays expanded");
+assert.match(seoActionsUi,/setShowAllOlder\(v=>!v\)/,"older recommendations can be expanded or collapsed");
+assert.match(seoActionsUi,/all\.filter\(a=>actionTabForAction\(a\)==="review"\)\.length/,"counts include all review recommendations");
+assert.match(seoActionsUi,/setShowAllOlder\(false\)/,"View new resets expanded older rows");
