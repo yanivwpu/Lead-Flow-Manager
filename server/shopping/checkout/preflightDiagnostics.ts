@@ -1,12 +1,12 @@
 import { CatalogApiError } from '../../salesCatalog/shopify/api';
-import { CheckoutError } from './contract';
+import { CHECKOUT_FAILURE_DETAILS, CheckoutError, type CheckoutFailureDetail } from './contract';
 
 // Fixed, non-sensitive vocabulary only. Never derive API output from Error.message,
 // provider payloads, SQL text/parameters, request bodies, tokens or checkout URLs.
 export type VerificationStage = 'installation' | 'admin_metadata' | 'admin_variant' | 'selection' | 'storefront' | 'journal';
 const reasons = ['failed','unavailable','access_denied','throttled','invalid_response',
   'graphql_selection_mismatch','graphql_error','changed','setup_required','api_version_mismatch','invalid_json'] as const;
-type Reason = typeof reasons[number];
+type Reason = typeof reasons[number] | CheckoutFailureDetail;
 export class CheckoutVerificationError extends Error {
   readonly code: string;
   constructor(stage: VerificationStage, reason: Reason) {
@@ -23,7 +23,7 @@ export async function verificationStage<T>(stage: VerificationStage, run:()=>Pro
       if (error.detail === 'graphql_selection_mismatch' || error.detail === 'graphql_error') reason=error.detail;
       else if (['unavailable','access_denied','throttled','invalid_response'].includes(error.code)) reason=error.code;
     } else if (error instanceof CheckoutError) {
-      if (error.detail === 'api_version_mismatch' || error.detail === 'graphql_error' || error.detail === 'invalid_json') reason=error.detail;
+      if (CHECKOUT_FAILURE_DETAILS.includes(error.detail!)) reason=error.detail!;
       else if (['unavailable','throttled','invalid_response','changed','setup_required'].includes(error.code)) reason=error.code as Reason;
     }
     throw new CheckoutVerificationError(stage,reason);

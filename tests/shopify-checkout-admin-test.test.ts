@@ -11,7 +11,7 @@ import { SHOP, META } from '../server/shopping/checkout/controlledValidation';
 const prefix='/api/sales-catalog/commerce/checkout-test/';
 async function fixture(options:{missing?:boolean;ambiguous?:boolean;installationError?:boolean;
  adminFailure?:{query:'meta'|'variant';error:unknown};metaPatch?:(v:any)=>any;variantPatch?:(v:any)=>any;
- storefront?:'version'|'graphql'|'json'|'denied'|'unavailable'|'changed'|'network'}={}) {
+ storefront?:'version'|'graphql'|'json'|'denied'|'unavailable'|'changed'|'network'|'dns'|'tls'|'http430'|'missing_variant'|'quantity_rule'}={}) {
  const f=await catalogFixture();
  await f.database.update(users).set({shopifyShop:SHOP}).where(eq(users.id,'tenant-a'));
  await f.database.update(integrations).set({config:{shopUrl:SHOP}}).where(eq(integrations.id,'integration-a'));
@@ -28,6 +28,9 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
  return q===META&&options.metaPatch?options.metaPatch(data):data;};
  const storefrontFetch=(async(_url:unknown,init:any)=>{
    const {query}=JSON.parse(init.body);
+   if(options.storefront==='dns'||options.storefront==='tls')throw Object.assign(Error('private-marker'),{cause:{code:options.storefront==='dns'?'ENOTFOUND':'CERT_HAS_EXPIRED'}});
+   if(options.storefront==='http430')return new Response('private-marker',{status:430});
+   if(options.storefront==='missing_variant')return new Response(JSON.stringify({data:{node:null}}),{headers:{'x-shopify-api-version':'2026-10'}});
    if(options.storefront==='network')throw Error('private Shopify diagnostic token=do-not-leak');
    if(options.storefront==='version')return new Response(JSON.stringify({data:{}}),{headers:{'x-shopify-api-version':'2026-07'}});
    if(options.storefront==='graphql')return new Response(JSON.stringify({errors:[{message:'private response token=do-not-leak'}]}),{headers:{'x-shopify-api-version':'2026-10'}});
@@ -39,7 +42,7 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
    let data;
    if(query.startsWith('mutation')){creates++;if(options.ambiguous)throw Error('secret provider diagnostic');data={cartCreate:{cart,userErrors:[],warnings:[]}};}
    else if(query.includes('CheckoutStatus'))data={cart};
-   else data={node:{...variant(),price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
+   else data={node:{...variant(),price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:options.storefront==='quantity_rule'?2:1,maximum:null,increment:1}}};
    return new Response(JSON.stringify({data}),{headers:{'x-shopify-api-version':'2026-10'}});
  }) as typeof fetch;
  const handlers:Record<string,any>={};
@@ -148,6 +151,11 @@ test('selection shape, exact identity/publication and inventory failures are dis
  await expectSafeFailure({variantPatch:(v:any)=>({...v,inventoryQuantity:0})},'checkout_test_inventory_insufficient');
 });
 test('tokenless Storefront version, GraphQL, JSON, auth, transport and changed-selection diagnostics never create carts',async()=>{
- for(const [storefront,reason] of [['version','api_version_mismatch'],['graphql','graphql_error'],['json','invalid_json'],['denied','setup_required'],['unavailable','unavailable'],['network','unavailable'],['changed','changed']] as const)
+ for(const [storefront,reason] of [['version','api_version_mismatch'],['graphql','graphql_error'],['json','invalid_json'],['denied','http_403'],['unavailable','http_503'],['network','transport_unknown_before_headers'],['changed','changed']] as const)
+  await expectSafeFailure({storefront},`checkout_test_storefront_${reason}`);
+});
+
+test('authorized preflight distinguishes Storefront transport, HTTP rejection and valid-JSON eligibility failures without journal or cart mutation',async()=>{
+ for(const [storefront,reason] of [['dns','dns_failure'],['tls','tls_failure'],['http430','http_430'],['missing_variant','variant_not_accessible'],['quantity_rule','quantity_rule_rejected']] as const)
   await expectSafeFailure({storefront},`checkout_test_storefront_${reason}`);
 });

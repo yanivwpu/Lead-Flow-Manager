@@ -1,3 +1,4 @@
+import { storefrontTransportDetail, storefrontHttpDetail } from "./storefrontDiagnostics";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { compareMoney } from "@shared/shoppingAssistant";
 import { CheckoutError, type CommerceCheckoutProvider, type VerifiedCheckoutItem, type CheckoutReceipt } from "./contract";
@@ -33,24 +34,29 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
   async function request(query: string, variables: Record<string, unknown>, mutation = false): Promise<any> {
     if (Date.now() < nextRequestAt) throw new CheckoutError("throttled", nextRequestAt - Date.now());
     let response: Response;
+    const signal = AbortSignal.timeout(15_000);
     try {
       response = await requestFetch(`https://${shop}/api/${STOREFRONT_API_VERSION}/graphql.json`, {
-        method: "POST", redirect: "error", signal: AbortSignal.timeout(15_000),
+        method: "POST", redirect: "error", signal,
         headers: { "Content-Type": "application/json", ...(config.credential.kind === "tokenless" ? {} : { [config.credential.kind === "private" ? "Shopify-Storefront-Private-Token" : "X-Shopify-Storefront-Access-Token"]: config.credential.token }) },
         body: JSON.stringify({ query, variables }),
       });
-    } catch { throw new CheckoutError(mutation ? "ambiguous" : "unavailable"); }
+    } catch(error) { throw new CheckoutError(mutation ? "ambiguous" : "unavailable",30_000,mutation?undefined:storefrontTransportDetail(error,signal)); }
     if (response.status === 429) {
       const delay = Number(response.headers.get("retry-after"));
       const retryMs = Number.isFinite(delay) && delay > 0 ? Math.min(delay * 1000, 600_000) : 60_000;
       nextRequestAt = Date.now() + retryMs;
       throw new CheckoutError("throttled", retryMs);
     }
-    if ([401,403].includes(response.status)) throw new CheckoutError("setup_required",600_000);
-    if (!response.ok) throw new CheckoutError(mutation ? "ambiguous" : "unavailable");
-    if (response.headers.get("x-shopify-api-version") !== STOREFRONT_API_VERSION) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"api_version_mismatch");
+    if ([401,403].includes(response.status)) throw new CheckoutError("setup_required",600_000,mutation?undefined:storefrontHttpDetail(response.status));
+    if (!response.ok) throw new CheckoutError(mutation ? "ambiguous" : "unavailable",30_000,mutation?undefined:storefrontHttpDetail(response.status));
+    const html = response.headers.get("content-type")?.toLowerCase().includes("text/html") === true;
+    if (response.headers.get("x-shopify-api-version") !== STOREFRONT_API_VERSION) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,html?"html_response":"api_version_mismatch");
     let body: any;
-    try { body = await response.json(); } catch { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"invalid_json"); }
+    try { body = await response.json(); } catch(error) {
+      const detail = error instanceof SyntaxError ? (html?'html_response':'invalid_json') : storefrontTransportDetail(error,signal,true);
+      throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,mutation?undefined:detail);
+    }
     if (body?.errors?.length) {
       if (!body.data && body.errors.every((e:any)=>e?.extensions?.code === "THROTTLED")) { nextRequestAt=Date.now()+60_000; throw new CheckoutError("throttled",60_000); }
       throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"graphql_error");
@@ -59,7 +65,7 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
     return body.data;
   }
   function validateItem(item: VerifiedCheckoutItem) {
-    if (!gid("Product",item.productId) || !gid("ProductVariant",item.variantId) || !Number.isInteger(item.quantity) || item.quantity<1 || item.quantity>99 || !money(item.price) || !/^[A-Z]{3}$/.test(item.currency)) throw new CheckoutError("unavailable");
+    if (!gid("Product",item.productId) || !gid("ProductVariant",item.variantId) || !Number.isInteger(item.quantity) || item.quantity<1 || item.quantity>99 || !money(item.price) || !/^[A-Z]{3}$/.test(item.currency)) throw new CheckoutError("unavailable",30_000,"item_invalid");
   }
   function receipt(cart: any, item?: VerifiedCheckoutItem): CheckoutReceipt {
     if (typeof cart?.id !== "string" || !cart.id.startsWith("gid://shopify/Cart/")) throw new CheckoutError("invalid_response");
@@ -76,12 +82,18 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       const tokenless = config.credential.kind === "tokenless";
       if (tokenless) {
         const proof = item.inventoryProof, age = Date.now() - (proof?.at ?? 0);
-        if (!proof || !Number.isFinite(age) || age < 0 || age > 60_000 || (!proof.unrestricted && (!Number.isInteger(proof.quantity) || proof.quantity! < item.quantity))) throw new CheckoutError("unavailable");
+        if (!proof) throw new CheckoutError("unavailable",30_000,"inventory_proof_missing");
+        if (!Number.isFinite(age) || age < 0 || age > 60_000) throw new CheckoutError("unavailable",30_000,"inventory_proof_expired");
+        if (!proof.unrestricted && (!Number.isInteger(proof.quantity) || proof.quantity! < item.quantity)) throw new CheckoutError("unavailable",30_000,"inventory_proof_insufficient");
       }
       const v=(await request(tokenless ? VERIFY_TOKENLESS : VERIFY,{id:item.variantId})).node;
-      if(!v || v.id!==item.variantId || v.product?.id!==item.productId || v.availableForSale!==true || v.requiresComponents!==false || v.product.requiresSellingPlan!==false || (!tokenless && v.currentlyNotInStock!==true && (!Number.isInteger(v.quantityAvailable) || v.quantityAvailable<item.quantity))) throw new CheckoutError("unavailable");
+      if(!v) throw new CheckoutError("unavailable",30_000,"variant_not_accessible");
+      if(v.id!==item.variantId || v.product?.id!==item.productId) throw new CheckoutError("unavailable",30_000,"variant_identity_mismatch");
+      if(v.availableForSale!==true) throw new CheckoutError("unavailable",30_000,"variant_not_for_sale");
+      if(v.requiresComponents!==false || v.product.requiresSellingPlan!==false) throw new CheckoutError("unavailable",30_000,"variant_unsupported");
+      if(!tokenless && v.currentlyNotInStock!==true && (!Number.isInteger(v.quantityAvailable) || v.quantityAvailable<item.quantity)) throw new CheckoutError("unavailable",30_000,"storefront_inventory_insufficient");
       const rule=v.quantityRule;
-      if(!rule || !Number.isInteger(rule.minimum) || rule.minimum<1 || !Number.isInteger(rule.increment) || rule.increment<1 || (rule.maximum!==null && (!Number.isInteger(rule.maximum)||rule.maximum<rule.minimum)) || item.quantity<rule.minimum || (rule.maximum!==null && item.quantity>rule.maximum) || item.quantity%rule.increment!==0) throw new CheckoutError("unavailable");
+      if(!rule || !Number.isInteger(rule.minimum) || rule.minimum<1 || !Number.isInteger(rule.increment) || rule.increment<1 || (rule.maximum!==null && (!Number.isInteger(rule.maximum)||rule.maximum<rule.minimum)) || item.quantity<rule.minimum || (rule.maximum!==null && item.quantity>rule.maximum) || item.quantity%rule.increment!==0) throw new CheckoutError("unavailable",30_000,"quantity_rule_rejected");
       if(!money(v.price?.amount) || v.price.currencyCode!==item.currency || compareMoney(v.price.amount,item.price)!==0 || JSON.stringify(v.selectedOptions)!==JSON.stringify(item.options)) throw new CheckoutError("changed");
     },
     async prepare(item) {
