@@ -11,7 +11,7 @@ import { SHOP, META } from '../server/shopping/checkout/controlledValidation';
 const prefix='/api/sales-catalog/commerce/checkout-test/';
 async function fixture(options:{missing?:boolean;ambiguous?:boolean;installationError?:boolean;
  adminFailure?:{query:'meta'|'variant';error:unknown};metaPatch?:(v:any)=>any;variantPatch?:(v:any)=>any;
- httpResponse?:{status:number;contentType?:string;apiVersion?:string;redirected?:boolean};
+ httpResponse?:{status:number;contentType?:string;apiVersion?:string;redirected?:boolean;body?:unknown};
  storefront?:'version'|'graphql'|'json'|'denied'|'unavailable'|'changed'|'network'}={}) {
  const f=await catalogFixture();
  await f.database.update(users).set({shopifyShop:SHOP}).where(eq(users.id,'tenant-a'));
@@ -32,7 +32,7 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
    if(options.httpResponse){
      assert.match(query,/^query CheckoutVariant/);
      const {status,contentType,apiVersion,redirected}=options.httpResponse;
-     const response=new Response('private body token=do-not-leak',{status,headers:{...(contentType?{'content-type':contentType}:{}),...(apiVersion?{'x-shopify-api-version':apiVersion}:{}),'set-cookie':'private=do-not-leak','location':'https://private.invalid/?key=do-not-leak'}});
+     const response=new Response(options.httpResponse.body===undefined?'private body token=do-not-leak':JSON.stringify(options.httpResponse.body),{status,headers:{...(contentType?{'content-type':contentType}:{}),...(apiVersion?{'x-shopify-api-version':apiVersion}:{}),'set-cookie':'private=do-not-leak','location':'https://private.invalid/?key=do-not-leak'}});
      if(redirected)Object.defineProperty(response,'redirected',{value:true});
      return response;
    }
@@ -174,7 +174,7 @@ async function expectDiagnostic(options:Parameters<typeof fixture>[0],expected:u
 }
 test('admin-only diagnose returns exact five allowlisted response fields and never journals',async()=>{
  for(const [status,contentType,category] of [[400,'application/json','http_client_error'],[401,'text/html','setup_required'],[403,'application/problem+json','setup_required'],[404,'text/html','http_client_error'],[429,'text/plain','throttled'],[503,'text/plain','http_server_error']] as const)
-  await expectDiagnostic({httpResponse:{status,contentType,apiVersion:'private header value never exposed'}},{httpStatus:status,redirectOccurred:false,contentTypeFamily:contentType==='text/html'?'HTML':contentType==='text/plain'?'other':'JSON',apiVersionHeaderPresent:true,errorCategory:`checkout_test_storefront_${category}`});
+  await expectDiagnostic({httpResponse:{status,contentType,apiVersion:'private header value never exposed'}},{httpStatus:status,redirectOccurred:false,contentTypeFamily:contentType==='text/html'?'HTML':contentType==='text/plain'?'other':'JSON',apiVersionHeaderPresent:true,errorCategory:status===400?'checkout_test_storefront_bad_request_api_version_mismatch':`checkout_test_storefront_${category}`});
 });
 test('diagnose preserves header absence and redirect evidence without returning Location',async()=>{
  await expectDiagnostic({httpResponse:{status:302,contentType:'text/html'}},{httpStatus:302,redirectOccurred:false,contentTypeFamily:'HTML',apiVersionHeaderPresent:false,errorCategory:'checkout_test_storefront_http_redirect'});
@@ -192,4 +192,14 @@ test('diagnose authorization and request validation precede all upstream reads',
   assert.equal((await f.call('diagnose',{arbitrary:true})).status,400);
   assert.equal(f.reads(),0);assert.equal(f.creates(),0);
  }finally{await f.cleanup();}
+});
+
+test('diagnose classifies structured HTTP400 errors without raw payloads or readiness writes',async()=>{
+ for(const [body,reason] of [
+  [{errors:[{message:'private token=do-not-leak',extensions:{code:'undefinedField',fieldName:'quantityRule'}}]},'graphql_undefined_field_quantityRule'],
+  [{errors:[{message:'private token=do-not-leak',extensions:{code:'ACCESS_DENIED',fieldName:'private-secret'}}]},'graphql_access_denied'],
+  [{errors:{query:'private token=do-not-leak'}},'request_envelope_rejected'],
+  [{errors:[{message:'private token=do-not-leak',extensions:{code:'UNKNOWN_PRIVATE'}}]},'graphql_error_unclassified'],
+ ] as const)await expectDiagnostic({httpResponse:{status:400,contentType:'application/json',apiVersion:'2026-10',body}},
+  {httpStatus:400,redirectOccurred:false,contentTypeFamily:'JSON',apiVersionHeaderPresent:true,errorCategory:`checkout_test_storefront_bad_request_${reason}`});
 });
