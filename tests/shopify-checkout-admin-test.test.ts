@@ -148,6 +148,7 @@ test('selection shape, exact identity/publication and inventory failures are dis
  await expectSafeFailure({variantPatch:(v:any)=>({...v,inventoryQuantity:0})},'checkout_test_inventory_insufficient');
 });
 test('tokenless Storefront version, GraphQL, JSON, auth, transport and changed-selection diagnostics never create carts',async()=>{
- for(const [storefront,reason] of [['version','api_version_mismatch'],['graphql','graphql_error'],['json','invalid_json'],['denied','setup_required'],['unavailable','unavailable'],['network','unavailable'],['changed','changed']] as const)
+ for(const [storefront,reason] of [['version','api_version_mismatch'],['graphql','graphql_error'],['json','invalid_json'],['denied','setup_required'],['unavailable','http_server_error'],['network','transport_unknown'],['changed','changed']] as const)
   await expectSafeFailure({storefront},`checkout_test_storefront_${reason}`);
 });
+
