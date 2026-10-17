@@ -1,3 +1,4 @@
+import { storefrontDetails } from "./storefrontDiagnostics";
 import { CatalogApiError } from '../../salesCatalog/shopify/api';
 import { CheckoutError } from './contract';
 
@@ -5,7 +6,7 @@ import { CheckoutError } from './contract';
 // provider payloads, SQL text/parameters, request bodies, tokens or checkout URLs.
 export type VerificationStage = 'installation' | 'admin_metadata' | 'admin_variant' | 'selection' | 'storefront' | 'journal';
 const reasons = ['failed','unavailable','access_denied','throttled','invalid_response',
-  'graphql_selection_mismatch','graphql_error','changed','setup_required','api_version_mismatch','invalid_json'] as const;
+  'graphql_selection_mismatch','graphql_error','changed','setup_required','api_version_mismatch','invalid_json',...storefrontDetails] as const;
 type Reason = typeof reasons[number];
 export class CheckoutVerificationError extends Error {
   readonly code: string;
@@ -23,7 +24,8 @@ export async function verificationStage<T>(stage: VerificationStage, run:()=>Pro
       if (error.detail === 'graphql_selection_mismatch' || error.detail === 'graphql_error') reason=error.detail;
       else if (['unavailable','access_denied','throttled','invalid_response'].includes(error.code)) reason=error.code;
     } else if (error instanceof CheckoutError) {
-      if (error.detail === 'api_version_mismatch' || error.detail === 'graphql_error' || error.detail === 'invalid_json') reason=error.detail;
+      if (stage === 'storefront' && storefrontDetails.includes(error.detail as any)) reason=error.detail as Reason;
+      else if (error.detail === 'api_version_mismatch' || error.detail === 'graphql_error' || error.detail === 'invalid_json') reason=error.detail;
       else if (['unavailable','throttled','invalid_response','changed','setup_required'].includes(error.code)) reason=error.code as Reason;
     }
     throw new CheckoutVerificationError(stage,reason);
@@ -48,3 +50,4 @@ export class CheckoutGuardError extends Error {
 export function controlledFailureCode(error: unknown): string | undefined {
   return error instanceof CheckoutGuardError ? guardCodes[error.guard] : undefined;
 }
+

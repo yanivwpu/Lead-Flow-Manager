@@ -1,3 +1,4 @@
+import type { StorefrontDetail } from "./storefrontDiagnostics";
 /** Server-only contracts. Provider identities are resolved from the owned catalog, never a request body. */
 export type VerifiedCheckoutItem = {
   productId: string;
@@ -21,7 +22,8 @@ export interface CommerceCheckoutProvider {
   status?: (receipt: CheckoutReceipt, item?: VerifiedCheckoutItem) => Promise<"available" | "expired" | "unknown">;
 }
 export class CheckoutError extends Error {
-  constructor(public code: "setup_required" | "not_confirmed" | "unavailable" | "changed" | "invalid_response" | "throttled" | "ambiguous" | "already_preparing" | "expired", public retryMs = 30_000, public detail?: "api_version_mismatch" | "graphql_error" | "invalid_json") {
+  constructor(public code: "setup_required" | "not_confirmed" | "unavailable" | "changed" | "invalid_response" | "throttled" | "ambiguous" | "already_preparing" | "expired", public retryMs = 30_000, public detail?: "api_version_mismatch" | "graphql_error" | "invalid_json" | StorefrontDetail) {
     super(code); // Never include provider messages, bodies, URLs or tokens.
   }
 }
+
