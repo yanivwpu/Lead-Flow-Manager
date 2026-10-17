@@ -1,3 +1,4 @@
+import { registerShopifyCheckoutAdminTest } from "../../shopping/checkout/adminTest";
 import { isShopifyProductPublished } from "./publication";
 import type { Express } from "express";
 import { z } from "zod";
@@ -38,6 +39,7 @@ export function registerShopifyCatalogRoutes(
   authorize = requireWorkspaceOffersAdmin,
   requestFor = shopifyCatalogRequest,
 ) {
+  registerShopifyCheckoutAdminTest(app, database, authorize, requestFor);
   app.get("/api/sales-catalog/commerce/status", async (req, res) => {
     const auth = await authorize(req, res);
     if (!auth) return;

@@ -1,3 +1,4 @@
+import { ShopifyCheckoutTest } from "@/components/ShopifyCheckoutTest";
 import { AiTestChat } from "@/components/AiTestChat";
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
@@ -17,6 +18,7 @@ export function ShoppingSettings() {
  return <section dir={i18n.dir()} className="rounded-lg border p-4 space-y-3">
   <h3 className="font-semibold">{t("shopping.title")}</h3>
   <AiTestChat/>
+  <ShopifyCheckoutTest key={user?.id}/>
   <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} disabled={!query.data.entitled} onChange={e=>setDraft({...value,enabled:e.target.checked})}/>{t("shopping.enable")}</label>
   {!query.data.entitled&&<p className="text-sm">{t("shopping.pro")}</p>}
   <label className="flex items-center gap-2">{t("shopping.max")}<input className="border rounded w-16 p-1" type="number" min={1} max={8} value={value.maxRecommendations} onChange={e=>setDraft({...value,maxRecommendations:Number(e.target.value)})}/></label>
