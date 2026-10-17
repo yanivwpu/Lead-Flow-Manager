@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createShopifyCheckoutProvider, STOREFRONT_API_VERSION, validateCheckoutUrl } from "../server/shopping/checkout/shopify";
 import { checkoutReceiptCodec, checkoutRequestKey } from "../server/shopping/checkout/attempts";
-import type { VerifiedCheckoutItem } from "../server/shopping/checkout/contract";
+import { CheckoutError, type CheckoutFailureDetail, type VerifiedCheckoutItem } from "../server/shopping/checkout/contract";
 const shop="fixture-a.myshopify.com", url=`https://${shop}/cart/c/provider-token?key=secret`;
 const item:VerifiedCheckoutItem={productId:"gid://shopify/Product/1",variantId:"gid://shopify/ProductVariant/2",quantity:2,price:"600.00",currency:"USD",options:[{name:"Color",value:"Ice"}]};
 function variant(){return {id:item.variantId,product:{id:item.productId,requiresSellingPlan:false},availableForSale:true,quantityAvailable:5,quantityRule:{minimum:1,maximum:null,increment:1},currentlyNotInStock:false,requiresComponents:false,price:{amount:"600.0",currencyCode:"USD"},selectedOptions:item.options};}
@@ -158,4 +158,68 @@ test("tokenless Cart warnings, partial quantities and authorization errors canno
   const {provider,calls}=tokenlessProvider({errorAt});await assert.rejects(provider.prepare(tokenlessItem()),errorAt==="verify"?/invalid_response/:/ambiguous/);assert.equal(calls.length,errorAt==="verify"?1:2);
  }
  const {provider}=tokenlessProvider({errorAt:"status"});await assert.rejects(provider.status!({checkoutUrl:url,providerCartId:cart().id,paymentStatus:"unknown"},item),/invalid_response/);
+});
+
+
+function diagnosticProvider(response:(signal:AbortSignal)=>Promise<Response>) {
+ let calls=0;
+ const p=createShopifyCheckoutProvider({shop,credential:{kind:'tokenless'},fetch:async(u,init)=>{
+   calls++;assert.equal(u,`https://${shop}/api/2026-10/graphql.json`);
+   assert.equal(init?.method,'POST');assert.equal(init?.redirect,'error');
+   assert.deepEqual(init?.headers,{'Content-Type':'application/json'});
+   assert.ok(init?.signal instanceof AbortSignal);
+   const body=JSON.parse(init?.body as string);assert.ok(body.query.startsWith('query CheckoutVariant'));
+   assert.deepEqual(body.variables,{id:item.variantId});
+   return response(init!.signal!);
+ }});
+ return {p,calls:()=>calls};
+}
+const proofItem=()=>({...item,inventoryProof:{at:Date.now(),quantity:5,unrestricted:false}});
+function failureDetail(expected:CheckoutFailureDetail,code:string='unavailable') {
+ return (error:unknown)=>{
+  assert.ok(error instanceof CheckoutError);assert.equal(error.code,code);assert.equal(error.detail,expected);
+  assert.doesNotMatch(JSON.stringify(error),/private-marker|secret-body|https:|password|stack|cause/);return true;
+ };
+}
+test('Storefront diagnostics distinguish DNS/TLS/connection and native timeouts before HTTP headers without retry',async()=>{
+ for(const [code,detail] of [
+  ['ENOTFOUND','dns_failure'],['EAI_AGAIN','dns_failure'],['CERT_HAS_EXPIRED','tls_failure'],
+  ['ERR_TLS_CERT_ALTNAME_INVALID','tls_failure'],['ECONNRESET','connection_failure'],['ECONNREFUSED','connection_failure'],
+  ['UND_ERR_CONNECT_TIMEOUT','connect_timeout'],['UND_ERR_HEADERS_TIMEOUT','headers_timeout'],
+ ] as const){
+  const f=diagnosticProvider(async()=>{throw Object.assign(new TypeError('private-marker'),{cause:Object.assign(Error('private-marker'),{code})});});
+  await assert.rejects(f.p.verify(proofItem()),failureDetail(detail));assert.equal(f.calls(),1);
+ }
+ const aggregate=diagnosticProvider(async()=>{throw Object.assign(Error('private-marker'),{cause:new AggregateError([Object.assign(Error('private-marker'),{code:'ENOTFOUND'})])});});
+ await assert.rejects(aggregate.p.verify(proofItem()),failureDetail('dns_failure'));
+ const timeout=diagnosticProvider(async()=>{throw new DOMException('private-marker','TimeoutError');});
+ await assert.rejects(timeout.p.verify(proofItem()),failureDetail('request_timeout'));
+ const unknown=diagnosticProvider(async()=>{throw Object.assign(Error('private-marker'),{code:'private-marker'});});
+ await assert.rejects(unknown.p.verify(proofItem()),failureDetail('transport_unknown_before_headers'));
+});
+test('Storefront rejected redirect and received HTTP status/HTML are distinct; response bodies and destinations stay private',async()=>{
+ const redirected=diagnosticProvider(async()=>{throw Object.assign(new TypeError('private-marker'),{cause:Error('unexpected redirect')});});
+ await assert.rejects(redirected.p.verify(proofItem()),failureDetail('redirect_refused'));assert.equal(redirected.calls(),1);
+ for(const [status,detail,code] of [[403,'http_403','setup_required'],[404,'http_404','unavailable'],[430,'http_430','unavailable'],[503,'http_503','unavailable'],[302,'http_redirect','unavailable']] as const){
+  const f=diagnosticProvider(async()=>new Response('secret-body',{status,headers:{'Content-Type':'text/html','Location':'https://untrusted.invalid/private-marker'}}));
+  await assert.rejects(f.p.verify(proofItem()),failureDetail(detail,code));assert.equal(f.calls(),1);
+ }
+ const html=diagnosticProvider(async()=>new Response('<html>secret-body password page</html>',{headers:{'Content-Type':'text/html'}}));
+ await assert.rejects(html.p.verify(proofItem()),failureDetail('html_response','invalid_response'));
+});
+test('Storefront timeout/body read failure after HTTP headers is not mislabeled as JSON syntax failure',async()=>{
+ for(const [error,detail] of [[new DOMException('private-marker','TimeoutError'),'body_timeout'],[Object.assign(Error('private-marker'),{code:'UND_ERR_SOCKET'}),'body_transport_failed']] as const){
+  const f=diagnosticProvider(async()=>new Response(new ReadableStream({start(controller){controller.error(error);}}),{headers:{'x-shopify-api-version':STOREFRONT_API_VERSION}}));
+  await assert.rejects(f.p.verify(proofItem()),failureDetail(detail,'invalid_response'));assert.equal(f.calls(),1);
+ }
+});
+test('Storefront diagnostic inventory-proof failures happen before fetch; null variant and quantity-rule failures happen after valid HTTP JSON',async()=>{
+ for(const [inventoryProof,detail] of [[undefined,'inventory_proof_missing'],[{at:Date.now()-61000,quantity:5,unrestricted:false},'inventory_proof_expired'],[{at:Date.now(),quantity:0,unrestricted:false},'inventory_proof_insufficient']] as const){
+  const f=diagnosticProvider(async()=>{throw Error('must not fetch');});
+  await assert.rejects(f.p.verify({...item,inventoryProof}),failureDetail(detail));assert.equal(f.calls(),0);
+ }
+ for(const [node,detail] of [[null,'variant_not_accessible'],[{...variant(),id:'gid://shopify/ProductVariant/99'},'variant_identity_mismatch'],[{...variant(),availableForSale:false},'variant_not_for_sale'],[{...variant(),requiresComponents:true},'variant_unsupported'],[{...variant(),quantityRule:{minimum:3,maximum:null,increment:1}},'quantity_rule_rejected']] as const){
+  const f=diagnosticProvider(async()=>new Response(JSON.stringify({data:{node}}),{headers:{'x-shopify-api-version':STOREFRONT_API_VERSION}}));
+  await assert.rejects(f.p.verify(proofItem()),failureDetail(detail));assert.equal(f.calls(),1);
+ }
 });
