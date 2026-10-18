@@ -46,6 +46,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
     ['quantityRule', 'id quantityRule { minimum maximum increment }'],
     ['requiresComponents', 'id requiresComponents'],
     ['requiresSellingPlan', 'id product { id requiresSellingPlan }'],
+    ['inventoryScope', 'id quantityAvailable currentlyNotInStock'],
     ['complete', 'id availableForSale quantityRule { minimum maximum increment } requiresComponents selectedOptions { name value } price { amount currencyCode } product { id requiresSellingPlan }'],
   ];
   const endpoint = `https://${SHOP}/api/${VERSION}/graphql.json`;
@@ -68,7 +69,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
         test: name, utc: started, status: response.status,
         apiVersionMatch: version === VERSION,
         contentType: type.toLowerCase().includes('json') ? 'JSON' : type.toLowerCase().startsWith('text/html') ? 'HTML' : 'other',
-        errorCode: 'none', lockedChannel: false, hasData: false, variantReturned: false, variantIdMatches: false,
+        errorCode: 'none', lockedChannel: false, hasData: false, variantReturned: false, variantIdMatches: false, inventoryFieldsAccessible: null,
       };
       // Never print the raw response body or arbitrary provider error strings.
       if (summary.contentType === 'JSON') {
@@ -80,6 +81,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
           summary.hasData = !!data?.data;
           summary.variantReturned = !!data?.data?.node;
           summary.variantIdMatches = data?.data?.node?.id === ID;
+          if (name === 'inventoryScope') summary.inventoryFieldsAccessible = Number.isSafeInteger(data?.data?.node?.quantityAvailable) && typeof data?.data?.node?.currentlyNotInStock === 'boolean';
           if (Array.isArray(data?.errors) && data.errors.length) {
             const codes = data.errors.map(e => e?.extensions?.code);
             summary.errorCode = codes.length === 1 && ['BAD_REQUEST','ACCESS_DENIED','GRAPHQL_VALIDATION_FAILED','THROTTLED'].includes(codes[0]) ? codes[0] : 'other';
