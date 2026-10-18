@@ -49,7 +49,7 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
    let data;
    if(query.startsWith('mutation')){creates++;if(options.ambiguous)throw Error('secret provider diagnostic');data={cartCreate:{cart,userErrors:[],warnings:[]}};}
    else if(query.includes('CheckoutStatus'))data={cart};
-   else data={node:{...variant(),price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
+   else data={node:{...variant(),quantityAvailable:3,currentlyNotInStock:false,price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
    return new Response(JSON.stringify({data}),{headers:{'x-shopify-api-version':'2026-10'}});
  }) as typeof fetch;
  const handlers:Record<string,any>={};
