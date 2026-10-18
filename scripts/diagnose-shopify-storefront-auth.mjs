@@ -43,7 +43,7 @@ if (!TOKEN || !['public', 'private'].includes(KIND)) {
       const summary = {
         test: name, utc: started, status: response.status,
         apiVersionMatch: version === VERSION,
-        contentType: /(?:^|\\/)json(?:;|$)|\\+json/i.test(type) ? 'JSON' : /^text\\/html/i.test(type) ? 'HTML' : 'other',
+        contentType: type.toLowerCase().includes('json') ? 'JSON' : type.toLowerCase().startsWith('text/html') ? 'HTML' : 'other',
         errorCode: 'none', lockedChannel: false, hasData: false,
       };
       // Never print the raw response body or arbitrary provider error strings.
