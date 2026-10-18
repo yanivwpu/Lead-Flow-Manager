@@ -69,7 +69,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
         test: name, utc: started, status: response.status,
         apiVersionMatch: version === VERSION,
         contentType: type.toLowerCase().includes('json') ? 'JSON' : type.toLowerCase().startsWith('text/html') ? 'HTML' : 'other',
-        errorCode: 'none', lockedChannel: false, hasData: false, variantReturned: false, variantIdMatches: false, inventoryFieldsAccessible: null,
+        errorCode: 'none', lockedChannel: false, hasData: false, variantReturned: false, variantIdMatches: false, inventoryFieldsAccessible: null, verifiedPrice: null, verifiedCurrency: null,
       };
       // Never print the raw response body or arbitrary provider error strings.
       if (summary.contentType === 'JSON') {
@@ -81,6 +81,10 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
           summary.hasData = !!data?.data;
           summary.variantReturned = !!data?.data?.node;
           summary.variantIdMatches = data?.data?.node?.id === ID;
+          if (name === 'minimal' && summary.variantIdMatches && /^\d+(?:\.\d{1,6})?$/.test(data?.data?.node?.price?.amount) && /^[A-Z]{3}$/.test(data?.data?.node?.price?.currencyCode)) {
+            summary.verifiedPrice = data.data.node.price.amount;
+            summary.verifiedCurrency = data.data.node.price.currencyCode;
+          }
           if (name === 'inventoryScope') summary.inventoryFieldsAccessible = Number.isSafeInteger(data?.data?.node?.quantityAvailable) && typeof data?.data?.node?.currentlyNotInStock === 'boolean';
           if (Array.isArray(data?.errors) && data.errors.length) {
             const codes = data.errors.map(e => e?.extensions?.code);
