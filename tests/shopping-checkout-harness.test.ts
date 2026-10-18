@@ -22,7 +22,7 @@ function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=
    let data;
    if(query.startsWith('mutation')) {assert.equal(consumed,true);mutations++;assert.deepEqual(variables,{input:{lines:[{merchandiseId:selection.variantId,quantity:1}]}});if(change.ambiguous)throw Error('synthetic network failure');data={cartCreate:{cart:change.cart?.(cart)??cart,userErrors:[],warnings:[]}};}
    else if(query.includes('CheckoutStatus'))data={cart};
-   else data={node:{...variant,price:{amount:'12.00',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
+   else data={node:{...variant,quantityAvailable:5,currentlyNotInStock:false,price:{amount:'12.00',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
    return new Response(JSON.stringify({data}),{headers:{'x-shopify-api-version':'2026-10'}});
   }) as typeof fetch,
   consume:async()=>{if(consumed)throw Error('already_consumed');consumed=true;},
