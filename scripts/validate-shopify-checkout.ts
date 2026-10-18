@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { consumeDispatch, savePrivateReceipt } from './checkout-validation/private-files';
 import { resolve } from 'node:path';
+import { railwayCartDirectory, railwayCheckoutModeAllowed } from './checkout-validation/railway-guard';
 import { fileURLToPath } from 'node:url';
 import { runValidation, SHOP, META } from './checkout-validation/harness';
 import { SHOPIFY_INVENTORY_BATCH_QUERY } from '../server/salesCatalog/shopify/inventory';
@@ -10,7 +11,7 @@ import { createCatalogRequest } from '../server/salesCatalog/shopify/api';
 async function main() {
   const [mode, selectionPath, approvalPath, ...extra] = process.argv.slice(2);
   if (!['--preflight','--create-one-cart'].includes(mode) || !selectionPath || extra.length ||
-      (mode==='--create-one-cart')!==!!approvalPath || process.env.CI || process.env.RAILWAY_SERVICE_ID)
+      (mode==='--create-one-cart')!==!!approvalPath || process.env.CI || !railwayCheckoutModeAllowed(mode))
     throw Error('operator_command_required');
   const selection = JSON.parse(await readFile(selectionPath,'utf8'));
   const approval = approvalPath ? JSON.parse(await readFile(approvalPath,'utf8')) : undefined;
@@ -25,7 +26,7 @@ async function main() {
     await client.query('BEGIN READ ONLY');
     const database = drizzle(client);
     // Fixed per-checkout directory; no per-run nonce that could silently bypass the one-shot claim.
-    const directory = resolve('work/checkout-validation');
+    const directory = await railwayCartDirectory();
     const result = await runValidation(selection,{
       approval,
       installation:()=>resolveCatalogInstallation(database,selection.userId,SHOP),
