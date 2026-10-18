@@ -77,7 +77,9 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
           summary.errorCode = parsed.error;
         } else {
           const data = parsed.data;
-          summary.hasData = !!data?.data;\n          summary.variantReturned = !!data?.data?.node;\n          summary.variantIdMatches = data?.data?.node?.id === ID;
+          summary.hasData = !!data?.data;
+          summary.variantReturned = !!data?.data?.node;
+          summary.variantIdMatches = data?.data?.node?.id === ID;
           if (Array.isArray(data?.errors) && data.errors.length) {
             const codes = data.errors.map(e => e?.extensions?.code);
             summary.errorCode = codes.length === 1 && ['BAD_REQUEST','ACCESS_DENIED','GRAPHQL_VALIDATION_FAILED','THROTTLED'].includes(codes[0]) ? codes[0] : 'other';
