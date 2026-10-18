@@ -98,6 +98,7 @@ jobs:
       - name: Conversational shopping and PostgreSQL session integration
         run: |
           node --import tsx tests/shopping-checkout-harness.test.ts
+          node --import tsx tests/shopping-checkout-bad-request.test.ts
           node --import tsx tests/shopping-checkout-http-diagnostic.test.ts
           node --import tsx tests/shopping-checkout-transport.test.ts
           node --import tsx tests/shopping-checkout.test.ts

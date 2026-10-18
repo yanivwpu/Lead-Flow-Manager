@@ -1,3 +1,4 @@
+import { badRequestDiagnostic } from './badRequestDiagnostic';
 import { emptyHttpSummary, storefrontHttpSummary } from './httpDiagnostic';
 import { CheckoutVerificationError, controlledFailureCode, verificationStage } from './preflightDiagnostics';
 import { createHash, randomUUID } from 'node:crypto';
@@ -46,6 +47,7 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
     app[action === 'access' ? 'get' : 'post'](`${base}/${action}`, async(req,res)=>{
       res.set({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});
       let http = emptyHttpSummary();
+      let badRequest: string | undefined;
       try {
         const auth = await authorize(req,res);
         if (!auth) return;
@@ -65,6 +67,7 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
           requestFor, storefrontFetch: action === 'diagnose' ? (async(input,init)=>{
             const response = await storefrontFetch(input,init);
             http = storefrontHttpSummary(response);
+            if(response.status===400) badRequest=await badRequestDiagnostic(response);
             return response;
           }) as typeof fetch : storefrontFetch,
           consume:async()=>{throw new TestError(403,'approval_required');},
@@ -138,7 +141,9 @@ export function registerShopifyCheckoutAdminTest(app: Express, database: Catalog
         const known = error instanceof TestError;
         const diagnostic = error instanceof CheckoutVerificationError ? error.code : controlledFailureCode(error);
         if (action === 'diagnose') return res.status(known ? error.status : 503).json({
-          ...http,errorCategory: known ? error.code : diagnostic ?? 'checkout_test_failed_closed',
+          ...http,errorCategory: http.httpStatus===400 && diagnostic==='checkout_test_storefront_http_client_error' && badRequest
+            ? `checkout_test_storefront_bad_request_${badRequest}`
+            : known ? error.code : diagnostic ?? 'checkout_test_failed_closed',
         });
         res.status(known ? error.status : code==='23505' ? 409 : 503).json({error:known ? error.code :
           code==='42P01' || code==='42703' ? 'checkout_test_setup_required_apply_reviewed_0112' :
