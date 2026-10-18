@@ -9,6 +9,30 @@ const SHOP = 'whachatcrm.myshopify.com';
 const VERSION = '2026-10';
 const ID = 'gid://shopify/ProductVariant/51638768632090';
 const TOKEN = process.env.SHOPIFY_STOREFRONT_TEST_TOKEN;
+const MAX_BYTES = 16 * 1024;
+async function readLimitedJson(response) {
+  const reader = response.body?.getReader();
+  if (!reader) return {error: 'unreadable_body'};
+  const chunks = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BYTES) {
+        await reader.cancel();
+        return {error: 'body_over_limit'};
+      }
+      chunks.push(value);
+    }
+    const bytes = Buffer.concat(chunks.map(v => Buffer.from(v)));
+    try {return {data: JSON.parse(bytes.toString('utf8'))};}
+    catch {return {error: 'invalid_json'};}
+  } finally {
+    reader.releaseLock();
+  }
+}
 const KIND = process.env.SHOPIFY_STOREFRONT_TEST_TOKEN_KIND;
 if (!TOKEN || !['public', 'private'].includes(KIND)) {
   console.error('Missing dedicated Storefront test token or valid token kind (public|private).');
@@ -48,18 +72,18 @@ if (!TOKEN || !['public', 'private'].includes(KIND)) {
       };
       // Never print the raw response body or arbitrary provider error strings.
       if (summary.contentType === 'JSON') {
-        const raw = await response.text();
-        if (Buffer.byteLength(raw, 'utf8') <= 16384) {
-          try {
-            const data = JSON.parse(raw);
-            summary.hasData = !!data?.data;
-            if (Array.isArray(data?.errors) && data.errors.length) {
-              const codes = data.errors.map(e => e?.extensions?.code);
-              summary.errorCode = codes.length === 1 && ['BAD_REQUEST','ACCESS_DENIED','GRAPHQL_VALIDATION_FAILED','THROTTLED'].includes(codes[0]) ? codes[0] : 'other';
-              summary.lockedChannel = data.errors.some(e => e?.message === 'Online Store channel is locked.');
-            }
-          } catch { summary.errorCode = 'invalid_json'; }
-        } else {summary.errorCode = 'body_over_limit';}
+        const parsed = await readLimitedJson(response);
+        if (parsed.error) {
+          summary.errorCode = parsed.error;
+        } else {
+          const data = parsed.data;
+          summary.hasData = !!data?.data;
+          if (Array.isArray(data?.errors) && data.errors.length) {
+            const codes = data.errors.map(e => e?.extensions?.code);
+            summary.errorCode = codes.length === 1 && ['BAD_REQUEST','ACCESS_DENIED','GRAPHQL_VALIDATION_FAILED','THROTTLED'].includes(codes[0]) ? codes[0] : 'other';
+            summary.lockedChannel = data.errors.some(e => e?.message === 'Online Store channel is locked.');
+          }
+        }
       }
       console.log(JSON.stringify(summary));
     } catch {
