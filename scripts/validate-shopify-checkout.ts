@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { consumeDispatch, savePrivateReceipt } from './checkout-validation/private-files';
 import { resolve } from 'node:path';
 import { railwayCartDirectory, railwayCheckoutModeAllowed } from './checkout-validation/railway-guard';
+import { resolveReadOnlyCheckoutInstallation } from './checkout-validation/read-only-installation';
 import { fileURLToPath } from 'node:url';
 import { runValidation, SHOP, META } from './checkout-validation/harness';
 import { SHOPIFY_INVENTORY_BATCH_QUERY } from '../server/salesCatalog/shopify/inventory';
@@ -19,7 +20,6 @@ async function main() {
   if (!connectionString) throw Error('readonly_database_required');
   const { Client } = await import('pg');
   const { drizzle } = await import('drizzle-orm/node-postgres');
-  const { resolveCatalogInstallation } = await import('../server/salesCatalog/shopify/installation');
   const client = new Client({connectionString,connectionTimeoutMillis:10000,statement_timeout:15000});
   await client.connect();
   try {
@@ -29,7 +29,7 @@ async function main() {
     const directory = await railwayCartDirectory();
     const result = await runValidation(selection,{
       approval,
-      installation:()=>resolveCatalogInstallation(database,selection.userId,SHOP),
+      installation:()=>resolveReadOnlyCheckoutInstallation(database,selection.userId,SHOP),
       requestFor:(shop,token)=>createCatalogRequest({request:async(query,options)=>{
         if (shop!==SHOP || ![META,SHOPIFY_INVENTORY_BATCH_QUERY].includes(query)) throw Error('admin_read_not_allowed');
         const response = await fetch(`https://${SHOP}/admin/api/2026-01/graphql.json`,{
