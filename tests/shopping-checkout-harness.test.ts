@@ -5,7 +5,7 @@ import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { consumeDispatch } from '../scripts/checkout-validation/private-files';
-import { runValidation, SHOP, META, selectionDigest, authorize } from '../scripts/checkout-validation/harness';
+import { runValidation, SHOP, META, selectionDigest, authorize, developmentStorefrontCredential } from '../scripts/checkout-validation/harness';
 const selection={shop:SHOP,userId:'owner',productId:'gid://shopify/Product/1',variantId:'gid://shopify/ProductVariant/2',quantity:1,price:'12.00',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const approval=()=>({action:'CREATE EXACTLY ONE DEVELOPMENT STORE CART',selectionSha256:selectionDigest(selection),expiresAt:new Date(Date.now()+600000).toISOString(),approvedBy:'fixture operator',developmentStoreEvidence:'synthetic fixture'});
 function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=>any;ambiguous?:boolean;installationChanged?:boolean}={}) {
@@ -14,8 +14,9 @@ function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=
  const deps={
   installation:async()=>({shop:SHOP,integrationId:'installation',token:change.installationChanged && ++installs>1?'changed':'synthetic-admin'}),
   requestFor:()=>async(query:string)=>query===META ? (change.meta?.({shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}})??{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}):{shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[change.variant?.(variant)??variant]},
+  storefrontCredential:{kind:'private' as const,token:'fixture-private-token'},
   storefrontFetch:(async(url:any,init:any)=>{
-   assert.equal(url,`https://${SHOP}/api/2026-10/graphql.json`);assert.deepEqual(init.headers,{'Content-Type':'application/json'});assert.equal(init.redirect,'error');
+   assert.equal(url,`https://${SHOP}/api/2026-10/graphql.json`);assert.deepEqual(init.headers,{'Content-Type':'application/json','Shopify-Storefront-Private-Token':'fixture-private-token'});assert.equal(init.redirect,'error');
    const {query,variables}=JSON.parse(init.body); calls.push(query);
    const cart={id:'gid://shopify/Cart/fixture?key=private',checkoutUrl:`https://${SHOP}/cart/c/fixture?key=private`,totalQuantity:1,lines:{nodes:[{quantity:1,merchandise:{id:selection.variantId,product:{id:selection.productId}},cost:{amountPerQuantity:{amount:'12.00',currencyCode:'USD'}}}]}};
    let data;
@@ -29,6 +30,17 @@ function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=
  };
  return {deps,counts:()=>({mutations,consumed,saved}),calls};
 }
+test('development credential resolver fails closed and only accepts private server-side token',()=>{
+ assert.throws(()=>developmentStorefrontCredential({} as NodeJS.ProcessEnv),/development_storefront_private_token_missing/);
+ assert.throws(()=>developmentStorefrontCredential({SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN:'  '} as NodeJS.ProcessEnv),/development_storefront_private_token_missing/);
+ assert.deepEqual(developmentStorefrontCredential({SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN:'private-test'} as NodeJS.ProcessEnv),{kind:'private',token:'private-test'});
+});
+test('tokenless credentials cannot enter controlled validation',async()=>{
+ const f=fixture();
+ await assert.rejects(runValidation(selection,{...f.deps,storefrontCredential:{kind:'tokenless'}}),/development_storefront_private_token_required/);
+ assert.equal(f.calls.length,0);
+ assert.equal(f.counts().mutations,0);
+});
 test('preflight uses real provider verification without cart dispatch or local claim',async()=>{
  const f=fixture();const result=await runValidation(selection,f.deps);assert.equal(result.cartCreated,false);assert.deepEqual(f.counts(),{mutations:0,consumed:false,saved:false});assert.equal(f.calls.length,1);
 });
