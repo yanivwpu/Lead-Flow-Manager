@@ -12,7 +12,7 @@ export async function railwayCartDirectory(env: NodeJS.ProcessEnv = process.env,
   // The volume MUST be mounted at the exact dedicated path; a folder inside an ephemeral image is insufficient.
   if (!mountinfo.split('\n').some(line => line.split(' - ')[0]?.split(' ')[4] === path))
     throw Error('dedicated_persistent_volume_not_mounted');
-  return path;
+  return resolve(path,'private-claim');
 }
 
 export function railwayCheckoutModeAllowed(mode: string, env: NodeJS.ProcessEnv = process.env) {
