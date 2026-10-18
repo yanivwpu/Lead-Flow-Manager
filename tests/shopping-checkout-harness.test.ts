@@ -94,6 +94,6 @@ test('Railway one-cart runner requires exact service, approval phase, and a moun
  assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...correct,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART',CHECKOUT_TEST_APPROVED_ONCE:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'}),true);
  assert.equal(railwayCheckoutModeAllowed('--preflight',{...correct,RAILWAY_SERVICE_ID:'another'}),false);
  await assert.rejects(railwayCartDirectory(correct,'100 1 8:1 / /app rw - ext4 /dev/root rw'),/dedicated_persistent_volume_not_mounted/);
- assert.equal(await railwayCartDirectory(correct,'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),'/checkout-one-cart');
+ assert.equal(await railwayCartDirectory(correct,'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),'/checkout-one-cart/private-claim');
  await assert.rejects(railwayCartDirectory({...correct,RAILWAY_SERVICE_ID:'another'},'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),/railway_service_not_attested/);
 });
