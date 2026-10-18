@@ -68,7 +68,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
         test: name, utc: started, status: response.status,
         apiVersionMatch: version === VERSION,
         contentType: type.toLowerCase().includes('json') ? 'JSON' : type.toLowerCase().startsWith('text/html') ? 'HTML' : 'other',
-        errorCode: 'none', lockedChannel: false, hasData: false,
+        errorCode: 'none', lockedChannel: false, hasData: false, variantReturned: false, variantIdMatches: false,
       };
       // Never print the raw response body or arbitrary provider error strings.
       if (summary.contentType === 'JSON') {
@@ -77,7 +77,7 @@ if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE
           summary.errorCode = parsed.error;
         } else {
           const data = parsed.data;
-          summary.hasData = !!data?.data;
+          summary.hasData = !!data?.data;\n          summary.variantReturned = !!data?.data?.node;\n          summary.variantIdMatches = data?.data?.node?.id === ID;
           if (Array.isArray(data?.errors) && data.errors.length) {
             const codes = data.errors.map(e => e?.extensions?.code);
             summary.errorCode = codes.length === 1 && ['BAD_REQUEST','ACCESS_DENIED','GRAPHQL_VALIDATION_FAILED','THROTTLED'].includes(codes[0]) ? codes[0] : 'other';
