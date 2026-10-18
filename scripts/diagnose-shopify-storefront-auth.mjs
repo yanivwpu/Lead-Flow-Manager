@@ -2,7 +2,7 @@
 /**
  * Read-only development-store Storefront API isolation.
  * Run from a trusted server runtime only. Never run in a merchant/browser session.
- * Required: SHOPIFY_STOREFRONT_TEST_TOKEN; SHOPIFY_STOREFRONT_TEST_TOKEN_KIND=public|private.
+ * Required: SHOPIFY_STOREFRONT_TEST_TOKEN; SHOPIFY_STOREFRONT_TEST_TOKEN_KIND=private.\n * Guard: SHOPIFY_STOREFRONT_TEST_RUN_ONCE=yes (explicit one-shot opt-in).
  * No Admin tokens, carts, customer data, tokens, response bodies or free-form errors logged.
  */
 const SHOP = 'whachatcrm.myshopify.com';
@@ -34,8 +34,8 @@ async function readLimitedJson(response) {
   }
 }
 const KIND = process.env.SHOPIFY_STOREFRONT_TEST_TOKEN_KIND;
-if (!TOKEN || !['public', 'private'].includes(KIND)) {
-  console.error('Missing dedicated Storefront test token or valid token kind (public|private).');
+if (!TOKEN || KIND !== 'private' || process.env.SHOPIFY_STOREFRONT_TEST_RUN_ONCE !== 'yes') {
+  console.error('Missing private Storefront token, private token kind, or one-shot opt-in.');
   process.exitCode = 2;
 } else {
   const headerName = KIND === 'private'
