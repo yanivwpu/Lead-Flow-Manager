@@ -5,6 +5,7 @@ import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { consumeDispatch } from '../scripts/checkout-validation/private-files';
+import { railwayCartDirectory, railwayCheckoutModeAllowed } from '../scripts/checkout-validation/railway-guard';
 import { runValidation, SHOP, META, selectionDigest, authorize, developmentStorefrontCredential } from '../scripts/checkout-validation/harness';
 const selection={shop:SHOP,userId:'owner',productId:'gid://shopify/Product/1',variantId:'gid://shopify/ProductVariant/2',quantity:1,price:'12.00',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const approval=()=>({action:'CREATE EXACTLY ONE DEVELOPMENT STORE CART',selectionSha256:selectionDigest(selection),expiresAt:new Date(Date.now()+600000).toISOString(),approvedBy:'fixture operator',developmentStoreEvidence:'synthetic fixture'});
@@ -83,4 +84,16 @@ test('real filesystem claim is exclusive across racing invocations and remains c
   assert.equal((await stat(join(dir,'cart-dispatch-consumed.json'))).mode & 0o777,0o600);
   await assert.rejects(consumeDispatch(dir));
  } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('Railway one-cart runner requires exact service, approval phase, and a mounted persistent claim volume',async()=>{
+ const correct={RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',CHECKOUT_TEST_RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',CHECKOUT_TEST_PHASE:'PREFLIGHT'} as NodeJS.ProcessEnv;
+ assert.equal(railwayCheckoutModeAllowed('--preflight',correct),true);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',correct),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...correct,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART'}),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...correct,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART',CHECKOUT_TEST_APPROVED_ONCE:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'}),true);
+ assert.equal(railwayCheckoutModeAllowed('--preflight',{...correct,RAILWAY_SERVICE_ID:'another'}),false);
+ await assert.rejects(railwayCartDirectory(correct,'100 1 8:1 / /app rw - ext4 /dev/root rw'),/dedicated_persistent_volume_not_mounted/);
+ assert.equal(await railwayCartDirectory(correct,'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),'/checkout-one-cart');
+ await assert.rejects(railwayCartDirectory({...correct,RAILWAY_SERVICE_ID:'another'},'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),/railway_service_not_attested/);
 });
