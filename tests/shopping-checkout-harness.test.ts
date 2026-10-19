@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { consumeDispatch } from '../scripts/checkout-validation/private-files';
+import { consumeDispatch, savePrivateSelection } from '../scripts/checkout-validation/private-files';
 import { railwayCartDirectory, railwayCheckoutModeAllowed } from '../scripts/checkout-validation/railway-guard';
 import { assertBootstrapCommand } from '../scripts/checkout-validation/admin-bootstrap';
 import { runValidation, SHOP, META, selectionDigest, authorize, developmentStorefrontCredential } from '../scripts/checkout-validation/harness';
@@ -136,4 +136,14 @@ test('authorized Railway bootstrap uses private saved selection, digest expiry a
  assert.match(cli,/selectionSha256:digest/);
  assert.match(cli,/consumeDispatch\(directory\)/);
  assert.match(cli,/savePrivateReceipt\(directory,receipt\)/);
+});
+
+test('private preflight selection permits identical re-verification but rejects drift',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'checkout-selection-'));
+ try {
+   const dir=join(root,'private');
+   await savePrivateSelection(dir,{shop:'development',price:'600.00'});
+   await savePrivateSelection(dir,{shop:'development',price:'600.00'});
+   await assert.rejects(savePrivateSelection(dir,{shop:'development',price:'601.00'}),/selection_drift_requires_new_claim/);
+ } finally {await rm(root,{recursive:true,force:true});}
 });
