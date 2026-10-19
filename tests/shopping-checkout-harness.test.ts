@@ -123,3 +123,17 @@ test('read-only bootstrap accepts CI flag only with exact Railway service attest
  assert.throws(()=>assertBootstrapCommand(['--create-one-cart'],valid),/preflight_guard_args/);
  assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{CI:'true'} as NodeJS.ProcessEnv),/runtime_identity_missing/);
 });
+
+test('authorized Railway bootstrap uses private saved selection, digest expiry and one-shot claim',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.match(cli,/mode === '--create-approved-bootstrap'/);
+ assert.match(cli,/process\.argv\.slice\(2\)\.length!==1/);
+ assert.match(cli,/railwayCheckoutModeAllowed\('--create-one-cart'\)/);
+ assert.match(cli,/selection\.private\.json/);
+ assert.match(cli,/CHECKOUT_TEST_SELECTION_SHA256/);
+ assert.match(cli,/CHECKOUT_TEST_EXPIRES_AT/);
+ assert.match(cli,/30 \* 60_000/);
+ assert.match(cli,/selectionSha256:digest/);
+ assert.match(cli,/consumeDispatch\(directory\)/);
+ assert.match(cli,/savePrivateReceipt\(directory,receipt\)/);
+});
