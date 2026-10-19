@@ -18,6 +18,8 @@ on:
       - "script/build.ts"
       - "docs/shopify-privacy-staging-smoke.md"
       - "server/shopify*.ts"
+      - "server/ecommerce/**"
+      - "client/src/components/integrations/ShopifyEcommerceInboxPreview.tsx"
       - "shared/shopify*.ts"
       - "client/index.html"
       - "client/src/App.tsx"
@@ -83,6 +85,8 @@ jobs:
           npx tsx --test tests/shopify-managed-pricing.test.ts tests/shopify-oauth-state.test.ts tests/shopify-onboarding-emails.test.ts
       - name: Staging-only E-commerce inbox preview access and read-only checks
         run: npx tsx --test tests/shopify-ecommerce-preview.test.ts
+      - name: E-commerce manual review security and concurrent real PostgreSQL gate
+        run: npx tsx --test tests/shopify-ecommerce-review-security.test.ts tests/shopify-ecommerce-review-postgres.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
