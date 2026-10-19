@@ -147,3 +147,12 @@ test('private preflight selection permits identical re-verification but rejects 
    await assert.rejects(savePrivateSelection(dir,{shop:'development',price:'601.00'}),/selection_drift_requires_new_claim/);
  } finally {await rm(root,{recursive:true,force:true});}
 });
+
+test('claim inspection is read-only, attested and does not expose private contents',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.match(cli,/mode==='--inspect-private-claim'/);
+ assert.match(cli,/inspection_service_not_attested/);
+ assert.match(cli,/await lstat\(resolve\(directory,name\)\)/);
+ assert.match(cli,/result:'private_claim_inspection'/);
+ assert.doesNotMatch(cli,/status\[key\]=await readFile/);
+});
