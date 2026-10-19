@@ -1,0 +1,58 @@
+name: E-commerce Growth Engine validation
+on:
+  pull_request:
+    paths:
+      - "server/ecommerce/**"
+      - "server/shopifyCommerceWebhooks.ts"
+      - "scripts/inspect-ecommerce-inbox.ts"
+      - "docs/ecommerce-growth-engine-staging-runbook.md"
+      - "tests/ecommerce-*.test.ts"
+      - "migrations/20261019_ecommerce_growth_event_inbox.sql"
+      - "docs/ecommerce-growth-engine-phase2-boundary.md"
+      - ".github/workflows/ecommerce-growth-validation.yml"
+permissions:
+  contents: read
+jobs:
+  ecommerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ecommerce_test
+          POSTGRES_PASSWORD: ecommerce_test
+          POSTGRES_DB: whachat_ecommerce_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ecommerce_test -d whachat_ecommerce_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      ECOMMERCE_TEST_DATABASE_URL: postgres://ecommerce_test:ecommerce_test@127.0.0.1:5432/whachat_ecommerce_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Pure event classification and preview guards
+        run: npx tsx --test tests/ecommerce-event-intake.test.ts tests/ecommerce-recording-bridge.test.ts
+      - name: PGlite persistence compatibility
+        run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
+      - name: Native PostgreSQL 16 migration, concurrency and uniqueness
+        run: npx tsx --test tests/ecommerce-postgres-inbox.test.ts
+      - name: Read-only staging-schema inspection with no migration applied
+        env:
+          ECOMMERCE_PREFLIGHT_ACK: staging-read-only
+          ECOMMERCE_PREFLIGHT_DATABASE_URL: postgres://ecommerce_test:ecommerce_test@127.0.0.1:5432/whachat_ecommerce_test
+        run: npx tsx scripts/inspect-ecommerce-inbox.ts --read-only
+      - name: Reject TypeScript regressions against PR base
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - name: Build
+        run: npm run build
