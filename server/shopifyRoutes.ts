@@ -695,10 +695,12 @@ router.post('/ecommerce/workflow-draft', async (req: Request, res: Response) => 
       const [liveOwner] = await tx.select().from(users).where(and(eq(users.id, accountId),
         eq(users.shopifyShop, shop))).limit(1);
       if (!liveOwner || !isShopifyContactInstallationActive(liveOwner)) return null;
-      const [installation] = await tx.select().from(integrations).where(and(
+      const installations = await tx.select().from(integrations).where(and(
         eq(integrations.userId, accountId), eq(integrations.type, 'shopify'),
         eq(integrations.isActive, true))).limit(2);
-      if (!installation || !installation.isActive) return null;
+      // Ambiguous active Shopify installations must never be updated arbitrarily.
+      if (installations.length !== 1) return null;
+      const installation = installations[0];
       const cfg = (installation.config || {}) as Record<string, unknown>;
       if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
           normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
