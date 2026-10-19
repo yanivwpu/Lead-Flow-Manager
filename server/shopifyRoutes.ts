@@ -577,14 +577,18 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
     const result = await db.execute(sql`
       SELECT COUNT(*)::integer AS total,
              COUNT(*) FILTER (WHERE state = 'pending')::integer AS pending,
+             COUNT(*) FILTER (WHERE journey = 'order_support')::integer AS order_support,
+             COUNT(*) FILTER (WHERE journey = 'fulfillment_support')::integer AS fulfillment_support,
+             COUNT(*) FILTER (WHERE journey = 'order_cancelled')::integer AS order_cancelled,
              MAX(received_at) AS last_event_at
       FROM ecommerce_growth_event_inbox
       WHERE account_id = ${accountId} AND shop = ${shop}
     `);
-    const stats = result.rows[0] as { total?: number; pending?: number; last_event_at?: Date | string | null } | undefined;
+    const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     return res.json({ ok: true,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
       total: Number(stats?.total ?? 0), pending: Number(stats?.pending ?? 0),
+      journeys: { orderSupport: Number(stats?.order_support ?? 0), fulfillmentSupport: Number(stats?.fulfillment_support ?? 0), orderCancelled: Number(stats?.order_cancelled ?? 0) },
       lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
