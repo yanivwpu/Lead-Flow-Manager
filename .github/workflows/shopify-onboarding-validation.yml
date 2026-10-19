@@ -87,6 +87,8 @@ jobs:
         run: npx tsx --test tests/shopify-ecommerce-preview.test.ts
       - name: E-commerce manual review security and concurrent real PostgreSQL gate
         run: npx tsx --test tests/shopify-ecommerce-review-security.test.ts tests/shopify-ecommerce-review-postgres.test.ts
+      - name: E-commerce merchant workflow draft parser, security and real PostgreSQL concurrency
+        run: npx tsx --test tests/shopify-ecommerce-workflow-drafts.test.ts tests/shopify-ecommerce-workflow-drafts-postgres.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
