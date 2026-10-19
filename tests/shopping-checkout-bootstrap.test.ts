@@ -150,13 +150,14 @@ test('selection file is private, durable and exclusive; symlinks and permissive 
   } finally {await rm(root,{recursive:true,force:true});}
 });
 
-test('bootstrap command requires attested Railway preflight; rejects CI, approvals and selection arguments',()=>{
+test('bootstrap command requires attested Railway preflight even when Railway supplies CI; rejects unauthorized runtimes and arguments',()=>{
   const runtime={RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',
     CHECKOUT_TEST_RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',CHECKOUT_TEST_PHASE:'PREFLIGHT'};
   assert.doesNotThrow(()=>assertBootstrapCommand(['--bootstrap-preflight'],runtime));
+  assert.doesNotThrow(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...runtime,CI:'true'}));
   for(const args of [[],['--create-one-cart'],['--bootstrap-preflight','selection.json'],['--bootstrap-preflight','selection.json','approval.json']])
     assert.throws(()=>assertBootstrapCommand(args,runtime));
-  for(const bad of [{},{...runtime,CI:'true'},{...runtime,RAILWAY_SERVICE_ID:'staging-app'},
+  for(const bad of [{},{CI:'true'},{...runtime,RAILWAY_SERVICE_ID:'staging-app'},
     {...runtime,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART'}])
     assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],bad));
 });
