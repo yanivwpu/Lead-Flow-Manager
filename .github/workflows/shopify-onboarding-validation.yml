@@ -91,6 +91,8 @@ jobs:
         run: npx tsx --test tests/shopify-ecommerce-workflow-drafts.test.ts tests/shopify-ecommerce-workflow-drafts-postgres.test.ts
       - name: E-commerce order-support task execution gate and native PostgreSQL dedupe
         run: npx tsx --test tests/ecommerce-order-support-tasks.test.ts tests/ecommerce-order-support-postgres.test.ts
+      - name: Internal order task merchant controls, ownership and PostgreSQL concurrency
+        run: npx tsx --test tests/shopify-ecommerce-order-task-controls.test.ts tests/shopify-ecommerce-order-task-controls-postgres.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

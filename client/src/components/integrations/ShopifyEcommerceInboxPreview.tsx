@@ -14,6 +14,14 @@ type InboxPreview = {
   journeys: { orderSupport: number; fulfillmentSupport: number; orderCancelled: number };
   reviewQueue: Array<{ id: string; topic: string; journey: string; receivedAt: string }>;
   workflowDrafts: Record<"orderSupport" | "fulfillmentSupport" | "orderCancelled" | "abandonedCart", boolean>;
+  internalTasks: {
+    schemaReady: boolean;
+    merchantEnabled: boolean;
+    operatorEnabled: boolean;
+    openCount: number;
+    completedCount: number;
+    items: Array<{id:string;state:string;createdAt:string}>;
+  };
 };
 
 /** Staging-only internal triage. Never installs workflows or sends to customers. */
@@ -51,6 +59,28 @@ export function ShopifyEcommerceInboxPreview() {
         body: JSON.stringify({action:"save_draft", ...input}),
       });
       if (!response.ok) throw Error("Draft could not be saved. Refresh and try again.");
+    },
+    onSuccess: async () => { await refetch(); },
+  });
+  const orderTasks = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const response = await fetch("/api/shopify/ecommerce/order-support-settings", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({action:"set_internal_order_tasks",enabled}),
+      });
+      if (!response.ok) throw Error("Task setting could not be saved. Refresh and try again.");
+    },
+    onSuccess: async () => { await refetch(); },
+  });
+  const completeTask = useMutation({
+    mutationFn: async (taskId: string) => {
+      const response = await fetch("/api/shopify/ecommerce/order-support-task-complete", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({action:"complete_internal_order_task",taskId}),
+      });
+      if (!response.ok) throw Error("Task could not be completed. Refresh and try again.");
     },
     onSuccess: async () => { await refetch(); },
   });
@@ -93,6 +123,51 @@ export function ShopifyEcommerceInboxPreview() {
               </div>
             ))}
             {review.isError && <p role="alert" className="text-xs text-red-700">Review could not be saved. Refresh and try again.</p>}
+          </div>
+          <div className="border-t border-slate-200 pt-3 space-y-2 text-xs" data-testid="ecommerce-internal-order-support-tasks">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="font-medium text-sm">Internal order-support tasks</p>
+                <p className="text-muted-foreground">Create merchant tasks from future verified orders only. No customer messages or order changes.</p>
+              </div>
+              {data.internalTasks?.schemaReady && (
+                <Button type="button" size="sm" variant="outline"
+                  disabled={orderTasks.isPending || isFetching ||
+                    (!data.internalTasks.merchantEnabled && !data.workflowDrafts?.orderSupport)}
+                  onClick={() => orderTasks.mutate(!data.internalTasks.merchantEnabled)}>
+                  {data.internalTasks.merchantEnabled ? "Pause internal tasks" : "Opt in to internal tasks"}
+                </Button>
+              )}
+            </div>
+            {!data.internalTasks?.schemaReady ? (
+              <p className="text-muted-foreground">Staging database setup pending. Internal tasks are unavailable and cannot be enabled.</p>
+            ) : (
+              <>
+                <p className="text-muted-foreground">
+                  {data.internalTasks.merchantEnabled ?
+                    (data.internalTasks.operatorEnabled ? "Merchant opt-in active · staging execution gate open" :
+                    "Merchant opt-in saved · execution still paused by operator") :
+                    "Internal tasks paused. Prepare the new order support draft before opting in."}
+                </p>
+                <p className="text-muted-foreground">Open tasks: {data.internalTasks.openCount} · Completed: {data.internalTasks.completedCount}</p>
+                {data.internalTasks.items.length === 0 && <p className="text-muted-foreground">No internal tasks yet. Earlier order events are not automatically backfilled.</p>}
+                {data.internalTasks.items.map(task => (
+                  <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+                    <div>
+                      <p className="font-medium">Shopify order support · {task.state === "open" ? "Open" : "Completed"}</p>
+                      <p className="text-muted-foreground">Created {new Date(task.createdAt).toLocaleString()}</p>
+                    </div>
+                    {task.state === "open" && (
+                      <Button type="button" size="sm" variant="outline" disabled={completeTask.isPending || isFetching}
+                        onClick={() => completeTask.mutate(task.id)}>Mark task completed</Button>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+            {(orderTasks.isError || completeTask.isError) &&
+              <p role="alert" className="text-red-700">Task change could not be saved. Refresh and try again.</p>}
+            <p className="text-muted-foreground">Task opt-in does not activate messaging, checkout, fulfillment or cancellation workflows.</p>
           </div>
           <details className="border-t border-slate-200 pt-3" data-testid="ecommerce-journey-review-preview">
             <summary className="cursor-pointer text-xs font-medium">Workflow previews · review only</summary>

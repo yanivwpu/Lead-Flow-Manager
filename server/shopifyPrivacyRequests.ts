@@ -103,6 +103,15 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
       return customerIdentityTokens({ email: c.email, phone: c.phone }).some(token => tokens.includes(token));
     });
     const ids = found.map(c => c.id);
+    // Purge internal order-support tasks for redacted contacts even when the
+    // CRM contact is retained and anonymized. The migration is optional.
+    if (ids.length) {
+      const taskTable = await tx.execute(sql`SELECT to_regclass('public.ecommerce_growth_order_support_tasks')::text AS tasks`);
+      if (typeof taskTable.rows[0]?.tasks === 'string')
+        await tx.execute(sql`DELETE FROM ecommerce_growth_order_support_tasks
+          WHERE account_id = ${user.id} AND shop = ${shop}
+          AND contact_id IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
+    }
     const threads = ids.length ? (await tx.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.userId, user.id), inArray(conversations.contactId, ids)))).map(c => c.id) : [];
     if (threads.length) {
       await tx.delete(flowJobs).where(and(eq(flowJobs.userId, user.id), inArray(flowJobs.conversationId, threads)));
