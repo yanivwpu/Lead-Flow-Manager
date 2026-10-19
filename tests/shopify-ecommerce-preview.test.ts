@@ -26,7 +26,9 @@ test("staging UI shows counters and never gives an activate or send action", () 
   assert.match(view, /Recording mode/);
   assert.match(view, /Recorded events/);
   assert.match(view, /Pending review/);
-  assert.equal(view.includes('method: "POST"'),false);
+  assert.ok(view.includes('method: "POST"'), "manual review sends a scoped administrative POST");
+  assert.ok(view.includes("mark_reviewed"), "only explicit manual review is available");
+  assert.ok(view.includes("No automatic messages or checkout actions"));
   assert.equal(view.includes('Activate</Button>'),false);
 });
 
