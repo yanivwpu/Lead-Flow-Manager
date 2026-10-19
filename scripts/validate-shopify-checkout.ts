@@ -36,7 +36,10 @@ async function main() {
     return;
   }
   if (!['--preflight','--create-one-cart'].includes(mode) || !selectionPath || extra.length ||
-      (mode==='--create-one-cart')!==!!approvalPath || process.env.CI || !railwayCheckoutModeAllowed(mode))
+      (mode==='--create-one-cart')!==!!approvalPath ||
+      // Railway may expose CI=true; the exact service and approval phase guard is authoritative.
+      !railwayCheckoutModeAllowed(mode) ||
+      (!process.env.RAILWAY_SERVICE_ID && Boolean(process.env.CI)))
     throw Error('operator_command_required');
   const selection = JSON.parse(await readFile(selectionPath,'utf8'));
   const approval = approvalPath ? JSON.parse(await readFile(approvalPath,'utf8')) : undefined;
