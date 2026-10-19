@@ -96,6 +96,9 @@ function ShopifyWebhookDiagnosticsBody({ enabled, onReregisterComplete }: Diagno
 
   const report = data?.report;
   const panelHealthy = report?.summary.healthy ?? false;
+  // A configured app-level commerce webhook cannot be repaired with a per-shop mutation.
+  const perShopActionable = report?.webhooks.some(item => item.registrationMethod === "graphql" &&
+    ["missing", "wrong_url", "blocked_shopify"].includes(item.status)) ?? false;
   const inlineError = data?.error || (error as Error | null)?.message;
 
   return (
@@ -149,7 +152,7 @@ function ShopifyWebhookDiagnosticsBody({ enabled, onReregisterComplete }: Diagno
             variant="outline"
             size="sm"
             className="h-7 text-xs"
-            disabled={reregisterMutation.isPending || isLoading || !report || report.permissionVerification === "unknown"}
+            disabled={reregisterMutation.isPending || isLoading || !report || report.permissionVerification === "unknown" || !perShopActionable}
             onClick={() => reregisterMutation.mutate()}
             data-testid="button-shopify-webhook-reregister"
           >
@@ -173,6 +176,7 @@ function ShopifyWebhookDiagnosticsBody({ enabled, onReregisterComplete }: Diagno
         </p>
       )}
 
+      {report && !perShopActionable && <p className="text-xs text-muted-foreground">No per-shop registration change is indicated. App-managed subscriptions must be checked in the active Shopify app version and delivery logs.</p>}
       {report && <ShopifyWebhookHealthSummary report={report} />}
       {lastAttempts && <div className="text-xs">Last registration attempts: {lastAttempts.map(a => `${a.topic}: ${a.status}${a.message ? ` — ${a.message}` : ""}`).join("; ")}</div>}
 
