@@ -29,3 +29,21 @@ test("staging UI shows counters and never gives an activate or send action", () 
   assert.equal(view.includes('method: "POST"'),false);
   assert.equal(view.includes('Activate</Button>'),false);
 });
+
+test("journey preview remains tenant-scoped and does not claim unsupported webhook subscriptions",()=>{
+  const route=readFileSync("server/shopifyRoutes.ts","utf8");
+  const view=readFileSync("client/src/components/integrations/ShopifyEcommerceInboxPreview.tsx","utf8");
+  const start=route.indexOf("router.get('/ecommerce/event-inbox-preview'");
+  const end=route.indexOf("router.get('/webhooks/health'",start);
+  assert.ok(start>=0&&end>start);
+  const snippet=route.slice(start,end);
+  for(const journey of ["order_support","fulfillment_support","order_cancelled"])
+    assert.ok(snippet.includes(`journey = '${journey}'`));
+  assert.match(snippet,/WHERE account_id = \$\{accountId\} AND shop = \$\{shop\}/);
+  assert.ok(view.includes("Workflow previews · review only"));
+  assert.ok(view.includes("Not subscribed or wired yet"));
+  assert.ok(view.includes("No workflow is active"));
+  assert.ok(view.includes("No messages queued or sent"));
+  assert.ok(!view.includes("method: 'POST'"));
+  assert.ok(!snippet.includes("INSERT INTO"));
+});
