@@ -99,6 +99,19 @@ test('Railway one-cart runner requires exact service, approval phase, and a moun
  await assert.rejects(railwayCartDirectory({...correct,RAILWAY_SERVICE_ID:'another'},'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),/railway_service_not_attested/);
 });
 
+test('cart command preserves exact Railway attestation rather than rejecting Railway CI flag',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.doesNotMatch(cli,/process\.env\.CI\s*\|\|\s*!railwayCheckoutModeAllowed/);
+ assert.match(cli,/!railwayCheckoutModeAllowed\(mode\)/);
+ assert.match(cli,/!process\.env\.RAILWAY_SERVICE_ID\s*&&\s*Boolean\(process\.env\.CI\)/);
+ const id='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07';
+ const valid={CI:'true',RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_RAILWAY_SERVICE_ID:id,
+   CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART',CHECKOUT_TEST_APPROVED_ONCE:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'} as NodeJS.ProcessEnv;
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',valid),true);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...valid,RAILWAY_SERVICE_ID:'other'}),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...valid,CHECKOUT_TEST_APPROVED_ONCE:undefined}),false);
+});
+
 test('read-only bootstrap accepts CI flag only with exact Railway service attestation',()=>{
  const id='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07';
  const valid={CI:'true',RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_PHASE:'PREFLIGHT'} as NodeJS.ProcessEnv;
