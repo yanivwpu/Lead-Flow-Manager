@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { consumeDispatch } from '../scripts/checkout-validation/private-files';
 import { railwayCartDirectory, railwayCheckoutModeAllowed } from '../scripts/checkout-validation/railway-guard';
+import { assertBootstrapCommand } from '../scripts/checkout-validation/admin-bootstrap';
 import { runValidation, SHOP, META, selectionDigest, authorize, developmentStorefrontCredential } from '../scripts/checkout-validation/harness';
 const selection={shop:SHOP,userId:'owner',productId:'gid://shopify/Product/1',variantId:'gid://shopify/ProductVariant/2',quantity:1,price:'12.00',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const approval=()=>({action:'CREATE EXACTLY ONE DEVELOPMENT STORE CART',selectionSha256:selectionDigest(selection),expiresAt:new Date(Date.now()+600000).toISOString(),approvedBy:'fixture operator',developmentStoreEvidence:'synthetic fixture'});
@@ -96,4 +97,16 @@ test('Railway one-cart runner requires exact service, approval phase, and a moun
  await assert.rejects(railwayCartDirectory(correct,'100 1 8:1 / /app rw - ext4 /dev/root rw'),/dedicated_persistent_volume_not_mounted/);
  assert.equal(await railwayCartDirectory(correct,'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),'/checkout-one-cart/private-claim');
  await assert.rejects(railwayCartDirectory({...correct,RAILWAY_SERVICE_ID:'another'},'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),/railway_service_not_attested/);
+});
+
+test('read-only bootstrap accepts CI flag only with exact Railway service attestation',()=>{
+ const id='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07';
+ const valid={CI:'true',RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_PHASE:'PREFLIGHT'} as NodeJS.ProcessEnv;
+ assert.doesNotThrow(()=>assertBootstrapCommand(['--bootstrap-preflight'],valid));
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,RAILWAY_SERVICE_ID:undefined}),/runtime_identity_missing/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,RAILWAY_SERVICE_ID:'wrong'}),/runtime_identity_mismatch/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,CHECKOUT_TEST_RAILWAY_SERVICE_ID:'wrong'}),/attestation_mismatch/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART'}),/preflight_guard_phase/);
+ assert.throws(()=>assertBootstrapCommand(['--create-one-cart'],valid),/preflight_guard_args/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{CI:'true'} as NodeJS.ProcessEnv),/runtime_identity_missing/);
 });
