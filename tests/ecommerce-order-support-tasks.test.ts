@@ -37,7 +37,7 @@ test("task identity is bounded and cannot use arbitrary shops or missing contact
 test("Shopify bridge only dispatches a non-sending internal task after durable event recording", () => {
   const webhook = readFileSync("server/shopifyCommerceWebhooks.ts", "utf8");
   const module = readFileSync("server/ecommerce/orderSupportTaskQueue.ts", "utf8");
-  assert.match(webhook, /isStagingOrderSupportTaskExecutionEnabled\(process\.env\)/);
+  assert.match(webhook, /isStagingOrderSupportTaskExecutionEnabled\(\{/);
   assert.match(webhook, /orderSupportTaskInsertQuery/);
   assert.match(webhook, /result\.contactId/);
   assert.match(module, /prefs\.tasks_enabled = TRUE/);
