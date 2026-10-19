@@ -1,3 +1,4 @@
+import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
 import { db } from "../drizzle/db";
 import { sql } from "drizzle-orm";
@@ -586,12 +587,7 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       WHERE account_id = ${accountId} AND shop = ${shop}
     `);
     // Only administrative event metadata; no contact payload, delivery ID or customer fields.
-    const rows = await db.execute(sql`
-      SELECT id::text AS id, topic, journey, received_at
-      FROM ecommerce_growth_event_inbox
-      WHERE account_id = ${accountId} AND shop = ${shop} AND state = 'pending'
-      ORDER BY received_at ASC, id ASC LIMIT 20
-    `);
+    const rows = await db.execute(pendingEventReviewQuery(accountId, shop));
     const reviewQueue = rows.rows.map(row => ({
       id: String(row.id),
       topic: String(row.topic),
@@ -658,12 +654,7 @@ router.post('/ecommerce/event-review', async (req: Request, res: Response) => {
     if (!shop || !integration?.isActive ||
         (cfg.shop != null && normalizeShopifyShopDomain(String(cfg.shop)) !== shop))
       return res.status(403).json({ error: 'Active Shopify connection required' });
-    const changed = await db.execute(sql`
-      UPDATE ecommerce_growth_event_inbox SET state = 'reviewed'
-      WHERE id = CAST(${parsed.eventId} AS BIGINT)
-        AND account_id = ${accountId} AND shop = ${shop} AND state = 'pending'
-      RETURNING id::text AS id
-    `);
+    const changed = await db.execute(markEventReviewedQuery(parsed.eventId, accountId, shop));
     if (changed.rows.length !== 1)
       return res.status(409).json({ error: 'Event not pending or unavailable' });
     return res.json({ ok: true, reviewed: true });
