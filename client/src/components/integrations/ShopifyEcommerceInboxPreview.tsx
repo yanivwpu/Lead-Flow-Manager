@@ -130,7 +130,7 @@ export function ShopifyEcommerceInboxPreview() {
                 <div key={journey.key} className="rounded-md border border-slate-200 bg-white p-3 text-xs space-y-1">
                   <p className="font-medium">{journey.name}</p>
                   <p className="text-muted-foreground">{journey.description}</p>
-                  <p>Events recorded: <strong className="tabular-nums">{data.journeys?.[journey.key] ?? 0}</strong></p>
+                  <p>Events recorded: <strong className="tabular-nums">{journey.key === "abandonedCart" ? 0 : (data.journeys?.[journey.key] ?? 0)}</strong></p>
                   <p className="text-muted-foreground">Trigger: {journey.trigger}</p>
                   <p className="text-muted-foreground">{journey.integrated ? "Staging event capture connected" : "Not subscribed or wired yet"}</p>
                   <p className="text-muted-foreground">No messages queued or sent</p>
