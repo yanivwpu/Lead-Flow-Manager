@@ -4,6 +4,8 @@ on:
     paths:
       - "server/ecommerce/**"
       - "server/shopifyCommerceWebhooks.ts"
+      - "scripts/inspect-ecommerce-inbox.ts"
+      - "docs/ecommerce-growth-engine-staging-runbook.md"
       - "tests/ecommerce-*.test.ts"
       - "migrations/20261019_ecommerce_growth_event_inbox.sql"
       - "docs/ecommerce-growth-engine-phase2-boundary.md"
@@ -43,6 +45,11 @@ jobs:
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
         run: npx tsx --test tests/ecommerce-postgres-inbox.test.ts
+      - name: Read-only staging-schema inspection with no migration applied
+        env:
+          ECOMMERCE_PREFLIGHT_ACK: staging-read-only
+          ECOMMERCE_PREFLIGHT_DATABASE_URL: postgres://ecommerce_test:ecommerce_test@127.0.0.1:5432/whachat_ecommerce_test
+        run: npx tsx scripts/inspect-ecommerce-inbox.ts --read-only
       - name: Reject TypeScript regressions against PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
