@@ -1,3 +1,4 @@
+import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
 import { db } from "../drizzle/db";
 import { sql } from "drizzle-orm";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
@@ -584,12 +585,26 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       FROM ecommerce_growth_event_inbox
       WHERE account_id = ${accountId} AND shop = ${shop}
     `);
+    // Only administrative event metadata; no contact payload, delivery ID or customer fields.
+    const rows = await db.execute(sql`
+      SELECT id::text AS id, topic, journey, received_at
+      FROM ecommerce_growth_event_inbox
+      WHERE account_id = ${accountId} AND shop = ${shop} AND state = 'pending'
+      ORDER BY received_at ASC, id ASC LIMIT 20
+    `);
+    const reviewQueue = rows.rows.map(row => ({
+      id: String(row.id),
+      topic: String(row.topic),
+      journey: String(row.journey),
+      receivedAt: new Date(row.received_at as string | Date).toISOString(),
+    }));
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     return res.json({ ok: true,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
       total: Number(stats?.total ?? 0), pending: Number(stats?.pending ?? 0),
       journeys: { orderSupport: Number(stats?.order_support ?? 0), fulfillmentSupport: Number(stats?.fulfillment_support ?? 0), orderCancelled: Number(stats?.order_cancelled ?? 0) },
       lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
+      reviewQueue,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
     return res.status(503).json({ error: 'E-commerce inbox preview unavailable' });
@@ -613,6 +628,47 @@ router.get('/webhooks/health', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('[Shopify Webhook Health]', error);
     res.status(500).json({ error: 'Failed to audit Shopify webhooks' });
+  }
+});
+
+
+/** Staging-only merchant action: atomically acknowledge a single owned event.
+ * This action has no message send, automation dispatch, Shopify API or checkout.
+ */
+router.post('/ecommerce/event-review', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  const origin = 'https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({ error: 'Not available' });
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  // Require a same-origin JSON request; no cross-site form or opaque-origin writes.
+  if (req.get('origin') !== origin || req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({ error: 'Invalid request origin or content type' });
+  const parsed = parseReviewEventRequest(req.body);
+  if (!parsed) return res.status(400).json({ error: 'Invalid review request' });
+  try {
+    const accountId = (req.user as { id: string }).id;
+    const owner = await storage.getUserForSession(accountId);
+    if (!owner || !isShopifyContactInstallationActive(owner))
+      return res.status(403).json({ error: 'Active Shopify connection required' });
+    const shop = normalizeShopifyShopDomain(owner.shopifyShop);
+    const integration = await storage.getIntegrationByUserAndType(accountId, 'shopify');
+    const cfg = (integration?.config ?? {}) as Record<string, unknown>;
+    if (!shop || !integration?.isActive ||
+        (cfg.shop != null && normalizeShopifyShopDomain(String(cfg.shop)) !== shop))
+      return res.status(403).json({ error: 'Active Shopify connection required' });
+    const changed = await db.execute(sql`
+      UPDATE ecommerce_growth_event_inbox SET state = 'reviewed'
+      WHERE id = CAST(${parsed.eventId} AS BIGINT)
+        AND account_id = ${accountId} AND shop = ${shop} AND state = 'pending'
+      RETURNING id::text AS id
+    `);
+    if (changed.rows.length !== 1)
+      return res.status(409).json({ error: 'Event not pending or unavailable' });
+    return res.json({ ok: true, reviewed: true });
+  } catch {
+    return res.status(503).json({ error: 'E-commerce event review unavailable' });
   }
 });
 
