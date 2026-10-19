@@ -113,6 +113,19 @@ export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
         }
       }
     }
+    // Purge any staging E-commerce task/event rows for this shop on signed shop/redact,
+    // without introducing a dependency on migrations that are not yet applied.
+    const commerceTables = await tx.execute(sql`
+      SELECT to_regclass('public.ecommerce_growth_order_support_tasks')::text AS tasks,
+             to_regclass('public.ecommerce_growth_event_inbox')::text AS inbox,
+             to_regclass('public.ecommerce_growth_order_task_settings')::text AS settings
+    `);
+    if (typeof commerceTables.rows[0]?.tasks === 'string')
+      await tx.execute(sql`DELETE FROM ecommerce_growth_order_support_tasks WHERE shop = ${shop}`);
+    if (typeof commerceTables.rows[0]?.inbox === 'string')
+      await tx.execute(sql`DELETE FROM ecommerce_growth_event_inbox WHERE shop = ${shop}`);
+    if (typeof commerceTables.rows[0]?.settings === 'string')
+      await tx.execute(sql`DELETE FROM ecommerce_growth_order_task_settings WHERE shop = ${shop}`);
     // Includes legacy partial redactions where users.shopifyShop was already cleared.
     await tx.delete(integrations).where(and(eq(integrations.type, "shopify"),
       or(sql`${integrations.config}->>'shopUrl' = ${shop}`,
