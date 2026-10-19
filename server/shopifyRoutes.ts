@@ -1,5 +1,6 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
+import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
 import { users, integrations } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
@@ -597,6 +598,27 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       journey: String(row.journey),
       receivedAt: new Date(row.received_at as string | Date).toISOString(),
     }));
+    // Do not block the existing event inbox when the opt-in migration is not applied.
+    // Exact tenant/shop scope is enforced on every task read; no customer data returned.
+    const taskTables = await db.execute(orderSupportTablesReadyQuery);
+    let internalTasks: { schemaReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string}> } = {
+      schemaReady: false, merchantEnabled: false,
+      operatorEnabled: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED === 'true' &&
+        process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true',
+      openCount: 0, completedCount: 0, items: []
+    };
+    if (orderSupportTablesReady(taskTables.rows[0])) {
+      const [settings, tasks] = await Promise.all([
+        db.execute(readOrderTaskMerchantSettingsQuery(accountId, shop)),
+        db.execute(readOrderSupportTaskListQuery(accountId, shop)),
+      ]);
+      const counts = settings.rows[0] as {enabled?:boolean;open_count?:number;completed_count?:number} | undefined;
+      internalTasks = {
+        ...internalTasks, schemaReady:true, merchantEnabled:counts?.enabled === true,
+        openCount:Number(counts?.open_count ?? 0), completedCount:Number(counts?.completed_count ?? 0),
+        items:tasks.rows.map(row => ({id:String(row.id),state:String(row.state),createdAt:new Date(row.created_at as Date|string).toISOString()}))
+      };
+    }
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     return res.json({ ok: true,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
@@ -605,6 +627,7 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
       reviewQueue,
       workflowDrafts: readWorkflowDraftSettings(cfg),
+      internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
     return res.status(503).json({ error: 'E-commerce inbox preview unavailable' });
@@ -715,6 +738,92 @@ router.post('/ecommerce/workflow-draft', async (req: Request, res: Response) => 
     }), workflowActive: false, messagingEnabled: false });
   } catch {
     return res.status(503).json({ error: 'Workflow draft unavailable' });
+  }
+});
+
+/** Merchant opt-in/PAUSE for internal order-support tasks ONLY.
+ * Requires reviewed schema, prepared orderSupport draft, active owned Shopify
+ * installation and the same uninstall/redaction lock. Never enables customer sends.
+ */
+router.post('/ecommerce/order-support-settings', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  const origin = 'https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({error:'Not available'});
+  if (!req.user) return res.status(401).json({error:'Unauthorized'});
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({error:'Invalid origin or content type'});
+  const input = parseSupportTaskChange(req.body);
+  if (!input) return res.status(400).json({error:'Invalid task settings'});
+  try {
+    const accountId = (req.user as {id:string}).id;
+    const saved = await db.transaction(async tx => {
+      const owner = await storage.getUserForSession(accountId);
+      const shop = normalizeShopifyShopDomain(owner?.shopifyShop);
+      if (!owner || !shop || !isShopifyContactInstallationActive(owner)) return null;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+      const [liveOwner] = await tx.select().from(users).where(and(eq(users.id,accountId),
+        eq(users.shopifyShop,shop))).limit(1);
+      if (!liveOwner || !isShopifyContactInstallationActive(liveOwner)) return null;
+      const matches = await tx.select().from(integrations).where(and(
+        eq(integrations.userId,accountId), eq(integrations.type,'shopify'),
+        eq(integrations.isActive,true))).limit(2);
+      if (matches.length !== 1) return null;
+      const cfg = (matches[0].config ?? {}) as Record<string,unknown>;
+      if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
+        normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
+      const ready = await tx.execute(orderSupportTablesReadyQuery);
+      if (!orderSupportTablesReady(ready.rows[0])) return 'schema_missing';
+      if (input.enabled && (!readWorkflowDraftSettings(cfg).orderSupport ||
+          !Array.isArray(cfg.syncOptions) || !cfg.syncOptions.includes('new_orders')))
+        return 'draft_or_sync_missing';
+      const result = await tx.execute(saveOrderTaskMerchantOptInQuery(accountId,shop,input.enabled));
+      return result.rows.length === 1 ? input.enabled : null;
+    });
+    if (saved === 'schema_missing') return res.status(409).json({error:'Task schema not ready'});
+    if (saved === 'draft_or_sync_missing') return res.status(409).json({error:'Prepare order-support draft and enable order sync first'});
+    if (saved === null) return res.status(409).json({error:'Shopify installation changed; refresh'});
+    return res.json({ok:true,merchantEnabled:saved,operatorEnabled:false,
+      messagingEnabled:false,checkoutEnabled:false});
+  } catch {
+    return res.status(503).json({error:'Order-support task settings unavailable'});
+  }
+});
+
+/** Manual completion operates only on an already-created, owned internal task.
+ * Does not acknowledge the separate original Shopify event or send messages.
+ */
+router.post('/ecommerce/order-support-task-complete', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  const origin = 'https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({error:'Not available'});
+  if (!req.user) return res.status(401).json({error:'Unauthorized'});
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({error:'Invalid origin or content type'});
+  const input = parseSupportTaskComplete(req.body);
+  if (!input) return res.status(400).json({error:'Invalid task'});
+  try {
+    const accountId = (req.user as {id:string}).id;
+    const owner = await storage.getUserForSession(accountId);
+    const shop = normalizeShopifyShopDomain(owner?.shopifyShop);
+    if (!owner || !shop || !isShopifyContactInstallationActive(owner))
+      return res.status(403).json({error:'Active Shopify connection required'});
+    const integration = await storage.getIntegrationByUserAndType(accountId,'shopify');
+    const cfg = (integration?.config ?? {}) as Record<string,unknown>;
+    if (!integration?.isActive ||
+      (cfg.shop != null && (typeof cfg.shop !== 'string' ||
+        normalizeShopifyShopDomain(cfg.shop) !== shop)))
+      return res.status(403).json({error:'Active Shopify connection required'});
+    const result = await db.execute(markOrderSupportTaskCompleteQuery(input.taskId,accountId,shop));
+    if (result.rows.length !== 1) return res.status(409).json({error:'Task unavailable or already completed'});
+    return res.json({ok:true,completed:true,messagingEnabled:false});
+  } catch {
+    return res.status(503).json({error:'Task completion unavailable'});
   }
 });
 
