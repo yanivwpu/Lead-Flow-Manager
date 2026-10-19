@@ -13,7 +13,7 @@ test("staging preview route only reads scoped inbox aggregate and never accepts 
   assert.match(endpoint, /getUserForSession\(accountId\)/);
   assert.match(endpoint, /isShopifyContactInstallationActive\(owner\)/);
   assert.match(endpoint, /integration\?\.isActive/);
-  assert.match(readFileSync("server/ecommerce/reviewQueue.ts","utf8"), /WHERE account_id = \\$\\{accountId\\} AND shop = \\$\\{shop\\}/);
+  assert.ok(readFileSync("server/ecommerce/reviewQueue.ts","utf8").includes("WHERE account_id = ${accountId} AND shop = ${shop}"));
   assert.match(endpoint, /COUNT\(\*\)/);
   for (const forbidden of ["req.query", "req.body", "INSERT INTO", "UPDATE ecommerce", "sendMessage", "cartCreate"])
     assert.equal(endpoint.includes(forbidden), false, forbidden);
@@ -41,7 +41,7 @@ test("journey preview remains tenant-scoped and does not claim unsupported webho
   const snippet=route.slice(start,end);
   for(const journey of ["order_support","fulfillment_support","order_cancelled"])
     assert.ok(snippet.includes(`journey = '${journey}'`));
-  assert.match(readFileSync("server/ecommerce/reviewQueue.ts","utf8"),/WHERE account_id = \\$\\{accountId\\} AND shop = \\$\\{shop\\}/);
+  assert.ok(readFileSync("server/ecommerce/reviewQueue.ts","utf8").includes("WHERE account_id = ${accountId} AND shop = ${shop}"));
   assert.ok(view.includes("Workflow previews · review only"));
   assert.ok(view.includes("Not subscribed or wired yet"));
   assert.ok(view.includes("No workflow is active"));
