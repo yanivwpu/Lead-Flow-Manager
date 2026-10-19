@@ -12,7 +12,8 @@ export const BOOTSTRAP_VARIANT='gid://shopify/ProductVariant/51638768632090';
 export function assertBootstrapCommand(args: string[], env: NodeJS.ProcessEnv=process.env) {
   // Emit only a fixed diagnostic code. Never log environment variable values.
   if(args.length!==1 || args[0]!=='--bootstrap-preflight') throw Error('preflight_guard_args');
-  if(env.CI) throw Error('preflight_guard_ci');
+  // Railway sets CI during deployments. Trust only the exact attested Railway service,
+  // never CI alone; local/GitHub CI remains blocked by the mandatory service ID.
   if(!env.RAILWAY_SERVICE_ID) throw Error('preflight_guard_runtime_identity_missing');
   if(env.RAILWAY_SERVICE_ID !== 'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07')
     throw Error('preflight_guard_runtime_identity_mismatch');
