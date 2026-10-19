@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { classifyCommerceWebhook } from "./ecommerce/eventIntake";
+import { isStagingOrderSupportTaskExecutionEnabled, orderSupportTaskInsertQuery } from "./ecommerce/orderSupportTaskQueue";
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -164,6 +165,22 @@ async function ingestShopifyOrderCreate(
         (account_id,shop,topic,delivery_id,journey,state)
         VALUES (${account},${canonicalShop},${topic},${delivery},${decision.journey},'pending')
         ON CONFLICT (account_id,shop,topic,delivery_id) DO NOTHING`);
+      // Only HMAC-verified, owned, recorded orders with explicit merchant opt-in
+      // can create one internal CRM-linked support task. No sender is imported.
+      if (isStagingOrderSupportTaskExecutionEnabled({
+        RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+        APP_URL: process.env.APP_URL,
+        ECOMMERCE_EVENT_RECORDING_ENABLED: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED,
+        ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED,
+      }) && result.contactId) {
+        const taskQuery = orderSupportTaskInsertQuery({
+          accountId: merchant.userId,
+          canonicalShop,
+          deliveryId: delivery,
+          contactId: result.contactId,
+        });
+        if (taskQuery) await db.execute(taskQuery);
+      }
     }
   }
 
