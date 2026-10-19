@@ -35,14 +35,35 @@ async function main() {
     } finally {await client.query('ROLLBACK').catch(()=>{});await client.end();}
     return;
   }
-  if (!['--preflight','--create-one-cart'].includes(mode) || !selectionPath || extra.length ||
+  // Operator-approved, one-shot isolated Railway runner. Load the selection only from
+  // the mounted private volume; approval is fixed to the preflight digest and expires.
+  const approvedBootstrap = mode === '--create-approved-bootstrap';
+  if (approvedBootstrap && (process.argv.slice(2).length!==1 ||
+      !railwayCheckoutModeAllowed('--create-one-cart') ||
+      !process.env.RAILWAY_SERVICE_ID)) throw Error('operator_command_required');
+  if (!approvedBootstrap && (
+      (!['--preflight','--create-one-cart'].includes(mode) || !selectionPath || extra.length ||
       (mode==='--create-one-cart')!==!!approvalPath ||
       // Railway may expose CI=true; the exact service and approval phase guard is authoritative.
       !railwayCheckoutModeAllowed(mode) ||
-      (!process.env.RAILWAY_SERVICE_ID && Boolean(process.env.CI)))
+      (!process.env.RAILWAY_SERVICE_ID && Boolean(process.env.CI))))
     throw Error('operator_command_required');
-  const selection = JSON.parse(await readFile(selectionPath,'utf8'));
-  const approval = approvalPath ? JSON.parse(await readFile(approvalPath,'utf8')) : undefined;
+  const privateDirectory = approvedBootstrap ? await railwayCartDirectory() : undefined;
+  const digest = process.env.CHECKOUT_TEST_SELECTION_SHA256;
+  const expiresAt = process.env.CHECKOUT_TEST_EXPIRES_AT;
+  if (approvedBootstrap && (!digest || !/^[a-f0-9]{64}$/.test(digest) ||
+      !expiresAt || !Number.isFinite(Date.parse(expiresAt)) ||
+      Date.parse(expiresAt) <= Date.now() ||
+      Date.parse(expiresAt) - Date.now() > 30 * 60_000))
+    throw Error('authorization_invalid');
+  const selection = JSON.parse(await readFile(approvedBootstrap ?
+    resolve(privateDirectory!,'selection.private.json') : selectionPath,'utf8'));
+  const approval = approvedBootstrap ? {
+    action:'CREATE EXACTLY ONE DEVELOPMENT STORE CART',
+    selectionSha256:digest,expiresAt,
+    approvedBy:'explicit operator authorization in ChatGPT',
+    developmentStoreEvidence:'prior live preflight attested development store and validated selection',
+  } : approvalPath ? JSON.parse(await readFile(approvalPath,'utf8')) : undefined;
   const connectionString = process.env.CHECKOUT_TEST_READONLY_DATABASE_URL;
   if (!connectionString) throw Error('readonly_database_required');
   const { Client } = await import('pg');
