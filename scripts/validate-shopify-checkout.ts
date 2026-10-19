@@ -1,5 +1,5 @@
 // Standalone operator CLI. No dotenv, app bootstrap, workers, routes or sender imports.
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat } from 'node:fs/promises';
 import { consumeDispatch, savePrivateReceipt, savePrivateSelection } from './checkout-validation/private-files';
 import { bootstrapAdminPreflight, assertBootstrapCommand } from './checkout-validation/admin-bootstrap';
 import { resolve } from 'node:path';
@@ -13,6 +13,30 @@ import { createCatalogRequest } from '../server/salesCatalog/shopify/api';
 let preflightStage: 'command' | 'volume' | 'database_config' | 'database_connect' | 'database_transaction' | 'admin_bootstrap' | 'selection_saved' = 'command';
 async function main() {
   const [mode, selectionPath, approvalPath, ...extra] = process.argv.slice(2);
+  if(mode==='--inspect-private-claim') {
+    if(process.argv.slice(2).length!==1 ||
+       process.env.RAILWAY_SERVICE_ID!=='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07' ||
+       process.env.CHECKOUT_TEST_RAILWAY_SERVICE_ID!==process.env.RAILWAY_SERVICE_ID)
+      throw Error('inspection_service_not_attested');
+    const directory=await railwayCartDirectory();
+    const status: Record<string,boolean>={};
+    for(const [key,name] of [
+      ['selection','selection.private.json'],
+      ['claimConsumed','cart-dispatch-consumed.json'],
+      ['receipt','receipt.private.json'],
+    ] as const) {
+      try {
+        const info=await lstat(resolve(directory,name));
+        if(!info.isFile() || info.isSymbolicLink()) throw Error('inspection_invalid_file');
+        status[key]=true;
+      } catch(error) {
+        if((error as NodeJS.ErrnoException).code!=='ENOENT') throw error;
+        status[key]=false;
+      }
+    }
+    console.log(JSON.stringify({result:'private_claim_inspection',...status}));
+    return;
+  }
   if(mode==='--bootstrap-preflight') {
     assertBootstrapCommand(process.argv.slice(2));
     preflightStage='volume';
