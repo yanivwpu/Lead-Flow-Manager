@@ -57,7 +57,7 @@ export function saveWorkflowDraftQuery(params: {
       '{ecommerceGrowthEngineDrafts}',
       (CASE WHEN jsonb_typeof(config->'ecommerceGrowthEngineDrafts') = 'object'
         THEN config->'ecommerceGrowthEngineDrafts'
-        ELSE '{}'::jsonb END) || jsonb_build_object(${journey}, ${prepared}),
+        ELSE '{}'::jsonb END) || jsonb_build_object(${journey}::text, ${prepared}::boolean),
       true
     )
     WHERE id = ${integrationId} AND user_id = ${accountId}
