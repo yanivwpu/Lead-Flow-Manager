@@ -1,4 +1,7 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
+import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
+import { users, integrations } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
 import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
 import { db } from "../drizzle/db";
 import { sql } from "drizzle-orm";
@@ -601,6 +604,7 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       journeys: { orderSupport: Number(stats?.order_support ?? 0), fulfillmentSupport: Number(stats?.fulfillment_support ?? 0), orderCancelled: Number(stats?.order_cancelled ?? 0) },
       lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
       reviewQueue,
+      workflowDrafts: readWorkflowDraftSettings(cfg),
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
     return res.status(503).json({ error: 'E-commerce inbox preview unavailable' });
@@ -660,6 +664,55 @@ router.post('/ecommerce/event-review', async (req: Request, res: Response) => {
     return res.json({ ok: true, reviewed: true });
   } catch {
     return res.status(503).json({ error: 'E-commerce event review unavailable' });
+  }
+});
+
+/** Merchant-owned staging workflow DRAFTS only. An explicit flag does not activate a
+ * workflow, enqueue tasks, authorize a channel, or permit outbound messages.
+ */
+router.post('/ecommerce/workflow-draft', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  const origin = 'https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({ error: 'Not available' });
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({ error: 'Invalid request origin or content type' });
+  const change = parseWorkflowDraftChange(req.body);
+  if (!change) return res.status(400).json({ error: 'Invalid draft request' });
+  try {
+    const accountId = (req.user as { id: string }).id;
+    const sessionOwner = await storage.getUserForSession(accountId);
+    if (!sessionOwner || !isShopifyContactInstallationActive(sessionOwner))
+      return res.status(403).json({ error: 'Active Shopify connection required' });
+    const shop = normalizeShopifyShopDomain(sessionOwner.shopifyShop);
+    if (!shop) return res.status(403).json({ error: 'Active Shopify connection required' });
+    // Serialize configuration against uninstall/redaction using the same shop lock.
+    const saved = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+      const [liveOwner] = await tx.select().from(users).where(and(eq(users.id, accountId),
+        eq(users.shopifyShop, shop))).limit(1);
+      if (!liveOwner || !isShopifyContactInstallationActive(liveOwner)) return null;
+      const [installation] = await tx.select().from(integrations).where(and(
+        eq(integrations.userId, accountId), eq(integrations.type, 'shopify'),
+        eq(integrations.isActive, true))).limit(2);
+      if (!installation || !installation.isActive) return null;
+      const cfg = (installation.config || {}) as Record<string, unknown>;
+      if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
+          normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
+      const updated = await tx.execute(saveWorkflowDraftQuery({
+        integrationId: installation.id, accountId, shop, ...change
+      }));
+      return updated.rows.length === 1 ? updated.rows[0].drafts : null;
+    });
+    if (!saved) return res.status(409).json({ error: 'Shopify installation changed; refresh' });
+    return res.json({ ok: true, workflowDrafts: readWorkflowDraftSettings({
+      ecommerceGrowthEngineDrafts: saved
+    }), workflowActive: false, messagingEnabled: false });
+  } catch {
+    return res.status(503).json({ error: 'Workflow draft unavailable' });
   }
 });
 
