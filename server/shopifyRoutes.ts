@@ -557,7 +557,7 @@ router.get('/connection-status', async (req: Request, res: Response) => {
 router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store');
   if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
-      process.env.APP_URL?.replace(/\\/$/, '') !== 'https://whachatcrm-staging-app-staging.up.railway.app')
+      process.env.APP_URL?.replace(/[/]$/, '') !== 'https://whachatcrm-staging-app-staging.up.railway.app')
     return res.status(404).json({ error: 'Not available' });
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   try {
