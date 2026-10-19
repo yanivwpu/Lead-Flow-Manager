@@ -13,6 +13,7 @@ type InboxPreview = {
   checkoutEnabled: false;
   journeys: { orderSupport: number; fulfillmentSupport: number; orderCancelled: number };
   reviewQueue: Array<{ id: string; topic: string; journey: string; receivedAt: string }>;
+  workflowDrafts: Record<"orderSupport" | "fulfillmentSupport" | "orderCancelled" | "abandonedCart", boolean>;
 };
 
 /** Staging-only internal triage. Never installs workflows or sends to customers. */
@@ -42,7 +43,18 @@ export function ShopifyEcommerceInboxPreview() {
     },
     onSuccess: async () => { await refetch(); },
   });
-  if (!visible || !user?.id) return null;
+  const drafts = useMutation({
+    mutationFn: async (input: { journey: "orderSupport" | "fulfillmentSupport" | "orderCancelled" | "abandonedCart"; prepared: boolean }) => {
+      const response = await fetch("/api/shopify/ecommerce/workflow-draft", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({action:"save_draft", ...input}),
+      });
+      if (!response.ok) throw Error("Draft could not be saved. Refresh and try again.");
+    },
+    onSuccess: async () => { await refetch(); },
+  });
+    if (!visible || !user?.id) return null;
   return (
     <section className="rounded-lg border border-slate-200 p-4 space-y-3 text-sm" data-testid="ecommerce-event-inbox-preview">
       <div className="flex items-center justify-between gap-3">
@@ -107,6 +119,13 @@ export function ShopifyEcommerceInboxPreview() {
                   description: "Review cancellations and prepare help options when appropriate.",
                   integrated: false,
                 },
+                {
+                  key: "abandonedCart" as const,
+                  name: "Abandoned-cart recovery",
+                  trigger: "no subscribed cart/checkout event",
+                  description: "Future consent-safe recovery journey; checkout abandonment is not wired.",
+                  integrated: false,
+                },
               ].map(journey => (
                 <div key={journey.key} className="rounded-md border border-slate-200 bg-white p-3 text-xs space-y-1">
                   <p className="font-medium">{journey.name}</p>
@@ -115,10 +134,19 @@ export function ShopifyEcommerceInboxPreview() {
                   <p className="text-muted-foreground">Trigger: {journey.trigger}</p>
                   <p className="text-muted-foreground">{journey.integrated ? "Staging event capture connected" : "Not subscribed or wired yet"}</p>
                   <p className="text-muted-foreground">No messages queued or sent</p>
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <span className="text-muted-foreground">{data.workflowDrafts?.[journey.key] ? "Draft prepared · inactive" : "Not prepared"}</span>
+                    <Button type="button" size="sm" variant="outline"
+                      disabled={drafts.isPending || isFetching}
+                      onClick={() => drafts.mutate({journey:journey.key,prepared:!data.workflowDrafts?.[journey.key]})}>
+                      {data.workflowDrafts?.[journey.key] ? "Remove draft" : "Prepare draft"}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">No workflow is active. Before any future messaging: verify merchant opt-in, recipient consent, opt-outs, approved templates, channel rules and delivery deduplication.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Saving a draft does not enable any workflow or message. Before any future messaging: verify merchant opt-in, recipient consent, opt-outs, approved templates, channel rules and delivery deduplication.</p>
+            {drafts.isError && <p role="alert" className="mt-2 text-xs text-red-700">Draft could not be saved. Refresh and try again.</p>}
           </details>
         </>
       )}
