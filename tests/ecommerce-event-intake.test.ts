@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCommerceWebhook } from '../server/ecommerce/eventIntake';
+import { classifyCommerceWebhook, previewCommerceJourney } from '../server/ecommerce/eventIntake';
 
 const valid = { verified:true, accountId:'acct-1', shopDomain:'demo.myshopify.com', topic:'orders/create', webhookId:'delivery-123' };
 
@@ -29,4 +29,17 @@ test('supported fulfillment and cancellation classification',()=>{
   const cancelled=classifyCommerceWebhook({...valid,topic:'orders/cancelled'});
   assert.equal(cancelled.status,'candidate');
   if(cancelled.status==='candidate') assert.equal(cancelled.journey,'order_cancelled');
+});
+
+test('journey previews require enabled engine, active matching installation and consent',()=>{
+ const event=classifyCommerceWebhook(valid);
+ const gate={engineEnabled:true,installationActive:true,installationAccountId:'acct-1',eventAccountId:'acct-1',contactConsent:'granted' as const,contactOptedOut:false};
+ assert.equal(previewCommerceJourney(event,gate).status,'preview_ready');
+ assert.deepEqual(previewCommerceJourney(event,{...gate,engineEnabled:false}),{status:'blocked',reason:'engine_disabled'});
+ assert.deepEqual(previewCommerceJourney(event,{...gate,installationActive:false}),{status:'blocked',reason:'installation_inactive'});
+ assert.deepEqual(previewCommerceJourney(event,{...gate,installationAccountId:'acct-2'}),{status:'blocked',reason:'tenant_mismatch'});
+ assert.deepEqual(previewCommerceJourney(event,{...gate,contactOptedOut:true}),{status:'blocked',reason:'customer_opted_out'});
+ assert.deepEqual(previewCommerceJourney(event,{...gate,contactConsent:'unknown'}),{status:'blocked',reason:'consent_unknown_or_denied'});
+ assert.deepEqual(previewCommerceJourney(event,{...gate,contactConsent:'denied'}),{status:'blocked',reason:'consent_unknown_or_denied'});
+ assert.deepEqual(previewCommerceJourney(classifyCommerceWebhook({...valid,verified:false}),gate),{status:'blocked',reason:'event_ineligible'});
 });
