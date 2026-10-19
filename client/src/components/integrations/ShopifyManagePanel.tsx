@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { ShopifyWebhookAdvancedTools } from "./ShopifyWebhookDiagnostics";
+import { ShopifyEcommerceInboxPreview } from "./ShopifyEcommerceInboxPreview";
 
 export type ShopifyConnectionStatus = {
   connected: boolean;
@@ -156,6 +157,7 @@ export function ShopifyManagePanel({
         )}
       </div>
 
+      <ShopifyEcommerceInboxPreview />
       <ShopifyWebhookAdvancedTools
         enabled={connected}
         onReregisterComplete={() => {
