@@ -29,7 +29,7 @@ test("real PostgreSQL: draft preferences are per-merchant, atomic, non-destructi
     await insert("owned","account-a","one.myshopify.com");
     await insert("foreign","account-b","two.myshopify.com");
     const change=(journey:"orderSupport"|"fulfillmentSupport"|"abandonedCart",prepared:boolean,accountId="account-a",shop="one.myshopify.com",integrationId="owned") =>
-      database.execute(saveWorkflowDraftQuery({integrationId,accountId,shop,journey,prepared}));
+      database.execute(saveWorkflowDraftQuery({integrationId,accountId,shop,journey,prepared})).catch((error: unknown) => { throw (error as { cause?: unknown }).cause ?? error; });
     assert.equal((await change("orderSupport",true,"account-b")).rows.length,0);
     assert.equal((await change("orderSupport",true,"account-a","two.myshopify.com")).rows.length,0);
     assert.equal((await change("orderSupport",true,"account-a","one.myshopify.com","foreign")).rows.length,0);
