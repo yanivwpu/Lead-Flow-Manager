@@ -7,6 +7,7 @@ import {
   type ShopifyShopWebhookSummary,
   type ShopifyWebhookHealthReport,
   type ShopifyWebhookRegistrationAttempt,
+  SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS,
 } from "@shared/shopifyWebhookHealth";
 import { getShopifyApi, SHOPIFY_SCOPES, HOST } from "./shopify";
 
@@ -44,7 +45,12 @@ export async function auditShopWebhookHealth(
     ),
     fetchShopGrantedScopes(shop, accessToken),
   ]);
-  return buildShopWebhookHealthReport({ shop, host: HOST, requestedScopes: SHOPIFY_SCOPES, scopes, subscriptions, registrationAttempts });
+  // Staging commerce topics are declared on the installed app version, not per-shop GraphQL.
+  // This improves classification but deliberately DOES NOT assert live delivery or registration.
+  const stagedApp = new URL(HOST).origin === "https://whachatcrm-staging-app-staging.up.railway.app";
+  return buildShopWebhookHealthReport({ shop, host: HOST, requestedScopes: SHOPIFY_SCOPES, scopes, subscriptions, registrationAttempts,
+    appManagedTopics: stagedApp ? SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS.map(s => s.topic) : [],
+  });
 }
 
 export async function registerShopWebhooks(shop: string, accessToken: string): Promise<ShopifyWebhookRegistrationAttempt[]> {

@@ -87,6 +87,9 @@ export function buildShopWebhookHealthReport(params: {
   scopes: ShopifyScopeVerification;
   subscriptions: { status: "verified" | "unknown"; listed: ListedWebhook[] };
   registrationAttempts?: ShopifyWebhookRegistrationAttempt[];
+  /** App-level topics independently declared in the current staging app version.
+   * Declarations are NOT evidence of delivery and must never count as registered. */
+  appManagedTopics?: readonly string[];
 }): ShopifyWebhookHealthReport {
   const { shop, host, requestedScopes, scopes, subscriptions } = params;
   const grantedScopes: string[] = [...scopes.grantedScopes];
@@ -106,12 +109,15 @@ export function buildShopWebhookHealthReport(params: {
     else if (registered) status = correct ? "registered" : "wrong_url";
     else if (failure?.status === "skipped_protected_data") status = "protected_data_unconfirmed";
     else if (failure?.status === "failed") status = "blocked_shopify";
+    else if (params.appManagedTopics?.includes(spec.restTopic)) status = "app_config";
     else status = "missing";
     return {
       topic: spec.topic, restTopic: spec.restTopic, label: spec.label,
       expectedCallbackUrl: expected, registeredCallbackUrl: registered?.callbackUrl ?? null,
-      status, required: spec.required, registrationMethod: "graphql",
-      scopeNotes: failure?.message ?? (status === "permissions_unknown" ? "Permissions not verified; no missing scope inferred." : spec.requiredScopes?.length ? `Requires ${spec.requiredScopes.join(", ")}.` : null),
+      status, required: spec.required, registrationMethod: status === "app_config" ? "app_toml" : "graphql",
+      scopeNotes: failure?.message ?? (status === "app_config"
+        ? "App-managed topic declared in staging Shopify version; per-shop GraphQL list does not verify it. Confirm active app version and delivery logs. Do not create a parallel per-shop subscription."
+        : status === "permissions_unknown" ? "Permissions not verified; no missing scope inferred." : spec.requiredScopes?.length ? `Requires ${spec.requiredScopes.join(", ")}.` : null),
     };
   });
   // The per-shop API cannot confirm app-level compliance subscriptions. TOML is intent, not deployment evidence.
@@ -133,14 +139,16 @@ export function buildShopWebhookHealthReport(params: {
     recommendedAction: scopes.status === "unknown" || subscriptions.status === "unknown"
       ? "Retry read-only verification and check Shopify authentication. Do not infer missing permissions or re-register during the audit."
       : missingScopes.length ? "Approve the missing OAuth scopes in Shopify Admin, then refresh verification."
-      : "Confirm active app-level compliance subscriptions in Shopify Partner Dashboard. Review missing or incorrect callbacks and any explicit registration failures before a separately authorized correction.",
+      : webhooks.some(w => w.status === "app_config") && !knownProblem
+        ? "App-level subscriptions are declared, not verified through per-shop GraphQL. Review the active Shopify app version and successful delivery logs; do not create duplicate per-shop subscriptions."
+        : "Confirm active app-level compliance subscriptions in Shopify Partner Dashboard. Review missing or incorrect callbacks and any explicit registration failures before a separately authorized correction.",
     failedRegistrations, webhooks,
     ordersCreateAudit: {
       requiredScopes: ["read_orders"], oauthScopesRequested: [...requestedScopes], grantedScopes,
       missingGrantedScopes: missingScopes, hasReadOrders: scopes.status === "verified" && grantedScopes.includes("read_orders"),
       requiresProtectedCustomerData: true, canRegister: scopes.status === "verified" && grantedScopes.includes("read_orders"),
       protectedCustomerDataApprovalRequired: true,
-      registrationBlockedReason: orders.status === "permissions_unknown" ? "permissions_unknown" : orders.status === "registration_unknown" ? "registration_unknown" : orders.status === "blocked_scope" ? "missing_scope" : orders.status === "protected_data_unconfirmed" ? "protected_customer_data" : orders.status === "blocked_shopify" || orders.status === "wrong_url" ? "registration_failed" : orders.status === "registered" ? "none" : "not_attempted",
+      registrationBlockedReason: orders.status === "permissions_unknown" ? "permissions_unknown" : orders.status === "registration_unknown" || orders.status === "app_config" ? "registration_unknown" : orders.status === "blocked_scope" ? "missing_scope" : orders.status === "protected_data_unconfirmed" ? "protected_customer_data" : orders.status === "blocked_shopify" || orders.status === "wrong_url" ? "registration_failed" : orders.status === "registered" ? "none" : "not_attempted",
       note: orders.status === "registered" ? "ORDERS_CREATE registration and callback verified. Delivery is not tested by this audit." : `ORDERS_CREATE: ${orders.status.replaceAll("_", " ")}. Absence alone does not establish a protected-data rejection.`,
     },
     summary: {
