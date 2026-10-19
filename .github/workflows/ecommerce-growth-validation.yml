@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "server/ecommerce/**"
+      - "server/shopifyCommerceWebhooks.ts"
       - "tests/ecommerce-*.test.ts"
       - "migrations/20261019_ecommerce_growth_event_inbox.sql"
       - "docs/ecommerce-growth-engine-phase2-boundary.md"
@@ -37,7 +38,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Pure event classification and preview guards
-        run: npx tsx --test tests/ecommerce-event-intake.test.ts
+        run: npx tsx --test tests/ecommerce-event-intake.test.ts tests/ecommerce-recording-bridge.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
