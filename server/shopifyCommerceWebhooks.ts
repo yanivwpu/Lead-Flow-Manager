@@ -167,7 +167,12 @@ async function ingestShopifyOrderCreate(
         ON CONFLICT (account_id,shop,topic,delivery_id) DO NOTHING`);
       // Only HMAC-verified, owned, recorded orders with explicit merchant opt-in
       // can create one internal CRM-linked support task. No sender is imported.
-      if (isStagingOrderSupportTaskExecutionEnabled(process.env) && result.contactId) {
+      if (isStagingOrderSupportTaskExecutionEnabled({
+        RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+        APP_URL: process.env.APP_URL,
+        ECOMMERCE_EVENT_RECORDING_ENABLED: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED,
+        ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED,
+      }) && result.contactId) {
         const taskQuery = orderSupportTaskInsertQuery({
           accountId: merchant.userId,
           canonicalShop,
