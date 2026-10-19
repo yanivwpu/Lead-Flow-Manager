@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,10 @@ type InboxPreview = {
   messagingEnabled: false;
   checkoutEnabled: false;
   journeys: { orderSupport: number; fulfillmentSupport: number; orderCancelled: number };
+  reviewQueue: Array<{ id: string; topic: string; journey: string; receivedAt: string }>;
 };
 
-/** Read-only and staging-only. Does not install, activate, or send anything. */
+/** Staging-only internal triage. Never installs workflows or sends to customers. */
 export function ShopifyEcommerceInboxPreview() {
   const { user } = useAuth();
   const visible = window.location.hostname === "whachatcrm-staging-app-staging.up.railway.app";
@@ -28,6 +29,18 @@ export function ShopifyEcommerceInboxPreview() {
     },
     staleTime: 30_000,
     retry: false,
+  });
+  const review = useMutation({
+    mutationFn: async (eventId: string) => {
+      const response = await fetch("/api/shopify/ecommerce/event-review", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_reviewed", eventId }),
+      });
+      if (!response.ok) throw new Error("Review could not be saved. Refresh and try again.");
+    },
+    onSuccess: async () => { await refetch(); },
   });
   if (!visible || !user?.id) return null;
   return (
@@ -52,6 +65,22 @@ export function ShopifyEcommerceInboxPreview() {
             <div className="col-span-2 sm:col-span-3 text-muted-foreground">
               {data.lastEventAt ? `Last recorded: ${new Date(data.lastEventAt).toLocaleString()}` : "No verified order event has been recorded yet."}
             </div>
+          </div>
+          <div className="border-t border-slate-200 pt-3 space-y-2" data-testid="ecommerce-manual-triage">
+            <p className="text-xs font-medium">Order-event review queue · manual only</p>
+            <p className="text-xs text-muted-foreground">Acknowledging an event closes this staging review item. It does not contact the customer, fulfill orders or run an automation.</p>
+            {(data.reviewQueue ?? []).length === 0 && <p className="text-xs text-muted-foreground">No events waiting for review.</p>}
+            {(data.reviewQueue ?? []).map(event => (
+              <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+                <div className="text-xs">
+                  <p className="font-medium">{event.journey === "order_support" ? "New order support" : event.journey === "fulfillment_support" ? "Fulfillment assistance" : "Cancellation assistance"}</p>
+                  <p className="text-muted-foreground">{event.topic} · {new Date(event.receivedAt).toLocaleString()}</p>
+                </div>
+                <Button type="button" variant="outline" size="sm" disabled={review.isPending || isFetching}
+                  onClick={() => review.mutate(event.id)}>Mark reviewed</Button>
+              </div>
+            ))}
+            {review.isError && <p role="alert" className="text-xs text-red-700">Review could not be saved. Refresh and try again.</p>}
           </div>
           <details className="border-t border-slate-200 pt-3" data-testid="ecommerce-journey-review-preview">
             <summary className="cursor-pointer text-xs font-medium">Workflow previews · review only</summary>

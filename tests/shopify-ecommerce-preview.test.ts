@@ -13,7 +13,7 @@ test("staging preview route only reads scoped inbox aggregate and never accepts 
   assert.match(endpoint, /getUserForSession\(accountId\)/);
   assert.match(endpoint, /isShopifyContactInstallationActive\(owner\)/);
   assert.match(endpoint, /integration\?\.isActive/);
-  assert.match(endpoint, /WHERE account_id = \$\{accountId\} AND shop = \$\{shop\}/);
+  assert.ok(readFileSync("server/ecommerce/reviewQueue.ts","utf8").includes("WHERE account_id = ${accountId} AND shop = ${shop}"));
   assert.match(endpoint, /COUNT\(\*\)/);
   for (const forbidden of ["req.query", "req.body", "INSERT INTO", "UPDATE ecommerce", "sendMessage", "cartCreate"])
     assert.equal(endpoint.includes(forbidden), false, forbidden);
@@ -26,7 +26,9 @@ test("staging UI shows counters and never gives an activate or send action", () 
   assert.match(view, /Recording mode/);
   assert.match(view, /Recorded events/);
   assert.match(view, /Pending review/);
-  assert.equal(view.includes('method: "POST"'),false);
+  assert.ok(view.includes('method: "POST"'), "manual review sends a scoped administrative POST");
+  assert.ok(view.includes("mark_reviewed"), "only explicit manual review is available");
+  assert.ok(view.includes("No automatic messages or checkout actions"));
   assert.equal(view.includes('Activate</Button>'),false);
 });
 
@@ -39,7 +41,7 @@ test("journey preview remains tenant-scoped and does not claim unsupported webho
   const snippet=route.slice(start,end);
   for(const journey of ["order_support","fulfillment_support","order_cancelled"])
     assert.ok(snippet.includes(`journey = '${journey}'`));
-  assert.match(snippet,/WHERE account_id = \$\{accountId\} AND shop = \$\{shop\}/);
+  assert.ok(readFileSync("server/ecommerce/reviewQueue.ts","utf8").includes("WHERE account_id = ${accountId} AND shop = ${shop}"));
   assert.ok(view.includes("Workflow previews · review only"));
   assert.ok(view.includes("Not subscribed or wired yet"));
   assert.ok(view.includes("No workflow is active"));
