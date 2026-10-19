@@ -21,3 +21,10 @@ Status: **draft / not connected to runtime**. PR #109 is a pure planning foundat
 
 ## Explicit exclusion
 Checkout one-cart test remains unresolved and guarded separately in PR #108. Never reset or remove its consumed volume claim as part of E-commerce Growth Engine work.
+
+## Durable inbox PR #109 follow-up
+- Additive SQL migration `migrations/20261019_ecommerce_growth_event_inbox.sql` is **not deployed or applied**.
+- `recordCommerceEvent` inserts only account, shop, topic, delivery ID, journey, and pending state using PostgreSQL's uniqueness constraint; it does not write customer payloads or dispatch workflows.
+- Runtime route integration must **not** happen until a verified webhook, unique live installation and tenant identity are resolved; this service is otherwise incapable of claiming HMAC authenticity.
+- No workers, polling, notifications or retry side effects are connected. Migrated rows remain pending for a separately reviewed preview workflow.
+- The PGlite regression checks are a compatibility test, not confirmation of live PostgreSQL deployment. Require native PostgreSQL CI and migration review before merge.
