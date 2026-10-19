@@ -97,3 +97,33 @@ test("subscription authentication, GraphQL failure and timeout do not confirm ab
   await assert.rejects(listVerifiedWebhookSubscriptions({ request: async () => ({ errors: [{ message: "denied" }] }) }));
   await assert.rejects(listVerifiedWebhookSubscriptions({ request: () => new Promise(() => {}) }, 5), /timed out/);
 });
+
+test("staging app-owned commerce topics are unverified app configuration, not missing per-shop registration", () => {
+  const r=report({
+    subscriptions: { status: "verified", listed: [listed[0]] },
+    appManagedTopics: ["orders/create", "customers/create", "customers/update"],
+  });
+  for (const topic of ["CUSTOMERS_CREATE", "ORDERS_CREATE"]) {
+    const item=r.webhooks.find(w=>w.topic===topic)!;
+    assert.equal(item.status,"app_config");
+    assert.equal(item.registrationMethod,"app_toml");
+    assert.equal(item.registeredCallbackUrl,null);
+  }
+  assert.equal(r.summary.missingRequired,0);
+  assert.equal(r.summary.status,"Verification Unavailable");
+  assert.equal(r.summary.healthy,false);
+  assert.equal(r.ordersCreateAudit.registrationBlockedReason,"registration_unknown");
+  assert.match(r.recommendedAction,/do not create duplicate per-shop subscriptions/i);
+});
+test("app-managed declaration never hides a conflicting per-shop callback, or an unverified permission",()=>{
+  const r=report({
+    subscriptions:{status:"verified",listed:listed.map(w=>w.topic==="ORDERS_CREATE"?{...w,callbackUrl:"https://wrong.invalid/webhooks/orders-create"}:w)},
+    appManagedTopics:["orders/create"]
+  });
+  assert.equal(r.webhooks.find(w=>w.topic==="ORDERS_CREATE")?.status,"wrong_url");
+  assert.equal(r.summary.status,"Action Required");
+  const bad=report({scopes:{status:"unknown",grantedScopes:[],reason:"no access"},
+    subscriptions:{status:"verified",listed:[listed[0]]},appManagedTopics:["orders/create","customers/create"]});
+  assert.equal(bad.webhooks.find(w=>w.topic==="ORDERS_CREATE")?.status,"permissions_unknown");
+  assert.equal(bad.summary.healthy,false);
+});
