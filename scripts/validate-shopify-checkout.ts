@@ -72,5 +72,5 @@ async function main() {
   } finally {await client.query('ROLLBACK').catch(()=>{});await client.end();}
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url))
-  main().catch(()=>{console.error(JSON.stringify({result:'preflight_or_validation_failed_closed',stage:preflightStage,selectionSha256:null}));process.exitCode=1;});
+  main().catch((error:unknown)=>{const codes=['preflight_guard_args','preflight_guard_ci','preflight_guard_runtime_identity_missing','preflight_guard_runtime_identity_mismatch','preflight_guard_attestation_mismatch','preflight_guard_phase','preflight_guard_not_allowed']; const reason=error instanceof Error && codes.includes(error.message)?error.message:'unspecified';console.error(JSON.stringify({result:'preflight_or_validation_failed_closed',stage:preflightStage,reason,selectionSha256:null}));process.exitCode=1;});
 
