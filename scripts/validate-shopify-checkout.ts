@@ -1,6 +1,7 @@
 // Standalone operator CLI. No dotenv, app bootstrap, workers, routes or sender imports.
 import { readFile } from 'node:fs/promises';
-import { consumeDispatch, savePrivateReceipt } from './checkout-validation/private-files';
+import { consumeDispatch, savePrivateReceipt, savePrivateSelection } from './checkout-validation/private-files';
+import { bootstrapAdminPreflight, assertBootstrapCommand } from './checkout-validation/admin-bootstrap';
 import { resolve } from 'node:path';
 import { railwayCartDirectory, railwayCheckoutModeAllowed } from './checkout-validation/railway-guard';
 import { resolveReadOnlyCheckoutInstallation } from './checkout-validation/read-only-installation';
@@ -11,6 +12,23 @@ import { createCatalogRequest } from '../server/salesCatalog/shopify/api';
 
 async function main() {
   const [mode, selectionPath, approvalPath, ...extra] = process.argv.slice(2);
+  if(mode==='--bootstrap-preflight') {
+    assertBootstrapCommand(process.argv.slice(2));
+    const directory=await railwayCartDirectory();
+    const connectionString=process.env.CHECKOUT_TEST_READONLY_DATABASE_URL;
+    if(!connectionString) throw Error('readonly_database_required');
+    const {Client}=await import('pg');
+    const {drizzle}=await import('drizzle-orm/node-postgres');
+    const client=new Client({connectionString,connectionTimeoutMillis:10000,statement_timeout:15000});
+    try {
+      await client.connect();
+      await client.query('BEGIN READ ONLY');
+      const result=await bootstrapAdminPreflight({database:drizzle(client),requestFetch:fetch,env:process.env,
+        saveSelection:selection=>savePrivateSelection(directory,selection)});
+      console.log(JSON.stringify(result));
+    } finally {await client.query('ROLLBACK').catch(()=>{});await client.end();}
+    return;
+  }
   if (!['--preflight','--create-one-cart'].includes(mode) || !selectionPath || extra.length ||
       (mode==='--create-one-cart')!==!!approvalPath || process.env.CI || !railwayCheckoutModeAllowed(mode))
     throw Error('operator_command_required');
@@ -48,4 +66,5 @@ async function main() {
   } finally {await client.query('ROLLBACK').catch(()=>{});await client.end();}
 }
 if (process.argv[1] && resolve(process.argv[1])===fileURLToPath(import.meta.url))
-  main().catch(()=>{console.error('Controlled checkout validation failed closed; do not retry a consumed dispatch.');process.exitCode=1;});
+  main().catch(()=>{console.error(JSON.stringify({result:'preflight_or_validation_failed_closed',selectionSha256:null}));process.exitCode=1;});
+
