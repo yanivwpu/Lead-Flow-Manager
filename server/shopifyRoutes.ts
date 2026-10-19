@@ -551,6 +551,44 @@ router.get('/connection-status', async (req: Request, res: Response) => {
   }
 });
 
+/** Staging-only, authenticated, tenant-scoped E-commerce event inbox preview.
+ * Does not expose webhook IDs or customer data and cannot send or activate workflows.
+ */
+router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/\\/$/, '') !== 'https://whachatcrm-staging-app-staging.up.railway.app')
+    return res.status(404).json({ error: 'Not available' });
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const accountId = (req.user as { id: string }).id;
+    const owner = await storage.getUserForSession(accountId);
+    if (!owner || !isShopifyContactInstallationActive(owner))
+      return res.status(403).json({ error: 'Active Shopify connection required' });
+    const shop = normalizeShopifyShopDomain(owner.shopifyShop);
+    const integration = await storage.getIntegrationByUserAndType(accountId, 'shopify');
+    const cfg = (integration?.config ?? {}) as Record<string, unknown>;
+    if (!shop || !integration?.isActive ||
+        (cfg.shop != null && normalizeShopifyShopDomain(String(cfg.shop)) !== shop))
+      return res.status(403).json({ error: 'Active Shopify connection required' });
+    const result = await db.execute(sql`
+      SELECT COUNT(*)::integer AS total,
+             COUNT(*) FILTER (WHERE state = 'pending')::integer AS pending,
+             MAX(received_at) AS last_event_at
+      FROM ecommerce_growth_event_inbox
+      WHERE account_id = ${accountId} AND shop = ${shop}
+    `);
+    const stats = result.rows[0] as { total?: number; pending?: number; last_event_at?: Date | string | null } | undefined;
+    return res.json({ ok: true,
+      mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
+      total: Number(stats?.total ?? 0), pending: Number(stats?.pending ?? 0),
+      lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
+      messagingEnabled: false, checkoutEnabled: false });
+  } catch {
+    return res.status(503).json({ error: 'E-commerce inbox preview unavailable' });
+  }
+});
+
 router.get('/webhooks/health', async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
