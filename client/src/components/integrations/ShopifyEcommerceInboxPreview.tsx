@@ -145,7 +145,7 @@ export function ShopifyEcommerceInboxPreview() {
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">Saving a draft does not enable any workflow or message. Before any future messaging: verify merchant opt-in, recipient consent, opt-outs, approved templates, channel rules and delivery deduplication.</p>
+            <p className="mt-2 text-xs text-muted-foreground">No workflow is active. Saving a draft does not enable any workflow or message. Before any future messaging: verify merchant opt-in, recipient consent, opt-outs, approved templates, channel rules and delivery deduplication.</p>
             {drafts.isError && <p role="alert" className="mt-2 text-xs text-red-700">Draft could not be saved. Refresh and try again.</p>}
           </details>
         </>
