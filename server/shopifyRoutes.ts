@@ -1,3 +1,6 @@
+import { db } from "../drizzle/db";
+import { sql } from "drizzle-orm";
+import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
 import { createShopifyOrderWebhookHandler } from "./shopifyOrderWebhookHandler";
 import { createShopifyCustomerWebhookHandler } from "./shopifyCustomerWebhookHandler";
 import { syncShopifyCustomer } from "./shopifyCustomerSync";
