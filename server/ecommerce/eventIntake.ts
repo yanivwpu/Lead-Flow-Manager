@@ -34,3 +34,37 @@ export function classifyCommerceWebhook(input: {
   // Never log this key or use it as an outbound idempotency guarantee until persisted.
   return { status: 'candidate', journey, dedupeKey: JSON.stringify([account,shop,input.topic,id]) };
 }
+
+/**
+ * Planning-only activation gate. Returns a preview, never a send instruction.
+ * Real message delivery additionally requires durable deduplication, per-channel
+ * legal consent, opt-out handling, template approval and a reviewed workflow.
+ */
+export type CommercePreviewDecision =
+  | { status: 'preview_ready'; journey: 'order_support' | 'fulfillment_support' | 'order_cancelled'; dedupeKey: string }
+  | { status: 'blocked'; reason:
+      'event_ineligible' | 'engine_disabled' | 'installation_inactive' |
+      'tenant_mismatch' | 'consent_unknown_or_denied' | 'customer_opted_out' };
+
+export function previewCommerceJourney(
+  decision: CommerceEventDecision,
+  context: {
+    engineEnabled: boolean;
+    installationActive: boolean;
+    installationAccountId: string | null;
+    eventAccountId: string;
+    contactConsent: 'granted' | 'denied' | 'unknown';
+    contactOptedOut: boolean;
+  },
+): CommercePreviewDecision {
+  if (decision.status !== 'candidate') return {status:'blocked',reason:'event_ineligible'};
+  if (!context.engineEnabled) return {status:'blocked',reason:'engine_disabled'};
+  if (!context.installationActive) return {status:'blocked',reason:'installation_inactive'};
+  const accountId = context.eventAccountId.trim();
+  if (!accountId || context.installationAccountId !== accountId ||
+      JSON.parse(decision.dedupeKey)[0] !== accountId)
+    return {status:'blocked',reason:'tenant_mismatch'};
+  if (context.contactOptedOut) return {status:'blocked',reason:'customer_opted_out'};
+  if (context.contactConsent !== 'granted') return {status:'blocked',reason:'consent_unknown_or_denied'};
+  return {status:'preview_ready',journey:decision.journey,dedupeKey:decision.dedupeKey};
+}
