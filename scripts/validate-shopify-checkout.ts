@@ -46,7 +46,7 @@ async function main() {
       (mode==='--create-one-cart')!==!!approvalPath ||
       // Railway may expose CI=true; the exact service and approval phase guard is authoritative.
       !railwayCheckoutModeAllowed(mode) ||
-      (!process.env.RAILWAY_SERVICE_ID && Boolean(process.env.CI))))
+      (!process.env.RAILWAY_SERVICE_ID && Boolean(process.env.CI)))))
     throw Error('operator_command_required');
   const privateDirectory = approvedBootstrap ? await railwayCartDirectory() : undefined;
   const digest = process.env.CHECKOUT_TEST_SELECTION_SHA256;
