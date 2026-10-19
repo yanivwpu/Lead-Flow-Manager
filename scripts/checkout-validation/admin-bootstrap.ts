@@ -10,8 +10,16 @@ export const BOOTSTRAP_PRODUCT='gid://shopify/Product/10108113912090';
 export const BOOTSTRAP_VARIANT='gid://shopify/ProductVariant/51638768632090';
 
 export function assertBootstrapCommand(args: string[], env: NodeJS.ProcessEnv=process.env) {
-  if(args.length!==1 || args[0]!=='--bootstrap-preflight' || env.CI || !env.RAILWAY_SERVICE_ID ||
-     !railwayCheckoutModeAllowed('--preflight',env)) throw Error('operator_command_required');
+  // Emit only a fixed diagnostic code. Never log environment variable values.
+  if(args.length!==1 || args[0]!=='--bootstrap-preflight') throw Error('preflight_guard_args');
+  if(env.CI) throw Error('preflight_guard_ci');
+  if(!env.RAILWAY_SERVICE_ID) throw Error('preflight_guard_runtime_identity_missing');
+  if(env.RAILWAY_SERVICE_ID !== 'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07')
+    throw Error('preflight_guard_runtime_identity_mismatch');
+  if(env.CHECKOUT_TEST_RAILWAY_SERVICE_ID !== env.RAILWAY_SERVICE_ID)
+    throw Error('preflight_guard_attestation_mismatch');
+  if(env.CHECKOUT_TEST_PHASE !== 'PREFLIGHT') throw Error('preflight_guard_phase');
+  if(!railwayCheckoutModeAllowed('--preflight',env)) throw Error('preflight_guard_not_allowed');
 }
 
 /** Exact read documents and variables only; no caller-supplied target or Admin mutation. */
