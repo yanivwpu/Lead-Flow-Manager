@@ -9,8 +9,8 @@ test("Shopify Tasks keeps open work visible and completed history collapsed with
   assert.match(view,/<details className="mt-3 rounded-lg border border-slate-200" data-testid="shopify-completed-tasks">/);
   assert.match(view,/Completed \(\{tasks.completedCount\}\)/);
   assert.match(view,/completedTasks\.map\(task => \(/);
-  assert.match(view,/Customer & orders/);
-  assert.match(view,/setLocation\(`\/app\/contacts\/\$\{task.contactId\}`\)/);
+  assert.match(view,/task.orderActivityId \? "View order" : "View customer"/);
+  assert.match(view,/setLocation\(shopifyTaskContactHref\(task.contactId, task.orderActivityId\)\)/);
   assert.match(view,/Recent completed tasks only/);
   assert.match(view,/Only the latest tasks appear here/);
   // The task history is a read-through of existing records, not a second order system.
