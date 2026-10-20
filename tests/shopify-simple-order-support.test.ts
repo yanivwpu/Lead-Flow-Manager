@@ -57,7 +57,7 @@ test("merchant surface keeps a single clear call to action and hides technical c
   const panel=readFileSync("client/src/components/integrations/ShopifyManagePanel.tsx","utf8");
   for(const words of [
     "Turn on order support","On — new orders create tasks","View tasks",
-    "Pause","No customer messages","shopify-order-support-quick-start"
+    "Pause","No customer messages","order-support-quick-start"
   ])assert.ok(setup.includes(words),words);
   for(const forbidden of ["Prepare draft","Fulfillment assistance","Abandoned-cart recovery",
     "Mark reviewed","Customer outreach","Send campaign"])
