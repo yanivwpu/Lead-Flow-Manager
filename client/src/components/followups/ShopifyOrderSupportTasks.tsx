@@ -4,6 +4,7 @@ import { ShoppingBag, CheckCircle2, ArrowUpRight, RefreshCw } from "lucide-react
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { Button } from "@/components/ui/button";
+import { ShopifyTaskScheduleEditor } from "./ShopifyTaskScheduleEditor";
 
 type ShopifyTask = {
   id: string;
@@ -11,6 +12,10 @@ type ShopifyTask = {
   createdAt: string;
   contactId: string;
   contactName: string;
+  assigneeUserId: string | null;
+  dueAt: string | null;
+  reminderMinutes: number | null;
+  reminderDue: boolean;
 };
 type ShopifyTaskPreview = {
   ok: true;
@@ -18,6 +23,7 @@ type ShopifyTaskPreview = {
   checkoutEnabled: false;
   internalTasks: {
     schemaReady: boolean;
+    scheduleReady: boolean;
     merchantEnabled: boolean;
     operatorEnabled: boolean;
     openCount: number;
@@ -47,6 +53,7 @@ export function ShopifyOrderSupportTasks() {
     enabled: staging && !!user?.id,
     retry: false,
     staleTime: 15_000,
+    refetchInterval: 60_000, // In-app due reminder updates; no notification dispatch.
     queryFn: async () => {
       const response = await fetch("/api/shopify/ecommerce/event-inbox-preview", { credentials: "include" });
       // Not connected or not a staging merchant: do not show E-commerce controls.
@@ -55,6 +62,22 @@ export function ShopifyOrderSupportTasks() {
       return response.json() as Promise<ShopifyTaskPreview>;
     },
   });
+  const { data: team = [] } = useQuery<Array<{memberId:string|null;name:string|null;email:string;status:string}>>({
+    queryKey: withUserQueryScope(["/api/team"],user?.id),
+    enabled:staging && !!user?.id,retry:false,
+    queryFn:async () => {
+      const response=await fetch("/api/team",{credentials:"include"});
+      if (!response.ok) return [];
+      const body: unknown=await response.json();
+      return Array.isArray(body) ? body : [];
+    }
+  });
+  const teamChoices = [
+    ...(user?.id ? [{id:user.id,label:"Account owner"}] : []),
+    ...team.filter(member=>member.status==="active" && !!member.memberId)
+      .map(member=>({id:member.memberId!,label:member.name || member.email}))
+      .filter(member=>member.id!==user?.id)
+  ];
   const complete = useMutation({
     mutationFn: async (id: string) => {
       const response = await fetch("/api/shopify/ecommerce/order-support-task-complete", {
@@ -112,12 +135,19 @@ export function ShopifyOrderSupportTasks() {
                     </button>
                   )}
                 </div>
+                <div className="w-full sm:w-auto">
                 <Button type="button" variant="outline" size="sm"
                   disabled={complete.isPending || isFetching}
                   onClick={() => complete.mutate(task.id)}>
                   <CheckCircle2 className="h-4 w-4 mr-1.5" aria-hidden="true" />
                   Complete
                 </Button>
+                </div>
+                <div className="w-full">
+                  <ShopifyTaskScheduleEditor
+                    task={task} choices={teamChoices}
+                    ready={tasks.scheduleReady} queryKey={queryKey} />
+                </div>
               </div>
             ))}
           </div>
