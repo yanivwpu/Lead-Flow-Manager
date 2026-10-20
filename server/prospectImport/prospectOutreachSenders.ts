@@ -28,6 +28,7 @@ export type ProspectOutreachSendPrepareInput = {
   recipientIdentity: string;
   subjectSnapshot?: string | null;
   messageSnapshot: string;
+  campaignLinkUrl?: string;
   senderMailboxId?: string | null;
   contactName?: string | null;
 };
@@ -231,7 +232,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
           mailboxId: gate.mailboxId || input.mailboxId,
           subject: input.subject,
           textBody: input.messageSnapshot,
-          htmlBody: renderProspectOutreachEmailHtml(input.messageSnapshot),
+          htmlBody: renderProspectOutreachEmailHtml(input.messageSnapshot, [input.campaignLinkUrl || ""]),
           replyMode: "new",
           prospectOutreach: true,
         },

@@ -68,7 +68,7 @@ import {
   PROSPECT_MESSAGE_CREATION_DEFAULTS,
   messageCreationUsesTemplate,
 } from "@shared/prospectMessageCreation";
-import { resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
@@ -437,7 +437,7 @@ export async function createQueueBatch(params: {
       subjectSnapshot = String(generated?.subject || "").trim();
       messageSnapshot = String(generated?.body || "").trim();
     } else {
-      messageSnapshot = String(pi?.suggestedFirstMessage || "").trim();
+      messageSnapshot = ensureAiComposeCampaignLink(String(pi?.suggestedFirstMessage || "").trim(), settings.outreachInstructions);
       subjectSnapshot = resolveProspectOutreachSubject({
         savedSubject: pi?.suggestedOutreachSubject,
         prospectName: contact.name,
@@ -1692,6 +1692,7 @@ export async function processClaimedQueueItem(
     .where(eq(prospectOutreachQueueItems.id, item.id));
   const itemWithAttempt = { ...item, attempts: attemptNumber };
 
+  const sendSettings = await getOutreachSettings(item.workspaceUserId);
   const sendResult = await sender.send({
     workspaceUserId: item.workspaceUserId,
     contactId: item.contactId,
@@ -1700,6 +1701,7 @@ export async function processClaimedQueueItem(
     messageSnapshot: item.messageSnapshot,
     senderMailboxId: prepared.mailboxId,
     mailboxId: prepared.mailboxId,
+    campaignLinkUrl: sendSettings.outreachInstructions.linkUrl,
     subject: prepared.subject,
     contactName: contact.name,
   });
@@ -1722,6 +1724,7 @@ export async function processClaimedQueueItem(
           decryptField: parsed.decryptField,
           errMsgSafe: sendErr,
           mailboxId: prepared.mailboxId,
+    campaignLinkUrl: sendSettings.outreachInstructions.linkUrl,
         });
         if (handled === "continue") {
           await db

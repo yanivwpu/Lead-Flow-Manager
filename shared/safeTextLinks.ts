@@ -1,5 +1,5 @@
 /** Parse safe http(s) URLs while retaining original text and punctuation. */
-export function safeTextLinks(text: string, prose = false): Array<{ text: string; href?: string }> {
+export function safeTextLinks(text: string, prose = false, approvedUrls: string[] = []): Array<{ text: string; href?: string }> {
   const parts: Array<{ text: string; href?: string }> = [];
   let cursor = 0;
   for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/gi)) {
@@ -9,6 +9,10 @@ export function safeTextLinks(text: string, prose = false): Array<{ text: string
     let href = prose ? match[0].replace(/[.,;:!?]+$/g, "") : match[0];
     if (prose) for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
       while (href.endsWith(close) && href.split(close).length > href.split(open).length) href = href.slice(0, -1);
+    }
+    if (prose) {
+      const approved = approvedUrls.filter(url => url && match[0].startsWith(url) && /^[.,;:!?\)\]\}]*$/.test(match[0].slice(url.length))).sort((a,b) => b.length-a.length)[0];
+      if (approved) href = approved;
     }
     try {
       const url = new URL(href);

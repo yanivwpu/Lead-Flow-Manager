@@ -284,7 +284,7 @@ export function ensureAiComposeCampaignLink(
   if (!text || !settings.includeLinkNaturally || !url) return text;
   const validated = validateOutreachLinkUrl(url);
   if (!validated.ok) return text;
-  if (safeTextLinks(text).some(part => part.href === validated.linkUrl)) return text;
+  if (safeTextLinks(text, true, [validated.linkUrl]).some(part => part.href === validated.linkUrl)) return text;
   const intro = {
     english: "See how it works: ",
     spanish: "Descubre cómo funciona: ",
