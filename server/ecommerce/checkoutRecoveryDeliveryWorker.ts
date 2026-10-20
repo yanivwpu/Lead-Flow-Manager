@@ -46,7 +46,6 @@ export async function processClaimedRecoveryDelivery(
  deps:DeliveryDeps,consentDigestSecret:string
 ):Promise<'disabled'|'suppressed'|'accepted'|'uncertain'> {
  if(!recoveryDeliveryExecutionEnabled(env))return 'disabled';
- let providerAttempted=false;
  try{
    if(!await deps.verifyCurrentInstallation(claim)){
      if(!await deps.settle(claim,'suppressed'))return 'uncertain';
@@ -74,7 +73,6 @@ export async function processClaimedRecoveryDelivery(
    // The fresh Shopify check, verified recipient, opt-in and live Meta status
    // immediately precede the one-and-only provider attempt. No send here if
    // any prior guard is unavailable.
-   providerAttempted=true;
    const accepted=await deps.sendApprovedTemplate({
      claim,phone:decision.recipientPhone,
      templateName:decision.templateName,templateLanguage:decision.templateLanguage,
