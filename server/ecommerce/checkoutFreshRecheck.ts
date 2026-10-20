@@ -7,7 +7,7 @@
  * Fails closed if either source is missing, stale or inaccessible.
  */
 export type FreshRecoveryResult =
-  | { status: 'eligible_for_review'; checkoutId: string; lastActivityAt: string; recoveryUrl: string }
+  | { status: 'eligible_for_review'; checkoutId: string; shopifyCustomerId: string; lastActivityAt: string; recoveryUrl: string }
   | { status: 'blocked'; reason: string; completed: boolean };
 
 type FetchLike = typeof fetch;
@@ -16,10 +16,10 @@ const CHECKOUT_RE = /^gid:\/\/shopify\/AbandonedCheckout\/([1-9][0-9]{0,19})$/;
 const QUERY = [
   'query OneCheckoutRecoveryRecheck($checkoutId: ID!, $search: String!) {',
   '  abandonedCheckouts(first: 2, query: $search) {',
-  '    nodes { id updatedAt completedAt abandonedCheckoutUrl }',
+  '    nodes { id updatedAt completedAt abandonedCheckoutUrl customer { id } }',
   '  }',
   '  abandonmentByAbandonedCheckoutId(abandonedCheckoutId: $checkoutId) {',
-  '    customerHasNoOrderSinceAbandonment',
+  '    customerHasNoOrderSinceAbandonment customer { id }',
   '  }',
   '  shop { primaryDomain { url } }',
   '}',
@@ -83,6 +83,13 @@ export async function recheckShopifyCheckoutForRecovery(input: {
     if (abandonment?.customerHasNoOrderSinceAbandonment !== true)
       return blocked('new_order_or_order_status_unknown',
         abandonment?.customerHasNoOrderSinceAbandonment === false);
+    const checkoutCustomer=row.customer as Record<string,unknown> | undefined;
+    const abandonmentCustomer=abandonment.customer as Record<string,unknown> | undefined;
+    const customerId=checkoutCustomer?.id;
+    if (typeof customerId !== 'string' ||
+        !/^gid:\/\/shopify\/Customer\/[1-9][0-9]{0,19}$/.test(customerId) ||
+        customerId !== abandonmentCustomer?.id)
+      return blocked('shopify_customer_identity_unverified');
     const updated=row.updatedAt;
     const now=input.now ?? Date.now();
     if (typeof updated !== 'string' || !Number.isFinite(Date.parse(updated)) ||
@@ -91,7 +98,7 @@ export async function recheckShopifyCheckoutForRecovery(input: {
     const domain=shop?.primaryDomain as Record<string,unknown> | undefined;
     const recoveryUrl=safeShopifyRecoveryUrl(row.abandonedCheckoutUrl,input.shop,domain?.url);
     if (!recoveryUrl) return blocked('recovery_url_unverified');
-    return {status:'eligible_for_review',checkoutId:input.checkoutId,lastActivityAt:updated,
+    return {status:'eligible_for_review',checkoutId:input.checkoutId,shopifyCustomerId:customerId,lastActivityAt:updated,
       recoveryUrl};
   } catch { return blocked('shopify_status_unavailable'); }
 }
