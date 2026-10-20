@@ -127,6 +127,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-checkout-fresh-recheck.test.ts tests/ecommerce-checkout-recovery-preparation-gate.test.ts tests/ecommerce-checkout-recovery-intents-postgres.test.ts
       - name: Checkout recovery opt-in and Meta-template live delivery safety
         run: npx tsx --test tests/ecommerce-recovery-messaging-eligibility.test.ts tests/ecommerce-recovery-delivery-worker.test.ts tests/ecommerce-recovery-outbox-postgres.test.ts
+      - name: Recovery outbox and consent safe uninstall and redaction
+        run: npx tsx --test tests/ecommerce-recovery-privacy-postgres.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
