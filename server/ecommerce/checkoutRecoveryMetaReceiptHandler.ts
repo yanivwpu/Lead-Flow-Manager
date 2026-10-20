@@ -1,18 +1,11 @@
 import { and,eq,sql } from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users} from '@shared/schema';
+import {metaRecoveryReceiptCaptureEnabled} from './checkoutRecoveryMetaReceiptGate';
 import {parseSignedRecoveryReceipt,
  applySignedRecoveryReceiptQuery,type MetaRecoveryReceiptCandidate
 } from './checkoutRecoveryMetaReceipts';
 
-export function metaRecoveryReceiptCaptureEnabled(env:{
- RAILWAY_ENVIRONMENT_NAME?:string;APP_URL?:string;
- ECOMMERCE_RECOVERY_RECEIPTS_ENABLED?:string;
-}):boolean{
- return env.RAILWAY_ENVIRONMENT_NAME==='staging' &&
-   env.APP_URL?.replace(/\/$/,'')==='https://whachatcrm-staging-app-staging.up.railway.app' &&
-   env.ECOMMERCE_RECOVERY_RECEIPTS_ENABLED==='true';
-}
 export async function recordRecoveryReceiptFromVerifiedMeta(input:{
  accountId:string;candidate:MetaRecoveryReceiptCandidate;secret:string;
  env:Parameters<typeof metaRecoveryReceiptCaptureEnabled>[0];
