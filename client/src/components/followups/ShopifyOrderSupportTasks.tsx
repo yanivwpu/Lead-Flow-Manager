@@ -159,7 +159,7 @@ export function ShopifyOrderSupportTasks() {
               </summary>
               <div className="space-y-2 border-t border-slate-100 p-3">
                 {completedTasks.length === 0 ? (
-                  <p className="text-sm text-slate-500">Recent tasks are still loading in this view.</p>
+                  <p className="text-sm text-slate-500">Only the latest tasks appear here. Customer orders are in Contacts.</p>
                 ) : completedTasks.map(task => (
                   <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2"
                     data-testid={`shopify-completed-task-${task.id}`}>
