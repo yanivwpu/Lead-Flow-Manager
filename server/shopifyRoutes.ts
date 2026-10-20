@@ -1,4 +1,7 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
+import { fetchShopifyAbandonedCheckoutPage } from "./ecommerce/abandonedCheckoutSource";
+import { upsertCheckoutObservationQuery } from "./ecommerce/checkoutObservationQueries";
+import { checkoutObservationPreviewAvailable, parseCheckoutObservationSyncRequest } from "./ecommerce/checkoutObservationSyncGate";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
 import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
 import { parseOrderSupportQuickStart, orderSupportQuickStartAvailable } from "./ecommerce/orderSupportQuickStart";
@@ -938,6 +941,65 @@ router.post('/ecommerce/order-support-task-schedule', async (req: Request, res: 
     return res.json({ok:true,messagingEnabled:false,checkoutEnabled:false});
   } catch {
     return res.status(503).json({error:'Task schedule unavailable'});
+  }
+});
+
+/** Staging-only manual Shopify abandoned-checkout observation import.
+ * A Shopify Admin authenticated read is the trusted source, not arbitrary browser data.
+ * No recovery URL or customer PII is persisted, and no messages are queued or sent.
+ */
+router.post('/ecommerce/checkout-observation-preview-sync', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  const origin='https://whachatcrm-staging-app-staging.up.railway.app';
+  if (!checkoutObservationPreviewAvailable(process.env))
+    return res.status(404).json({error:'Not available'});
+  if (!req.user) return res.status(401).json({error:'Unauthorized'});
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({error:'Invalid origin or content type'});
+  const input=parseCheckoutObservationSyncRequest(req.body);
+  if(!input) return res.status(400).json({error:'Invalid checkout preview request'});
+  try {
+    const accountId=(req.user as {id:string}).id;
+    const owner=await storage.getUserForSession(accountId);
+    const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
+    if(!owner || !shop || !isShopifyContactInstallationActive(owner) || !owner.shopifyAccessToken)
+      return res.status(403).json({error:'Active Shopify connection required'});
+    const ready=await db.execute(sql`SELECT to_regclass('public.ecommerce_abandoned_checkout_observations') IS NOT NULL AS ready`);
+    if(ready.rows[0]?.ready !== true)
+      return res.status(409).json({error:'Staging checkout observation schema unavailable'});
+    // Shopify verifies read_orders and manage_abandoned_checkouts permissions here.
+    // This bounded call is read-only and never follows the customer's recovery URL.
+    const page=await fetchShopifyAbandonedCheckoutPage({
+      shop,accessToken:owner.shopifyAccessToken,after:input.after,
+    });
+    const recorded=await db.transaction(async tx=>{
+      // Serialize against uninstall/redaction and recheck live tenant ownership.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+      const [liveOwner]=await tx.select().from(users).where(and(
+        eq(users.id,accountId),eq(users.shopifyShop,shop))).limit(1);
+      if(!liveOwner || !isShopifyContactInstallationActive(liveOwner) ||
+          liveOwner.shopifyAccessToken !== owner.shopifyAccessToken) return null;
+      const installs=await tx.select().from(integrations).where(and(
+        eq(integrations.userId,accountId),eq(integrations.type,'shopify'),
+        eq(integrations.isActive,true))).limit(2);
+      if(installs.length !== 1) return null;
+      const cfg=(installs[0].config ?? {}) as Record<string,unknown>;
+      for(const key of ['shop','shopUrl']) if(cfg[key] != null &&
+        (typeof cfg[key] !== 'string' || normalizeShopifyShopDomain(cfg[key]) !== shop))
+        return null;
+      for(const snapshot of page.observations)
+        await tx.execute(upsertCheckoutObservationQuery({accountId,shop,snapshot}));
+      return page.observations.length;
+    });
+    if(recorded === null)
+      return res.status(409).json({error:'Shopify installation changed; refresh'});
+    return res.json({ok:true,recordedCount:recorded,
+      completedCount:page.observations.filter(x=>x.completed).length,
+      hasNextPage:page.hasNextPage,nextCursor:page.nextCursor,
+      messagingEnabled:false,recoveryEnabled:false});
+  } catch {
+    return res.status(503).json({error:'Shopify checkout observation sync unavailable'});
   }
 });
 
