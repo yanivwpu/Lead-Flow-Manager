@@ -1,4 +1,5 @@
 import { isEarlyShopifyUninstall } from "@shared/shopifyOnboarding";
+import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryUninstallQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { logShopifyActivation } from "./shopifyActivationTelemetry";
 import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
 import { shopifyContactCaptureLog } from "@shared/shopifyContactPrivacy";
@@ -116,6 +117,10 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
     if (isEarlyShopifyUninstall(typeof lastInstalledAt === "string" ? lastInstalledAt : user.shopifyInstalledAt)) {
       logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
     }
+    // Prevent uninstall/reinstall from silently restoring recovery consent.
+    const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
+    for(const statement of recoveryUninstallQueries(user.id,shop,
+      parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
     await tx.update(users).set({
       shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
       shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",
