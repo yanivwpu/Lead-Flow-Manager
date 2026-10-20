@@ -135,9 +135,7 @@ export function startCheckoutRecoveryRuntime():null|(()=>void){
      const status=await processClaimedRecoveryDelivery(claim,setting,{
        verifyCurrentInstallation:()=>installation(claim.accountId,claim.shop),
        freshShopifyRecheck:()=>fetchFresh(claim),
-       resolveCurrentEvidence:()=>evidence(claim,
-         (await fetchFresh(claim)).status==='eligible_for_review'
-          ? (await fetchFresh(claim) as {shopifyCustomerId:string}).shopifyCustomerId : ''),
+       resolveCurrentEvidence:(_claimed,shopifyCustomerId)=>evidence(claim,shopifyCustomerId),
        sendApprovedTemplate:args=>sendRecoveryViaMeta(args),
        settle,
      },process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'');
