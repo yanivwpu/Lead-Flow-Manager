@@ -39,7 +39,7 @@ export function EcommerceGrowthEnginePreview() {
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                 <a href={setupHref} data-testid="ecommerce-preview-primary-cta"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-6 py-3 font-semibold text-white transition hover:bg-emerald-800 sm:w-auto">
-                  Explore Shopify setup <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  Set up Shopify <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </a>
                 <a href="/solutions/ecommerce"
                   className="inline-flex items-center justify-center px-3 py-3 text-sm font-medium text-slate-600 underline-offset-4 hover:underline">
