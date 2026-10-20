@@ -1,4 +1,8 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
+import { recheckShopifyCheckoutForRecovery } from "./ecommerce/checkoutFreshRecheck";
+import { dueCheckoutObservationsQuery } from "./ecommerce/checkoutObservationQueries";
+import { prepareCheckoutRecoveryIntentQuery, suppressCheckoutRecoveryIntentQuery, suppressCompletedCheckoutIntentQuery } from "./ecommerce/checkoutRecoveryIntents";
+import { checkoutRecoveryPreparationEnabled, parsePrepareRecoveryRequest } from "./ecommerce/checkoutRecoveryPreparationGate";
 import { fetchShopifyAbandonedCheckoutPage } from "./ecommerce/abandonedCheckoutSource";
 import { upsertCheckoutObservationQuery } from "./ecommerce/checkoutObservationQueries";
 import { checkoutObservationPreviewAvailable, parseCheckoutObservationSyncRequest } from "./ecommerce/checkoutObservationSyncGate";
@@ -992,8 +996,16 @@ router.post('/ecommerce/checkout-observation-preview-sync', async (req: Request,
       for(const key of ['shop','shopUrl']) if(cfg[key] != null &&
         (typeof cfg[key] !== 'string' || normalizeShopifyShopDomain(cfg[key]) !== shop))
         return null;
-      for(const snapshot of page.observations)
+      const intentSchema=await tx.execute(sql`
+        SELECT to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS ready`);
+      const hasIntents=intentSchema.rows[0]?.ready===true;
+      for(const snapshot of page.observations) {
         await tx.execute(upsertCheckoutObservationQuery({accountId,shop,snapshot}));
+        if(snapshot.completed && hasIntents)
+          await tx.execute(suppressCompletedCheckoutIntentQuery({
+            accountId,shop,checkoutId:snapshot.checkoutId
+          }));
+      }
       return page.observations.length;
     });
     if(recorded === null)
@@ -1004,6 +1016,79 @@ router.post('/ecommerce/checkout-observation-preview-sync', async (req: Request,
       messagingEnabled:false,recoveryEnabled:false});
   } catch {
     return res.status(503).json({error:'Shopify checkout observation sync unavailable'});
+  }
+});
+
+/** Manually prepare up to five tenant-owned checkout recovery review records.
+ * The Shopify API is re-read for each specific checkout immediately before the
+ * intent is persisted. NO background polling, customer messages or URLs persisted.
+ */
+router.post('/ecommerce/checkout-recovery-prepare', async (req:Request,res:Response)=>{
+  res.set('Cache-Control','no-store');
+  const origin='https://whachatcrm-staging-app-staging.up.railway.app';
+  if(!checkoutRecoveryPreparationEnabled({
+      RAILWAY_ENVIRONMENT_NAME:process.env.RAILWAY_ENVIRONMENT_NAME,
+      APP_URL:process.env.APP_URL,
+      ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:process.env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED,
+      ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:process.env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED,
+  })) return res.status(404).json({error:'Not available'});
+  if(!req.user) return res.status(401).json({error:'Unauthorized'});
+  if(req.get('origin') !== origin ||
+     req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({error:'Invalid request origin'});
+  if(!parsePrepareRecoveryRequest(req.body))
+    return res.status(400).json({error:'Invalid preparation request'});
+  try{
+    const accountId=(req.user as {id:string}).id;
+    const owner=await storage.getUserForSession(accountId);
+    const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
+    if(!owner || !shop || !isShopifyContactInstallationActive(owner) || !owner.shopifyAccessToken)
+      return res.status(403).json({error:'Active Shopify installation required'});
+    const readiness=await db.execute(sql`
+      SELECT to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS intents,
+        to_regclass('public.ecommerce_abandoned_checkout_observations') IS NOT NULL AS observations`);
+    if(readiness.rows[0]?.intents !== true || readiness.rows[0]?.observations !== true)
+      return res.status(409).json({error:'Recovery preview schema unavailable'});
+    const due=await db.execute(dueCheckoutObservationsQuery(accountId,shop));
+    let checked=0, prepared=0, suppressed=0;
+    for(const row of due.rows.slice(0,5)){
+      const checkoutId=String(row.checkout_gid);
+      const fresh=await recheckShopifyCheckoutForRecovery({
+        shop,accessToken:owner.shopifyAccessToken,checkoutId
+      });
+      checked++;
+      if(fresh.status==='blocked' && !fresh.completed) continue;
+      const result=await db.transaction(async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+        const [liveOwner]=await tx.select().from(users).where(and(
+          eq(users.id,accountId),eq(users.shopifyShop,shop))).limit(1);
+        if(!liveOwner || !isShopifyContactInstallationActive(liveOwner) ||
+          liveOwner.shopifyAccessToken !== owner.shopifyAccessToken) return null;
+        const matches=await tx.select().from(integrations).where(and(
+          eq(integrations.userId,accountId),eq(integrations.type,'shopify'),
+          eq(integrations.isActive,true))).limit(2);
+        if(matches.length !== 1) return null;
+        const cfg=(matches[0].config ?? {}) as Record<string,unknown>;
+        for(const key of ['shop','shopUrl']) if(cfg[key]!=null &&
+          (typeof cfg[key]!=='string'||normalizeShopifyShopDomain(cfg[key])!==shop))
+          return null;
+        if(fresh.status==='blocked'){
+          await tx.execute(suppressCheckoutRecoveryIntentQuery({accountId,shop,checkoutId}));
+          return 'suppressed';
+        }
+        const rows=await tx.execute(prepareCheckoutRecoveryIntentQuery({
+          accountId,shop,checkoutId,verifiedLastActivityAt:fresh.lastActivityAt
+        }));
+        return rows.rows.length===1 ? 'prepared' : 'skipped';
+      });
+      if(result===null) return res.status(409).json({error:'Shopify installation changed'});
+      if(result==='prepared') prepared++;
+      if(result==='suppressed') suppressed++;
+    }
+    return res.json({ok:true,checked,prepared,suppressed,
+      messagingEnabled:false,sendQueueEnabled:false,recoveryActive:false});
+  }catch{
+    return res.status(503).json({error:'Checkout recovery review unavailable'});
   }
 });
 
