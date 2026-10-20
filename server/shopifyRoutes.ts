@@ -951,7 +951,11 @@ router.post('/ecommerce/order-support-task-schedule', async (req: Request, res: 
 router.post('/ecommerce/checkout-observation-preview-sync', async (req: Request, res: Response) => {
   res.set('Cache-Control','no-store');
   const origin='https://whachatcrm-staging-app-staging.up.railway.app';
-  if (!checkoutObservationPreviewAvailable(process.env))
+  if (!checkoutObservationPreviewAvailable({
+    RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+    APP_URL: process.env.APP_URL,
+    ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED: process.env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED,
+  }))
     return res.status(404).json({error:'Not available'});
   if (!req.user) return res.status(401).json({error:'Unauthorized'});
   if (req.get('origin') !== origin ||
