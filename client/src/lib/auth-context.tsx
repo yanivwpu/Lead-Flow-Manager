@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { useLocation } from "wouter";
 import { trackSignUp } from "@/lib/ga4Events";
 import { queryClient } from "@/lib/queryClient";
+import { resolveLogoutLandingUrl } from "@/lib/logoutRedirect";
 import {
   applyDatabaseLanguagePreference,
   clearExplicitLanguageSelection,
@@ -309,14 +310,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
       });
-    } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
+      if (!response.ok) {
+        // Do not present a signed-out UI or leave this origin if the session is still active.
+        console.error("Logout failed:", response.status);
+        return;
+      }
+
       resetAccountQueryCache(queryClient);
       clearAccountLocalHints();
       clearExplicitLanguageSelection();
@@ -324,7 +328,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setSessionAligned(false);
       // Keep whachatcrm_language — not auth-sensitive; public URL locale still wins on marketing pages.
-      setLocation("/");
+      const landingUrl = resolveLogoutLandingUrl(window.location.origin);
+      if (landingUrl) {
+        window.location.replace(landingUrl);
+      } else {
+        setLocation("/");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
     }
   };
 
