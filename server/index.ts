@@ -600,6 +600,20 @@ app.use((req, res, next) => {
   // Start cron jobs (trial check-in emails, Search Console sync, and post-sync SEO analysis).
   startCronJobs();
 
+  // Checkout recovery worker is inert unless all independent STAGING-only
+  // operator switches AND the exact test merchant allowlist are configured.
+  // Never expose it through merchant UI or start it in production.
+  if (process.env.ECOMMERCE_RECOVERY_WORKER_ENABLED === 'true') {
+    try {
+      const { startCheckoutRecoveryRuntime } =
+        await import('./ecommerce/checkoutRecoveryWorkerRuntime');
+      startCheckoutRecoveryRuntime();
+    } catch (err) {
+      console.error('[EcommerceRecoveryWorker] startup disabled',
+        err instanceof Error ? err.message : 'unknown_error');
+    }
+  }
+
   // Approved SEO proposals are claimed durably and can only create review-only GitHub PRs.
   const { startSeoGithubExecutionWorker } = await import("./seo/githubExecutionService");
   startSeoGithubExecutionWorker();
