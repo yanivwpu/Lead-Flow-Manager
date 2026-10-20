@@ -268,3 +268,20 @@ Rules:
 - Do NOT invent unsupported claims, fake interest, Re:/Fwd: subjects, clickbait, spammy wording, or emojis unless explicitly requested.
 - Do NOT invent what the workspace sells beyond WORKSPACE BUSINESS CONTEXT.`;
 }
+
+/**
+ * AI can omit an explicitly requested campaign URL. Guarantee exactly the
+ * configured destination appears at least once in AI Compose drafts.
+ * Template modes intentionally preserve the user's authored wording.
+ */
+export function ensureAiComposeCampaignLink(
+  body: string,
+  settings: Pick<ProspectOutreachInstructions, "linkUrl" | "includeLinkNaturally">,
+): string {
+  const text = String(body || "").trim();
+  const url = String(settings.linkUrl || "").trim();
+  if (!text || !settings.includeLinkNaturally || !url || text.includes(url)) return text;
+  const validated = validateOutreachLinkUrl(url);
+  if (!validated.ok) return text;
+  return text + "\n\nSee how it works: " + validated.linkUrl;
+}
