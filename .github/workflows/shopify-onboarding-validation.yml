@@ -20,6 +20,8 @@ on:
       - "server/shopify*.ts"
       - "server/ecommerce/**"
       - "client/src/components/integrations/ShopifyEcommerceInboxPreview.tsx"
+      - "client/src/components/followups/ShopifyOrderSupportTasks.tsx"
+      - "client/src/pages/FollowUps.tsx"
       - "shared/shopify*.ts"
       - "client/index.html"
       - "client/src/App.tsx"
@@ -95,6 +97,8 @@ jobs:
         run: npx tsx --test tests/shopify-ecommerce-order-task-controls.test.ts tests/shopify-ecommerce-order-task-controls-postgres.test.ts
       - name: Staging-only E-commerce task migration guard and actual PostgreSQL DDL
         run: npx tsx --test tests/ecommerce-task-schema-migration.test.ts
+      - name: Shopify task bridge into regular Follow-Ups with native tenant isolation
+        run: npx tsx --test tests/shopify-followups-task-bridge-postgres.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

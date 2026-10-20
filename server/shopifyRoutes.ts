@@ -601,7 +601,7 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
     // Do not block the existing event inbox when the opt-in migration is not applied.
     // Exact tenant/shop scope is enforced on every task read; no customer data returned.
     const taskTables = await db.execute(orderSupportTablesReadyQuery);
-    let internalTasks: { schemaReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string}> } = {
+    let internalTasks: { schemaReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string;contactId:string;contactName:string}> } = {
       schemaReady: false, merchantEnabled: false,
       operatorEnabled: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED === 'true' &&
         process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true',
@@ -616,7 +616,11 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
       internalTasks = {
         ...internalTasks, schemaReady:true, merchantEnabled:counts?.enabled === true,
         openCount:Number(counts?.open_count ?? 0), completedCount:Number(counts?.completed_count ?? 0),
-        items:tasks.rows.map(row => ({id:String(row.id),state:String(row.state),createdAt:new Date(row.created_at as Date|string).toISOString()}))
+        items:tasks.rows.map(row => ({
+          id:String(row.id),state:String(row.state),
+          createdAt:new Date(row.created_at as Date|string).toISOString(),
+          contactId:String(row.contact_id),contactName:String(row.contact_name),
+        }))
       };
     }
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
