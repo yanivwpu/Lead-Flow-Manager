@@ -936,9 +936,9 @@ export function Integrations() {
       }
       return res.json();
     },
-    // A Shopify-installed account can inspect its connected store even when
-    // other optional integrations aren't included in its subscription tier.
-    enabled: !!user?.id && sessionAligned && (!!integrationsEnabled || !!user?.shopifyShop),
+    // Shopify connection status is a read-only, authenticated account endpoint.
+    // Its availability must not depend on unrelated integration entitlements.
+    enabled: !!user?.id && sessionAligned,
     staleTime: 30_000,
   });
 
