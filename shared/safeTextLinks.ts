@@ -10,8 +10,9 @@ export function safeTextLinks(text: string, prose = false, approvedUrls: string[
     if (prose) for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
       while (href.endsWith(close) && href.split(close).length > href.split(open).length) href = href.slice(0, -1);
     }
+    if (prose && text[index - 1] === "'" && href.endsWith("'")) href = href.slice(0, -1);
     if (prose) {
-      const approved = approvedUrls.filter(url => url && match[0].startsWith(url) && /^[.,;:!?\)\]\}]*$/.test(match[0].slice(url.length))).sort((a,b) => b.length-a.length)[0];
+      const approved = approvedUrls.filter(url => url && match[0].startsWith(url) && /^[.,;:!?\)\]\}']*$/.test(match[0].slice(url.length))).sort((a,b) => b.length-a.length)[0];
       if (approved) href = approved;
     }
     try {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { renderProspectOutreachEmailHtml } from "../server/prospectImport/prospectOutreachEmailHtml";
-import { ensureAiComposeCampaignLink } from "../shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, validateOutreachLinkUrl } from "../shared/prospectOutreachInstructions";
 
 function main() {
   const url = "https://www.whachatcrm.com/realtor-growth-engine";
@@ -57,3 +57,10 @@ for (const suffix of [".", ",", ";", ":", "!", "?", ")", "]", "}", "'"]) {
 
 const exactPunctuation = "https://example.com/reset?token=abc!";
 assert.ok(renderProspectOutreachEmailHtml("Visit " + exactPunctuation + ".", [exactPunctuation]).includes(`href="${exactPunctuation}"`));
+
+const quoted = "Details: 'https://example.com/demo'";
+assert.equal(ensureAiComposeCampaignLink(quoted, {linkUrl:"https://example.com/demo",includeLinkNaturally:true}),quoted);
+assert.ok(renderProspectOutreachEmailHtml(quoted,["https://example.com/demo"]).includes('href="https://example.com/demo"'));
+
+assert.equal(validateOutreachLinkUrl("https://user:pass@example.com/demo").ok,false);
+assert.ok(renderProspectOutreachEmailHtml("Template https://example.com/reset?token=abc!", [], true).includes('href="https://example.com/reset?token=abc!"'));

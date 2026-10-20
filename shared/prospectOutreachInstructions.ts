@@ -78,6 +78,7 @@ export function validateOutreachLinkUrl(raw: unknown): OutreachLinkValidation {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return { ok: false, error: "URL must start with http:// or https://" };
   }
+  if (parsed.username || parsed.password) return { ok: false, error: "Campaign URLs must not contain usernames or passwords." };
   return { ok: true, linkUrl: trimmed };
 }
 

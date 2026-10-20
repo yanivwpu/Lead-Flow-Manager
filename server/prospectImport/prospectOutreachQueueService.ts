@@ -1702,6 +1702,7 @@ export async function processClaimedQueueItem(
     senderMailboxId: prepared.mailboxId,
     mailboxId: prepared.mailboxId,
     campaignLinkUrl: sendSettings.outreachInstructions.linkUrl,
+    preserveAuthoredUrls: messageCreationUsesTemplate(sendSettings.outreachInstructions.mode),
     subject: prepared.subject,
     contactName: contact.name,
   });
