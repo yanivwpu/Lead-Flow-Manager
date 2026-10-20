@@ -1,12 +1,15 @@
 /** Parse safe http(s) URLs while retaining original text and punctuation. */
-export function safeTextLinks(text: string): Array<{ text: string; href?: string }> {
+export function safeTextLinks(text: string, prose = false): Array<{ text: string; href?: string }> {
   const parts: Array<{ text: string; href?: string }> = [];
   let cursor = 0;
   for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/gi)) {
     const index = match.index!;
     if (index > cursor) parts.push({ text: text.slice(cursor, index) });
     // URL punctuation is data. Whitespace or angle/attribute delimiters end tokens.
-    const href = match[0];
+    let href = prose ? match[0].replace(/[.,;:!?]+$/g, "") : match[0];
+    if (prose) for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
+      while (href.endsWith(close) && href.split(close).length > href.split(open).length) href = href.slice(0, -1);
+    }
     try {
       const url = new URL(href);
       if (!url.hostname || url.username || url.password || !["https:", "http:"].includes(url.protocol)) throw new Error();
