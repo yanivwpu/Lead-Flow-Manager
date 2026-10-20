@@ -47,7 +47,7 @@ async function ownerStillActive(tx:typeof db,merchant:AutoPrepMerchant):Promise<
 function withShopLock<T>(merchant:AutoPrepMerchant,fn:(tx:typeof db)=>Promise<T>):Promise<T>{
  return db.transaction(async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${merchant.shop},0))`);
-   return fn(tx as typeof db);
+   return fn(tx as unknown as typeof db);
  });
 }
 async function getMerchant(accountId:string):Promise<AutoPrepMerchant|null>{
