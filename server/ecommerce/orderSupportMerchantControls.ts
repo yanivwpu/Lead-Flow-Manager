@@ -54,10 +54,14 @@ export function readOrderTaskMerchantSettingsQuery(accountId: string, shop: stri
 }
 export function readOrderSupportTaskListQuery(accountId: string, shop: string) {
   return sql`
-    SELECT id::text AS id, state, created_at
-    FROM ecommerce_growth_order_support_tasks
-    WHERE account_id = ${accountId} AND shop = ${shop}
-    ORDER BY created_at DESC, id DESC LIMIT 20
+    SELECT t.id::text AS id, t.state, t.created_at,
+           c.id AS contact_id, c.name AS contact_name
+    FROM ecommerce_growth_order_support_tasks t
+    INNER JOIN contacts c
+      ON c.id = t.contact_id AND c.user_id = t.account_id
+    WHERE t.account_id = ${accountId} AND t.shop = ${shop}
+    ORDER BY CASE WHEN t.state = 'open' THEN 0 ELSE 1 END,
+             t.created_at DESC, t.id DESC LIMIT 20
   `;
 }
 export function markOrderSupportTaskCompleteQuery(taskId: string, accountId: string, shop: string) {
