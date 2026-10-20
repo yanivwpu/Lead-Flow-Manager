@@ -1724,7 +1724,6 @@ export async function processClaimedQueueItem(
           decryptField: parsed.decryptField,
           errMsgSafe: sendErr,
           mailboxId: prepared.mailboxId,
-    campaignLinkUrl: sendSettings.outreachInstructions.linkUrl,
         });
         if (handled === "continue") {
           await db
