@@ -2,6 +2,7 @@ import {and,eq,sql} from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users,contacts,integrations} from '@shared/schema';
 import {isShopifyContactInstallationActive} from '@shared/shopifyContactPrivacy';
+import {normalizeShopifyShopDomain} from '@shared/shopifyBilling';
 import {classifyRecoveryConsentInbound,recoveryConsentCaptureEnabled,
  type VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
 import {grantSignedRecoveryConsentQuery,revokeSignedRecoveryConsentQuery,
@@ -83,7 +84,7 @@ export async function captureRecoveryConsentFromVerifiedMeta(input:{
    if(active.length!==1)return 'ignored';
    const cfg=obj(active[0].config);
    for(const k of ['shop','shopUrl'])if(cfg[k]!=null &&
-     cfg[k]!==shop)return 'ignored';
+     (typeof cfg[k]!=='string' || normalizeShopifyShopDomain(cfg[k])!==shop))return 'ignored';
    if(!input.inboxContactId)return 'ignored';
    const exactContacts=await tx.select().from(contacts).where(and(
      eq(contacts.userId,input.accountId),eq(contacts.phone,currentPhone)
