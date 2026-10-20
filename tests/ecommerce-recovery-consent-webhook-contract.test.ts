@@ -7,7 +7,7 @@ test('signed inbound consent capture is AFTER Meta signature verification and BE
  const capture=src.indexOf('captureRecoveryConsentFromVerifiedMeta({');
  const ack=src.indexOf('res.status(200).send("EVENT_RECEIVED");',capture);
  assert.ok(verify>=0 && capture>verify && ack>capture,'must never ACK before capture');
- const block=src.slice(capture-180,capture+1450);
+ const block=src.slice(verify,ack);
  for(const guard of ['signatureValid && rawBodyBuffer',"incomingMessage.type === \"text\"",
    'metaInboxContact?.id','Buffer.isBuffer(rawBodyBuffer)',
    'ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED']) assert.ok(block.includes(guard),guard);
