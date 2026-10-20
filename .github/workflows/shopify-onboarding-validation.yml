@@ -45,6 +45,7 @@ on:
       - "migrations/20261020_ecommerce_abandoned_checkout_observations.sql"
       - "migrations/20261020_ecommerce_checkout_recovery_intents.sql"
       - "migrations/20261020_ecommerce_whatsapp_recovery_delivery.sql"
+      - "migrations/20261020_ecommerce_recovery_signed_inbound_consent.sql"
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
       - "scripts/check-types-against-base.mjs"
@@ -131,6 +132,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-privacy-postgres.test.ts
       - name: Strict Shopify recovery Meta marketing template and final send guard
         run: npx tsx --test tests/ecommerce-recovery-meta-adapter.test.ts
+      - name: Signed Meta recovery consent and opt-out privacy lifecycle
+        run: npx tsx --test tests/ecommerce-recovery-signed-inbound-consent-gate.test.ts tests/ecommerce-recovery-consent-webhook-contract.test.ts tests/ecommerce-recovery-signed-consent-postgres.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base

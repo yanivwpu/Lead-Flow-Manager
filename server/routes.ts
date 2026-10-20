@@ -3301,6 +3301,46 @@ export async function registerRoutes(
         await Promise.all(directJobs);
       }
 
+      // Signed WhatsApp-specific checkout reminder consent: staging-only,
+      // exact tenant/customer mapping and privacy-locked PostgreSQL evidence.
+      // Unlike the generic development webhook bypass, this feature NEVER
+      // persists unsigned or fallback-serialized payloads as permission.
+      if (incomingMessage && signatureValid && rawBodyBuffer &&
+          incomingMessage.type === "text") {
+        const { captureRecoveryConsentFromVerifiedMeta } =
+          await import("./ecommerce/checkoutRecoveryInboundConsentCapture");
+        try {
+          const owner = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
+          if (owner) await captureRecoveryConsentFromVerifiedMeta({
+            accountId: owner.id,
+            inboxContactId: metaInboxContact?.id ?? null,
+            candidate: {
+              signatureValid,
+              hasRawBody: Buffer.isBuffer(rawBodyBuffer),
+              type: incomingMessage.type,
+              phoneNumberId: incomingMessage.phoneNumberId,
+              from: incomingMessage.from,
+              messageId: incomingMessage.messageId,
+              timestamp: incomingMessage.timestamp,
+              text: incomingMessage.text,
+            },
+            env: {
+              RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+              APP_URL: process.env.APP_URL,
+              ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED:
+                process.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED,
+            },
+            secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
+          });
+        } catch (consentErr) {
+          console.error("[EcommerceRecoveryConsent] Signed opt-in processing failed",
+            consentErr instanceof Error ? consentErr.message : "unknown_error");
+          // Meta may replay the same event. The timestamp-ordered upsert
+          // is idempotent; retry, do not silently lose a valid STOP or opt-in.
+          return res.status(503).send("Consent processing unavailable");
+        }
+      }
+
       res.status(200).send("EVENT_RECEIVED");
 
       // Process legacy chat write and other side effects asynchronously (non-critical)
