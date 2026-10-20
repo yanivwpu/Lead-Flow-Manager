@@ -685,6 +685,7 @@ export function Integrations() {
   const [recoveringCrmOAuth, setRecoveringCrmOAuth] = useState(false);
   const [crmOAuthRecoveryResult, setCrmOAuthRecoveryResult] = useState<CrmOAuthRecoveryAttemptResult | null>(null);
   const [manageIntegrationId, setManageIntegrationId] = useState<string | null>(null);
+  const shopifySetupLinkHandled = useRef(false);
   const [pendingDisconnectType, setPendingDisconnectType] = useState<string | null>(null);
   const [leadManageOpen, setLeadManageOpen] = useState(false);
   const [ghlOAuthDebugOpen, setGhlOAuthDebugOpen] = useState(false);
@@ -938,6 +939,21 @@ export function Integrations() {
     enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
     staleTime: 30_000,
   });
+
+  // The post-install welcome action opens the existing Shopify manager directly.
+  // A single fixed query value is recognized; no shop/user IDs or external URLs
+  // are read from the query string. It never activates a workflow by itself.
+  useEffect(() => {
+    if (shopifySetupLinkHandled.current || !user?.id || !sessionAligned ||
+        shopifyStatusFetching || !shopifyStatus) return;
+    if (new URLSearchParams(window.location.search).get("setup") !== "shopify") return;
+    shopifySetupLinkHandled.current = true;
+    if (shopifyStatus.connected) {
+      setManageIntegrationId("shopify");
+    } else {
+      setShowShopifyInfo(true);
+    }
+  }, [user?.id, sessionAligned, shopifyStatusFetching, shopifyStatus]);
 
   const shopifyConnected = !!shopifyStatus?.connected;
 
