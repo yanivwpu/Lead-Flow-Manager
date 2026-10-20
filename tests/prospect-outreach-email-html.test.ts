@@ -4,10 +4,10 @@ import { ensureAiComposeCampaignLink } from "../shared/prospectOutreachInstructi
 
 function main() {
   const url = "https://www.whachatcrm.com/realtor-growth-engine";
-  const source = "Hi there,\n\nSee the details: " + url + ".\n\nWould you like to talk?";
+  const source = "Hi there,\n\nSee the details: " + url + "\n\nWould you like to talk?";
   const html = renderProspectOutreachEmailHtml(source);
   assert.ok(html.includes('<a href="' + url + '"'));
-  assert.ok(html.includes(">" + url + "</a>."));
+  assert.ok(html.includes(">" + url + "</a>"));
   assert.ok(html.includes("Hi there,"));
   assert.ok(html.includes("Would you like to talk?"));
   assert.ok(html.includes("</p><p"));
@@ -47,3 +47,10 @@ const apostrophe = "https://example.com/it's-here";
 const linked = renderProspectOutreachEmailHtml("See " + apostrophe);
 assert.ok(linked.includes('href="https://example.com/it&#39;s-here"'));
 assert.equal(linked.includes('href="https://example.com/it"'), false);
+
+for (const suffix of [".", ",", ";", ":", "!", "?"]) {
+ const url = "https://example.com/reset?token=abc" + suffix;
+ const message = "Details: " + url;
+ assert.equal(ensureAiComposeCampaignLink(message, {linkUrl:url,includeLinkNaturally:true}), message);
+ assert.ok(renderProspectOutreachEmailHtml(message).includes(`href="${url}"`));
+}

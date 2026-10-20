@@ -5,7 +5,7 @@ export function safeTextLinks(text: string): Array<{ text: string; href?: string
   for (const match of text.matchAll(/https?:\/\/[^\s<>"]+/gi)) {
     const index = match.index!;
     if (index > cursor) parts.push({ text: text.slice(cursor, index) });
-    let href = match[0].replace(/[.,;:!?]+$/g, "");
+    let href = match[0];
     if (text[index - 1] === "'" && href.endsWith("'")) href = href.slice(0, -1);
     for (const [open, close] of [["(", ")"], ["[", "]"], ["{", "}"]]) {
       while (href.endsWith(close) && href.split(close).length > href.split(open).length) href = href.slice(0, -1);
