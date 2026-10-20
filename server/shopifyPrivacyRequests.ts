@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, createCipheriv } from "node:crypto";
+import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryCustomerErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users, contacts, conversations, chats, workflowExecutions, workflows, flowJobs, webhooks, webhookDeliveries, activityEvents, messages, shopifyPrivacyErasureTasks, shopifyPrivacyCustomerLocks } from "@shared/schema";
@@ -103,6 +104,15 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
       return customerIdentityTokens({ email: c.email, phone: c.phone }).some(token => tokens.includes(token));
     });
     const ids = found.map(c => c.id);
+    // Verified Shopify customer/redact must also purge recovery opt-in evidence
+    // and any queued/uncertain provider state for the matched customer.
+    const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
+    const exactShopifyIds=tokens.filter(token => /^id:[1-9][0-9]{0,19}$/.test(token))
+      .map(token => token.slice(3));
+    for(const statement of recoveryCustomerErasureQueries({
+      accountId:user.id,shop,contactIds:ids,shopifyCustomerIds:exactShopifyIds
+    },parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+
     // Purge internal order-support tasks for redacted contacts even when the
     // CRM contact is retained and anonymized. The migration is optional.
     if (ids.length) {
