@@ -17,12 +17,12 @@ const QUERY = `query EcommerceAbandonedCheckouts($first: Int!, $after: String) {
     pageInfo { hasNextPage endCursor }
   }
 }`;
-const SHOP_RE = /^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/;
+const SHOP_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 const ID_RE = /^gid:\/\/shopify\/AbandonedCheckout\/[1-9][0-9]{0,19}$/;
 
 function validDate(value: unknown): value is string {
   return typeof value === 'string' && !Number.isNaN(Date.parse(value)) &&
-    /^\\d{4}-\\d{2}-\\d{2}T/.test(value);
+    /^\d{4}-\d{2}-\d{2}T/.test(value);
 }
 export function parseAbandonedCheckoutSnapshot(value: unknown, now = Date.now()): AbandonedCheckoutSnapshot {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('invalid_checkout_record');
