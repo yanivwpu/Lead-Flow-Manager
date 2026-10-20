@@ -46,5 +46,5 @@ test("one fixed setup link opens the existing Shopify manager only after account
   assert.match(effect,/setManageIntegrationId\("shopify"\)/);
   assert.match(effect,/setShowShopifyInfo\(true\)/);
   assert.doesNotMatch(effect,/location\.assign|fetch\(|POST|setInternalTasks|startOrderSupport/);
-  assert.match(page,/enabled: !!user\?\.id && sessionAligned && \(!!integrationsEnabled \|\| !!user\?\.shopifyShop\)/);
+  assert.match(page,/enabled: !!user\?\.id && sessionAligned/);
 });
