@@ -48,9 +48,9 @@ const linked = renderProspectOutreachEmailHtml("See " + apostrophe);
 assert.ok(linked.includes('href="https://example.com/it&#39;s-here"'));
 assert.equal(linked.includes('href="https://example.com/it"'), false);
 
-for (const suffix of [".", ",", ";", ":", "!", "?"]) {
+for (const suffix of [".", ",", ";", ":", "!", "?", ")", "]", "}", "'"]) {
  const url = "https://example.com/reset?token=abc" + suffix;
  const message = "Details: " + url;
  assert.equal(ensureAiComposeCampaignLink(message, {linkUrl:url,includeLinkNaturally:true}), message);
- assert.ok(renderProspectOutreachEmailHtml(message).includes(`href="${url}"`));
+ assert.ok(renderProspectOutreachEmailHtml(message).includes(`href="${url.replace(/'/g, "&#39;")}"`));
 }
