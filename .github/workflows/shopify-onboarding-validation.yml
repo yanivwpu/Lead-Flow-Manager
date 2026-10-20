@@ -20,6 +20,8 @@ on:
       - "server/shopify*.ts"
       - "server/ecommerce/**"
       - "client/src/components/integrations/ShopifyEcommerceInboxPreview.tsx"
+      - "client/src/components/integrations/ShopifySimpleSetup.tsx"
+      - "client/src/components/integrations/ShopifyManagePanel.tsx"
       - "client/src/components/followups/ShopifyOrderSupportTasks.tsx"
       - "client/src/components/followups/ShopifyTaskScheduleEditor.tsx"
       - "migrations/20261020_ecommerce_task_schedule_staging.sql"
@@ -103,6 +105,8 @@ jobs:
         run: npx tsx --test tests/shopify-followups-task-bridge-postgres.test.ts
       - name: Shopify task ownership due dates and in-app reminder PostgreSQL checks
         run: npx tsx --test tests/shopify-task-schedule-postgres.test.ts
+      - name: One-click Shopify order support: safe endpoint, UI and atomic native PostgreSQL
+        run: npx tsx --test tests/shopify-simple-order-support.test.ts tests/shopify-simple-order-support-postgres.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
