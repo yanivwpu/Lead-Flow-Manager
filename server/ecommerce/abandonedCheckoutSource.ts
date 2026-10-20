@@ -12,7 +12,7 @@ export type AbandonedCheckoutSnapshot = {
 export type CheckoutSourcePage = { observations: AbandonedCheckoutSnapshot[]; hasNextPage: boolean; nextCursor: string | null };
 type FetchLike = typeof fetch;
 const QUERY = `query EcommerceAbandonedCheckouts($first: Int!, $after: String) {
-  abandonedCheckouts(first: $first, after: $after, sortKey: UPDATED_AT, reverse: true) {
+  abandonedCheckouts(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
     nodes { id updatedAt completedAt abandonedCheckoutUrl }
     pageInfo { hasNextPage endCursor }
   }
