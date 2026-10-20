@@ -36,7 +36,7 @@ export function evaluateCheckoutRecovery(i: CheckoutRecoveryInput): CheckoutReco
   try { url = new URL(i.checkoutRecoveryUrl); }
   catch { return blocked('invalid_recovery_url'); }
   if (url.protocol !== 'https:' || url.username || url.password || url.hash ||
-      !/^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/i.test(url.hostname) ||
+      !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(url.hostname) ||
       url.port) return blocked('invalid_recovery_url');
   if (i.hasCompletedPurchase !== false) return blocked('purchase_not_confirmed_incomplete');
   if (!Number.isFinite(i.minimumDelayMinutes) || i.minimumDelayMinutes < 1 ||
