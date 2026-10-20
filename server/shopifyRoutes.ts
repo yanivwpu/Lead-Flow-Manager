@@ -1,6 +1,7 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
 import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
+import { parseOrderSupportQuickStart, orderSupportQuickStartAvailable } from "./ecommerce/orderSupportQuickStart";
 import { parseTaskScheduleChange, taskScheduleReadyQuery, taskScheduleReady, readScheduledOrderSupportTaskListQuery, saveTaskScheduleQuery } from "./ecommerce/orderTaskSchedule";
 import { users, integrations } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -751,6 +752,65 @@ router.post('/ecommerce/workflow-draft', async (req: Request, res: Response) => 
     }), workflowActive: false, messagingEnabled: false });
   } catch {
     return res.status(503).json({ error: 'Workflow draft unavailable' });
+  }
+});
+
+/** Single explicit action to prepare and start merchant-only order-support tasks.
+ * Creates no outbound messaging workflow; never mutates Shopify orders.
+ * Staging-only until distinct production safety/release acceptance.
+ */
+router.post('/ecommerce/order-support-quick-start', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store');
+  const origin = 'https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({ error: 'Not available' });
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({ error: 'Invalid origin or content type' });
+  if (!parseOrderSupportQuickStart(req.body))
+    return res.status(400).json({ error: 'Invalid request' });
+  if (!orderSupportQuickStartAvailable(process.env))
+    return res.status(409).json({ error: 'Order support is not available yet' });
+  try {
+    const accountId = (req.user as {id: string}).id;
+    const result = await db.transaction(async tx => {
+      const owner = await storage.getUserForSession(accountId);
+      const shop = normalizeShopifyShopDomain(owner?.shopifyShop);
+      if (!owner || !shop || !isShopifyContactInstallationActive(owner)) return 'disconnected';
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+      const [liveOwner] = await tx.select().from(users).where(and(
+        eq(users.id,accountId), eq(users.shopifyShop,shop))).limit(1);
+      if (!liveOwner || !isShopifyContactInstallationActive(liveOwner)) return 'disconnected';
+      const installations = await tx.select().from(integrations).where(and(
+        eq(integrations.userId,accountId),eq(integrations.type,'shopify'),
+        eq(integrations.isActive,true))).limit(2);
+      if (installations.length !== 1) return 'disconnected';
+      const integration = installations[0];
+      const cfg = (integration.config ?? {}) as Record<string, unknown>;
+      if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
+          normalizeShopifyShopDomain(cfg.shop) !== shop)) return 'disconnected';
+      // Do not silently enable a separate Shopify order sync switch.
+      if (!Array.isArray(cfg.syncOptions) || !cfg.syncOptions.includes('new_orders'))
+        return 'sync_paused';
+      const ready = await tx.execute(orderSupportTablesReadyQuery);
+      if (!orderSupportTablesReady(ready.rows[0])) return 'not_ready';
+      const draft = await tx.execute(saveWorkflowDraftQuery({
+        integrationId:integration.id,accountId,shop,
+        journey:'orderSupport',prepared:true,
+      }));
+      if (draft.rows.length !== 1) throw new Error('Draft update failed');
+      const optIn = await tx.execute(saveOrderTaskMerchantOptInQuery(accountId,shop,true));
+      if (optIn.rows.length !== 1) throw new Error('Merchant opt-in failed');
+      return 'started';
+    });
+    if (result === 'disconnected') return res.status(409).json({error:'Reconnect Shopify to continue'});
+    if (result === 'sync_paused') return res.status(409).json({error:'Turn on Shopify order sync first'});
+    if (result === 'not_ready') return res.status(409).json({error:'Order support setup is not ready'});
+    return res.json({ok:true,orderSupportRunning:true,messagingEnabled:false,checkoutEnabled:false});
+  } catch {
+    return res.status(503).json({error:'Could not start order support. Try again.'});
   }
 });
 
