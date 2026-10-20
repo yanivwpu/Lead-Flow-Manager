@@ -19,6 +19,7 @@ import {
   type ProspectSenderProbeFailureClass,
 } from "@shared/prospectSenderProbeDiagnostics";
 import { channelService } from "../channelService";
+import { renderProspectOutreachEmailHtml } from "./prospectOutreachEmailHtml";
 import { getEmailMailboxById, getPrimaryEmailMailbox } from "../emailChannel/mailboxStore";
 
 export type ProspectOutreachSendPrepareInput = {
@@ -230,6 +231,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
           mailboxId: gate.mailboxId || input.mailboxId,
           subject: input.subject,
           textBody: input.messageSnapshot,
+          htmlBody: renderProspectOutreachEmailHtml(input.messageSnapshot),
           replyMode: "new",
           prospectOutreach: true,
         },
