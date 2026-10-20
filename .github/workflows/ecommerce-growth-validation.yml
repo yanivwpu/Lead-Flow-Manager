@@ -8,6 +8,8 @@ on:
       - "docs/ecommerce-growth-engine-staging-runbook.md"
       - "tests/ecommerce-*.test.ts"
       - "migrations/20261019_ecommerce_growth_event_inbox.sql"
+      - "migrations/20261020_ecommerce_abandoned_checkout_observations.sql"
+      - "server/shopifyRoutes.ts"
       - "docs/ecommerce-growth-engine-phase2-boundary.md"
       - ".github/workflows/ecommerce-growth-validation.yml"
 permissions:
@@ -41,10 +43,14 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Pure event classification and preview guards
         run: npx tsx --test tests/ecommerce-event-intake.test.ts tests/ecommerce-recording-bridge.test.ts
+      - name: Checkout observation source and staging security checks
+        run: npx tsx --test tests/ecommerce-abandoned-checkout-source.test.ts tests/ecommerce-checkout-sync-gate.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
         run: npx tsx --test tests/ecommerce-postgres-inbox.test.ts
+      - name: Checkout status cancellation, tenant separation, native PostgreSQL
+        run: npx tsx --test tests/ecommerce-checkout-observations-postgres.test.ts
       - name: Read-only staging-schema inspection with no migration applied
         env:
           ECOMMERCE_PREFLIGHT_ACK: staging-read-only
