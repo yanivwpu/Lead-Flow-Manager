@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import type { AbandonedCheckoutSnapshot } from './abandonedCheckoutSource';
 
-const SHOP_RE = /^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/;
+const SHOP_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 const GID_RE = /^gid:\/\/shopify\/AbandonedCheckout\/[1-9][0-9]{0,19}$/;
 export const CHECKOUT_OBSERVATION_DELAY_MINUTES = 60;
 
