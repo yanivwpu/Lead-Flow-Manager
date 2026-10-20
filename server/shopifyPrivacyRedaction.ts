@@ -1,4 +1,5 @@
 import { enqueuePrivacyRequest } from "./shopifyPrivacyRequests";
+import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryStoreErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import crypto from "crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -20,6 +21,11 @@ export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
   if (!shop) throw new Error("Invalid Shopify privacy request");
   return db.transaction(async tx => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop}, 0))`);
+    // Erase Shopify recovery consent, queued work and checkout identifiers under
+    // the same store privacy lock, even when the optional staging schema exists.
+    const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
+    for(const statement of recoveryStoreErasureQueries(shop,
+      parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
     // Lock active mappings so capture/support updates and fenced ingestion cannot recreate erased data.
     const merchantRows = await tx.select().from(users).where(or(eq(users.shopifyShop, shop), eq(users.email, shopifySyntheticMerchantEmail(shop)!))).for("update");
     const integrationRows = await tx.select().from(integrations).where(and(eq(integrations.type, "shopify"),
