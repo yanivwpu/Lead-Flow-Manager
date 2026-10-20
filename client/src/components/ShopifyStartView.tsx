@@ -33,12 +33,18 @@ export function ShopifyStartView({ locale = "en", snapshot, loading, busy, faile
               copy.notActive}
           </h1>
           {usable ? <>
-            <p>{copy.connectDescription}</p>
-            {state === "trial_active" ? <p role="status">{copy.trialDescription}</p> : null}
+            <p className="text-sm text-gray-600">{copy.connectDescription}</p>
+            {state === "trial_active" ? <p role="status" className="text-xs text-gray-500">{copy.trialDescription}</p> : null}
             <a className="block rounded-lg bg-emerald-700 px-4 py-3 text-white text-center font-medium"
-              href={settingsChannelsHref({ provider: "whatsapp" })}>{copy.connect}</a>
-            <a className="block text-center underline" href="/app/inbox">{copy.inbox}</a>
-            <a className="block text-center text-sm underline" href="/pricing">{copy.plansAnytime}</a>
+              href="/app/integrations?setup=shopify" data-testid="shopify-first-use-setup">{copy.connect}</a>
+            <a className="block text-center text-sm text-emerald-800 underline" href="/app/inbox">{copy.inbox}</a>
+            <details className="border-t pt-3 text-sm text-gray-600">
+              <summary className="cursor-pointer">{copy.moreOptions}</summary>
+              <div className="mt-3 flex flex-col gap-3">
+                <a className="underline" href={settingsChannelsHref({ provider: "whatsapp" })}>{copy.connectChannelLater}</a>
+                <a className="underline" href="/pricing">{copy.plansAnytime}</a>
+              </div>
+            </details>
           </> : state === "plan_required" ? <>
             <p>{copy.noAccess}</p>
             <a className="block rounded-lg bg-emerald-700 px-4 py-3 text-white text-center" href="/pricing">
