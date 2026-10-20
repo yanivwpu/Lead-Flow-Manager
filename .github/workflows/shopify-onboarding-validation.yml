@@ -38,6 +38,7 @@ on:
       - "client/src/components/integrations/ShopifyWebhook*.tsx"
       - "client/src/components/admin/AdminShopifyWebhookHealth.tsx"
       - "client/src/lib/shopify*.ts"
+      - "tests/ecommerce-checkout-recovery-eligibility.test.ts"
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
       - "scripts/check-types-against-base.mjs"
@@ -112,6 +113,8 @@ jobs:
         run: npx tsx --test tests/shopify-task-schedule-postgres.test.ts
       - name: "One-click Shopify order support: safe endpoint, UI and atomic native PostgreSQL"
         run: npx tsx --test tests/shopify-simple-order-support.test.ts tests/shopify-simple-order-support-postgres.test.ts
+      - name: Checkout recovery eligibility must fail closed before any send plumbing
+        run: npx tsx --test tests/ecommerce-checkout-recovery-eligibility.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
