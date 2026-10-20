@@ -31,7 +31,7 @@ export function shopifyInstallDestination(
   firstTokenInstall: boolean,
 ): string {
   if (state === "trial_active") return firstTokenInstall ? "/shopify/start" : "/app/inbox";
-  if (state === "app_ready") return "/app/inbox";
+  if (state === "app_ready") return firstTokenInstall ? "/shopify/start" : "/app/inbox";
   if (state === "plan_required") return "/pricing";
   return "/shopify/start";
 }
