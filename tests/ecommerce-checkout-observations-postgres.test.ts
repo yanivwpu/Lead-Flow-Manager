@@ -6,7 +6,7 @@ import {drizzle} from 'drizzle-orm/node-postgres';
 import {dueCheckoutObservationsQuery,upsertCheckoutObservationQuery} from '../server/ecommerce/checkoutObservationQueries';
 
 test('native PostgreSQL: one tenant-scoped checkout row, purchases terminal under concurrent replay', async () => {
-  const url=process.env.ECOMMERCE_TEST_DATABASE_URL;
+  const url=process.env.ECOMMERCE_TEST_DATABASE_URL || process.env.SHOPIFY_TEST_DATABASE_URL;
   if(!url) throw Error('ECOMMERCE_TEST_DATABASE_URL_required');
   const admin=new Client({connectionString:url}),first=new Client({connectionString:url}),second=new Client({connectionString:url});
   await admin.connect();await first.connect();await second.connect();
