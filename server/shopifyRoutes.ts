@@ -1,6 +1,7 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
 import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
+import { parseTaskScheduleChange, taskScheduleReadyQuery, taskScheduleReady, readScheduledOrderSupportTaskListQuery, saveTaskScheduleQuery } from "./ecommerce/orderTaskSchedule";
 import { users, integrations } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
@@ -601,8 +602,10 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
     // Do not block the existing event inbox when the opt-in migration is not applied.
     // Exact tenant/shop scope is enforced on every task read; no customer data returned.
     const taskTables = await db.execute(orderSupportTablesReadyQuery);
-    let internalTasks: { schemaReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string;contactId:string;contactName:string}> } = {
-      schemaReady: false, merchantEnabled: false,
+    const scheduleTables = await db.execute(taskScheduleReadyQuery);
+    const scheduleReady = taskScheduleReady(scheduleTables.rows[0]);
+    let internalTasks: { schemaReady: boolean; scheduleReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string;contactId:string;contactName:string;assigneeUserId:string|null;dueAt:string|null;reminderMinutes:number|null;reminderDue:boolean}> } = {
+      schemaReady: false, scheduleReady, merchantEnabled: false,
       operatorEnabled: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED === 'true' &&
         process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true',
       openCount: 0, completedCount: 0, items: []
@@ -610,7 +613,9 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
     if (orderSupportTablesReady(taskTables.rows[0])) {
       const [settings, tasks] = await Promise.all([
         db.execute(readOrderTaskMerchantSettingsQuery(accountId, shop)),
-        db.execute(readOrderSupportTaskListQuery(accountId, shop)),
+        db.execute(scheduleReady
+          ? readScheduledOrderSupportTaskListQuery(accountId, shop)
+          : readOrderSupportTaskListQuery(accountId, shop)),
       ]);
       const counts = settings.rows[0] as {enabled?:boolean;open_count?:number;completed_count?:number} | undefined;
       internalTasks = {
@@ -620,6 +625,10 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
           id:String(row.id),state:String(row.state),
           createdAt:new Date(row.created_at as Date|string).toISOString(),
           contactId:String(row.contact_id),contactName:String(row.contact_name),
+          assigneeUserId:row.assignee_user_id ? String(row.assignee_user_id) : null,
+          dueAt:row.due_at ? new Date(row.due_at as string|Date).toISOString() : null,
+          reminderMinutes:row.reminder_minutes == null ? null : Number(row.reminder_minutes),
+          reminderDue:row.reminder_due === true,
         }))
       };
     }
@@ -828,6 +837,45 @@ router.post('/ecommerce/order-support-task-complete', async (req: Request, res: 
     return res.json({ok:true,completed:true,messagingEnabled:false});
   } catch {
     return res.status(503).json({error:'Task completion unavailable'});
+  }
+});
+
+/** Owner-only, staging-only schedule editing. No customer send or contact follow-up writes.
+ * The SQL atomically validates task ownership AND live active team membership.
+ */
+router.post('/ecommerce/order-support-task-schedule', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  const origin='https://whachatcrm-staging-app-staging.up.railway.app';
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+      process.env.APP_URL?.replace(/[/]$/, '') !== origin)
+    return res.status(404).json({error:'Not available'});
+  if (!req.user) return res.status(401).json({error:'Unauthorized'});
+  if (req.get('origin') !== origin ||
+      req.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json')
+    return res.status(403).json({error:'Invalid origin or content type'});
+  const change = parseTaskScheduleChange(req.body);
+  if (!change) return res.status(400).json({error:'Invalid task schedule'});
+  try {
+    const accountId=(req.user as {id:string}).id;
+    const owner=await storage.getUserForSession(accountId);
+    const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
+    if (!owner || !shop || !isShopifyContactInstallationActive(owner))
+      return res.status(403).json({error:'Active Shopify connection required'});
+    const integration=await storage.getIntegrationByUserAndType(accountId,'shopify');
+    const cfg=(integration?.config ?? {}) as Record<string,unknown>;
+    if (!integration?.isActive ||
+        (cfg.shop != null && (typeof cfg.shop !== 'string' ||
+         normalizeShopifyShopDomain(cfg.shop) !== shop)))
+      return res.status(403).json({error:'Active Shopify connection required'});
+    const ready=await db.execute(taskScheduleReadyQuery);
+    if (!taskScheduleReady(ready.rows[0]))
+      return res.status(409).json({error:'Staging task schedule schema unavailable'});
+    const changed=await db.execute(saveTaskScheduleQuery(change,accountId,shop));
+    if (changed.rows.length !== 1)
+      return res.status(409).json({error:'Task not open, not owned, or assignee not active'});
+    return res.json({ok:true,messagingEnabled:false,checkoutEnabled:false});
+  } catch {
+    return res.status(503).json({error:'Task schedule unavailable'});
   }
 });
 
