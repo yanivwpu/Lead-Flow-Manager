@@ -96,7 +96,7 @@ jobs:
         run: npx tsx --test tests/shopify-first-use-handoff.test.ts tests/shopify-trial-first.test.tsx
       - name: Shopify merchant task history and customer purchases UI contract
         run: npx tsx --test tests/shopify-merchant-task-history.test.ts
-      - name: E-commerce landing: prelaunch noindex, direct setup CTA and truthful messaging
+      - name: "E-commerce landing: prelaunch noindex, direct setup CTA and truthful messaging"
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
