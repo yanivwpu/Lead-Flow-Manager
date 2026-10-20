@@ -44,6 +44,7 @@ on:
       - "tests/ecommerce-checkout-observations-postgres.test.ts"
       - "migrations/20261020_ecommerce_abandoned_checkout_observations.sql"
       - "migrations/20261020_ecommerce_checkout_recovery_intents.sql"
+      - "migrations/20261020_ecommerce_whatsapp_recovery_delivery.sql"
       - "tests/shopify*.test.ts"
       - "tests/shopify*.test.tsx"
       - "scripts/check-types-against-base.mjs"
@@ -124,6 +125,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-abandoned-checkout-source.test.ts tests/ecommerce-checkout-sync-gate.test.ts tests/ecommerce-checkout-observations-postgres.test.ts
       - name: Exact purchase recheck, safe review preparation and durable intent SQL
         run: npx tsx --test tests/ecommerce-checkout-fresh-recheck.test.ts tests/ecommerce-checkout-recovery-preparation-gate.test.ts tests/ecommerce-checkout-recovery-intents-postgres.test.ts
+      - name: Checkout recovery opt-in and Meta-template live delivery safety
+        run: npx tsx --test tests/ecommerce-recovery-messaging-eligibility.test.ts tests/ecommerce-recovery-delivery-worker.test.ts tests/ecommerce-recovery-outbox-postgres.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
