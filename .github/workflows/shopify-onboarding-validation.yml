@@ -33,6 +33,7 @@ on:
       - "client/src/App.tsx"
       - "client/src/pages/AppLayout.tsx"
       - "client/src/pages/ShopifyStart.tsx"
+      - "client/src/pages/EcommerceGrowthEnginePreview.tsx"
       - "client/src/components/Shopify*.tsx"
       - "client/src/components/integrations/ShopifyWebhook*.tsx"
       - "client/src/components/admin/AdminShopifyWebhookHealth.tsx"
@@ -111,6 +112,8 @@ jobs:
         run: npx tsx --test tests/shopify-task-schedule-postgres.test.ts
       - name: One-click Shopify order support: safe endpoint, UI and atomic native PostgreSQL
         run: npx tsx --test tests/shopify-simple-order-support.test.ts tests/shopify-simple-order-support-postgres.test.ts
+      - name: E-commerce landing preview remains staged and honest
+        run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
