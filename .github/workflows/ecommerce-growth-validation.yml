@@ -57,6 +57,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-outbox-postgres.test.ts
       - name: Recovery consent and delivery GDPR cleanup in native PostgreSQL
         run: npx tsx --test tests/ecommerce-recovery-privacy-postgres.test.ts
+      - name: Live-approved Meta checkout recovery adapter and outbox claim guard
+        run: npx tsx --test tests/ecommerce-recovery-meta-adapter.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
