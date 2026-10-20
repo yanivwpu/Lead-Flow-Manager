@@ -5,7 +5,7 @@ import {
   validateRecoveryMetaTemplate,
   recoveryTemplateBodyComponents,
   type RecoveryTemplateShape,
-} from '../server/ecommerce/checkoutRecoveryMetaSender';
+} from '../server/ecommerce/checkoutRecoveryMetaTemplate';
 
 const local:RecoveryTemplateShape={
  name:'shopify_checkout_recovery',language:'en_US',category:'marketing',
