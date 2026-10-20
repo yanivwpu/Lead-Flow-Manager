@@ -29,7 +29,8 @@ test("existing and paid installs keep app access; used trial requires a plan", (
     const paid = { ...base, billingPlan: plan, shopifySubscriptionStatus: "active" };
     assert.equal(resolveShopifyOnboardingState(paid, ready).state, "app_ready");
     assert.equal(shopifyMerchantNeedsPlanSelection(paid, { isFreshInstallRedirect: true }), false);
-    assert.equal(shopifyInstallDestination("app_ready", true), "/app/inbox");
+    assert.equal(shopifyInstallDestination("app_ready", true), "/shopify/start");
+    assert.equal(shopifyInstallDestination("app_ready", false), "/app/inbox");
   }
   const expired = { ...active, trialStatus: "expired", trialEndsAt: "2020-01-01T00:00:00Z" };
   assert.equal(resolveShopifyOnboardingState(expired, { ...ready, ledgerStatus: "granted", userEligible: false }).state, "plan_required");
@@ -56,14 +57,16 @@ test("guided view renders usable actions, voluntary pricing, and honest error st
   }));
   const activeHtml = view("trial_active");
   assert.match(activeHtml, /Your 14-day Pro \+ AI trial is active/);
-  assert.match(activeHtml, /Connect a channel/);
+  assert.match(activeHtml, /Set up Shopify/);
+  assert.match(activeHtml, /href="\/app\/integrations\?setup=shopify"/);
+  assert.match(activeHtml, /Connect messaging \(optional\)/);
   assert.match(activeHtml, /href="\/app\/inbox"/);
   assert.match(activeHtml, /href="\/pricing"/);
   assert.match(activeHtml, /No paid plan selection is needed/);
   for (const state of ["recovery_required", "support_required", "reconnect_required", "plan_required"]) {
     const html = view(state);
     assert.doesNotMatch(html, /Your 14-day Pro \+ AI trial is active/);
-    assert.doesNotMatch(html, /Enter Inbox/);
+    assert.doesNotMatch(html, /Set up Shopify/);
   }
   assert.match(view("recovery_required"), /Try again/);
   assert.match(view("support_required"), /Contact support/);
@@ -113,6 +116,7 @@ test("Spanish and Hebrew first-use screens retain the same verified trial action
       onRetry() {}, onRefresh() {},
     }));
     assert.match(html, /href="\/app\/inbox"/);
+    assert.match(html, /href="\/app\/integrations\?setup=shopify"/);
     assert.match(html, /href="\/pricing"/);
     if (locale === "he") assert.match(html, /dir="rtl"/);
   }
