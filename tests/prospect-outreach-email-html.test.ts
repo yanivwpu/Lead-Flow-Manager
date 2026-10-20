@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { renderProspectOutreachEmailHtml } from "../server/prospectImport/prospectOutreachEmailHtml";
+import { ensureAiComposeCampaignLink } from "../shared/prospectOutreachInstructions";
 
 function main() {
   const url = "https://www.whachatcrm.com/realtor-growth-engine";
@@ -22,6 +23,12 @@ function main() {
   const multiline = renderProspectOutreachEmailHtml("Hello\nHow are you?");
   assert.ok(multiline.includes("Hello<br>How are you?"));
   assert.equal(renderProspectOutreachEmailHtml(" \n "), "");
+  const settings = { linkUrl: url, includeLinkNaturally: true };
+  const draft = ensureAiComposeCampaignLink("Hi there, would a demo help?", settings);
+  assert.ok(draft.includes(url), "explicitly configured CTA URL cannot be dropped by AI");
+  assert.equal(ensureAiComposeCampaignLink(draft, settings), draft, "CTA must be idempotent");
+  assert.equal(ensureAiComposeCampaignLink("Hi", { linkUrl: url, includeLinkNaturally: false }), "Hi");
+  assert.equal(ensureAiComposeCampaignLink("Hi", { linkUrl: "javascript:bad()", includeLinkNaturally: true }), "Hi");
   console.log("ok - prospect outreach email HTML linkification and escaping");
 }
 main();
