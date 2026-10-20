@@ -64,3 +64,16 @@ assert.ok(renderProspectOutreachEmailHtml(quoted,["https://example.com/demo"]).i
 
 assert.equal(validateOutreachLinkUrl("https://user:pass@example.com/demo").ok,false);
 assert.ok(renderProspectOutreachEmailHtml("Template https://example.com/reset?token=abc!", [], true).includes('href="https://example.com/reset?token=abc!"'));
+
+for (const suffix of ['a"b', "a<b", "a>b", "a b"]) assert.equal(validateOutreachLinkUrl("https://example.com/"+suffix).ok,false);
+
+// Migration preserves existing authored destinations and is repeatable in an isolated fixture.
+const {PGlite} = await import("@electric-sql/pglite");
+const {readFile} = await import("node:fs/promises");
+const migrationDb = new PGlite();
+try {
+ await migrationDb.exec("CREATE TABLE prospect_outreach_queue_items(id text); INSERT INTO prospect_outreach_queue_items VALUES ('legacy')");
+ const migration = await readFile("migrations/0114_prospect_link_rendering_snapshot.sql", "utf8");
+ await migrationDb.exec(migration); await migrationDb.exec(migration);
+ assert.deepEqual((await migrationDb.query<any>("SELECT link_rendering_snapshot FROM prospect_outreach_queue_items")).rows[0].link_rendering_snapshot,{campaignLinkUrl:"",preserveAuthoredUrls:true});
+} finally { await migrationDb.close(); }

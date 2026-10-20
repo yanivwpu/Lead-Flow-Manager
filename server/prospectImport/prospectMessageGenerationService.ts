@@ -1,3 +1,4 @@
+import { snapshotOutreachLinkRendering } from "@shared/prospectOutreachInstructions";
 /**
  * Prospect AI Message Generation — strategy dispatch for queue snapshots, regenerate, preview.
  */
@@ -331,6 +332,7 @@ export async function refreshQueuedDraftsForMessageCreation(params: {
         .set({
           subjectSnapshot: generated.subject,
           messageSnapshot: generated.body,
+          linkRenderingSnapshot: snapshotOutreachLinkRendering(settings),
           updatedAt: new Date(),
         })
         .where(eq(prospectOutreachQueueItems.id, row.id));

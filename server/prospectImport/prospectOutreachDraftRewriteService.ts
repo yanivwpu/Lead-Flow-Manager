@@ -5,7 +5,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { contacts, prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
-import { ensureAiComposeCampaignLink, type ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, snapshotOutreachLinkRendering, type ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
 import {
   buildOutreachDraftRewriteSystemPrompt,
   buildOutreachDraftRewriteUserPrompt,
@@ -145,6 +145,7 @@ export async function rewriteQueuedOutreachDrafts(params: {
         .set({
           subjectSnapshot: parsed.subject,
           messageSnapshot: rewrittenMessage,
+          linkRenderingSnapshot: snapshotOutreachLinkRendering({...params.instructions, mode:"ai_compose"}),
           updatedAt: new Date(),
         })
         .where(eq(prospectOutreachQueueItems.id, row.item.id));

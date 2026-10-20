@@ -68,7 +68,7 @@ import {
   PROSPECT_MESSAGE_CREATION_DEFAULTS,
   messageCreationUsesTemplate,
 } from "@shared/prospectMessageCreation";
-import { ensureAiComposeCampaignLink, resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, resolveProspectOutreachSubject, snapshotOutreachLinkRendering } from "@shared/prospectOutreachInstructions";
 import { db } from "../../drizzle/db";
 import { storage } from "../storage";
 import { resolveProspectImportDestinationUserId } from "./prospectImportService";
@@ -480,6 +480,7 @@ export async function createQueueBatch(params: {
           recipientIdentityNormalized: normalizeRecipientIdentity(channel, recipient),
           subjectSnapshot,
           messageSnapshot,
+          linkRenderingSnapshot: snapshotOutreachLinkRendering(settings.outreachInstructions),
           recommendedOffer: pi?.recommendedOffer ?? null,
           outreachAngle: pi?.suggestedOutreachAngle ?? null,
           queueStatus: "queued",
@@ -1243,6 +1244,7 @@ export async function updateQueueItemDraft(params: {
     .set({
       subjectSnapshot: subject,
       messageSnapshot: message,
+      linkRenderingSnapshot: {...item.linkRenderingSnapshot, campaignLinkUrl: item.linkRenderingSnapshot?.campaignLinkUrl || "", preserveAuthoredUrls: true},
       updatedAt: new Date(),
     })
     .where(eq(prospectOutreachQueueItems.id, item.id));
@@ -1692,7 +1694,6 @@ export async function processClaimedQueueItem(
     .where(eq(prospectOutreachQueueItems.id, item.id));
   const itemWithAttempt = { ...item, attempts: attemptNumber };
 
-  const sendSettings = await getOutreachSettings(item.workspaceUserId);
   const sendResult = await sender.send({
     workspaceUserId: item.workspaceUserId,
     contactId: item.contactId,
@@ -1701,8 +1702,8 @@ export async function processClaimedQueueItem(
     messageSnapshot: item.messageSnapshot,
     senderMailboxId: prepared.mailboxId,
     mailboxId: prepared.mailboxId,
-    campaignLinkUrl: sendSettings.outreachInstructions.linkUrl,
-    preserveAuthoredUrls: messageCreationUsesTemplate(sendSettings.outreachInstructions.mode),
+    campaignLinkUrl: item.linkRenderingSnapshot?.campaignLinkUrl || "",
+    preserveAuthoredUrls: item.linkRenderingSnapshot?.preserveAuthoredUrls !== false,
     subject: prepared.subject,
     contactName: contact.name,
   });

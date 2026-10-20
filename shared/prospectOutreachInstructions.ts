@@ -69,6 +69,7 @@ export type OutreachLinkValidation =
 export function validateOutreachLinkUrl(raw: unknown): OutreachLinkValidation {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return { ok: true, linkUrl: "" };
+  if (/[\s<>"\x00-\x1f\x7f]/.test(trimmed)) return { ok: false, error: "Encode spaces, quotes and angle brackets in campaign URLs." };
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
@@ -294,4 +295,10 @@ export function ensureAiComposeCampaignLink(
     auto: "",
   }[settings.language || "auto"];
   return text + "\n\n" + intro + validated.linkUrl;
+}
+
+/** Capture rendering choices alongside the draft, never consult mutable settings at send. */
+export function snapshotOutreachLinkRendering(settings: {linkUrl?: string; mode?: string}) {
+  const link = validateOutreachLinkUrl(settings.linkUrl);
+  return {campaignLinkUrl: link.ok ? link.linkUrl : "", preserveAuthoredUrls: settings.mode !== "ai_compose"};
 }
