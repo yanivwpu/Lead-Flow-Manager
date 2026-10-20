@@ -65,6 +65,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-signed-inbound-consent-gate.test.ts tests/ecommerce-recovery-consent-webhook-contract.test.ts tests/ecommerce-recovery-signed-consent-postgres.test.ts
       - name: Signed Meta delivery receipt, monotonic PostgreSQL status and allowlisted worker
         run: npx tsx --test tests/ecommerce-recovery-meta-receipts.test.ts tests/ecommerce-recovery-meta-receipts-postgres.test.ts tests/ecommerce-recovery-worker-scheduler.test.ts
+      - name: Single-merchant automatic checkout discovery and verified-consent enqueue
+        run: npx tsx --test tests/ecommerce-recovery-auto-preparation.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
