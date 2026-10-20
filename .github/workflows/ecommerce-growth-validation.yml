@@ -12,6 +12,7 @@ on:
       - "migrations/20261020_ecommerce_checkout_recovery_intents.sql"
       - "migrations/20261020_ecommerce_whatsapp_recovery_delivery.sql"
       - "migrations/20261020_ecommerce_recovery_signed_inbound_consent.sql"
+      - "migrations/20261020_ecommerce_recovery_meta_receipts.sql"
       - "server/shopifyRoutes.ts"
       - "docs/ecommerce-growth-engine-phase2-boundary.md"
       - ".github/workflows/ecommerce-growth-validation.yml"
@@ -62,6 +63,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-meta-adapter.test.ts
       - name: Signed WhatsApp inbound consent, STOP and replay-safe native PostgreSQL
         run: npx tsx --test tests/ecommerce-recovery-signed-inbound-consent-gate.test.ts tests/ecommerce-recovery-consent-webhook-contract.test.ts tests/ecommerce-recovery-signed-consent-postgres.test.ts
+      - name: Signed Meta delivery receipt, monotonic PostgreSQL status and allowlisted worker
+        run: npx tsx --test tests/ecommerce-recovery-meta-receipts.test.ts tests/ecommerce-recovery-meta-receipts-postgres.test.ts tests/ecommerce-recovery-worker-scheduler.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
