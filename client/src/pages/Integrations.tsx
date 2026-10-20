@@ -936,7 +936,9 @@ export function Integrations() {
       }
       return res.json();
     },
-    enabled: !!integrationsEnabled && !!user?.id && sessionAligned,
+    // A Shopify-installed account can inspect its connected store even when
+    // other optional integrations aren't included in its subscription tier.
+    enabled: !!user?.id && sessionAligned && (!!integrationsEnabled || !!user?.shopifyShop),
     staleTime: 30_000,
   });
 
