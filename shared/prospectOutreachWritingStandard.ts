@@ -34,7 +34,11 @@ WRITING QUALITY:
 - Avoid repeating the same benefit twice.
 - Keep the tone confident but not pushy.
 - Prefer varied, natural subjects — never default every prospect to rigid templates like "Idea for {Business}".
-- End with a friendly call-to-action.
+- Use short, scannable paragraphs (one or two sentences each); avoid dense, feature-heavy blocks.
+- In a first-touch email, connect one verified prospect problem to at most two relevant capabilities and one clear outcome.
+- Write complete sentences. Never end mid-sentence, mid-signature, or with a fragment such as "Looking forward to discussing".
+- End with one clear, low-pressure call-to-action (for example, offering a walkthrough); do not use multiple competing CTAs.
+- Never imply a relationship or past conversation that is not evidenced.
 
 LINKS:
 - When a campaign link is allowed, introduce it naturally (e.g. "If you'd like to learn more about...", "You can see how it works here...", "Here's a quick overview...").
