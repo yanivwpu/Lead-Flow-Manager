@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
 
 interface Chat {
   id: string;
@@ -897,6 +898,7 @@ export function FollowUps() {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
+        {viewMode === 'list' && !kpiFilter && <ShopifyOrderSupportTasks />}
         
         {kpiFilter && (
           <div className="mb-4 flex items-center gap-2">
