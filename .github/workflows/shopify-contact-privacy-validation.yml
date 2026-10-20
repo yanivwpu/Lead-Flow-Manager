@@ -20,6 +20,7 @@ on:
       - "server/storage.ts"
       - "server/cron.ts"
       - "server/routes.ts"
+      - "migrations/20261020_ecommerce_recovery_meta_receipts.sql"
       - "migrations/20261020_ecommerce_recovery_signed_inbound_consent.sql"
       - "client/src/pages/Admin.tsx"
       - "client/src/components/admin/AdminPrivacyOperationsTab.tsx"
@@ -90,6 +91,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-privacy-postgres.test.ts
       - name: Signed WhatsApp consent STOP and contact privacy PostgreSQL
         run: npx tsx --test tests/ecommerce-recovery-signed-inbound-consent-gate.test.ts tests/ecommerce-recovery-consent-webhook-contract.test.ts tests/ecommerce-recovery-signed-consent-postgres.test.ts
+      - name: Signed Meta recovery receipt privacy tenant scope and native PostgreSQL status
+        run: npx tsx --test tests/ecommerce-recovery-meta-receipts.test.ts tests/ecommerce-recovery-meta-receipts-postgres.test.ts tests/ecommerce-recovery-worker-scheduler.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts
