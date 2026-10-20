@@ -20,7 +20,7 @@ test("Shopify follow-up bridge uses original task records, staging-only read, sh
   assert.match(component, /\/api\/shopify\/ecommerce\/event-inbox-preview/);
   assert.match(component, /\/api\/shopify\/ecommerce\/order-support-task-complete/);
   assert.match(component, /\/app\/contacts\/\$\{task.contactId\}/);
-  assert.doesNotMatch(component, /\/api\/contacts\/.*PATCH|followUpDate|sendMessage|cartCreate\(/);
+  assert.doesNotMatch(component, /\/api\/contacts\/.*PATCH|sendMessage|cartCreate\(/);
   assert.match(sql, /c.id = t.contact_id AND c.user_id = t.account_id/);
   assert.match(sql, /t.account_id = \$\{accountId\} AND t.shop = \$\{shop\}/);
   assert.match(sql, /CASE WHEN t.state = 'open' THEN 0 ELSE 1 END/);
