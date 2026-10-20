@@ -3341,6 +3341,39 @@ export async function registerRoutes(
         }
       }
 
+      // Recovery receipts must be processed from signed raw Meta bytes and
+      // durably recorded BEFORE provider ACK. Legacy general-message status
+      // handling below remains unchanged, but it is not consent evidence.
+      if (statusUpdate && signatureValid && rawBodyBuffer) {
+        try {
+          const { recordRecoveryReceiptFromVerifiedMeta } =
+            await import("./ecommerce/checkoutRecoveryMetaReceiptHandler");
+          const sender=await findUserByMetaPhoneNumberId(statusUpdate.phoneNumberId);
+          if(sender)await recordRecoveryReceiptFromVerifiedMeta({
+            accountId:sender.id,
+            candidate:{
+              signatureValid,
+              hasRawBody:Buffer.isBuffer(rawBodyBuffer),
+              phoneNumberId:statusUpdate.phoneNumberId,
+              messageId:statusUpdate.messageId,
+              recipientId:statusUpdate.recipientId,
+              status:statusUpdate.status,
+              timestamp:statusUpdate.timestamp,
+            },
+            secret:process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||"",
+            env:{
+              RAILWAY_ENVIRONMENT_NAME:process.env.RAILWAY_ENVIRONMENT_NAME,
+              APP_URL:process.env.APP_URL,
+              ECOMMERCE_RECOVERY_RECEIPTS_ENABLED:process.env.ECOMMERCE_RECOVERY_RECEIPTS_ENABLED,
+            }
+          });
+        } catch (receiptErr) {
+          console.error("[EcommerceRecoveryReceipt] Durable status recording failed",
+            receiptErr instanceof Error?receiptErr.message:"unknown_error");
+          return res.status(503).send("Recovery receipt persistence unavailable");
+        }
+      }
+
       res.status(200).send("EVENT_RECEIVED");
 
       // Process legacy chat write and other side effects asynchronously (non-critical)
