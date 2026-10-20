@@ -18,6 +18,8 @@ test("native PostgreSQL merchant tasks: isolated opt-ins, tenant list and atomic
   let pool:Pool|undefined;
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
+    await admin.query(`CREATE TABLE "${schema}".contacts (
+      id VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, name TEXT NOT NULL)`);
     await admin.query(`CREATE TABLE "${schema}".ecommerce_growth_order_task_settings (
       account_id VARCHAR(128) NOT NULL, shop VARCHAR(255) NOT NULL,
       tasks_enabled BOOLEAN NOT NULL DEFAULT FALSE, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -31,6 +33,10 @@ test("native PostgreSQL merchant tasks: isolated opt-ins, tenant list and atomic
     pool=new Pool({connectionString:url.toString(),max:12});
     const db=drizzle(pool);
     const shop="one.myshopify.com", second="other.myshopify.com";
+    await pool.query(`INSERT INTO contacts (id,user_id,name) VALUES
+      ('alice-contact','alice','Alice Customer'),
+      ('bob-contact','bob','Bob Customer'),
+      ('another-contact','alice','Other Customer')`);
     await pool.query(`INSERT INTO ecommerce_growth_order_support_tasks
       (event_id,account_id,shop,contact_id) VALUES
       (1,'alice',$1,'alice-contact'),(2,'bob',$1,'bob-contact'),(3,'alice',$2,'another-contact')`,[shop,second]);
