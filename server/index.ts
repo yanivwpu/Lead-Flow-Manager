@@ -614,6 +614,20 @@ app.use((req, res, next) => {
     }
   }
 
+  // Restricted checkout discovery and durable queue preparation: one explicitly
+  // allowlisted staging merchant, no customer sends or browser-triggered jobs.
+  // Independent opt-in switch remains absent from Railway by default.
+  if (process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED === 'true') {
+    try {
+      const { startCheckoutRecoveryAutoPreparation } =
+        await import('./ecommerce/checkoutRecoveryAutoPreparationRuntime');
+      startCheckoutRecoveryAutoPreparation();
+    } catch (error) {
+      console.error('[EcommerceRecoveryAutoPrep] startup disabled',
+        error instanceof Error ? error.message : 'unknown_error');
+    }
+  }
+
   // Approved SEO proposals are claimed durably and can only create review-only GitHub PRs.
   const { startSeoGithubExecutionWorker } = await import("./seo/githubExecutionService");
   startSeoGithubExecutionWorker();
