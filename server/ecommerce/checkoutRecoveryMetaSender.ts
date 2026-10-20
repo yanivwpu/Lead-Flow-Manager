@@ -117,13 +117,36 @@ export async function sendRecoveryViaMeta(
    ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:process.env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED,
    ECOMMERCE_RECOVERY_SEND_ENABLED:process.env.ECOMMERCE_RECOVERY_SEND_ENABLED,
  }))throw Error('recovery_send_disabled');
- if(!E164.test(args.phone) || !claim.id || !claim.claimToken ||
+ if(!E164.test(args.phone) || !/^[1-9][0-9]{0,18}$/.test(claim.id) ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claim.claimToken) ||
     !claim.accountId || !claim.shop || !claim.checkoutId || !claim.contactId ||
     !claim.templateId || !args.checkoutRecoveryUrl)
    throw Error('invalid_recovery_send_claim');
 
  return db.transaction(async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${claim.shop},0))`);
+   // A forged or stale caller cannot turn this adapter into a direct send:
+   // only a uniquely claimed, tenant-owned, purchase-incomplete and due
+   // outbox record may reach the provider. Keep the claim locked until the
+   // one-and-only Meta send has resolved; a second caller must not overlap.
+   const claimed=await tx.execute(sql`
+     SELECT o.id
+     FROM ecommerce_checkout_recovery_outbox o
+     INNER JOIN ecommerce_checkout_recovery_intents i ON i.id=o.intent_id
+     INNER JOIN ecommerce_abandoned_checkout_observations obs
+       ON obs.account_id=o.account_id AND obs.shop=o.shop
+         AND obs.checkout_gid=o.checkout_gid
+     WHERE o.id=CAST(${claim.id} AS BIGINT)
+       AND o.account_id=${claim.accountId} AND o.shop=${claim.shop}
+       AND o.checkout_gid=${claim.checkoutId}
+       AND o.contact_id=${claim.contactId}
+       AND o.template_id=${claim.templateId}
+       AND o.claim_token=CAST(${claim.claimToken} AS UUID)
+       AND o.state='claimed' AND i.status='ready'
+       AND obs.completed=FALSE AND obs.next_review_at<=NOW()
+     FOR UPDATE OF o
+   `);
+   if(claimed.rows.length!==1)throw Error('unclaimed_or_suppressed_recovery_delivery');
    const [merchant]=await tx.select().from(users)
      .where(and(eq(users.id,claim.accountId),eq(users.shopifyShop,claim.shop)))
      .for('share').limit(1);
