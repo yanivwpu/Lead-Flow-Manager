@@ -393,10 +393,10 @@ const NATIVE_INTEGRATIONS: IntegrationConfig[] = [
     id: "shopify", 
     name: "Shopify", 
     icon: ShoppingCart, 
-    description: "Auto-create leads from new orders and customers", 
+    description: "Keep Shopify customers, orders and tasks organized", 
     color: "bg-green-500",
     category: "commerce",
-    tagline: "Orders, customers & abandoned carts",
+    tagline: "Customers, orders & support tasks",
     fields: [],
     syncOptions: [
       { id: "new_orders", label: "New Orders", description: "Create a chat when a new order is placed" },

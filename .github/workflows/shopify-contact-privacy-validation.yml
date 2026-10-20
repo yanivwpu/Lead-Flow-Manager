@@ -91,6 +91,8 @@ jobs:
           npx tsx --test tests/shopify-managed-pricing.test.ts tests/shopify-oauth-state.test.ts tests/shopify-onboarding-emails.test.ts
       - name: Shopify one-click self-service with native PostgreSQL atomic rollback
         run: npx tsx --test tests/shopify-simple-order-support.test.ts tests/shopify-simple-order-support-postgres.test.ts
+      - name: Shopify merchant task history and customer purchases UI contract
+        run: npx tsx --test tests/shopify-merchant-task-history.test.ts
       - name: Reject TypeScript regressions against the exact PR base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
