@@ -95,6 +95,7 @@ export function ShopifyOrderSupportTasks() {
   if (!staging || !user?.id) return null;
   const tasks = data?.internalTasks;
   const openTasks = (tasks?.items ?? []).filter(task => task.state === "open");
+  const completedTasks = (tasks?.items ?? []).filter(task => task.state === "completed");
   if (!isLoading && !error && (!data || !tasks?.schemaReady || (!tasks.openCount && !tasks.completedCount))) return null;
 
   return (
@@ -104,7 +105,7 @@ export function ShopifyOrderSupportTasks() {
           <ShoppingBag className="w-5 h-5 text-slate-600" aria-hidden="true" />
           <div>
             <h2 className="font-semibold text-slate-900">Shopify order-support tasks</h2>
-            <p className="text-xs text-slate-500">Internal merchant tasks · separate from contact follow-up reminders</p>
+            <p className="text-xs text-slate-500">Tasks here · order history in customer profiles</p>
           </div>
         </div>
         <Button type="button" variant="outline" size="sm"
@@ -151,8 +152,39 @@ export function ShopifyOrderSupportTasks() {
               </div>
             ))}
           </div>
+          {tasks.completedCount > 0 && (
+            <details className="mt-3 rounded-lg border border-slate-200" data-testid="shopify-completed-tasks">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
+                Completed ({tasks.completedCount})
+              </summary>
+              <div className="space-y-2 border-t border-slate-100 p-3">
+                {completedTasks.length === 0 ? (
+                  <p className="text-sm text-slate-500">Recent tasks are still loading in this view.</p>
+                ) : completedTasks.map(task => (
+                  <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2"
+                    data-testid={`shopify-completed-task-${task.id}`}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800">New order support · Completed</p>
+                      <p className="text-xs text-slate-500">
+                        {task.contactName || "Shopify customer"} · {new Date(task.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                    {task.contactId && (
+                      <Button type="button" size="sm" variant="outline"
+                        onClick={() => setLocation(`/app/contacts/${task.contactId}`)}>
+                        Customer & orders <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">
+                  Recent completed tasks only. Customer purchases are recorded under Contacts.
+                </p>
+              </div>
+            </details>
+          )}
           {complete.isError && <p role="alert" className="mt-2 text-sm text-red-700">Could not complete this task. Refresh and try again.</p>}
-          <p className="text-xs text-slate-500 mt-3">Completing a task does not review the Shopify event, change the Shopify order or send a message.</p>
+          <p className="text-xs text-slate-500 mt-3">Task completion never changes a Shopify order or sends a message.</p>
         </>
       )}
     </section>
