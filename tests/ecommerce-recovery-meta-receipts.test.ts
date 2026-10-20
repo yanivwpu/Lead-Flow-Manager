@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseSignedRecoveryReceipt,applySignedRecoveryReceiptQuery} from '../server/ecommerce/checkoutRecoveryMetaReceipts';
-import {metaRecoveryReceiptCaptureEnabled} from '../server/ecommerce/checkoutRecoveryMetaReceiptHandler';
+import {metaRecoveryReceiptCaptureEnabled} from '../server/ecommerce/checkoutRecoveryMetaReceiptGate';
 import {recoveryPhoneDigest} from '../server/ecommerce/checkoutRecoveryMessagingEligibility';
 import {readFileSync} from 'node:fs';
 const now=Date.parse('2026-10-20T19:00:00Z'),secret='s'.repeat(40);
