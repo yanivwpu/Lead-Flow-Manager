@@ -31,6 +31,7 @@ on:
       - "shared/schema.ts"
       - "migrations/0104_shopify_contact_privacy.sql"
       - "client/src/pages/Pricing.tsx"
+      - "client/src/pages/EcommerceGrowthEnginePreview.tsx"
       - "client/src/components/integrations/ShopifyManagePanel.tsx"
       - "client/src/pages/AppLayout.tsx"
       - "docs/shopify-contact-privacy.md"
