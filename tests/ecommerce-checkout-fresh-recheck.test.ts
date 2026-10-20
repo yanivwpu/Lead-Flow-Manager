@@ -4,11 +4,11 @@ import {recheckShopifyCheckoutForRecovery} from '../server/ecommerce/checkoutFre
 
 const ID='gid://shopify/AbandonedCheckout/123';
 const node={id:ID,updatedAt:'2026-10-20T10:00:00Z',completedAt:null,
-  abandonedCheckoutUrl:'https://store.example.com/123/checkouts/token/recover?key=secret'};
+  abandonedCheckoutUrl:'https://store.example.com/123/checkouts/token/recover?key=secret',customer:{id:'gid://shopify/Customer/456'}};
 const data=(overrides:Record<string,unknown>={})=>({
   data:{
     abandonedCheckouts:{nodes:[node]},
-    abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:true},
+    abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:true,customer:{id:'gid://shopify/Customer/456'}},
     shop:{primaryDomain:{url:'https://store.example.com'}},
     ...overrides
   }
@@ -29,6 +29,7 @@ test('fresh checkout + no later order permits only in-memory review with primary
   assert.equal(decision.status,'eligible_for_review');
   if(decision.status==='eligible_for_review'){
     assert.equal(decision.checkoutId,ID);
+    assert.equal(decision.shopifyCustomerId,'gid://shopify/Customer/456');
     assert.equal(decision.recoveryUrl,node.abandonedCheckoutUrl);
   }
 });
@@ -36,7 +37,7 @@ test('completed checkout and a later order both fail closed',async()=>{
   const done=await read(data({abandonedCheckouts:{nodes:[{...node,completedAt:'2026-10-20T11:00:00Z'}]}}));
   assert.deepEqual(done,{status:'blocked',reason:'checkout_completed',completed:true});
   const purchased=await read(data({
-    abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:false}
+    abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:false,customer:{id:'gid://shopify/Customer/456'}}
   }));
   assert.deepEqual(purchased,{status:'blocked',reason:'new_order_or_order_status_unknown',completed:true});
 });
@@ -46,6 +47,8 @@ test('missing/foreign record, null abandonment, incomplete response and spoofed 
     data({abandonedCheckouts:{nodes:[{...node,id:'gid://shopify/AbandonedCheckout/999'}]}}),
     data({abandonmentByAbandonedCheckoutId:null}),
     data({abandonmentByAbandonedCheckoutId:{}}),
+    data({abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:true,customer:{id:'gid://shopify/Customer/999'}}}),
+    data({abandonedCheckouts:{nodes:[{...node,customer:null}]}}),
     data({abandonedCheckouts:{nodes:[{...node,completedAt:undefined}]}}),
     data({abandonedCheckouts:{nodes:[{...node,abandonedCheckoutUrl:'https://evil.test/123/checkouts/a/recover'}]}}),
     data({abandonedCheckouts:{nodes:[{...node,abandonedCheckoutUrl:'http://store.example.com/123/checkouts/a/recover'}]}}),
