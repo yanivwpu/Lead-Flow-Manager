@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../drizzle/db';
 import { users, contacts, messageTemplates, integrations } from '@shared/schema';
 import { isShopifyContactInstallationActive } from '@shared/shopifyContactPrivacy';
+import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from '../userMeta';
 import { recheckShopifyCheckoutForRecovery } from './checkoutFreshRecheck';
 import { evaluateRecoveryMessagingEligibility, type RecoveryTemplateApproval } from './checkoutRecoveryMessagingEligibility';
@@ -91,7 +92,8 @@ export async function sendRecoveryViaMeta(
    if(active.length!==1)throw Error('shopify_integration_ambiguous');
    const cfg=plainObject(active[0].config);
    for(const key of ['shop','shopUrl'])if(cfg[key]!=null &&
-     cfg[key]!==claim.shop)throw Error('shopify_integration_shop_mismatch');
+     (typeof cfg[key]!=='string' || normalizeShopifyShopDomain(cfg[key])!==claim.shop))
+     throw Error('shopify_integration_shop_mismatch');
 
    const [contact]=await tx.select().from(contacts).where(and(
      eq(contacts.userId,claim.accountId),eq(contacts.id,claim.contactId)
