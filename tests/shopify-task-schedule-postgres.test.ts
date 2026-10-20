@@ -57,6 +57,13 @@ test("native PG schedule: tenant-safe active-member assignment, reminder due, un
       event_id BIGINT UNIQUE,account_id VARCHAR(128),shop VARCHAR(255),
       contact_id VARCHAR,state VARCHAR(16) DEFAULT 'open',
       created_at TIMESTAMPTZ DEFAULT NOW())`);
+    await admin.query(`CREATE TABLE "${schema}".ecommerce_growth_event_inbox (
+      id BIGINT PRIMARY KEY, account_id VARCHAR(128), shop VARCHAR(255),
+      topic TEXT, delivery_id TEXT)`);
+    await admin.query(`CREATE TABLE "${schema}".activity_events (
+      id VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, contact_id VARCHAR NOT NULL,
+      event_type TEXT NOT NULL, event_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW())`);
     url.searchParams.set("options",`-c search_path=${schema}`);
     pool=new Pool({connectionString:url.toString(),max:9});
     const db=drizzle(pool);
