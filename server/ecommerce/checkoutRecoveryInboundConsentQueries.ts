@@ -40,8 +40,8 @@ export function grantSignedRecoveryConsentQuery(x:Base &{
    AND COALESCE(c.custom_fields->>'shopifyShop',
                 c.source_details->>'shop')=${x.shop}
    AND c.automations_paused=FALSE
-   AND COALESCE((c.custom_fields->>'doNotContact')::boolean,FALSE)=FALSE
-   AND COALESCE((c.custom_fields->>'marketingOptIn')::boolean,TRUE)=TRUE
+   AND LOWER(COALESCE(c.custom_fields->>'doNotContact','false'))<>'true'
+   AND LOWER(COALESCE(c.custom_fields->>'marketingOptIn','true'))<>'false'
  ON CONFLICT (account_id,shop,contact_id) DO UPDATE SET
    shopify_customer_gid=EXCLUDED.shopify_customer_gid,
    evidence_source=EXCLUDED.evidence_source,
