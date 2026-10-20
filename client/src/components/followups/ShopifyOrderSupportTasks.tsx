@@ -53,6 +53,7 @@ export function ShopifyOrderSupportTasks() {
     enabled: staging && !!user?.id,
     retry: false,
     staleTime: 15_000,
+    refetchInterval: 60_000, // In-app due reminder updates; no notification dispatch.
     queryFn: async () => {
       const response = await fetch("/api/shopify/ecommerce/event-inbox-preview", { credentials: "include" });
       // Not connected or not a staging merchant: do not show E-commerce controls.
