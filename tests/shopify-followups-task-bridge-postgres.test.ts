@@ -19,7 +19,7 @@ test("Shopify follow-up bridge uses original task records, staging-only read, sh
   assert.match(component, /response.status === 403 \|\| response.status === 404/);
   assert.match(component, /\/api\/shopify\/ecommerce\/event-inbox-preview/);
   assert.match(component, /\/api\/shopify\/ecommerce\/order-support-task-complete/);
-  assert.match(component, /\/app\/contacts\/\$\{task.contactId\}/);
+  assert.match(component, /shopifyTaskContactHref\(task.contactId, task.orderActivityId\)/);
   assert.doesNotMatch(component, /\/api\/contacts\/.*PATCH|sendMessage|cartCreate\(/);
   assert.match(sql, /c.id = t.contact_id AND c.user_id = t.account_id/);
   assert.match(sql, /t.account_id = \$\{accountId\} AND t.shop = \$\{shop\}/);
@@ -45,6 +45,13 @@ test("native PG: ownership-filtered Shopify task list links only to owned contac
       state VARCHAR(16) NOT NULL DEFAULT 'open',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
+    await admin.query(`CREATE TABLE "${schema}".ecommerce_growth_event_inbox (
+      id BIGINT PRIMARY KEY, account_id VARCHAR(128), shop VARCHAR(255),
+      topic TEXT, delivery_id TEXT)`);
+    await admin.query(`CREATE TABLE "${schema}".activity_events (
+      id VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, contact_id VARCHAR NOT NULL,
+      event_type TEXT NOT NULL, event_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW())`);
     url.searchParams.set("options", `-c search_path=${schema}`);
     pool = new Pool({ connectionString: url.toString(), max: 12 });
     const db = drizzle(pool);

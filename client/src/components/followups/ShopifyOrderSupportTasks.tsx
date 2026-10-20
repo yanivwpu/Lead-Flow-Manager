@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { Button } from "@/components/ui/button";
 import { ShopifyTaskScheduleEditor } from "./ShopifyTaskScheduleEditor";
+import { shopifyTaskContactHref } from "@shared/contactDetails";
 
 type ShopifyTask = {
   id: string;
@@ -12,6 +13,8 @@ type ShopifyTask = {
   createdAt: string;
   contactId: string;
   contactName: string;
+  orderActivityId: string | null;
+  orderName: string | null;
   assigneeUserId: string | null;
   dueAt: string | null;
   reminderMinutes: number | null;
@@ -126,13 +129,13 @@ export function ShopifyOrderSupportTasks() {
             {openTasks.map(task => (
               <div key={task.id} className="flex flex-wrap justify-between items-center gap-3 rounded-lg border border-slate-200 p-3" data-testid={`shopify-followup-task-${task.id}`}>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-slate-900">New order support</p>
+                  <p className="text-sm font-medium text-slate-900">{task.orderName ? `${task.orderName} · Support` : "New order support"}</p>
                   <p className="text-xs text-slate-500">{task.contactName || "Shopify customer"} · {new Date(task.createdAt).toLocaleString()}</p>
                   {task.contactId && (
                     <button type="button" className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1 mt-1"
-                      onClick={() => setLocation(`/app/contacts/${task.contactId}`)}
+                      onClick={() => setLocation(shopifyTaskContactHref(task.contactId, task.orderActivityId))}
                       data-testid={`shopify-task-contact-${task.id}`}>
-                      View CRM contact <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                      {task.orderActivityId ? "View order" : "View customer"} <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                     </button>
                   )}
                 </div>
@@ -164,15 +167,15 @@ export function ShopifyOrderSupportTasks() {
                   <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2"
                     data-testid={`shopify-completed-task-${task.id}`}>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800">New order support · Completed</p>
+                      <p className="text-sm font-medium text-slate-800">{task.orderName ? `${task.orderName} · Support completed` : "Support completed"}</p>
                       <p className="text-xs text-slate-500">
                         {task.contactName || "Shopify customer"} · {new Date(task.createdAt).toLocaleString()}
                       </p>
                     </div>
                     {task.contactId && (
                       <Button type="button" size="sm" variant="outline"
-                        onClick={() => setLocation(`/app/contacts/${task.contactId}`)}>
-                        Customer & orders <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
+                        onClick={() => setLocation(shopifyTaskContactHref(task.contactId, task.orderActivityId))}>
+                        {task.orderActivityId ? "View order" : "View customer"} <ArrowUpRight className="ml-1 h-3 w-3" aria-hidden="true" />
                       </Button>
                     )}
                   </div>

@@ -29,6 +29,13 @@ test("native PostgreSQL merchant tasks: isolated opt-ins, tenant list and atomic
       account_id VARCHAR(128) NOT NULL, shop VARCHAR(255) NOT NULL,
       contact_id VARCHAR NOT NULL, state VARCHAR(16) NOT NULL DEFAULT 'open',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+    await admin.query(`CREATE TABLE "${schema}".ecommerce_growth_event_inbox (
+      id BIGINT PRIMARY KEY, account_id VARCHAR(128), shop VARCHAR(255),
+      topic TEXT, delivery_id TEXT)`);
+    await admin.query(`CREATE TABLE "${schema}".activity_events (
+      id VARCHAR PRIMARY KEY, user_id VARCHAR NOT NULL, contact_id VARCHAR NOT NULL,
+      event_type TEXT NOT NULL, event_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW())`);
     url.searchParams.set("options",`-c search_path=${schema}`);
     pool=new Pool({connectionString:url.toString(),max:12});
     const db=drizzle(pool);

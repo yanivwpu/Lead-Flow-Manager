@@ -55,10 +55,27 @@ export function readOrderTaskMerchantSettingsQuery(accountId: string, shop: stri
 export function readOrderSupportTaskListQuery(accountId: string, shop: string) {
   return sql`
     SELECT t.id::text AS id, t.state, t.created_at,
-           c.id AS contact_id, c.name AS contact_name
+           c.id AS contact_id, c.name AS contact_name,
+           order_link.activity_id::text AS order_activity_id,
+           order_link.order_name AS order_name
     FROM ecommerce_growth_order_support_tasks t
     INNER JOIN contacts c
       ON c.id = t.contact_id AND c.user_id = t.account_id
+    LEFT JOIN ecommerce_growth_event_inbox inbox
+      ON inbox.id=t.event_id
+      AND inbox.account_id=t.account_id AND inbox.shop=t.shop
+      AND inbox.topic='orders/create'
+    LEFT JOIN LATERAL (
+      SELECT a.id AS activity_id,
+             a.event_data->>'orderName' AS order_name
+      FROM activity_events a
+      WHERE a.user_id=t.account_id
+        AND a.contact_id=t.contact_id
+        AND a.event_type='shopify_order_created'
+        AND a.event_data->>'shop'=t.shop
+        AND a.event_data->>'shopifyEventId'=inbox.delivery_id
+      ORDER BY a.created_at DESC, a.id DESC LIMIT 1
+    ) order_link ON TRUE
     WHERE t.account_id = ${accountId} AND t.shop = ${shop}
     ORDER BY CASE WHEN t.state = 'open' THEN 0 ELSE 1 END,
              t.created_at DESC, t.id DESC LIMIT 20

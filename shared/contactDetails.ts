@@ -42,3 +42,13 @@ export function shopifyContactContext(contact: { source?: string | null; sourceD
     totalSpent: typeof snapshot.totalSpent === 'string' && /^\d+(\.\d+)?$/.test(snapshot.totalSpent) ? snapshot.totalSpent : null,
   };
 }
+
+/** Navigate to an already-owned CRM contact and highlight a matching Shopify order.
+ * The task API must prove both IDs belong to the same account, shop and webhook
+ * event. Never construct a Shopify Admin URL from unsanitized input.
+ */
+export function shopifyTaskContactHref(contactId: string, activityId: string | null): string {
+  const path = `/app/contacts/${encodeURIComponent(contactId)}`;
+  if (!activityId || !/^[a-f0-9-]{36}$/i.test(activityId)) return path;
+  return `${path}?shopifyOrderEvent=${encodeURIComponent(activityId)}`;
+}
