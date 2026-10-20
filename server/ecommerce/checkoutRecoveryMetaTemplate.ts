@@ -37,8 +37,8 @@ export function validateRecoveryMetaTemplate(
     !/^[a-z]{2}(?:_[A-Z]{2})?$/.test(local.language) ||
     (local.headerType && local.headerType.toLowerCase()!=='none') ||
     (local.templateType && local.templateType.toLowerCase()!=='text') ||
-    (Array.isArray(local.buttons) && local.buttons.length>0) ||
-    (Array.isArray(local.carouselCards) && local.carouselCards.length>0))
+    (local.buttons != null && (!Array.isArray(local.buttons) || local.buttons.length>0)) ||
+    (local.carouselCards != null && (!Array.isArray(local.carouselCards) || local.carouselCards.length>0)))
    return blocked('unsupported_recovery_template_shape');
  if(typeof local.bodyText!=='string' ||
     (local.bodyText.match(EXACT_LINK_PLACEHOLDER)||[]).length!==1 ||
@@ -62,6 +62,9 @@ export function recoveryTemplateBodyComponents(
  approved:Extract<ReturnType<typeof validateRecoveryMetaTemplate>,{ok:true}>,
  recoveryUrl:string
 ):Record<string,unknown>[] {
+ if(!approved || approved.ok!==true || !/^[a-z][a-z0-9_]{0,511}$/.test(approved.name) ||
+    !/^[a-z]{2}(?:_[A-Z]{2})?$/.test(approved.language))
+    throw Error('unapproved_recovery_template');
  if(typeof recoveryUrl!=='string' || recoveryUrl.length>2048)throw Error('invalid_recovery_url');
  let url:URL;
  try {url=new URL(recoveryUrl);}catch{throw Error('invalid_recovery_url');}
