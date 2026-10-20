@@ -5,9 +5,9 @@ import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
 import { ShopifyWebhookAdvancedTools } from "./ShopifyWebhookDiagnostics";
 import { ShopifyEcommerceInboxPreview } from "./ShopifyEcommerceInboxPreview";
+import { ShopifySimpleSetup } from "./ShopifySimpleSetup";
 
 export type ShopifyConnectionStatus = {
   connected: boolean;
@@ -101,69 +101,53 @@ export function ShopifyManagePanel({
 
   return (
     <div className="space-y-4" data-testid="shopify-manage-connected">
-      <ShopifySupportContact manage />
-      <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 p-4 text-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="font-semibold text-emerald-950">Connected</p>
-          <Badge className="text-[10px] bg-emerald-600 text-white">Active</Badge>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50/70 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-emerald-900">Shopify connected</p>
+          {status?.shop && <p className="text-xs text-emerald-800 break-all">{status.shop}</p>}
         </div>
-        {status?.shop && (
-          <div className="grid gap-1 sm:grid-cols-[120px_minmax(0,1fr)] sm:items-start text-xs sm:text-sm">
-            <span className="text-emerald-800">Shop</span>
-            <span className="font-medium text-emerald-950 break-all sm:text-right">{status.shop}</span>
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <div>
-            <p className="text-sm font-medium text-emerald-950">Sync</p>
-            <p className="text-xs text-emerald-900/80 mt-0.5">
-              {status.syncEnabled
-                ? "New Shopify customers and orders sync to WhachatCRM."
-                : "Sync is paused — turn on to receive new Shopify events."}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Switch
-              checked={!!status.syncEnabled}
+        <Badge className="bg-emerald-600 text-white">Connected</Badge>
+      </div>
+
+      <ShopifySimpleSetup syncEnabled={!!status.syncEnabled} />
+
+      <details className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm"
+        data-testid="shopify-advanced-settings">
+        <summary className="cursor-pointer font-medium text-slate-700">Settings & advanced</summary>
+        <div className="mt-4 space-y-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-slate-900">Order & customer sync</p>
+              <p className="text-xs text-slate-500">{status.syncEnabled ? "On" : "Paused"}</p>
+            </div>
+            <Switch checked={!!status.syncEnabled}
               disabled={!integrationId || toggleSyncPending}
-              onCheckedChange={(checked) => {
+              onCheckedChange={checked => {
                 if (integrationId) onToggleSync(integrationId, checked);
               }}
-              data-testid="switch-shopify-sync"
-            />
-            <span className={cn("text-xs font-medium", status.syncEnabled ? "text-emerald-900" : "text-gray-500")}>
-              {status.syncEnabled ? "On" : "Off"}
-            </span>
+              data-testid="switch-shopify-sync"/>
           </div>
+          <ShopifySupportContact manage />
+          <details className="border-t border-slate-200 pt-3">
+            <summary className="cursor-pointer text-slate-600">Technical details</summary>
+            <div className="mt-3 space-y-4">
+              <ShopifyEcommerceInboxPreview />
+              <ShopifyWebhookAdvancedTools enabled={connected}
+                onReregisterComplete={() => {
+                  void queryClient.invalidateQueries({queryKey:["/api/shopify/connection-status"]});
+                }}/>
+            </div>
+          </details>
+          <div className="border-t border-slate-200 pt-3">
+            <Button type="button" variant="outline" size="sm"
+              className="text-red-600 hover:bg-red-50"
+              disabled={!integrationId || disconnectPending}
+              onClick={() => {if (integrationId) onDisconnect(integrationId);}}
+              data-testid="button-disconnect-shopify">Disconnect Shopify</Button>
+          </div>
+          {isFetching && <p className="text-xs text-slate-500">Updating…</p>}
         </div>
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600"
-          disabled={!integrationId || disconnectPending}
-          onClick={() => {
-            if (integrationId) onDisconnect(integrationId);
-          }}
-          data-testid="button-disconnect-shopify"
-        >
-          Disconnect
-        </Button>
-        {isFetching && (
-          <span className="text-xs text-muted-foreground">Updating status…</span>
-        )}
-      </div>
-
-      <ShopifyEcommerceInboxPreview />
-      <ShopifyWebhookAdvancedTools
-        enabled={connected}
-        onReregisterComplete={() => {
-          void queryClient.invalidateQueries({ queryKey: ["/api/shopify/connection-status"] });
-        }}
-      />
+      </details>
     </div>
   );
 }
