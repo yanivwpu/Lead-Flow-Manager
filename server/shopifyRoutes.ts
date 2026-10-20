@@ -1,4 +1,5 @@
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
+import { suppressPendingRecoveryDeliveryQuery } from "./ecommerce/checkoutRecoveryOutbox";
 import { recheckShopifyCheckoutForRecovery } from "./ecommerce/checkoutFreshRecheck";
 import { dueCheckoutObservationsQuery } from "./ecommerce/checkoutObservationQueries";
 import { prepareCheckoutRecoveryIntentQuery, suppressCheckoutRecoveryIntentQuery, suppressCompletedCheckoutIntentQuery } from "./ecommerce/checkoutRecoveryIntents";
@@ -996,15 +997,21 @@ router.post('/ecommerce/checkout-observation-preview-sync', async (req: Request,
       for(const key of ['shop','shopUrl']) if(cfg[key] != null &&
         (typeof cfg[key] !== 'string' || normalizeShopifyShopDomain(cfg[key]) !== shop))
         return null;
-      const intentSchema=await tx.execute(sql`
-        SELECT to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS ready`);
-      const hasIntents=intentSchema.rows[0]?.ready===true;
+      const stages=await tx.execute(sql`
+        SELECT to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS intents,
+               to_regclass('public.ecommerce_checkout_recovery_outbox') IS NOT NULL AS outbox`);
+      const hasIntents=stages.rows[0]?.intents===true;
+      const hasOutbox=stages.rows[0]?.outbox===true;
       for(const snapshot of page.observations) {
         await tx.execute(upsertCheckoutObservationQuery({accountId,shop,snapshot}));
-        if(snapshot.completed && hasIntents)
-          await tx.execute(suppressCompletedCheckoutIntentQuery({
+        if(snapshot.completed) {
+          if(hasIntents) await tx.execute(suppressCompletedCheckoutIntentQuery({
             accountId,shop,checkoutId:snapshot.checkoutId
           }));
+          if(hasOutbox) await tx.execute(suppressPendingRecoveryDeliveryQuery({
+            accountId,shop,checkoutId:snapshot.checkoutId
+          }));
+        }
       }
       return page.observations.length;
     });
