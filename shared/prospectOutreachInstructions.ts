@@ -1,3 +1,4 @@
+import { safeTextLinks } from "./safeTextLinks";
 /**
  * Prospect AI Campaign — workspace Outreach Instructions (AI Compose fields).
  * Message Creation modes wrap these in `shared/prospectMessageCreation.ts`.
@@ -276,12 +277,20 @@ Rules:
  */
 export function ensureAiComposeCampaignLink(
   body: string,
-  settings: Pick<ProspectOutreachInstructions, "linkUrl" | "includeLinkNaturally">,
+  settings: Pick<ProspectOutreachInstructions, "linkUrl" | "includeLinkNaturally"> & Partial<Pick<ProspectOutreachInstructions, "language">>,
 ): string {
   const text = String(body || "").trim();
   const url = String(settings.linkUrl || "").trim();
-  if (!text || !settings.includeLinkNaturally || !url || text.includes(url)) return text;
+  if (!text || !settings.includeLinkNaturally || !url) return text;
   const validated = validateOutreachLinkUrl(url);
   if (!validated.ok) return text;
-  return text + "\n\nSee how it works: " + validated.linkUrl;
+  if (safeTextLinks(text).some(part => part.href === validated.linkUrl)) return text;
+  const intro = {
+    english: "See how it works: ",
+    spanish: "Descubre cómo funciona: ",
+    hebrew: "לפרטים נוספים: ",
+    arabic: "لمعرفة المزيد: ",
+    auto: "",
+  }[settings.language || "auto"];
+  return text + "\n\n" + intro + validated.linkUrl;
 }

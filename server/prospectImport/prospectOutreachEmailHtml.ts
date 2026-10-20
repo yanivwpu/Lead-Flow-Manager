@@ -1,3 +1,4 @@
+import { safeTextLinks } from "@shared/safeTextLinks";
 /**
  * Display plain-text Prospect AI outreach as readable HTML email.
  * Presentation only: never change approved text or destination URLs.
@@ -9,30 +10,9 @@ function escapeHtml(value: string): string {
 }
 
 function linkifyLine(line: string): string {
-  const urlPattern = /https?:\/\/[^\s<>"']+/gi;
-  let cursor = 0;
-  let output = "";
-  for (const match of line.matchAll(urlPattern)) {
-    const index = match.index ?? 0;
-    const raw = match[0];
-    output += escapeHtml(line.slice(cursor, index));
-    // Punctuation terminating prose must not become part of the URL.
-    const url = raw.replace(/[.,;:!?)}\]]+$/g, "");
-    const punctuation = raw.slice(url.length);
-    let safe = false;
-    try {
-      const parsed = new URL(url);
-      safe = (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-        !!parsed.hostname && !parsed.username && !parsed.password;
-    } catch {
-      safe = false;
-    }
-    output += safe
-      ? "<a href=\"" + escapeHtml(url) + "\" style=\"color:#0369a1;text-decoration:underline\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(url) + "</a>" + escapeHtml(punctuation)
-      : escapeHtml(raw);
-    cursor = index + raw.length;
-  }
-  return output + escapeHtml(line.slice(cursor));
+  return safeTextLinks(line).map(part => part.href
+    ? "<a href=\"" + escapeHtml(part.href) + "\" style=\"color:#0369a1;text-decoration:underline\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(part.text) + "</a>"
+    : escapeHtml(part.text)).join("");
 }
 
 export function renderProspectOutreachEmailHtml(rawText: string): string {

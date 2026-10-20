@@ -32,3 +32,18 @@ function main() {
   console.log("ok - prospect outreach email HTML linkification and escaping");
 }
 main();
+
+const configured = "https://example.com/demo";
+for (const altered of [configured + "?utm_source=ai", configured + "/wrong"]) {
+  const fixed = ensureAiComposeCampaignLink("Details: " + altered, {linkUrl:configured,includeLinkNaturally:true});
+  assert.ok(fixed.endsWith(configured), "a modified URL cannot count as the configured destination");
+}
+const origin = "https://example.com";
+assert.ok(ensureAiComposeCampaignLink("See https://example.com.evil.test", {linkUrl:origin,includeLinkNaturally:true}).endsWith(origin));
+for (const [language, prefix] of [["spanish","Descubre cómo funciona:"],["hebrew","לפרטים נוספים:"],["arabic","لمعرفة المزيد:"]] as const) {
+  assert.ok(ensureAiComposeCampaignLink("Localized message", {linkUrl:configured,includeLinkNaturally:true,language}).includes(prefix));
+}
+const apostrophe = "https://example.com/it's-here";
+const linked = renderProspectOutreachEmailHtml("See " + apostrophe);
+assert.ok(linked.includes('href="https://example.com/it&#39;s-here"'));
+assert.equal(linked.includes('href="https://example.com/it"'), false);
