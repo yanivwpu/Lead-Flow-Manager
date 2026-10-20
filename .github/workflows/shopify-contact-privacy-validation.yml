@@ -85,6 +85,8 @@ jobs:
           npx tsx --test tests/shopify-privacy-one-shot.test.ts
           npx tsx --test tests/shopify-privacy-alert-email.test.ts
           npx tsx --test tests/shopify-privacy-verification.test.ts tests/shopify-customer-privacy-handler.test.ts tests/shopify-privacy-admin-routes.test.ts
+      - name: E-commerce recovery consent and outbox signed privacy lifecycle
+        run: npx tsx --test tests/ecommerce-recovery-privacy-postgres.test.ts
       - name: Existing Shopify eligibility, billing, OAuth, and compliance regressions
         run: |
           npx tsx tests/shopify-shop-trial-ledger.test.ts
