@@ -605,7 +605,7 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
     const taskTables = await db.execute(orderSupportTablesReadyQuery);
     const scheduleTables = await db.execute(taskScheduleReadyQuery);
     const scheduleReady = taskScheduleReady(scheduleTables.rows[0]);
-    let internalTasks: { schemaReady: boolean; scheduleReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string;contactId:string;contactName:string;assigneeUserId:string|null;dueAt:string|null;reminderMinutes:number|null;reminderDue:boolean}> } = {
+    let internalTasks: { schemaReady: boolean; scheduleReady: boolean; merchantEnabled: boolean; operatorEnabled: boolean; openCount: number; completedCount: number; items: Array<{id: string;state: string;createdAt:string;contactId:string;contactName:string;orderActivityId:string|null;orderName:string|null;assigneeUserId:string|null;dueAt:string|null;reminderMinutes:number|null;reminderDue:boolean}> } = {
       schemaReady: false, scheduleReady, merchantEnabled: false,
       operatorEnabled: process.env.ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED === 'true' &&
         process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true',
@@ -626,6 +626,8 @@ router.get('/ecommerce/event-inbox-preview', async (req: Request, res: Response)
           id:String(row.id),state:String(row.state),
           createdAt:new Date(row.created_at as Date|string).toISOString(),
           contactId:String(row.contact_id),contactName:String(row.contact_name),
+          orderActivityId:row.order_activity_id ? String(row.order_activity_id) : null,
+          orderName:row.order_name ? String(row.order_name) : null,
           assigneeUserId:row.assignee_user_id ? String(row.assignee_user_id) : null,
           dueAt:row.due_at ? new Date(row.due_at as string|Date).toISOString() : null,
           reminderMinutes:row.reminder_minutes == null ? null : Number(row.reminder_minutes),
