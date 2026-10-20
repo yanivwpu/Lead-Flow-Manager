@@ -110,7 +110,7 @@ jobs:
         run: npx tsx --test tests/shopify-task-order-deeplink-postgres.test.ts
       - name: Shopify task ownership due dates and in-app reminder PostgreSQL checks
         run: npx tsx --test tests/shopify-task-schedule-postgres.test.ts
-      - name: One-click Shopify order support: safe endpoint, UI and atomic native PostgreSQL
+      - name: "One-click Shopify order support: safe endpoint, UI and atomic native PostgreSQL"
         run: npx tsx --test tests/shopify-simple-order-support.test.ts tests/shopify-simple-order-support-postgres.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
