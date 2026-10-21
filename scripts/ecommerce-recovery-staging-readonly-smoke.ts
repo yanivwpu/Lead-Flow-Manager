@@ -43,7 +43,7 @@ async function main(){
      report.exactCheckoutStatus=fresh.status;
      report.purchaseStopped=fresh.status==='blocked'?fresh.completed:false;
      if(fresh.status==='eligible_for_review'){
-       const consent=await pool.query("SELECT count(*)::int AS total FROM ecommerce_whatsapp_recovery_consents WHERE account_id=$1 AND shop=$2 AND shopify_customer_gid=$3 AND revoked_at IS NULL AND evidence_source='verified_whatsapp_explicit_opt_in'",[accountId,SHOP,fresh.shopifyCustomerId]);
+       const consent=await pool.query("SELECT count(*)::int AS total FROM ecommerce_whatsapp_recovery_consents WHERE account_id=$1 AND shop=$2 AND shopify_customer_gid=$3 AND revoked_at IS NULL AND granted_at > NOW() - INTERVAL '365 days' AND last_verified_inbound_at IS NOT NULL AND evidence_source='verified_whatsapp_explicit_opt_in'",[accountId,SHOP,fresh.shopifyCustomerId]);
        report.signedWhatsAppConsent=Number(consent.rows[0].total)===1?'present':'absent';
      }
    }
