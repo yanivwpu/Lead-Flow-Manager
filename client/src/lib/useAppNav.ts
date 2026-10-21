@@ -15,6 +15,7 @@ import {
   Plug,
   BookOpen,
   HelpCircle,
+  ShoppingBag,
   type LucideIcon,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -58,6 +59,7 @@ const APP_NAV_ICONS: Record<AppNavItemId, LucideIcon> = {
   aiBrain: Brain,
   prospectAi: Sparkles,
   realtorGrowthEngine: Home,
+  ecommerceGrowthEngine: ShoppingBag,
   settings: Settings,
   integrations: Plug,
   gettingStarted: BookOpen,
@@ -95,7 +97,7 @@ export function useAppNavCategories(): {
   mobilePrimaryItems: AppNavLinkItem[];
   mobileMoreCategories: AppNavCategory[];
 } {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [location] = useLocation();
   const prospectAiStatus = useProspectAiStatus();
   const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
@@ -129,6 +131,7 @@ export function useAppNavCategories(): {
       hasPresetCampaigns,
       prospectAiActivated,
       realtorGrowthEngineActivated,
+      ecommerceGrowthEngineVisible: hideRgeForShopify,
     });
 
     const toItem = (id: AppNavItemId): AppNavLinkItem => {
@@ -137,10 +140,12 @@ export function useAppNavCategories(): {
       if (id === "realtorGrowthEngine") {
         href = getRgeHubPath(rgePayload?.entitlement?.status, rgePayload?.entitlement);
       }
+      const language = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+      const localizedEcommerce = language === "he" ? "מנוע צמיחה למסחר אלקטרוני" : language === "es" ? "Motor de crecimiento e-commerce" : APP_NAV_LABEL_DEFAULTS.ecommerceGrowthEngine;
       return {
         id,
         icon: APP_NAV_ICONS[id],
-        label: t(APP_NAV_LABEL_KEYS[id], APP_NAV_LABEL_DEFAULTS[id]),
+        label: id === "ecommerceGrowthEngine" ? localizedEcommerce : t(APP_NAV_LABEL_KEYS[id], APP_NAV_LABEL_DEFAULTS[id]),
         href,
         testId: APP_NAV_SIDEBAR_TEST_IDS[id],
         mobileTestId: APP_NAV_MOBILE_TEST_IDS[id],
@@ -172,6 +177,8 @@ export function useAppNavCategories(): {
     hasPresetCampaigns,
     prospectAiActivated,
     realtorGrowthEngineActivated,
+    hideRgeForShopify,
+    i18n.language,
     rgePayload,
   ]);
 }
