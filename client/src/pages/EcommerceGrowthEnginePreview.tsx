@@ -39,11 +39,10 @@ export function EcommerceGrowthEnginePreview() {
                 Shopify first · Staging preview
               </div>
               <h1 className="mt-6 max-w-2xl font-display text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
-                Turn Shopify orders into organized follow-ups.
+                {l[0]}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
-                Connect your store, keep customer orders together, and turn new orders into follow-up tasks.
-                No technical setup maze.
+                {locale === "he" ? "חברו את החנות, רכזו לקוחות והזמנות ונהלו משימות מעקב במקום אחד. גלו את הכלים הקיימים ואת האוטומציות שבפיתוח." : locale === "es" ? "Conecta tu tienda, reúne clientes y pedidos, y organiza las tareas de seguimiento. Descubre las funciones disponibles y las automatizaciones en desarrollo." : "Connect your store, bring customers and orders together, and organize internal follow-up tasks. Explore available tools and upcoming automation."}
               </p>
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                 <a href={setupHref} data-testid="ecommerce-preview-primary-cta"
