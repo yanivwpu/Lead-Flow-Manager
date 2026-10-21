@@ -49,7 +49,7 @@ export function EcommerceGrowthEnginePreview() {
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                 <a href={setupHref} data-testid="ecommerce-preview-primary-cta"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 sm:w-auto">
-                  {l[1]} <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  {l[1]} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                 </a>
                 <a href="/solutions/ecommerce"
                   className="inline-flex items-center justify-center px-3 py-3 text-sm font-medium text-slate-600 underline-offset-4 hover:underline">
@@ -62,7 +62,7 @@ export function EcommerceGrowthEnginePreview() {
               <div className="mb-6 flex items-center justify-between">
                 <p className="text-sm font-semibold">{tr.support}</p>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-800">
-                  <CircleDot className="h-3 w-3" /> Sample
+                  <CircleDot className="h-3 w-3" /> {tr.sample}
                 </span>
               </div>
               <div className="flex items-center gap-3 rounded-xl border border-slate-100 p-3.5">
@@ -146,15 +146,15 @@ export function EcommerceGrowthEnginePreview() {
           <div className="mx-auto flex max-w-6xl flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <LockKeyhole className="h-4 w-4" /> Private preview
+                <LockKeyhole className="h-4 w-4" /> {tr.private}
               </div>
               <h2 className="mt-2 text-xl font-bold">{l[3]}</h2>
               <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Automated customer messaging, fulfillment and cancellation journeys, and abandoned-cart recovery are not active in this preview.
+                {tr.warning}
               </p>
             </div>
             <a href={setupHref} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700">
-              {tr.viewSetup} <ArrowRight className="h-4 w-4"/>
+              {tr.viewSetup} <ArrowRight className="h-4 w-4 rtl:rotate-180"/>
             </a>
           </div>
         </section>
