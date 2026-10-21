@@ -2669,7 +2669,7 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         try {
-          const msg = await withGlobalDncPhoneBoundary(req.user.id, recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
+          const msg = await withGlobalDncPhoneBoundary<{sid: string; status: string}>(req.user.id, recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
           messageId = msg.sid;
           sendStatus = msg.status;
           console.log(
