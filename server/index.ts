@@ -345,7 +345,7 @@ export function log(message: string, source = "express") {
 
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
+  const path = req.path.startsWith("/api/marketing/unsubscribe/") ? "/api/marketing/unsubscribe/:token" : req.path;
 
   res.on("finish", () => {
     const duration = Date.now() - start;

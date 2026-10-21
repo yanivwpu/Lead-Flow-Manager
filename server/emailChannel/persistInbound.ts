@@ -46,6 +46,31 @@ export async function persistNormalizedEmailMessage(params: {
 }): Promise<{ messageId: string; conversationId: string; contactId: string; created: boolean } | null> {
   const { mailbox, normalized } = params;
 
+  const { formMeta, replyTarget } = classifyNormalizedInboundEmail({
+    normalized,
+    mailboxEmail: mailbox.emailAddress,
+  });
+
+  const identityEmail =
+    formMeta?.visitorEmail ||
+    (replyTarget.source === "reply_to" &&
+    looksLikeNotificationSender(normalized.from.email)
+      ? replyTarget.email
+      : null);
+
+  // Suppression is its own idempotent operation and must run on every replay,
+  // even when message persistence already succeeded before a transient failure.
+  if (normalized.direction === "inbound") {
+    const { isProspectEmailUnsubscribeSignal, prospectEmailUnsubscribeScope } = await import("@shared/prospectEmailSuppression");
+    const authored = normalized.textBody || htmlToPlainText(normalized.htmlBody || "") || normalized.snippet || "";
+    if (isProspectEmailUnsubscribeSignal({ subject: normalized.subject, body: authored, fromEmail: normalized.from.email })) {
+      const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
+      await suppressMarketingIdentity({ workspace: mailbox.workspaceUserId, email: identityEmail || normalized.from.email,
+        reason: "unsubscribe", source: "persist_inbound_unsubscribe",
+        scope: prospectEmailUnsubscribeScope(authored, normalized.subject || "") });
+    }
+  }
+
   const existing = await storage.getMessageByUserExternalId(
     mailbox.workspaceUserId,
     normalized.providerMessageId,
@@ -85,18 +110,7 @@ export async function persistNormalizedEmailMessage(params: {
     return null;
   }
 
-  const { formMeta, replyTarget } = classifyNormalizedInboundEmail({
-    normalized,
-    mailboxEmail: mailbox.emailAddress,
-  });
-
   const primaryTo = normalized.to[0]?.email || null;
-  const identityEmail =
-    formMeta?.visitorEmail ||
-    (replyTarget.source === "reply_to" &&
-    looksLikeNotificationSender(normalized.from.email)
-      ? replyTarget.email
-      : null);
   const identityName =
     formMeta?.visitorName ||
     (identityEmail ? replyTarget.name : null);
@@ -354,7 +368,7 @@ export async function persistNormalizedEmailMessage(params: {
 
   if (normalized.direction === "inbound") {
     try {
-      const { isProspectEmailUnsubscribeSignal } = await import(
+      const { isProspectEmailUnsubscribeSignal, prospectEmailUnsubscribeScope } = await import(
         "@shared/prospectEmailSuppression"
       );
       if (
@@ -371,11 +385,13 @@ export async function persistNormalizedEmailMessage(params: {
           contactId: contact.id,
           reason: "unsubscribe",
           detail: "inbound_unsubscribe_keyword",
+          scope: prospectEmailUnsubscribeScope(textContent, normalized.subject || ""),
           source: "persist_inbound_unsubscribe",
         });
       }
     } catch (err) {
-      console.error("[EmailPersist] unsubscribe suppression failed", err);
+      console.error("[EmailPersist] unsubscribe suppression failed; retry required");
+      throw err;
     }
 
     try {

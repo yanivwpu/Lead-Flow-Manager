@@ -455,3 +455,9 @@ for (const [name, fn] of tests) {
 }
 if (failed) process.exit(1);
 console.log(`\n${tests.length} tests passed`);
+
+for (const source of ["workflow", "delayed_job", "follow_up"] as const) {
+  const held = await withStubbedContact(fakeContact({ primaryChannel: "email" }), () => evaluateAutomationSendGuard({userId:"ws-1", contactId:"c1", source, idempotencyKey:"unclassified-"+source}));
+  assert.equal(held.ok, false);
+  if (!held.ok) assert.equal(held.reason, "marketing_disabled");
+}

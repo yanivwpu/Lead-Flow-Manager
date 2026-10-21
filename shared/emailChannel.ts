@@ -190,6 +190,9 @@ export type EmailRichSendPayload = {
    * Used to mark outreach_sent only after Gmail send succeeds.
    */
   prospectOutreach?: boolean;
+  messagePurpose?: "marketing" | "transactional";
+  /** Internal server-generated header only; never trust a client-supplied URL. */
+  marketingUnsubscribeUrl?: string;
 };
 
 /**
@@ -258,6 +261,7 @@ export function resolveEmailRichFromSendBody(input: {
     references: Array.isArray(emailRich?.references) ? (emailRich!.references as string[]) : undefined,
     // Critical: PI lifecycle marker must survive API sanitization.
     prospectOutreach: emailRich?.prospectOutreach === true,
+    messagePurpose: emailRich?.messagePurpose === "marketing" ? "marketing" : undefined,
   };
 }
 

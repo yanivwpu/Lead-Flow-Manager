@@ -11,6 +11,7 @@ import { prospectBulkOutreachLog } from "@shared/prospectBulkOutreach";
 
 export async function applyProspectEmailSuppression(params: {
   contactId: string;
+  scope?: "email" | "all";
   reason: ProspectEmailSuppressionReason;
   detail?: string;
   bouncedEmail?: string | null;
@@ -19,7 +20,16 @@ export async function applyProspectEmailSuppression(params: {
   const contact = await storage.getContact(params.contactId);
   if (!contact) return { updated: false };
 
-  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  // Persist the identity ledger before idempotent per-contact shortcuts.
+  const ledgerEmail = ["bounce", "invalid_recipient"].includes(params.reason) ? params.bouncedEmail || contact.email : contact.email;
+  if (ledgerEmail) {
+    const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
+    await suppressMarketingIdentity({ workspace: contact.userId, email: ledgerEmail,
+      reason: params.reason, source: params.source || "inbound", scope: params.scope || (["bounce", "invalid_recipient"].includes(params.reason) ? "email" : "all") });
+  }
+  const fresh = await storage.getContact(contact.id);
+  if (params.reason === "unsubscribe" && params.scope === "email") return { updated: true, contact: fresh || contact };
+  const cf = (fresh?.customFields || contact.customFields || {}) as Record<string, unknown>;
   // Idempotent: already suppressed for same reason type.
   if (
     (params.reason === "bounce" || params.reason === "invalid_recipient") &&

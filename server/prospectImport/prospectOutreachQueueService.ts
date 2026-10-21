@@ -1,3 +1,4 @@
+import { queueDraftPreviewRevision } from "@shared/prospectBulkOutreach";
 /**
  * Durable channel-agnostic prospect outreach queue.
  * Snapshots approved subject/body at queue time.
@@ -446,6 +447,13 @@ export async function createQueueBatch(params: {
       });
     }
 
+    if (settings.outreachInstructions.mode === "ai_compose") {
+      const { prospectMarketingQualityIssues } = await import("@shared/prospectMarketingQuality");
+      if (prospectMarketingQualityIssues(subjectSnapshot, messageSnapshot).length) {
+        // Keep the draft in Review; never enqueue an incomplete AI message.
+        continue;
+      }
+    }
     if (!messageSnapshot) {
       console.info(
         JSON.stringify(
@@ -1052,6 +1060,7 @@ async function handleSenderNotConnectedInfraPause(params: {
 }
 
 export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  await (await import("../marketingCompliance/service")).assertMarketingQueueSetup(workspaceUserId);
   // Refuse to clear pause when mailbox still cannot send — prevents resume/pause loops.
   const mailboxId = await assertLiveEmailSenderForCampaignArm(workspaceUserId);
   await clearStaleSenderNotConnectedQueueErrors(workspaceUserId, mailboxId);
@@ -1085,6 +1094,7 @@ export async function resumeQueue(workspaceUserId: string): Promise<ProspectOutr
 }
 
 export async function startQueue(workspaceUserId: string): Promise<ProspectOutreachWorkspaceSettings> {
+  await (await import("../marketingCompliance/service")).assertMarketingQueueSetup(workspaceUserId);
   // Fail closed before arming: never claim/send without a live outbound mailbox.
   const mailboxId = await assertLiveEmailSenderForCampaignArm(workspaceUserId);
   await clearStaleSenderNotConnectedQueueErrors(workspaceUserId, mailboxId);
@@ -1199,6 +1209,7 @@ export async function getQueueItemDetail(params: {
   const messageSnapshot = String(row.item.messageSnapshot || "");
   return {
     ...summary,
+    draftRevision: queueDraftPreviewRevision(row.item),
     messageSnapshot,
     reasoningSummary: row.reasoningSummary ?? null,
     companyName: row.companyName ?? null,
@@ -1857,7 +1868,7 @@ async function markItemFailed(
     pause = false;
   }
 
-  await db
+  const failedRows = await db
     .update(prospectOutreachQueueItems)
     .set({
       queueStatus: "failed",
@@ -1865,7 +1876,9 @@ async function markItemFailed(
       startedAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(prospectOutreachQueueItems.id, item.id));
+    .where(and(eq(prospectOutreachQueueItems.id, item.id), eq(prospectOutreachQueueItems.queueStatus, "sending")))
+    .returning({ id: prospectOutreachQueueItems.id });
+  if (!failedRows.length) return;
 
   await db
     .update(prospectOutreachBatches)
@@ -1895,7 +1908,7 @@ async function scheduleTransientRetry(
       startedAt: null,
       updatedAt: new Date(),
     })
-    .where(eq(prospectOutreachQueueItems.id, item.id));
+    .where(and(eq(prospectOutreachQueueItems.id, item.id), eq(prospectOutreachQueueItems.queueStatus, "sending")));
   console.info(
     JSON.stringify(
       prospectBulkOutreachLog("transient_retry_scheduled", {

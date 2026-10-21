@@ -128,8 +128,9 @@ function extractAttachments(payload: any): NormalizedEmailMessage["attachments"]
   return out;
 }
 
-function toRfc2822(params: {
+export function toRfc2822(params: {
   from: string;
+  unsubscribeUrl?: string;
   to: string[];
   cc?: string[];
   bcc?: string[];
@@ -139,7 +140,15 @@ function toRfc2822(params: {
   inReplyTo?: string | null;
   references?: string[] | null;
 }): string {
+  const headerValues = [params.from, ...params.to, ...(params.cc || []), ...(params.bcc || []), params.subject, params.inReplyTo || "", ...(params.references || [])];
+  if (headerValues.some(v => /[\r\n\0]/.test(v))) throw new Error("Unsafe email header");
   const lines: string[] = [];
+  if (params.unsubscribeUrl) {
+    const u = new URL(params.unsubscribeUrl);
+    if (u.protocol !== "https:" || u.username || u.password || /[\r\n<>]/.test(params.unsubscribeUrl)) throw new Error("Unsafe unsubscribe header");
+    lines.push(`List-Unsubscribe: <${params.unsubscribeUrl}>`);
+    lines.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+  }
   lines.push(`From: ${params.from}`);
   lines.push(`To: ${params.to.join(", ")}`);
   if (params.cc?.length) lines.push(`Cc: ${params.cc.join(", ")}`);
@@ -706,6 +715,7 @@ export class GmailEmailProvider implements EmailProvider {
     payload: import("@shared/emailChannel").EmailRichSendPayload;
     textBody: string;
     htmlBody?: string | null;
+    onDispatch?: () => void;
   }): Promise<EmailSendResult> {
     const to = params.payload.to || [];
     if (!to.length) return { success: false, error: "Recipient required" };
@@ -715,6 +725,7 @@ export class GmailEmailProvider implements EmailProvider {
     const raw = encodeRawMessage(
       toRfc2822({
         from: params.from,
+        unsubscribeUrl: params.payload.marketingUnsubscribeUrl,
         to,
         cc: params.payload.cc,
         bcc: params.payload.bcc,
@@ -724,13 +735,18 @@ export class GmailEmailProvider implements EmailProvider {
       }),
     );
 
+    params.onDispatch?.();
     const res = await fetch(`${GMAIL_API}/users/me/messages/send`, {
+      signal: AbortSignal.timeout(30_000),
       method: "POST",
       headers: {
         Authorization: `Bearer ${params.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ raw }),
+    }).catch(() => {
+      // Delivery may have succeeded before transport loss: never auto-retry it.
+      throw new Error("ambiguous_provider_delivery: inspect provider delivery before retry");
     });
     const json = (await res.json().catch(() => ({}))) as {
       id?: string;
@@ -754,6 +770,7 @@ export class GmailEmailProvider implements EmailProvider {
     payload: import("@shared/emailChannel").EmailRichSendPayload;
     textBody: string;
     htmlBody?: string | null;
+    onDispatch?: () => void;
   }): Promise<EmailSendResult> {
     const to = params.payload.to || [];
     if (!to.length) return { success: false, error: "Recipient required" };
@@ -762,6 +779,7 @@ export class GmailEmailProvider implements EmailProvider {
     const raw = encodeRawMessage(
       toRfc2822({
         from: params.from,
+        unsubscribeUrl: params.payload.marketingUnsubscribeUrl,
         to,
         cc: params.payload.cc,
         bcc: params.payload.bcc,
@@ -773,13 +791,18 @@ export class GmailEmailProvider implements EmailProvider {
       }),
     );
 
+    params.onDispatch?.();
     const res = await fetch(`${GMAIL_API}/users/me/messages/send`, {
+      signal: AbortSignal.timeout(30_000),
       method: "POST",
       headers: {
         Authorization: `Bearer ${params.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ raw, threadId: params.threadId }),
+    }).catch(() => {
+      // Delivery may have succeeded before transport loss: never auto-retry it.
+      throw new Error("ambiguous_provider_delivery: inspect provider delivery before retry");
     });
     const json = (await res.json().catch(() => ({}))) as {
       id?: string;

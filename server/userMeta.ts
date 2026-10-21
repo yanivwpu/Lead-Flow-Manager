@@ -1,3 +1,4 @@
+import { withGlobalDncPhoneBoundary, MarketingSuppressionError } from "./marketingCompliance/store";
 import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -484,7 +485,7 @@ export async function sendMetaWhatsAppMessage(
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -503,7 +504,7 @@ export async function sendMetaWhatsAppMessage(
         },
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const error = await response.json();
@@ -551,7 +552,7 @@ export async function sendMetaWhatsAppMedia(
     ` filename="${filename || "(none)"}" url=${mediaUrl}`
   );
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -567,7 +568,7 @@ export async function sendMetaWhatsAppMedia(
         [mediaType]: mediaPayload,
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const errorBody = await response.json();
@@ -667,7 +668,7 @@ export async function sendMetaWhatsAppTemplate(
 
   let response: Response;
   try {
-    response = await fetch(graphPath, {
+    response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(graphPath, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -680,8 +681,9 @@ export async function sendMetaWhatsAppTemplate(
         type: "template",
         template: templatePayload,
       }),
-    });
+    }));
   } catch (fetchErr: unknown) {
+    if (fetchErr instanceof MarketingSuppressionError) throw fetchErr;
     const kind = classifyGraphFetchFailure(fetchErr);
     const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
     const err = new Error(
@@ -785,7 +787,7 @@ export async function sendMetaInteractiveMessage(
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -804,7 +806,7 @@ export async function sendMetaInteractiveMessage(
         },
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const error = await response.json();

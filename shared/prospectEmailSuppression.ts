@@ -64,20 +64,17 @@ export function buildProspectEmailSuppressionCustomFields(
   return patch;
 }
 
-const UNSUBSCRIBE_BODY_RE =
-  /\b(unsubscribe|stop(\s+messaging)?|remove\s+me|opt[\s-]?out|do\s+not\s+contact|don'?t\s+contact)\b/i;
-
-/** Real prospect inbound reply requesting opt-out (not a bounce DSN). */
+/** Only explicit requests in the newly authored portion count. Quoted history
+ * and ordinary sentences such as “stop by tomorrow” must not opt someone out. */
 export function isProspectEmailUnsubscribeSignal(input: {
-  subject?: string | null;
-  body?: string | null;
-  fromEmail?: string | null;
+  subject?: string | null; body?: string | null; fromEmail?: string | null;
 }): boolean {
-  if (isSystemOrBounceEmail({ fromEmail: input.fromEmail, subject: input.subject })) {
-    return false;
-  }
-  const text = `${input.subject || ""}\n${input.body || ""}`;
-  return UNSUBSCRIBE_BODY_RE.test(text);
+  if (isSystemOrBounceEmail({ fromEmail: input.fromEmail, subject: input.subject })) return false;
+  const authored = String(input.body || "").split(/\r?\n/)
+    .slice(0, 30).filter(line => !/^\s*>/.test(line))
+    .join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim();
+  const request = /^(?:please\s+)?(?:stop(?:\s+(?:messaging|contacting|emailing|texting)(?:\s+me)?)?|unsubscribe(?:\s+me)?|remove\s+me(?:\s+from\s+(?:your|the|this)\s+(?:list|mailing list))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?|don['’]?t\s+contact(?:\s+me)?)[.!\s]*$/i;
+  return request.test(authored) || (!authored && request.test(String(input.subject || "").trim()));
 }
 
 /**
@@ -155,4 +152,10 @@ export function prospectSuppressionDetailLabel(
   }
   if (r.includes("suppress")) return "Suppressed";
   return "Suppressed";
+}
+
+/** Global STOP is distinct from an email-specific request. Ignore quoted history. */
+export function prospectEmailUnsubscribeScope(body: string, subject = ""): "all" | "email" {
+  const authored = String(body || "").split(/\r?\n/).slice(0, 30).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim() || subject.trim();
+  return /^(?:please\s+)?(?:stop(?:\s+(?:contacting|messaging)(?:\s+me)?)?[.!\s]*$|do\s+not\s+contact|don['’]?t\s+contact)/i.test(authored) ? "all" : "email";
 }

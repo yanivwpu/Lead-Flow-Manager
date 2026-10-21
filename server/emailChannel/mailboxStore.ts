@@ -211,6 +211,20 @@ export async function insertEmailMessageDetail(row: InsertEmailMessageDetail): P
   await db.insert(emailMessageDetails).values(row).onConflictDoNothing();
 }
 
+/** Atomic counter update so a manual completion cannot overwrite a marketing reservation. */
+export async function incrementEmailSendCounters(mailboxId: string, day: string, hour: string): Promise<void> {
+  await db.update(emailMailboxes).set({
+    messagesSentToday: sql`CASE WHEN ${emailMailboxes.sendCountDayKey}=${day} THEN COALESCE(${emailMailboxes.messagesSentToday},0)+1 ELSE 1 END`,
+    messagesSentHour: sql`CASE WHEN ${emailMailboxes.sendCountHourKey}=${hour} THEN COALESCE(${emailMailboxes.messagesSentHour},0)+1 ELSE 1 END`,
+    sendCountDayKey: day, sendCountHourKey: hour,
+  }).where(eq(emailMailboxes.id, mailboxId));
+}
+
+/** Persist the exact server-generated marketing bodies used at provider dispatch. */
+export async function updateEmailMessageBodies(messageId: string, textBody: string, htmlBody: string | null): Promise<void> {
+  await db.update(emailMessageDetails).set({ textBody, htmlBody }).where(eq(emailMessageDetails.messageId, messageId));
+}
+
 export async function getEmailMessageDetail(messageId: string) {
   const rows = await db
     .select()

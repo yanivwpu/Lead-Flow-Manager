@@ -110,6 +110,7 @@ export interface EmailProvider {
     payload: EmailRichSendPayload;
     textBody: string;
     htmlBody?: string | null;
+    onDispatch?: () => void;
   }): Promise<EmailSendResult>;
 
   replyToThread(params: {
@@ -119,5 +120,6 @@ export interface EmailProvider {
     payload: EmailRichSendPayload;
     textBody: string;
     htmlBody?: string | null;
+    onDispatch?: () => void;
   }): Promise<EmailSendResult>;
 }

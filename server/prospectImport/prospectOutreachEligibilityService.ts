@@ -500,7 +500,9 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     .where(eq(prospectIntelligence.contactId, params.contact.id))
     .limit(1);
   const pi = piRows[0];
-  const suppression = contactSuppressionState(params.contact);
+  const { isContactDurablySuppressed } = await import("../marketingCompliance/store");
+  const suppressed = await isContactDurablySuppressed(params.contact, params.preferredChannel || "email");
+  const suppression = suppressed ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(params.contact);
   const alreadyQueued = params.ignoreAlreadyQueued
     ? false
     : await hasActiveQueueItem({

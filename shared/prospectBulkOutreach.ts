@@ -409,6 +409,7 @@ export type ProspectOutreachQueueItemSummary = {
 
 /** Full draft detail for Campaigns row expansion (includes body + AI context). */
 export type ProspectOutreachQueueItemDetail = ProspectOutreachQueueItemSummary & {
+  draftRevision?: string;
   messageSnapshot: string;
   reasoningSummary?: string | null;
   companyName?: string | null;
@@ -539,4 +540,9 @@ export function buildQueueDedupKey(input: {
     input.channel,
     normalizeRecipientIdentity(input.channel, input.recipientIdentity),
   ].join(":");
+}
+
+/** Changes even when regeneration keeps text but changes immutable rendering metadata. */
+export function queueDraftPreviewRevision(item: {updatedAt?: Date | string | null; subjectSnapshot?: string | null; messageSnapshot: string; linkRenderingSnapshot?: unknown}): string {
+  return JSON.stringify([item.updatedAt || null, item.subjectSnapshot || "", item.messageSnapshot, item.linkRenderingSnapshot || null]);
 }

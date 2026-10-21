@@ -207,7 +207,11 @@ export async function generateProspectOutreachDraft(params: {
     recommendedOffer: pi?.recommendedOffer,
     outreachAngle: pi?.suggestedOutreachAngle,
   });
-  return generateFromAiComposeSeed({ seed: { subject, body: ensureAiComposeCampaignLink(body, settings) } });
+  const completeBody = ensureAiComposeCampaignLink(body, settings);
+  const { prospectMarketingQualityIssues } = await import("@shared/prospectMarketingQuality");
+  const issues = prospectMarketingQualityIssues(subject, completeBody);
+  if (issues.length) throw new Error(`Draft needs review: ${issues.join("; ")}`);
+  return generateFromAiComposeSeed({ seed: { subject, body: completeBody } });
 }
 
 /** Preview helper — never enqueues. */

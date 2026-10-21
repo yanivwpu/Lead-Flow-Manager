@@ -1,3 +1,4 @@
+import { batchSuppressedContactIds } from "../marketingCompliance/store";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { contacts, prospectIntelligence, prospectOutreachQueueItems, prospectAiOutcomes, type Contact } from "@shared/schema";
 import { PROSPECT_OUTREACH_DEFAULT_SETTINGS, normalizeRecipientIdentity, buildQueueDedupKey, PROSPECT_OUTREACH_CHANNELS, type ProspectOutreachPreferredChannel } from "@shared/prospectBulkOutreach";
@@ -34,6 +35,7 @@ export async function batchEvaluateProspectCampaignReadiness(params: {
     params.context ? params.context.priorOutreach : batchLoadPriorOutreachFlags(ids),
     ids.length ? db.select().from(prospectAiOutcomes).where(and(eq(prospectAiOutcomes.workspaceUserId, params.workspaceUserId), inArray(prospectAiOutcomes.contactId, ids))) : [],
   ]);
+  const durableSuppressed = await batchSuppressedContactIds(params.workspaceUserId, contactRows);
   const piById = new Map(piRows.map((p) => [p.contactId, p]));
   const outcomesById = new Map(outcomes.map((o) => [o.contactId, o.prospectOutcome]));
   const recipients = new Set<string>();
@@ -69,7 +71,7 @@ export async function batchEvaluateProspectCampaignReadiness(params: {
     const input = buildProspectOutreachEligibilityInput({
       contact, intelligence: pi, connections,
       priorOutreach: { alreadyContacted: prior?.priorOutreachDetected === true, reason: prior?.reason || "ok" },
-      suppression: contactSuppressionState(contact),
+      suppression: durableSuppressed.has(contact.id) ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(contact),
       alreadyQueued: queuedContacts.has(contact.id),
       preferredChannel: params.preferredChannel || settings.preferredChannel,
       websiteUrl: resolveProspectWebsiteUrl(contact),
