@@ -77,6 +77,7 @@ try {
  await migrationDb.exec(migration); await migrationDb.exec(migration);
  const ts = (await import("typescript")).default;
  const startup = ts.createSourceFile("startup.ts",await readFile("server/startupSchemaPatches.ts","utf8"),ts.ScriptTarget.Latest,true);
+ assert.equal((startup as any).parseDiagnostics.length, 0, "startup patch source must parse without syntax errors");
  let startupSql = "";
  function visit(node: any) {
   if (ts.isObjectLiteralExpression(node)) {
