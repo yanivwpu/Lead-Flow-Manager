@@ -1,6 +1,7 @@
 import { ArrowRight, CheckCircle2, CircleDot, ShoppingBag, Users, ClipboardCheck, LockKeyhole } from "lucide-react";
 import { Helmet } from "react-helmet";
 import { useAuth } from "@/lib/auth-context";
+import { useTranslation } from "react-i18next";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -10,10 +11,18 @@ import { SiteFooter } from "@/components/SiteFooter";
  */
 export function EcommerceGrowthEnginePreview() {
   const { user } = useAuth();
+  const { i18n } = useTranslation();
+  const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+  const translations = {
+    en: ["Turn Shopify orders into organized follow-ups.", "Set up Shopify", "Everything important. Nothing complicated.", "Start simple. Expand when it's ready."],
+    es: ["Convierte los pedidos de Shopify en seguimientos organizados.", "Configurar Shopify", "Todo lo importante, sin complicaciones.", "Empieza fácilmente. Amplía cuando esté listo."],
+    he: ["הופכים הזמנות Shopify למשימות מעקב מסודרות.", "הגדרת Shopify", "כל מה שחשוב. בלי סיבוכים.", "מתחילים בקלות. מתרחבים כשהכול מוכן."],
+  };
+  const l = translations[locale as keyof typeof translations] || translations.en;
   const setupPath = "/app/integrations?setup=shopify";
   const setupHref = user ? setupPath : `/auth?redirect=${encodeURIComponent(setupPath)}`;
   return (
-    <div className="min-h-screen overflow-x-hidden bg-white text-slate-900" data-testid="ecommerce-growth-engine-preview">
+    <div className="min-h-screen overflow-x-hidden bg-white text-slate-900" data-testid="ecommerce-growth-engine-preview" lang={locale} dir={locale === "he" ? "rtl" : "ltr"}>
       <Helmet>
         <title>E-commerce Growth Engine Preview | WhachatCRM</title>
         <meta name="description" content="Preview Shopify customer and order sync with internal order-support tasks in WhachatCRM. Customer messaging automation is not yet active." />
@@ -39,7 +48,7 @@ export function EcommerceGrowthEnginePreview() {
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                 <a href={setupHref} data-testid="ecommerce-preview-primary-cta"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 sm:w-auto">
-                  Set up Shopify <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  {l[1]} <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </a>
                 <a href="/solutions/ecommerce"
                   className="inline-flex items-center justify-center px-3 py-3 text-sm font-medium text-slate-600 underline-offset-4 hover:underline">
@@ -87,7 +96,7 @@ export function EcommerceGrowthEnginePreview() {
 
         <section className="px-4 py-14 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-6xl">
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">Everything important. Nothing complicated.</h2>
+            <h2 className="font-display text-2xl font-bold sm:text-3xl">{l[2]}</h2>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {[
                 { heading:"One connected store", text:"Bring Shopify customers and recorded orders into WhachatCRM." },
@@ -149,7 +158,7 @@ export function EcommerceGrowthEnginePreview() {
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <LockKeyhole className="h-4 w-4" /> Private preview
               </div>
-              <h2 className="mt-2 text-xl font-bold">Start simple. Expand when it's ready.</h2>
+              <h2 className="mt-2 text-xl font-bold">{l[3]}</h2>
               <p className="mt-2 max-w-2xl text-sm text-slate-600">
                 Automated customer messaging, fulfillment and cancellation journeys, and abandoned-cart recovery are not active in this preview.
               </p>
