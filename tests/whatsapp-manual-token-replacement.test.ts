@@ -1,4 +1,4 @@
-import { validateManualMetaTokenReplacement, MetaTokenReplacementError } from "../server/metaManualTokenReplacement";
+import { validateManualMetaTokenReplacement, MetaTokenReplacementError } from "../shared/manualMetaTokenReplacementValidation";
 
 const connected = {
   metaConnected: true,
