@@ -139,6 +139,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-meta-receipts.test.ts tests/ecommerce-recovery-meta-receipts-postgres.test.ts tests/ecommerce-recovery-worker-scheduler.test.ts
       - name: Staging checkout auto-preparation stops on purchase or missing consent
         run: npx tsx --test tests/ecommerce-recovery-auto-preparation.test.ts
+      - name: Verify controlled Shopify development-store probe is non-mutating
+        run: npx tsx --test tests/ecommerce-controlled-staging-runbook.test.ts
       - name: E-commerce landing preview remains staged and honest
         run: npx tsx --test tests/shopify-ecommerce-landing-preview.test.ts
       - name: Reject TypeScript regressions against the exact PR base
