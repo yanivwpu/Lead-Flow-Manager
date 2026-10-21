@@ -1554,6 +1554,7 @@ export async function processClaimedQueueItem(
             workspaceId: item.workspaceUserId,
             queueItemId: item.id,
             contactId: item.contactId,
+            workspaceUserId: item.workspaceUserId,
             reason: prior.reason,
           }),
         ),
@@ -1776,6 +1777,7 @@ export async function processClaimedQueueItem(
           const { applyProspectEmailSuppression } = await import("./prospectEmailSuppressionService");
           await applyProspectEmailSuppression({
             contactId: item.contactId,
+            workspaceUserId: item.workspaceUserId,
             reason: "invalid_recipient",
             detail: sendErr.substring(0, 300),
             bouncedEmail: item.recipientIdentity,

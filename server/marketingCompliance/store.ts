@@ -86,7 +86,7 @@ export async function isContactDurablySuppressed(contact: { userId: string; emai
   return result.rows.length > 0;
 }
 
-export async function batchSuppressedContactIds(workspace: string, contacts: Array<{ id: string; email?: string | null; phone?: string | null }>): Promise<Set<string>> {
+export async function batchSuppressedContactIds(workspace: string, contacts: Array<{ id: string; email?: string | null; phone?: string | null }>, channel = "email"): Promise<Set<string>> {
   const keys = new Map<string, string[]>();
   for (const c of contacts) {
     const values: string[] = [];
@@ -96,7 +96,7 @@ export async function batchSuppressedContactIds(workspace: string, contacts: Arr
   }
   const identities = [...new Set([...keys.values()].flat())];
   if (!identities.length) return new Set();
-  const rows = await db.execute(sql`SELECT email_normalized FROM marketing_suppressions WHERE workspace_user_id=${workspace} AND email_normalized IN (${sql.join(identities.map(k => sql`${k}`), sql`,`)})`);
+  const rows = await db.execute(sql`SELECT email_normalized FROM marketing_suppressions WHERE workspace_user_id=${workspace} AND email_normalized IN (${sql.join(identities.map(k => sql`${k}`), sql`,`)}) AND (scope='all' OR ${channel}='email')`);
   const suppressed = new Set(rows.rows.map(r => String(r.email_normalized)));
   return new Set(contacts.filter(c => keys.get(c.id)?.some(key => suppressed.has(key))).map(c => c.id));
 }

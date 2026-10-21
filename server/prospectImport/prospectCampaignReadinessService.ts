@@ -35,7 +35,9 @@ export async function batchEvaluateProspectCampaignReadiness(params: {
     params.context ? params.context.priorOutreach : batchLoadPriorOutreachFlags(ids),
     ids.length ? db.select().from(prospectAiOutcomes).where(and(eq(prospectAiOutcomes.workspaceUserId, params.workspaceUserId), inArray(prospectAiOutcomes.contactId, ids))) : [],
   ]);
-  const durableSuppressed = await batchSuppressedContactIds(params.workspaceUserId, contactRows);
+  const preferred = params.preferredChannel || settings.preferredChannel;
+  const suppressionChannel = preferred === "auto" ? "email" : preferred;
+  const durableSuppressed = await batchSuppressedContactIds(params.workspaceUserId, contactRows, suppressionChannel);
   const piById = new Map(piRows.map((p) => [p.contactId, p]));
   const outcomesById = new Map(outcomes.map((o) => [o.contactId, o.prospectOutcome]));
   const recipients = new Set<string>();
@@ -71,7 +73,7 @@ export async function batchEvaluateProspectCampaignReadiness(params: {
     const input = buildProspectOutreachEligibilityInput({
       contact, intelligence: pi, connections,
       priorOutreach: { alreadyContacted: prior?.priorOutreachDetected === true, reason: prior?.reason || "ok" },
-      suppression: durableSuppressed.has(contact.id) ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(contact),
+      suppression: durableSuppressed.has(contact.id) ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(contact, suppressionChannel),
       alreadyQueued: queuedContacts.has(contact.id),
       preferredChannel: params.preferredChannel || settings.preferredChannel,
       websiteUrl: resolveProspectWebsiteUrl(contact),

@@ -333,14 +333,16 @@ export async function loadWorkspaceChannelConnections(
   };
 }
 
-export function contactSuppressionState(contact: Contact): {
+export function contactSuppressionState(contact: Contact, channel = "email"): {
   suppressed: boolean;
   optedOut: boolean;
   /** Stable machine reason: bounce | unsubscribe | dnc | suppressed | … */
   reason: string | null;
   detail: string | null;
 } {
+  const cf = (contact.customFields || {}) as Record<string, unknown>;
   const dnc = contactHasDoNotContact(contact);
+  if (channel !== "email" && cf.suppressionScope === "email" && dnc.detail !== "tag_or_stage" && cf.doNotContact !== true && cf.dnc !== true && cf.stop !== true) return {suppressed:false,optedOut:false,reason:null,detail:null};
   if (dnc.blocked) {
     const optedOut = dnc.reason === "unsubscribed";
     return {
@@ -350,7 +352,6 @@ export function contactSuppressionState(contact: Contact): {
       detail: dnc.detail || dnc.reason || null,
     };
   }
-  const cf = (contact.customFields || {}) as Record<string, unknown>;
   if (cf.emailBounced === true || cf.bounced === true) {
     return {
       suppressed: true,
@@ -501,8 +502,9 @@ export async function resolveProspectOutreachEligibilityForContact(params: {
     .limit(1);
   const pi = piRows[0];
   const { isContactDurablySuppressed } = await import("../marketingCompliance/store");
-  const suppressed = await isContactDurablySuppressed(params.contact, params.preferredChannel || "email");
-  const suppression = suppressed ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(params.contact);
+  const suppressionChannel = !params.preferredChannel || params.preferredChannel === "auto" ? "email" : params.preferredChannel;
+  const suppressed = await isContactDurablySuppressed(params.contact, suppressionChannel);
+  const suppression = suppressed ? { suppressed: true, optedOut: true, reason: "unsubscribe", detail: "durable_suppression" } : contactSuppressionState(params.contact, suppressionChannel);
   const alreadyQueued = params.ignoreAlreadyQueued
     ? false
     : await hasActiveQueueItem({

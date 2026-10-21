@@ -65,10 +65,15 @@ try {
   // Exercise actual route handlers without opening network sockets.
   process.env.MARKETING_OPTOUT_SECRET = "isolated integration test secret at least 32 bytes";
   const { issueOptOutToken } = await import("../server/marketingCompliance/policy");
+  const ts = (await import("typescript")).default;
+  const eligibilitySource = ts.createSourceFile("eligibility.ts",await readFile("server/prospectImport/prospectOutreachEligibilityService.ts","utf8"),ts.ScriptTarget.Latest,true);
+  const suppressionFunction = eligibilitySource.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "contactSuppressionState")!;
+  const pureSuppressionSource = suppressionFunction.getText(eligibilitySource);
   const routeOutput = join(scratch, "routes.mjs");
-  await build({ stdin: { contents: 'export * from "./server/marketingCompliance/routes"; export * from "./server/marketingCompliance/service"; export {registerChannelAdapters} from "./server/channelAdapters"; export {applyProspectEmailSuppression} from "./server/prospectImport/prospectEmailSuppressionService"; export {evaluateAutomationSendGuard} from "./server/automationSendGuard"; export {gmailEmailProvider} from "./server/emailChannel/gmailProvider"; export {sendUserWhatsAppMessage,sendUserWhatsAppMedia} from "./server/userTwilio"; export {sendMetaWhatsAppMessage,sendMetaWhatsAppMedia,sendMetaWhatsAppTemplate,sendMetaInteractiveMessage} from "./server/userMeta";', resolveDir: process.cwd(), loader: "ts" }, outfile: routeOutput, bundle: true, platform: "node", format: "esm", packages: "external", plugins: [{ name: "isolated-services", setup(b) {
+  await build({ stdin: { contents: 'export * from "./server/marketingCompliance/routes"; export * from "./server/marketingCompliance/service"; export {registerChannelAdapters} from "./server/channelAdapters"; export {contactSuppressionState} from "./server/prospectImport/prospectOutreachEligibilityService"; export {applyProspectEmailSuppression,suppressContactByEmailInWorkspace} from "./server/prospectImport/prospectEmailSuppressionService"; export {evaluateAutomationSendGuard} from "./server/automationSendGuard"; export {gmailEmailProvider} from "./server/emailChannel/gmailProvider"; export {sendUserWhatsAppMessage,sendUserWhatsAppMedia} from "./server/userTwilio"; export {sendMetaWhatsAppMessage,sendMetaWhatsAppMedia,sendMetaWhatsAppTemplate,sendMetaInteractiveMessage} from "./server/userMeta";', resolveDir: process.cwd(), loader: "ts" }, outfile: routeOutput, bundle: true, platform: "node", format: "esm", packages: "external", plugins: [{ name: "isolated-services", setup(b) {
+    b.onLoad({filter:/prospectOutreachEligibilityService\.ts$/},()=>({contents:'import {contactHasDoNotContact} from "../automationSendGuard";\n'+pureSuppressionSource,loader:"ts"}));
     b.onLoad({ filter: /[/\\]drizzle[/\\]db\.ts$/ }, () => ({ contents: "export const db=globalThis.__marketingTest.db;", loader: "ts" }));
-    b.onLoad({ filter: /[/\\]emailChannel[/\\]mailboxStore\.ts$/ }, () => ({ contents: "export async function getEmailMailboxById(id) { return {id,workspaceUserId:'a'}; } export async function listEmailMailboxes() { return []; }", loader: "ts" }));
+    b.onLoad({ filter: /[/\\]emailChannel[/\\]mailboxStore\.ts$/ }, () => ({ contents: "export async function getEmailMailboxById(id) { return {id,workspaceUserId:'a'}; } export async function listEmailMailboxes() { return []; } export async function getPrimaryEmailMailbox(){return null}", loader: "ts" }));
     b.onLoad({ filter: /prospectImportAccess\.ts$/ }, () => ({ contents: "export function requireProspectImportAccess(req,res,next){next()}", loader: "ts" }));
     b.onLoad({ filter: /prospectWorkspaceScope\.ts$/ }, () => ({ contents: "export async function resolveProspectWorkspaceUserId(){return 'a'}", loader: "ts" }));
     b.onLoad({filter:/[/\\]channelService\.ts$/},()=>({contents:"export const channelService={registerAdapter:(channel,adapter)=>globalThis.__marketingTest.adapters.set(channel,adapter)}",loader:"ts"}));
@@ -102,6 +107,16 @@ try {
   const scopedWorkflow = await routes.evaluateAutomationSendGuard({userId:"a",contactId:"email-only",conversationId:"wa",source:"workflow",idempotencyKey:"wa-after-email-opt-out"});
   assert.equal(scopedWorkflow.ok,true,"email-only opt-out must not block a WhatsApp conversation when channel is omitted");
   delete (globalThis as any).__marketingTest.contact;
+  await routes.suppressContactByEmailInWorkspace({workspaceUserId:"a",email:"deleted-late-bounce@example.com",reason:"bounce"});
+  assert(await store.isMarketingSuppressed("a","deleted-late-bounce@example.com"),"late bounce must persist without any contact");
+  await routes.applyProspectEmailSuppression({workspaceUserId:"a",contactId:"deleted",bouncedEmail:"concurrently-deleted@example.com",reason:"bounce"});
+  assert(await store.isMarketingSuppressed("a","concurrently-deleted@example.com"));
+  const scopedContact = {userId:"a",email:"email-only@example.com",customFields:{suppressed:true,emailBounced:true,suppressionScope:"email"}};
+  assert.equal(routes.contactSuppressionState(scopedContact,"sms").suppressed,false);
+  assert.equal(routes.contactSuppressionState(scopedContact,"email").suppressed,true);
+  const scopedRows = [{id:"email-only",email:"email-only@example.com"}];
+  assert((await store.batchSuppressedContactIds("a",scopedRows,"email")).has("email-only"));
+  assert(!(await store.batchSuppressedContactIds("a",scopedRows,"sms")).has("email-only"));
   const registered = new Map<string, Function[]>();
   const app = Object.fromEntries(["get", "post", "put"].map(method => [method, (path: string, ...handlers: Function[]) => registered.set(method + path, handlers)]));
   routes.registerMarketingComplianceRoutes(app);

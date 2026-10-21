@@ -119,6 +119,11 @@ try {
   assert.equal(maximumList.preview.skips.length, 0);
   assert.equal(sqlQueries.length, 5);
   assert.equal(state.probes, probesBefore + 1);
+  await pg.exec("INSERT INTO marketing_suppressions VALUES ('workspace-1','contact-5@example.com','email')");
+  assert.equal((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"email"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
+  assert.notEqual((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"sms"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
+  await pg.exec("UPDATE marketing_suppressions SET scope='all'");
+  assert.equal((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"sms"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
   console.log("prospect-campaign-readiness-batch-db: PostgreSQL 1/6 parity, workspace scope, normalized external recipients, list reuse, five reads for 1,000 rows, template modes passed");
 } finally {
   delete (globalThis as any).__readinessTest;

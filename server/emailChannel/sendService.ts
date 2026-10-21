@@ -292,6 +292,7 @@ export async function sendEmailViaMailbox(params: {
           );
           await applyProspectEmailSuppression({
             contactId: contact.id,
+            workspaceUserId: params.workspaceUserId,
             reason: "invalid_recipient",
             detail: (result.error || "permanent_send_failure").substring(0, 300),
             bouncedEmail: to[0] || null,

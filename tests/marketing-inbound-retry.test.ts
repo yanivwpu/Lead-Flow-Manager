@@ -14,10 +14,10 @@ try {
     b.onLoad({ filter: /[/\\]drizzle[/\\]db\.ts$/ }, () => ({ contents: "export const db={};", loader: "ts" }));
     b.onLoad({ filter: /[/\\]server[/\\]storage\.ts$/ }, () => ({ contents: "export const storage={getMessageByUserExternalId:async()=>{globalThis.__inboundRetry.reads++;return {id:'already-persisted',conversationId:'conv',contactId:'contact'}}};", loader: "ts" }));
     b.onLoad({ filter: /prospectIntelligenceService\.ts$/ }, () => ({ contents: "export async function markProspectOutreachReplied(){}", loader: "ts" }));
-    b.onLoad({ filter: /prospectEmailSuppressionService\.ts$/ }, () => ({ contents: "export async function applyProspectEmailSuppression(){};export async function suppressContactByEmailInWorkspace(){}", loader: "ts" }));
+    b.onLoad({ filter: /prospectEmailSuppressionService\.ts$/ }, () => ({ contents: "export async function applyProspectEmailSuppression(){};export async function suppressContactByEmailInWorkspace(input){const s=globalThis.__inboundRetry;s.attempts++;if(s.fail){s.fail=false;throw new Error('transient ledger failure')}s.identities.push({workspace:input.workspaceUserId,email:input.email,reason:input.reason,scope:'email'})}", loader: "ts" }));
     b.onLoad({ filter: /[/\\]presence\.ts$/ }, () => ({ contents: "export function notifyUser(){}", loader: "ts" }));
     b.onLoad({ filter: /[/\\]mailboxStore\.ts$/ }, () => ({ contents: "export async function insertEmailMessageDetail(){}", loader: "ts" }));
-    b.onLoad({ filter: /[/\\]contactMatch\.ts$/ }, () => ({ contents: "export async function resolveEmailContact(){throw new Error('dedup should return first')};export function shouldSuppressEmailContactCreation(){return null}", loader: "ts" }));
+    b.onLoad({ filter: /[/\\]contactMatch\.ts$/ }, () => ({ contents: "export async function resolveEmailContact(){throw new Error('dedup should return first')};export function shouldSuppressEmailContactCreation(email){return /mailer-daemon|postmaster|noreply/i.test(email)?'noreply_or_system':null}", loader: "ts" }));
     b.onLoad({ filter: /[/\\]marketingCompliance[/\\]store\.ts$/ }, () => ({ contents: "export async function suppressMarketingIdentity(input){const s=globalThis.__inboundRetry;s.attempts++;if(s.fail){s.fail=false;throw new Error('transient ledger failure')}s.identities.push(input)}", loader: "ts" }));
   } }] });
   const { persistNormalizedEmailMessage } = await import(pathToFileURL(output).href);
@@ -31,7 +31,14 @@ try {
   assert.equal(state.reads, 1);
   assert.equal(state.identities[0].workspace, "workspace-a");
   assert.equal(state.identities[0].scope, "all");
-  await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,from:{email:"forms@vendor.example"},replyTo:{email:"visitor@example.com"}}});
+  await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,from:{email:"noreply@vendor.example"},replyTo:{email:"visitor@example.com"}}});
   assert.equal(state.identities.at(-1).email,"visitor@example.com","pre-dedup suppression must use authoritative Reply-To visitor identity");
+  const dsn = {...params,normalized:{...params.normalized,subject:"Delivery failure",textBody:"Final-Recipient: rfc822; bounced@example.com",from:{email:"mailer-daemon@vendor.example"}}};
+  const readsBeforeBounce = state.reads; state.fail = true;
+  await assert.rejects(persistNormalizedEmailMessage(dsn),/transient ledger failure/);
+  assert.equal(state.reads,readsBeforeBounce,"bounce ledger failure must happen before dedup and remain retryable");
+  assert.equal((await persistNormalizedEmailMessage(dsn)).created,false);
+  assert.equal(state.identities.at(-1).email,"bounced@example.com");
+  assert.equal(state.identities.at(-1).reason,"bounce");
   console.log("ok - persisted STOP is suppressed on replay after a transient ledger failure, before message deduplication");
 } finally { delete (globalThis as any).__inboundRetry; await rm(scratch, { recursive: true, force: true }); }

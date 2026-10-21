@@ -63,11 +63,52 @@ export async function persistNormalizedEmailMessage(params: {
   if (normalized.direction === "inbound") {
     const { isProspectEmailUnsubscribeSignal, prospectEmailUnsubscribeScope } = await import("@shared/prospectEmailSuppression");
     const authored = normalized.textBody || htmlToPlainText(normalized.htmlBody || "") || normalized.snippet || "";
-    if (isProspectEmailUnsubscribeSignal({ subject: normalized.subject, body: authored, fromEmail: normalized.from.email })) {
+    if (isProspectEmailUnsubscribeSignal({ subject: normalized.subject, body: authored, fromEmail: identityEmail || normalized.from.email })) {
       const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
       await suppressMarketingIdentity({ workspace: mailbox.workspaceUserId, email: identityEmail || normalized.from.email,
         reason: "unsubscribe", source: "persist_inbound_unsubscribe",
         scope: prospectEmailUnsubscribeScope(authored, normalized.subject || "") });
+    }
+  }
+
+  const bounceLocal = shouldSuppressEmailContactCreation(normalized.from.email);
+  if (normalized.direction === "inbound" && bounceLocal) {
+    const { extractBouncedRecipientFromDsn } = await import(
+      "@shared/prospectEmailSuppression"
+    );
+    const { isSystemOrBounceEmail } = await import("@shared/prospectOutreachLifecycle");
+    const fromIsSystem = isSystemOrBounceEmail({
+      fromEmail: normalized.from.email,
+      subject: normalized.subject,
+    });
+    if (fromIsSystem || bounceLocal === "noreply_or_system") {
+      const bounced =
+        extractBouncedRecipientFromDsn({
+          subject: normalized.subject,
+          body: normalized.textBody || normalized.snippet,
+          selectedHeaders: normalized.selectedHeaders,
+        }) || null;
+      if (bounced) {
+        const { suppressContactByEmailInWorkspace } = await import(
+          "../prospectImport/prospectEmailSuppressionService"
+        );
+        await suppressContactByEmailInWorkspace({
+          workspaceUserId: mailbox.workspaceUserId,
+          email: bounced,
+          reason: "bounce",
+          detail: "inbound_dsn_or_system_bounce",
+          source: "persist_inbound_dsn",
+        });
+      } else {
+        console.info(
+          JSON.stringify({
+            tag: "[EmailPersist]",
+            event: "bounce_unattributed",
+            reason: bounceLocal,
+            note: "DSN detected but recipient not extracted — suppression not written",
+          }),
+        );
+      }
     }
   }
 
@@ -138,51 +179,6 @@ export async function persistNormalizedEmailMessage(params: {
     isWebsiteForm: Boolean(formMeta),
     isLeadCapture: Boolean(formMeta),
   });
-
-  const bounceLocal = shouldSuppressEmailContactCreation(normalized.from.email);
-  if (normalized.direction === "inbound" && bounceLocal) {
-    try {
-      const { extractBouncedRecipientFromDsn } = await import(
-        "@shared/prospectEmailSuppression"
-      );
-      const { isSystemOrBounceEmail } = await import("@shared/prospectOutreachLifecycle");
-      const fromIsSystem = isSystemOrBounceEmail({
-        fromEmail: normalized.from.email,
-        subject: normalized.subject,
-      });
-      if (fromIsSystem || bounceLocal === "noreply_or_system") {
-        const bounced =
-          extractBouncedRecipientFromDsn({
-            subject: normalized.subject,
-            body: normalized.textBody || normalized.snippet,
-            selectedHeaders: normalized.selectedHeaders,
-          }) || null;
-        if (bounced) {
-          const { suppressContactByEmailInWorkspace } = await import(
-            "../prospectImport/prospectEmailSuppressionService"
-          );
-          await suppressContactByEmailInWorkspace({
-            workspaceUserId: mailbox.workspaceUserId,
-            email: bounced,
-            reason: "bounce",
-            detail: "inbound_dsn_or_system_bounce",
-            source: "persist_inbound_dsn",
-          });
-        } else {
-          console.info(
-            JSON.stringify({
-              tag: "[EmailPersist]",
-              event: "bounce_unattributed",
-              reason: bounceLocal,
-              note: "DSN detected but recipient not extracted — suppression not written",
-            }),
-          );
-        }
-      }
-    } catch (err) {
-      console.error("[EmailPersist] bounce attribution failed", err);
-    }
-  }
 
   if (match.kind === "suppressed") {
     console.log(
@@ -375,7 +371,7 @@ export async function persistNormalizedEmailMessage(params: {
         isProspectEmailUnsubscribeSignal({
           subject: normalized.subject,
           body: textContent,
-          fromEmail: normalized.from.email,
+          fromEmail: identityEmail || normalized.from.email,
         })
       ) {
         const { applyProspectEmailSuppression } = await import(
@@ -383,6 +379,7 @@ export async function persistNormalizedEmailMessage(params: {
         );
         await applyProspectEmailSuppression({
           contactId: contact.id,
+          workspaceUserId: mailbox.workspaceUserId,
           reason: "unsubscribe",
           detail: "inbound_unsubscribe_keyword",
           scope: prospectEmailUnsubscribeScope(textContent, normalized.subject || ""),
