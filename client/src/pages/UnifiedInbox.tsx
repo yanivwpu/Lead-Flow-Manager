@@ -1,3 +1,4 @@
+import { SafeMessageText } from "@/components/SafeMessageText";
 import { ShoppingActivity } from "@/components/inbox/ShoppingActivity";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, type ComponentProps } from "react";
 import { apiRequest } from "@/lib/queryClient";
@@ -4571,7 +4572,7 @@ export function UnifiedInbox() {
                                     }
                                   }}
                                 />
-                                {msg.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-snug [overflow-wrap:anywhere] break-words">{msg.content}</p>}
+                                {msg.content && <p className="mt-1 whitespace-pre-wrap text-sm leading-snug [overflow-wrap:anywhere] break-words">{<SafeMessageText text={msg.content} />}</p>}
                               </div>
                             );
                             if (hasMedia && isVideo) return (
@@ -4608,7 +4609,7 @@ export function UnifiedInbox() {
                                 />
                               );
                             }
-                            return <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words">{msg.content || (ct === 'sticker' ? 'Sticker received' : '')}</p>;
+                            return <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words">{<SafeMessageText text={msg.content || (ct === 'sticker' ? 'Sticker received' : '')} />}</p>;
                             })()}
                           </div>
                           <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">

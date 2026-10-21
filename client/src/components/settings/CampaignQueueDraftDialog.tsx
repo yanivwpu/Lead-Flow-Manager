@@ -1,3 +1,4 @@
+import { MarketingEmailPreview } from "./MarketingEmailPreview";
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Pencil, Eye, RefreshCw, Trash2 } from "lucide-react";
@@ -203,6 +204,7 @@ export function CampaignQueueDraftDialog({
           <p className="py-6 text-sm text-red-600">{loadError}</p>
         ) : detail ? (
           <div className="space-y-4 text-sm">
+            {itemId && !editing && detail.selectedChannel === "email" && <MarketingEmailPreview key={detail.draftRevision || JSON.stringify([detail.subjectSnapshot, detail.messageSnapshot])} itemId={itemId} revision={detail.draftRevision || JSON.stringify([detail.subjectSnapshot, detail.messageSnapshot])} />}
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
                 {prospectCampaignQueueStatusLabel(detail.queueStatus)}
@@ -290,13 +292,14 @@ export function CampaignQueueDraftDialog({
               )}
             </div>
 
+            {editing && <p className="text-sm text-amber-800">Save changes to view the recipient email with its required footer.</p>}
             {previewing ? (
               <div
                 className="rounded-lg border border-violet-100 bg-violet-50/40 p-3"
                 data-testid="po-draft-preview"
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-                  Preview
+                  Draft text only — required footer not shown
                 </p>
                 <p className="mt-2 font-medium text-gray-900">{subject || "(no subject)"}</p>
                 <p className="mt-2 whitespace-pre-wrap text-gray-800">{body || "(empty)"}</p>
@@ -396,7 +399,7 @@ export function CampaignQueueDraftDialog({
                 data-testid="po-draft-preview-toggle"
               >
                 <Eye className="mr-1.5 h-3.5 w-3.5" />
-                {previewing ? "Hide preview" : "Preview"}
+                {previewing ? "Hide draft text" : "Preview draft text"}
               </Button>
               {editable ? (
                 <Button
