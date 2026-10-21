@@ -75,5 +75,17 @@ try {
  await migrationDb.exec("CREATE TABLE prospect_outreach_queue_items(id text); INSERT INTO prospect_outreach_queue_items VALUES ('legacy')");
  const migration = await readFile("migrations/0114_prospect_link_rendering_snapshot.sql", "utf8");
  await migrationDb.exec(migration); await migrationDb.exec(migration);
+ const ts = (await import("typescript")).default;
+ const startup = ts.createSourceFile("startup.ts",await readFile("server/startupSchemaPatches.ts","utf8"),ts.ScriptTarget.Latest,true);
+ let startupSql = "";
+ function visit(node: any) {
+  if (ts.isObjectLiteralExpression(node)) {
+   const tag: any = node.properties.find((p: any) => p.name?.getText(startup) === "tag");
+   if (tag?.initializer?.text === "0114_prospect_link_rendering_snapshot") startupSql = (node.properties.find((p: any) => p.name?.getText(startup) === "sql") as any)?.initializer?.text || "";
+  }
+  ts.forEachChild(node,visit);
+ }
+ visit(startup); assert(startupSql,"production startup must include 0114");
+ await migrationDb.exec(startupSql); await migrationDb.exec(startupSql);
  assert.deepEqual((await migrationDb.query<any>("SELECT link_rendering_snapshot FROM prospect_outreach_queue_items")).rows[0].link_rendering_snapshot,{campaignLinkUrl:"",preserveAuthoredUrls:true});
 } finally { await migrationDb.close(); }
