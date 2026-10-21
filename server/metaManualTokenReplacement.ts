@@ -16,13 +16,15 @@ export { MetaTokenReplacementError } from "../shared/manualMetaTokenReplacementV
 export async function replaceManualMetaAccessToken(userId: string, token: string): Promise<{ expiresAt: string | null }> {
   const user = await storage.getUserForSession(userId);
   const appId = String(process.env.META_APP_ID || "").trim();
+  const savedWabaId = String(user?.metaBusinessAccountId || "");
+  const savedPhoneId = String(user?.metaPhoneNumberId || "");
   // Check ownership before any Graph call: fail closed without sending unrelated tokens.
   if (
     !user?.metaConnected ||
     user.whatsappProvider !== "meta" ||
     user.metaConnectionType !== "manual_legacy" ||
-    !/^\d{8,}$/.test(user.metaBusinessAccountId || "") ||
-    !/^\d{8,}$/.test(user.metaPhoneNumberId || "") ||
+    !/^\d{8,}$/.test(savedWabaId) ||
+    !/^\d{8,}$/.test(savedPhoneId) ||
     !appId
   ) {
     throw new MetaTokenReplacementError("not_manual_connection", "An existing manual WhatsApp connection is required.");
@@ -38,7 +40,7 @@ export async function replaceManualMetaAccessToken(userId: string, token: string
   }
   const base = getMetaGraphApiBase();
   const r = await fetch(
-    `${base}/${encodeURIComponent(user.metaBusinessAccountId)}/phone_numbers?fields=id&limit=100`,
+    `${base}/${encodeURIComponent(savedWabaId)}/phone_numbers?fields=id&limit=100`,
     { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(12000) },
   ).catch(() => null);
   if (!r?.ok) {
@@ -69,8 +71,8 @@ export async function replaceManualMetaAccessToken(userId: string, token: string
     eq(users.metaConnected, true),
     eq(users.whatsappProvider, "meta"),
     eq(users.metaConnectionType, "manual_legacy"),
-    eq(users.metaPhoneNumberId, user.metaPhoneNumberId),
-    eq(users.metaBusinessAccountId, user.metaBusinessAccountId),
+    eq(users.metaPhoneNumberId, savedPhoneId),
+    eq(users.metaBusinessAccountId, savedWabaId),
   )).returning({ id: users.id });
   if (updated.length !== 1) {
     throw new MetaTokenReplacementError("connection_changed", "WhatsApp connection changed. Refresh Settings and try again.");
