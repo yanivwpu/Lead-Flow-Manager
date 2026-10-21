@@ -67,6 +67,8 @@ jobs:
         run: npx tsx --test tests/ecommerce-recovery-meta-receipts.test.ts tests/ecommerce-recovery-meta-receipts-postgres.test.ts tests/ecommerce-recovery-worker-scheduler.test.ts
       - name: Single-merchant automatic checkout discovery and verified-consent enqueue
         run: npx tsx --test tests/ecommerce-recovery-auto-preparation.test.ts
+      - name: Restore-first staging migration guard and one-store readonly acceptance probe
+        run: npx tsx --test tests/ecommerce-controlled-staging-runbook.test.ts
       - name: PGlite persistence compatibility
         run: npx tsx --test tests/ecommerce-durable-event-inbox.test.ts
       - name: Native PostgreSQL 16 migration, concurrency and uniqueness
