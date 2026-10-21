@@ -72,6 +72,28 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
     }
   });
 
+  // Manual/test Meta token renewal. Unlike /api/meta/connect this endpoint never
+  // overwrites WABA, sender, webhook verification token, or subscription state.
+  app.post("/api/integrations/whatsapp/meta/replace-token", async (req: Request, res: Response) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const payload = z.object({ accessToken: z.string().min(20).max(8192) }).strict().safeParse(req.body);
+    if (!payload.success) return res.status(400).json({ error: "Enter a valid Meta access token." });
+    try {
+      const { replaceManualMetaAccessToken } = await import("../metaManualTokenReplacement");
+      const result = await replaceManualMetaAccessToken(req.user.id, payload.data.accessToken);
+      res.setHeader("Cache-Control", "no-store");
+      return res.json({ success: true, expiresAt: result.expiresAt, webhookPreserved: true });
+    } catch (error: unknown) {
+      const { MetaTokenReplacementError } = await import("../metaManualTokenReplacement");
+      if (error instanceof MetaTokenReplacementError) {
+        return res.status(400).json({ error: error.message, code: error.code });
+      }
+      // Never log or echo new access tokens or raw Meta Graph responses.
+      console.warn("[WhatsApp token refresh] failed (details withheld)");
+      return res.status(503).json({ error: "Could not verify and save this Meta token. Please try again." });
+    }
+  });
+
   app.get("/api/integrations/whatsapp/meta/config", (req: Request, res: Response) => {
     try {
       const cfg = getWhatsappMetaPublicConfig();
