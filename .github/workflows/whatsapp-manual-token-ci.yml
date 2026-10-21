@@ -42,7 +42,9 @@ jobs:
             for (const line of fs.readFileSync(path, 'utf8').split(/\r?\n/)) {
               const m = line.match(/^(.+?)\(\d+,\d+\): error TS(\d+): (.*)$/);
               if (!m) continue;
-              // Compare by file and TS code, not message text. Path-only inference\n              // differs when tsc resolves node_modules through a linked worktree.\n              const key = m[1] + ':' + m[2];
+              // Compare by file and TS code, not message text.
+              // TypeScript's import paths differ through linked worktrees.
+              const key = m[1] + ':' + m[2];
               result.set(key, (result.get(key) || 0) + 1);
             }
             return result;
