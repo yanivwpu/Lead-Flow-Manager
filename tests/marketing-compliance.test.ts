@@ -82,3 +82,7 @@ assert.equal(prospectEmailUnsubscribeScope("Stop messaging me"), "all");
 
 assert.deepEqual(inboundStopIdentity("12025550123", "malformed legacy email"), {phone:"+12025550123",email:undefined});
 assert.deepEqual(inboundStopIdentity("+12025550123", " Person@Example.com "), {phone:"+12025550123",email:"person@example.com"});
+
+for (const request of ["Please unsubscribe me from future emails", "STOP please", "Hi, please remove me from your list. Thanks!", "Not interested. Could you please unsubscribe me?"]) assert(isStop({body:request}),request);
+for (const prose of ["Stop by tomorrow", "The unsubscribe link is broken", "I do not want to unsubscribe", "Please do not unsubscribe me"]) assert(!isStop({body:prose}),prose);
+assert.equal(prospectEmailUnsubscribeScope("STOP please"),"all");

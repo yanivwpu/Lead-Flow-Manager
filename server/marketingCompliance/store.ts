@@ -105,30 +105,39 @@ export class MarketingSuppressionError extends Error {
   constructor() { super("Recipient has a durable global do-not-contact request"); }
 }
 
-/** Order manual/transactional email with global DNC commits, without email-only blocks. */
-export async function withGlobalDncEmailBoundary<T>(workspace: string, recipients: string[], send: () => Promise<T>): Promise<T> {
-  return db.transaction(async tx => {
-    await lockMarketingWorkspace(tx, workspace);
-    for (const email of recipients) if (await isContactDurablySuppressed({userId:workspace,email}, "global", tx)) throw new MarketingSuppressionError();
-    return send();
-  });
+export class AmbiguousProviderDeliveryError extends Error {
+  constructor() { super("ambiguous_provider_delivery: reconcile provider delivery before retry"); }
 }
 
-/** Serialize direct legacy phone dispatch with the same workspace opt-out lock. */
-export async function withGlobalDncPhoneBoundary<T>(workspace: string, phone: string, send: () => Promise<T>): Promise<T> {
-  return db.transaction(async tx => {
-    await lockMarketingWorkspace(tx, workspace);
-    if (await isContactDurablySuppressed({userId:workspace,phone:normalizeStoredMarketingPhone(phone)}, "global", tx)) throw new MarketingSuppressionError();
-    return send();
-  });
+async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: () => Promise<T>): Promise<T> {
+  let accepted = false;
+  try {
+    return await db.transaction(async tx => {
+      await lockMarketingWorkspace(tx, workspace);
+      for (const identity of identities) {
+        if (identity.userId !== workspace) throw new Error("Contact not found");
+        if (await isContactDurablySuppressed(identity, "global", tx)) throw new MarketingSuppressionError();
+      }
+      const result = await send();
+      accepted = !(result instanceof Response ? !result.ok : result && typeof result === "object" && "success" in result && result.success === false);
+      return result;
+    });
+  } catch (error) {
+    if (accepted) throw new AmbiguousProviderDeliveryError();
+    throw error;
+  }
 }
 
-/** Adapter credentials/configuration must be prepared before entering this lock. */
-export async function withGlobalDncContactBoundary<T>(workspace: string, contact: {userId: string; email?: string | null; phone?: string | null}, send: () => Promise<T>): Promise<T> {
-  if (contact.userId !== workspace) throw new Error("Contact not found");
-  return db.transaction(async tx => {
-    await lockMarketingWorkspace(tx, workspace);
-    if (await isContactDurablySuppressed(contact, "global", tx)) throw new MarketingSuppressionError();
-    return send();
-  });
+/** Order manual/transactional email with global DNC, preserving email-only exemptions. */
+export function withGlobalDncEmailBoundary<T>(workspace: string, recipients: string[], send: () => Promise<T>): Promise<T> {
+  return withGlobalDncBoundary(workspace, recipients.map(email => ({userId:workspace,email})), send);
+}
+
+/** Caller prepares credentials and local payload validation before entering this lock. */
+export function withGlobalDncPhoneBoundary<T>(workspace: string, phone: string, send: () => Promise<T>): Promise<T> {
+  return withGlobalDncBoundary(workspace,[{userId:workspace,phone:normalizeStoredMarketingPhone(phone)}],send);
+}
+
+export function withGlobalDncContactBoundary<T>(workspace: string, contact: {userId: string; email?: string | null; phone?: string | null}, send: () => Promise<T>): Promise<T> {
+  return withGlobalDncBoundary(workspace,[contact],send);
 }

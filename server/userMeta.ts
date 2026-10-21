@@ -1,4 +1,4 @@
-import { withGlobalDncPhoneBoundary, MarketingSuppressionError } from "./marketingCompliance/store";
+import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError } from "./marketingCompliance/store";
 import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -683,7 +683,7 @@ export async function sendMetaWhatsAppTemplate(
       }),
     }));
   } catch (fetchErr: unknown) {
-    if (fetchErr instanceof MarketingSuppressionError) throw fetchErr;
+    if (fetchErr instanceof MarketingSuppressionError || fetchErr instanceof AmbiguousProviderDeliveryError) throw fetchErr;
     const kind = classifyGraphFetchFailure(fetchErr);
     const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
     const err = new Error(

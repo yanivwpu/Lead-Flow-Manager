@@ -64,17 +64,23 @@ export function buildProspectEmailSuppressionCustomFields(
   return patch;
 }
 
-/** Only explicit requests in the newly authored portion count. Quoted history
- * and ordinary sentences such as “stop by tomorrow” must not opt someone out. */
-export function isProspectEmailUnsubscribeSignal(input: {
-  subject?: string | null; body?: string | null; fromEmail?: string | null;
-}): boolean {
-  if (isSystemOrBounceEmail({ fromEmail: input.fromEmail, subject: input.subject })) return false;
-  const authored = String(input.body || "").split(/\r?\n/)
-    .slice(0, 30).filter(line => !/^\s*>/.test(line))
-    .join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim();
-  const request = /^(?:please\s+)?(?:stop(?:\s+(?:messaging|contacting|emailing|texting)(?:\s+me)?)?|unsubscribe(?:\s+me)?|remove\s+me(?:\s+from\s+(?:your|the|this)\s+(?:list|mailing list))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?|don['’]?t\s+contact(?:\s+me)?)[.!\s]*$/i;
-  return request.test(authored) || (!authored && request.test(String(input.subject || "").trim()));
+/** Extract only newly authored text, excluding quoted history. */
+function explicitOptOutScope(body: string, subject = ""): "all" | "email" | null {
+  const authored = String(body || "").split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim() || subject.trim();
+  const clauses = /(?:^|[.!?\n,;])\s*(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(stop(?:\s+(?:messaging|contacting|emailing|texting)(?:\s+me)?)?|unsubscribe(?:\s+me)?(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:future\s+)?(?:emails?|messages?|mailing\s+list|list))?|remove\s+me(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:mailing\s+list|list|emails?|contacts))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?(?:\s+again)?|don['’]?t\s+contact(?:\s+me)?(?:\s+again)?)(?:\s+(?:please|thanks|thank\s+you))?\s*(?=$|[.!?\n,;])/gi;
+  let scope: "all" | "email" | null = null;
+  for (const match of authored.matchAll(clauses)) {
+    const action = match[1].toLowerCase();
+    if (/^(?:do\s+not\s+contact|don['’]?t\s+contact|stop(?:\s+(?:messaging|contacting)(?:\s+me)?)?$)/.test(action)) return "all";
+    scope = "email";
+  }
+  return scope;
+}
+
+/** Explicit opt-out clauses count; ordinary “stop by tomorrow” does not. */
+export function isProspectEmailUnsubscribeSignal(input: {subject?: string | null; body?: string | null; fromEmail?: string | null}): boolean {
+  if (isSystemOrBounceEmail({fromEmail:input.fromEmail,subject:input.subject})) return false;
+  return explicitOptOutScope(input.body || "",input.subject || "") !== null;
 }
 
 /**
@@ -154,8 +160,7 @@ export function prospectSuppressionDetailLabel(
   return "Suppressed";
 }
 
-/** Global STOP is distinct from an email-specific request. Ignore quoted history. */
+/** Global contact requests remain distinct from email-specific opt-outs. */
 export function prospectEmailUnsubscribeScope(body: string, subject = ""): "all" | "email" {
-  const authored = String(body || "").split(/\r?\n/).slice(0, 30).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim() || subject.trim();
-  return /^(?:please\s+)?(?:stop(?:\s+(?:contacting|messaging)(?:\s+me)?)?[.!\s]*$|do\s+not\s+contact|don['’]?t\s+contact)/i.test(authored) ? "all" : "email";
+  return explicitOptOutScope(body,subject) || "email";
 }

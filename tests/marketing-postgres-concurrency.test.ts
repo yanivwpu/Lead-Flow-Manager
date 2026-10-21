@@ -95,6 +95,17 @@ test("real PostgreSQL: opt-out wins over waiting workers and retries without poo
       await control.query("SELECT pg_terminate_backend($1)", [active.rows[0].pid]);
       return { success: true };
     }), /ambiguous_provider_delivery/);
+    for (const boundary of [
+      (send: () => Promise<any>) => service.withGlobalDncPhoneBoundary("b","12025550123",send),
+      (send: () => Promise<any>) => service.withGlobalDncContactBoundary("b",{userId:"b",email:"person@example.com"},send),
+    ]) {
+      await assert.rejects(boundary(async () => {
+        const active = await control.query("SELECT pid FROM pg_stat_activity WHERE application_name='marketing-race-fixture' AND state='idle in transaction' AND datname=current_database()");
+        assert.equal(active.rows.length,1);
+        await control.query("SELECT pg_terminate_backend($1)",[active.rows[0].pid]);
+        return {success:true};
+      }),/ambiguous_provider_delivery/,"accepted phone/adapter send followed by failed commit must never appear as ordinary retryable failure");
+    }
     process.env.EMAIL_SEND_HOURLY_SOFT_CAP = "1";
     let overCapCalls = 0;
     const overCap = await Promise.allSettled(Array.from({length:4}, () => service.withCompliantMarketingEmail({ ...input, workspace:"b", mailbox:"mb" }, async () => { overCapCalls++; return {success:true}; })));

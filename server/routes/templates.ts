@@ -1,3 +1,4 @@
+import { withGlobalDncPhoneBoundary } from "../marketingCompliance/store";
 import type { Express } from "express";
 import type { Channel, MessageTemplate, PresetCampaign } from "@shared/schema";
 import {
@@ -2668,7 +2669,7 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         try {
-          const msg = await (twilioClient as any).messages.create(msgOptions);
+          const msg = await withGlobalDncPhoneBoundary(req.user.id, recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
           messageId = msg.sid;
           sendStatus = msg.status;
           console.log(
