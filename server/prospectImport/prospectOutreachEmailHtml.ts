@@ -19,7 +19,7 @@ export function renderProspectOutreachEmailHtml(rawText: string, approvedUrls: s
   const normalized = String(rawText || "").replace(/\r\n?/g, "\n").trim();
   if (!normalized) return "";
   const paragraphs = normalized.split(/\n[ \t]*\n+/).map((paragraph) =>
-    "<p style=\"margin:0 0 16px;line-height:1.55\">" +
+    "<p dir=\"auto\" style=\"margin:0 0 16px;line-height:1.55\">" +
       paragraph.split("\n").map(line => linkifyLine(line, approvedUrls, preserveAuthoredUrls)).join("<br>") + "</p>"
   );
   return "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#172b4d;max-width:680px\">" + paragraphs.join("") + "</div>";
