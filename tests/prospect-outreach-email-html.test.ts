@@ -107,3 +107,13 @@ for (const message of ["Hello,\n\nSee https://example.com/demo.","Hola,\n\nConsu
  assert(!html.includes('dir="rtl"'),"English and Spanish must retain automatic LTR rendering");
  assert(html.includes('href="https://example.com/demo"'));
 }
+
+for(const [open,close] of [["“","”"],["‘","’"],["«","»"],["‹","›"],["„","“"],["「","」"],["『","』"]]) {
+ const url="https://example.com/demo"; const message=`Details: ${open}${url}${close}.`;
+ assert.equal(ensureAiComposeCampaignLink(message,{linkUrl:url,includeLinkNaturally:true}),message);
+ assert.equal(safeTextLinks(message,true,[url]).find(p=>p.href)?.href,url);
+ assert.equal(safeTextLinks(message,true).find(p=>p.href)?.href,url);
+ const exact=url+close;
+ assert.equal(safeTextLinks(`${open}${exact}${close}`,true,[exact]).find(p=>p.href)?.href,exact);
+ assert.equal(safeTextLinks(exact,false).find(p=>p.href)?.href,exact);
+}

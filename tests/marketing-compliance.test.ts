@@ -97,3 +97,11 @@ assert(!isStop({subject:"Delivery failure",body:"Unsubscribe",fromEmail:"mailer-
 
 const {isTransientOutreachFailure} = await import("../shared/prospectOutreachFailureScope");
 assert(!isTransientOutreachFailure("ambiguous_provider_delivery: timeout; reconcile before retry"));
+
+for (const request of ["Please stop sending me emails.","Stop sending emails to me", "Please stop sending me any more marketing emails.","Stop sending me messages!"]) {
+ assert(isStop({body:request}),request);
+ assert(isStop({subject:request,body:"Sent from my iPhone"}),request);
+}
+assert.equal(prospectEmailUnsubscribeScope("Please stop sending me emails."),"email");
+assert.equal(prospectEmailUnsubscribeScope("Stop sending me messages!"),"all");
+for(const body of ["Please stop sending me code snippets.","Please do not stop sending me emails.","> Please stop sending me emails."]) assert(!isStop({body}),body);

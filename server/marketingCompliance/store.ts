@@ -73,7 +73,7 @@ export async function suppressMarketingIdentity(input: { workspace: string; emai
         (SELECT id FROM chats WHERE user_id=${input.workspace} AND regexp_replace(whatsapp_phone,'[^0-9]','','g') IN (${sql.join(suppressedPhones.map(k => sql`${k}`), sql`,`)}))`);
       await tx.execute(sql`UPDATE contacts SET follow_up=NULL,follow_up_date=NULL WHERE ${matches}`);
     }
-    await tx.execute(sql`UPDATE prospect_intelligence SET lifecycle_status='archived',archived_at=COALESCE(archived_at,now()),archive_reason=COALESCE(archive_reason,'other'),archive_note=COALESCE(archive_note,'Marketing suppressed'),updated_at=now() WHERE contact_id IN
+    if (scope === "all") await tx.execute(sql`UPDATE prospect_intelligence SET lifecycle_status='archived',archived_at=COALESCE(archived_at,now()),archive_reason=COALESCE(archive_reason,'other'),archive_note=COALESCE(archive_note,'Marketing suppressed'),updated_at=now() WHERE contact_id IN
       (SELECT id FROM contacts WHERE ${matches}) AND COALESCE(lifecycle_status,'active')='active'`);
   });
 }
