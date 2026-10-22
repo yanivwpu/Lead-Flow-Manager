@@ -17,7 +17,7 @@ export function MarketingSenderSetup() {
     if (!response.ok) throw new Error(t("marketingCompliance.senderUnavailable", "Sender setup is unavailable"));
     return response.json() as Promise<{ mailboxes: Array<{ id: string; email: string }>; profiles: Array<{ mailbox_id: string; brand: string; postal_address: string; verified_at: string }> }>;
   }});
-  return <section lang={i18n.resolvedLanguage || i18n.language || "en"} dir={i18n.dir()} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3" aria-label={t("marketingCompliance.senderTitle", "Marketing sender setup")}>
+  return <section lang={i18n.resolvedLanguage || i18n.language || "en"} dir={i18n.dir?.() || ((i18n.resolvedLanguage || i18n.language || "en").startsWith("he") ? "rtl" : "ltr")} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3" aria-label={t("marketingCompliance.senderTitle", "Marketing sender setup")}>
     <h2 className="text-lg font-semibold">{t("marketingCompliance.senderTitle", "Marketing sender setup")}</h2>
     <p>{t("marketingCompliance.senderHold", "Marketing sending is disabled pending staging acceptance and release approval. Each connected sender must have its own verified physical mailing address. Use the independent sender’s address.")}</p>
     {profiles.data?.profiles?.map(p => <p key={p.mailbox_id}>{p.brand} · {p.postal_address} · {t("marketingCompliance.verified", "Verified")} {new Date(p.verified_at).toLocaleDateString()}</p>)}

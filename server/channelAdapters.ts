@@ -1,4 +1,4 @@
-import { withGlobalDncContactBoundary } from "./marketingCompliance/store";
+import { withGlobalDncContactBoundary, readProviderDeliveryJson } from "./marketingCompliance/store";
 import type { Contact } from "@shared/schema";
 import { storage } from "./storage";
 import { channelService, ChannelAdapter } from "./channelService";
@@ -128,7 +128,7 @@ async function sendMetaGraphMessage(input: {
     }),
   }));
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   if (!response.ok || result.error) {
     const errorMessage = parseMetaError(result.error, input.channelLabel === "Instagram" ? "instagram" : "facebook");
     console.error(`[Outbound] ${input.channelLabel} API error:`, response.status, result.error);
@@ -769,7 +769,7 @@ class TelegramAdapter implements ChannelAdapter {
         }
       ));
 
-      const result = await response.json();
+      const result = await readProviderDeliveryJson(response);
 
       if (!result.ok) {
         return { success: false, error: result.description || "Telegram API error" };

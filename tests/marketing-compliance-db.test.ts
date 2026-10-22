@@ -116,6 +116,12 @@ try {
       assert.equal(outcome.success,false);
       assert.match(outcome.error,/ambiguous_provider_delivery/,channel);
     }
+    globalThis.fetch = async () => ({ok:true,status:200,json:async()=>{throw new Error("connection reset while reading accepted response")}}) as Response;
+    for (const invoke of [() => routes.sendMetaWhatsAppMessage("b","12025550123","test"), () => routes.sendMetaWhatsAppTemplate("b","12025550123","test")]) await assert.rejects(invoke(),/ambiguous_provider_delivery/);
+    for (const channel of ["instagram","facebook","telegram"]) {
+      const outcome = await (globalThis as any).__marketingTest.adapters.get(channel).send({contactId:"fresh",conversationId:"wa",content:"test"});
+      assert.match(outcome.error,/ambiguous_provider_delivery/,channel+" accepted response body loss");
+    }
     delete (globalThis as any).__marketingTest.transportFailure;
     delete (globalThis as any).__marketingTest.contact;
 
