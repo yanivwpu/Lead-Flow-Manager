@@ -5,9 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createInstance } from "i18next";
 import { I18nextProvider } from "react-i18next";
 import { build } from "esbuild";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
+await mkdir("work",{recursive:true});
 const scratch = await mkdtemp(join(process.cwd(),"work","marketing-locales-"));
 try {
   const outfile = join(scratch,"controls.mjs");

@@ -130,7 +130,9 @@ try {
   await routes.applyProspectEmailSuppression({contactId:"bounce-contact",reason:"bounce",bouncedEmail:"actual-recipient@example.com"});
   assert(await store.isMarketingSuppressed("a","actual-recipient@example.com"));
   assert(!await store.isMarketingSuppressed("a","form@example.com"));
+  await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('email-scope','a','email-only@example.com','{}'); INSERT INTO prospect_intelligence(contact_id,lifecycle_status) VALUES ('email-scope','active')");
   await store.suppressMarketingIdentity({workspace:"a",email:"email-only@example.com",scope:"email",reason:"unsubscribe",source:"fixture"});
+  assert.equal((await pg.query<any>("SELECT lifecycle_status FROM prospect_intelligence WHERE contact_id='email-scope'")).rows[0].lifecycle_status,"active","email-only suppression must not archive unrelated channel eligibility");
   (globalThis as any).__marketingTest.contact = {id:"email-only",userId:"a",email:"email-only@example.com",phone:"+12025550124",customFields:{emailUnsubscribed:true}};
   const scopedWorkflow = await routes.evaluateAutomationSendGuard({userId:"a",contactId:"email-only",conversationId:"wa",source:"workflow",idempotencyKey:"wa-after-email-opt-out"});
   assert.equal(scopedWorkflow.ok,true,"email-only opt-out must not block a WhatsApp conversation when channel is omitted");

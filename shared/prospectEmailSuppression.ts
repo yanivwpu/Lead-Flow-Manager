@@ -69,11 +69,11 @@ function explicitOptOutScope(body: string, subject = ""): "all" | "email" | null
   const authored = String(body || "").split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim();
   // Inspect both independently: signatures must not hide a subject-only request.
   const candidates = [authored, subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, "").trim()];
-  const clauses = /(?:^|[.!?\n,;])\s*(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(stop(?:\s+(?:messaging|contacting|emailing|texting)(?:\s+me)?)?|unsubscribe(?:\s+me)?(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:future\s+)?(?:emails?|messages?|mailing\s+list|list))?|remove\s+me(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:mailing\s+list|list|emails?|contacts))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?(?:\s+again)?|don['’]?t\s+contact(?:\s+me)?(?:\s+again)?)(?:\s+(?:please|thanks|thank\s+you))?\s*(?=$|[.!?\n,;])/gi;
+  const clauses = /(?:^|[.!?\n,;])\s*(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(stop(?:\s+(?:(?:messaging|contacting|emailing|texting)(?:\s+me)?|sending(?:\s+me)?\s+(?:any\s+)?(?:more\s+)?(?:(?:marketing|promotional)\s+)?(?:emails?|messages?|texts?)(?:\s+to\s+me)?))?|unsubscribe(?:\s+me)?(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:future\s+)?(?:emails?|messages?|mailing\s+list|list))?|remove\s+me(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:mailing\s+list|list|emails?|contacts))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?(?:\s+again)?|don['’]?t\s+contact(?:\s+me)?(?:\s+again)?)(?:\s+(?:please|thanks|thank\s+you))?\s*(?=$|[.!?\n,;])/gi;
   let scope: "all" | "email" | null = null;
   for (const candidate of candidates) for (const match of candidate.matchAll(clauses)) {
     const action = match[1].toLowerCase();
-    if (/^(?:do\s+not\s+contact|don['’]?t\s+contact|stop(?:\s+(?:messaging|contacting)(?:\s+me)?)?$)/.test(action)) return "all";
+    if (/^(?:do\s+not\s+contact|don['’]?t\s+contact|stop(?:\s+(?:(?:messaging|contacting)(?:\s+me)?|sending(?:\s+me)?\s+(?:any\s+)?(?:more\s+)?messages?(?:\s+to\s+me)?))?$)/.test(action)) return "all";
     scope = "email";
   }
   return scope;

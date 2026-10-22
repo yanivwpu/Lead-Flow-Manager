@@ -38,6 +38,8 @@ try {
   assert.equal(state.identities.at(-1).email,"person@example.com");
   await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,subject:"STOP",textBody:"Sent from my iPhone"}});
   assert.equal(state.identities.at(-1).scope,"all");
+  await persistNormalizedEmailMessage({...params,normalized:{...params.normalized,textBody:"Please stop sending me emails."}});
+  assert.equal(state.identities.at(-1).scope,"email");
   const dsn = {...params,normalized:{...params.normalized,subject:"Delivery failure",textBody:"Final-Recipient: rfc822; bounced@example.com",from:{email:"mailer-daemon@vendor.example"}}};
   const readsBeforeBounce = state.reads; state.fail = true;
   await assert.rejects(persistNormalizedEmailMessage(dsn),/transient ledger failure/);
