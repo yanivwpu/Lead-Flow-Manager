@@ -1,0 +1,67 @@
+name: Manual WhatsApp token rotation
+
+on:
+  pull_request:
+    branches:
+      - codex/shopify-trial-first-onboarding
+    paths:
+      - server/metaManualTokenReplacement.ts
+      - shared/manualMetaTokenReplacementValidation.ts
+      - client/src/components/ConnectWhatsAppHub.tsx
+      - server/routes/whatsappIntegrationRoutes.ts
+      - server/whatsappEmbeddedSignup.ts
+      - tests/whatsapp-manual-token-replacement.test.ts
+      - .github/workflows/whatsapp-manual-token-ci.yml
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Test manual token renewal safety rules
+        run: npx tsx tests/whatsapp-manual-token-replacement.test.ts
+      - name: TypeScript regression check against staging base
+        shell: bash
+        run: |
+          npm run check > /tmp/pr-tsc.log 2>&1 || true
+          git worktree add --detach /tmp/wa-token-base ${{ github.event.pull_request.base.sha }}
+          ln -s "$GITHUB_WORKSPACE/node_modules" /tmp/wa-token-base/node_modules
+          (cd /tmp/wa-token-base && npm run check > /tmp/base-tsc.log 2>&1) || true
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          function diagnostics(path) {
+            const result = new Map();
+            for (const line of fs.readFileSync(path, 'utf8').split(/\r?\n/)) {
+              const m = line.match(/^(.+?)\(\d+,\d+\): error TS(\d+): (.*)$/);
+              if (!m) continue;
+              // Compare by file and TS code, not message text.
+              // TypeScript's import paths differ through linked worktrees.
+              const key = m[1] + ':' + m[2];
+              result.set(key, (result.get(key) || 0) + 1);
+            }
+            return result;
+          }
+          const baseline = diagnostics('/tmp/base-tsc.log');
+          const current = diagnostics('/tmp/pr-tsc.log');
+          const newErrors = [];
+          for (const [key, count] of current) {
+            if (count > (baseline.get(key) || 0)) newErrors.push(key);
+          }
+          console.log('Existing staging TypeScript diagnostics:', [...baseline.values()].reduce((a,b)=>a+b,0));
+          console.log('Current diagnostics:', [...current.values()].reduce((a,b)=>a+b,0));
+          if (newErrors.length) {
+            console.error('NEW TypeScript diagnostics:', newErrors.join('\n'));
+            process.exit(1);
+          }
+          console.log('No additional TypeScript diagnostics introduced.');
+          NODE
+      - name: Build staging frontend and backend
+        run: npm run build

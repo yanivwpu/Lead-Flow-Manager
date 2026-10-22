@@ -1941,16 +1941,30 @@ export async function applyMetaTokenExpiryAttention(userId: string): Promise<voi
   const t = exp.getTime();
   const now = Date.now();
 
+  const manualTestNumber =
+    user.metaConnectionType === "manual_legacy" &&
+    isMetaTestPhoneFromSavedFields({
+      displayPhoneNumber: user.metaDisplayPhoneNumber,
+      verifiedName: user.metaVerifiedName,
+    });
   if (t <= now) {
     await storage.updateUser(userId, {
       metaIntegrationStatus: "needs_attention",
-      metaLastErrorMessage:
-        "Meta access token has expired. Disconnect and reconnect WhatsApp in Settings.",
+      metaLastErrorMessage: manualTestNumber
+        ? "Meta test access token has expired. Open WhatsApp Manage to replace only the token."
+        : "Meta access token has expired. Reconnect WhatsApp in Settings.",
     });
     return;
   }
 
-  if (t - now < TOKEN_ATTENTION_BEFORE_MS && user.metaIntegrationStatus === "connected") {
+  // Meta's developer test tokens often live just one hour. A *valid* test
+  // token must remain usable until it expires; otherwise the 7-day
+  // production renewal warning disables every newly generated test token.
+  if (
+    !manualTestNumber &&
+    t - now < TOKEN_ATTENTION_BEFORE_MS &&
+    user.metaIntegrationStatus === "connected"
+  ) {
     await storage.updateUser(userId, {
       metaIntegrationStatus: "needs_attention",
       metaLastErrorMessage:

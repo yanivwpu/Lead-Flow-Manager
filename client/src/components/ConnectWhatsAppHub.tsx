@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -312,6 +313,7 @@ export function ConnectWhatsAppHub({
   const queryClient = useQueryClient();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [replacementTestToken, setReplacementTestToken] = useState("");
   const [hubBanner, setHubBanner] = useState<HubBanner | null>(null);
   const [wabaPickerOpen, setWabaPickerOpen] = useState(false);
   const [wabaChoices, setWabaChoices] = useState<WabaChoice[] | null>(null);
@@ -382,6 +384,33 @@ export function ConnectWhatsAppHub({
       setHubBanner(null);
     },
     onError: (e: Error) => setHubBanner({ variant: "error", message: e.message }),
+  });
+
+  // Do not call the ordinary Connect API flow to renew a test token: that flow
+  // rotates webhook verification and resets WABA subscription state.
+  const replacementTokenMutation = useMutation({
+    mutationFn: async (accessToken: string) => {
+      const res = await fetch("/api/integrations/whatsapp/meta/replace-token", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not update the Meta test token.");
+      return data as { success: boolean; expiresAt: string | null };
+    },
+    onSuccess: async () => {
+      setReplacementTestToken("");
+      setHubBanner({ variant: "neutral", message: "Meta test token updated. The phone number and inbound webhook were preserved." });
+      await queryClient.invalidateQueries({ queryKey: ["/api/integrations/whatsapp/status"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/channels/whatsapp/availability"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/channel-health"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    },
+    onError: (error: Error) => {
+      setHubBanner({ variant: "error", message: error.message });
+    },
   });
 
   const loading = cfgLoading || statusLoading;
@@ -1151,6 +1180,42 @@ export function ConnectWhatsAppHub({
               Close
             </Button>
           </div>
+          {metaTestConnected && meta?.legacyManualConnection && (
+            <form
+              className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!replacementTokenMutation.isPending && replacementTestToken.trim()) {
+                  replacementTokenMutation.mutate(replacementTestToken.trim());
+                }
+              }}
+            >
+              <p className="text-xs font-medium text-slate-800">Replace expired Meta test token</p>
+              <p className="text-xs text-slate-600">
+                Generate a fresh temporary token in Meta Developers → WhatsApp → Try it out, then paste it here.
+                This keeps the sender, existing conversations, and staging webhook unchanged.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  aria-label="New Meta test access token"
+                  placeholder="New Meta test access token"
+                  value={replacementTestToken}
+                  onChange={(event) => setReplacementTestToken(event.target.value)}
+                  className="min-w-40 flex-1 text-sm"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!replacementTestToken.trim() || replacementTokenMutation.isPending}
+                >
+                  {replacementTokenMutation.isPending ? "Checking token…" : "Update token"}
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">For test numbers only. Temporary tokens may expire in about an hour. Never share the token in screenshots.</p>
+            </form>
+          )}
         </div>
       ) : (
         <>
