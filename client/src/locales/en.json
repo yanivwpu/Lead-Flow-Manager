@@ -1578,5 +1578,36 @@
       "cooldown": "Shopify API cooldown. Price and availability must be checked again for a new selection.",
       "ready_to_check": "Inventory will be checked when requested. Saved prices are historical verification results."
     }
+  },
+  "marketingCompliance": {
+    "senderTitle": "Marketing sender setup",
+    "senderHold": "Marketing sending is disabled pending staging acceptance and release approval. Each connected sender must have its own verified physical mailing address. Use the independent sender’s address.",
+    "verified": "Verified",
+    "saved": "Sender address saved. Marketing sending remains disabled.",
+    "saveError": "Unable to save",
+    "senderUnavailable": "Sender setup is unavailable",
+    "senderUnavailableHold": "Sender setup is unavailable. Marketing remains blocked.",
+    "connectedSender": "Connected sender",
+    "chooseSender": "Choose a sender",
+    "businessName": "Sender business name",
+    "address": "Physical mailing address",
+    "attestation": "I verified that this is the sender’s current physical mailing address.",
+    "saveSender": "Save verified sender",
+    "previewUnavailable": "Preview unavailable",
+    "loadingPreview": "Loading recipient preview…",
+    "previewUnavailableHold": "Recipient preview unavailable. Marketing remains blocked.",
+    "previewTitle": "Recipient email preview",
+    "htmlFooter": "HTML email including required footer",
+    "textFooter": "Plain text including required footer",
+    "previewHold": "Preview only. Marketing sending remains disabled.",
+    "preferences": "Marketing preferences",
+    "historyError": "Unable to load opt-out history",
+    "dncError": "Unable to save do-not-contact",
+    "dnc": "Do not contact",
+    "emailSuppressed": "Email marketing suppressed",
+    "stopped": "Promotional outreach is stopped. Reimporting does not re-enable contact.",
+    "confirmDnc": "Set permanent do not contact across channels? This cancels queued outreach, workflows and campaign enrollments and cannot be undone here.",
+    "setDnc": "Set do not contact across channels",
+    "missingIdentity": "Add a valid email or international phone number before setting do not contact."
   }
 }

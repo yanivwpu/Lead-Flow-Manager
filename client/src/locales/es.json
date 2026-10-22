@@ -1508,5 +1508,36 @@
       "cooldown": "Pausa de la API de Shopify. Deben verificarse otra vez el precio y la disponibilidad.",
       "ready_to_check": "El inventario se verificará al solicitarlo. Los precios guardados son resultados históricos."
     }
+  },
+  "marketingCompliance": {
+    "senderTitle": "Configuración del remitente de marketing",
+    "senderHold": "El envío de marketing está desactivado hasta la aceptación en pruebas y la aprobación de publicación. Cada remitente debe tener su propia dirección postal verificada.",
+    "verified": "Verificado",
+    "saved": "Dirección del remitente guardada. El envío de marketing sigue desactivado.",
+    "saveError": "No se pudo guardar",
+    "senderUnavailable": "La configuración del remitente no está disponible",
+    "senderUnavailableHold": "La configuración del remitente no está disponible. El marketing sigue bloqueado.",
+    "connectedSender": "Remitente conectado",
+    "chooseSender": "Elegir un remitente",
+    "businessName": "Nombre comercial del remitente",
+    "address": "Dirección postal física",
+    "attestation": "He verificado que esta es la dirección postal física actual del remitente.",
+    "saveSender": "Guardar remitente verificado",
+    "previewUnavailable": "Vista previa no disponible",
+    "loadingPreview": "Cargando vista previa del destinatario…",
+    "previewUnavailableHold": "Vista previa no disponible. El marketing sigue bloqueado.",
+    "previewTitle": "Vista previa del correo del destinatario",
+    "htmlFooter": "Correo HTML con pie de página obligatorio",
+    "textFooter": "Texto sin formato con pie de página obligatorio",
+    "previewHold": "Solo vista previa. El envío de marketing sigue desactivado.",
+    "preferences": "Preferencias de marketing",
+    "historyError": "No se pudo cargar el historial de bajas",
+    "dncError": "No se pudo guardar la exclusión de contacto",
+    "dnc": "No contactar",
+    "emailSuppressed": "Marketing por correo bloqueado",
+    "stopped": "El contacto promocional está detenido. Volver a importar no lo reactiva.",
+    "confirmDnc": "¿Bloquear permanentemente el contacto en todos los canales? Se cancelarán los envíos pendientes, flujos de trabajo e inscripciones en campañas. No se puede deshacer aquí.",
+    "setDnc": "Bloquear contacto en todos los canales",
+    "missingIdentity": "Añade un correo válido o un teléfono internacional antes de bloquear el contacto."
   }
 }

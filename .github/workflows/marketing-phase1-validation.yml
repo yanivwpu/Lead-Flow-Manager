@@ -6,6 +6,14 @@ on:
       - 'server/emailChannel/**'
       - 'server/prospectImport/**'
       - 'shared/prospect*'
+      - 'shared/safeTextLinks.ts'
+      - 'server/userMeta.ts'
+      - 'server/userTwilio.ts'
+      - 'server/channelAdapters.ts'
+      - 'migrations/0113_marketing_compliance.sql'
+      - 'migrations/0114_prospect_link_rendering_snapshot.sql'
+      - 'scripts/verify-marketing-schema.ts'
+      - 'client/src/locales/*.json'
       - 'tests/marketing-*'
       - '.github/workflows/marketing-phase1-validation.yml'
       - 'client/src/components/ContactSuppressionStatus.tsx'
@@ -32,6 +40,7 @@ jobs:
           cache: npm
       - run: npm ci --include=dev
       - run: |
+          if [ -f tests/marketing-compliance-locales.test.ts ]; then node --import tsx tests/marketing-compliance-locales.test.ts; fi
           node --import tsx tests/marketing-compliance.test.ts
           node --import tsx tests/marketing-compliance-db.test.ts
           node --import tsx tests/marketing-send-boundary.test.ts

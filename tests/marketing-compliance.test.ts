@@ -86,3 +86,14 @@ assert.deepEqual(inboundStopIdentity("+12025550123", " Person@Example.com "), {p
 for (const request of ["Please unsubscribe me from future emails", "STOP please", "Hi, please remove me from your list. Thanks!", "Not interested. Could you please unsubscribe me?"]) assert(isStop({body:request}),request);
 for (const prose of ["Stop by tomorrow", "The unsubscribe link is broken", "I do not want to unsubscribe", "Please do not unsubscribe me"]) assert(!isStop({body:prose}),prose);
 assert.equal(prospectEmailUnsubscribeScope("STOP please"),"all");
+
+for (const subject of ["Unsubscribe", "Re: Unsubscribe", "STOP", "Please remove me from your list"]) {
+  assert(isStop({subject,body:"Sent from my iPhone",fromEmail:"person@example.com"}),subject);
+}
+assert.equal(prospectEmailUnsubscribeScope("Sent from my iPhone","STOP"),"all");
+assert.equal(prospectEmailUnsubscribeScope("STOP","Unsubscribe"),"all");
+assert(!isStop({subject:"Stop by tomorrow",body:"Sent from my iPhone"}));
+assert(!isStop({subject:"Delivery failure",body:"Unsubscribe",fromEmail:"mailer-daemon@example.com"}));
+
+const {isTransientOutreachFailure} = await import("../shared/prospectOutreachFailureScope");
+assert(!isTransientOutreachFailure("ambiguous_provider_delivery: timeout; reconcile before retry"));

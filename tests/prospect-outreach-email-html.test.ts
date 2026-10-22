@@ -1,3 +1,4 @@
+import { safeTextLinks } from "../shared/safeTextLinks";
 import assert from "node:assert/strict";
 import { renderProspectOutreachEmailHtml } from "../server/prospectImport/prospectOutreachEmailHtml";
 import { ensureAiComposeCampaignLink, validateOutreachLinkUrl } from "../shared/prospectOutreachInstructions";
@@ -90,3 +91,12 @@ try {
  await migrationDb.exec(startupSql); await migrationDb.exec(startupSql);
  assert.deepEqual((await migrationDb.query<any>("SELECT link_rendering_snapshot FROM prospect_outreach_queue_items")).rows[0].link_rendering_snapshot,{campaignLinkUrl:"",preserveAuthoredUrls:true});
 } finally { await migrationDb.close(); }
+
+for (const punctuation of ["؟","،","؛","。","！","？","，","…"]) {
+ const url="https://example.com/demo";
+ const message="Details: "+url+punctuation;
+ assert.equal(ensureAiComposeCampaignLink(message,{linkUrl:url,includeLinkNaturally:true}),message);
+ assert.equal(safeTextLinks(message,true,[url]).find(p=>p.href)?.href,url);
+ const exact=url+punctuation;
+ assert.equal(safeTextLinks(exact,true,[exact]).find(p=>p.href)?.href,exact);
+}

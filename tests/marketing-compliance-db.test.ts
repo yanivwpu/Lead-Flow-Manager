@@ -21,8 +21,9 @@ try {
     await pg.exec(`CREATE TABLE ${config.name} (${config.columns.map(c => `"${c.name}" ${c.getSQLType()}`).join(",")})`);
   }
   await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('history','a','History@Example.com','{\"unsubscribed\":true}')");
+  await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('old-bounce','a','old-bounce@example.com','{\"emailBounced\":true}')");
   await pg.exec(await readFile("migrations/0113_marketing_compliance.sql", "utf8"));
-  assert.equal((await pg.query("SELECT * FROM marketing_suppressions")).rows.length, 1, "historical flags backfilled");
+  assert.equal((await pg.query("SELECT * FROM marketing_suppressions")).rows.length, 2, "historical opt-outs and bounces backfilled");
   await pg.exec(`INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES
     ('a1','a','Person@Example.com','+12025550123','{}'),('a2','a',' person@example.com ','12025550123','{}'),('b1','b','person@example.com','+12025550123','{}');
     INSERT INTO prospect_intelligence(contact_id,outreach_status) VALUES ('a1','not_sent');
@@ -35,7 +36,16 @@ try {
   await build({ entryPoints: ["server/marketingCompliance/store.ts"], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", plugins: [{ name: "isolated-db", setup(b) {
     b.onLoad({ filter: /[/\\]drizzle[/\\]db\.ts$/ }, () => ({ contents: "export const db=globalThis.__marketingTest.db;", loader: "ts" }));
   } }] });
+  await pg.exec("ALTER TABLE prospect_outreach_queue_items DROP COLUMN link_rendering_snapshot");
+  await pg.exec(await readFile("migrations/0114_prospect_link_rendering_snapshot.sql", "utf8"));
+  await pg.exec(await readFile("migrations/0114_prospect_link_rendering_snapshot.sql", "utf8"));
+  const {verifyMarketingSchema} = await import("../scripts/verify-marketing-schema");
+  assert((await verifyMarketingSchema(pg)).ready);
+  await pg.exec("ALTER TABLE prospect_outreach_queue_items ALTER COLUMN link_rendering_snapshot DROP NOT NULL");
+  await assert.rejects(verifyMarketingSchema(pg),/marketing_snapshot_schema_invalid/);
+  await pg.exec("ALTER TABLE prospect_outreach_queue_items ALTER COLUMN link_rendering_snapshot SET NOT NULL");
   const store = await import(pathToFileURL(output).href);
+  assert(await store.isContactDurablySuppressed({userId:"a",email:"old-bounce@example.com"},"transactional_email"));
   await pg.exec("INSERT INTO chats(id,user_id,whatsapp_phone) VALUES ('legacy-a','a','12025550123'),('legacy-b','b','12025550123'); INSERT INTO drip_enrollments(id,chat_id,status) VALUES ('da','legacy-a','active'),('db','legacy-b','active')");
   const input = { workspace: "a", email: "PERSON@example.com", reason: "unsubscribe", source: "fixture", scope: "all" };
   await store.suppressMarketingIdentity(input);
@@ -78,7 +88,7 @@ try {
     b.onLoad({ filter: /prospectWorkspaceScope\.ts$/ }, () => ({ contents: "export async function resolveProspectWorkspaceUserId(){return 'a'}", loader: "ts" }));
     b.onLoad({filter:/[/\\]channelService\.ts$/},()=>({contents:"export const channelService={registerAdapter:(channel,adapter)=>globalThis.__marketingTest.adapters.set(channel,adapter)}",loader:"ts"}));
     b.onResolve({filter:/^twilio$/}, () => ({path:"twilio",namespace:"fake"}));
-    b.onLoad({filter:/.*/,namespace:"fake"}, () => ({contents:"export default function(){return {messages:{create:async()=>({sid:'fake',status:'sent'})}}}",loader:"ts"}));
+    b.onLoad({filter:/.*/,namespace:"fake"}, () => ({contents:"export default function(){return {messages:{create:async()=>{if(globalThis.__marketingTest.transportFailure)throw new Error('ECONNRESET');return {sid:'fake',status:'sent'}}}}}",loader:"ts"}));
     b.onLoad({ filter: /[/\\]server[/\\]storage\.ts$/ }, () => ({ contents: "const user={twilioAccountSid:'fake',twilioAuthToken:'fake',twilioConnected:true,twilioWhatsappNumber:'+12025550000',metaAccessToken:'fake',metaConnected:true,metaPhoneNumberId:'fake'}; export const storage={getContact:async()=>globalThis.__marketingTest.contact||null,updateContact:async(id,patch)=>({...globalThis.__marketingTest.contact,...patch}),getConversation:async()=>({id:'wa',userId:'a',channel:'whatsapp',status:'active',windowExpiresAt:new Date(Date.now()+3600000)}),getChannelSettings:async()=>['instagram','facebook','telegram'].map(channel=>({channel,config:{accessToken:'fake',pageId:'fake',botToken:'fake'}})),getUser:async()=>user,getUserForSession:async()=>user};", loader: "ts" }));
   } }] });
   const routes = await import(pathToFileURL(routeOutput).href);
@@ -95,6 +105,18 @@ try {
       assert.equal(blocked.success,false,channel+" adapter must enforce durable DNC before provider dispatch");
       assert.match(blocked.error,/durable global do-not-contact/);
     }
+    // Test actual provider wrappers, including Meta's retry-error translation.
+    globalThis.fetch = async () => {throw new Error("timeout")};
+    for (const invoke of [() => routes.sendMetaWhatsAppMessage("b","12025550123","test"), () => routes.sendMetaWhatsAppTemplate("b","12025550123","test")]) await assert.rejects(invoke(),/ambiguous_provider_delivery/);
+    (globalThis as any).__marketingTest.transportFailure = true;
+    await assert.rejects(routes.sendUserWhatsAppMessage("b","12025550123","test"),/ambiguous_provider_delivery/);
+    (globalThis as any).__marketingTest.contact = {id:"fresh",userId:"a",phone:"12025550999",email:"fresh@example.com",instagramId:"ig",facebookId:"fb",telegramId:"tg"};
+    for (const channel of ["sms","instagram","facebook","telegram"]) {
+      const outcome = await (globalThis as any).__marketingTest.adapters.get(channel).send({contactId:"fresh",conversationId:"wa",content:"test"});
+      assert.equal(outcome.success,false);
+      assert.match(outcome.error,/ambiguous_provider_delivery/,channel);
+    }
+    delete (globalThis as any).__marketingTest.transportFailure;
     delete (globalThis as any).__marketingTest.contact;
 
   } finally { globalThis.fetch = originalFetch; }
@@ -111,6 +133,34 @@ try {
   assert(await store.isMarketingSuppressed("a","deleted-late-bounce@example.com"),"late bounce must persist without any contact");
   await routes.applyProspectEmailSuppression({workspaceUserId:"a",contactId:"deleted",bouncedEmail:"concurrently-deleted@example.com",reason:"bounce"});
   assert(await store.isMarketingSuppressed("a","concurrently-deleted@example.com"));
+  // Permanent delivery failures survive deletion/reimport and later opt-outs.
+  for (const email of ["deleted-late-bounce@example.com", "concurrently-deleted@example.com"]) {
+    assert(await store.isContactDurablySuppressed({userId:"a",email},"transactional_email"));
+    let sent = false;
+    await assert.rejects(store.withGlobalDncEmailBoundary("a",[email],async()=>{sent=true;return {success:true}}), /durable/);
+    assert.equal(sent,false);
+    await store.suppressMarketingIdentity({workspace:"a",email,reason:"unsubscribe",source:"fixture",scope:"email"});
+    assert(await store.isContactDurablySuppressed({userId:"a",email},"transactional_email"),"unsubscribe cannot erase permanent failure reason");
+    assert(!await store.isContactDurablySuppressed({userId:"b",email},"transactional_email"));
+  }
+  await store.suppressMarketingIdentity({workspace:"a",email:"email-only@example.com",reason:"invalid_recipient",source:"fixture",scope:"email"});
+  assert(await store.isContactDurablySuppressed({userId:"a",email:"email-only@example.com"},"transactional_email"),"a later bounce must upgrade an existing unsubscribe");
+  await store.suppressMarketingIdentity({workspace:"a",email:"manual-ok@example.com",reason:"unsubscribe",source:"fixture",scope:"email"});
+  assert(!await store.isContactDurablySuppressed({userId:"a",email:"manual-ok@example.com"},"transactional_email"));
+  assert((await store.withGlobalDncEmailBoundary("a",["manual-ok@example.com"],async mark=>{mark();return {success:true}})).success);
+  // No network: inject transport loss at the actual locked dispatch callbacks.
+  for (const boundary of [
+    send=>store.withGlobalDncPhoneBoundary("b","12025550123",send),
+    send=>store.withGlobalDncContactBoundary("b",{userId:"b",email:"transport@example.com"},send),
+    send=>store.withGlobalDncEmailBoundary("b",["transport@example.com"],send),
+  ]) {
+    for (const message of ["timeout", "ECONNRESET"]) await assert.rejects(boundary(async mark=>{mark();throw new Error(message)}),/ambiguous_provider_delivery/);
+    const rejected = Object.assign(new Error("Provider rejected request"),{status:400});
+    await assert.rejects(boundary(async()=>{throw rejected}),error=>error===rejected);
+    assert.equal((await boundary(async()=>({success:false,error:"definite rejection"}))).success,false);
+  }
+  const localError = new Error("Invalid MIME header");
+  await assert.rejects(store.withGlobalDncEmailBoundary("b",["transport@example.com"],async()=>{throw localError}),error=>error===localError);
   const scopedContact = {userId:"a",email:"email-only@example.com",customFields:{suppressed:true,emailBounced:true,suppressionScope:"email"}};
   assert.equal(routes.contactSuppressionState(scopedContact,"sms").suppressed,false);
   assert.equal(routes.contactSuppressionState(scopedContact,"email").suppressed,true);
