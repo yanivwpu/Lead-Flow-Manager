@@ -124,3 +124,48 @@ Never drop suppressions or reset contact opt-outs to roll back UI/presentation.
 Require independent review, required CI, real-provider/manual acceptance and
 explicit release approval before any merge or production rollout. These controls
 are engineering safeguards, not a blanket statement of legal compliance.
+
+## Railway schema prerequisite and acceptance record
+
+Before any deployment, verify the explicitly selected Railway project, service,
+environment and database against the approved isolated staging target. A Railway
+environment name alone does not establish database or Gmail isolation. No Railway
+schema application or production inspection has been performed by these tests.
+
+Review/apply 0113 once using the project's approved migration procedure, then
+0114 (repeat-safe). 0113 includes historical permanent bounce/invalid-recipient
+backfill in addition to opt-outs; do not assume the ordinary startup patch applies
+0113. If an earlier 0113 was applied to a disposable test database, reconcile its
+backfill separately before acceptance. Do not re-run its CREATE TABLE statements
+against an existing installation. Bootstrap-from-schema alone does not perform
+historical backfill and is not an upgrade procedure.
+
+Run the read-only verifier with the explicitly selected database connection:
+
+```
+node --import tsx scripts/verify-marketing-schema.ts
+```
+
+It checks required columns, JSONB/non-null snapshot, composite identity primary
+keys, scope constraint and absence of a contact foreign key on the durable ledger.
+It runs in a read-only transaction and prints no recipient data or connection URL.
+A passing schema check does not prove historical backfill, production recipient
+suppression, environment isolation or migration authorization. Verify backfill
+counts and existing global DNC/bounce rows through an approved operational review.
+The automated fixture tests exercise migrations, historical bounce backfill,
+repeat-safe 0114 and rejection of an incomplete schema.
+
+Provider timeout/reset after dispatch is ambiguous across the phone/adapter and
+email boundaries. Reconcile provider delivery before retry; the queue Retry action
+refuses ambiguous rows. Definite SDK HTTP rejection and pre-dispatch Gmail MIME
+validation remain definite failures. Permanent bounce/invalid-recipient ledger
+reasons survive later unsubscribe writes and block all email, including manual
+and transactional sends. Email-only marketing unsubscribe still permits manual
+and transactional messages. Global DNC blocks every covered channel boundary.
+
+New sender, DNC and recipient-preview controls have English, Spanish and Hebrew
+copy and inherit explicit locale direction; recipient message text uses automatic
+paragraph direction. Automated SSR checks cover all three locales. Interactive
+browser layout and actual Gmail multipart/DKIM acceptance remain staging gates.
+The real production STOP recipient still requires verified durable suppression;
+no production identity or suppression is asserted by fake-provider tests.

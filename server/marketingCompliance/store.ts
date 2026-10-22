@@ -44,7 +44,8 @@ export async function suppressMarketingIdentity(input: { workspace: string; emai
     }
     for (const key of keys) await tx.execute(sql`INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
       VALUES (${input.workspace},${key},${scope},${input.reason},${input.source})
-      ON CONFLICT (workspace_user_id,email_normalized) DO UPDATE SET scope=CASE WHEN marketing_suppressions.scope='all' THEN 'all' ELSE EXCLUDED.scope END`);
+      ON CONFLICT (workspace_user_id,email_normalized) DO UPDATE SET scope=CASE WHEN marketing_suppressions.scope='all' THEN 'all' ELSE EXCLUDED.scope END,
+        reason=CASE WHEN marketing_suppressions.reason IN ('bounce','invalid_recipient') THEN marketing_suppressions.reason WHEN EXCLUDED.reason IN ('bounce','invalid_recipient') THEN EXCLUDED.reason ELSE marketing_suppressions.reason END`);
     // All matching contacts, not just the original recipient contact ID.
     await tx.execute(sql`UPDATE contacts SET custom_fields=COALESCE(custom_fields,'{}'::jsonb) ||
       jsonb_build_object('suppressed',true,'suppressionScope',${scope}::text,'suppressionReason',${input.reason}::text,'suppressionSource',${input.source}::text,'suppressedAt',COALESCE(custom_fields->>'suppressedAt',now()::text)) || ${optOut ? JSON.stringify(scope === "all" ? {unsubscribed:true,campaignOptOut:true,doNotContact:true} : {emailUnsubscribed:true}) : '{}'}::jsonb
@@ -82,7 +83,7 @@ export async function isContactDurablySuppressed(contact: { userId: string; emai
   try { if (contact.email) keys.push(normalizeMarketingEmail(contact.email)); } catch {}
   try { if (contact.phone) keys.push(`phone:${normalizeStoredMarketingPhone(contact.phone)}`); } catch {}
   if (!keys.length) return false;
-  const result = await executor.execute(sql`SELECT 1 FROM marketing_suppressions WHERE workspace_user_id=${contact.userId} AND email_normalized IN (${sql.join(keys.map(k => sql`${k}`), sql`,`)}) AND (scope='all' OR ${channel}='email') LIMIT 1`);
+  const result = await executor.execute(sql`SELECT 1 FROM marketing_suppressions WHERE workspace_user_id=${contact.userId} AND email_normalized IN (${sql.join(keys.map(k => sql`${k}`), sql`,`)}) AND (scope='all' OR ${channel}='email' OR (${channel}='transactional_email' AND reason IN ('bounce','invalid_recipient'))) LIMIT 1`);
   return result.rows.length > 0;
 }
 
@@ -109,28 +110,34 @@ export class AmbiguousProviderDeliveryError extends Error {
   constructor() { super("ambiguous_provider_delivery: reconcile provider delivery before retry"); }
 }
 
-async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: () => Promise<T>): Promise<T> {
+async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: (onDispatch: () => void) => Promise<T>, email = false): Promise<T> {
   let accepted = false;
+  let dispatched = false;
   try {
     return await db.transaction(async tx => {
       await lockMarketingWorkspace(tx, workspace);
       for (const identity of identities) {
         if (identity.userId !== workspace) throw new Error("Contact not found");
-        if (await isContactDurablySuppressed(identity, "global", tx)) throw new MarketingSuppressionError();
+        if (await isContactDurablySuppressed(identity, email ? "transactional_email" : "global", tx)) throw new MarketingSuppressionError();
       }
-      const result = await send();
+      // Phone/adapter callers enter only after credentials and payload validation.
+      // Gmail signals its own dispatch after MIME validation.
+      if (!email) dispatched = true;
+      const result = await send(() => { dispatched = true; });
       accepted = !(result instanceof Response ? !result.ok : result && typeof result === "object" && "success" in result && result.success === false);
       return result;
     });
   } catch (error) {
-    if (accepted) throw new AmbiguousProviderDeliveryError();
+    const status = Number((error as {status?: number})?.status);
+    const definiteRejection = Number.isInteger(status) && status >= 400 && status <= 599;
+    if (accepted || (dispatched && !definiteRejection)) throw new AmbiguousProviderDeliveryError();
     throw error;
   }
 }
 
 /** Order manual/transactional email with global DNC, preserving email-only exemptions. */
-export function withGlobalDncEmailBoundary<T>(workspace: string, recipients: string[], send: () => Promise<T>): Promise<T> {
-  return withGlobalDncBoundary(workspace, recipients.map(email => ({userId:workspace,email})), send);
+export function withGlobalDncEmailBoundary<T>(workspace: string, recipients: string[], send: (onDispatch: () => void) => Promise<T>): Promise<T> {
+  return withGlobalDncBoundary(workspace, recipients.map(email => ({userId:workspace,email})), send, true);
 }
 
 /** Caller prepares credentials and local payload validation before entering this lock. */

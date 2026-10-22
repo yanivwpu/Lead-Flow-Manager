@@ -27,5 +27,17 @@ try {
   assert.equal(await count(), 1);
   await markItemFailed({ id: "claimed", batchId: "batch", workspaceUserId: "workspace" }, "late duplicate completion", false);
   assert.equal(await count(), 1, "a repeated worker completion must not double count");
+  // Execute the actual Retry handler: ambiguous delivery must not requeue.
+  const retry = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "retryFailedQueueItem")!;
+  const retryOutput = join(scratch,"retry.mjs");
+  const retryAst = ts.createSourceFile("retry.ts",retry.getText(ast),ts.ScriptTarget.Latest,true);
+  const retryFunction = retryAst.statements[0] as ts.FunctionDeclaration;
+  const statements = retryFunction.body!.statements;
+  // Keep production early guards through reconciliation; replace only the DB read.
+  const guardEnd = statements.findIndex(node=>node.getText(retryAst).includes("storage.getContact"));
+  const guards = statements.slice(1,guardEnd).map(node=>node.getText(retryAst)).join("\n");
+  await build({stdin:{contents:`export async function retryFailedQueueItem(fixture){const rows=[fixture];${guards};throw new Error('retry reached provider preparation')}`,resolveDir:process.cwd(),loader:"ts"},outfile:retryOutput,platform:"node",format:"esm"});
+  const retryModule = await import(pathToFileURL(retryOutput).href);
+  assert.deepEqual(await retryModule.retryFailedQueueItem({queueStatus:"failed",attempts:1,maxAttempts:3,lastError:"ambiguous_provider_delivery: timeout"}),{retried:false,reason:"delivery_reconciliation_required"});
   console.log("ok - production queue failure accounting respects opt-out races and duplicate completion");
 } finally { delete (globalThis as any).__queueAccounting; await pg.close(); await rm(scratch, { recursive: true, force: true }); }

@@ -60,6 +60,7 @@ export function classifyProspectOutreachFailureScope(
   const raw = String(reason || "").trim();
   if (!raw) return "prospect";
 
+  if (/ambiguous_provider_delivery/i.test(raw)) return "prospect";
   if (isSenderNotConnectedFailure(raw)) return "campaign";
   if (CAMPAIGN_LIMIT_RE.test(raw)) return "campaign";
   if (PROSPECT_REASON_RE.test(raw)) return "prospect";

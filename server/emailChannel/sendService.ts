@@ -69,7 +69,7 @@ export async function sendEmailViaMailbox(params: {
   }
 
   const { isContactDurablySuppressed } = await import("../marketingCompliance/store");
-  if (await isContactDurablySuppressed(contact, "global")) {
+  if (await isContactDurablySuppressed(contact, "transactional_email")) {
     return { success: false, channel: "email", error: "Recipient has a durable global do-not-contact request" };
   }
   const dnc = contactHasDoNotContact(contact);
@@ -272,7 +272,7 @@ export async function sendEmailViaMailbox(params: {
           recipients: [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])],
           text: textBody, html: sanitized.html || null,
         }, dispatch)
-      : await (await import("../marketingCompliance/store")).withGlobalDncEmailBoundary(params.workspaceUserId, [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])], () => dispatch({ text: textBody || htmlToPlainText(htmlBody || ""), html: sanitized.html || null }));
+      : await (await import("../marketingCompliance/store")).withGlobalDncEmailBoundary(params.workspaceUserId, [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])], onDispatch => dispatch({ text: textBody || htmlToPlainText(htmlBody || ""), html: sanitized.html || null, onDispatch }));
 
     if (auditBodies.value) {
       await updateEmailMessageBodies(pending.id, auditBodies.value.text, auditBodies.value.html);

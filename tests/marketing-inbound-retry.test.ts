@@ -33,6 +33,11 @@ try {
   assert.equal(state.identities[0].scope, "all");
   await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,from:{email:"noreply@vendor.example"},replyTo:{email:"visitor@example.com"}}});
   assert.equal(state.identities.at(-1).email,"visitor@example.com","pre-dedup suppression must use authoritative Reply-To visitor identity");
+  await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,subject:"Unsubscribe",textBody:"Sent from my iPhone"}});
+  assert.equal(state.identities.at(-1).scope,"email");
+  assert.equal(state.identities.at(-1).email,"person@example.com");
+  await persistNormalizedEmailMessage({...params, normalized:{...params.normalized,subject:"STOP",textBody:"Sent from my iPhone"}});
+  assert.equal(state.identities.at(-1).scope,"all");
   const dsn = {...params,normalized:{...params.normalized,subject:"Delivery failure",textBody:"Final-Recipient: rfc822; bounced@example.com",from:{email:"mailer-daemon@vendor.example"}}};
   const readsBeforeBounce = state.reads; state.fail = true;
   await assert.rejects(persistNormalizedEmailMessage(dsn),/transient ledger failure/);
