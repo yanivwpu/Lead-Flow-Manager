@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -3555,7 +3555,7 @@ export const marketingSenderProfiles = pgTable("marketing_sender_profiles", {
   postalAddress: text("postal_address").notNull(),
   verifiedAt: timestamp("verified_at").notNull(),
   verifiedBy: varchar("verified_by").notNull().references(() => users.id),
-}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.mailboxId] }) }));
+}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.mailboxId] }), addressLength: check("marketing_sender_profiles_postal_address_check", sql`length(trim(${t.postalAddress})) BETWEEN 10 AND 1000`) }));
 export const marketingSuppressions = pgTable("marketing_suppressions", {
   workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   emailNormalized: text("email_normalized").notNull(),
@@ -3563,4 +3563,4 @@ export const marketingSuppressions = pgTable("marketing_suppressions", {
   reason: text("reason").notNull(),
   source: text("source").notNull(),
   suppressedAt: timestamp("suppressed_at").notNull().defaultNow(),
-}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.emailNormalized] }) }));
+}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.emailNormalized] }), validScope: check("marketing_suppressions_scope_check", sql`${t.scope} IN ('email','all')`) }));
