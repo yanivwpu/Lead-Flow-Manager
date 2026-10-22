@@ -59,6 +59,8 @@ test("empty PostgreSQL baseline is transactional, concurrent/repeat safe and com
     assert.ok(merchant.id, "generated defaults must work");
     await assert.rejects(pool.query("INSERT INTO integrations (user_id,type,name) VALUES ($1,$2,$3)", ["missing-user","shopify","Fixture"]),
       (error: any) => error.code === "23503", "generated foreign keys must be enforced");
+    const {verifyMarketingSchema} = await import("../scripts/verify-marketing-schema");
+    assert((await verifyMarketingSchema(pool)).ready,"fresh Railway schema must meet Phase 1 constraints");
     assert.equal((await bootstrapStagingDatabase(env)).initialized, false);
     assert.equal((await pool.query("SELECT count(*)::int AS n FROM users")).rows[0].n, 1);
     const updatedManifest = { ...manifest, sha256: "changed-baseline" };

@@ -133,6 +133,8 @@ try {
   assert(await store.isMarketingSuppressed("a","deleted-late-bounce@example.com"),"late bounce must persist without any contact");
   await routes.applyProspectEmailSuppression({workspaceUserId:"a",contactId:"deleted",bouncedEmail:"concurrently-deleted@example.com",reason:"bounce"});
   assert(await store.isMarketingSuppressed("a","concurrently-deleted@example.com"));
+  assert.equal(getTableConfig((await import("../shared/schema")).marketingSuppressions).checks.length,1,"generated Railway schema must enforce the same scope constraint as 0113");
+  assert.equal(getTableConfig((await import("../shared/schema")).marketingSenderProfiles).checks.length,1,"generated Railway schema must enforce the same address constraint as 0113");
   // Permanent delivery failures survive deletion/reimport and later opt-outs.
   for (const email of ["deleted-late-bounce@example.com", "concurrently-deleted@example.com"]) {
     assert(await store.isContactDurablySuppressed({userId:"a",email},"transactional_email"));
