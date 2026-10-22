@@ -1,4 +1,4 @@
-import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError } from "./marketingCompliance/store";
+import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError, readProviderDeliveryJson } from "./marketingCompliance/store";
 import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -511,7 +511,7 @@ export async function sendMetaWhatsAppMessage(
     throw new Error(error.error?.message || "Failed to send message via Meta WhatsApp API");
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   return { 
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 
@@ -580,7 +580,7 @@ export async function sendMetaWhatsAppMedia(
     throw new Error(errorMsg);
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   const messageId = result.messages?.[0]?.id || "";
   console.log(
     `[MetaWhatsApp] Media sent OK — to=${normalizedPhone} type=${mediaType}` +
@@ -753,7 +753,7 @@ export async function sendMetaWhatsAppTemplate(
     throw err;
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   const messageId = result.messages?.[0]?.id || "";
   console.log(
     `[WA_TEMPLATE_SEND_SUCCESS] ${JSON.stringify({
@@ -813,7 +813,7 @@ export async function sendMetaInteractiveMessage(
     throw new Error(error.error?.message || "Failed to send interactive message");
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   return { 
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 

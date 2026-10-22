@@ -110,6 +110,15 @@ export class AmbiguousProviderDeliveryError extends Error {
   constructor() { super("ambiguous_provider_delivery: reconcile provider delivery before retry"); }
 }
 
+/** A successful HTTP response may still lose its body after upstream acceptance. */
+export async function readProviderDeliveryJson(response: Response): Promise<any> {
+  try { return await response.json(); }
+  catch (error) {
+    if (response.ok) throw new AmbiguousProviderDeliveryError();
+    throw error;
+  }
+}
+
 async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: (onDispatch: () => void) => Promise<T>, email = false): Promise<T> {
   let accepted = false;
   let dispatched = false;
