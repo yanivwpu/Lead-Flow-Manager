@@ -8,6 +8,13 @@ const STAGING = {
   environment: "43e4c163-6da9-4be5-ad93-0a3534234613",
   service: "7663b193-b936-41cd-a810-a4940d9912fc",
 };
+// Dedicated marketing QA environment. Explicit identifiers prevent accidentally
+// bootstrapping the existing Shopify staging DB or the live app database.
+const MARKETING_QA = {
+  project: "8da07fa3-3f34-47f8-a31d-ca9c487b0273",
+  environment: "52ba4a24-38d5-4343-b1d0-4501cea0a6b3",
+  service: "93ddb7c9-6497-46fa-b977-5984d0823461",
+};
 const MARKER = "whachat_staging_schema_bootstrap";
 const LOCK = 18643109;
 
@@ -27,7 +34,16 @@ export function validateStagingTarget(env) {
     target.hostname === "postgres.railway.internal" &&
     target.pathname === "/railway" &&
     !target.search && !target.hash;
-  if (!disposable && !railway) throw new Error("staging_target_not_allowlisted");
+  // Empty, independent Postgres instance in a new Railway project only.
+  // Using this allowance cannot loosen the production/Shopify guard.
+  const marketingQa = env.RAILWAY_PROJECT_ID === MARKETING_QA.project &&
+    env.RAILWAY_ENVIRONMENT_ID === MARKETING_QA.environment &&
+    env.RAILWAY_SERVICE_ID === MARKETING_QA.service &&
+    env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
+    target.hostname === "postgres.railway.internal" &&
+    target.pathname === "/railway" &&
+    !target.search && !target.hash;
+  if (!disposable && !railway && !marketingQa) throw new Error("staging_target_not_allowlisted");
   return { url: target.toString(), database: decodeURIComponent(target.pathname.slice(1)) };
 }
 
