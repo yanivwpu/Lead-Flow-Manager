@@ -69,14 +69,24 @@ function explicitOptOutScope(body: string, subject = ""): "all" | "email" | null
   const authored = String(body || "").split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim();
   // Inspect both independently: signatures must not hide a subject-only request.
   const candidates = [authored, subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, "").trim()];
-  const clauses = /(?:^|[.!?\n,;])\s*(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(stop(?:\s+(?:(?:messaging|contacting|emailing|texting)(?:\s+me)?|sending(?:\s+me)?\s+(?:any\s+)?(?:more\s+)?(?:(?:marketing|promotional)\s+)?(?:emails?|messages?|texts?)(?:\s+to\s+me)?))?|unsubscribe(?:\s+me)?(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:future\s+)?(?:emails?|messages?|mailing\s+list|list))?|remove\s+me(?:\s+from\s+(?:(?:your|the|this)\s+)?(?:mailing\s+list|list|emails?|contacts))?|opt[\s-]?out|do\s+not\s+contact(?:\s+me)?(?:\s+again)?|don['’]?t\s+contact(?:\s+me)?(?:\s+again)?)(?:\s+(?:please|thanks|thank\s+you))?\s*(?=$|[.!?\n,;])/gi;
+  // Share nouns/actions across polite forms so "texts" and "text messages"
+  // cannot diverge between recognition and channel-scope classification.
+  const noun = String.raw`(?:e[ -]?mails?(?:\s+messages?)?|texts?(?:\s+messages?)?|sms(?:\s+messages?)?|messages?|communications?|notifications?|updates?|newsletters?|mail|whatsapp(?:\s+messages?)?|spam|promotions?|advertisements?|offers?)`;
+  const qualifiedNoun = String.raw`(?:(?:any|all)\s+)?(?:more\s+)?(?:(?:your|the|these|those|such)\s+)?(?:(?:future|marketing|promotional|unwanted)\s+)*${noun}`;
+  const list = String.raw`(?:(?:your|the|this|all)\s+)?(?:mailing\s+list|e[ -]?mail\s+list|distribution\s+list|contact\s+list|list|database|contacts|${qualifiedNoun})`;
+  const delivery = String.raw`(?:sending|receiving)(?:\s+(?:me|us))?\s+${qualifiedNoun}(?:\s+to\s+(?:me|us))?`;
+  const action = String.raw`(?:stop(?:\s+(?:(?:messaging|contacting|emailing|mailing|texting)(?:\s+(?:me|us))?|${delivery}|everything))?|unsubscribe(?:\s+me)?(?:\s+from\s+${list})?|remove\s+me(?:\s+from\s+${list})?|take\s+me\s+off\s+${list}|opt(?:\s+me)?[\s-]?out(?:\s+of\s+${list})?|(?:do\s+not|don['’]?t|never)\s+(?:(?:contact|message|text|email|mail)(?:\s+(?:me|us))?|send(?:\s+(?:me|us))?\s+${qualifiedNoun})(?:\s+again)?|no\s+more\s+${noun})`;
+  const prefix = String.raw`(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?|i(?:\s+want|\s+would\s+like|['’]d\s+like)\s+(?:you\s+)?to\s+)?`;
+  const suffix = String.raw`(?:\s+(?:please|thanks|thank\s+you|immediately|now|for\s+now))?`;
+  const clauses = new RegExp(String.raw`(?:^|[.!?\n,;])\s*${prefix}(${action})${suffix}\s*(?=$|[.!?\n,;])`, "gi");
   let scope: "all" | "email" | null = null;
   for (const candidate of candidates) for (const match of candidate.matchAll(clauses)) {
-    const action = match[1].toLowerCase();
-    const globalRequest = /^(?:do\s+not\s+contact|don['’]?t\s+contact|stop$)/.test(action) ||
-      /^stop\s+(?:messaging|contacting|texting)\b/.test(action) ||
-      (/^stop\s+sending\b/.test(action) && /\b(?:messages?|texts?)\b/.test(action));
-    if (globalRequest) return "all";
+    const request = match[1].toLowerCase();
+    if (request === "stop" || /\b(?:texts?|texting|sms|whatsapp|messaging|contact(?:ing|s)?|everything)\b/.test(request)) return "all";
+    // An explicit email noun keeps "email messages" email-scoped, whereas
+    // unspecified messages/communications are a broader stop request.
+    if (!/\b(?:e[ -]?mails?|emailing|mailing|mail|newsletters?|list)\b/.test(request) &&
+        /\b(?:messages?|communications?|notifications?|updates?|promotions?|advertisements?|offers?)\b/.test(request)) return "all";
     scope = "email";
   }
   return scope;

@@ -111,3 +111,21 @@ for(const body of ["Stop texting me", "Stop sending me texts", "Please stop send
  assert.equal(prospectEmailUnsubscribeScope(body),"all",body);
 }
 assert.equal(prospectEmailUnsubscribeScope("Stop sending me marketing emails."),"email");
+
+const optOutExamples: Array<[string,"all"|"email"]> = [
+ ["Stop sending me text messages","all"],["Please stop sending me SMS messages.","all"],
+ ["Please stop sending me any more promotional text messages.","all"],
+ ["Stop sending me email messages.","email"],["Stop receiving marketing emails.","email"],
+ ["Please do not email me again.","email"],["Don't send me any more emails.","email"],
+ ["Do not text me again.","all"],["Never message me again.","all"],
+ ["I would like to unsubscribe from your mailing list.","email"],
+ ["Take me off your email list please.","email"],["No more text messages please.","all"],
+ ["No more emails please.","email"],["Stop everything.","all"],
+];
+for(const [body,scope] of optOutExamples) {
+ assert(isStop({body}),body);assert.equal(prospectEmailUnsubscribeScope(body),scope,body);
+ assert(isStop({subject:body,body:"Sent from my iPhone"}),body);
+}
+for(const body of ["Please do not unsubscribe me.","Don't stop sending me emails.","I don't want to unsubscribe.","The text messages feature has a stop button.","Stop sending me code samples.","> Stop sending me text messages","Thanks\nOn Monday Alice wrote:\nStop sending me text messages"]) assert(!isStop({body}),body);
+
+for(const [body,scope] of [["Please stop sending me these text messages.","all"],["Stop sending me mail.","email"],["Please opt me out of your emails.","email"],["I'd like to unsubscribe.","email"],["Stop sending me WhatsApp messages.","all"]] as const) {assert(isStop({body}),body);assert.equal(prospectEmailUnsubscribeScope(body),scope,body);}
