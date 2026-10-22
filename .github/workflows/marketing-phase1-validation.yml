@@ -1,28 +1,7 @@
 name: Marketing Phase 1 validation
+# Always validate: suppression spans ingestion, automation and provider boundaries.
 on:
-  pull_request:
-    paths:
-      - 'server/marketingCompliance/**'
-      - 'server/emailChannel/**'
-      - 'server/prospectImport/**'
-      - 'shared/prospect*'
-      - 'shared/safeTextLinks.ts'
-      - 'server/userMeta.ts'
-      - 'server/userTwilio.ts'
-      - 'server/channelAdapters.ts'
-      - 'migrations/0113_marketing_compliance.sql'
-      - 'migrations/0114_prospect_link_rendering_snapshot.sql'
-      - 'scripts/verify-marketing-schema.ts'
-      - 'client/src/locales/*.json'
-      - 'tests/marketing-*'
-      - '.github/workflows/marketing-phase1-validation.yml'
-      - 'client/src/components/ContactSuppressionStatus.tsx'
-      - 'client/src/components/SafeMessageText.tsx'
-      - 'client/src/components/settings/Marketing*'
-      - 'client/src/components/settings/CampaignQueueDraftDialog.tsx'
-      - 'client/src/pages/ContactDetails.tsx'
-      - 'client/src/pages/UnifiedInbox.tsx'
-      - 'client/src/pages/Settings.tsx'
+  pull_request: {}
 permissions:
   contents: read
 jobs:
