@@ -40,7 +40,7 @@ try {
   assert.equal(state.identities.at(-1).scope,"all");
   await persistNormalizedEmailMessage({...params,normalized:{...params.normalized,textBody:"Please stop sending me emails."}});
   assert.equal(state.identities.at(-1).scope,"email");
-  for(const textBody of ["Stop texting me", "Stop sending me texts"]) {
+  for(const textBody of ["Stop texting me", "Stop sending me texts", "Stop sending me text messages", "Do not text me again"]) {
     await persistNormalizedEmailMessage({...params,normalized:{...params.normalized,textBody}});
     assert.equal(state.identities.at(-1).scope,"all",textBody);
   }

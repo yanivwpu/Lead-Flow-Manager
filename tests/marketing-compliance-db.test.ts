@@ -145,7 +145,7 @@ try {
   assert.equal(getTableConfig((await import("../shared/schema")).marketingSenderProfiles).checks.length,1,"generated Railway schema must enforce the same address constraint as 0113");
   await pg.exec("INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES ('text-stop','a','text-stop@example.com','+12025550888','{}')");
   const {prospectEmailUnsubscribeScope} = await import("../shared/prospectEmailSuppression");
-  await store.suppressMarketingIdentity({workspace:"a",email:"text-stop@example.com",reason:"unsubscribe",source:"email_reply",scope:prospectEmailUnsubscribeScope("Stop texting me")});
+  await store.suppressMarketingIdentity({workspace:"a",email:"text-stop@example.com",reason:"unsubscribe",source:"email_reply",scope:prospectEmailUnsubscribeScope("Stop sending me text messages")});
   assert(await store.isContactDurablySuppressed({userId:"a",phone:"+12025550888"},"sms"),"inbound texting opt-out must expand to linked phone");
   // Permanent delivery failures survive deletion/reimport and later opt-outs.
   for (const email of ["deleted-late-bounce@example.com", "concurrently-deleted@example.com"]) {
