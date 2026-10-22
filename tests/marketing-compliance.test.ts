@@ -105,3 +105,9 @@ for (const request of ["Please stop sending me emails.","Stop sending emails to 
 assert.equal(prospectEmailUnsubscribeScope("Please stop sending me emails."),"email");
 assert.equal(prospectEmailUnsubscribeScope("Stop sending me messages!"),"all");
 for(const body of ["Please stop sending me code snippets.","Please do not stop sending me emails.","> Please stop sending me emails."]) assert(!isStop({body}),body);
+
+for(const body of ["Stop texting me", "Stop sending me texts", "Please stop sending me any more promotional messages.", "Stop sending me marketing texts."]) {
+ assert(isStop({body}),body);
+ assert.equal(prospectEmailUnsubscribeScope(body),"all",body);
+}
+assert.equal(prospectEmailUnsubscribeScope("Stop sending me marketing emails."),"email");

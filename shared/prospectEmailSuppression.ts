@@ -73,7 +73,10 @@ function explicitOptOutScope(body: string, subject = ""): "all" | "email" | null
   let scope: "all" | "email" | null = null;
   for (const candidate of candidates) for (const match of candidate.matchAll(clauses)) {
     const action = match[1].toLowerCase();
-    if (/^(?:do\s+not\s+contact|don['’]?t\s+contact|stop(?:\s+(?:(?:messaging|contacting)(?:\s+me)?|sending(?:\s+me)?\s+(?:any\s+)?(?:more\s+)?messages?(?:\s+to\s+me)?))?$)/.test(action)) return "all";
+    const globalRequest = /^(?:do\s+not\s+contact|don['’]?t\s+contact|stop$)/.test(action) ||
+      /^stop\s+(?:messaging|contacting|texting)\b/.test(action) ||
+      (/^stop\s+sending\b/.test(action) && /\b(?:messages?|texts?)\b/.test(action));
+    if (globalRequest) return "all";
     scope = "email";
   }
   return scope;
