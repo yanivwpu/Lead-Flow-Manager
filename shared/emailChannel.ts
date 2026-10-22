@@ -157,6 +157,8 @@ export type NormalizedEmailMessage = {
   subject: string | null;
   snippet: string | null;
   textBody: string | null;
+  /** Preserve native plaintext vs an HTML/snippet display fallback for intent checks. */
+  textBodySource?: "plain" | "html" | "snippet";
   htmlBody: string | null;
   from: NormalizedEmailAddress;
   to: NormalizedEmailAddress[];

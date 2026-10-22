@@ -1332,7 +1332,7 @@ export async function retryFailedQueueItem(params: {
   if (item.attempts >= item.maxAttempts) return { retried: false, reason: "max_attempts" };
   const lastErr = String(item.lastError || "");
   if (/ambiguous_provider_delivery/i.test(lastErr)) return { retried: false, reason: "delivery_reconciliation_required" };
-  if (/^permanent:/i.test(lastErr) || /suppressed|opted_out|bounce/i.test(lastErr)) {
+  if (/^permanent:/i.test(lastErr)) {
     return { retried: false, reason: "permanent_failure" };
   }
 
@@ -1340,8 +1340,9 @@ export async function retryFailedQueueItem(params: {
   const contact = await storage.getContact(item.contactId);
   if (contact) {
     const { contactSuppressionState } = await import("./prospectOutreachEligibilityService");
-    const suppression = contactSuppressionState(contact);
-    if (suppression.suppressed || suppression.optedOut) {
+    const suppression = contactSuppressionState(contact, item.selectedChannel);
+    const { isContactDurablySuppressed } = await import("../marketingCompliance/store");
+    if (suppression.suppressed || suppression.optedOut || await isContactDurablySuppressed(contact, item.selectedChannel)) {
       return { retried: false, reason: "contact_suppressed" };
     }
     if (contact.automationsPaused === true) {

@@ -231,6 +231,7 @@ export function normalizeGmailApiMessage(
     subject,
     snippet: raw.snippet || textBody?.slice(0, 200) || null,
     textBody,
+    textBodySource: bodies.text?.trim() ? "plain" : bodies.html ? "html" : "snippet",
     htmlBody: bodies.html,
     from,
     to,

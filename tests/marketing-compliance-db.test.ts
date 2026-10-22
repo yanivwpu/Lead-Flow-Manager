@@ -233,5 +233,30 @@ try {
   process.env.NODE_ENV="production";
   await assert.rejects(routes.withCompliantMarketingEmail(marketing, send), /disabled/);
   assert.equal(sent,1);
+  // Run the entire production Retry handler with real queue reads/writes.
+  const queueAst = ts.createSourceFile("queue.ts",await readFile("server/prospectImport/prospectOutreachQueueService.ts","utf8"),ts.ScriptTarget.Latest,true);
+  const retryFunction = queueAst.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==="retryFailedQueueItem")!;
+  const retryOutput = join(scratch,"retry.mjs");
+  (globalThis as any).__marketingTest.contactSuppressionState = routes.contactSuppressionState;
+  await build({stdin:{contents:`import {and,eq} from 'drizzle-orm'; import {prospectOutreachQueueItems} from './shared/schema'; const db=globalThis.__marketingTest.db; const storage={getContact:async()=>globalThis.__marketingTest.contact}; ${retryFunction.getText(queueAst)}`,resolveDir:process.cwd(),loader:"ts"},outfile:retryOutput,bundle:true,platform:"node",format:"esm",packages:"external",plugins:[{name:"retry-fixture",setup(b){
+    b.onResolve({filter:/prospectOutreachEligibilityService$/},()=>({path:"eligibility",namespace:"fixture"}));
+    b.onLoad({filter:/.*/,namespace:"fixture"},()=>({contents:"export const contactSuppressionState=globalThis.__marketingTest.contactSuppressionState",loader:"ts"}));
+    b.onResolve({filter:/marketingCompliance\/store$/},()=>({path:join(process.cwd(),"server/marketingCompliance/store.ts")}));
+    b.onLoad({filter:/[/\\]drizzle[/\\]db\.ts$/},()=>({contents:"export const db=globalThis.__marketingTest.db",loader:"ts"}));
+  }}]});
+  const {retryFailedQueueItem} = await import(pathToFileURL(retryOutput).href);
+  await pg.exec("INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES ('retry-scope','a','retry-scope@example.com','+12025550777','{}')");
+  await store.suppressMarketingIdentity({workspace:"a",email:"retry-scope@example.com",scope:"email",reason:"unsubscribe",source:"fixture"});
+  (globalThis as any).__marketingTest.contact={id:"retry-scope",userId:"a",email:"retry-scope@example.com",phone:"+12025550777",customFields:{suppressed:true,suppressionScope:"email",emailUnsubscribed:true}};
+  for(const channel of ["email","sms","whatsapp"]) {
+    await pg.query("INSERT INTO prospect_outreach_queue_items(id,workspace_user_id,contact_id,selected_channel,queue_status,attempts,max_attempts,last_error) VALUES ($1,'a','retry-scope',$2,'failed',1,3,'email_suppressed')",["retry-"+channel,channel]);
+    const result=await retryFailedQueueItem({queueItemId:"retry-"+channel,workspaceUserId:"a"});
+    assert.equal(result.retried,channel!=="email",channel+" retry must respect actual suppression channel");
+    assert.equal((await get("prospect_outreach_queue_items","retry-"+channel)).queue_status,channel==="email"?"failed":"queued");
+  }
+  await store.suppressMarketingIdentity({workspace:"a",email:"retry-scope@example.com",scope:"all",reason:"dnc",source:"fixture"});
+  (globalThis as any).__marketingTest.contact.customFields={}; // simulate reimport/stale CRM flags
+  await pg.exec("UPDATE prospect_outreach_queue_items SET queue_status='failed',last_error='provider_failure' WHERE id='retry-sms'");
+  assert.equal((await retryFailedQueueItem({queueItemId:"retry-sms",workspaceUserId:"a"})).reason,"contact_suppressed","durable global DNC must still block a phone retry with empty contact flags");
   console.log("ok - migration, historical backfill, tenant isolation, duplicate/reimport/phone suppression, atomic queue/job cancellation");
 } finally { await pg.close(); await rm(scratch, { recursive: true, force: true }); }

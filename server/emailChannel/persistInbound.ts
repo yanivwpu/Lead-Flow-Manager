@@ -1,3 +1,4 @@
+import { inboundOptOutText } from "./authoredEmailText";
 import { and, eq } from "drizzle-orm";
 import { conversations, type EmailMailbox } from "@shared/schema";
 import type { NormalizedEmailMessage } from "@shared/emailChannel";
@@ -58,11 +59,13 @@ export async function persistNormalizedEmailMessage(params: {
       ? replyTarget.email
       : null);
 
+  const authoredOptOutText = messageContentForInbound({formMeta, fallbackText: inboundOptOutText(normalized)});
+
   // Suppression is its own idempotent operation and must run on every replay,
   // even when message persistence already succeeded before a transient failure.
   if (normalized.direction === "inbound") {
     const { isProspectEmailUnsubscribeSignal, prospectEmailUnsubscribeScope } = await import("@shared/prospectEmailSuppression");
-    const authored = normalized.textBody || htmlToPlainText(normalized.htmlBody || "") || normalized.snippet || "";
+    const authored = authoredOptOutText;
     if (isProspectEmailUnsubscribeSignal({ subject: normalized.subject, body: authored, fromEmail: identityEmail || normalized.from.email })) {
       const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
       await suppressMarketingIdentity({ workspace: mailbox.workspaceUserId, email: identityEmail || normalized.from.email,
@@ -370,7 +373,7 @@ export async function persistNormalizedEmailMessage(params: {
       if (
         isProspectEmailUnsubscribeSignal({
           subject: normalized.subject,
-          body: textContent,
+          body: authoredOptOutText,
           fromEmail: identityEmail || normalized.from.email,
         })
       ) {
@@ -382,7 +385,7 @@ export async function persistNormalizedEmailMessage(params: {
           workspaceUserId: mailbox.workspaceUserId,
           reason: "unsubscribe",
           detail: "inbound_unsubscribe_keyword",
-          scope: prospectEmailUnsubscribeScope(textContent, normalized.subject || ""),
+          scope: prospectEmailUnsubscribeScope(authoredOptOutText, normalized.subject || ""),
           source: "persist_inbound_unsubscribe",
         });
       }
