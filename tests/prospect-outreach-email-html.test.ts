@@ -100,3 +100,10 @@ for (const punctuation of ["؟","،","؛","。","！","？","，","…"]) {
  const exact=url+punctuation;
  assert.equal(safeTextLinks(exact,true,[exact]).find(p=>p.href)?.href,exact);
 }
+
+for (const message of ["Hello,\n\nSee https://example.com/demo.","Hola,\n\nConsulta https://example.com/demo.","שלום,\n\nפרטים https://example.com/demo.","مرحبا،\n\nتفاصيل https://example.com/demo؟"]) {
+ const html=renderProspectOutreachEmailHtml(message);
+ assert.equal((html.match(/<p dir="auto" /g)||[]).length,2,"each paragraph must resolve its own content direction");
+ assert(!html.includes('dir="rtl"'),"English and Spanish must retain automatic LTR rendering");
+ assert(html.includes('href="https://example.com/demo"'));
+}
