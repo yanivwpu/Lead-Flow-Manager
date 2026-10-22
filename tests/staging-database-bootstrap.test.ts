@@ -24,6 +24,19 @@ test("target guards reject missing opt-in, production, wrong Railway context and
   assert.equal(validateStagingTarget(pinned).database, "railway");
   assert.throws(() => validateStagingTarget({ ...pinned, RAILWAY_ENVIRONMENT_NAME: "production" }));
   assert.throws(() => validateStagingTarget({ ...pinned, RAILWAY_SERVICE_ID: "another-service" }));
+  const qa = { ...pinned,
+    RAILWAY_PROJECT_ID: "8da07fa3-3f34-47f8-a31d-ca9c487b0273",
+    RAILWAY_ENVIRONMENT_ID: "52ba4a24-38d5-4343-b1d0-4501cea0a6b3",
+    RAILWAY_SERVICE_ID: "93ddb7c9-6497-46fa-b977-5984d0823461",
+  };
+  assert.equal(validateStagingTarget(qa).database, "railway");
+  assert.throws(() => validateStagingTarget({ ...qa, RAILWAY_PROJECT_ID: pinned.RAILWAY_PROJECT_ID }));
+  assert.throws(() => validateStagingTarget({ ...qa, RAILWAY_ENVIRONMENT_ID: pinned.RAILWAY_ENVIRONMENT_ID }));
+  assert.throws(() => validateStagingTarget({ ...qa, RAILWAY_SERVICE_ID: pinned.RAILWAY_SERVICE_ID }));
+  assert.throws(() => validateStagingTarget({ ...qa, RAILWAY_ENVIRONMENT_NAME: "production" }));
+  assert.throws(() => validateStagingTarget({ ...qa, DATABASE_URL: "postgres://unused:unused@other.railway.internal/railway" }));
+  assert.throws(() => validateStagingTarget({ ...qa, DATABASE_URL: "postgres://unused:unused@postgres.railway.internal/customerdb" }));
+
 });
 
 test("empty PostgreSQL baseline is transactional, concurrent/repeat safe and compatible with actual startup patches", async () => {
