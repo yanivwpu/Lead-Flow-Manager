@@ -128,6 +128,32 @@ function extractAttachments(payload: any): NormalizedEmailMessage["attachments"]
   return out;
 }
 
+/**
+ * Raw non-ASCII in an RFC 5322 Subject is not portable: Gmail recipients can
+ * display mojibake ("Â..." instead of an em dash). Use RFC 2047 UTF-8 encoded
+ * words and fold each complete Unicode code point without splitting bytes.
+ */
+export function encodeMimeSubject(subject: string): string {
+  if (/^[\\x20-\\x7e]*$/.test(subject)) return subject;
+  const words: string[] = [];
+  let chunk = "";
+  let size = 0;
+  const push = () => {
+    if (!chunk) return;
+    words.push("=?UTF-8?B?" + Buffer.from(chunk, "utf8").toString("base64") + "?=");
+    chunk = "";
+    size = 0;
+  };
+  for (const cp of subject) {
+    const n = Buffer.byteLength(cp, "utf8");
+    if (size + n > 36) push();
+    chunk += cp;
+    size += n;
+  }
+  push();
+  return words.join("\r\n ");
+}
+
 export function toRfc2822(params: {
   from: string;
   unsubscribeUrl?: string;
@@ -153,7 +179,7 @@ export function toRfc2822(params: {
   lines.push(`To: ${params.to.join(", ")}`);
   if (params.cc?.length) lines.push(`Cc: ${params.cc.join(", ")}`);
   if (params.bcc?.length) lines.push(`Bcc: ${params.bcc.join(", ")}`);
-  lines.push(`Subject: ${params.subject}`);
+  lines.push(`Subject: ${encodeMimeSubject(params.subject)}`);
   lines.push("MIME-Version: 1.0");
   if (params.inReplyTo) lines.push(`In-Reply-To: ${params.inReplyTo}`);
   if (params.references?.length) lines.push(`References: ${params.references.join(" ")}`);
