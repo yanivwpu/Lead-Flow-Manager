@@ -2,7 +2,7 @@ import { getEmailChannelCaps } from "../emailChannel/emailChannelConfig";
 import { renderProspectOutreachEmailHtml } from "../prospectImport/prospectOutreachEmailHtml";
 import { sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { addMarketingFooter, assertStagingMarketingRecipient, issueOptOutToken, marketingPublicOrigin } from "./policy";
+import { addMarketingFooter, assertStagingMarketingRecipient, issueOptOutToken, marketingPublicOrigin, marketingQueueProbeRecipient, readProductionPilotConfig } from "./policy";
 import { isMarketingSuppressed, lockMarketingWorkspace } from "./store";
 
 export async function requireMarketingSender(workspace: string, mailbox: string, executor: Pick<typeof db, "execute"> = db) {
@@ -17,12 +17,29 @@ export async function assertMarketingQueueSetup(workspace: string) {
   const result = await db.execute(sql`SELECT id FROM email_mailboxes WHERE workspace_user_id=${workspace} AND is_primary=true LIMIT 1`);
   const mailbox = result.rows[0]?.id;
   if (!mailbox) throw new Error("Marketing blocked: connect a sender mailbox first.");
+  const probe = marketingQueueProbeRecipient();
   assertStagingMarketingRecipient(
-    [process.env.MARKETING_TEST_RECIPIENT || ""], process.env,
+    [probe], process.env,
     { workspace, mailbox: String(mailbox), phase: "queue" },
   );
+  // A pilot cannot resume unrelated paused/queued messages from earlier
+  // campaigns. Each queued identity must exactly match the approved list.
+  if (process.env.MARKETING_SENDS_ENABLED === "production-pilot") {
+    const pilot = readProductionPilotConfig();
+    const pending = await db.execute(sql`SELECT contact_id,recipient_identity_normalized
+      FROM prospect_outreach_queue_items
+      WHERE workspace_user_id=${workspace}
+      AND queue_status IN ('queued','paused','sending') LIMIT 50`);
+    const invalid = pending.rows.some(row =>
+      !pilot.recipients.some(allowed =>
+        allowed.contactId === String(row.contact_id) &&
+        allowed.email === String(row.recipient_identity_normalized || "").trim().toLowerCase()
+      )
+    );
+    if (invalid) throw new Error("Pilot start blocked: review and remove all non-pilot queued items first");
+  }
   marketingPublicOrigin();
-  issueOptOutToken({ workspace, email: process.env.MARKETING_TEST_RECIPIENT || "" });
+  issueOptOutToken({ workspace, email: probe });
   await requireMarketingSender(workspace, String(mailbox));
 }
 export async function withCompliantMarketingEmail<T>(input: {
@@ -39,6 +56,19 @@ export async function withCompliantMarketingEmail<T>(input: {
     return await db.transaction(async tx => {
       await lockMarketingWorkspace(tx, input.workspace);
       const email = input.recipients[0];
+      if (process.env.MARKETING_SENDS_ENABLED === "production-pilot") {
+        // Under the same workspace lock as the Gmail provider call, enforce
+        // one successful outreach email per pre-reviewed contact for the pilot.
+        const pilot = readProductionPilotConfig();
+        if (!input.contactId || !pilot.recipients.some(r => r.contactId === input.contactId && r.email === email.toLowerCase())) {
+          throw new Error("Pilot contact identity not allowlisted");
+        }
+        const history = await tx.execute(sql`SELECT id FROM prospect_outreach_queue_items
+          WHERE workspace_user_id=${input.workspace}
+          AND contact_id=${input.contactId}
+          AND selected_channel='email' AND queue_status='sent' LIMIT 1`);
+        if (history.rows.length) throw new Error("Pilot contact has already received outreach");
+      }
       if (await isMarketingSuppressed(input.workspace, email, tx)) throw new Error("Marketing recipient suppressed");
       // Historical duplicate contact flags remain authoritative before backfill.
       const legacy = await tx.execute(sql`SELECT 1 FROM contacts WHERE user_id=${input.workspace} AND lower(trim(email))=lower(trim(${email})) AND (

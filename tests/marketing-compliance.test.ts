@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { issueOptOutToken, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, addMarketingFooter, assertStagingMarketingRecipient, inboundStopIdentity } from "../server/marketingCompliance/policy";
+import { issueOptOutToken, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, addMarketingFooter, assertStagingMarketingRecipient, inboundStopIdentity, readProductionPilotConfig, marketingQueueProbeRecipient } from "../server/marketingCompliance/policy";
 import { encodeMimeSubject, toRfc2822 } from "../server/emailChannel/gmailProvider";
 import { safeTextLinks } from "../shared/safeTextLinks";
 import { renderMarketingUnsubscribePage } from "../server/marketingCompliance/unsubscribePage";
@@ -122,6 +122,54 @@ for (const changed of [
 assert.throws(() => assertStagingMarketingRecipient(["stranger@example.com"], prodEnv, prodCtx));
 assert.throws(() => assertStagingMarketingRecipient(["person@example.com","person@example.com"], prodEnv, prodCtx));
 assert.throws(() => assertStagingMarketingRecipient(["person@example.com"], prodEnv));
+
+const pilotConfig = {
+  NODE_ENV: "production", APP_ENV: "production", MARKETING_SENDS_ENABLED: "production-pilot",
+  MARKETING_PILOT_WORKSPACE_ID: "workspace-pilot",
+  MARKETING_PILOT_MAILBOX_ID: "mailbox-pilot",
+  MARKETING_PILOT_EXPIRES_AT: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  MARKETING_PILOT_CONTACTS_JSON: JSON.stringify([
+    {contactId:"contact-pilot-1",email:"Pilot1@Example.com"},
+    {contactId:"contact-pilot-2",email:"pilot2@example.com"},
+  ]),
+};
+const approvedPilot = readProductionPilotConfig(pilotConfig);
+assert.equal(approvedPilot.recipients.length, 2);
+assert.equal(approvedPilot.recipients[0]?.email, "pilot1@example.com");
+assert.equal(marketingQueueProbeRecipient(pilotConfig), "pilot1@example.com");
+assert.equal(marketingQueueProbeRecipient(prodEnv), "person@example.com");
+const pilotCtx = {workspace:"workspace-pilot",mailbox:"mailbox-pilot",phase:"send" as const,contactId:"contact-pilot-1"};
+assertStagingMarketingRecipient(["PILOT1@example.com"], pilotConfig, pilotCtx);
+assertStagingMarketingRecipient(["pilot2@example.com"], pilotConfig, {...pilotCtx,contactId:"contact-pilot-2"});
+assertStagingMarketingRecipient(["pilot1@example.com"], pilotConfig, {...pilotCtx,phase:"queue",contactId:undefined});
+for (const params of [
+  {recipients:["pilot1@example.com"],ctx:{...pilotCtx,contactId:"contact-pilot-2"}},
+  {recipients:["pilot2@example.com"],ctx:pilotCtx},
+  {recipients:["stranger@example.com"],ctx:pilotCtx},
+  {recipients:["pilot1@example.com","pilot2@example.com"],ctx:pilotCtx},
+  {recipients:["pilot1@example.com"],ctx:{...pilotCtx,workspace:"other"}},
+  {recipients:["pilot1@example.com"],ctx:{...pilotCtx,mailbox:"other"}},
+  {recipients:["pilot1@example.com"],ctx:{...pilotCtx,phase:undefined}},
+  {recipients:["pilot1@example.com"],ctx:{...pilotCtx,contactId:undefined}},
+]) assert.throws(() => assertStagingMarketingRecipient(params.recipients,pilotConfig,params.ctx),"block non-pilot sends");
+for (const change of [
+  {MARKETING_SENDS_ENABLED:"disabled"},
+  {NODE_ENV:"test"},
+  {APP_ENV:"staging"},
+  {MARKETING_PILOT_WORKSPACE_ID:""},
+  {MARKETING_PILOT_MAILBOX_ID:""},
+  {MARKETING_PILOT_EXPIRES_AT:new Date(Date.now() - 1000).toISOString()},
+  {MARKETING_PILOT_EXPIRES_AT:new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()},
+  {MARKETING_PILOT_CONTACTS_JSON:"[]"},
+  {MARKETING_PILOT_CONTACTS_JSON:"not JSON"},
+  {MARKETING_PILOT_CONTACTS_JSON:JSON.stringify(Array.from({length:6},(_,i)=>({contactId:"contact-item-"+i,email:"recipient"+i+"@example.com"})))},
+  {MARKETING_PILOT_CONTACTS_JSON:JSON.stringify([{contactId:"contact-1-abc",email:"same@example.com"},{contactId:"contact-2-def",email:"same@example.com"}])},
+  {MARKETING_PILOT_CONTACTS_JSON:JSON.stringify([{contactId:"contact-1-abc",email:"first@example.com"},{contactId:"contact-1-abc",email:"second@example.com"}])},
+  {MARKETING_PILOT_CONTACTS_JSON:JSON.stringify([{contactId:"<script>bad",email:"pilot1@example.com"}])},
+]) assert.throws(() => readProductionPilotConfig({...pilotConfig,...change}),"invalid pilot configuration must fail closed");
+assert.throws(() => assertStagingMarketingRecipient(["pilot1@example.com"], pilotConfig),
+  "missing provider context must fail closed");
+
 assert.equal(safeTextLinks('<img src=x onerror=bad> https://example.com/a?x=1&y=2. javascript:alert(1)').filter(p => p.href).length, 1);
 assert.equal(safeTextLinks("https://user:password@example.com").filter(p => p.href).length, 0);
 for (const body of ["Stop", "Please remove me from your list.", "unsubscribe", "Do not contact me", "STOP MESSAGING ME"]) assert(isStop({ body }), body);

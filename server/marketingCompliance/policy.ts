@@ -32,6 +32,62 @@ export function readOptOutToken(token: string, secret?: string): OptOutIdentity 
     return { workspace: value.workspace, email: normalizeMarketingEmail(value.email) };
   } catch { throw new Error("Invalid unsubscribe link"); }
 }
+/**
+ * Single-workspace, time-limited, reviewed prospect pilot. Does not enable general
+ * marketing sends and cannot be configured by tenants or per-message metadata.
+ * At most five exact contact/email pairs may be permitted for up to seven days.
+ */
+export function readProductionPilotConfig(env: NodeJS.ProcessEnv = process.env, nowMs = Date.now()): {
+  workspace: string;
+  mailbox: string;
+  recipients: Array<{ contactId: string; email: string }>;
+} {
+  if (env.NODE_ENV !== "production" || env.APP_ENV !== "production" ||
+      env.MARKETING_SENDS_ENABLED !== "production-pilot") {
+    throw new Error("Marketing pilot is not enabled");
+  }
+  const workspace = env.MARKETING_PILOT_WORKSPACE_ID || "";
+  const mailbox = env.MARKETING_PILOT_MAILBOX_ID || "";
+  const expiration = String(env.MARKETING_PILOT_EXPIRES_AT || "");
+  const expiresAt = Date.parse(expiration);
+  if (!workspace || !mailbox || !/^\d{4}-\d{2}-\d{2}T/.test(expiration) ||
+      !expiration.endsWith("Z") || !Number.isFinite(expiresAt) ||
+      expiresAt <= nowMs || expiresAt > nowMs + 7 * 24 * 60 * 60 * 1000) {
+    throw new Error("Pilot requires a pinned workspace, mailbox and expiry within seven days");
+  }
+  let raw: unknown;
+  try { raw = JSON.parse(env.MARKETING_PILOT_CONTACTS_JSON || ""); }
+  catch { throw new Error("Pilot requires a valid reviewed contact allowlist"); }
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 5) {
+    throw new Error("Pilot may contain between one and five reviewed recipients");
+  }
+  const recipients: Array<{contactId: string;email: string}> = [];
+  const contactIds = new Set<string>();
+  const emails = new Set<string>();
+  for (const row of raw) {
+    if (!row || typeof row !== "object" || Array.isArray(row) ||
+        typeof row.contactId !== "string" || !/^[a-zA-Z0-9_-]{8,128}$/.test(row.contactId) ||
+        typeof row.email !== "string") {
+      throw new Error("Pilot contact allowlist is malformed");
+    }
+    const email = normalizeMarketingEmail(row.email);
+    if (contactIds.has(row.contactId) || emails.has(email)) {
+      throw new Error("Pilot requires unique contact identities and email addresses");
+    }
+    contactIds.add(row.contactId);
+    emails.add(email);
+    recipients.push({contactId: row.contactId, email});
+  }
+  return {workspace,mailbox,recipients};
+}
+
+export function marketingQueueProbeRecipient(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.MARKETING_SENDS_ENABLED === "production-pilot") {
+    return readProductionPilotConfig(env).recipients[0]!.email;
+  }
+  return env.MARKETING_TEST_RECIPIENT || "";
+}
+
 type MarketingAcceptanceContext = { workspace?: string; mailbox?: string; contactId?: string; phase?: "queue" | "send" };
 
 /**
@@ -52,6 +108,22 @@ export function assertStagingMarketingRecipient(
   const productionTest = env.NODE_ENV === "production" &&
     env.APP_ENV === "production" &&
     env.MARKETING_SENDS_ENABLED === "production-test-only";
+  const pilot = env.NODE_ENV === "production" && env.APP_ENV === "production" &&
+    env.MARKETING_SENDS_ENABLED === "production-pilot";
+  if (pilot) {
+    const config = readProductionPilotConfig(env);
+    if (context.workspace !== config.workspace || context.mailbox !== config.mailbox ||
+        (context.phase !== "queue" && context.phase !== "send") ||
+        recipients.length !== 1) {
+      throw new Error("Pilot blocked: unapproved workspace, mailbox or multiple recipients");
+    }
+    const email = normalizeMarketingEmail(recipients[0]);
+    const allowed = config.recipients.some(row =>
+      row.email === email && (context.phase === "queue" || row.contactId === context.contactId)
+    );
+    if (!allowed) throw new Error("Pilot blocked: recipient/contact pair not reviewed");
+    return;
+  }
   if (!staging && !productionTest) {
     throw new Error("Marketing sending disabled. Release approval and staging acceptance are required.");
   }
