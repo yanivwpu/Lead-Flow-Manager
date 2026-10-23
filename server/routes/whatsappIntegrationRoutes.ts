@@ -23,6 +23,7 @@ import {
   sanitizeEmbeddedSignupClientError,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
+import { buildCallbackRoutingDiagnostics, fetchAppWebhookSubscriptions } from "../whatsappCallbackRoutingDiagnostics";
 import { storage } from "../storage";
 import {
   buildMetaWhatsAppPhoneClassificationInput,
@@ -328,26 +329,15 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       let subscribedApps: { httpOk: boolean; status: number; body: any; appIds: string[]; hasConfiguredAppId: boolean } =
         { httpOk: false, status: 0, body: null, appIds: [], hasConfiguredAppId: false };
       if (wabaId) {
-        const url = `${graphBase}/${encodeURIComponent(wabaId)}/subscribed_apps?access_token=${encodeURIComponent(token)}`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+        const url = `${graphBase}/${encodeURIComponent(wabaId)}/subscribed_apps`;
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) });
         const rawText = await r.text();
         let body: any = {};
         try {
           body = rawText ? JSON.parse(rawText) : {};
         } catch {
-          body = { _parseError: true as const, rawSnippet: rawText.slice(0, 2000) };
+          body = { _parseError: true as const };
         }
-        console.log(
-          `[WABA SubscribedApps GET] raw ${JSON.stringify({
-            wabaId,
-            httpStatus: r.status,
-            httpOk: r.ok,
-            rawResponse:
-              typeof rawText === "string" && rawText.length > 16_000
-                ? `${rawText.slice(0, 16_000)}…[truncated]`
-                : rawText,
-          })}`
-        );
         const appIds = extractAppIdsFromWabaSubscribedAppsPayload(body);
         const hasConfiguredAppId = appId ? appIds.some((rid) => metaAppIdsEqualLocal(appId, rid)) : false;
         subscribedApps = { httpOk: r.ok, status: r.status, body, appIds, hasConfiguredAppId };
@@ -375,6 +365,13 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const graphPhoneStatus =
         (phoneGraph.ok ? (phoneGraph.data?.status as unknown) : null) ?? null;
 
+      const appSubscriptions = await fetchAppWebhookSubscriptions({
+        graphBase, appId, appSecret: process.env.META_APP_SECRET || "",
+      });
+      const callbackRouting = buildCallbackRoutingDiagnostics({
+        appId, wabaStatus: subscribedApps.status || null, wabaBody: subscribedApps.body,
+        appStatus: appSubscriptions.status, appBody: appSubscriptions.body,
+      });
       const debugToken = await fetchMetaUserTokenDebugSummary(token);
       const webhookProbe = await probeWebhookMetaReachable();
 
@@ -479,7 +476,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         wabaId: wabaId || null,
         phoneNumberId: phoneNumberId || null,
         appIdExpected: appId || null,
-        subscribedApps: subscribedApps.httpOk ? subscribedApps.body : null,
+        subscribedApps: subscribedApps.httpOk ? { appIds: subscribedApps.appIds } : null,
+        callbackRouting,
         configuredAppIdPresent: subscribedApps.hasConfiguredAppId,
         phoneStatus: phoneStatusStr,
         codeVerificationStatus: codeVerificationStr,
@@ -523,7 +521,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           httpStatus: subscribedApps.status,
           configuredAppIdPresent: subscribedApps.hasConfiguredAppId,
           appIds: subscribedApps.appIds.slice(0, 200),
-          error: subscribedApps.httpOk ? null : (subscribedApps.body?.error ?? null),
+          error: subscribedApps.httpOk ? null : callbackRouting.wabaProbe,
         },
         phoneUnderWaba: wabaPhones.phoneUnderWaba,
         wabaPhoneNumbers: {
@@ -555,7 +553,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         accessTokenEncryptionStatus,
         metaEncryptionKeyConfigured,
         graphPhoneTruncated: truncateJson(phoneGraph.ok ? phoneGraph.data : phoneGraph.error, 7000),
-        subscribedAppsTruncated: truncateJson({ appIds: subscribedApps.appIds, error: subscribedApps.body?.error ?? null }, 7000),
+        subscribedAppsTruncated: truncateJson({ appIds: subscribedApps.appIds, probe: callbackRouting.wabaProbe }, 7000),
         wabaPhonesTruncated: truncateJson({ phoneIds: wabaPhones.phoneIds, error: wabaPhones.body?.error ?? null }, 7000),
       });
 

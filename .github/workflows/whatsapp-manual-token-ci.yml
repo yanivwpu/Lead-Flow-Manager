@@ -11,6 +11,8 @@ on:
       - server/routes/whatsappIntegrationRoutes.ts
       - server/whatsappEmbeddedSignup.ts
       - tests/whatsapp-manual-token-replacement.test.ts
+      - server/whatsappCallbackRoutingDiagnostics.ts
+      - tests/whatsapp-callback-routing-diagnostics.test.ts
       - .github/workflows/whatsapp-manual-token-ci.yml
 
 jobs:
@@ -28,6 +30,8 @@ jobs:
       - run: npm ci
       - name: Test manual token renewal safety rules
         run: npx tsx tests/whatsapp-manual-token-replacement.test.ts
+      - name: Test read-only callback routing evidence and redaction
+        run: node --import tsx tests/whatsapp-callback-routing-diagnostics.test.ts
       - name: TypeScript regression check against staging base
         shell: bash
         run: |
