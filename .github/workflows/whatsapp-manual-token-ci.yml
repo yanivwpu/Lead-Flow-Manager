@@ -32,6 +32,10 @@ jobs:
         run: npx tsx tests/whatsapp-manual-token-replacement.test.ts
       - name: Test read-only callback routing evidence and redaction
         run: node --import tsx tests/whatsapp-callback-routing-diagnostics.test.ts
+      - name: Test existing signed inbound consent and tenant-mapping guards
+        run: |
+          node --import tsx tests/ecommerce-recovery-consent-webhook-contract.test.ts
+          node --import tsx tests/ecommerce-recovery-signed-inbound-consent-gate.test.ts
       - name: TypeScript regression check against staging base
         shell: bash
         run: |

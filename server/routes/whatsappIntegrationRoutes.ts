@@ -23,7 +23,8 @@ import {
   sanitizeEmbeddedSignupClientError,
 } from "../whatsappEmbeddedSignup";
 import { getAppOrigin } from "../urlOrigins";
-import { buildCallbackRoutingDiagnostics, fetchAppWebhookSubscriptions } from "../whatsappCallbackRoutingDiagnostics";
+import { buildCallbackRoutingDiagnostics, fetchAppWebhookSubscriptions, fetchPhoneWebhookConfiguration,
+  buildStagingCallbackRepairDryRun, STAGING_CALLBACK_SCOPE } from "../whatsappCallbackRoutingDiagnostics";
 import { storage } from "../storage";
 import {
   buildMetaWhatsAppPhoneClassificationInput,
@@ -31,7 +32,7 @@ import {
 } from "../metaWhatsAppPhoneKind";
 import { disconnectWhatsAppProvider, getProviderStatus, buildMetaWhatsAppReadinessForUser } from "../whatsappService";
 import { getMetaGraphApiBase } from "../metaGraphVersion";
-import { fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose } from "../userMeta";
+import { fetchMetaWhatsAppPhoneNumberGraphSnapshotVerbose, findUserByMetaPhoneNumberId } from "../userMeta";
 import {
   isEncrypted,
   decryptMetaCredentialOrNull,
@@ -181,6 +182,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
   app.get("/api/integrations/whatsapp/coexistence-diagnostics", async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      res.setHeader("Cache-Control", "no-store");
       const user = await storage.getUserForSession(req.user.id);
       if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -365,15 +367,28 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const graphPhoneStatus =
         (phoneGraph.ok ? (phoneGraph.data?.status as unknown) : null) ?? null;
 
-      const appSubscriptions = await fetchAppWebhookSubscriptions({
-        graphBase, appId, appSecret: process.env.META_APP_SECRET || "",
-      });
+      const [appSubscriptions, phoneConfiguration] = await Promise.all([
+        fetchAppWebhookSubscriptions({ graphBase, appId, appSecret: process.env.META_APP_SECRET || "" }),
+        fetchPhoneWebhookConfiguration({ graphBase, phoneNumberId, accessToken: token }),
+      ]);
       const callbackRouting = buildCallbackRoutingDiagnostics({
         appId, wabaStatus: subscribedApps.status || null, wabaBody: subscribedApps.body,
         appStatus: appSubscriptions.status, appBody: appSubscriptions.body,
+        phoneNumberId, phoneStatus: phoneConfiguration.status, phoneBody: phoneConfiguration.body,
       });
       const debugToken = await fetchMetaUserTokenDebugSummary(token);
       const webhookProbe = await probeWebhookMetaReachable();
+      const isStagingTestScope = process.env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
+        appId === STAGING_CALLBACK_SCOPE.appId && wabaId === STAGING_CALLBACK_SCOPE.wabaId &&
+        phoneNumberId === STAGING_CALLBACK_SCOPE.phoneNumberId;
+      const phoneOwner = isStagingTestScope ? await findUserByMetaPhoneNumberId(phoneNumberId) : null;
+      const stagingCallbackRepair = isStagingTestScope ? buildStagingCallbackRepairDryRun({
+        env: { RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME, APP_URL: process.env.APP_URL },
+        appId, wabaId, phoneNumberId,
+        ownerMatchesSession: phoneOwner?.id === req.user.id, phoneUnderWaba: wabaPhones.phoneUnderWaba,
+        verifyTokenConfigured: !!process.env.META_WEBHOOK_VERIFY_TOKEN?.trim(),
+        token: debugToken, routing: callbackRouting,
+      }) : null;
 
       const phoneStatusStr =
         phoneGraph.ok && phoneGraph.data?.status != null ? String(phoneGraph.data.status) : null;
@@ -452,6 +467,10 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           "code_verification_status=NOT_VERIFIED (warning only): common on test numbers; outbound templates can still return HTTP 200 from Graph. Confirm with [WA_TEMPLATE_SEND_SUCCESS] or the Graph error body on failed sends.";
       } else if (!connectionSavedAsCoexistence && reasons.some((r) => r.includes("coexistence"))) {
         blockerReason = "D) Connection not saved as coexistence — provisioning route may differ.";
+      } else if (callbackRouting.effectiveCallback.category !== "unknown" &&
+        (callbackRouting.effectiveCallback.origin !== String(getAppOrigin()).replace(/\/+$/, "") ||
+          !callbackRouting.effectiveCallback.expectedPath)) {
+        blockerReason = "Meta reports a callback destination that does not match this environment. Review callbackRouting and the read-only stagingCallbackRepair preview; changing live routing requires separate approval.";
       } else if (!reasons.length && webhookProbe.webhookEndpointHealthy && subscribedApps.hasConfiguredAppId) {
         blockerReason =
           "No definitive Graph blocker. If Railway still sees zero POST /api/webhook/meta for WhatsApp, check Meta App Dashboard WhatsApp product webhook fields (messages, and smb_message_echoes for Coexistence), phone registration, or coexistence onboarding delay.";
@@ -464,6 +483,8 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
       const routingLikelyActive =
         webhookProbe.webhookEndpointHealthy &&
+        callbackRouting.effectiveCallback.origin === String(getAppOrigin()).replace(/\/+$/, "") &&
+        callbackRouting.effectiveCallback.expectedPath &&
         !!(appId && subscribedApps.hasConfiguredAppId) &&
         debugToken.ok !== false &&
         debugToken.is_valid !== false &&
@@ -478,6 +499,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         appIdExpected: appId || null,
         subscribedApps: subscribedApps.httpOk ? { appIds: subscribedApps.appIds } : null,
         callbackRouting,
+        stagingCallbackRepair,
         configuredAppIdPresent: subscribedApps.hasConfiguredAppId,
         phoneStatus: phoneStatusStr,
         codeVerificationStatus: codeVerificationStr,
@@ -552,6 +574,9 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         tokenStatus,
         accessTokenEncryptionStatus,
         metaEncryptionKeyConfigured,
+        // Only routing metadata: no provider bodies, recipient content, tokens or arbitrary URLs.
+        callbackRouting,
+        stagingCallbackRepairDecision: stagingCallbackRepair?.decision ?? null,
         graphPhoneTruncated: truncateJson(phoneGraph.ok ? phoneGraph.data : phoneGraph.error, 7000),
         subscribedAppsTruncated: truncateJson({ appIds: subscribedApps.appIds, probe: callbackRouting.wabaProbe }, 7000),
         wabaPhonesTruncated: truncateJson({ phoneIds: wabaPhones.phoneIds, error: wabaPhones.body?.error ?? null }, 7000),
