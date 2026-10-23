@@ -738,7 +738,7 @@ export function Pricing() {
 
         {/* ─────────────── SECTION 3: PRICING CARDS (plans only) ─────────────── */}
         <div
-          className="mx-auto mb-6 grid w-full max-w-3xl grid-cols-1 items-stretch gap-4 md:grid-cols-2"
+          className="mx-auto mb-8 grid w-full max-w-6xl grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)_minmax(0,1fr)]"
           data-testid="section-pricing-cards"
         >
           {/* FREE */}
@@ -746,7 +746,7 @@ export function Pricing() {
             const isCurrentBillingPlan = billingPlan === "free" && !isActiveProAiTrial;
             return (
               <div
-                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col h-full relative ${
+                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col relative lg:mt-5 lg:min-h-[590px] ${
                   isActiveProAiTrial ? "border-gray-300" : "border-gray-200"
                 }`}
                 data-testid="plan-card-free"
@@ -821,7 +821,7 @@ export function Pricing() {
             const isLoading = loadingPlan === "pro";
             return (
               <div
-                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col h-full relative ${
+                className={`bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col relative lg:min-h-[670px] ${
                   isActiveProAiTrial
                     ? "border-brand-green shadow-lg ring-1 ring-emerald-200"
                     : "border-brand-green shadow-lg ring-1 ring-emerald-100"
@@ -905,23 +905,30 @@ export function Pricing() {
               </div>
             );
           })()}
-        </div>
 
-        <section
-          className="mx-auto mb-8 max-w-3xl rounded-2xl border border-gray-200 bg-white px-5 py-5 text-center"
-          data-testid="section-agency-enterprise"
-        >
-          <p className="text-base font-semibold text-gray-900">{pricingContent.agency.title}</p>
-          <p className="mt-1 text-sm text-gray-600">{pricingContent.agency.body}</p>
-          <Link href="/contact">
-            <Button
-              className="mt-4 bg-gray-900 hover:bg-gray-800 text-white"
-              data-testid="button-contact-sales"
-            >
-              {pricingContent.agency.cta}
-            </Button>
-          </Link>
-        </section>
+          {/* Sales-led plan: show beside Pro rather than below both plans. */}
+          <section
+            className="flex flex-col rounded-2xl border-2 border-gray-200 bg-white p-5 sm:p-6 lg:mt-5 lg:min-h-[590px]"
+            data-testid="section-agency-enterprise"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Agency &amp; Enterprise
+            </span>
+            <h2 className="mt-4 text-xl font-bold leading-snug text-gray-900">
+              {pricingContent.agency.title}
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-600">
+              {pricingContent.agency.body}
+            </p>
+            <div className="mt-auto pt-6">
+              <Link href="/contact">
+                <Button className="w-full bg-gray-900 text-white hover:bg-gray-800" data-testid="button-contact-sales">
+                  {pricingContent.agency.cta}
+                </Button>
+              </Link>
+            </div>
+          </section>
+        </div>
 
         {isShopify ? (
           <p
