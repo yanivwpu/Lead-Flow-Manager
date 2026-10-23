@@ -15,8 +15,22 @@ function linkifyLine(line: string, approvedUrls: string[], preserveAuthoredUrls:
     : escapeHtml(part.text)).join("");
 }
 
+/**
+ * Occasionally imported/serialized email drafts contain a literal backslash-n
+ * sequence instead of a line break. Repair it at the final send/preview boundary
+ * so that an adjacent URL never absorbs "\\n\\nNext" into its href.
+ * Genuine CRLF and Unicode text are preserved.
+ */
+export function normalizeProspectOutreachEmailText(value: string): string {
+  return String(value || "")
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n")
+    .replace(/\r\n?/g, "\n");
+}
+
 export function renderProspectOutreachEmailHtml(rawText: string, approvedUrls: string[] = [], preserveAuthoredUrls = false): string {
-  const normalized = String(rawText || "").replace(/\r\n?/g, "\n").trim();
+  const normalized = normalizeProspectOutreachEmailText(rawText).trim();
   if (!normalized) return "";
   const paragraphs = normalized.split(/\n[ \t]*\n+/).map((paragraph) =>
     "<p dir=\"auto\" style=\"margin:0 0 16px;line-height:1.55\">" +

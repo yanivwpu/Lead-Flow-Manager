@@ -19,7 +19,7 @@ import {
   type ProspectSenderProbeFailureClass,
 } from "@shared/prospectSenderProbeDiagnostics";
 import { channelService } from "../channelService";
-import { renderProspectOutreachEmailHtml } from "./prospectOutreachEmailHtml";
+import { normalizeProspectOutreachEmailText, renderProspectOutreachEmailHtml } from "./prospectOutreachEmailHtml";
 import { getEmailMailboxById, getPrimaryEmailMailbox } from "../emailChannel/mailboxStore";
 
 export type ProspectOutreachSendPrepareInput = {
@@ -207,7 +207,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
       resolveProspectOutreachSubject({
         prospectName: input.contactName || "there",
       });
-    const body = String(input.messageSnapshot || "").trim();
+    const body = normalizeProspectOutreachEmailText(input.messageSnapshot || "").trim();
     if (!body) throw new Error("Approved message snapshot is empty");
     return { subject, body, mailboxId: mailbox.id };
   },
@@ -223,17 +223,18 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
     }
 
     try {
+      const outgoingBody = normalizeProspectOutreachEmailText(input.messageSnapshot);
       const result = await channelService.sendMessage({
         userId: input.workspaceUserId,
         contactId: input.contactId,
-        content: input.messageSnapshot,
+        content: outgoingBody,
         forceChannel: "email",
         suppressFallback: true,
         emailRich: {
           mailboxId: gate.mailboxId || input.mailboxId,
           subject: input.subject,
-          textBody: input.messageSnapshot,
-          htmlBody: renderProspectOutreachEmailHtml(input.messageSnapshot, [input.campaignLinkUrl || ""], input.preserveAuthoredUrls),
+          textBody: outgoingBody,
+          htmlBody: renderProspectOutreachEmailHtml(outgoingBody, [input.campaignLinkUrl || ""], input.preserveAuthoredUrls),
           replyMode: "new",
           prospectOutreach: true,
         },

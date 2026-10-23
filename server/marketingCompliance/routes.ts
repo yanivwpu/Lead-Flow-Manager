@@ -39,8 +39,8 @@ export function registerMarketingComplianceRoutes(app: Express) {
       if (!item) return res.status(404).json({ error: "Draft not found" });
       const { requireMarketingSender } = await import("./service");
       const sender = await requireMarketingSender(workspace, String(item.sender_mailbox_id));
-      const { renderProspectOutreachEmailHtml } = await import("../prospectImport/prospectOutreachEmailHtml");
-      const text = String(item.message_snapshot);
+      const { normalizeProspectOutreachEmailText, renderProspectOutreachEmailHtml } = await import("../prospectImport/prospectOutreachEmailHtml");
+      const text = normalizeProspectOutreachEmailText(String(item.message_snapshot));
       const token = issueOptOutToken({ workspace, email: String(item.recipient_identity_normalized) });
       const url = `${marketingPublicOrigin()}/api/marketing/unsubscribe/${token}`;
       const rendering = item.link_rendering_snapshot as {campaignLinkUrl?: string; preserveAuthoredUrls?: boolean} | null;
