@@ -1,3 +1,4 @@
+import { safeTextLinks } from "./safeTextLinks";
 /**
  * Prospect AI Campaign — workspace Outreach Instructions (AI Compose fields).
  * Message Creation modes wrap these in `shared/prospectMessageCreation.ts`.
@@ -68,6 +69,7 @@ export type OutreachLinkValidation =
 export function validateOutreachLinkUrl(raw: unknown): OutreachLinkValidation {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return { ok: true, linkUrl: "" };
+  if (/[\s<>"\x00-\x1f\x7f]/.test(trimmed)) return { ok: false, error: "Encode spaces, quotes and angle brackets in campaign URLs." };
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
@@ -77,6 +79,7 @@ export function validateOutreachLinkUrl(raw: unknown): OutreachLinkValidation {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return { ok: false, error: "URL must start with http:// or https://" };
   }
+  if (parsed.username || parsed.password) return { ok: false, error: "Campaign URLs must not contain usernames or passwords." };
   return { ok: true, linkUrl: trimmed };
 }
 
@@ -267,4 +270,35 @@ Rules:
 - Never put a campaign URL in the subject line.
 - Do NOT invent unsupported claims, fake interest, Re:/Fwd: subjects, clickbait, spammy wording, or emojis unless explicitly requested.
 - Do NOT invent what the workspace sells beyond WORKSPACE BUSINESS CONTEXT.`;
+}
+
+/**
+ * AI can omit an explicitly requested campaign URL. Guarantee exactly the
+ * configured destination appears at least once in AI Compose drafts.
+ * Template modes intentionally preserve the user's authored wording.
+ */
+export function ensureAiComposeCampaignLink(
+  body: string,
+  settings: Pick<ProspectOutreachInstructions, "linkUrl" | "includeLinkNaturally"> & Partial<Pick<ProspectOutreachInstructions, "language">>,
+): string {
+  const text = String(body || "").trim();
+  const url = String(settings.linkUrl || "").trim();
+  if (!text || !settings.includeLinkNaturally || !url) return text;
+  const validated = validateOutreachLinkUrl(url);
+  if (!validated.ok) return text;
+  if (safeTextLinks(text, true, [validated.linkUrl]).some(part => part.href === validated.linkUrl)) return text;
+  const intro = {
+    english: "See how it works: ",
+    spanish: "Descubre cómo funciona: ",
+    hebrew: "לפרטים נוספים: ",
+    arabic: "لمعرفة المزيد: ",
+    auto: "",
+  }[settings.language || "auto"];
+  return text + "\n\n" + intro + validated.linkUrl;
+}
+
+/** Capture rendering choices alongside the draft, never consult mutable settings at send. */
+export function snapshotOutreachLinkRendering(settings: {linkUrl?: string; mode?: string}) {
+  const link = validateOutreachLinkUrl(settings.linkUrl);
+  return {campaignLinkUrl: link.ok ? link.linkUrl : "", preserveAuthoredUrls: settings.mode !== "ai_compose"};
 }

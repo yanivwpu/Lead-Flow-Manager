@@ -1,3 +1,4 @@
+import { snapshotOutreachLinkRendering } from "@shared/prospectOutreachInstructions";
 /**
  * Prospect AI Message Generation — strategy dispatch for queue snapshots, regenerate, preview.
  */
@@ -24,7 +25,7 @@ import {
   type ProspectGeneratedMessage,
 } from "@shared/prospectMessageGeneration";
 import type { ProspectMessageVariableSource } from "@shared/prospectMessageVariables";
-import { resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, resolveProspectOutreachSubject } from "@shared/prospectOutreachInstructions";
 import { formatOutreachSenderContextForPrompt } from "@shared/prospectOutreachWritingStandard";
 import { loadProspectAiWorkspaceContext } from "./prospectAiWorkspaceContext";
 import { resolveProspectWebsiteUrl } from "./prospectWebsiteUrl";
@@ -206,7 +207,7 @@ export async function generateProspectOutreachDraft(params: {
     recommendedOffer: pi?.recommendedOffer,
     outreachAngle: pi?.suggestedOutreachAngle,
   });
-  return generateFromAiComposeSeed({ seed: { subject, body } });
+  return generateFromAiComposeSeed({ seed: { subject, body: ensureAiComposeCampaignLink(body, settings) } });
 }
 
 /** Preview helper — never enqueues. */
@@ -331,6 +332,7 @@ export async function refreshQueuedDraftsForMessageCreation(params: {
         .set({
           subjectSnapshot: generated.subject,
           messageSnapshot: generated.body,
+          linkRenderingSnapshot: snapshotOutreachLinkRendering(settings),
           updatedAt: new Date(),
         })
         .where(eq(prospectOutreachQueueItems.id, row.id));

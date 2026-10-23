@@ -2827,6 +2827,7 @@ export const prospectOutreachQueueItems = pgTable("prospect_outreach_queue_items
   recipientIdentityNormalized: text("recipient_identity_normalized").notNull(),
   subjectSnapshot: text("subject_snapshot"),
   messageSnapshot: text("message_snapshot").notNull(),
+  linkRenderingSnapshot: jsonb("link_rendering_snapshot").$type<{campaignLinkUrl: string; preserveAuthoredUrls: boolean}>().notNull().default(sql`'{"campaignLinkUrl":"","preserveAuthoredUrls":true}'::jsonb`),
   recommendedOffer: text("recommended_offer"),
   outreachAngle: text("outreach_angle"),
   queueStatus: text("queue_status").notNull().default("queued"),

@@ -5,7 +5,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { contacts, prospectIntelligence, prospectOutreachQueueItems } from "@shared/schema";
-import type { ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
+import { ensureAiComposeCampaignLink, snapshotOutreachLinkRendering, type ProspectOutreachInstructions } from "@shared/prospectOutreachInstructions";
 import {
   buildOutreachDraftRewriteSystemPrompt,
   buildOutreachDraftRewriteUserPrompt,
@@ -139,11 +139,13 @@ export async function rewriteQueuedOutreachDrafts(params: {
         failed += 1;
         return;
       }
+      const rewrittenMessage = ensureAiComposeCampaignLink(parsed.message, params.instructions);
       await db
         .update(prospectOutreachQueueItems)
         .set({
           subjectSnapshot: parsed.subject,
-          messageSnapshot: parsed.message,
+          messageSnapshot: rewrittenMessage,
+          linkRenderingSnapshot: snapshotOutreachLinkRendering({...params.instructions, mode:"ai_compose"}),
           updatedAt: new Date(),
         })
         .where(eq(prospectOutreachQueueItems.id, row.item.id));
@@ -153,7 +155,7 @@ export async function rewriteQueuedOutreachDrafts(params: {
         .update(prospectIntelligence)
         .set({
           suggestedOutreachSubject: parsed.subject,
-          suggestedFirstMessage: parsed.message,
+          suggestedFirstMessage: rewrittenMessage,
           updatedAt: new Date(),
         })
         .where(eq(prospectIntelligence.contactId, row.item.contactId));
