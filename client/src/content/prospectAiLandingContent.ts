@@ -45,7 +45,7 @@ export const PROSPECT_AI_LANDING = {
     "all from one platform.",
   ],
   primaryCta: "Start Free Trial",
-  secondaryCta: "Watch Demo",
+  secondaryCta: "Book a Demo",
   authRedirect: "/app/prospect-ai",
 
   pain: {
