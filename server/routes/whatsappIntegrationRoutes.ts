@@ -377,6 +377,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
         appStatus: appSubscriptions.status, appBody: appSubscriptions.body,
         phoneNumberId, phoneStatus: phoneConfiguration.status, phoneBody: phoneConfiguration.body,
         phoneTokenAppId: debugToken.ok ? debugToken.app_id : null,
+        currentOrigin: getAppOrigin(),
       });
       const webhookProbe = await probeWebhookMetaReachable();
       const isStagingTestScope = process.env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
@@ -468,9 +469,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
           "code_verification_status=NOT_VERIFIED (warning only): common on test numbers; outbound templates can still return HTTP 200 from Graph. Confirm with [WA_TEMPLATE_SEND_SUCCESS] or the Graph error body on failed sends.";
       } else if (!connectionSavedAsCoexistence && reasons.some((r) => r.includes("coexistence"))) {
         blockerReason = "D) Connection not saved as coexistence — provisioning route may differ.";
-      } else if (callbackRouting.effectiveCallback.category !== "unknown" &&
-        (callbackRouting.effectiveCallback.origin !== String(getAppOrigin()).replace(/\/+$/, "") ||
-          !callbackRouting.effectiveCallback.expectedPath)) {
+      } else if (callbackRouting.effectiveCallbackMatchesCurrentOrigin === false) {
         blockerReason = "Meta reports a callback destination that does not match this environment. Review callbackRouting and the read-only stagingCallbackRepair preview; changing live routing requires separate approval.";
       } else if (!reasons.length && webhookProbe.webhookEndpointHealthy && subscribedApps.hasConfiguredAppId) {
         blockerReason =
@@ -484,8 +483,7 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
 
       const routingLikelyActive =
         webhookProbe.webhookEndpointHealthy &&
-        callbackRouting.effectiveCallback.origin === String(getAppOrigin()).replace(/\/+$/, "") &&
-        callbackRouting.effectiveCallback.expectedPath &&
+        callbackRouting.effectiveCallbackMatchesCurrentOrigin === true &&
         !!(appId && subscribedApps.hasConfiguredAppId) &&
         debugToken.ok !== false &&
         debugToken.is_valid !== false &&

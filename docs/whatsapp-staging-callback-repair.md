@@ -57,7 +57,9 @@ conflicting WABA evidence, a probe token belonging to another app, and failed Gr
 without a configured app ID also stays unknown (the unresolved #156 review item).
 
 `routingLikelyActive` now requires a reported destination matching this app's
-origin and webhook path. A known destination mismatch is an explicit blocker.
+origin and webhook path. Matching occurs before URL redaction and exposes only
+a boolean, so custom/self-hosted origins remain supported without logging them.
+A known destination mismatch is an explicit blocker.
 The sanitized routing block is also logged, allowing the operator to run the
 authenticated diagnostic without copying credentials into chat. Responses use
 `Cache-Control: no-store`.
@@ -125,7 +127,7 @@ default; their enabling variables are absent from staging's rendered listing.
 
 ## Validation and acceptance still required
 
-- Eleven callback evidence/dry-run tests pass, including hierarchy precedence,
+- Twelve callback evidence/dry-run tests pass, including hierarchy precedence,
   failed/wrong-phone evidence, cross-tenant/app/WABA/production rejection,
   rollback uncertainty, URL/exception redaction, and GET/header-only probes.
 - Five existing signed-consent gate/contract tests pass. No unrelated Shopify or

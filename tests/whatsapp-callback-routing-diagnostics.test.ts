@@ -67,6 +67,7 @@ const hierarchy = (config: Record<string, unknown>, patch: Record<string, unknow
   appId: scope.appId, wabaStatus: 200, wabaBody: {data: [{whatsapp_business_api_data: {id: scope.appId}}]},
   appStatus: 200, appBody: {data: [{object: "whatsapp_business_account", callback_url: production, fields: ["messages"]}]},
   phoneNumberId: scope.phoneNumberId, phoneStatus: 200, phoneTokenAppId: scope.appId,
+  currentOrigin: scope.callback.replace("/api/webhook/meta", ""),
   phoneBody: {id: scope.phoneNumberId, webhook_configuration: config}, ...patch,
 });
 const planInput = (routing = hierarchy({application: production})) => ({
@@ -107,6 +108,18 @@ test("failed, missing, wrong-phone, contradictory and invalid hierarchy evidence
     {wabaBody: {data: []}},
     {wabaBody: {data: [{id: scope.appId, override_callback_uri: scope.callback}]}},
   ]) assert.equal(hierarchy({application: production}, patch).effectiveCallback.category, "unknown");
+});
+
+test("custom environment matching happens before URL redaction", () => {
+  const config = {application: "https://merchant.example/api/webhook/meta?private=HIDE"};
+  const matching = hierarchy(config, {currentOrigin: "https://merchant.example"});
+  assert.equal(matching.effectiveCallback.category, "other");
+  assert.equal(matching.effectiveCallback.origin, null);
+  assert.equal(matching.effectiveCallbackMatchesCurrentOrigin, true);
+  assert.equal(hierarchy(config).effectiveCallbackMatchesCurrentOrigin, false);
+  assert.equal(hierarchy({...config, application: "https://merchant.example/wrong"}, {currentOrigin: "https://merchant.example"}).effectiveCallbackMatchesCurrentOrigin, false);
+  assert.equal(hierarchy(config, {currentOrigin: undefined}).effectiveCallbackMatchesCurrentOrigin, null);
+  assert.doesNotMatch(JSON.stringify(matching), /merchant\.example|private=HIDE/);
 });
 
 test("phone probe uses the saved phone ID, GET and header-only credentials; failures are isolated", async () => {

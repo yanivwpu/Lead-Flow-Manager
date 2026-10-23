@@ -17,6 +17,16 @@ export function callbackTarget(value: unknown) {
   } catch { return unknown; }
 }
 
+function callbackMatchesOrigin(value: unknown, currentOrigin: string | undefined): boolean | null {
+  if (!currentOrigin || callbackTarget(value).category === "unknown") return null;
+  try {
+    const target = new URL(value as string);
+    const current = new URL(currentOrigin);
+    if (current.protocol !== "https:" || current.username || current.password) return null;
+    return target.origin === current.origin && target.pathname === "/api/webhook/meta";
+  } catch { return null; }
+}
+
 export function graphProbeSummary(status: number | null, body: unknown) {
   const error = object(object(body).error);
   return {
@@ -32,6 +42,7 @@ export function buildCallbackRoutingDiagnostics(input: {
   appStatus: number | null; appBody: unknown; checkedAt?: string;
   phoneNumberId?: string; phoneStatus?: number | null; phoneBody?: unknown;
   phoneTokenAppId?: string | null;
+  currentOrigin?: string;
 }) {
   const wabaProbe = graphProbeSummary(input.wabaStatus, input.wabaBody);
   const appProbe = graphProbeSummary(input.appStatus, input.appBody);
@@ -73,15 +84,18 @@ export function buildCallbackRoutingDiagnostics(input: {
   // malformed higher-priority value, or a failed probe must never imply fallback.
   let effectiveCallback = callbackTarget(null);
   let effectiveCallbackEvidence = "not_exposed";
+  let effectiveCallbackMatchesCurrentOrigin: boolean | null = null;
   if (completePhoneConfiguration) {
     const level = ["phone_number", "whatsapp_business_account", "application"]
       .find(key => config[key] !== undefined && config[key] !== null && config[key] !== "");
     if (level) {
       effectiveCallback = callbackTarget(config[level]);
+      effectiveCallbackMatchesCurrentOrigin = callbackMatchesOrigin(config[level], input.currentOrigin);
       effectiveCallbackEvidence = effectiveCallback.category === "unknown" ? "invalid_phone_configuration" : `phone_configuration_${level}`;
     }
     if (!wabaEvidenceConsistent && level !== "phone_number") {
       effectiveCallback = callbackTarget(null);
+      effectiveCallbackMatchesCurrentOrigin = null;
       effectiveCallbackEvidence = "conflicting_waba_evidence";
     }
   }
@@ -95,6 +109,7 @@ export function buildCallbackRoutingDiagnostics(input: {
     appCallback,
     messagesSubscribed,
     effectiveCallback,
+    effectiveCallbackMatchesCurrentOrigin,
     effectiveCallbackEvidence,
     inboundReceipt: "not_measured",
   };
