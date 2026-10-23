@@ -28,7 +28,7 @@ for (const expected of ["text/plain", "text/html", "List-Unsubscribe: <https://"
 assert(!toRfc2822({ from: "sender@example.com", to: ["person@example.com"], subject: "Receipt", textBody: "Paid" }).includes("List-Unsubscribe"));
 
 const decodeSubject = (header: string) =>
-  [...header.matchAll(/=\\?UTF-8\\?B\\?([^?]+)\\?=/gi)]
+  [...header.matchAll(/=\?UTF-8\?B\?([^?]+)\?=/gi)]
     .map(m => Buffer.from(m[1], "base64").toString("utf8")).join("");
 for (const subject of [
   "[TEST] WhachatCRM Prospect AI — Gmail acceptance",
@@ -41,10 +41,10 @@ for (const subject of [
     textBody: "Hello", htmlBody: "<p>Hello</p>"
   });
   assert(message.includes("Subject: =?UTF-8?B?"), "Unicode subject must be RFC 2047 encoded");
-  assert.equal(decodeSubject(message.split("\\r\\nMIME-Version:")[0]), subject);
-  const folded = message.match(/^Subject: .*?(?=\\r\\nMIME-Version:)/ms)?.[0] || "";
+  assert.equal(decodeSubject(message.split("\r\nMIME-Version:")[0]), subject);
+  const folded = message.match(/^Subject: .*?(?=\r\nMIME-Version:)/ms)?.[0] || "";
   assert(folded.startsWith("Subject: =?UTF-8?B?"), "subject found in MIME headers");
-  assert(folded.split("\\r\\n").every(line => Buffer.byteLength(line, "utf8") <= 76), "RFC 2047 encoded header lines must be folded");
+  assert(folded.split("\r\n").every(line => Buffer.byteLength(line, "utf8") <= 76), "RFC 2047 encoded header lines must be folded");
   assert(!folded.includes(" — "), "Unicode must not appear unencoded in the raw header");
 }
 assert.equal(encodeMimeSubject("Simple ASCII subject"), "Simple ASCII subject");
