@@ -103,6 +103,8 @@ jobs:
           npx tsx --test tests/shopify-managed-pricing.test.ts tests/shopify-oauth-state.test.ts tests/shopify-onboarding-emails.test.ts
       - name: Staging-only E-commerce inbox preview access and read-only checks
         run: npx tsx --test tests/shopify-ecommerce-preview.test.ts
+      - name: Merchant preview locale, connection states and real link rendering
+        run: npx tsx --test tests/shopify-ecommerce-ui-render.test.ts
       - name: E-commerce manual review security and concurrent real PostgreSQL gate
         run: npx tsx --test tests/shopify-ecommerce-review-security.test.ts tests/shopify-ecommerce-review-postgres.test.ts
       - name: E-commerce merchant workflow draft parser, security and real PostgreSQL concurrency
