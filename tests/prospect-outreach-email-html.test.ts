@@ -32,6 +32,17 @@ function main() {
   const htmlRepaired = renderProspectOutreachEmailHtml(encodedNewlines, [url], true);
   assert.equal((htmlRepaired.match(/<p dir="auto" /g) || []).length, 3);
   assert.ok(htmlRepaired.includes('href="' + url + '"'), "href stays exact");
+  assert(htmlRepaired.includes(">Explore the Realtor Growth Engine</a>"), "approved campaign link has descriptive CTA label");
+  assert(htmlRepaired.includes("background-color:#087f78"), "approved CTA is styled for email clients");
+  assert(!htmlRepaired.includes("%5Cn") && !htmlRepaired.includes(escapedBreak), "CTA must not absorb encoded breaks");
+  const otherApproved = "https://example.com/book?source=email";
+  const otherCta = renderProspectOutreachEmailHtml("Book: " + otherApproved, [otherApproved], true);
+  assert(otherCta.includes('href="https://example.com/book?source=email"'));
+  assert(otherCta.includes(">Learn more</a>"), "non-Realtor campaigns receive neutral CTA");
+  const authoredLink = renderProspectOutreachEmailHtml("Reference: " + otherApproved, [url], true);
+  assert(authoredLink.includes(">" + otherApproved + "</a>"), "non-approved authored links retain original visible URL");
+  assert(!authoredLink.includes("background-color:#087f78"), "only explicitly approved links become CTAs");
+
   assert.ok(htmlRepaired.includes("</a></p><p"), "link ends before the next paragraph");
   assert.equal(htmlRepaired.includes("%5Cn"), false);
   assert.equal(htmlRepaired.includes(escapedBreak), false);

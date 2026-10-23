@@ -10,9 +10,23 @@ function escapeHtml(value: string): string {
 }
 
 function linkifyLine(line: string, approvedUrls: string[], preserveAuthoredUrls: boolean): string {
-  return safeTextLinks(line, !preserveAuthoredUrls, approvedUrls).map(part => part.href
-    ? "<a href=\"" + escapeHtml(part.href) + "\" style=\"color:#0369a1;text-decoration:underline\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(part.text) + "</a>"
-    : escapeHtml(part.text)).join("");
+  return safeTextLinks(line, !preserveAuthoredUrls, approvedUrls).map(part => {
+    if (!part.href) return escapeHtml(part.text);
+    // Only URLs explicitly configured/approved for the campaign become a CTA.
+    // All other authored links keep their original visible URL text, and the
+    // actual validated href is never replaced or modified.
+    const approved = approvedUrls.some(url => !!url && url === part.href);
+    const label = approved
+      ? (part.href === "https://www.whachatcrm.com/realtor-growth-engine"
+        ? "Explore the Realtor Growth Engine"
+        : "Learn more")
+      : part.text;
+    const style = approved
+      ? "display:inline-block;margin:4px 0;padding:11px 17px;border-radius:8px;background-color:#087f78;color:#ffffff;font-weight:700;text-decoration:none;line-height:1.4"
+      : "color:#0369a1;text-decoration:underline";
+    return "<a href=\"" + escapeHtml(part.href) + "\" style=\"" + style +
+      "\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(label) + "</a>";
+  }).join("");
 }
 
 /**

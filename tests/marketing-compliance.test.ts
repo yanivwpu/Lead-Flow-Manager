@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { issueOptOutToken, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, addMarketingFooter, assertStagingMarketingRecipient, inboundStopIdentity } from "../server/marketingCompliance/policy";
 import { encodeMimeSubject, toRfc2822 } from "../server/emailChannel/gmailProvider";
 import { safeTextLinks } from "../shared/safeTextLinks";
+import { renderMarketingUnsubscribePage } from "../server/marketingCompliance/unsubscribePage";
 import { isProspectEmailUnsubscribeSignal as isStop } from "../shared/prospectEmailSuppression";
 const secret = "a sufficiently long isolated test secret 120";
 const identity = { workspace: "tenant-a", email: "Person@Example.com" };
@@ -13,6 +14,43 @@ assert.throws(() => readOptOutToken(token, "different sufficiently long secret f
 assert.throws(() => readOptOutToken(token.slice(0, 20) + (token[20] === "X" ? "Y" : "X") + token.slice(21), secret));
 assert.throws(() => readOptOutToken("invalid", secret));
 assert.throws(() => issueOptOutToken(identity, "short"));
+
+const confirmation = renderMarketingUnsubscribePage({
+  kind: "confirm", actionPath: `/api/marketing/unsubscribe/${token}`, acceptLanguage: "en-US,en;q=0.8"
+});
+assert(confirmation.html.includes("<form method=\"post\""));
+assert(confirmation.html.includes('name="List-Unsubscribe" value="One-Click"'));
+assert(confirmation.html.includes(`action="/api/marketing/unsubscribe/${token}"`));
+assert(confirmation.html.includes('name="viewport"'));
+assert(confirmation.html.includes('meta name="robots" content="noindex,nofollow,noarchive"'));
+assert(confirmation.html.includes("WhachatCRM"));
+assert(confirmation.html.includes("Confirm unsubscribe"));
+assert(!confirmation.html.includes("https://cdn."));
+assert(confirmation.csp.includes("default-src 'none'"));
+assert(confirmation.csp.includes("script-src 'none'"));
+assert(confirmation.csp.includes("form-action 'self'"));
+assert(confirmation.csp.includes("frame-ancestors 'none'"));
+assert(/style-src 'nonce-[A-Za-z0-9+/=]+'/.test(confirmation.csp));
+assert.match(confirmation.html, /<style nonce="[A-Za-z0-9+/=]+">/);
+assert(!confirmation.html.includes("fetch(") && !confirmation.html.includes("<script"));
+const done = renderMarketingUnsubscribePage({ kind: "success", acceptLanguage: "en" });
+assert(done.html.includes("You&#39;re unsubscribed"), "HTML escapes apostrophes safely");
+assert(!done.html.includes("<form"));
+assert.notEqual(done.csp, confirmation.csp, "CSP style nonce must be fresh");
+for (const [locale, phrase, direction] of [
+  ["es-MX,es;q=0.9", "Cancelar suscripción", "ltr"],
+  ["he-IL,he;q=0.9", "הסרה מרשימת", "rtl"],
+] as const) {
+  const localized = renderMarketingUnsubscribePage({ kind:"confirm", actionPath:`/api/marketing/unsubscribe/${token}`, acceptLanguage:locale });
+  assert(localized.html.includes(phrase));
+  assert(localized.html.includes(`dir="${direction}"`));
+  assert(localized.html.includes(`action="/api/marketing/unsubscribe/${token}"`));
+  const completed = renderMarketingUnsubscribePage({ kind:"success", acceptLanguage:locale });
+  assert(!completed.html.includes("<form"));
+}
+assert.throws(() => renderMarketingUnsubscribePage({kind:"confirm",actionPath:"https://evil.example/x"}));
+assert.throws(() => renderMarketingUnsubscribePage({kind:"confirm",actionPath:'/api/marketing/unsubscribe/bad" onsubmit="alert(1)'}));
+
 assert.equal(normalizeMarketingEmail("  Üser@EXAMPLE.COM "), "üser@example.com");
 assert.equal(normalizeMarketingPhone("+1 (202) 555-0123"), "+12025550123");
 assert.throws(() => normalizeMarketingPhone("2025550123"));

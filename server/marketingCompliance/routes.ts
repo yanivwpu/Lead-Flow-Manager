@@ -2,22 +2,25 @@ import { requireProspectImportAccess } from "../routes/prospectImportAccess";
 import express, { type Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { escapeMarketingHtml, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone, issueOptOutToken, addMarketingFooter, marketingPublicOrigin } from "./policy";
+import { readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone, issueOptOutToken, addMarketingFooter, marketingPublicOrigin } from "./policy";
 import { suppressMarketingIdentity } from "./store";
 import { getEmailMailboxById, listEmailMailboxes } from "../emailChannel/mailboxStore";
+import { renderMarketingUnsubscribePage } from "./unsubscribePage";
 
 export function registerMarketingComplianceRoutes(app: Express) {
   const path = "/api/marketing/unsubscribe/:token";
   // Token authentication replaces cookies. GET never mutates; scanners are safe.
   app.get(path, (req, res) => {
-    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "Content-Security-Policy": "default-src 'none'; form-action 'self'; frame-ancestors 'none'", "X-Content-Type-Options": "nosniff" });
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex, nofollow" });
     try {
       readOptOutToken(req.params.token);
-      res.type("html").send(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Marketing email preferences</title><h1>Unsubscribe from marketing emails</h1><p>Confirm to stop marketing messages from this sender.</p><form method="post" action="${escapeMarketingHtml(req.path)}"><input type="hidden" name="List-Unsubscribe" value="One-Click"><button type="submit">Unsubscribe</button></form></html>`);
+      const page = renderMarketingUnsubscribePage({ kind: "confirm", actionPath: req.path, acceptLanguage: req.headers?.["accept-language"] });
+      res.set({ "Content-Security-Policy": page.csp, "Content-Language": page.language });
+      res.type("html").send(page.html);
     } catch { res.status(400).type("text").send("This unsubscribe link is invalid. Reply to the sender to request an opt-out."); }
   });
   app.post(path, express.urlencoded({ extended: false, limit: "2kb" }), async (req, res) => {
-    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+    res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex, nofollow" });
     let identity;
     try { identity = readOptOutToken(req.params.token); }
     catch { return res.status(400).json({ error: "Invalid unsubscribe link" }); }
@@ -25,7 +28,9 @@ export function registerMarketingComplianceRoutes(app: Express) {
     try {
       // Ignore session, query tenant overrides and redirects entirely.
       await suppressMarketingIdentity({ ...identity, reason: "unsubscribe", source: "one_click", scope: "email" });
-      return res.type("html").send("<!doctype html><html lang=en><meta charset=utf-8><title>Unsubscribed</title><h1>You are unsubscribed</h1><p>Marketing messages from this sender have been stopped.</p></html>");
+      const page = renderMarketingUnsubscribePage({ kind: "success", acceptLanguage: req.headers?.["accept-language"] });
+      res.set({ "Content-Security-Policy": page.csp, "Content-Language": page.language });
+      return res.type("html").send(page.html);
     } catch { return res.status(503).json({ error: "Unable to save your opt-out. Please retry or reply to the sender." }); }
   });
 
