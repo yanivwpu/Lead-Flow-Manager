@@ -228,7 +228,8 @@ export function ProspectMessagePreview({ draft, contactId }: Props) {
             Subject: {preview.subject || "(no subject)"}
           </p>
           <pre
-            className="whitespace-pre-wrap rounded border border-gray-100 bg-gray-50/80 p-2.5 text-[13px] leading-relaxed text-gray-800"
+            dir="auto"
+            className="whitespace-pre-wrap break-words rounded border border-gray-100 bg-gray-50/80 p-2.5 text-[13px] leading-relaxed text-gray-800"
             data-testid="pi-preview-body"
           >
             {preview.body || "(empty message)"}
@@ -241,7 +242,7 @@ export function ProspectMessagePreview({ draft, contactId }: Props) {
         </div>
       ) : (
         <p className="text-[11px] text-gray-500">
-          Preview shows the final rendered email for the selected prospect.
+          This previews draft content only. To inspect clickable links, final HTML, sender details, and the required unsubscribe footer, open the recipient email preview in the queued campaign draft.
         </p>
       )}
     </div>

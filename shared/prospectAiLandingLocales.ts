@@ -93,7 +93,7 @@ export const PROSPECT_AI_LANDING_LOCALES: Record<
       "todo desde una plataforma.",
     ],
     primaryCta: "Empieza tu prueba gratis",
-    secondaryCta: "Ver demo",
+    secondaryCta: "Reservar una demo",
     pain: {
       title: "Deja de prospectar en frío",
       paragraphs: [
@@ -335,7 +335,7 @@ export const PROSPECT_AI_LANDING_LOCALES: Record<
       "הכל מפלטפורמה אחת.",
     ],
     primaryCta: "התחל ניסיון חינם",
-    secondaryCta: "צפה בהדגמה",
+    secondaryCta: "קביעת הדגמה",
     pain: {
       title: "הפסיקו prospecting בקור",
       paragraphs: [
