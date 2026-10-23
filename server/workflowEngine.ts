@@ -2,7 +2,8 @@ import { storage } from "./storage";
 import { type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
 import { subscriptionService } from "./subscriptionService";
 import {
-  evaluateGrowthEngineAccess,
+  evaluateGrowthEngineRuntimeAccess,
+  GROWTH_ENGINE_TEMPLATE_IDS,
   isGrowthEngineWorkflow,
   isAiBrainWorkflowActionType,
   isRuntimeSafeWorkflowActionType,
@@ -72,7 +73,7 @@ export interface WorkflowCondition {
 }
 
 /**
- * Growth Engine workflows: single subscription gate (active Pro + automations).
+ * Growth Engine workflows require plan access and completed workspace activation.
  * Returns `null` when execution may proceed, or a human-readable block reason.
  * Logs + persists a workflow execution row so skips are never silent.
  */
@@ -85,7 +86,7 @@ async function blockGrowthEngineWorkflowIfNotEntitled(
   if (!isGrowthEngineWorkflow(workflow)) {
     return null;
   }
-  const access = await evaluateGrowthEngineAccess(workflow.userId);
+  const access = await evaluateGrowthEngineRuntimeAccess(workflow.userId);
   if (access.ok) {
     return null;
   }
@@ -344,6 +345,12 @@ async function executeSendMessageTemplateAction(params: {
   }
   const tc = workflow.triggerConditions as { templateId?: string; templateKey?: string };
   const templateId = tc?.templateId || "realtor-growth-engine";
+  // Legacy/general workflow rows can reference RGE message templates without
+  // carrying the engine marker. Template access must enforce activation too.
+  if (GROWTH_ENGINE_TEMPLATE_IDS.has(templateId)) {
+    const access = await evaluateGrowthEngineRuntimeAccess(workflow.userId);
+    if (!access.ok) return { ok: false, outcome: "guard_skipped", detail: access.reason };
+  }
   const workflowKey = tc?.templateKey ?? null;
   const row = await storage.getUserTemplateDataByKey(
     workflow.userId,

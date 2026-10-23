@@ -5,6 +5,10 @@ on:
       - "shopify.app.staging.toml"
       - "shopify.app.whachatcrm.toml"
       - "server/commerceEventPipeline.ts"
+      - "server/growthEngineEntitlements.ts"
+      - "server/workflowEngine.ts"
+      - "server/automationTimerHandlers.ts"
+      - "tests/growth-engine-runtime-activation.test.ts"
       - "scripts/verify-shopify-order-recovery.ts"
       - "scripts/monitor-shopify-privacy.ts"
       - "tests/shopify-production-config.test.py"
@@ -106,6 +110,8 @@ jobs:
         run: npx tsx --test tests/shopify-ecommerce-preview.test.ts
       - name: Test-merchant consent disclosure and staging isolation
         run: npx tsx --test tests/shopify-recovery-consent-disclosure.test.tsx
+      - name: Growth Engine activation required at workflow and timer execution
+        run: npx tsx --test tests/growth-engine-runtime-activation.test.ts tests/growth-engine-pro-entitlement.test.ts
       - name: E-commerce manual review security and concurrent real PostgreSQL gate
         run: npx tsx --test tests/shopify-ecommerce-review-security.test.ts tests/shopify-ecommerce-review-postgres.test.ts
       - name: E-commerce merchant workflow draft parser, security and real PostgreSQL concurrency

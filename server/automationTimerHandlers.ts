@@ -5,6 +5,7 @@ import { sendMetaWhatsAppMessage } from "./userMeta";
 import { withAutomationSendGuard } from "./automationSendGuard";
 import { logEntitlementSkip, resolveExecutionEntitlement } from "./paidAutomationGate";
 import { ENTITLEMENT_BLOCKED_REASON } from "@shared/paidAutomationEntitlements";
+import { evaluateGrowthEngineRuntimeAccess } from "./growthEngineEntitlements";
 
 type W2QualPayload = {
   userId: string;
@@ -125,6 +126,14 @@ export async function processAutomationTimerJob(job: AutomationTimerJob): Promis
     });
     await storage.markAutomationTimerJobSkipped(job.id, ENTITLEMENT_BLOCKED_REASON);
     return;
+  }
+
+  if (job.kind === "w2_qualification" || job.kind === "w2_routing") {
+    const access = await evaluateGrowthEngineRuntimeAccess(job.userId);
+    if (!access.ok) {
+      await storage.markAutomationTimerJobSkipped(job.id, access.reason);
+      return;
+    }
   }
 
   const contact = await storage.getContact((job.payload as any).contactId as string);

@@ -12,6 +12,7 @@ export type GrowthEngineDenialReason =
   | "automations_not_in_plan"
   | "pro_plan_required"
   | "ai_brain_required"
+  | "workspace_not_activated"
   | "admin_override_disabled";
 
 export type GrowthEngineAccessResult =
@@ -120,7 +121,7 @@ export function isGrowthEngineWorkflow(
 }
 
 /**
- * Product rule: Growth Engine install, activation, and runtime all require
+ * Product rule: Growth Engine install and activation require
  * an active Pro plan (AI Brain is included with Pro) plus plan automations enabled.
  *
  * Admin overrides (plan / AI Brain / Growth Engine) are honored here.
@@ -199,6 +200,27 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
   const result: GrowthEngineAccessResult = { ok: true, limits };
   logGrowthEngineAccessDecision(userId, user, result);
   return result;
+}
+
+/** Plan eligibility permits setup; runtime also requires this workspace's
+ * completed installation. Global template seeding, Pro and admin grants alone
+ * must never activate an engine or revive an orphaned workflow/timer.
+ */
+export async function evaluateGrowthEngineRuntimeAccess(userId: string): Promise<GrowthEngineAccessResult> {
+  const access = await evaluateGrowthEngineAccess(userId);
+  if (!access.ok) return access;
+  const install = await storage.getTemplateInstall(userId, "realtor-growth-engine");
+  if (install?.userId === userId && install.templateId === "realtor-growth-engine" &&
+      install.installStatus === "installed") return access;
+  return {
+    ok: false,
+    reason: "workspace_not_activated",
+    message: "Growth Engine has not been activated in this workspace.",
+    limits: access.limits,
+    hasProTier: access.limits.plan === "pro",
+    hasAIBrainAddon: !!access.limits.hasAIBrainAddon,
+    workflowsEnabled: !!access.limits.workflowsEnabled,
+  };
 }
 
 /**
