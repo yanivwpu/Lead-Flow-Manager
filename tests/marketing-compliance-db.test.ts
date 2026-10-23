@@ -22,8 +22,19 @@ try {
   }
   await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('history','a','History@Example.com','{\"unsubscribed\":true}')");
   await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('old-bounce','a','old-bounce@example.com','{\"emailBounced\":true}')");
+  await pg.exec("INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES ('email-only-phone','a','email-phone@example.com','+12025550321','{\\\"unsubscribed\\\":true}'),('global-dnc','a','global@example.com','+12025550987','{\\\"doNotContact\\\":true}')");
+
   await pg.exec(await readFile("migrations/0113_marketing_compliance.sql", "utf8"));
-  assert.equal((await pg.query("SELECT * FROM marketing_suppressions")).rows.length, 2, "historical opt-outs and bounces backfilled");
+  assert.equal((await pg.query("SELECT * FROM marketing_suppressions")).rows.length, 5, "email-only opt-outs and explicit global DNC identities backfilled");
+  const historical = (await pg.query<{email_normalized: string; scope: string}>("SELECT email_normalized,scope FROM marketing_suppressions WHERE workspace_user_id='a'")).rows;
+  const scopeOf = (key: string) => historical.find(r => r.email_normalized === key)?.scope;
+  assert.equal(scopeOf("history@example.com"), "email", "historic email unsubscribe must not silently become global DNC");
+  assert.equal(scopeOf("email-phone@example.com"), "email");
+  assert.equal(scopeOf("phone:+12025550321"), undefined, "an email-only opt-out must not disable WhatsApp/SMS");
+  assert.equal(scopeOf("global@example.com"), "all");
+  assert.equal(scopeOf("phone:+12025550987"), "all", "explicit global DNC must include known phone identity");
+  assert.equal(scopeOf("old-bounce@example.com"), "email");
+
   await pg.exec(`INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES
     ('a1','a','Person@Example.com','+12025550123','{}'),('a2','a',' person@example.com ','12025550123','{}'),('b1','b','person@example.com','+12025550123','{}');
     INSERT INTO prospect_intelligence(contact_id,outreach_status) VALUES ('a1','not_sent');
