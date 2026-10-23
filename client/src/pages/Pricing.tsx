@@ -914,15 +914,18 @@ export function Pricing() {
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
               Agency &amp; Enterprise
             </span>
-            <h2 className="mt-4 text-xl font-bold leading-snug text-gray-900">
-              {pricingContent.agency.title}
+            <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-gray-900">
+              Agency &amp; Enterprise
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-gray-600">
+              {pricingContent.agency.title}
+            </p>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">
               {pricingContent.agency.body}
             </p>
             <div className="mt-auto pt-6">
               <Link href="/contact">
-                <Button className="w-full bg-gray-900 text-white hover:bg-gray-800" data-testid="button-contact-sales">
+                <Button className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200" data-testid="button-contact-sales">
                   {pricingContent.agency.cta}
                 </Button>
               </Link>
