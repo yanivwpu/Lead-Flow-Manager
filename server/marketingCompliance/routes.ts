@@ -2,7 +2,7 @@ import { requireProspectImportAccess } from "../routes/prospectImportAccess";
 import express, { type Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
-import { escapeMarketingHtml, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone, issueOptOutToken, addMarketingFooter, marketingPublicOrigin } from "./policy";
+import { readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone, issueOptOutToken, addMarketingFooter, marketingPublicOrigin } from "./policy";
 import { suppressMarketingIdentity } from "./store";
 import { getEmailMailboxById, listEmailMailboxes } from "../emailChannel/mailboxStore";
 import { renderMarketingUnsubscribePage } from "./unsubscribePage";
