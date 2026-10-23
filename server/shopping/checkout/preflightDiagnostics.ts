@@ -43,6 +43,8 @@ const guardCodes = {
   catalog_selection_unavailable_or_changed: 'checkout_test_selection_unavailable_or_changed',
   inventory_insufficient: 'checkout_test_inventory_insufficient',
   installation_changed: 'checkout_test_installation_changed',
+  development_storefront_private_token_missing: 'checkout_test_storefront_setup_required',
+  development_storefront_private_token_required: 'checkout_test_storefront_setup_required',
 } as const;
 export class CheckoutGuardError extends Error {
   constructor(readonly guard: keyof typeof guardCodes) { super(guard); }

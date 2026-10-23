@@ -21,7 +21,7 @@ export function validateCheckoutUrl(raw: unknown, shop: string, attestedHost?:st
 // Keep token-only inventory out of the tokenless document, rather than removing fields by string replacement.
 const VERIFY_FIELDS = `id availableForSale quantityRule { minimum maximum increment } requiresComponents selectedOptions { name value } price { amount currencyCode } product { id requiresSellingPlan }`;
 const VERIFY_TOKENLESS = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { ${VERIFY_FIELDS} } } }`;
-const VERIFY = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { ${VERIFY_FIELDS} quantityAvailable currentlyNotInStock } } }`;
+export const VERIFY = `query CheckoutVariant($id:ID!) { node(id:$id) { ... on ProductVariant { ${VERIFY_FIELDS} quantityAvailable currentlyNotInStock } } }`;
 const CART_FIELDS = `id checkoutUrl totalQuantity lines(first:2) { nodes { quantity merchandise { ... on ProductVariant { id product { id } } } cost { amountPerQuantity { amount currencyCode } } } }`;
 const CREATE = `mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${CART_FIELDS} } userErrors { code } warnings { code } } }`;
 const STATUS = `query CheckoutStatus($id:ID!) { cart(id:$id) { ${CART_FIELDS} } }`;
@@ -114,4 +114,5 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
   };
   return provider;
 }
+
 

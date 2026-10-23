@@ -28,6 +28,8 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
    {shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[options.variantPatch?options.variantPatch(variant()):variant()]};
  return q===META&&options.metaPatch?options.metaPatch(data):data;};
  const storefrontFetch=(async(_url:unknown,init:any)=>{
+   assert.equal(init.headers['Shopify-Storefront-Private-Token'],'fixture-private-token');
+   assert.equal(init.headers['X-Shopify-Storefront-Access-Token'],undefined);
    const {query}=JSON.parse(init.body);
    if(options.httpResponse){
      assert.match(query,/^query CheckoutVariant/);
@@ -47,7 +49,7 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
    let data;
    if(query.startsWith('mutation')){creates++;if(options.ambiguous)throw Error('secret provider diagnostic');data={cartCreate:{cart,userErrors:[],warnings:[]}};}
    else if(query.includes('CheckoutStatus'))data={cart};
-   else data={node:{...variant(),price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
+   else data={node:{...variant(),quantityAvailable:3,currentlyNotInStock:false,price:{amount:options.storefront==='changed'?'999.00':price,currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
    return new Response(JSON.stringify({data}),{headers:{'x-shopify-api-version':'2026-10'}});
  }) as typeof fetch;
  const handlers:Record<string,any>={};
@@ -64,7 +66,7 @@ async function fixture(options:{missing?:boolean;ambiguous?:boolean;installation
  }
  return {...f,call,creates:()=>creates,reads:()=>reads,changePrice:()=>{price='602.00';},badPlan:()=>{dev=false;}};
 }
-function config(){process.env.SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID='tenant-a';process.env.SHOPIFY_CHECKOUT_TEST_OPERATOR_IDS='tenant-a';}
+function config(){process.env.SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID='tenant-a';process.env.SHOPIFY_CHECKOUT_TEST_OPERATOR_IDS='tenant-a';process.env.SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN='fixture-private-token';}
 function identity(p:any){return {requestId:p.requestId,selectionSha256:p.selectionSha256};}
 async function approve(f:Awaited<ReturnType<typeof fixture>>,p:any){return f.call('approve',{...identity(p),confirmation:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'});}
 

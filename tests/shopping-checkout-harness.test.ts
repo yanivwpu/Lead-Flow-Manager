@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { consumeDispatch } from '../scripts/checkout-validation/private-files';
-import { runValidation, SHOP, META, selectionDigest, authorize } from '../scripts/checkout-validation/harness';
+import { consumeDispatch, savePrivateSelection } from '../scripts/checkout-validation/private-files';
+import { railwayCartDirectory, railwayCheckoutModeAllowed } from '../scripts/checkout-validation/railway-guard';
+import { assertBootstrapCommand } from '../scripts/checkout-validation/admin-bootstrap';
+import { runValidation, SHOP, META, selectionDigest, authorize, developmentStorefrontCredential } from '../scripts/checkout-validation/harness';
 const selection={shop:SHOP,userId:'owner',productId:'gid://shopify/Product/1',variantId:'gid://shopify/ProductVariant/2',quantity:1,price:'12.00',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const approval=()=>({action:'CREATE EXACTLY ONE DEVELOPMENT STORE CART',selectionSha256:selectionDigest(selection),expiresAt:new Date(Date.now()+600000).toISOString(),approvedBy:'fixture operator',developmentStoreEvidence:'synthetic fixture'});
 function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=>any;ambiguous?:boolean;installationChanged?:boolean}={}) {
@@ -14,14 +16,15 @@ function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=
  const deps={
   installation:async()=>({shop:SHOP,integrationId:'installation',token:change.installationChanged && ++installs>1?'changed':'synthetic-admin'}),
   requestFor:()=>async(query:string)=>query===META ? (change.meta?.({shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}})??{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}):{shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[change.variant?.(variant)??variant]},
+  storefrontCredential:{kind:'private' as const,token:'fixture-private-token'},
   storefrontFetch:(async(url:any,init:any)=>{
-   assert.equal(url,`https://${SHOP}/api/2026-10/graphql.json`);assert.deepEqual(init.headers,{'Content-Type':'application/json'});assert.equal(init.redirect,'error');
+   assert.equal(url,`https://${SHOP}/api/2026-10/graphql.json`);assert.deepEqual(init.headers,{'Content-Type':'application/json','Shopify-Storefront-Private-Token':'fixture-private-token'});assert.equal(init.redirect,'error');
    const {query,variables}=JSON.parse(init.body); calls.push(query);
    const cart={id:'gid://shopify/Cart/fixture?key=private',checkoutUrl:`https://${SHOP}/cart/c/fixture?key=private`,totalQuantity:1,lines:{nodes:[{quantity:1,merchandise:{id:selection.variantId,product:{id:selection.productId}},cost:{amountPerQuantity:{amount:'12.00',currencyCode:'USD'}}}]}};
    let data;
    if(query.startsWith('mutation')) {assert.equal(consumed,true);mutations++;assert.deepEqual(variables,{input:{lines:[{merchandiseId:selection.variantId,quantity:1}]}});if(change.ambiguous)throw Error('synthetic network failure');data={cartCreate:{cart:change.cart?.(cart)??cart,userErrors:[],warnings:[]}};}
    else if(query.includes('CheckoutStatus'))data={cart};
-   else data={node:{...variant,price:{amount:'12.00',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
+   else data={node:{...variant,quantityAvailable:5,currentlyNotInStock:false,price:{amount:'12.00',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1}}};
    return new Response(JSON.stringify({data}),{headers:{'x-shopify-api-version':'2026-10'}});
   }) as typeof fetch,
   consume:async()=>{if(consumed)throw Error('already_consumed');consumed=true;},
@@ -29,6 +32,17 @@ function fixture(change:{meta?:(m:any)=>any;variant?:(v:any)=>any;cart?:(c:any)=
  };
  return {deps,counts:()=>({mutations,consumed,saved}),calls};
 }
+test('development credential resolver fails closed and only accepts private server-side token',()=>{
+ assert.throws(()=>developmentStorefrontCredential({} as NodeJS.ProcessEnv),/development_storefront_private_token_missing/);
+ assert.throws(()=>developmentStorefrontCredential({SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN:'  '} as NodeJS.ProcessEnv),/development_storefront_private_token_missing/);
+ assert.deepEqual(developmentStorefrontCredential({SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN:'private-test'} as NodeJS.ProcessEnv),{kind:'private',token:'private-test'});
+});
+test('tokenless credentials cannot enter controlled validation',async()=>{
+ const f=fixture();
+ await assert.rejects(runValidation(selection,{...f.deps,storefrontCredential:{kind:'tokenless'}}),/development_storefront_private_token_required/);
+ assert.equal(f.calls.length,0);
+ assert.equal(f.counts().mutations,0);
+});
 test('preflight uses real provider verification without cart dispatch or local claim',async()=>{
  const f=fixture();const result=await runValidation(selection,f.deps);assert.equal(result.cartCreated,false);assert.deepEqual(f.counts(),{mutations:0,consumed:false,saved:false});assert.equal(f.calls.length,1);
 });
@@ -71,4 +85,74 @@ test('real filesystem claim is exclusive across racing invocations and remains c
   assert.equal((await stat(join(dir,'cart-dispatch-consumed.json'))).mode & 0o777,0o600);
   await assert.rejects(consumeDispatch(dir));
  } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('Railway one-cart runner requires exact service, approval phase, and a mounted persistent claim volume',async()=>{
+ const correct={RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',CHECKOUT_TEST_RAILWAY_SERVICE_ID:'cd3e14a1-c6a1-4532-8c67-8bc502d5aa07',CHECKOUT_TEST_PHASE:'PREFLIGHT'} as NodeJS.ProcessEnv;
+ assert.equal(railwayCheckoutModeAllowed('--preflight',correct),true);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',correct),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...correct,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART'}),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...correct,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART',CHECKOUT_TEST_APPROVED_ONCE:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'}),true);
+ assert.equal(railwayCheckoutModeAllowed('--preflight',{...correct,RAILWAY_SERVICE_ID:'another'}),false);
+ await assert.rejects(railwayCartDirectory(correct,'100 1 8:1 / /app rw - ext4 /dev/root rw'),/dedicated_persistent_volume_not_mounted/);
+ assert.equal(await railwayCartDirectory(correct,'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),'/checkout-one-cart/private-claim');
+ await assert.rejects(railwayCartDirectory({...correct,RAILWAY_SERVICE_ID:'another'},'100 1 8:1 / /checkout-one-cart rw - ext4 /dev/sdb rw'),/railway_service_not_attested/);
+});
+
+test('cart command preserves exact Railway attestation rather than rejecting Railway CI flag',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.doesNotMatch(cli,/process\.env\.CI\s*\|\|\s*!railwayCheckoutModeAllowed/);
+ assert.match(cli,/!railwayCheckoutModeAllowed\(mode\)/);
+ assert.match(cli,/!process\.env\.RAILWAY_SERVICE_ID\s*&&\s*Boolean\(process\.env\.CI\)/);
+ const id='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07';
+ const valid={CI:'true',RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_RAILWAY_SERVICE_ID:id,
+   CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART',CHECKOUT_TEST_APPROVED_ONCE:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'} as NodeJS.ProcessEnv;
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',valid),true);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...valid,RAILWAY_SERVICE_ID:'other'}),false);
+ assert.equal(railwayCheckoutModeAllowed('--create-one-cart',{...valid,CHECKOUT_TEST_APPROVED_ONCE:undefined}),false);
+});
+
+test('read-only bootstrap accepts CI flag only with exact Railway service attestation',()=>{
+ const id='cd3e14a1-c6a1-4532-8c67-8bc502d5aa07';
+ const valid={CI:'true',RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_RAILWAY_SERVICE_ID:id,CHECKOUT_TEST_PHASE:'PREFLIGHT'} as NodeJS.ProcessEnv;
+ assert.doesNotThrow(()=>assertBootstrapCommand(['--bootstrap-preflight'],valid));
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,RAILWAY_SERVICE_ID:undefined}),/runtime_identity_missing/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,RAILWAY_SERVICE_ID:'wrong'}),/runtime_identity_mismatch/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,CHECKOUT_TEST_RAILWAY_SERVICE_ID:'wrong'}),/attestation_mismatch/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{...valid,CHECKOUT_TEST_PHASE:'AUTHORIZED_ONE_CART'}),/preflight_guard_phase/);
+ assert.throws(()=>assertBootstrapCommand(['--create-one-cart'],valid),/preflight_guard_args/);
+ assert.throws(()=>assertBootstrapCommand(['--bootstrap-preflight'],{CI:'true'} as NodeJS.ProcessEnv),/runtime_identity_missing/);
+});
+
+test('authorized Railway bootstrap uses private saved selection, digest expiry and one-shot claim',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.match(cli,/mode === '--create-approved-bootstrap'/);
+ assert.match(cli,/process\.argv\.slice\(2\)\.length!==1/);
+ assert.match(cli,/railwayCheckoutModeAllowed\('--create-one-cart'\)/);
+ assert.match(cli,/selection\.private\.json/);
+ assert.match(cli,/CHECKOUT_TEST_SELECTION_SHA256/);
+ assert.match(cli,/CHECKOUT_TEST_EXPIRES_AT/);
+ assert.match(cli,/30 \* 60_000/);
+ assert.match(cli,/selectionSha256:digest/);
+ assert.match(cli,/consumeDispatch\(directory\)/);
+ assert.match(cli,/savePrivateReceipt\(directory,receipt\)/);
+});
+
+test('private preflight selection permits identical re-verification but rejects drift',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'checkout-selection-'));
+ try {
+   const dir=join(root,'private');
+   await savePrivateSelection(dir,{shop:'development',price:'600.00'});
+   await savePrivateSelection(dir,{shop:'development',price:'600.00'});
+   await assert.rejects(savePrivateSelection(dir,{shop:'development',price:'601.00'}),/selection_drift_requires_new_claim/);
+ } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('claim inspection is read-only, attested and does not expose private contents',()=>{
+ const cli=readFileSync('scripts/validate-shopify-checkout.ts','utf8');
+ assert.match(cli,/mode==='--inspect-private-claim'/);
+ assert.match(cli,/inspection_service_not_attested/);
+ assert.match(cli,/await lstat\(resolve\(directory,name\)\)/);
+ assert.match(cli,/result:'private_claim_inspection'/);
+ assert.doesNotMatch(cli,/status\[key\]=await readFile/);
 });

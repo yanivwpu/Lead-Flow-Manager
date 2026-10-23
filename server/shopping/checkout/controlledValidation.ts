@@ -2,7 +2,7 @@ import { CheckoutGuardError, verificationStage, verificationFailure } from './pr
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { compareMoney } from '../../../shared/shoppingAssistant';
-import { createShopifyCheckoutProvider } from './shopify';
+import { createShopifyCheckoutProvider, type StorefrontCredential } from './shopify';
 import { isShopifyProductPublished } from '../../salesCatalog/shopify/publication';
 import { SHOPIFY_INVENTORY_BATCH_QUERY } from '../../salesCatalog/shopify/inventory';
 import type { CatalogRequest } from '../../salesCatalog/shopify/api';
@@ -32,10 +32,18 @@ export function authorize(selection: Selection, raw: unknown, now = Date.now()) 
   if (approval.selectionSha256 !== selectionDigest(selection) || remaining <= 0 || remaining > 30 * 60_000)
     throw Error('authorization_invalid');
 }
+export function developmentStorefrontCredential(env: NodeJS.ProcessEnv = process.env): StorefrontCredential {
+  const token = env.SHOPIFY_CHECKOUT_DEV_STOREFRONT_PRIVATE_TOKEN;
+  if (typeof token !== 'string' || !token.trim() || token !== token.trim())
+    throw new CheckoutGuardError('development_storefront_private_token_missing');
+  return {kind:'private',token};
+}
+
 export async function runValidation(raw: unknown, deps: {
   installation: () => Promise<{shop:string;integrationId:string;token:string}|null>;
   requestFor: (shop:string,token:string)=>CatalogRequest;
   storefrontFetch: typeof fetch;
+  storefrontCredential?: StorefrontCredential;
   approval?: unknown;
   consume: () => Promise<void>;
   saveReceipt: (receipt: unknown)=>Promise<void>;
@@ -71,7 +79,10 @@ export async function runValidation(raw: unknown, deps: {
     throw new CheckoutGuardError('inventory_insufficient');
   const {shop,userId,...item} = selection;
   const verified = {...item,inventoryProof:{at:Date.now(),quantity:v.inventoryQuantity ?? null,unrestricted}};
-  const provider = createShopifyCheckoutProvider({shop:SHOP,credential:{kind:'tokenless'},fetch:deps.storefrontFetch});
+  const credential = deps.storefrontCredential ?? developmentStorefrontCredential();
+  if (credential.kind !== 'private' || !credential.token.trim())
+    throw new CheckoutGuardError('development_storefront_private_token_required');
+  const provider = createShopifyCheckoutProvider({shop:SHOP,credential,fetch:deps.storefrontFetch});
   await verificationStage('storefront',()=>provider.verify(verified));
   if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false};
   authorize(selection,deps.approval);
