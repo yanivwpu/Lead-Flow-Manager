@@ -12,19 +12,26 @@ export async function requireMarketingSender(workspace: string, mailbox: string,
   return profile;
 }
 export async function assertMarketingQueueSetup(workspace: string) {
-  // Production remains disabled even after a sender profile is configured.
-  assertStagingMarketingRecipient([process.env.MARKETING_TEST_RECIPIENT || ""]);
-  marketingPublicOrigin();
-  issueOptOutToken({ workspace, email: process.env.MARKETING_TEST_RECIPIENT || "" });
+  // Resolve the sender first: production acceptance requires an exact mailbox
+  // and workspace match. An unrelated user's queue cannot be started.
   const result = await db.execute(sql`SELECT id FROM email_mailboxes WHERE workspace_user_id=${workspace} AND is_primary=true LIMIT 1`);
   const mailbox = result.rows[0]?.id;
   if (!mailbox) throw new Error("Marketing blocked: connect a sender mailbox first.");
+  assertStagingMarketingRecipient(
+    [process.env.MARKETING_TEST_RECIPIENT || ""], process.env,
+    { workspace, mailbox: String(mailbox), phase: "queue" },
+  );
+  marketingPublicOrigin();
+  issueOptOutToken({ workspace, email: process.env.MARKETING_TEST_RECIPIENT || "" });
   await requireMarketingSender(workspace, String(mailbox));
 }
 export async function withCompliantMarketingEmail<T>(input: {
-  workspace: string; mailbox: string; recipients: string[]; text: string; html?: string | null;
+  workspace: string; mailbox: string; contactId?: string; recipients: string[]; text: string; html?: string | null;
 }, send: (message: { text: string; html: string; unsubscribeUrl: string; onDispatch: () => void }) => Promise<T>): Promise<T> {
-  assertStagingMarketingRecipient(input.recipients);
+  assertStagingMarketingRecipient(
+    input.recipients, process.env,
+    { workspace: input.workspace, mailbox: input.mailbox, contactId: input.contactId, phase: "send" },
+  );
   let dispatched = false;
   let rejected: { value: T } | undefined;
   const definiteRejection = new Error("definite_provider_rejection");
