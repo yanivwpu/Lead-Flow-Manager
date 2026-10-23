@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { issueOptOutToken, readOptOutToken, normalizeMarketingEmail, normalizeMarketingPhone, addMarketingFooter, assertStagingMarketingRecipient, inboundStopIdentity } from "../server/marketingCompliance/policy";
-import { toRfc2822 } from "../server/emailChannel/gmailProvider";
+import { encodeMimeSubject, toRfc2822 } from "../server/emailChannel/gmailProvider";
 import { safeTextLinks } from "../shared/safeTextLinks";
 import { isProspectEmailUnsubscribeSignal as isStop } from "../shared/prospectEmailSuppression";
 const secret = "a sufficiently long isolated test secret 120";
@@ -26,6 +26,28 @@ assert.throws(() => addMarketingFooter({ text: "Hi", address: "Road", brand: "B"
 const raw = toRfc2822({ from: "sender@example.com", to: ["person@example.com"], subject: "Hello", textBody: bodies.text, htmlBody: bodies.html, unsubscribeUrl: `https://mail.example.com/api/marketing/unsubscribe/${token}` });
 for (const expected of ["text/plain", "text/html", "List-Unsubscribe: <https://", "List-Unsubscribe-Post: List-Unsubscribe=One-Click", "123 Example Road"]) assert(raw.includes(expected), expected);
 assert(!toRfc2822({ from: "sender@example.com", to: ["person@example.com"], subject: "Receipt", textBody: "Paid" }).includes("List-Unsubscribe"));
+
+const decodeSubject = (header: string) =>
+  [...header.matchAll(/=\\?UTF-8\\?B\\?([^?]+)\\?=/gi)]
+    .map(m => Buffer.from(m[1], "base64").toString("utf8")).join("");
+for (const subject of [
+  "[TEST] WhachatCRM Prospect AI — Gmail acceptance",
+  "Hebrew אימייל חכם בעברית — ניסיון",
+  "Español: información, programación y atención ✅",
+  "🔔".repeat(30) + " — " + "פרטים".repeat(12),
+]) {
+  const message = toRfc2822({
+    from: "sender@example.com", to: ["person@example.com"], subject,
+    textBody: "Hello", htmlBody: "<p>Hello</p>"
+  });
+  assert(message.includes("Subject: =?UTF-8?B?"), "Unicode subject must be RFC 2047 encoded");
+  assert.equal(decodeSubject(message.split("\\r\\nMIME-Version:")[0]), subject);
+  const folded = message.match(/^Subject: .*?(?=\\r\\nMIME-Version:)/s)?.[0] || "";
+  assert(folded.split("\\r\\n").every(line => Buffer.byteLength(line, "utf8") <= 76), "RFC 2047 encoded header lines must be folded");
+  assert(!folded.includes(" — "), "Unicode must not appear unencoded in the raw header");
+}
+assert.equal(encodeMimeSubject("Simple ASCII subject"), "Simple ASCII subject");
+
 for (const field of ["subject", "from"] as const) assert.throws(() => toRfc2822({ from: "a@b.test", to: ["p@b.test"], subject: "Hi", textBody: "Hi", [field]: "bad\r\nBcc: victim@example.com" }));
 assert.throws(() => toRfc2822({ from: "a@b.test", to: ["p@b.test"], subject: "Hi", textBody: "Hi", unsubscribeUrl: "https://e.test/\r\nX: bad" }));
 assert.throws(() => assertStagingMarketingRecipient(["person@example.com"], { NODE_ENV: "production", APP_ENV: "staging", MARKETING_SENDS_ENABLED: "staging-only", MARKETING_TEST_RECIPIENT: "person@example.com" }));
