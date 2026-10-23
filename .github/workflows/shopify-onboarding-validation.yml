@@ -22,6 +22,7 @@ on:
       - "client/src/components/integrations/ShopifyEcommerceInboxPreview.tsx"
       - "client/src/components/integrations/ShopifySimpleSetup.tsx"
       - "client/src/components/integrations/ShopifyManagePanel.tsx"
+      - "client/src/components/integrations/ShopifyRecoveryConsentDisclosure.tsx"
       - "client/src/components/followups/ShopifyOrderSupportTasks.tsx"
       - "client/src/components/followups/ShopifyTaskScheduleEditor.tsx"
       - "migrations/20261020_ecommerce_task_schedule_staging.sql"
@@ -103,6 +104,8 @@ jobs:
           npx tsx --test tests/shopify-managed-pricing.test.ts tests/shopify-oauth-state.test.ts tests/shopify-onboarding-emails.test.ts
       - name: Staging-only E-commerce inbox preview access and read-only checks
         run: npx tsx --test tests/shopify-ecommerce-preview.test.ts
+      - name: Test-merchant consent disclosure and staging isolation
+        run: npx tsx --test tests/shopify-recovery-consent-disclosure.test.tsx
       - name: E-commerce manual review security and concurrent real PostgreSQL gate
         run: npx tsx --test tests/shopify-ecommerce-review-security.test.ts tests/shopify-ecommerce-review-postgres.test.ts
       - name: E-commerce merchant workflow draft parser, security and real PostgreSQL concurrency

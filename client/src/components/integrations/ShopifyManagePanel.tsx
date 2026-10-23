@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { ShopifyWebhookAdvancedTools } from "./ShopifyWebhookDiagnostics";
 import { ShopifyEcommerceInboxPreview } from "./ShopifyEcommerceInboxPreview";
 import { ShopifySimpleSetup } from "./ShopifySimpleSetup";
+import { ShopifyRecoveryConsentDisclosure } from "./ShopifyRecoveryConsentDisclosure";
 
 export type ShopifyConnectionStatus = {
   connected: boolean;
@@ -110,6 +111,7 @@ export function ShopifyManagePanel({
       </div>
 
       <ShopifySimpleSetup syncEnabled={!!status.syncEnabled} />
+      <ShopifyRecoveryConsentDisclosure shop={status.shop} />
 
       <details className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm"
         data-testid="shopify-advanced-settings">
