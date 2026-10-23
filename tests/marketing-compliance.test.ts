@@ -42,7 +42,8 @@ for (const subject of [
   });
   assert(message.includes("Subject: =?UTF-8?B?"), "Unicode subject must be RFC 2047 encoded");
   assert.equal(decodeSubject(message.split("\\r\\nMIME-Version:")[0]), subject);
-  const folded = message.match(/^Subject: .*?(?=\\r\\nMIME-Version:)/s)?.[0] || "";
+  const folded = message.match(/^Subject: .*?(?=\\r\\nMIME-Version:)/ms)?.[0] || "";
+  assert(folded.startsWith("Subject: =?UTF-8?B?"), "subject found in MIME headers");
   assert(folded.split("\\r\\n").every(line => Buffer.byteLength(line, "utf8") <= 76), "RFC 2047 encoded header lines must be folded");
   assert(!folded.includes(" — "), "Unicode must not appear unencoded in the raw header");
 }
