@@ -32,12 +32,44 @@ export function readOptOutToken(token: string, secret?: string): OptOutIdentity 
     return { workspace: value.workspace, email: normalizeMarketingEmail(value.email) };
   } catch { throw new Error("Invalid unsubscribe link"); }
 }
-export function assertStagingMarketingRecipient(recipients: string[], env = process.env): void {
-  if (env.NODE_ENV === "production" || env.MARKETING_SENDS_ENABLED !== "staging-only" || env.APP_ENV !== "staging") {
+type MarketingAcceptanceContext = { workspace?: string; mailbox?: string; contactId?: string; phase?: "queue" | "send" };
+
+/**
+ * Default-deny marketing delivery. Staging can send only to its pre-approved test
+ * recipient. Production can do the same for a specifically pinned workspace,
+ * mailbox, contact ID and recipient; this is NOT general marketing activation.
+ * The final send path must supply phase:"send" and contactId even if the queue
+ * was started earlier. No optional bypass via untrusted message metadata.
+ */
+export function assertStagingMarketingRecipient(
+  recipients: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  context: MarketingAcceptanceContext = {},
+): void {
+  const staging = env.NODE_ENV !== "production" &&
+    env.APP_ENV === "staging" &&
+    env.MARKETING_SENDS_ENABLED === "staging-only";
+  const productionTest = env.NODE_ENV === "production" &&
+    env.APP_ENV === "production" &&
+    env.MARKETING_SENDS_ENABLED === "production-test-only";
+  if (!staging && !productionTest) {
     throw new Error("Marketing sending disabled. Release approval and staging acceptance are required.");
   }
   const approved = normalizeMarketingEmail(env.MARKETING_TEST_RECIPIENT || "");
-  if (recipients.length !== 1 || normalizeMarketingEmail(recipients[0]) !== approved) throw new Error("Only the approved staging test recipient may receive marketing");
+  if (recipients.length !== 1 || normalizeMarketingEmail(recipients[0]) !== approved) {
+    throw new Error("Only the approved marketing test recipient may receive marketing");
+  }
+  if (productionTest) {
+    const expectedWorkspace = env.MARKETING_TEST_WORKSPACE_ID || "";
+    const expectedMailbox = env.MARKETING_TEST_MAILBOX_ID || "";
+    const expectedContact = env.MARKETING_TEST_CONTACT_ID || "";
+    if (!expectedWorkspace || !expectedMailbox || !expectedContact ||
+        context.workspace !== expectedWorkspace || context.mailbox !== expectedMailbox ||
+        (context.phase === "send" && context.contactId !== expectedContact) ||
+        (context.phase !== "queue" && context.phase !== "send")) {
+      throw new Error("Production marketing acceptance is restricted to one verified workspace, mailbox and test contact");
+    }
+  }
 }
 export function marketingPublicOrigin(raw = process.env.MARKETING_PUBLIC_ORIGIN || ""): string {
   const url = new URL(raw);
