@@ -34,6 +34,33 @@ const env = { NODE_ENV: "test", APP_ENV: "staging", MARKETING_SENDS_ENABLED: "st
 assertStagingMarketingRecipient(["Person@example.com"], env);
 assert.throws(() => assertStagingMarketingRecipient(["other@example.com"], env));
 assert.throws(() => assertStagingMarketingRecipient(["person@example.com", "person@example.com"], env));
+const prodCtx = {workspace:"workspace-test",mailbox:"gmail-test",contactId:"contact-test",phase:"send" as const};
+const prodEnv = {
+  NODE_ENV:"production", APP_ENV:"production", MARKETING_SENDS_ENABLED:"production-test-only",
+  MARKETING_TEST_RECIPIENT:"person@example.com",
+  MARKETING_TEST_WORKSPACE_ID:"workspace-test",
+  MARKETING_TEST_MAILBOX_ID:"gmail-test",
+  MARKETING_TEST_CONTACT_ID:"contact-test",
+};
+assertStagingMarketingRecipient(["PERSON@EXAMPLE.COM"], prodEnv, prodCtx);
+assertStagingMarketingRecipient(["person@example.com"], prodEnv, { ...prodCtx, contactId:undefined, phase:"queue" });
+for (const changed of [
+  {env:{...prodEnv,MARKETING_SENDS_ENABLED:"disabled"},ctx:prodCtx},
+  {env:{...prodEnv,MARKETING_TEST_CONTACT_ID:""},ctx:prodCtx},
+  {env:{...prodEnv,MARKETING_TEST_WORKSPACE_ID:""},ctx:prodCtx},
+  {env:{...prodEnv,MARKETING_TEST_MAILBOX_ID:""},ctx:prodCtx},
+  {env:{...prodEnv,APP_ENV:"staging"},ctx:prodCtx},
+  {env:{...prodEnv,NODE_ENV:"development"},ctx:prodCtx},
+  {env:prodEnv,ctx:{...prodCtx,workspace:"other"}},
+  {env:prodEnv,ctx:{...prodCtx,mailbox:"other"}},
+  {env:prodEnv,ctx:{...prodCtx,contactId:"other"}},
+  {env:prodEnv,ctx:{...prodCtx,contactId:undefined}},
+  {env:prodEnv,ctx:{...prodCtx,phase:undefined}},
+  {env:prodEnv,ctx:{...prodCtx,phase:"queue" as const,mailbox:"other"}},
+]) assert.throws(() => assertStagingMarketingRecipient(["person@example.com"], changed.env, changed.ctx), "fail closed for invalid production acceptance configuration");
+assert.throws(() => assertStagingMarketingRecipient(["stranger@example.com"], prodEnv, prodCtx));
+assert.throws(() => assertStagingMarketingRecipient(["person@example.com","person@example.com"], prodEnv, prodCtx));
+assert.throws(() => assertStagingMarketingRecipient(["person@example.com"], prodEnv));
 assert.equal(safeTextLinks('<img src=x onerror=bad> https://example.com/a?x=1&y=2. javascript:alert(1)').filter(p => p.href).length, 1);
 assert.equal(safeTextLinks("https://user:password@example.com").filter(p => p.href).length, 0);
 for (const body of ["Stop", "Please remove me from your list.", "unsubscribe", "Do not contact me", "STOP MESSAGING ME"]) assert(isStop({ body }), body);
