@@ -52,7 +52,7 @@ export const PROSPECT_AI_LANDING = {
     id: "stop-cold-prospecting",
     title: "Stop Cold Prospecting",
     paragraphs: [
-      "Traditional prospecting still means hours of Google searches, spreadsheet chaos, and guessing who might buy. Teams scrape directories, chase incomplete contact data, and send generic blasts that never earn a reply.",
+      "Traditional prospecting still means hours of Google searches, spreadsheet chaos, and guessing who might buy. Teams manually search directories, chase incomplete contact data, and spend time on generic outreach that rarely earns a reply.",
       "Meanwhile, local businesses that need your offer sit one search away—if only you had an AI sales assistant to find them, qualify the fit, and start a real conversation.",
       "Prospect AI replaces that grind with AI prospecting software built for local business lead generation, lead qualification, and sales engagement—inside the CRM you already use for replies.",
     ],
@@ -135,12 +135,12 @@ export const PROSPECT_AI_LANDING = {
       id: "personalized-outreach",
       title: "Personalized Outreach",
       paragraphs: [
-        "Message Creation lets AI write outreach, use your templates, or blend both. Edit every subject and body before you Start Sending.",
-        "Prospect AI is AI outreach software with pacing controls—so sales automation stays personal, not spammy.",
+        "Message Creation lets AI write outreach, use your templates, or blend both. Preview and edit your messages, then inspect each recipient’s formatted email before sending.",
+        "Email campaigns have sender verification, unsubscribe and suppression safeguards, plus pacing controls. Sending depends on a verified business sender and campaign eligibility.",
       ],
       bullets: [
         "AI Writes / Template / Personalization modes",
-        "Edit before send",
+        "Recipient HTML and plain-text preview before send",
         "Start, Pause, and Resume Sending",
       ],
       image: screenshot(
@@ -247,7 +247,7 @@ export const PROSPECT_AI_LANDING = {
     {
       question: "Can I edit messages?",
       answer:
-        "Yes. Every outreach subject and body can be edited before send. You stay in control of tone, offers, and personalization.",
+        "Yes. Preview draft wording and edit individual queued messages. The recipient email preview displays the formatted HTML and plain-text versions, including required sender details and unsubscribe information.",
     },
     {
       question: "Can I use my own templates?",
@@ -267,7 +267,7 @@ export const PROSPECT_AI_LANDING = {
     {
       question: "Does Prospect AI work with WhatsApp?",
       answer:
-        "Prospect AI outreach campaigns send email. When conversations continue—or you already use WhatsApp for sales—replies and WhatsApp chats live in the same Unified Inbox and WhatsApp CRM workspace.",
+        "Prospect AI outbound prospecting currently uses email, not unsolicited WhatsApp messages. Existing authorized WhatsApp chats and email replies can be managed in the same Unified Inbox.",
     },
     {
       question: "What happens when a business replies?",
