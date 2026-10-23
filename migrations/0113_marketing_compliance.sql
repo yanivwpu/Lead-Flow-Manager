@@ -42,7 +42,7 @@ FROM contacts WHERE email IS NOT NULL AND trim(email) <> '' AND (
 -- unsubscribe must not silently block a phone/WhatsApp conversation.
 INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
 SELECT user_id, 'phone:+' || regexp_replace(phone,'[^0-9]','','g'), 'all', 'historical_opt_out', 'migration_0113'
-FROM contacts WHERE regexp_replace(phone,'[^0-9]','','g') ~ '^[1-9][0-9]{7,14}
+FROM contacts WHERE regexp_replace(phone,'[^0-9]','','g') ~ '^[1-9][0-9]{7,14}$' AND (
  custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
  custom_fields @> '{"stop":true}' OR
  concat_ws(' ',tag,pipeline_stage) ~* '\m(do not contact|dnc|stop|remove me)\M'
