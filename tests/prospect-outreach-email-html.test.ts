@@ -23,16 +23,19 @@ function main() {
 
   // Regression: production acceptance seed exposed literal backslash-n sequences
   // becoming part of an email href and yielding a %5Cn%5CnWe 404.
-  const encodedNewlines = String.raw`Hi there!\\n\\nLearn about our Realtor Growth Engine: https://www.whachatcrm.com/realtor-growth-engine\\n\\nWe are checking formatting.`;
+  const escapedBreak = String.fromCharCode(92) + "n";
+  const encodedNewlines = "Hi there!" + escapedBreak.repeat(2) +
+    "Learn about our Realtor Growth Engine: " + url +
+    escapedBreak.repeat(2) + "We are checking formatting.";
   const repaired = normalizeProspectOutreachEmailText(encodedNewlines);
-  assert.equal(repaired, "Hi there!\\n\\nLearn about our Realtor Growth Engine: " + url + "\\n\\nWe are checking formatting.".replaceAll("\\\\n", "\\n"));
+  assert.equal(repaired, ["Hi there!", "Learn about our Realtor Growth Engine: " + url, "We are checking formatting."].join("\n\n"));
   const htmlRepaired = renderProspectOutreachEmailHtml(encodedNewlines, [url], true);
   assert.equal((htmlRepaired.match(/<p dir="auto" /g) || []).length, 3);
   assert.ok(htmlRepaired.includes('href="' + url + '"'), "href stays exact");
   assert.ok(htmlRepaired.includes("</a></p><p"), "link ends before the next paragraph");
   assert.equal(htmlRepaired.includes("%5Cn"), false);
-  assert.equal(htmlRepaired.includes("\\\\n"), false);
-  assert.equal(repaired.includes("\\\\n"), false);
+  assert.equal(htmlRepaired.includes(escapedBreak), false);
+  assert.equal(repaired.includes(escapedBreak), false);
   const multiline = renderProspectOutreachEmailHtml("Hello\nHow are you?");
   assert.ok(multiline.includes("Hello<br>How are you?"));
   assert.equal(renderProspectOutreachEmailHtml(" \n "), "");
