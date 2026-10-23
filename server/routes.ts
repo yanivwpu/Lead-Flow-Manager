@@ -2538,7 +2538,7 @@ export async function registerRoutes(
       const token = req.query["hub.verify_token"];
       const challenge = req.query["hub.challenge"];
 
-      console.log("Meta webhook verification attempt:", { mode, token });
+      console.log("Meta webhook verification attempt:", { mode, tokenPresent: typeof token === "string" && token.length > 0 });
 
       if (mode === "subscribe") {
         // Check 1: users table (WhatsApp Meta connections)
@@ -2568,7 +2568,7 @@ export async function registerRoutes(
           return res.status(200).send(challenge);
         }
 
-        console.warn(`[Webhook Verify] FAILED — token did not match any user or channelSettings record. Token: ${String(token).slice(0, 8)}...`);
+        console.warn("[Webhook Verify] FAILED — token did not match any user or channelSettings record.");
       }
 
       console.log("Meta webhook verification failed");
