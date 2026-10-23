@@ -130,7 +130,7 @@ test("runtime checks pause workflows without deleting installation state", () =>
   const runtime = read("server/workflowEngine.ts");
   const entitlement = read("server/growthEngineEntitlements.ts");
   const provisioning = read("server/growthEngineProvisioning.ts");
-  assert.match(runtime, /evaluateGrowthEngineAccess/);
+  assert.match(runtime, /evaluateGrowthEngineRuntimeAccess/);
   assert.match(entitlement, /active Pro plan/);
   assert.match(provisioning, /getTemplateInstall/);
   assert.doesNotMatch(provisioning, /deleteTemplateInstall|deleteWorkflow/);
