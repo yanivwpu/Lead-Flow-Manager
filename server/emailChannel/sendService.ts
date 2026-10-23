@@ -268,7 +268,7 @@ export async function sendEmailViaMailbox(params: {
     const marketing = params.rich.prospectOutreach === true || params.rich.messagePurpose === "marketing";
     const result = marketing
       ? await (await import("../marketingCompliance/service")).withCompliantMarketingEmail({
-          workspace: params.workspaceUserId, mailbox: mailbox.id,
+          workspace: params.workspaceUserId, mailbox: mailbox.id, contactId: contact.id,
           recipients: [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])],
           text: textBody, html: sanitized.html || null,
         }, dispatch)
