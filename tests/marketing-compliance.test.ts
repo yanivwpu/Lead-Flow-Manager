@@ -34,7 +34,7 @@ assert(/style-src 'nonce-[A-Za-z0-9+/=]+'/.test(confirmation.csp));
 assert.match(confirmation.html, /<style nonce="[A-Za-z0-9+/=]+">/);
 assert(!confirmation.html.includes("fetch(") && !confirmation.html.includes("<script"));
 const done = renderMarketingUnsubscribePage({ kind: "success", acceptLanguage: "en" });
-assert(done.html.includes("You're unsubscribed"));
+assert(done.html.includes("You&#39;re unsubscribed"), "HTML escapes apostrophes safely");
 assert(!done.html.includes("<form"));
 assert.notEqual(done.csp, confirmation.csp, "CSP style nonce must be fresh");
 for (const [locale, phrase, direction] of [
