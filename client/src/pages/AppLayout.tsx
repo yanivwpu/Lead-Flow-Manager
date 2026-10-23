@@ -41,6 +41,7 @@ const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })))
 const Settings = lazy(() => import("./Settings").then(m => ({ default: m.Settings })));
 const Workflows = lazy(() => import("./Workflows").then(m => ({ default: m.Workflows })));
 const Integrations = lazy(() => import("./Integrations").then(m => ({ default: m.Integrations })));
+const EcommerceGrowthEngineDashboard = lazy(() => import("./EcommerceGrowthEngineDashboard").then(m => ({ default: m.EcommerceGrowthEngineDashboard })));
 const Templates = lazy(() => import("./Templates").then(m => ({ default: m.Templates })));
 const HelpCenter = lazy(() => import("./HelpCenter").then(m => ({ default: m.HelpCenter })));
 const ChatbotBuilder = lazy(() => import("./ChatbotBuilder").then(m => ({ default: m.ChatbotBuilder })));
@@ -226,6 +227,7 @@ function AppContent() {
                 <Redirect to="/app/widget" />
               </Route>
               <Route path="/app/widget" component={WebsiteWidget} />
+              <Route path="/app/ecommerce-growth-engine" component={EcommerceGrowthEngineDashboard} />
               <Route path="/app/integrations" component={Integrations} />
               <Route path="/app/ai-brain" component={AIBrain} />
               <Route path="/app/search" component={Search} />

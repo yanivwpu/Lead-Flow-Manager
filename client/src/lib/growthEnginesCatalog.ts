@@ -165,8 +165,9 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     industry: "E-commerce",
     badges: ["Included with Pro", "AI Automation"],
     summary:
-      "Automate Shopify customer conversations, abandoned-cart follow-up, order-event support, re-engagement, and conversion journeys.",
-    benefits: ["Built for Shopify first", "Cart and order-event journeys", "Support, re-engagement, and conversion"],
+      "Connect Shopify customers and orders, organize order-support tasks, and preview upcoming AI shopping and recovery journeys.",
+    benefits: ["Shopify customer and order context", "Internal follow-up tasks", "AI and cart-recovery journeys in development"],
+    marketingHref: "/ecommerce-growth-engine",
     status: "coming_soon",
     ctaLabel: "Coming soon",
     placeholderKey: "commerce",

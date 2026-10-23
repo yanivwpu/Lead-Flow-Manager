@@ -588,7 +588,16 @@ export function GrowthEngineGalleryCard({
         <p className="min-h-10 text-sm leading-relaxed text-gray-600 text-pretty [overflow-wrap:anywhere]">{engine.summary}</p>
         {rgeState?.note ? <p className="text-xs font-medium text-amber-800" role="status">{rgeState.note}</p> : null}
         <div className="mt-auto flex flex-col gap-1 border-t border-gray-100 pt-3 sm:flex-row sm:items-center">
-          {isComingSoon ? (
+          {isComingSoon && engine.slug === "ecommerce-growth-engine" ? (
+            <Button
+              variant="outline"
+              className="w-full border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 sm:flex-1"
+              onClick={() => { if (engine.marketingHref) setLocation(engine.marketingHref); }}
+              data-testid="button-preview-ecommerce-growth-engine"
+            >
+              Preview engine <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
+            </Button>
+          ) : isComingSoon ? (
             <Button
               variant="outline"
               className="w-full cursor-not-allowed border-gray-200 bg-gray-50/80 text-gray-500 hover:bg-gray-50/80 sm:flex-1"
