@@ -134,7 +134,7 @@ function extractAttachments(payload: any): NormalizedEmailMessage["attachments"]
  * words and fold each complete Unicode code point without splitting bytes.
  */
 export function encodeMimeSubject(subject: string): string {
-  if (/^[\\x20-\\x7e]*$/.test(subject)) return subject;
+  if (/^[\x20-\x7e]*$/.test(subject)) return subject;
   const words: string[] = [];
   let chunk = "";
   let size = 0;
