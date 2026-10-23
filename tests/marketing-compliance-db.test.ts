@@ -22,7 +22,7 @@ try {
   }
   await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('history','a','History@Example.com','{\"unsubscribed\":true}')");
   await pg.exec("INSERT INTO contacts(id,user_id,email,custom_fields) VALUES ('old-bounce','a','old-bounce@example.com','{\"emailBounced\":true}')");
-  await pg.exec("INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES ('email-only-phone','a','email-phone@example.com','+12025550321','{\\\"unsubscribed\\\":true}'),('global-dnc','a','global@example.com','+12025550987','{\\\"doNotContact\\\":true}')");
+  await pg.exec("INSERT INTO contacts(id,user_id,email,phone,custom_fields) VALUES ('email-only-phone','a','email-phone@example.com','+12025550321','{\"unsubscribed\":true}'),('global-dnc','a','global@example.com','+12025550987','{\"doNotContact\":true}')");
 
   await pg.exec(await readFile("migrations/0113_marketing_compliance.sql", "utf8"));
   assert.equal((await pg.query("SELECT * FROM marketing_suppressions")).rows.length, 5, "email-only opt-outs and explicit global DNC identities backfilled");
