@@ -18,25 +18,34 @@ CREATE TABLE marketing_suppressions (
   suppressed_at timestamp NOT NULL DEFAULT now(),
   PRIMARY KEY (workspace_user_id, email_normalized)
 );
--- Historical flags cannot be silently cleared by duplicate imports.
+-- Preserve historically recorded *email* unsubscribe flags without upgrading
+-- them to a blanket cross-channel DNC. Only explicit DNC flags or DNC stages/tags
+-- may block all promotional channels. Marketing sends are blocked by either scope.
+-- Because the target ledger is identity scoped, reimports cannot bypass an opt-out.
 INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
-SELECT user_id, lower(trim(email)), 'all', 'historical_opt_out', 'migration_0113'
+SELECT user_id, lower(trim(email)),
+  CASE WHEN (
+    custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
+    custom_fields @> '{"stop":true}' OR
+    concat_ws(' ',tag,pipeline_stage) ~* '\\m(do not contact|dnc|stop|remove me)\\M'
+  ) THEN 'all' ELSE 'email' END,
+  'historical_opt_out', 'migration_0113'
 FROM contacts WHERE email IS NOT NULL AND trim(email) <> '' AND (
  custom_fields @> '{"unsubscribed":true}' OR custom_fields @> '{"optOut":true}' OR
  custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
  custom_fields @> '{"campaignOptOut":true}' OR custom_fields @> '{"marketingOptIn":false}' OR
  custom_fields @> '{"optedOut":true}' OR custom_fields @> '{"unsubscribe":true}' OR custom_fields @> '{"stop":true}' OR
- concat_ws(' ',tag,pipeline_stage) ~* '\m(do not contact|dnc|stop|unsubscribe|unsubscribed|opt out|remove me)\M'
-) ON CONFLICT DO NOTHING;
--- Phone identity keys are namespaced; do not infer country codes.
+ concat_ws(' ',tag,pipeline_stage) ~* '\\m(do not contact|dnc|stop|unsubscribe|unsubscribed|opt out|remove me)\\M'
+) ON CONFLICT (workspace_user_id,email_normalized) DO UPDATE SET
+  scope = CASE WHEN marketing_suppressions.scope='all' OR EXCLUDED.scope='all' THEN 'all' ELSE 'email' END;
+-- A phone suppression requires explicit phone/global DNC evidence. An email-only
+-- unsubscribe must not silently block a phone/WhatsApp conversation.
 INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
 SELECT user_id, 'phone:+' || regexp_replace(phone,'[^0-9]','','g'), 'all', 'historical_opt_out', 'migration_0113'
-FROM contacts WHERE regexp_replace(phone,'[ ().-]','','g') ~ '^\+?[1-9][0-9]{7,14}$' AND (
- custom_fields @> '{"unsubscribed":true}' OR custom_fields @> '{"optOut":true}' OR
+FROM contacts WHERE regexp_replace(phone,'[ ().-]','','g') ~ '^\\+?[1-9][0-9]{7,14}$' AND (
  custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
- custom_fields @> '{"campaignOptOut":true}' OR custom_fields @> '{"marketingOptIn":false}' OR
- custom_fields @> '{"optedOut":true}' OR custom_fields @> '{"unsubscribe":true}' OR custom_fields @> '{"stop":true}' OR
- concat_ws(' ',tag,pipeline_stage) ~* '\m(do not contact|dnc|stop|unsubscribe|unsubscribed|opt out|remove me)\M'
+ custom_fields @> '{"stop":true}' OR
+ concat_ws(' ',tag,pipeline_stage) ~* '\\m(do not contact|dnc|stop|remove me)\\M'
 ) ON CONFLICT DO NOTHING;
 -- Permanent delivery failures are email-specific, including transactional email.
 -- Preserve a global scope if the same historical contact also opted out globally.
