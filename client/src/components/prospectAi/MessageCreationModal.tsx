@@ -275,7 +275,7 @@ export function MessageCreationModal({
           <DialogTitle>Message Creation</DialogTitle>
           <DialogDescription>
             Choose your Message Strategy for this campaign — how much AI should write versus how
-            much of your own wording to keep.
+            much of your own wording to keep. AI drafts follow the platform writing standard; review factual claims and the complete recipient preview before approving.
           </DialogDescription>
         </DialogHeader>
 

@@ -987,6 +987,11 @@ class ChannelService {
       mediaFilename?: string;
     }
   ): Promise<{ success: boolean; externalMessageId?: string; error?: string }> {
+    const freshContact = await storage.getContact(params.contactId);
+    if (!freshContact || freshContact.userId !== userId) return { success: false, error: "Contact not found" };
+    const { contactHasDoNotContact } = await import("./automationSendGuard");
+    const { isContactDurablySuppressed } = await import("./marketingCompliance/store");
+    if (contactHasDoNotContact(freshContact).blocked || await isContactDurablySuppressed(freshContact, channel)) return { success: false, error: "Recipient opted out" };
     const adapter = this.adapters.get(channel);
     if (adapter) {
       return adapter.send(params);
@@ -1411,6 +1416,13 @@ class ChannelService {
         errors: [{ code: "contact_missing", message: "Contact missing after inbound resolve", recoverable: false, stage: "contact" }],
       });
     }
+    const isOptOutRequest = (channel === "sms" || channel === "whatsapp") && (await import("@shared/prospectEmailSuppression")).isProspectEmailUnsubscribeSignal({ body: content });
+    if (isOptOutRequest) {
+      const { suppressMarketingIdentity } = await import("./marketingCompliance/store");
+      const { inboundStopIdentity } = await import("./marketingCompliance/policy");
+      await suppressMarketingIdentity({ workspace: userId, ...inboundStopIdentity(channelContactId, contact.email), reason: "dnc", source: `${channel}_stop`, scope: "all" });
+      contact = (await storage.getContact(contact.id)) || contact;
+    }
     const inboundContactId = contact.id;
 
     // For WhatsApp/SMS with a channelAccountId (multi-number), isolate by destination number
@@ -1585,6 +1597,14 @@ class ChannelService {
       direction: 'inbound',
       channel,
       preview: content.substring(0, 100),
+    });
+
+    if (isOptOutRequest) return buildInboundResult({
+      success: true, contact, conversation, message, channel,
+      sourceEventId: externalMessageId || null,
+      workflowState: { status: "skipped", reason: "recipient_opt_out" },
+      chatbotState: { status: "skipped", reason: "recipient_opt_out", willFire: false },
+      automationState: { status: "skipped", reason: "recipient_opt_out" }, errors: [],
     });
 
     {

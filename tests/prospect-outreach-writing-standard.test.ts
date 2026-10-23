@@ -246,7 +246,7 @@ import { formatOutreachInstructionsForPrompt } from "../shared/prospectOutreachI
     join(
       import.meta.dirname,
       "..",
-      "client/src/components/prospectAi/OutreachInstructionsModal.tsx",
+      "client/src/components/prospectAi/MessageCreationModal.tsx",
     ),
     "utf8",
   );

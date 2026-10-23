@@ -1,3 +1,4 @@
+import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
 import { createTestChatGenerator } from "./aiTestChat/generate";
@@ -539,6 +540,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerMarketingComplianceRoutes(app);
   registerSeoIntelligenceRoutes(app, requireSalesAdmin);
 
   // Object storage routes for file uploads

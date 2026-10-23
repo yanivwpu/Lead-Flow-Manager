@@ -8,8 +8,9 @@ import { getEmailProvider } from "./gmailProvider";
 import {
   getEmailMailboxById,
   insertEmailMessageDetail,
-  updateEmailMailbox,
   getEmailMessageDetail,
+  updateEmailMessageBodies,
+  incrementEmailSendCounters,
 } from "./mailboxStore";
 import { findEmailConversationByThread } from "./persistInbound";
 import { sanitizeEmailHtml, htmlToPlainText } from "./htmlSanitize";
@@ -39,18 +40,7 @@ export async function assertEmailSendRateLimit(mailboxId: string): Promise<void>
 }
 
 async function bumpEmailSendCounters(mailboxId: string): Promise<void> {
-  const mailbox = await getEmailMailboxById(mailboxId);
-  if (!mailbox) return;
-  const dKey = dayKey();
-  const hKey = hourKey();
-  const dayCount = mailbox.sendCountDayKey === dKey ? mailbox.messagesSentToday || 0 : 0;
-  const hourCount = mailbox.sendCountHourKey === hKey ? mailbox.messagesSentHour || 0 : 0;
-  await updateEmailMailbox(mailboxId, {
-    sendCountDayKey: dKey,
-    sendCountHourKey: hKey,
-    messagesSentToday: dayCount + 1,
-    messagesSentHour: hourCount + 1,
-  });
+  await incrementEmailSendCounters(mailboxId, dayKey(), hourKey());
 }
 
 export type EmailOutboundResult = {
@@ -78,12 +68,16 @@ export async function sendEmailViaMailbox(params: {
     return { success: false, channel: "email", error: "Contact not found" };
   }
 
+  const { isContactDurablySuppressed } = await import("../marketingCompliance/store");
+  if (await isContactDurablySuppressed(contact, "transactional_email")) {
+    return { success: false, channel: "email", error: "Recipient has a durable global do-not-contact request" };
+  }
   const dnc = contactHasDoNotContact(contact);
   if (dnc.blocked) {
     return { success: false, channel: "email", error: "Contact is marked do-not-contact" };
   }
   const cf = (contact.customFields || {}) as Record<string, unknown>;
-  if (cf.emailBounced === true || cf.bounced === true || cf.suppressed === true) {
+  if (cf.emailBounced === true || cf.bounced === true || (cf.suppressed === true && cf.suppressionScope !== "email")) {
     return {
       success: false,
       channel: "email",
@@ -229,6 +223,7 @@ export async function sendEmailViaMailbox(params: {
     selectedHeaders: {},
   });
 
+  let providerAccepted = false;
   try {
     const { accessToken } = await getValidMailboxAccessToken(mailbox.id);
     const provider = getEmailProvider(mailbox.provider);
@@ -242,24 +237,47 @@ export async function sendEmailViaMailbox(params: {
       providerThreadId: threadId || undefined,
     };
 
-    const result =
-      threadId && replyMode !== "new"
+    const auditBodies: { value?: { text: string; html: string | null } } = {};
+    const dispatch = async (bodies: { text: string; html: string | null; unsubscribeUrl?: string; onDispatch?: () => void }) => {
+      if (bodies.unsubscribeUrl) {
+        auditBodies.value = { text: bodies.text, html: bodies.html };
+      }
+      const outcome = threadId && replyMode !== "new"
         ? await provider.replyToThread({
             accessToken,
+            onDispatch: bodies.onDispatch,
             from: mailbox.emailAddress,
             threadId,
-            payload,
-            textBody: textBody || htmlToPlainText(htmlBody || ""),
-            htmlBody: sanitized.html || null,
+            payload: { ...payload, marketingUnsubscribeUrl: bodies.unsubscribeUrl },
+            textBody: bodies.text,
+            htmlBody: bodies.html,
           })
         : await provider.sendNewEmail({
             accessToken,
+            onDispatch: bodies.onDispatch,
             from: mailbox.emailAddress,
-            payload,
-            textBody: textBody || htmlToPlainText(htmlBody || ""),
-            htmlBody: sanitized.html || null,
+            payload: { ...payload, marketingUnsubscribeUrl: bodies.unsubscribeUrl },
+            textBody: bodies.text,
+            htmlBody: bodies.html,
           });
 
+      if (outcome.success) providerAccepted = true;
+      return outcome;
+    };
+
+    const marketing = params.rich.prospectOutreach === true || params.rich.messagePurpose === "marketing";
+    const result = marketing
+      ? await (await import("../marketingCompliance/service")).withCompliantMarketingEmail({
+          workspace: params.workspaceUserId, mailbox: mailbox.id,
+          recipients: [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])],
+          text: textBody, html: sanitized.html || null,
+        }, dispatch)
+      : await (await import("../marketingCompliance/store")).withGlobalDncEmailBoundary(params.workspaceUserId, [...to, ...(params.rich.cc || []), ...(params.rich.bcc || [])], onDispatch => dispatch({ text: textBody || htmlToPlainText(htmlBody || ""), html: sanitized.html || null, onDispatch }));
+
+    if (auditBodies.value) {
+      await updateEmailMessageBodies(pending.id, auditBodies.value.text, auditBodies.value.html);
+      await storage.updateMessage(pending.id, { content: auditBodies.value.text, contentType: "email_html" });
+    }
     if (!result.success) {
       await storage.updateMessage(pending.id, {
         status: "failed",
@@ -274,6 +292,7 @@ export async function sendEmailViaMailbox(params: {
           );
           await applyProspectEmailSuppression({
             contactId: contact.id,
+            workspaceUserId: params.workspaceUserId,
             reason: "invalid_recipient",
             detail: (result.error || "permanent_send_failure").substring(0, 300),
             bouncedEmail: to[0] || null,
@@ -316,7 +335,7 @@ export async function sendEmailViaMailbox(params: {
       } as any);
     }
 
-    await bumpEmailSendCounters(mailbox.id);
+    if (!marketing) await bumpEmailSendCounters(mailbox.id);
 
     await storage.createActivityEvent({
       userId: params.workspaceUserId,
@@ -347,7 +366,7 @@ export async function sendEmailViaMailbox(params: {
       externalMessageId: result.providerMessageId,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Send failed";
+    const message = providerAccepted ? "ambiguous_provider_delivery: reconcile provider delivery before retry" : err instanceof Error ? err.message : "Send failed";
     await storage.updateMessage(pending.id, {
       status: "failed",
       errorMessage: message,

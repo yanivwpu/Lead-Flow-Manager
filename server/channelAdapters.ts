@@ -1,3 +1,5 @@
+import { withGlobalDncContactBoundary, readProviderDeliveryJson } from "./marketingCompliance/store";
+import type { Contact } from "@shared/schema";
 import { storage } from "./storage";
 import { channelService, ChannelAdapter } from "./channelService";
 import {
@@ -94,6 +96,8 @@ function parseMetaError(error: any, metaChannel: "facebook" | "instagram"): stri
 }
 
 async function sendMetaGraphMessage(input: {
+  workspace: string;
+  contact: Contact;
   pageId: string;
   accessToken: string;
   recipientId: string;
@@ -111,7 +115,7 @@ async function sendMetaGraphMessage(input: {
           },
         };
 
-  const response = await fetch(`https://graph.facebook.com/v19.0/${input.pageId}/messages`, {
+  const response = await withGlobalDncContactBoundary(input.workspace, input.contact, () => fetch(`https://graph.facebook.com/v19.0/${input.pageId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -122,9 +126,9 @@ async function sendMetaGraphMessage(input: {
       message: messageBody,
       messaging_type: input.messagingType,
     }),
-  });
+  }));
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   if (!response.ok || result.error) {
     const errorMessage = parseMetaError(result.error, input.channelLabel === "Instagram" ? "instagram" : "facebook");
     console.error(`[Outbound] ${input.channelLabel} API error:`, response.status, result.error);
@@ -135,6 +139,8 @@ async function sendMetaGraphMessage(input: {
 }
 
 async function sendMetaOutboundSequence(input: {
+  workspace: string;
+  contact: Contact;
   pageId: string;
   accessToken: string;
   recipientId: string;
@@ -156,6 +162,8 @@ async function sendMetaOutboundSequence(input: {
   let lastMessageId: string | undefined;
   for (const step of steps) {
     const sent = await sendMetaGraphMessage({
+      workspace: input.workspace,
+      contact: input.contact,
       pageId: input.pageId,
       accessToken: input.accessToken,
       recipientId: input.recipientId,
@@ -309,7 +317,7 @@ class SMSAdapter implements ChannelAdapter {
         messageOptions.mediaUrl = [params.mediaUrl];
       }
 
-      const result = await client.messages.create(messageOptions);
+      const result = await withGlobalDncContactBoundary(conversation.userId, contact, () => client.messages.create(messageOptions));
 
       return {
         success: true,
@@ -527,6 +535,8 @@ class InstagramAdapter implements ChannelAdapter {
       const messagingType = windowStatus.isExpiringSoon ? 'RESPONSE' : 'RESPONSE';
 
       const sendResult = await sendMetaOutboundSequence({
+        workspace: conversation.userId,
+        contact,
         pageId,
         accessToken,
         recipientId,
@@ -654,6 +664,8 @@ class FacebookAdapter implements ChannelAdapter {
       const messagingType = 'RESPONSE';
 
       const sendResult = await sendMetaOutboundSequence({
+        workspace: conversation.userId,
+        contact,
         pageId,
         accessToken,
         recipientId,
@@ -745,7 +757,7 @@ class TelegramAdapter implements ChannelAdapter {
       const botToken = (telegramSettings.config as any).botToken;
       const chatId = contact.telegramId;
 
-      const response = await fetch(
+      const response = await withGlobalDncContactBoundary(conversation.userId, contact, () => fetch(
         `https://api.telegram.org/bot${botToken}/sendMessage`,
         {
           method: 'POST',
@@ -755,9 +767,9 @@ class TelegramAdapter implements ChannelAdapter {
             text: params.content,
           }),
         }
-      );
+      ));
 
-      const result = await response.json();
+      const result = await readProviderDeliveryJson(response);
 
       if (!result.ok) {
         return { success: false, error: result.description || "Telegram API error" };

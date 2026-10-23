@@ -11,15 +11,27 @@ import { prospectBulkOutreachLog } from "@shared/prospectBulkOutreach";
 
 export async function applyProspectEmailSuppression(params: {
   contactId: string;
+  workspaceUserId?: string;
+  scope?: "email" | "all";
   reason: ProspectEmailSuppressionReason;
   detail?: string;
   bouncedEmail?: string | null;
   source?: string;
 }): Promise<{ updated: boolean; contact?: Contact }> {
   const contact = await storage.getContact(params.contactId);
-  if (!contact) return { updated: false };
 
-  const cf = (contact.customFields || {}) as Record<string, unknown>;
+  // Persist the identity ledger before idempotent per-contact shortcuts.
+  const ledgerEmail = ["bounce", "invalid_recipient"].includes(params.reason) ? params.bouncedEmail || contact?.email : contact?.email;
+  const workspace = contact?.userId || params.workspaceUserId;
+  if (ledgerEmail && workspace) {
+    const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
+    await suppressMarketingIdentity({ workspace, email: ledgerEmail,
+      reason: params.reason, source: params.source || "inbound", scope: params.scope || (["bounce", "invalid_recipient"].includes(params.reason) ? "email" : "all") });
+  }
+  if (!contact) return { updated: false };
+  const fresh = await storage.getContact(contact.id);
+  if (params.reason === "unsubscribe" && params.scope === "email") return { updated: true, contact: fresh || contact };
+  const cf = (fresh?.customFields || contact.customFields || {}) as Record<string, unknown>;
   // Idempotent: already suppressed for same reason type.
   if (
     (params.reason === "bounce" || params.reason === "invalid_recipient") &&
@@ -63,12 +75,15 @@ export async function suppressContactByEmailInWorkspace(params: {
   detail?: string;
   source?: string;
 }): Promise<{ updated: number }> {
+  const { suppressMarketingIdentity } = await import("../marketingCompliance/store");
+  await suppressMarketingIdentity({workspace:params.workspaceUserId,email:params.email,reason:params.reason,source:params.source || "inbound",scope:["bounce","invalid_recipient"].includes(params.reason) ? "email" : "all"});
   const { findContactsByEmail } = await import("../emailChannel/contactMatch");
   const contacts = await findContactsByEmail(params.workspaceUserId, params.email);
   let updated = 0;
   for (const c of contacts) {
     const res = await applyProspectEmailSuppression({
       contactId: c.id,
+      workspaceUserId: params.workspaceUserId,
       reason: params.reason,
       detail: params.detail,
       bouncedEmail: params.email,

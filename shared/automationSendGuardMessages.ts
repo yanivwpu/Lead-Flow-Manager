@@ -1,6 +1,7 @@
 /** User-facing copy for automation send guard blocks (templates, campaigns, workflows). */
 
 export type AutomationSendGuardBlockReason =
+  | "marketing_disabled"
   | "missing_idempotency_key"
   | "contact_missing"
   | "contact_wrong_user"
@@ -28,6 +29,8 @@ export function automationSendGuardBlockUserMessage(
 ): string {
   const d = detail?.trim() || "";
   switch (reason) {
+    case "marketing_disabled":
+      return "Marketing sending is disabled pending staging acceptance and release approval.";
     case "duplicate":
       return "This template was already sent to this contact in the last minute. Wait a moment and try again.";
     case "do_not_contact":

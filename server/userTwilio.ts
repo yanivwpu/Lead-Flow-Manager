@@ -1,3 +1,4 @@
+import { withGlobalDncPhoneBoundary } from "./marketingCompliance/store";
 import twilio from "twilio";
 import crypto from "crypto";
 import { eq, and } from "drizzle-orm";
@@ -105,11 +106,11 @@ export async function sendUserWhatsAppMessage(
     throw new Error("Twilio not connected. Please connect your Twilio account first.");
   }
 
-  const result = await client.messages.create({
+  const result = await withGlobalDncPhoneBoundary(userId, toPhone, () => client.messages.create({
     from: `whatsapp:${actualFrom}`,
     to: `whatsapp:${toPhone}`,
     body: message,
-  });
+  }));
 
   console.log(`[TwilioSend] Sent from ${actualFrom} to ${toPhone}, sid: ${result.sid}`);
   return { sid: result.sid, status: result.status };
@@ -140,7 +141,7 @@ export async function sendUserWhatsAppMedia(
     messageOptions.body = caption;
   }
 
-  const result = await client.messages.create(messageOptions);
+  const result = await withGlobalDncPhoneBoundary(userId, toPhone, () => client.messages.create(messageOptions));
 
   return { sid: result.sid, status: result.status };
 }

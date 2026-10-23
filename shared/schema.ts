@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -3546,3 +3546,21 @@ export const aiTestSessions = pgTable("ai_test_sessions", {
   leaseUntil: timestamp("lease_until"),
   lastTurnAt: timestamp("last_turn_at"),
 }, table => [uniqueIndex("ai_test_sessions_user_id_actor_id_key").on(table.userId, table.actorId)]);
+
+/** Marketing compliance identities survive CRM contact deletion/reimport. */
+export const marketingSenderProfiles = pgTable("marketing_sender_profiles", {
+  workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mailboxId: varchar("mailbox_id").notNull().references(() => emailMailboxes.id, { onDelete: "cascade" }),
+  brand: text("brand").notNull(),
+  postalAddress: text("postal_address").notNull(),
+  verifiedAt: timestamp("verified_at").notNull(),
+  verifiedBy: varchar("verified_by").notNull().references(() => users.id),
+}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.mailboxId] }), addressLength: check("marketing_sender_profiles_postal_address_check", sql`length(trim(${t.postalAddress})) BETWEEN 10 AND 1000`) }));
+export const marketingSuppressions = pgTable("marketing_suppressions", {
+  workspaceUserId: varchar("workspace_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailNormalized: text("email_normalized").notNull(),
+  scope: text("scope").notNull(),
+  reason: text("reason").notNull(),
+  source: text("source").notNull(),
+  suppressedAt: timestamp("suppressed_at").notNull().defaultNow(),
+}, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.emailNormalized] }), validScope: check("marketing_suppressions_scope_check", sql`${t.scope} IN ('email','all')`) }));

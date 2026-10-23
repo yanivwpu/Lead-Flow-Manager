@@ -1,3 +1,4 @@
+import { withGlobalDncPhoneBoundary } from "./marketingCompliance/store";
 import { storage } from "./storage";
 import { type Channel, type ChatbotFlow } from "@shared/schema";
 import { buildMetaCloudTemplateSendComponents, normalizeTemplateVariableMap } from "@shared/metaTemplateSend";
@@ -1140,7 +1141,7 @@ async function sendFlowTemplate(
       channel: "whatsapp",
       source: "template",
       idempotencyKey: `chatbot:template:${ctx.conversationId}:${template.id}:${JSON.stringify(templateVariables).slice(0, 160)}`,
-    }, async () => (twilioClient as any).messages.create(msgOptions));
+    }, async () => withGlobalDncPhoneBoundary<{sid: string; status: string}>(ctx.userId, recipientPhone, () => (twilioClient as any).messages.create(msgOptions)));
     if (!guarded.ok) {
       throw new Error(`Template send blocked by automation guard: ${guarded.reason}`);
     }

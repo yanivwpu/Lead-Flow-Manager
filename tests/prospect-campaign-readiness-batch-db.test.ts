@@ -25,6 +25,7 @@ const state = {
 await mkdir("work", { recursive: true });
 const scratch = await mkdtemp(join(process.cwd(), "work", "campaign-readiness-test-"));
 try {
+  await pg.exec("CREATE TABLE marketing_suppressions (workspace_user_id varchar,email_normalized text,scope text)");
   // Generate the needed tables from the actual Drizzle schema; omit unrelated foreign
   // keys so the fixture stays focused on reads, without a new application migration.
   for (const table of Object.values(schema)) {
@@ -75,7 +76,7 @@ try {
   assert.equal(evaluated.readiness.get(ids[0])?.campaignReadyBlockCode, "duplicate_queued");
   for (let i = 1; i < 5; i++) assert.equal(evaluated.readiness.get(ids[i])?.campaignReadyBlockCode, "duplicate_recipient");
   assert.equal(evaluated.readiness.get(ids[5])?.campaignReady, true);
-  assert.equal(sqlQueries.length, 4, "contacts, PI, outcomes, queue are loaded in four batch queries");
+  assert.equal(sqlQueries.length, 5, "contacts, PI, outcomes, suppression ledger, queue are loaded in five batch queries");
   assert.equal(state.probes, 1, "one workspace sender probe per batch");
   assert.equal((await batchEvaluateProspectCampaignReadiness({ workspaceUserId: wid, contactIds: ["another-workspace"] })).preview.willQueue, 0);
 
@@ -85,14 +86,14 @@ try {
   assert.equal(finalPreview.preview.willQueue, 1);
   assert.equal(finalPreview.preview.skips.length, 0);
 
-  // Reuse list-loaded data; only outcomes + queue reads remain, irrespective of size.
+  // Reuse list-loaded data; only outcomes + suppression + queue reads remain, irrespective of size.
   const contactRows = await db.select().from(contacts);
   const piRows = await db.select().from(prospectIntelligence);
   const context = { contacts: new Map(contactRows.map((c) => [c.id, c])), intelligence: new Map(piRows.map((p) => [p.contactId, p])), priorOutreach: new Map() };
   sqlQueries.length = 0;
   const fromList = await batchEvaluateProspectCampaignReadiness({ workspaceUserId: wid, contactIds: ids, context });
   assert.deepEqual(fromList.preview, evaluated.preview);
-  assert.equal(sqlQueries.length, 2);
+  assert.equal(sqlQueries.length, 3);
   const readCount = sqlQueries.length;
   await batchEvaluateProspectCampaignReadiness({ workspaceUserId: wid, contactIds: [], context });
   assert.equal(sqlQueries.length, readCount, "empty lists cause no DB reads");
@@ -116,9 +117,14 @@ try {
   const maximumList = await batchEvaluateProspectCampaignReadiness({ workspaceUserId: wid, contactIds: Array.from({ length: 1000 }, (_, i) => `bulk-${i + 1}`) });
   assert.equal(maximumList.preview.willQueue, 1000);
   assert.equal(maximumList.preview.skips.length, 0);
-  assert.equal(sqlQueries.length, 4);
+  assert.equal(sqlQueries.length, 5);
   assert.equal(state.probes, probesBefore + 1);
-  console.log("prospect-campaign-readiness-batch-db: PostgreSQL 1/6 parity, workspace scope, normalized external recipients, list reuse, four reads for 1,000 rows, template modes passed");
+  await pg.exec("INSERT INTO marketing_suppressions VALUES ('workspace-1','contact-5@example.com','email')");
+  assert.equal((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"email"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
+  assert.notEqual((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"sms"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
+  await pg.exec("UPDATE marketing_suppressions SET scope='all'");
+  assert.equal((await batchEvaluateProspectCampaignReadiness({workspaceUserId:wid,contactIds:[ids[5]],preferredChannel:"sms"})).readiness.get(ids[5])?.campaignReadyBlockCode,"suppressed");
+  console.log("prospect-campaign-readiness-batch-db: PostgreSQL 1/6 parity, workspace scope, normalized external recipients, list reuse, five reads for 1,000 rows, template modes passed");
 } finally {
   delete (globalThis as any).__readinessTest;
   await pg.close();

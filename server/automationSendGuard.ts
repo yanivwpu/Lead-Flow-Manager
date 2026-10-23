@@ -170,6 +170,22 @@ export async function evaluateAutomationSendGuard(
     conversation = await storage.getConversationByContactAndChannel(contact.id, channel);
   }
 
+  const effectiveChannel = channel || contact.primaryChannelOverride || contact.lastIncomingChannel || contact.primaryChannel;
+  const { isContactDurablySuppressed } = await import("./marketingCompliance/store");
+  if (await isContactDurablySuppressed(contact, String(effectiveChannel || "global"))) {
+    return { ok: false, reason: "do_not_contact", detail: "durable_suppression" };
+  }
+  if (params.source === "campaign" || params.source === "broadcast") {
+    // Promotional campaign channels stay disabled pending release approval.
+    return { ok: false, reason: "marketing_disabled", detail: "marketing_release_hold" };
+  }
+  // Legacy automation has no trustworthy commercial/transactional purpose.
+  // Hold automated email rather than dispatch it through the manual-email path.
+
+  if (effectiveChannel === "email" && ["workflow", "delayed_job", "follow_up"].includes(params.source)) {
+    return { ok: false, reason: "marketing_disabled", detail: "unclassified_automated_email_release_hold" };
+  }
+
   if (
     isConversationInactiveForAutomation(conversation, {
       allowReEngagementTemplateSend: params.allowReEngagementTemplateSend,
@@ -225,7 +241,13 @@ export async function withAutomationSendGuard<T>(
     return { ok: false, skipped: true, reason: "duplicate" };
   }
   try {
-    const result = await fn(decision);
+    // Dedup acquisition can race an inbound opt-out. Reload before dispatch.
+    const latest = await evaluateAutomationSendGuard(params);
+    if (!latest.ok) {
+      await storage.completeAutomationSendDedup(params.idempotencyKey, "skipped");
+      return { ok: false, skipped: true, reason: latest.reason, detail: latest.detail };
+    }
+    const result = await fn(latest);
     await storage.completeAutomationSendDedup(params.idempotencyKey, "completed");
     return { ok: true, result };
   } catch (e) {

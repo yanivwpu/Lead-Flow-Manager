@@ -64,20 +64,38 @@ export function buildProspectEmailSuppressionCustomFields(
   return patch;
 }
 
-const UNSUBSCRIBE_BODY_RE =
-  /\b(unsubscribe|stop(\s+messaging)?|remove\s+me|opt[\s-]?out|do\s+not\s+contact|don'?t\s+contact)\b/i;
-
-/** Real prospect inbound reply requesting opt-out (not a bounce DSN). */
-export function isProspectEmailUnsubscribeSignal(input: {
-  subject?: string | null;
-  body?: string | null;
-  fromEmail?: string | null;
-}): boolean {
-  if (isSystemOrBounceEmail({ fromEmail: input.fromEmail, subject: input.subject })) {
-    return false;
+/** Extract only newly authored text, excluding quoted history. */
+function explicitOptOutScope(body: string, subject = ""): "all" | "email" | null {
+  const authored = String(body || "").split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join("\n").split(/(?:^|\n)\s*(?:On .+wrote:|From:|-----Original Message-----)/i)[0].trim();
+  // Inspect both independently: signatures must not hide a subject-only request.
+  const candidates = [authored, subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, "").trim()];
+  // Share nouns/actions across polite forms so "texts" and "text messages"
+  // cannot diverge between recognition and channel-scope classification.
+  const noun = String.raw`(?:e[ -]?mails?(?:\s+messages?)?|texts?(?:\s+messages?)?|sms(?:\s+messages?)?|messages?|communications?|notifications?|updates?|newsletters?|mail|whatsapp(?:\s+messages?)?|spam|promotions?|advertisements?|offers?)`;
+  const qualifiedNoun = String.raw`(?:(?:any|all)\s+)?(?:more\s+)?(?:(?:your|the|these|those|such)\s+)?(?:(?:future|marketing|promotional|unwanted)\s+)*${noun}`;
+  const list = String.raw`(?:(?:your|the|this|all)\s+)?(?:mailing\s+list|e[ -]?mail\s+list|distribution\s+list|contact\s+list|list|database|contacts|${qualifiedNoun})`;
+  const delivery = String.raw`(?:sending|receiving)(?:\s+(?:me|us))?\s+${qualifiedNoun}(?:\s+to\s+(?:me|us))?`;
+  const action = String.raw`(?:stop(?:\s+(?:(?:messaging|contacting|emailing|mailing|texting)(?:\s+(?:me|us))?|${delivery}|everything))?|unsubscribe(?:\s+me)?(?:\s+from\s+${list})?|remove\s+me(?:\s+from\s+${list})?|take\s+me\s+off\s+${list}|opt(?:\s+me)?[\s-]?out(?:\s+of\s+${list})?|(?:do\s+not|don['’]?t|never)\s+(?:(?:contact|message|text|email|mail)(?:\s+(?:me|us))?|send(?:\s+(?:me|us))?\s+${qualifiedNoun})(?:\s+again)?|no\s+more\s+${noun})`;
+  const prefix = String.raw`(?:(?:hi|hello|thanks|thank you|no thanks)[,.!\s]+){0,2}(?:(?:but|and|also)\s+)?(?:(?:please|kindly)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?|i(?:\s+want|\s+would\s+like|['’]d\s+like)\s+(?:you\s+)?to\s+)?`;
+  const suffix = String.raw`(?:\s+(?:please|thanks|thank\s+you|immediately|now|for\s+now))?`;
+  const clauses = new RegExp(String.raw`(?:^|[.!?\n,;])\s*${prefix}(${action})${suffix}\s*(?=$|[.!?\n,;])`, "gi");
+  let scope: "all" | "email" | null = null;
+  for (const candidate of candidates) for (const match of candidate.matchAll(clauses)) {
+    const request = match[1].toLowerCase();
+    if (request === "stop" || /\b(?:texts?|texting|sms|whatsapp|messaging|contact(?:ing|s)?|everything)\b/.test(request)) return "all";
+    // An explicit email noun keeps "email messages" email-scoped, whereas
+    // unspecified messages/communications are a broader stop request.
+    if (!/\b(?:e[ -]?mails?|emailing|mailing|mail|newsletters?|list)\b/.test(request) &&
+        /\b(?:messages?|communications?|notifications?|updates?|promotions?|advertisements?|offers?)\b/.test(request)) return "all";
+    scope = "email";
   }
-  const text = `${input.subject || ""}\n${input.body || ""}`;
-  return UNSUBSCRIBE_BODY_RE.test(text);
+  return scope;
+}
+
+/** Explicit opt-out clauses count; ordinary “stop by tomorrow” does not. */
+export function isProspectEmailUnsubscribeSignal(input: {subject?: string | null; body?: string | null; fromEmail?: string | null}): boolean {
+  if (isSystemOrBounceEmail({fromEmail:input.fromEmail,subject:input.subject})) return false;
+  return explicitOptOutScope(input.body || "",input.subject || "") !== null;
 }
 
 /**
@@ -155,4 +173,9 @@ export function prospectSuppressionDetailLabel(
   }
   if (r.includes("suppress")) return "Suppressed";
   return "Suppressed";
+}
+
+/** Global contact requests remain distinct from email-specific opt-outs. */
+export function prospectEmailUnsubscribeScope(body: string, subject = ""): "all" | "email" {
+  return explicitOptOutScope(body,subject) || "email";
 }

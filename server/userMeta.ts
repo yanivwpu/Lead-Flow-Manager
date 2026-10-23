@@ -1,3 +1,4 @@
+import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError, readProviderDeliveryJson } from "./marketingCompliance/store";
 import crypto from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -484,7 +485,7 @@ export async function sendMetaWhatsAppMessage(
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -503,14 +504,14 @@ export async function sendMetaWhatsAppMessage(
         },
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error?.message || "Failed to send message via Meta WhatsApp API");
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   return { 
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 
@@ -551,7 +552,7 @@ export async function sendMetaWhatsAppMedia(
     ` filename="${filename || "(none)"}" url=${mediaUrl}`
   );
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -567,7 +568,7 @@ export async function sendMetaWhatsAppMedia(
         [mediaType]: mediaPayload,
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const errorBody = await response.json();
@@ -579,7 +580,7 @@ export async function sendMetaWhatsAppMedia(
     throw new Error(errorMsg);
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   const messageId = result.messages?.[0]?.id || "";
   console.log(
     `[MetaWhatsApp] Media sent OK — to=${normalizedPhone} type=${mediaType}` +
@@ -667,7 +668,7 @@ export async function sendMetaWhatsAppTemplate(
 
   let response: Response;
   try {
-    response = await fetch(graphPath, {
+    response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(graphPath, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -680,8 +681,9 @@ export async function sendMetaWhatsAppTemplate(
         type: "template",
         template: templatePayload,
       }),
-    });
+    }));
   } catch (fetchErr: unknown) {
+    if (fetchErr instanceof MarketingSuppressionError || fetchErr instanceof AmbiguousProviderDeliveryError) throw fetchErr;
     const kind = classifyGraphFetchFailure(fetchErr);
     const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
     const err = new Error(
@@ -751,7 +753,7 @@ export async function sendMetaWhatsAppTemplate(
     throw err;
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   const messageId = result.messages?.[0]?.id || "";
   console.log(
     `[WA_TEMPLATE_SEND_SUCCESS] ${JSON.stringify({
@@ -785,7 +787,7 @@ export async function sendMetaInteractiveMessage(
 
   const normalizedPhone = toPhone.replace(/[^\d]/g, "");
 
-  const response = await fetch(
+  const response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(
     `${getMetaGraphApiBase()}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -804,14 +806,14 @@ export async function sendMetaInteractiveMessage(
         },
       }),
     }
-  );
+  ));
 
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error?.message || "Failed to send interactive message");
   }
 
-  const result = await response.json();
+  const result = await readProviderDeliveryJson(response);
   return { 
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 
