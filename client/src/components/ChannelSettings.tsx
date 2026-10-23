@@ -2116,6 +2116,8 @@ export function ChannelSettings() {
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || "Disconnect failed");
+                        void queryClient.invalidateQueries({ queryKey: ["marketing-preview"] });
+                        void queryClient.invalidateQueries({ queryKey: ["marketing-sender-profiles"] });
                         toast({ title: "Gmail disconnected" });
                         void queryClient.invalidateQueries({ queryKey: ["/api/integrations/email/status"] });
                       } catch (err) {

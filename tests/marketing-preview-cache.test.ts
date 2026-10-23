@@ -1,0 +1,35 @@
+import { queueDraftPreviewRevision } from "../shared/prospectBulkOutreach";
+import assert from "node:assert/strict";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { build } from "esbuild";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+await mkdir("work", { recursive: true });
+const scratch = await mkdtemp(join(process.cwd(), "work", "marketing-preview-"));
+try {
+  const output = join(scratch, "preview.mjs");
+  await build({ entryPoints: ["client/src/components/settings/MarketingEmailPreview.tsx"], outfile: output, bundle: true, platform: "node", format: "esm", jsx: "automatic", packages: "external" });
+  const { MarketingEmailPreview } = await import(pathToFileURL(output).href);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const old = { subject: "Old subject", text: "STALE DRAFT", html: "<p>STALE DRAFT</p>" };
+  client.setQueryData(["marketing-preview", "item"], old);
+  client.setQueryData(["marketing-preview", "item", "old revision"], old);
+  const unchangedText = {subjectSnapshot:"Same subject",messageSnapshot:"Same body",updatedAt:"2026-01-01T00:00:00Z"};
+  const oldRevision = queueDraftPreviewRevision({...unchangedText,linkRenderingSnapshot:{preserveAuthoredUrls:true}});
+  const newRevision = queueDraftPreviewRevision({...unchangedText,linkRenderingSnapshot:{preserveAuthoredUrls:false}});
+  assert.notEqual(oldRevision,newRevision,"rendering-only regeneration must change the complete draft revision");
+  client.setQueryData(["marketing-preview","metadata-only",oldRevision],old);
+  const metadataHtml = renderToStaticMarkup(React.createElement(QueryClientProvider,{client},React.createElement(MarketingEmailPreview,{itemId:"metadata-only",revision:newRevision})));
+  assert(!metadataHtml.includes("STALE DRAFT"));
+  const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MarketingEmailPreview, { itemId: "item", revision: "new revision" })));
+  assert(!html.includes("STALE DRAFT"), "a saved draft revision must never render an older cached recipient preview");
+  assert(html.includes("Loading recipient preview"));
+  const sameRevision = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(MarketingEmailPreview, { itemId: "item", revision: "old revision" })));
+  assert(!sameRevision.includes("STALE DRAFT"), "reopening a preview must revalidate sender state even when the draft is unchanged");
+  assert(sameRevision.includes("Loading recipient preview"));
+  client.clear();
+  console.log("ok - actual React Query rendering does not reuse recipient previews across draft revisions");
+} finally { await rm(scratch, { recursive: true, force: true }); }

@@ -1,3 +1,4 @@
+import { MarketingSenderSetup } from "@/components/settings/MarketingSenderSetup";
 import React, { useEffect, useRef, useState } from "react";
 import { Bell, Mail, Smartphone, Shield, LogOut, Phone, Plus, Trash2, Loader2, CreditCard, ExternalLink, Zap, CheckCircle2, XCircle, MessageSquare, Copy, Check, AlertTriangle, Users, UserPlus, Crown, Clock, Building2, FileText } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -1236,6 +1237,7 @@ export function Settings() {
           </div>
 
           <BusinessProfileSettings />
+          <MarketingSenderSetup />
 
           <MarketingMaterialsSettings />
 

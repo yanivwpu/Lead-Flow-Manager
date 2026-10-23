@@ -1,3 +1,4 @@
+import { ContactSuppressionStatus } from "@/components/ContactSuppressionStatus";
 import { useState } from "react";
 import { Link, useRoute, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -81,6 +82,8 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
       <div className="min-w-0"><h1 className="break-words text-xl font-semibold">{webchatSafeDisplayName(contact)}</h1><p className="text-sm text-gray-500">{contact.pipelineStage || "No stage"} · {contact.tag || "No tag"}</p></div>
       {conversationHref ? <Link href={conversationHref}><Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Open Conversation</Button></Link> : <p className="text-sm text-gray-500">No messaging conversation yet</p>}
     </header>
+    <ContactSuppressionStatus contactId={contact.id} identityRevision={JSON.stringify([contact.email, contact.phone])} />
+
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
       <section className={section} aria-label="Contact profile">
         <div className="flex justify-between items-center"><h2 className="font-semibold">Contact profile</h2><Button variant="ghost" size="sm" onClick={() => { setEditing(!editing); setEditVersion(contact.updatedAt ? String(contact.updatedAt) : undefined); setDraft({}); save.reset(); }}>{editing ? "Cancel" : "Edit"}</Button></div>
