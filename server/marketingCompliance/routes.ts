@@ -14,7 +14,7 @@ export function registerMarketingComplianceRoutes(app: Express) {
     res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex, nofollow" });
     try {
       readOptOutToken(req.params.token);
-      const page = renderMarketingUnsubscribePage({ kind: "confirm", actionPath: req.path, acceptLanguage: req.headers["accept-language"] });
+      const page = renderMarketingUnsubscribePage({ kind: "confirm", actionPath: req.path, acceptLanguage: req.headers?.["accept-language"] });
       res.set({ "Content-Security-Policy": page.csp, "Content-Language": page.language });
       res.type("html").send(page.html);
     } catch { res.status(400).type("text").send("This unsubscribe link is invalid. Reply to the sender to request an opt-out."); }
@@ -28,7 +28,7 @@ export function registerMarketingComplianceRoutes(app: Express) {
     try {
       // Ignore session, query tenant overrides and redirects entirely.
       await suppressMarketingIdentity({ ...identity, reason: "unsubscribe", source: "one_click", scope: "email" });
-      const page = renderMarketingUnsubscribePage({ kind: "success", acceptLanguage: req.headers["accept-language"] });
+      const page = renderMarketingUnsubscribePage({ kind: "success", acceptLanguage: req.headers?.["accept-language"] });
       res.set({ "Content-Security-Policy": page.csp, "Content-Language": page.language });
       return res.type("html").send(page.html);
     } catch { return res.status(503).json({ error: "Unable to save your opt-out. Please retry or reply to the sender." }); }
