@@ -367,16 +367,17 @@ export function registerWhatsappIntegrationRoutes(app: Express): void {
       const graphPhoneStatus =
         (phoneGraph.ok ? (phoneGraph.data?.status as unknown) : null) ?? null;
 
-      const [appSubscriptions, phoneConfiguration] = await Promise.all([
+      const [appSubscriptions, phoneConfiguration, debugToken] = await Promise.all([
         fetchAppWebhookSubscriptions({ graphBase, appId, appSecret: process.env.META_APP_SECRET || "" }),
         fetchPhoneWebhookConfiguration({ graphBase, phoneNumberId, accessToken: token }),
+        fetchMetaUserTokenDebugSummary(token),
       ]);
       const callbackRouting = buildCallbackRoutingDiagnostics({
         appId, wabaStatus: subscribedApps.status || null, wabaBody: subscribedApps.body,
         appStatus: appSubscriptions.status, appBody: appSubscriptions.body,
         phoneNumberId, phoneStatus: phoneConfiguration.status, phoneBody: phoneConfiguration.body,
+        phoneTokenAppId: debugToken.ok ? debugToken.app_id : null,
       });
-      const debugToken = await fetchMetaUserTokenDebugSummary(token);
       const webhookProbe = await probeWebhookMetaReachable();
       const isStagingTestScope = process.env.RAILWAY_ENVIRONMENT_NAME === "staging" &&
         appId === STAGING_CALLBACK_SCOPE.appId && wabaId === STAGING_CALLBACK_SCOPE.wabaId &&

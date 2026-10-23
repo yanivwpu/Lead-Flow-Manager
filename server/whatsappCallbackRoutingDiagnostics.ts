@@ -31,6 +31,7 @@ export function buildCallbackRoutingDiagnostics(input: {
   appId: string; wabaStatus: number | null; wabaBody: unknown;
   appStatus: number | null; appBody: unknown; checkedAt?: string;
   phoneNumberId?: string; phoneStatus?: number | null; phoneBody?: unknown;
+  phoneTokenAppId?: string | null;
 }) {
   const wabaProbe = graphProbeSummary(input.wabaStatus, input.wabaBody);
   const appProbe = graphProbeSummary(input.appStatus, input.appBody);
@@ -52,7 +53,8 @@ export function buildCallbackRoutingDiagnostics(input: {
   const phoneProbe = graphProbeSummary(input.phoneStatus ?? null, input.phoneBody);
   const phoneBody = object(input.phoneBody);
   const phoneIdentityMatches = !!input.phoneNumberId && phoneBody.id === input.phoneNumberId;
-  const config = phoneProbe.ok && phoneIdentityMatches ? object(phoneBody.webhook_configuration) : {};
+  const phoneTokenAppMatches = /^\d+$/.test(input.appId) && input.phoneTokenAppId === input.appId;
+  const config = phoneProbe.ok && phoneIdentityMatches && phoneTokenAppMatches ? object(phoneBody.webhook_configuration) : {};
   const reportedPhoneConfiguration = {
     phoneNumber: callbackTarget(config.phone_number),
     waba: callbackTarget(config.whatsapp_business_account),
@@ -86,7 +88,7 @@ export function buildCallbackRoutingDiagnostics(input: {
   return {
     diagnosticOnly: true,
     checkedAt: input.checkedAt ?? new Date().toISOString(),
-    wabaProbe, appProbe, phoneProbe, phoneIdentityMatches, configuredAppMembership: membership,
+    wabaProbe, appProbe, phoneProbe, phoneIdentityMatches, phoneTokenAppMatches, configuredAppMembership: membership,
     reportedWabaOverride: override,
     reportedPhoneConfiguration,
     wabaRollbackState, wabaEvidenceConsistent,

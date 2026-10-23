@@ -66,7 +66,7 @@ const production = "https://app.whachatcrm.com/api/webhook/meta";
 const hierarchy = (config: Record<string, unknown>, patch: Record<string, unknown> = {}) => report({
   appId: scope.appId, wabaStatus: 200, wabaBody: {data: [{whatsapp_business_api_data: {id: scope.appId}}]},
   appStatus: 200, appBody: {data: [{object: "whatsapp_business_account", callback_url: production, fields: ["messages"]}]},
-  phoneNumberId: scope.phoneNumberId, phoneStatus: 200,
+  phoneNumberId: scope.phoneNumberId, phoneStatus: 200, phoneTokenAppId: scope.appId,
   phoneBody: {id: scope.phoneNumberId, webhook_configuration: config}, ...patch,
 });
 const planInput = (routing = hierarchy({application: production})) => ({
@@ -100,6 +100,7 @@ test("failed, missing, wrong-phone, contradictory and invalid hierarchy evidence
   const config = {application: production, phone_number: "invalid"};
   assert.equal(hierarchy(config).effectiveCallback.category, "unknown");
   for (const patch of [
+    {phoneTokenAppId: null}, {phoneTokenAppId: "another-app"},
     {phoneStatus: 403}, {phoneBody: null}, {phoneBody: {}},
     {phoneBody: {id: "another-phone", webhook_configuration: {application: production}}},
     {phoneBody: {id: scope.phoneNumberId, webhook_configuration: {}}},

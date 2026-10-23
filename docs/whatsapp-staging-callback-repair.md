@@ -53,7 +53,7 @@ now makes a separate, optional, header-authenticated
 subscriptions or invalidates the existing phone-status probe. The sanitized
 `callbackRouting` block reports phone/WABA/app hierarchy and applies phone-first
 precedence. Missing/malformed configuration, incorrect returned phone identity,
-conflicting WABA evidence, and failed Graph reads stay unknown. WABA membership
+conflicting WABA evidence, a probe token belonging to another app, and failed Graph reads stay unknown. WABA membership
 without a configured app ID also stays unknown (the unresolved #156 review item).
 
 `routingLikelyActive` now requires a reported destination matching this app's
