@@ -42,7 +42,20 @@ FROM contacts WHERE email IS NOT NULL AND trim(email) <> '' AND (
 -- unsubscribe must not silently block a phone/WhatsApp conversation.
 INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
 SELECT user_id, 'phone:+' || regexp_replace(phone,'[^0-9]','','g'), 'all', 'historical_opt_out', 'migration_0113'
-FROM contacts WHERE regexp_replace(phone,'[ ().-]','','g') ~ '^\\+?[1-9][0-9]{7,14}$' AND (
+FROM contacts WHERE regexp_replace(phone,'[^0-9]','','g') ~ '^[1-9][0-9]{7,14}
+ custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
+ custom_fields @> '{"stop":true}' OR
+ concat_ws(' ',tag,pipeline_stage) ~* '\m(do not contact|dnc|stop|remove me)\M'
+) ON CONFLICT DO NOTHING;
+-- Permanent delivery failures are email-specific, including transactional email.
+-- Preserve a global scope if the same historical contact also opted out globally.
+INSERT INTO marketing_suppressions (workspace_user_id,email_normalized,scope,reason,source)
+SELECT user_id, lower(trim(email)), 'email', 'bounce', 'migration_0113'
+FROM contacts WHERE email IS NOT NULL AND trim(email) <> '' AND (
+ custom_fields @> '{"emailBounced":true}' OR custom_fields @> '{"bounced":true}' OR
+ custom_fields->>'suppressionReason' IN ('bounce','invalid_recipient')
+) ON CONFLICT (workspace_user_id,email_normalized) DO UPDATE SET reason='bounce';
+ AND (
  custom_fields @> '{"doNotContact":true}' OR custom_fields @> '{"dnc":true}' OR
  custom_fields @> '{"stop":true}' OR
  concat_ws(' ',tag,pipeline_stage) ~* '\m(do not contact|dnc|stop|remove me)\M'
