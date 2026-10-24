@@ -963,7 +963,14 @@ export function SalesPortal() {
               <h2 className="font-semibold">Cancelled demos</h2>
               <p className="text-sm text-gray-500">Calendly cancellation detected. Contact the prospect before arranging another meeting; no message is sent automatically.</p>
               {canceledDemos.length === 0 ? <p className="text-sm text-gray-500">No cancelled demos.</p> : canceledDemos.map(demo => (
-                <div key={demo.id} className="border-t pt-3"><DemoContactBlock demo={demo} /></div>
+                <div key={demo.id} className="border-t pt-3 space-y-2">
+                  <DemoContactBlock demo={demo} />
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`mailto:${encodeURIComponent(demo.visitorEmail)}?subject=${encodeURIComponent("Your WhachatCRM demo — rescheduling")}&body=${encodeURIComponent(`Hi ${demo.visitorName},\n\nWould you like to arrange another time for your WhachatCRM demo? Please reply with a convenient time, and I will coordinate with you.\n\nThanks!`)}`}>
+                      <Mail className="h-4 w-4 mr-2" /> Email to coordinate
+                    </a>
+                  </Button>
+                </div>
               ))}
             </div>
           </TabsContent>
@@ -973,7 +980,14 @@ export function SalesPortal() {
               <h2 className="font-semibold">No-shows</h2>
               <p className="text-sm text-gray-500">Contact the prospect to coordinate a new time. No message is sent automatically.</p>
               {noShowDemos.length === 0 ? <p className="text-sm text-gray-500">No no-shows recorded.</p> : noShowDemos.map(demo => (
-                <div key={demo.id} className="border-t pt-3"><DemoContactBlock demo={demo} /></div>
+                <div key={demo.id} className="border-t pt-3 space-y-2">
+                  <DemoContactBlock demo={demo} />
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={`mailto:${encodeURIComponent(demo.visitorEmail)}?subject=${encodeURIComponent("Your WhachatCRM demo — rescheduling")}&body=${encodeURIComponent(`Hi ${demo.visitorName},\n\nWould you like to arrange another time for your WhachatCRM demo? Please reply with a convenient time, and I will coordinate with you.\n\nThanks!`)}`}>
+                      <Mail className="h-4 w-4 mr-2" /> Email to coordinate
+                    </a>
+                  </Button>
+                </div>
               ))}
             </div>
           </TabsContent>
