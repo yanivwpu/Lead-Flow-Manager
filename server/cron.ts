@@ -405,6 +405,11 @@ export function startCronJobs() {
       import("./calendlySyncService")
         .then(({ runCalendlyPollingCron }) => runCalendlyPollingCron())
         .catch((err) => console.error("[CalendlyPoll] cron error:", err));
+      // Marketing website demo bookings use a separate Calendly account flow.
+      // Read-only API polling also works on Calendly Free (no webhooks required).
+      import("./marketingDemoCalendlyPoll")
+        .then(({ pollMarketingDemoCalendlyBookings }) => pollMarketingDemoCalendlyBookings())
+        .catch((err) => console.error("[MarketingDemoCalendlyPoll] cron error:", err));
     }
 
     // Native email Gmail incremental sync — elapsed-time fallback (default 10 min).
