@@ -25,4 +25,3 @@ export function createEcommercePilotGuard(deps: {
     } catch { res.status(503).json({ error: "Pilot access unavailable" }); }
   };
 }
-
