@@ -59,7 +59,7 @@ async function reconcileScheduledDemo(token: string, booking: {
       calendlyInviteeUri: newInviteeUri,
       calendlyScheduledEventUri: event.uri,
       scheduledDate: start,
-      ...(meetingUrl ? { meetingLink: meetingUrl } : {}),
+      meetingLink: meetingUrl,
       calendlyPayload: { lifecycle: "rescheduled", priorInviteeUri: booking.calendlyInviteeUri, priorScheduledEventUri: booking.calendlyScheduledEventUri, updatedAt: new Date().toISOString() },
     }).where(and(
       eq(demoBookings.id, booking.id),
@@ -122,8 +122,12 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
           continue;
         }
         for (const booking of scheduled) {
-          const result = await reconcileScheduledDemo(token, booking);
-          if (result !== "unchanged") console.info(TAG, "Lifecycle changed", { salespersonId: connection.salespersonId, bookingId: booking.id, result });
+          try {
+            const result = await reconcileScheduledDemo(token, booking);
+            if (result !== "unchanged") console.info(TAG, "Lifecycle changed", { salespersonId: connection.salespersonId, bookingId: booking.id, result });
+          } catch (error) {
+            console.warn(TAG, "Lifecycle lookup failed", { salespersonId: connection.salespersonId, bookingId: booking.id, reason: error instanceof Error ? error.name : "unknown" });
+          }
         }
         if (!assigned.length) continue;
         let pageToken: string | undefined;
