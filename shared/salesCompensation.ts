@@ -15,6 +15,7 @@ export const DEMO_BOOKING_STATUS = {
   completed: "completed",
   converted: "converted",
   cancelled: "cancelled",
+  noShow: "no_show",
   needsReassignment: "needs_reassignment",
 } as const;
 
