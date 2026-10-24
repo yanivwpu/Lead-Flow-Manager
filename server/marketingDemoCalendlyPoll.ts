@@ -13,6 +13,7 @@ import { processMarketingDemoCalendlyPayload } from "./marketingDemoCalendlyWebh
 import { readDemoBookings } from "./demoBookingStorage";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import { eligibleMarketingDemoBooking } from "@shared/marketingDemoCalendlyReconciliation";
+import { resolveMarketingDemoBookingIdFromTracking } from "@shared/marketingDemoCalendly";
 import { getSalespersonCalendlyConnections } from "./salespersonCalendlyConnections";
 
 const TAG = "[MarketingDemoCalendlyPoll]";
@@ -71,6 +72,9 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
                 if (!invitee.email || invitee.status === "canceled" || invitee.cancellation) continue;
                 const email = invitee.email.trim().toLowerCase();
                 const tracking = invitee.tracking || {};
+                // Cross-salesperson safety: require the exact request ID when reconciling automatically.
+                // Email-only matches are reserved for manual review.
+                if (!resolveMarketingDemoBookingIdFromTracking(tracking)) continue;
                 if (!eligibleMarketingDemoBooking(assigned, email, tracking)) continue;
                 await processMarketingDemoCalendlyPayload({
                   event: "invitee.created",
