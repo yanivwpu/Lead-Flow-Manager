@@ -9999,6 +9999,31 @@ export async function registerRoutes(
     }
   });
 
+  // A missed demo is a human decision, not inferred from the scheduled time.
+  // Never mark a demo completed or trigger a commission from this action.
+  app.patch("/api/sales-portal/demos/:id/no-show", requireSalesperson, async (req: any, res) => {
+    try {
+      const { DEMO_BOOKING_STATUS } = await import("@shared/salesCompensation");
+      const demo = await storage.getDemoBooking(req.params.id);
+      if (!demo || demo.salespersonId !== req.salesperson.id) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      if (demo.status !== DEMO_BOOKING_STATUS.accepted) {
+        return res.status(409).json({ error: "Only accepted demos can be marked no-show" });
+      }
+      if (!demo.scheduledDate || new Date(demo.scheduledDate).getTime() > Date.now()) {
+        return res.status(409).json({ error: "The scheduled demo time has not arrived" });
+      }
+      const updated = await storage.updateDemoBooking(demo.id, {
+        status: DEMO_BOOKING_STATUS.noShow,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("[DemoLifecycle] Failed to mark no-show", error);
+      res.status(500).json({ error: "Failed to mark no-show" });
+    }
+  });
+
   // Salesperson Portal: Get my conversions
   app.get("/api/sales-portal/conversions", requireSalesperson, async (req: any, res) => {
     try {
