@@ -22,6 +22,10 @@ type StartupPatchStep = { step: string; sql: string };
 type StartupPatch = { tag: string; sql: string | StartupPatchStep[] };
 
 const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
+  {
+    tag: "0056_salesperson_calendly_connections",
+    sql: "CREATE TABLE IF NOT EXISTS salesperson_calendly_connections (salesperson_id varchar PRIMARY KEY REFERENCES salespeople(id) ON DELETE CASCADE, encrypted_access_token text NOT NULL, calendly_user_uri text, calendly_scheduling_url text, enabled boolean NOT NULL DEFAULT true, last_poll_at timestamp, last_error text, updated_at timestamp NOT NULL DEFAULT NOW());",
+  },
   { tag: "0109_private_ai_test_chat", sql: AI_TEST_CHAT_SCHEMA_SQL },
   { tag: "0107_shared_commerce_catalog", sql: COMMERCE_CATALOG_SCHEMA_SQL },
   { tag: "0108_conversation_shopping", sql: SHOPPING_SCHEMA_SQL },
