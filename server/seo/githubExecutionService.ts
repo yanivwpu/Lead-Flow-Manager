@@ -1,4 +1,4 @@
-import { runSeoPublicationOnce, updateSeoPublicationMeasurements } from "./publicationService";
+import { runSeoPublicationOnce, updateSeoPublicationMeasurements, reconcileAbandonedSeoPrOnce } from "./publicationService";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
@@ -79,7 +79,7 @@ export async function runSeoGithubExecutionWorkerOnce(deps:{claim?:typeof claimP
   await (deps.executeJob??executeClaimedSeoGithubJob)(claim);
   return true;
 }
-export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActive=true;void (async()=>{await runSeoGithubExecutionWorkerOnce();await runSeoPublicationOnce();await updateSeoPublicationMeasurements();})().catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
+export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActive=true;void (async()=>{await runSeoGithubExecutionWorkerOnce();await runSeoPublicationOnce();await reconcileAbandonedSeoPrOnce();await updateSeoPublicationMeasurements();})().catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
