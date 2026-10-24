@@ -65,6 +65,9 @@ async function findAwaitingMarketingDemoBooking(params: {
     if (!match) {
       return { rejectReason: "booking_id_not_found" };
     }
+    if (match.visitorEmail.trim().toLowerCase() !== normalizedEmail) {
+      return { rejectReason: "booking_id_email_mismatch" };
+    }
     if (match.status !== DEMO_BOOKING_STATUS.awaitingSchedule) {
       return { booking: undefined, rejectReason: `booking_id_wrong_status:${match.status}` };
     }
@@ -75,31 +78,17 @@ async function findAwaitingMarketingDemoBooking(params: {
     return { rejectReason: "missing_invitee_email" };
   }
 
-  try {
-    const rows = await db
-      .select()
-      .from(demoBookings)
-      .where(
-        and(
-          eq(demoBookings.status, DEMO_BOOKING_STATUS.awaitingSchedule),
-          sql`LOWER(TRIM(${demoBookings.visitorEmail})) = ${normalizedEmail}`,
-        ),
-      )
-      .orderBy(desc(demoBookings.createdAt))
-      .limit(1);
-    if (rows[0]) {
-      const booking = (await readDemoBookings({ id: rows[0].id }))[0];
-      if (booking) return { booking };
-    }
-  } catch (err) {
-    console.warn("[MarketingDemoCalendly] case-insensitive email lookup failed, falling back:", err);
-  }
-
-  const byEmail = await readDemoBookings({ email: normalizedEmail });
-  const match = byEmail.find((b) => b.status === DEMO_BOOKING_STATUS.awaitingSchedule);
-  if (match) return { booking: match };
-
-  return { rejectReason: "no_awaiting_schedule_for_email" };
+  // Never pick the newest row when an invitee email has multiple open requests.
+  // Without a verified booking ID this is ambiguous and needs manual review.
+  const matches = (await readDemoBookings({ email: normalizedEmail })).filter(
+    (b) =>
+      b.status === DEMO_BOOKING_STATUS.awaitingSchedule &&
+      b.visitorEmail.trim().toLowerCase() === normalizedEmail,
+  );
+  if (matches.length === 1) return { booking: matches[0] };
+  return {
+    rejectReason: matches.length > 1 ? "ambiguous_invitee_email" : "no_awaiting_schedule_for_email",
+  };
 }
 
 export function shouldSkipDuplicateMarketingDemoConfirm(params: {
