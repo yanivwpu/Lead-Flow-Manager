@@ -9778,6 +9778,41 @@ export async function registerRoutes(
     next();
   };
 
+  // Sales Portal Calendly credentials remain server-side and scoped to the active salesperson.
+  app.get("/api/sales-portal/calendly", requireSalesperson, async (req: any, res) => {
+    try {
+      const { salespersonCalendlyStatus } = await import("./salespersonCalendlyConnections");
+      res.json(await salespersonCalendlyStatus(req.salesperson.id));
+    } catch (error) {
+      console.error("[SalesCalendly] status failed", error);
+      res.status(500).json({ error: "Could not load Calendly connection" });
+    }
+  });
+
+  app.post("/api/sales-portal/calendly", requireSalesperson, async (req: any, res) => {
+    try {
+      const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+      if (!token || token.length > 4096) return res.status(400).json({ error: "Invalid token" });
+      const { connectSalespersonCalendly } = await import("./salespersonCalendlyConnections");
+      const result = await connectSalespersonCalendly(req.salesperson.id, token);
+      res.json({ connected: true, schedulingUrl: result.schedulingUrl });
+    } catch (error) {
+      console.error("[SalesCalendly] connect failed", error instanceof Error ? error.message : "unknown");
+      res.status(400).json({ error: "Unable to connect. Verify your Calendly token and try again." });
+    }
+  });
+
+  app.delete("/api/sales-portal/calendly", requireSalesperson, async (req: any, res) => {
+    try {
+      const { disconnectSalespersonCalendly } = await import("./salespersonCalendlyConnections");
+      await disconnectSalespersonCalendly(req.salesperson.id);
+      res.json({ connected: false });
+    } catch (error) {
+      console.error("[SalesCalendly] disconnect failed", error);
+      res.status(500).json({ error: "Could not disconnect Calendly" });
+    }
+  });
+
   // Salesperson Portal: Get my stats
   app.get("/api/sales-portal/stats", requireSalesperson, async (req: any, res) => {
     const salesperson = req.salesperson;
