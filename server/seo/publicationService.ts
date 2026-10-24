@@ -20,6 +20,37 @@ export async function requestSeoPublication(actionId:string,actor:string){
  return{queued:true,message:"Publishing requested. GitHub checks, deployment, and live content must pass before this is marked live."};
 }
 
+// Reconcile abandoned, never-requested PRs without publishing or requeuing them.
+// A closed unmerged PR cannot be treated as a live publication.
+let lastAbandonedPrCheck=0;
+export function isAbandonedSeoPr(pr:{state?:string;merged?:boolean}){return pr.state==="closed"&&pr.merged===false;}
+export async function reconcileAbandonedSeoPrOnce(deps:{config?:ReturnType<typeof resolveSeoGithubConfig>;fetchImpl?:typeof fetch;now?:number}={}){
+ const now=deps.now??Date.now();if(now-lastAbandonedPrCheck<60*60_000)return false;
+ lastAbandonedPrCheck=now;
+ const rows=await db.execute(sql`SELECT id,pr_number,commit_sha FROM seo_github_executions
+   WHERE status='pr_created' AND publication_requested_at IS NULL AND pr_number IS NOT NULL
+   ORDER BY created_at LIMIT 10`);
+ if(!rows.rows.length)return false;
+ const config=deps.config??resolveSeoGithubConfig();
+ for(const row of rows.rows as Array<{id:string;pr_number:number;commit_sha:string|null}>){
+  try{
+   const pr=await githubRequest<{state:string;merged:boolean;head?:{sha?:string}}>(config,`/pulls/${row.pr_number}`,{signal:AbortSignal.timeout(20_000)},deps.fetchImpl??fetch);
+   if(!isAbandonedSeoPr(pr)||pr.head?.sha!==row.commit_sha)continue;
+   await db.transaction(async tx=>{
+    const changed=await tx.execute(sql`UPDATE seo_github_executions SET status='publication_blocked',
+      failure_code='PR_CHANGED',error_message='GitHub PR was closed without merge; a fresh proposal is required',
+      updated_at=NOW()
+      WHERE id=${row.id} AND status='pr_created' AND publication_requested_at IS NULL
+      AND pr_number=${row.pr_number} AND commit_sha=${row.commit_sha} RETURNING action_id`);
+    if(changed.rows.length)await tx.execute(sql`INSERT INTO seo_action_events(action_id,from_status,to_status,reason,safe_metadata)
+      VALUES (${String((changed.rows[0] as any).action_id)},'approved','approved','Unmerged SEO PR closed; publication safely blocked',
+      ${JSON.stringify({prNumber:row.pr_number,automatic:true,publishingPerformed:false})}::jsonb)`);
+   });
+  }catch(error){console.error("[SEO publication] abandoned PR reconciliation failed",{prNumber:row.pr_number,message:safeGithubExecutionError(error)});}
+ }
+ return true;
+}
+
 type Job={id:string;token:string;status:string;actionId:string;version:number;pr:number;head:string;mergeSha:string|null;input:SeoGithubExecutionInput};
 async function claimPublication():Promise<Job|null>{
  const token=randomUUID();const result=await db.execute(sql`WITH candidate AS (SELECT id FROM seo_github_executions WHERE publication_requested_at IS NOT NULL AND status IN ('pr_created','awaiting_checks','deploying','publication_failed') AND (lease_expires_at IS NULL OR lease_expires_at<=NOW()) AND updated_at<NOW()-INTERVAL '20 seconds' ORDER BY updated_at LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE seo_github_executions g SET lease_token=${token},lease_expires_at=NOW()+INTERVAL '5 minutes',updated_at=NOW() FROM candidate WHERE g.id=candidate.id RETURNING g.*`);
