@@ -28,13 +28,23 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
     const awaiting = (await readDemoBookings({})).filter(
       (booking) => booking.status === DEMO_BOOKING_STATUS.awaitingSchedule,
     );
-    if (!awaiting.length) return;
+    if (!awaiting.length) {
+      console.info(TAG, "No awaiting-schedule demo requests", { connectedSalespeople: connections.length });
+      return;
+    }
     const minStartTime = new Date(Date.now() - 14 * 86400000).toISOString();
     const maxStartTime = new Date(Date.now() + 365 * 86400000).toISOString();
     for (const connection of connections) {
       const token = connection.token;
       const assigned = awaiting.filter((b) => b.salespersonId === connection.salespersonId);
-      if (!assigned.length) continue;
+      if (!assigned.length) {
+        console.info(TAG, "No assigned awaiting demos", { salespersonId: connection.salespersonId });
+        continue;
+      }
+      let eventsScanned = 0;
+      let inviteesScanned = 0;
+      let missingTrackingId = 0;
+      let matched = 0;
       try {
         const me = await calendlyGetCurrentUser(token);
         const user = me.data?.resource?.uri;
@@ -60,6 +70,7 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
             break;
           }
           for (const event of events.data?.collection || []) {
+            eventsScanned++;
             if (!event.uri || event.status === "canceled" || !event.start_time) continue;
             let inviteePage: string | undefined;
             for (let inviteeIndex = 0; inviteeIndex < 20; inviteeIndex++) {
@@ -69,13 +80,18 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
                 break;
               }
               for (const invitee of response.data?.collection || []) {
+                inviteesScanned++;
                 if (!invitee.email || invitee.status === "canceled" || invitee.cancellation) continue;
                 const email = invitee.email.trim().toLowerCase();
                 const tracking = invitee.tracking || {};
                 // Cross-salesperson safety: require the exact request ID when reconciling automatically.
                 // Email-only matches are reserved for manual review.
-                if (!resolveMarketingDemoBookingIdFromTracking(tracking)) continue;
+                if (!resolveMarketingDemoBookingIdFromTracking(tracking)) {
+                  if (assigned.some(b => b.visitorEmail.trim().toLowerCase() === email)) missingTrackingId++;
+                  continue;
+                }
                 if (!eligibleMarketingDemoBooking(assigned, email, tracking)) continue;
+                matched++;
                 await processMarketingDemoCalendlyPayload({
                   event: "invitee.created",
                   payload: {
@@ -101,8 +117,9 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
           pageToken = events.data?.pagination?.next_page_token || undefined;
           if (!pageToken) break;
         }
+        console.info(TAG, "Poll summary", { salespersonId: connection.salespersonId, awaitingAssigned: assigned.length, eventsScanned, inviteesScanned, missingTrackingId, matched });
       } catch (error) {
-        console.error(TAG, "Host reconciliation failed", error);
+        console.error(TAG, "Host reconciliation failed", { salespersonId: connection.salespersonId, message: error instanceof Error ? error.message : "unknown" });
       }
     }
   } finally {
