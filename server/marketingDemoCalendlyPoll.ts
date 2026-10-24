@@ -50,7 +50,7 @@ async function reconcileScheduledDemo(token: string, booking: {
     const match = newInviteeUri.match(/^(https:\/\/api\.calendly\.com\/scheduled_events\/[a-zA-Z0-9-]+)\/invitees\/[a-zA-Z0-9-]+$/);
     if (!match) return "unchanged";
     const nextEvent = await calendlyGetScheduledEvent(token, match[1]);
-    const event = next.data.resource;
+    const event = nextEvent.data.resource as CalendlyScheduledEventResource | undefined;
     if (!nextEvent.ok || !event?.start_time || event.status === "canceled" || !event.uri) return "unchanged";
     const start = new Date(event.start_time);
     if (Number.isNaN(start.getTime())) return "unchanged";
