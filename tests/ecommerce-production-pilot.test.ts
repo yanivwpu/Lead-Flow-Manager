@@ -5,6 +5,8 @@ import { once } from "node:events";
 import { createEcommercePilotGuard } from "../server/ecommerce/pilotGuard";
 import { ecommercePilotConfigured, isEcommercePilotOwner, ecommerceInternalTasksEnabled } from "../server/ecommerce/pilotAccess";
 import { resolveAppNavSections } from "../shared/appNav";
+import { shouldServeSpaFallback } from "../server/spaRouting";
+import { getMarketingRoutes, isNoIndexPath } from "../server/seo";
 
 const id = "10000000-0000-4000-8000-000000000001";
 const env = { ECOMMERCE_PILOT_ENABLED: "true", ECOMMERCE_PILOT_WORKSPACE_ID: id,
@@ -75,4 +77,13 @@ test("other merchants retain navigation; only an explicit pilot grant reveals th
   const after = resolveAppNavSections({ ...flags, ecommercePilotEnabled: true });
   assert.equal(after.flatMap(x => x.itemIds).filter(x => x === "ecommerceGrowthEngine").length, 1);
   assert.deepEqual(after.map(x => ({ ...x, itemIds: x.itemIds.filter(id => id !== "ecommerceGrowthEngine") })), before);
+});
+
+test("authorized private preview has a production SPA shell without joining public marketing routes", () => {
+  const marketing = getMarketingRoutes();
+  assert.equal(shouldServeSpaFallback('/ecommerce-growth-engine', marketing), true);
+  assert.equal(isNoIndexPath('/ecommerce-growth-engine'), true);
+  assert.equal(isNoIndexPath('/app/ecommerce-growth-engine'), true);
+  assert.equal(marketing.includes('/ecommerce-growth-engine'), false);
+  assert.equal(shouldServeSpaFallback('/ecommerce-growth-engine/unknown', marketing), false);
 });
