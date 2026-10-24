@@ -1,0 +1,72 @@
+name: E-commerce production foundation
+on:
+  pull_request:
+    paths:
+      - "server/ecommerce/**"
+      - "server/ecommercePilotRoutes.ts"
+      - "server/shopify*.ts"
+      - "server/routes.ts"
+      - "client/src/lib/ecommerce*"
+      - "client/src/pages/Ecommerce*"
+      - "client/src/pages/FollowUps.tsx"
+      - "client/src/pages/Integrations.tsx"
+      - "client/src/components/followups/Shopify*"
+      - "client/src/components/integrations/ShopifySimpleSetup.tsx"
+      - "shared/appNav.ts"
+      - "shared/contactDetails.ts"
+      - "migrations/*ecommerce*.sql"
+      - "tests/ecommerce-*.test.ts"
+      - "tests/shopify-*.test.ts"
+      - ".github/workflows/ecommerce-production-foundation.yml"
+permissions:
+  contents: read
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shopify_test
+          POSTGRES_PASSWORD: shopify_test
+          POSTGRES_DB: whachat_shopify_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U shopify_test -d whachat_shopify_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://shopify_test:shopify_test@127.0.0.1:5432/whachat_shopify_test
+      SHOPIFY_TEST_DATABASE_URL: postgres://shopify_test:shopify_test@127.0.0.1:5432/whachat_shopify_test
+      ECOMMERCE_TEST_DATABASE_URL: postgres://shopify_test:shopify_test@127.0.0.1:5432/whachat_ecommerce_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Create isolated e-commerce test database
+        run: node --input-type=module -e 'import pg from "pg"; const p=new pg.Pool({connectionString:process.env.SHOPIFY_TEST_DATABASE_URL}); await p.query("CREATE DATABASE whachat_ecommerce_test"); await p.end();'
+      - name: Pilot isolation, migrations, tasks, observation eligibility and localized UI
+        run: >-
+          node --import tsx --test --test-concurrency=2
+          tests/ecommerce-*.test.ts
+          tests/shopify-ecommerce-*-postgres.test.ts
+          tests/shopify-ecommerce-ui-render.test.ts
+          tests/shopify-followups-task-bridge-postgres.test.ts
+          tests/shopify-task-order-deeplink-postgres.test.ts
+          tests/shopify-task-schedule-postgres.test.ts
+          tests/shopify-simple-order-support-postgres.test.ts
+      - name: Existing navigation and CRM behavior
+        run: node --import tsx --test tests/app-nav-ia.test.ts tests/contact-details*.test.ts
+      - name: Reject TypeScript regressions against exact main base
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - name: Production build
+        if: ${{ !cancelled() }}
+        run: npm run build

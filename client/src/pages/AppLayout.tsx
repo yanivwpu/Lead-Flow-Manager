@@ -35,6 +35,7 @@ import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
 
 const ContactDetails = lazy(() => import("./ContactDetails").then(m => ({ default: m.ContactDetails })));
 
+const EcommerceGrowthEngineDashboard = lazy(() => import("./EcommerceGrowthEngineDashboard").then(m => ({default:m.EcommerceGrowthEngineDashboard})));
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
@@ -200,6 +201,7 @@ function AppContent() {
               <Route path="/app/chats">
                 <Redirect to="/app/inbox" />
               </Route>
+              <Route path="/app/ecommerce-growth-engine" component={EcommerceGrowthEngineDashboard} />
               <Route path="/app/followups" component={FollowUps} />
               <Route path="/app/contacts/:id" component={ContactDetails} />
               <Route path="/app/contacts" component={Contacts} />

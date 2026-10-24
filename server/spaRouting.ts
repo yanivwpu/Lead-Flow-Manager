@@ -23,6 +23,8 @@ export const SPA_FALLBACK_PREFIXES = [
 
 /** Exact client routes that are not marketing PAGE_META entries but still valid SPA pages. */
 export const SPA_FALLBACK_EXACT = new Set([
+  // Access is checked by requireEcommercePilot before the static catch-all.
+  "/ecommerce-growth-engine",
   "/auth",
   "/reset-password",
   "/sales-admin",

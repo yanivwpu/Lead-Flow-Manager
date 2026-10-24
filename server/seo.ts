@@ -917,6 +917,7 @@ export function getMarketingSsrBodyRoutes(): string[] {
 }
 
 const NOINDEX_EXACT_PATHS = new Set([
+  "/ecommerce-growth-engine",
   "/auth",
   "/reset-password",
   "/sales-admin",

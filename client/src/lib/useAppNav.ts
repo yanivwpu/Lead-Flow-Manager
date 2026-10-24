@@ -1,4 +1,6 @@
+import { useEcommercePilot } from "./ecommercePilot";
 import {
+  ShoppingBag,
   Inbox,
   Package,
   ListTodo,
@@ -47,6 +49,7 @@ import { PROSPECT_AI_PATH, useProspectAiStatus } from "@/lib/prospectAi";
 import { useHideGrowthEngineForShopify } from "@/lib/shopifyMerchantExperience";
 
 const APP_NAV_ICONS: Record<AppNavItemId, LucideIcon> = {
+  ecommerceGrowthEngine: ShoppingBag,
   inbox: Inbox,
   followups: ListTodo,
   contacts: Users,
@@ -97,7 +100,11 @@ export function useAppNavCategories(): {
   mobilePrimaryItems: AppNavLinkItem[];
   mobileMoreCategories: AppNavCategory[];
 } {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { available: ecommercePilotEnabled } = useEcommercePilot();
+  const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+  const ecommerceLabel = locale === "he" ? "מנוע הצמיחה למסחר אלקטרוני" :
+    locale === "es" ? "Motor de comercio electrónico" : "E-Commerce Growth Engine";
   const [location] = useLocation();
   const prospectAiStatus = useProspectAiStatus();
   const prospectAiActivated = Boolean(prospectAiStatus.data?.activated);
@@ -128,6 +135,7 @@ export function useAppNavCategories(): {
 
   return useMemo(() => {
     const sections = resolveAppNavSections({
+      ecommercePilotEnabled,
       hasPresetCampaigns,
       prospectAiActivated,
       realtorGrowthEngineActivated,
@@ -142,7 +150,7 @@ export function useAppNavCategories(): {
       return {
         id,
         icon: APP_NAV_ICONS[id],
-        label: t(APP_NAV_LABEL_KEYS[id], APP_NAV_LABEL_DEFAULTS[id]),
+        label: id === "ecommerceGrowthEngine" ? ecommerceLabel : t(APP_NAV_LABEL_KEYS[id], APP_NAV_LABEL_DEFAULTS[id]),
         href,
         testId: APP_NAV_SIDEBAR_TEST_IDS[id],
         mobileTestId: APP_NAV_MOBILE_TEST_IDS[id],
@@ -171,6 +179,8 @@ export function useAppNavCategories(): {
   }, [
     t,
     location,
+    ecommercePilotEnabled,
+    ecommerceLabel,
     hasPresetCampaigns,
     prospectAiActivated,
     realtorGrowthEngineActivated,
