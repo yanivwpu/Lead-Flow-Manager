@@ -262,6 +262,11 @@ export function SalesPortal() {
   const [acceptError, setAcceptError] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [earningsInfoOpen, setEarningsInfoOpen] = useState(false);
+  const [calendlyOpen, setCalendlyOpen] = useState(false);
+  const [calendlyToken, setCalendlyToken] = useState("");
+  const [calendlyBusy, setCalendlyBusy] = useState(false);
+  const [calendlyError, setCalendlyError] = useState("");
+  const [calendlyConnected, setCalendlyConnected] = useState(false);
   const [declineDemoId, setDeclineDemoId] = useState<string | null>(null);
   const [declineReason, setDeclineReason] = useState("");
 
@@ -355,6 +360,48 @@ export function SalesPortal() {
       setAcceptError(err.message || 'Failed to accept agreement. Please try again.');
     } finally {
       setIsAccepting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    fetch("/api/sales-portal/calendly", { credentials: "include" })
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error("Could not load Calendly status")))
+      .then((data) => setCalendlyConnected(Boolean(data.connected)))
+      .catch(() => setCalendlyError("Could not check Calendly connection"));
+  }, [isLoggedIn]);
+
+  const saveCalendlyConnection = async () => {
+    setCalendlyBusy(true);
+    setCalendlyError("");
+    try {
+      const res = await fetch("/api/sales-portal/calendly", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: calendlyToken }),
+      });
+      if (!res.ok) throw new Error("Connection failed. Check your token.");
+      setCalendlyConnected(true);
+      setCalendlyToken("");
+      toast({ title: "Calendly connected", description: "Confirmed demos will sync automatically." });
+    } catch (error) {
+      setCalendlyError(error instanceof Error ? error.message : "Connection failed");
+    } finally {
+      setCalendlyBusy(false);
+    }
+  };
+
+  const removeCalendlyConnection = async () => {
+    setCalendlyBusy(true);
+    try {
+      const res = await fetch("/api/sales-portal/calendly", { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Unable to disconnect");
+      setCalendlyConnected(false);
+      setCalendlyToken("");
+    } catch (error) {
+      setCalendlyError(error instanceof Error ? error.message : "Unable to disconnect");
+    } finally {
+      setCalendlyBusy(false);
     }
   };
 
@@ -706,6 +753,35 @@ export function SalesPortal() {
         </div>
       </header>
 
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Calendly booking synchronization</p>
+            <p className="text-xs text-gray-500">{calendlyConnected ? "Connected — automatic booking checks enabled" : "Connect your Calendly account to receive scheduled demos"}</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => { setCalendlyOpen(true); setCalendlyError(""); }}>
+            {calendlyConnected ? "Manage Calendly" : "Connect Calendly"}
+          </Button>
+        </div>
+      </div>
+      <Dialog open={calendlyOpen} onOpenChange={(open) => { setCalendlyOpen(open); if (!open) setCalendlyToken(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Calendly connection</DialogTitle>
+            <DialogDescription>Calendly Free is supported. Your token is stored encrypted and is never displayed again.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm">{calendlyConnected ? "Connected. Replace your token or disconnect below." : "Create a Personal Access Token with users:read and scheduled_events:read permissions."}</p>
+            <Label htmlFor="sales-calendly-token">Personal Access Token</Label>
+            <Input id="sales-calendly-token" type="password" autoComplete="off" value={calendlyToken} onChange={(e) => setCalendlyToken(e.target.value)} placeholder="Paste Calendly token" />
+            {calendlyError && <p role="alert" className="text-sm text-red-600">{calendlyError}</p>}
+            <Button onClick={saveCalendlyConnection} disabled={calendlyBusy || !calendlyToken.trim()}>
+              {calendlyBusy ? "Saving…" : calendlyConnected ? "Replace connection" : "Connect Calendly"}
+            </Button>
+            {calendlyConnected && <Button variant="outline" onClick={removeCalendlyConnection} disabled={calendlyBusy}>Disconnect</Button>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Tabs defaultValue="awaiting-schedule" className="space-y-4">
           <TabsList className="flex flex-wrap h-auto gap-1">
