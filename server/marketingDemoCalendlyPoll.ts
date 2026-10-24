@@ -1,9 +1,7 @@
 /**
  * Free-plan-compatible reconciliation of marketing demo Calendly bookings.
  *
- * Opt in by configuring CALENDLY_MARKETING_DEMO_API_TOKEN on the server.
- * For multiple Calendly hosts supply comma-separated PATs in
- * CALENDLY_MARKETING_DEMO_API_TOKENS. Never expose these tokens to the browser.
+ * Each salesperson authorizes an encrypted Calendly connection in the database.
  * Calendly Free supports read APIs but not webhook subscriptions.
  */
 import {
@@ -15,22 +13,15 @@ import { processMarketingDemoCalendlyPayload } from "./marketingDemoCalendlyWebh
 import { readDemoBookings } from "./demoBookingStorage";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import { eligibleMarketingDemoBooking } from "@shared/marketingDemoCalendlyReconciliation";
+import { getSalespersonCalendlyConnections } from "./salespersonCalendlyConnections";
 
 const TAG = "[MarketingDemoCalendlyPoll]";
 let inFlight = false;
 
 export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
   if (inFlight) return;
-  const tokens = Array.from(new Set(
-    [
-      process.env.CALENDLY_MARKETING_DEMO_API_TOKEN || "",
-      ...(process.env.CALENDLY_MARKETING_DEMO_API_TOKENS || "").split(","),
-    ].map((value) => value.trim()).filter(Boolean),
-  ));
-  if (!tokens.length) {
-    // No credentials means there is no reliable source to reconcile bookings.
-    return;
-  }
+  const connections = await getSalespersonCalendlyConnections();
+  if (!connections.length) return;
   inFlight = true;
   try {
     const awaiting = (await readDemoBookings({})).filter(
@@ -39,10 +30,17 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
     if (!awaiting.length) return;
     const minStartTime = new Date(Date.now() - 14 * 86400000).toISOString();
     const maxStartTime = new Date(Date.now() + 365 * 86400000).toISOString();
-    for (const token of tokens) {
+    for (const connection of connections) {
+      const token = connection.token;
+      const assigned = awaiting.filter((b) => b.salespersonId === connection.salespersonId);
+      if (!assigned.length) continue;
       try {
         const me = await calendlyGetCurrentUser(token);
         const user = me.data?.resource?.uri;
+        if (connection.calendlyUserUri && user !== connection.calendlyUserUri) {
+          console.warn(TAG, "Calendly account mismatch", { salespersonId: connection.salespersonId });
+          continue;
+        }
         if (!me.ok || !user) {
           console.warn(TAG, "Calendly user lookup failed", { status: me.status });
           continue;
@@ -73,7 +71,7 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
                 if (!invitee.email || invitee.status === "canceled" || invitee.cancellation) continue;
                 const email = invitee.email.trim().toLowerCase();
                 const tracking = invitee.tracking || {};
-                if (!eligibleMarketingDemoBooking(awaiting, email, tracking)) continue;
+                if (!eligibleMarketingDemoBooking(assigned, email, tracking)) continue;
                 await processMarketingDemoCalendlyPayload({
                   event: "invitee.created",
                   payload: {
