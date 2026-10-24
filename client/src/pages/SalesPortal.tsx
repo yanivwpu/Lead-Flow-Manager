@@ -503,6 +503,19 @@ export function SalesPortal() {
     onSuccess: invalidateDemoQueries,
   });
 
+  const markNoShow = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/sales-portal/demos/${id}/no-show`, { method: "PATCH", credentials: "include" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Unable to mark no-show");
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateDemoQueries();
+      toast({ title: "No-show recorded", description: "Contact the prospect to arrange a new Calendly appointment." });
+    },
+    onError: (err: Error) => toast({ title: "No-show not saved", description: err.message, variant: "destructive" }),
+  });
+
   const markSetupComplete = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/sales-portal/setup-tasks/${id}/complete`, { method: 'PATCH', credentials: 'include' });
@@ -527,6 +540,7 @@ export function SalesPortal() {
   const pendingAcceptanceDemos = demos.filter((d) => isDemoAwaitingAcceptance(d.status));
   const upcomingDemos = demos.filter((d) => isDemoUpcoming(d.status));
   const completedDemos = demos.filter((d) => isDemoCompleted(d.status));
+  const noShowDemos = demos.filter((d) => d.status === "no_show");
   const pendingSetup = setupTasks.filter(t => t.status !== 'setup_completed');
   const completedSetup = setupTasks.filter(t => t.status === 'setup_completed');
 
@@ -797,6 +811,10 @@ export function SalesPortal() {
               <Calendar className="h-4 w-4" />
               Upcoming Demos ({upcomingDemos.length})
             </TabsTrigger>
+            <TabsTrigger value="no-shows" className="gap-2">
+              <XCircle className="h-4 w-4" />
+              No-shows ({noShowDemos.length})
+            </TabsTrigger>
             <TabsTrigger value="completed" className="gap-2">
               <CheckCircle className="h-4 w-4" />
               Completed Demos ({completedDemos.length})
@@ -906,6 +924,12 @@ export function SalesPortal() {
                     <div key={demo.id} className="p-4 hover:bg-gray-50">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <DemoContactBlock demo={demo} />
+                        <div className="flex flex-wrap gap-2 items-center">
+                        {demo.scheduledDate && new Date(demo.scheduledDate).getTime() <= Date.now() && (
+                          <Button variant="outline" disabled={markNoShow.isPending} onClick={() => {
+                            if (window.confirm("Confirm the prospect did not attend this demo? This records a no-show; you can contact them to reschedule.")) markNoShow.mutate(demo.id);
+                          }}>Mark No-show</Button>
+                        )}
                         <Button
                           onClick={() => markComplete.mutate(demo.id)}
                           disabled={markComplete.isPending}
@@ -920,11 +944,22 @@ export function SalesPortal() {
                             </>
                           )}
                         </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="no-shows">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+              <h2 className="font-semibold">No-shows</h2>
+              <p className="text-sm text-gray-500">Contact the prospect to coordinate a new time. No message is sent automatically.</p>
+              {noShowDemos.length === 0 ? <p className="text-sm text-gray-500">No no-shows recorded.</p> : noShowDemos.map(demo => (
+                <div key={demo.id} className="border-t pt-3"><DemoContactBlock demo={demo} /></div>
+              ))}
             </div>
           </TabsContent>
 
