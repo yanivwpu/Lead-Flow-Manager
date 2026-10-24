@@ -1,5 +1,5 @@
 import { ContactSuppressionStatus } from "@/components/ContactSuppressionStatus";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useRoute, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Contact, ContactNote } from "@shared/schema";
@@ -44,6 +44,7 @@ export function ContactDetails() {
 
 function ContactDetailsContent({ id }: { id: string | undefined }) {
   const search = useSearch();
+  const selectedShopifyOrder = new URLSearchParams(search).get("shopifyOrderEvent");
   const { user } = useAuth();
   const path = `/api/contacts/${encodeURIComponent(id || "")}`;
   const cache = useQueryClient();
@@ -57,6 +58,18 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
   const notes = useQuery<ContactNote[]>({ queryKey: withUserQueryScope([`${path}/notes`], user?.id), queryFn: () => request(`${path}/notes`), enabled: Boolean(details.data && user && !details.isError), retry: false });
   const team = useQuery<Array<{ id: string; memberId?: string; name: string; status: string }>>({ queryKey: withUserQueryScope(["/api/team"], user?.id), queryFn: () => request("/api/team"), enabled: Boolean(details.data && user && !details.isError), retry: false });
   const appointments = useQuery<Array<{ id: string; title: string; appointmentType: string; appointmentDate: string; status: string }>>({ queryKey: withUserQueryScope([`${path}/appointments`], user?.id), queryFn: () => request(`${path}/appointments`), enabled: Boolean(details.data && user && !details.isError), retry: false });
+  useEffect(() => {
+    if (!selectedShopifyOrder ||
+        !details.data?.orders.some(order => order.id === selectedShopifyOrder)) return;
+    // After contact ownership and the async order list have loaded, scroll to
+    // the exact Shopify purchase instead of the top of the customer profile.
+    const frame = requestAnimationFrame(() => {
+      const card = document.getElementById(`shopify-order-${selectedShopifyOrder}`);
+      card?.scrollIntoView({ block:"center" });
+      card?.focus({ preventScroll:true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedShopifyOrder, details.data]);
   const save = useMutation({
     mutationFn: (patch: Record<string, string | null>) => request(path, "PATCH", patch, ["name", "email", "phone"].some(field => field in patch) ? editVersion : undefined),
     onSuccess: () => { setEditing(false); setDraft({}); cache.invalidateQueries({ queryKey: key }); cache.invalidateQueries({ queryKey: ["/api/contacts"] }); },
@@ -110,7 +123,8 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
       </section>
       <div className="min-w-0 space-y-4">
         {shopify && <section className={section} aria-label="Shopify purchases"><h2 className="font-semibold">Shopify purchases</h2>{details.data.commerceCustomer && <p className="text-sm">{details.data.commerceCustomer.store || "Store unavailable"}{details.data.commerceCustomer.ordersCount !== null && ` · ${details.data.commerceCustomer.ordersCount} orders`}</p>}<p className="text-xs text-gray-500">Synchronized order history. Status reflects the last stored event.</p>
-          {orders.length === 0 ? <p className="text-sm text-gray-500">No synchronized orders available.</p> : orders.map(order => <article key={order.id} className="border-t pt-3 space-y-1 text-sm break-words"><div className="flex flex-wrap justify-between gap-2"><h3 className="font-medium">{order.number || "Order"}</h3><span>{[order.total, order.currency].filter(Boolean).join(" ") || "Total unavailable"}</span></div><p className="text-gray-500">{order.store || "Store unavailable"} · {date(order.createdAt)}</p><ul className="list-inside list-disc">{order.products.map((product, index) => <li key={index}>{product.name}{product.quantity !== null && ` × ${product.quantity}`}</li>)}</ul><p>Payment: {order.paymentStatus || "Unavailable"} · Fulfillment: {order.fulfillmentStatus || "Unavailable"}</p></article>)}
+          {orders.length === 0 ? <p className="text-sm text-gray-500">No synchronized orders available.</p> : orders.map(order => <article key={order.id} id={`shopify-order-${order.id}`} tabIndex={-1}
+            className={`border-t pt-3 space-y-1 text-sm break-words rounded-sm outline-none ${selectedShopifyOrder === order.id ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}><div className="flex flex-wrap justify-between gap-2"><h3 className="font-medium">{order.number || "Order"}</h3><span>{[order.total, order.currency].filter(Boolean).join(" ") || "Total unavailable"}</span></div><p className="text-gray-500">{order.store || "Store unavailable"} · {date(order.createdAt)}</p><ul className="list-inside list-disc">{order.products.map((product, index) => <li key={index}>{product.name}{product.quantity !== null && ` × ${product.quantity}`}</li>)}</ul><p>Payment: {order.paymentStatus || "Unavailable"} · Fulfillment: {order.fulfillmentStatus || "Unavailable"}</p></article>)}
         </section>}
         <section className={section} aria-label="CRM notes"><h2 className="font-semibold">CRM notes</h2>
           {notes.isError ? <p role="alert">Notes could not be loaded.</p> : notes.isPending ? <p>Loading notes…</p> : !notes.data?.length ? <p className="text-sm text-gray-500">No notes yet.</p> : notes.data.map(item => <article key={item.id} className="border-t pt-2 text-sm"><p className="whitespace-pre-wrap break-words">{item.content}</p><p className="text-xs text-gray-500">{item.createdByName} · {date(item.createdAt)}</p></article>)}

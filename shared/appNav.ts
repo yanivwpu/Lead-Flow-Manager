@@ -31,6 +31,7 @@ export const APP_NAV_ITEM_IDS = [
   "aiBrain",
   "prospectAi",
   "realtorGrowthEngine",
+  "ecommerceGrowthEngine",
   "settings",
   "integrations",
   "gettingStarted",
@@ -72,6 +73,7 @@ export const APP_NAV_LABEL_KEYS: Record<AppNavSectionId | AppNavItemId, string> 
   aiBrain: "nav.aiBrain",
   prospectAi: "nav.prospectAi",
   realtorGrowthEngine: "nav.realtorGrowthEngine",
+  ecommerceGrowthEngine: "nav.ecommerceGrowthEngine",
   settings: "nav.settings",
   integrations: "nav.integrations",
   gettingStarted: "nav.gettingStarted",
@@ -97,6 +99,7 @@ export const APP_NAV_LABEL_DEFAULTS: Record<AppNavSectionId | AppNavItemId, stri
   aiBrain: "AI Brain",
   prospectAi: "Prospect AI",
   realtorGrowthEngine: "Realtor Growth Engine",
+  ecommerceGrowthEngine: "E-Commerce Growth Engine",
   settings: "Settings",
   integrations: "Integrations",
   gettingStarted: "Getting Started",
@@ -117,6 +120,7 @@ export const APP_NAV_HREFS: Record<AppNavItemId, string> = {
   aiBrain: "/app/ai-brain",
   prospectAi: "/app/prospect-ai",
   realtorGrowthEngine: RGE_TEMPLATE_DETAIL_PATH,
+  ecommerceGrowthEngine: "/app/ecommerce-growth-engine",
   settings: "/app/settings",
   integrations: "/app/integrations",
   gettingStarted: "/user-guide",
@@ -139,6 +143,7 @@ export const APP_NAV_SIDEBAR_TEST_IDS: Record<AppNavItemId, string> = {
   aiBrain: "sidebar-ai-brain",
   prospectAi: "sidebar-prospect-ai",
   realtorGrowthEngine: "sidebar-realtor-growth-engine",
+  ecommerceGrowthEngine: "sidebar-ecommerce-growth-engine",
   settings: "sidebar-settings",
   integrations: "sidebar-integrations",
   gettingStarted: "sidebar-getting-started",
@@ -159,6 +164,7 @@ export const APP_NAV_MOBILE_TEST_IDS: Record<AppNavItemId, string> = {
   aiBrain: "ai-brain",
   prospectAi: "prospect-ai",
   realtorGrowthEngine: "realtor-growth-engine",
+  ecommerceGrowthEngine: "ecommerce-growth-engine",
   settings: "settings",
   integrations: "integrations",
   gettingStarted: "getting-started",
@@ -166,6 +172,7 @@ export const APP_NAV_MOBILE_TEST_IDS: Record<AppNavItemId, string> = {
 };
 
 export type AppNavVisibilityFlags = {
+  ecommercePilotEnabled?: boolean;
   hasPresetCampaigns: boolean;
   prospectAiActivated: boolean;
   realtorGrowthEngineActivated: boolean;
@@ -186,6 +193,7 @@ export function resolveAppNavSections(flags: AppNavVisibilityFlags): ResolvedApp
     "aiBrain",
   ];
   const growth: AppNavItemId[] = [
+    ...(flags.ecommercePilotEnabled ? (["ecommerceGrowthEngine"] as const) : []),
     ...(flags.prospectAiActivated ? (["prospectAi"] as const) : []),
     ...(flags.realtorGrowthEngineActivated ? (["realtorGrowthEngine"] as const) : []),
   ];

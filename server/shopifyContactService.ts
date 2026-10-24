@@ -1,5 +1,6 @@
 import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { isEarlyShopifyUninstall } from "@shared/shopifyOnboarding";
+import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryUninstallQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { logShopifyActivation } from "./shopifyActivationTelemetry";
 import { captureShopifyOwnerEmail } from "./shopifyContactCapture";
 import { shopifyContactCaptureLog } from "@shared/shopifyContactPrivacy";
@@ -118,12 +119,23 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
       logShopifyActivation(shop, "early_uninstall", { source: "webhook" });
     }
     await cleanupShopifyCatalog(tx as any, shop, false);
+    // Prevent uninstall/reinstall from silently restoring recovery consent.
+    const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
+    for(const statement of recoveryUninstallQueries(user.id,shop,
+      parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
     await tx.update(users).set({
       shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
       shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",
     }).where(eq(users.id, user.id));
     await tx.update(integrations).set({ isActive: false, accessToken: null, refreshToken: null, tokenExpiresAt: null })
       .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify")));
+    // Never carry order-task merchant opt-in across uninstall/reinstall. The
+    // staging-only task migration may not exist yet; no production dependency.
+    const existingTaskSettings = await tx.execute(sql`SELECT to_regclass('public.ecommerce_growth_order_task_settings')::text AS settings`);
+    if (typeof existingTaskSettings.rows[0]?.settings === 'string') {
+      await tx.execute(sql`DELETE FROM ecommerce_growth_order_task_settings
+        WHERE account_id = ${user.id} AND shop = ${shop}`);
+    }
   });
 }
 

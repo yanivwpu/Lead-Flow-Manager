@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, createCipheriv } from "node:crypto";
+import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryCustomerErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users, contacts, conversations, chats, workflowExecutions, workflows, flowJobs, webhooks, webhookDeliveries, activityEvents, messages, shopifyPrivacyErasureTasks, shopifyPrivacyCustomerLocks } from "@shared/schema";
@@ -103,6 +104,24 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
       return customerIdentityTokens({ email: c.email, phone: c.phone }).some(token => tokens.includes(token));
     });
     const ids = found.map(c => c.id);
+    // Verified Shopify customer/redact must also purge recovery opt-in evidence
+    // and any queued/uncertain provider state for the matched customer.
+    const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
+    const exactShopifyIds=tokens.filter(token => /^id:[1-9][0-9]{0,19}$/.test(token))
+      .map(token => token.slice(3));
+    for(const statement of recoveryCustomerErasureQueries({
+      accountId:user.id,shop,contactIds:ids,shopifyCustomerIds:exactShopifyIds
+    },parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+
+    // Purge internal order-support tasks for redacted contacts even when the
+    // CRM contact is retained and anonymized. The migration is optional.
+    if (ids.length) {
+      const taskTable = await tx.execute(sql`SELECT to_regclass('public.ecommerce_growth_order_support_tasks')::text AS tasks`);
+      if (typeof taskTable.rows[0]?.tasks === 'string')
+        await tx.execute(sql`DELETE FROM ecommerce_growth_order_support_tasks
+          WHERE account_id = ${user.id} AND shop = ${shop}
+          AND contact_id IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
+    }
     const threads = ids.length ? (await tx.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.userId, user.id), inArray(conversations.contactId, ids)))).map(c => c.id) : [];
     if (threads.length) {
       await tx.delete(flowJobs).where(and(eq(flowJobs.userId, user.id), inArray(flowJobs.conversationId, threads)));

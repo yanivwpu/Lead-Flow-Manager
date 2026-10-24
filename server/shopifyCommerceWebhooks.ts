@@ -1,4 +1,8 @@
-import { eq } from "drizzle-orm";
+import { classifyCommerceWebhook } from "./ecommerce/eventIntake";
+import { orderSupportTaskInsertQuery } from "./ecommerce/orderSupportTaskQueue";
+import { orderSupportQuickStartAvailable } from "./ecommerce/orderSupportQuickStart";
+import { canRecordEcommercePilot } from "./ecommerce/pilotMiddleware";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -146,6 +150,38 @@ async function ingestShopifyOrderCreate(
     },
   });
   if (!result.ok) throw new Error("Order persistence failed");
+  // Disabled by default; existing contact/order ingestion remains authoritative.
+  // This is only called from the existing HMAC-verified /webhooks/orders-create route.
+  // No customer details, payloads, or outgoing messages enter the event inbox.
+  if (process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === "true" &&
+      await canRecordEcommercePilot(merchant.userId)) {
+    const decision = classifyCommerceWebhook({
+      verified: true,
+      accountId: merchant.userId,
+      shopDomain: shop,
+      topic: "orders/create",
+      webhookId: shopifyEventId(req, ""),
+    });
+    if (decision.status === "candidate") {
+      const [account, canonicalShop, topic, delivery] = JSON.parse(decision.dedupeKey) as string[];
+      await db.execute(sql`INSERT INTO ecommerce_growth_event_inbox
+        (account_id,shop,topic,delivery_id,journey,state)
+        VALUES (${account},${canonicalShop},${topic},${delivery},${decision.journey},'pending')
+        ON CONFLICT (account_id,shop,topic,delivery_id) DO NOTHING`);
+      // Only HMAC-verified, owned, recorded orders with explicit merchant opt-in
+      // can create one internal CRM-linked support task. No sender is imported.
+      if (orderSupportQuickStartAvailable(process.env) && result.contactId) {
+        const taskQuery = orderSupportTaskInsertQuery({
+          accountId: merchant.userId,
+          canonicalShop,
+          deliveryId: delivery,
+          contactId: result.contactId,
+        });
+        if (taskQuery) await db.execute(taskQuery);
+      }
+    }
+  }
+
 }
 
 export async function processShopifyOrderCreate(req: Pick<Request, "headers">, shop: string, body: ShopifyOrderPayload): Promise<void> {

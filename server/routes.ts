@@ -226,6 +226,8 @@ import {
 import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from "./salespersonTaskPayout";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
+import ecommercePilotRoutes from "./ecommercePilotRoutes";
+import { requireEcommercePilot } from "./ecommerce/pilotMiddleware";
 import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
@@ -547,6 +549,8 @@ export async function registerRoutes(
   registerObjectStorageRoutes(app);
 
   // Shopify integration routes
+  app.use('/api/shopify/ecommerce', ecommercePilotRoutes);
+  app.use(['/ecommerce-growth-engine', '/app/ecommerce-growth-engine'], requireEcommercePilot);
   app.use('/api/shopify', shopifyRoutes);
 
   // LeadConnector integration routes
