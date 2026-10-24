@@ -219,6 +219,11 @@ export function serveStatic(app: Express) {
         let enhancedHtml = injectSeoMeta(html, `/blog/${slug}`);
         enhancedHtml = removeStaticShellFromHtml(enhancedHtml);
         const ssrContent = generateBlogPostHtml(slug);
+        if (!ssrContent) {
+          // An unknown blog slug must not return a successful SPA shell.
+          // A genuine 404 avoids Google's soft-404 classification.
+          return sendNotFoundSpaShell(res, indexPath);
+        }
         if (ssrContent) {
           enhancedHtml = enhancedHtml.replace(
             '<div id="root"></div>',
