@@ -24,6 +24,11 @@ describe("Calendly Free marketing demo reconciliation", () => {
     assert.equal(eligibleMarketingDemoBooking([booking, { ...booking, id: "another-id" }], "william@example.com", marketing), false);
   });
 
+  it("does not import another salesperson\u0027s bookings when checking assigned subset", () => {
+    const anotherSalespersonBookings = [{ ...booking, id: "someone-else", visitorEmail: "other@example.com" }];
+    assert.equal(eligibleMarketingDemoBooking(anotherSalespersonBookings, "william@example.com", { utm_medium: "marketing_demo", utm_content: id }), false);
+  });
+
   it("does not match an already accepted or completed booking", () => {
     assert.equal(eligibleMarketingDemoBooking([{ ...booking, status: "accepted" }], "william@example.com", { utm_medium: "marketing_demo" }), false);
   });
