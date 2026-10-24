@@ -40,6 +40,25 @@ function isAutopilotDraftEligible(row:OpenRow,minConfidence=SEO_AUTOPILOT_CONFID
   if(row.action_type==="meta_description")return Boolean(proposal.proposedMetaDescription);
   return supportsSeoContentRoute(row.target_page)&&Boolean(proposal.proposedContent)&&proposal.factValidationStatus==="passed";
 }
+export type SeoAutopilotEligibilityReason="eligible"|"already_in_pipeline"|"unsupported_action"|"high_risk"|"stale"|"below_confidence"|"invalid_proposal"|"missing_verified_content";
+export function seoAutopilotEligibilityReason(row:OpenRow,minConfidence=SEO_AUTOPILOT_CONFIDENCE_DEFAULT):SeoAutopilotEligibilityReason{
+  if(row.status!=="proposed")return "already_in_pipeline";
+  if(!["meta_description","content_expansion"].includes(row.action_type))return "unsupported_action";
+  if(row.risk==="high")return "high_risk";
+  if(row.stale_at)return "stale";
+  if(Number(row.confidence)<minConfidence)return "below_confidence";
+  let proposal;
+  try{proposal=validateRecommendationOutput(row.proposal);}catch{return "invalid_proposal";}
+  if(proposal.actionType!==row.action_type||proposal.risk==="high"||!proposal.generatedAt)return "invalid_proposal";
+  if(row.action_type==="meta_description")return proposal.proposedMetaDescription?"eligible":"missing_verified_content";
+  return supportsSeoContentRoute(row.target_page)&&proposal.proposedContent&&proposal.factValidationStatus==="passed"?"eligible":"missing_verified_content";
+}
+export function seoAutopilotEligibilityCounts(rows:OpenRow[],minConfidence=SEO_AUTOPILOT_CONFIDENCE_DEFAULT){
+  const counts:Record<SeoAutopilotEligibilityReason,number>={eligible:0,already_in_pipeline:0,unsupported_action:0,high_risk:0,stale:0,below_confidence:0,invalid_proposal:0,missing_verified_content:0};
+  for(const row of rows)counts[seoAutopilotEligibilityReason(row,minConfidence)]++;
+  return counts;
+}
+
 export function isSeoAutopilotPublishEligible(row:OpenRow,minConfidence=SEO_AUTOPILOT_CONFIDENCE_DEFAULT){
   return row.status==="proposed"&&isAutopilotDraftEligible(row,minConfidence);
 }
@@ -103,6 +122,7 @@ export async function runSeoAutopilot(actor="seo-autopilot"){
   }
 
   rows=await loadOpenRows();
+  const eligibility=seoAutopilotEligibilityCounts(rows,config.minConfidence);
   let approved=0,publicationQueued=0,publishFailed=0;
   for(const row of rows.filter(item=>isSeoAutopilotPublishEligible(item,config.minConfidence)).slice(0,config.maxPublish)){
     try{
@@ -120,7 +140,7 @@ export async function runSeoAutopilot(actor="seo-autopilot"){
     try{await requestSeoPublication(row.id,actor);publicationQueued++;}catch{publishFailed++;}
   }
   if(publicationQueued>0)wakeSeoGithubExecutionWorker();
-  const result={retired,refreshed,refreshFailed,approved,publicationQueued,publishFailed,minConfidence:config.minConfidence};
+  const result={retired,refreshed,refreshFailed,approved,publicationQueued,publishFailed,minConfidence:config.minConfidence,eligibility};
   console.info("[SEO Autopilot] cycle complete",result);
   return result;
   }finally{
