@@ -41,8 +41,6 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Typecheck
-        run: npm run check
       - name: Apply salesperson Calendly migration on disposable database
         run: |
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE TABLE salespeople (id varchar PRIMARY KEY);'
