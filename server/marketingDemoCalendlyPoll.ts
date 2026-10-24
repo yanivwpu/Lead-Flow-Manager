@@ -8,16 +8,81 @@ import {
   calendlyGetCurrentUser,
   calendlyListScheduledEvents,
   calendlyListEventInvitees,
+  calendlyGetEventInvitee,
+  calendlyGetScheduledEvent,
+  type CalendlyScheduledEventResource,
 } from "./calendlyApi";
 import { processMarketingDemoCalendlyPayload } from "./marketingDemoCalendlyWebhook";
 import { readDemoBookings } from "./demoBookingStorage";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
 import { eligibleMarketingDemoBooking } from "@shared/marketingDemoCalendlyReconciliation";
 import { resolveMarketingDemoBookingIdFromTracking } from "@shared/marketingDemoCalendly";
+import { db } from "../drizzle/db";
+import { demoBookings } from "@shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { getSalespersonCalendlyConnections } from "./salespersonCalendlyConnections";
 
 const TAG = "[MarketingDemoCalendlyPoll]";
 let inFlight = false;
+
+/** Verify the exact invitee URI already recorded for this salesperson and booking.
+ * Never infer cancellation from absence in an events list or from matching an email alone. */
+async function reconcileScheduledDemo(token: string, booking: {
+  id: string; salespersonId: string | null; visitorEmail: string;
+  status: string; calendlyInviteeUri: string | null;
+  calendlyScheduledEventUri: string | null;
+}): Promise<"unchanged" | "canceled" | "rescheduled"> {
+  if (!booking.calendlyInviteeUri || !booking.calendlyScheduledEventUri || !booking.salespersonId) return "unchanged";
+  const existing = await calendlyGetEventInvitee(token, booking.calendlyInviteeUri);
+  if (!existing.ok || !existing.data.resource) return "unchanged";
+  const old = existing.data.resource;
+  if (!old.email || old.email.trim().toLowerCase() !== booking.visitorEmail.trim().toLowerCase()) return "unchanged";
+  if (old.status !== "canceled" && !old.cancellation) return "unchanged";
+
+  // Calendly marks the original invitee canceled during rescheduling.
+  // Only migrate a booking after the replacement invitee and event are verified.
+  const newInviteeUri = typeof (old as any).new_invitee === "string" ? (old as any).new_invitee : "";
+  if (newInviteeUri) {
+    const next = await calendlyGetEventInvitee(token, newInviteeUri);
+    if (!next.ok || !next.data.resource) return "unchanged";
+    const invitee = next.data.resource;
+    if (invitee.status !== "active" || invitee.email?.trim().toLowerCase() !== booking.visitorEmail.trim().toLowerCase()) return "unchanged";
+    const match = newInviteeUri.match(/^(https:\/\/api\.calendly\.com\/scheduled_events\/[a-zA-Z0-9-]+)\/invitees\/[a-zA-Z0-9-]+$/);
+    if (!match) return "unchanged";
+    const nextEvent = await calendlyGetScheduledEvent(token, match[1]);
+    const event = nextEvent.data.resource as CalendlyScheduledEventResource | undefined;
+    if (!nextEvent.ok || !event?.start_time || event.status === "canceled" || !event.uri) return "unchanged";
+    const start = new Date(event.start_time);
+    if (Number.isNaN(start.getTime())) return "unchanged";
+    const location = event.location || {};
+    const meetingUrl = typeof location.join_url === "string" ? location.join_url : null;
+    const result = await db.update(demoBookings).set({
+      calendlyInviteeUri: newInviteeUri,
+      calendlyScheduledEventUri: event.uri,
+      scheduledDate: start,
+      meetingLink: meetingUrl,
+      calendlyPayload: { lifecycle: "rescheduled", priorInviteeUri: booking.calendlyInviteeUri, priorScheduledEventUri: booking.calendlyScheduledEventUri, updatedAt: new Date().toISOString() },
+    }).where(and(
+      eq(demoBookings.id, booking.id),
+      eq(demoBookings.salespersonId, booking.salespersonId),
+      eq(demoBookings.calendlyInviteeUri, booking.calendlyInviteeUri),
+      inArray(demoBookings.status, [DEMO_BOOKING_STATUS.accepted, DEMO_BOOKING_STATUS.pendingAcceptance]),
+    )).returning({ id: demoBookings.id });
+    return result.length ? "rescheduled" : "unchanged";
+  }
+  if ((old as any).rescheduled === true) return "unchanged";
+  const result = await db.update(demoBookings).set({
+    status: DEMO_BOOKING_STATUS.cancelled,
+    calendlyPayload: { lifecycle: "canceled", priorInviteeUri: booking.calendlyInviteeUri, updatedAt: new Date().toISOString() },
+  }).where(and(
+    eq(demoBookings.id, booking.id),
+    eq(demoBookings.salespersonId, booking.salespersonId),
+    eq(demoBookings.calendlyInviteeUri, booking.calendlyInviteeUri),
+    inArray(demoBookings.status, [DEMO_BOOKING_STATUS.accepted, DEMO_BOOKING_STATUS.pendingAcceptance]),
+  )).returning({ id: demoBookings.id });
+  return result.length ? "canceled" : "unchanged";
+}
+
 
 export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
   if (inFlight) return;
@@ -25,10 +90,13 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
   if (!connections.length) return;
   inFlight = true;
   try {
-    const awaiting = (await readDemoBookings({})).filter(
-      (booking) => booking.status === DEMO_BOOKING_STATUS.awaitingSchedule,
-    );
-    if (!awaiting.length) {
+    const allDemos = await readDemoBookings({});
+    const awaiting = allDemos.filter((booking) => booking.status === DEMO_BOOKING_STATUS.awaitingSchedule);
+    const active = allDemos.filter((booking) => (
+      [DEMO_BOOKING_STATUS.accepted, DEMO_BOOKING_STATUS.pendingAcceptance].includes(booking.status as any)
+      && Boolean(booking.calendlyInviteeUri)
+    ));
+    if (!awaiting.length && !active.length) {
       console.info(TAG, "No awaiting-schedule demo requests", { connectedSalespeople: connections.length });
       return;
     }
@@ -37,10 +105,8 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
     for (const connection of connections) {
       const token = connection.token;
       const assigned = awaiting.filter((b) => b.salespersonId === connection.salespersonId);
-      if (!assigned.length) {
-        console.info(TAG, "No assigned awaiting demos", { salespersonId: connection.salespersonId });
-        continue;
-      }
+      const scheduled = active.filter(b => b.salespersonId === connection.salespersonId);
+      if (!assigned.length && !scheduled.length) continue;
       let eventsScanned = 0;
       let inviteesScanned = 0;
       let missingTrackingId = 0;
@@ -56,6 +122,15 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
           console.warn(TAG, "Calendly user lookup failed", { status: me.status });
           continue;
         }
+        for (const booking of scheduled) {
+          try {
+            const result = await reconcileScheduledDemo(token, booking);
+            if (result !== "unchanged") console.info(TAG, "Lifecycle changed", { salespersonId: connection.salespersonId, bookingId: booking.id, result });
+          } catch (error) {
+            console.warn(TAG, "Lifecycle lookup failed", { salespersonId: connection.salespersonId, bookingId: booking.id, reason: error instanceof Error ? error.name : "unknown" });
+          }
+        }
+        if (!assigned.length) continue;
         let pageToken: string | undefined;
         for (let page = 0; page < 50; page++) {
           const events = await calendlyListScheduledEvents(token, {

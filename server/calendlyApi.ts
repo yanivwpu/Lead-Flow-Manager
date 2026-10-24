@@ -259,3 +259,17 @@ export async function calendlyListEventInvitees(
     message?: string;
   }>(`/scheduled_events/${uuid}/invitees?${search.toString()}`, token);
 }
+
+/** Free-plan-safe, read-only lookups used for exact-URI demo lifecycle reconciliation. */
+export async function calendlyGetEventInvitee(token: string, inviteeUri: string) {
+  const parts = inviteeUri.match(/^https:\/\/api\.calendly\.com\/scheduled_events\/([a-zA-Z0-9-]+)\/invitees\/([a-zA-Z0-9-]+)$/);
+  if (!parts) return { ok: false, status: 0, data: {} as { resource?: CalendlyEventInviteeResource }, rawBody: "" };
+  return calendlyJson<{ resource?: CalendlyEventInviteeResource }>(
+    `/scheduled_events/${parts[1]}/invitees/${parts[2]}`, token
+  );
+}
+export async function calendlyGetScheduledEvent(token: string, eventUri: string) {
+  const parts = eventUri.match(/^https:\/\/api\.calendly\.com\/scheduled_events\/([a-zA-Z0-9-]+)$/);
+  if (!parts) return { ok: false, status: 0, data: {} as { resource?: CalendlyScheduledEventResource }, rawBody: "" };
+  return calendlyJson<{ resource?: CalendlyScheduledEventResource }>(`/scheduled_events/${parts[1]}`, token);
+}

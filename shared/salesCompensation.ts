@@ -15,6 +15,7 @@ export const DEMO_BOOKING_STATUS = {
   completed: "completed",
   converted: "converted",
   cancelled: "cancelled",
+  noShow: "no_show",
   needsReassignment: "needs_reassignment",
 } as const;
 
@@ -126,6 +127,8 @@ export function demoStatusLabel(status: string): string {
       return "Converted";
     case DEMO_BOOKING_STATUS.cancelled:
       return "Cancelled";
+    case DEMO_BOOKING_STATUS.noShow:
+      return "No-show";
     case DEMO_BOOKING_STATUS.needsReassignment:
       return "Needs Reassignment";
     default:
