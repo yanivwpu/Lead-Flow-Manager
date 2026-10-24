@@ -10,6 +10,7 @@ import {
   calendlyListEventInvitees,
   calendlyGetEventInvitee,
   calendlyGetScheduledEvent,
+  type CalendlyScheduledEventResource,
 } from "./calendlyApi";
 import { processMarketingDemoCalendlyPayload } from "./marketingDemoCalendlyWebhook";
 import { readDemoBookings } from "./demoBookingStorage";
