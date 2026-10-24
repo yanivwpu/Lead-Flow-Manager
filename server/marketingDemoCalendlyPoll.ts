@@ -14,7 +14,7 @@ import {
 import { processMarketingDemoCalendlyPayload } from "./marketingDemoCalendlyWebhook";
 import { readDemoBookings } from "./demoBookingStorage";
 import { DEMO_BOOKING_STATUS } from "@shared/salesCompensation";
-import { resolveMarketingDemoBookingIdFromTracking } from "@shared/marketingDemoCalendly";
+import { resolveMarketingDemoBookingIdFromTracking, isMarketingDemoCalendlyTracking } from "@shared/marketingDemoCalendly";
 
 const TAG = "[MarketingDemoCalendlyPoll]";
 let inFlight = false;
@@ -78,7 +78,8 @@ export async function pollMarketingDemoCalendlyBookings(): Promise<void> {
                 // The webhook processor independently enforces exact-ID/email checks.
                 const eligible = trackedBookingId
                   ? awaiting.some((b) => b.id === trackedBookingId && b.visitorEmail.trim().toLowerCase() === email)
-                  : awaiting.filter((b) => b.visitorEmail.trim().toLowerCase() === email).length === 1;
+                  : isMarketingDemoCalendlyTracking(tracking) &&
+                    awaiting.filter((b) => b.visitorEmail.trim().toLowerCase() === email).length === 1;
                 if (!eligible) continue;
                 await processMarketingDemoCalendlyPayload({
                   event: "invitee.created",
