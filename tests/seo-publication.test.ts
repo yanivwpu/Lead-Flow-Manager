@@ -9,7 +9,10 @@ import { aggregateSearchMetrics,measurementDates } from "../server/seo/publicati
 import { publishedSeoHtml,seoContentBlocks,supportsSeoContentRoute } from "../shared/seoPublishedContent";
 process.env.DATABASE_URL ||= "postgres://test:test@localhost/test";
 const {db}=await import("../drizzle/db");
-const {requestSeoPublication,runSeoPublicationOnce}=await import("../server/seo/publicationService");
+const {requestSeoPublication,runSeoPublicationOnce,isAbandonedSeoPr}=await import("../server/seo/publicationService");
+assert.equal(isAbandonedSeoPr({state:"closed",merged:false}),true);
+assert.equal(isAbandonedSeoPr({state:"closed",merged:true}),false);
+assert.equal(isAbandonedSeoPr({state:"open",merged:false}),false);
 const {seoAutopilotRefreshEligible}=await import("../server/seo/autopilotService");
 const attemptTime=Date.parse("2026-10-17T15:00:00Z");
 const refreshRow=(status:string,category:string|null,updatedAt:string)=>({status,refresh_failure_category:category,updated_at:updatedAt});
