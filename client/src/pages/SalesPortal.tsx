@@ -541,6 +541,7 @@ export function SalesPortal() {
   const upcomingDemos = demos.filter((d) => isDemoUpcoming(d.status));
   const completedDemos = demos.filter((d) => isDemoCompleted(d.status));
   const noShowDemos = demos.filter((d) => d.status === "no_show");
+  const canceledDemos = demos.filter((d) => d.status === "cancelled");
   const pendingSetup = setupTasks.filter(t => t.status !== 'setup_completed');
   const completedSetup = setupTasks.filter(t => t.status === 'setup_completed');
 
@@ -811,6 +812,10 @@ export function SalesPortal() {
               <Calendar className="h-4 w-4" />
               Upcoming Demos ({upcomingDemos.length})
             </TabsTrigger>
+            <TabsTrigger value="canceled" className="gap-2">
+              <XCircle className="h-4 w-4" />
+              Cancelled ({canceledDemos.length})
+            </TabsTrigger>
             <TabsTrigger value="no-shows" className="gap-2">
               <XCircle className="h-4 w-4" />
               No-shows ({noShowDemos.length})
@@ -950,6 +955,16 @@ export function SalesPortal() {
                   ))}
                 </div>
               )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="canceled">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+              <h2 className="font-semibold">Cancelled demos</h2>
+              <p className="text-sm text-gray-500">Calendly cancellation detected. Contact the prospect before arranging another meeting; no message is sent automatically.</p>
+              {canceledDemos.length === 0 ? <p className="text-sm text-gray-500">No cancelled demos.</p> : canceledDemos.map(demo => (
+                <div key={demo.id} className="border-t pt-3"><DemoContactBlock demo={demo} /></div>
+              ))}
             </div>
           </TabsContent>
 
