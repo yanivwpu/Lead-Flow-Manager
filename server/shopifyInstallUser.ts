@@ -4,8 +4,11 @@ import {
   shopifySyntheticMerchantEmail,
 } from "@shared/shopifyBilling";
 import { storage } from "./storage";
+import { resolveAssignedOwner } from "./shopifyAssignedOwner";
+import { assignedShopifyTarget } from "./shopifyStoreAssignment";
 
 export type ShopifyInstallUserResolution =
+  | "assigned_owner"
   | "shopify_shop"
   | "session_link"
   | "synthetic_email"
@@ -27,6 +30,13 @@ export async function resolveShopifyInstallUser(options: {
   if (!normalizedShop) {
     return { user: undefined, normalizedShop: null, resolution: "invalid_shop" };
   }
+
+  const assigned = await resolveAssignedOwner(normalizedShop, {
+    targetId: assignedShopifyTarget,
+    user: id => storage.getUserForSession(id),
+    shopOwner: shop => storage.getUserByShopifyShop(shop),
+  });
+  if (assigned) return { user: assigned, normalizedShop, resolution: "assigned_owner" };
 
   const byShop = await storage.getUserByShopifyShop(normalizedShop);
   if (byShop) {

@@ -63,7 +63,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Onboarding behavior, HTTP session recovery, and real PostgreSQL atomicity
         run: |
-          npx tsx --test tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts tests/shopify-login-session.test.ts tests/shopify-oauth-navigation.test.tsx
+          npx tsx --test tests/shopify-assigned-owner.test.ts tests/shopify-reassignment-billing.test.ts tests/shopify-trial-first.test.tsx tests/shopify-onboarding-routes.test.ts tests/shopify-login-session.test.ts tests/shopify-oauth-navigation.test.tsx
           npx tsx --test tests/shopify-trial-provisioning-postgres.test.ts
       - name: Staging configuration, identity guard, and idempotent registration
         run: |
