@@ -371,8 +371,8 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/crm-for-whatsapp-business`
   },
   "/zoko-alternative": {
-    title: "Best Zoko Alternative for Shopify | WhachatCRM",
-    description: "Switch from Zoko to WhachatCRM: $49/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers.",
+    title: "Zoko Alternative for Shopify Teams | WhachatCRM",
+    description: "Compare Zoko and WhachatCRM for Shopify conversations, shared inboxes, CRM features, social messaging, and team workflows. See which approach fits.",
     canonical: `${BASE_URL}/zoko-alternative`
   },
   "/manychat-alternative": {
