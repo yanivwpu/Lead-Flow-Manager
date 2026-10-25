@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
 
@@ -16,16 +16,16 @@ test("product discovery excludes generic trailing questions without broadening p
 });
 function fixture() {
  let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
- let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5, entitled=true;
+ let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5 as number|null, tracked=true, entitled=true;
  const config=shoppingSettings({enabled:true,handoffOnFailure:true});
  const product={id:"p1",title:"Snowboard",published:true,status:"ACTIVE",userId:"tenant-a"};
  const variants=[{id:"v1",title:"Ice",options:[{name:"Color",value:"Ice"}]},{id:"v2",title:"Fire",options:[{name:"Color",value:"Fire"}]}];
  const commerce={source:async(id:string)=>id==="tenant-a"?{id:"s1",currency:"USD"}:null,purchaseCandidates:async(_id:string,request:any)=>{assert.equal(request.filters.currency,"USD");return [{...product,variants}];},lookupVariant:async()=>null,
- verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;if(mode==="empty")return [];if(mode==="throw")throw Error("provider_unavailable");return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked:true,inventoryPolicy:"DENY",verifiedAt:new Date(mode==="stale"?clock-120_000:clock)},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
+ verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;if(mode==="empty")return [];if(mode==="throw")throw Error("provider_unavailable");return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked,inventoryPolicy:"DENY",verifiedAt:new Date(mode==="stale"?clock-120_000:clock)},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
  const sessions:ShoppingSessionStore={async withTurn(turn,run){if(turn.userId!=="tenant-a")return null;return run(state,async s=>{state=s;});}};
  const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled,now:()=>clock});
  let event=0;
- return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number)=>quantity=n,config,entitled:(b:boolean)=>entitled=b};
+ return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number|null)=>quantity=n,tracked:(value:boolean)=>tracked=value,config,entitled:(b:boolean)=>entitled=b};
 }
 test("multilingual shopping intent, budget and exact currency/decimal handling",()=>{
  for(const s of ["Show snowboard options","Muéstrame las opciones","אפשרויות של סנובורד"])assert.equal(shoppingIntent(s),"variants");
@@ -133,4 +133,53 @@ test("intentional new searches and budget-only updates replace preferences witho
 test("expired pending-event replays ask for a new search without reverifying or retaining stale choices",async()=>{
  const f=fixture();await f.turn("show snowboard under 750");f.mode("empty");await f.turn("option 1",{eventId:"pending"});f.advance(31*60_000);
  const calls=f.calls(),r=await f.turn("option 1",{eventId:"pending"});assert.match(r!.reply,/repeat your product search/);assert.equal(r!.state.selected,undefined);assert.deepEqual(r!.state.choices,[]);assert.equal(f.calls(),calls);
+});
+
+test("verification follow-ups require a choice, preserve the list, then recheck only the chosen variant without confirmation", async()=>{
+ for(const text of ["Verify inventory for Oxygen", "Verify inventory for 雪", "show another product", "verify option 2 inventory"]) assert.equal(shoppingVerificationFollowup(text),false);
+ const f=fixture();const found=(await f.turn("show snowboard"))!;
+ const first=found.state.choices[0];const calls=f.calls();
+ const clarify=(await f.turn("Verify the current price and available inventory for that exact variant."))!;
+ assert.equal(clarify.state.step,"selecting");
+ assert.match(clarify.reply,/Choose an option by name or number first/);
+ assert.deepEqual(clarify.state.choices,found.state.choices);
+ assert.equal(clarify.state.selected,undefined);
+ assert.equal(f.calls(),calls,"a verification request cannot silently pick from the offered list");
+ let selected=(await f.turn("option 1"))!;
+ assert.equal(selected.state.step,"confirming");
+ assert.equal(selected.state.selected?.variantId,first.variantId);
+ assert.equal(f.calls(),calls+1);
+ f.quantity(3);f.price("710.00");
+ const refreshed=(await f.turn("Verify the current price and available inventory for that exact variant."))!;
+ assert.equal(refreshed.state.selected?.variantId,first.variantId);
+ assert.equal(refreshed.state.selected?.price,"710.00");
+ assert.equal(refreshed.state.selected?.inventoryQuantity,3);
+ assert.match(refreshed.reply,/Tracked stock checked: 3 units; not reserved/);
+ assert.equal(refreshed.state.step,"confirming");
+ assert.equal(refreshed.state.checkout,undefined);
+ f.mode("empty");const pending=(await f.turn("What's its current price?"))!;
+ assert.equal(pending.state.step,"pending");
+ assert.equal(pending.state.selected?.variantId,first.variantId);
+ assert.doesNotMatch(pending.reply,/710|3 units|Tracked stock/);
+ f.mode("live");const retry=(await f.turn("retry"))!;
+ assert.equal(retry.state.step,"confirming");
+ assert.equal(retry.state.selected?.variantId,first.variantId);
+ assert.equal(retry.state.checkout,undefined);
+});
+
+test("only fresh known tracked inventory is reported; unknown counts and untracked stock are not invented",async()=>{
+ const f=fixture();let result=(await f.turn("show snowboard"))!;
+ assert.equal(result.state.choices[0].inventoryQuantity,5);
+ assert.match(result.reply,/Tracked stock checked: 5 units/);
+ for(const n of [null,-1,NaN]) {
+  const g=fixture();g.quantity(n);const unknown=(await g.turn("show snowboard"))!;
+  assert.equal(unknown.state.choices[0]?.inventoryQuantity,undefined);
+  assert.doesNotMatch(unknown.reply,/Tracked stock/);
+ }
+ const untracked=fixture();untracked.tracked(false);result=(await untracked.turn("show snowboard"))!;
+ assert.equal(result.state.choices[0].inventoryQuantity,undefined);
+ assert.doesNotMatch(result.reply,/Tracked stock/);
+ const stale=fixture();stale.mode("stale");result=(await stale.turn("show snowboard"))!;
+ assert.equal(result.state.step,"pending");
+ assert.doesNotMatch(result.reply,/Tracked stock|5 units/);
 });

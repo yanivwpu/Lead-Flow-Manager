@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
+import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -57,6 +58,10 @@ function Console() {
       if (mounted.current) setDiagnostics(undefined);
     }
   }
+  useEffect(() => {
+    if (!open || !chat || !diagnostics) return;
+    return scheduleTestChatCooldownRefresh(diagnostics, () => { void diagnose(chat.id); });
+  }, [open, chat?.id, diagnostics]);
   async function start() {
     setBusy(true);
     setError(false);

@@ -1,7 +1,7 @@
 import { catalogSearchTerms } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
-import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale } from "@shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup } from "@shared/shoppingAssistant";
 export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant">;
 export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
 export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean};
@@ -16,6 +16,11 @@ const SESSION_MS=30*60_000;
 const REPLAY_MS=60_000;
 function safeLabel(s:string) { return s.replace(/https?:\/\/\S+/gi,"").replace(/[\r\n\u0000-\u001f]/g," ").slice(0,180); }
 function line(c:ShoppingChoice) {return `${safeLabel(c.productTitle)} / ${safeLabel(c.variantTitle)} — ${c.currency} ${c.price}`;}
+function inventoryProof(v:ShoppingInventory): Pick<ShoppingChoice,"inventoryQuantity"> {
+ return v.variant.tracked === true && Number.isSafeInteger(v.variant.quantity) && v.variant.quantity! >= 0
+   ? {inventoryQuantity:v.variant.quantity!} : {};
+}
+function stockNote(c:ShoppingChoice,template:string) {return c.inventoryQuantity===undefined?"":`\n${template.replace("{quantity}",String(c.inventoryQuantity))}`;}
 function options(raw:unknown):ShoppingChoice["options"] {return Array.isArray(raw)?raw.filter(o=>typeof o?.name==="string"&&typeof o?.value==="string").map(o=>({name:o.name,value:o.value})):[];}
 export function createShoppingService(deps:{commerce:CommerceShoppingProvider; sessions:ShoppingSessionStore; settings:(userId:string)=>Promise<ShoppingSettings>; entitled:(userId:string)=>Promise<boolean>; checkout?: ShoppingCheckout; checkoutPreview?: boolean; now?:()=>number}) {
  const now=deps.now??Date.now;
@@ -25,7 +30,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
-   const requestedIntent=shoppingIntent(turn.text);
+   const verificationFollowup=shoppingVerificationFollowup(turn.text);
+   const requestedIntent=verificationFollowup?"availability":shoppingIntent(turn.text);
    const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
    const intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
    const expired=stored && (stamp-new Date(stored.updatedAt).getTime()>SESSION_MS || !Number.isFinite(new Date(stored.updatedAt).getTime()));
@@ -92,9 +98,13 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    // Never turn an orphaned list reference (including a bare number) into a catalog query.
    const needsPriorSearch=["confirm","retry"].includes(requestedIntent) || (["variants","availability","compare"].includes(requestedIntent) && !hasProductQuery);
    if(!previous && (numberedSelection!==undefined || needsPriorSearch)) return finish(copy.repeatSearch,"discovering");
+   if(verificationFollowup && !previous) return finish(copy.repeatSearch,"discovering");
    if(numberedSelection!==undefined && !state.choices[numberedSelection-1]) return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(!source.currency) return pending(state.selected?"select":"discover");
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
+   // A request to verify "that exact variant" is not permission to pick one.
+   // Preserve the offered list until the customer explicitly chooses an option.
+   if(verificationFollowup && !state.selected && state.choices.length) return clarify(copy.chooseBeforeVerify);
    const quantity=turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*(\d+)/iu);
    if(quantity) {
     const n=Number(quantity[1]);
@@ -102,9 +112,9 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     state.quantity=n;
    }
    const chosen=quantity || intent==="search"?undefined:matchShoppingChoice(turn.text,state.choices);
-   const selection=chosen??((intent==="confirm"||quantity||(retryTurn && (stored?.pending?stored.pending.action==="select":!!state.selected)))?state.selected:undefined);
+   const selection=chosen??((verificationFollowup||intent==="confirm"||quantity||(retryTurn && (stored?.pending?stored.pending.action==="select":!!state.selected)))?state.selected:undefined);
    if(selection) {
-    if(chosen || quantity) state.checkout=undefined;
+    if(chosen || quantity || verificationFollowup) state.checkout=undefined;
     state.selected=selection;
     const live=await verify([selection.variantId]);
     if(!live.length) return pending(intent==="confirm"?"confirm":"select");
@@ -116,12 +126,12 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     if(!["available","not_tracked"].includes(v.availability) || !v.product.published || v.product.status!=="ACTIVE" || v.variant.currency!==source.currency || v.variant.price===null ||
       !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS ||
       (v.variant.tracked && v.variant.inventoryPolicy!=="CONTINUE" && (v.variant.quantity===null || v.variant.quantity<state.quantity))) return unavailable();
-    const current:ShoppingChoice={productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency,verifiedAt:new Date(v.variant.verifiedAt).toISOString()};
+    const current:ShoppingChoice={productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)};
     const changed=compareMoney(current.price,selection.price)!==0 || JSON.stringify(current.options)!==JSON.stringify(selection.options) || current.variantTitle!==selection.variantTitle;
     state.selected=current;state.choices=state.choices.map(c=>c.variantId===current.variantId?current:c);state.currency=current.currency;
-    if(changed) {state.checkout=undefined;return finish(`${copy.changed}\n${line(current)} × ${state.quantity}`,"confirming");}
+    if(changed) {state.checkout=undefined;return finish(`${copy.changed}\n${line(current)} × ${state.quantity}${stockNote(current,copy.verifiedStock)}`,"confirming");}
     if((intent==="confirm" && ["confirming","confirmed"].includes(previous?.step??"") || retryTurn && previous?.step==="confirmed" && !!state.checkout) && !chosen && !quantity) return checkout(v);
-    return finish(`${line(current)} × ${state.quantity}\n${copy.confirm}`,"confirming");
+    return finish(`${line(current)} × ${state.quantity}${stockNote(current,copy.verifiedStock)}\n${copy.confirm}`,"confirming");
    }
    if(intent==="confirm" && !state.query) return clarify(copy.repeatSearch);
    // An unrecognized selection or contextual reply cannot replace the search/filters.
@@ -145,13 +155,13 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      v.variant.currency===source.currency && v.variant.price!==null && Number.isFinite(new Date(v.variant.verifiedAt).getTime()) &&
      stamp-new Date(v.variant.verifiedAt).getTime()<=REPLAY_MS &&
      (!state.maxPrice || compareMoney(v.variant.price,state.maxPrice)<=0) && (!state.minPrice || compareMoney(v.variant.price,state.minPrice)>=0))
-    .slice(0,config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString()}));
+    .slice(0,config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)}));
    if(!choices.length) {
     if(live.some(v=>["unknown","stale"].includes(v.availability) || v.variant.price===null || !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS)) return pending("discover");
     return unavailable();
    }
    state.choices=choices;state.selected=undefined;state.quantity=1;
-   return finish(state.choices.map((c,i)=>`${i+1}. ${line(c)}`).join("\n")+`\n${copy.choose}`,"selecting");
+   return finish(state.choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")+`\n${copy.choose}`,"selecting");
   });
  }};
 }

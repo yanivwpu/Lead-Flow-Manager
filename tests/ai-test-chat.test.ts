@@ -763,8 +763,8 @@ test("production Liquid availability question discovers before live verification
     await f.db.delete(schema.catalogVariants).where(eq(schema.catalogVariants.id,"variant-1"));
     await f.db.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}],price:"749.95",quantity:50,verifiedAt:new Date(Date.now()-25*60_000)}).where(eq(schema.catalogVariants.id,"variant-0"));
     const saved = shoppingSettings({enabled:false});
-    let calls=0, clock=Date.now();
-    const request=fixtureInventoryRequest(f.db);
+    let calls=0, clock=Date.now(), stock=50;
+    const request=fixtureInventoryRequest(f.db,node=>({...node,inventoryQuantity:stock}));
     const commerce=createCommerceStore(f.db,(shop,token)=>async(query,variables)=>{
       calls++;
       assert.match(query,/query VerifyInventoryBatch/);
@@ -775,9 +775,9 @@ test("production Liquid availability question discovers before live verification
     const generate=createTestChatGenerator({ai:aiService,commerce,settings:async()=>saved,entitled:async()=>true,
       privateShoppingAllowed:async id=>id===auth.workspaceUserId,knowledge:async()=>undefined,aiSettings:async()=>undefined,
       meter:async()=>{throw Error("deterministic Shopping must not invoke the reply model");}});
-    async function send(text:string){
+    async function send(text:string,due=true){
       clock+=1100;
-      await inventoryDue(f.db,f.source.id);
+      if(due) await inventoryDue(f.db,f.source.id);
       return sessions.turn(auth,chat.id,randomUUID(),text,({history,sessions:adapter})=>
         generate({userId:auth.workspaceUserId,sessionId:chat.id,history,sessions:adapter}));
     }
@@ -788,15 +788,38 @@ test("production Liquid availability question discovers before live verification
     assert.equal(result.state.choices![0].productId,"product-a");
     assert.equal(result.state.choices![0].variantId,"variant-0");
     assert.equal(result.state.choices![0].price,"749.95");
+    assert.equal(result.state.choices![0].inventoryQuantity,50);
     assert.match(result.transcript.at(-1)!.content,/The Collection Snowboard: Liquid.*USD 749\.95/);
-    result=await send("option 1");
+    assert.match(result.transcript.at(-1)!.content,/Tracked stock checked: 50 units/);
+    result=await send("Verify the current price and available inventory for that exact variant.",false);
+    assert.equal(result.state.step,"selecting");
+    assert.equal(calls,1);
+    assert.match(result.transcript.at(-1)!.content,/Choose an option by name or number first/);
+    const [source]=await f.db.select().from(schema.catalogSources).where(eq(schema.catalogSources.id,f.source.id));
+    const deadline=Date.now()+60_000;
+    await f.db.update(schema.catalogSources).set({checkpoint:{...(source.checkpoint as any),inventory:{...(source.checkpoint as any).inventory,apiAfter:deadline}}}).where(eq(schema.catalogSources.id,f.source.id));
+    result=await send("option 1",false);
+    assert.equal(result.state.step,"pending");
+    assert.equal(result.state.selected?.variantId,"variant-0");
+    assert.equal(calls,1,"provider cooldown cannot be bypassed by selecting an option");
+    assert.doesNotMatch(result.transcript.at(-1)!.content,/Tracked stock|50 units/);
+    const [blocked]=await f.db.select().from(schema.catalogSources).where(eq(schema.catalogSources.id,f.source.id));
+    assert.equal((blocked.checkpoint as any).inventory.apiAfter,deadline);
+    result=await send("retry");
     assert.equal(result.state.step,"confirming");
     assert.equal(result.state.selected?.variantId,"variant-0");
     assert.equal(calls,2);
+    stock=3;
+    result=await send("Verify the current price and available inventory for that exact variant.");
+    assert.equal(result.state.step,"confirming");
+    assert.equal(result.state.selected?.variantId,"variant-0");
+    assert.equal(result.state.selected?.inventoryQuantity,3);
+    assert.match(result.transcript.at(-1)!.content,/Tracked stock checked: 3 units/);
+    assert.equal(calls,3);
     result=await send("yes confirm");
     assert.equal(result.state.step,"confirmed");
     assert.equal(result.state.checkout,undefined);
-    assert.equal(calls,3);
+    assert.equal(calls,4);
     assert.equal(saved.enabled,false);
     for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.flowJobs,schema.dripEnrollments])
       assert.equal((await f.db.select().from(table)).length,0,getTableConfig(table).name);
