@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
+import { catalogSearchTerms } from "../shared/commerceCatalog";
+
+test("product discovery excludes generic trailing questions without broadening product terms or losing budgets", () => {
+ const text="I'm looking for The Collection Snowboard: Liquid. Is it available right now? What's its current price and how many units are in stock? Please verify using Shopify.";
+ assert.equal(catalogSearchTerms(shoppingFilters(text,"USD").query),"collection snowboard liquid");
+ const budget=shoppingFilters("show Dr. Martens red boots under $749.95. Is it available now?","USD");
+ assert.equal(budget.maxPrice,"749.95");
+ assert.equal(catalogSearchTerms(budget.query),"dr martens red boots");
+ assert.equal(shoppingFilters("show snowboard. Is it available under $750?","USD").maxPrice,"750");
+ assert.equal(catalogSearchTerms(shoppingFilters("show Liquid blue medium snowboard","USD").query),"liquid blue medium snowboard");
+ assert.equal(catalogSearchTerms(shoppingFilters("show Oxygen snowboard. Compare Liquid snowboard","USD").query),"oxygen snowboard liquid snowboard");
+});
 function fixture() {
  let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
  let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5, entitled=true;
