@@ -9,7 +9,24 @@ import type { ShoppingState } from "../shared/shoppingAssistant";
 import en from "../client/src/locales/en.json";
 import es from "../client/src/locales/es.json";
 import he from "../client/src/locales/he.json";
+import { scheduleTestChatCooldownRefresh } from "../client/src/lib/aiTestChatCooldown";
 (globalThis as any).React = React;
+test("private diagnostics refresh after cooldown, cancel on close, and never retry a shopping action", t => {
+  t.mock.timers.enable({apis:["setTimeout","Date"],now:10000});
+  let refreshes=0;
+  const cancel=scheduleTestChatCooldownRefresh({inventoryStatus:"cooldown",retryAt:12000},()=>refreshes++);
+  t.mock.timers.tick(2099);
+  assert.equal(refreshes,0);
+  t.mock.timers.tick(1);
+  assert.equal(refreshes,1);
+  cancel();
+  const closed=scheduleTestChatCooldownRefresh({inventoryStatus:"cooldown",retryAt:14000},()=>refreshes++);
+  closed();
+  scheduleTestChatCooldownRefresh({inventoryStatus:"temporarily_unavailable",retryAt:14000},()=>refreshes++);
+  scheduleTestChatCooldownRefresh({inventoryStatus:"ready_to_check",retryAt:14000},()=>refreshes++);
+  t.mock.timers.tick(10000);
+  assert.equal(refreshes,1);
+});
 test("Inbox and private console share localized shopping presentation; pending selection shows quantity without a verified price claim", async () => {
   for (const [lng, resource] of Object.entries({ en, es, he })) {
     assert.deepEqual(
