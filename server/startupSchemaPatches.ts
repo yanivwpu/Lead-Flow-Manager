@@ -21,7 +21,10 @@ import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 type StartupPatchStep = { step: string; sql: string };
 type StartupPatch = { tag: string; sql: string | StartupPatchStep[] };
 
-const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
+const BACKLINK_SCHEMA = `CREATE TABLE IF NOT EXISTS seo_backlink_opportunities (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), source_url text NOT NULL, target_url text NOT NULL, source_host text NOT NULL, topic text NOT NULL, evidence text NOT NULL, source_kind text NOT NULL, source_reference text NOT NULL, placement text NOT NULL, intent text NOT NULL, score integer NOT NULL DEFAULT 0, status text NOT NULL DEFAULT 'needs_review', notes text NOT NULL DEFAULT '', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(source_url,target_url)); CREATE INDEX IF NOT EXISTS seo_backlink_status_priority ON seo_backlink_opportunities(status,score DESC);`;
+
+const STARTUP_COLUMN_PATCHES: StartupPatch[
+  { tag: "0110_seo_backlink_opportunities", sql: BACKLINK_SCHEMA },] = [
   {
     tag: "0056_salesperson_calendly_connections",
     sql: "CREATE TABLE IF NOT EXISTS salesperson_calendly_connections (salesperson_id varchar PRIMARY KEY REFERENCES salespeople(id) ON DELETE CASCADE, encrypted_access_token text NOT NULL, calendly_user_uri text, calendly_scheduling_url text, enabled boolean NOT NULL DEFAULT true, last_poll_at timestamp, last_error text, updated_at timestamp NOT NULL DEFAULT NOW());",
