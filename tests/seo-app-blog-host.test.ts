@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const source=readFileSync(new URL("../server/index.ts",import.meta.url),"utf8");
+const p=source.indexOf('// Public blog articles belong exclusively');
+assert.ok(p>=0,"app-host blog canonicalization must exist");
+const section=source.slice(p,source.indexOf('if (host === "www.whachatcrm.com"',p));
+assert.match(section,/host === "app\.whachatcrm\.com"/);
+assert.match(section,/req\.method === "GET" \|\| req\.method === "HEAD"/);
+assert.match(section,/pathname === "\/blog" \|\| pathname\.startsWith\("\/blog\/"\)/);
+assert.match(section,/res\.redirect\(301, `https:\/\/www\.whachatcrm\.com/);
+assert.ok(source.indexOf("if (isEmailImageRequestPath(pathname))")<p,"email image exceptions remain prior to blog redirect");
+assert.ok(source.indexOf('if (host === "whachatcrm.com")')<p,"apex host redirect remains unchanged");
+console.log("App-host blog canonicalization regression passed");

@@ -163,6 +163,14 @@ app.use((req, res, next) => {
     return res.redirect(hostRedirectStatusForPathname(pathname), `https://www.whachatcrm.com${req.originalUrl || req.url}`);
   }
 
+  // Public blog articles belong exclusively on the marketing host. Redirect
+  // safe reads on app host to avoid duplicate discovery/canonical signals.
+  // Do not affect app/API/webhook routes or non-idempotent requests.
+  if (host === "app.whachatcrm.com" && (req.method === "GET" || req.method === "HEAD")
+    && (pathname === "/blog" || pathname.startsWith("/blog/"))) {
+    return res.redirect(301, `https://www.whachatcrm.com${req.originalUrl || req.url}`);
+  }
+
   if (host === "www.whachatcrm.com" && isSaaSPathname(pathname)) {
     return res.redirect(hostRedirectStatusForPathname(pathname), target);
   }
