@@ -339,13 +339,13 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/automation-templates`
   },
   "/respond-io-alternative": {
-    title: "Best Respond.io Alternative | WhachatCRM",
-    description: "Switch from Respond.io to WhachatCRM: Starts at $49/mo, free plan, unlimited users, simple setup. Better for small teams managing WhatsApp leads.",
+    title: "Respond.io Alternative for Small Teams | WhachatCRM",
+    description: "Compare Respond.io and WhachatCRM for omnichannel messaging, team inboxes, CRM follow-up, automation, and the needs of growing businesses."
     canonical: `${BASE_URL}/respond-io-alternative`
   },
   "/wati-alternative": {
-    title: "Best WATI Alternative for SMBs | WhachatCRM",
-    description: "Switch from WATI to WhachatCRM: $49/mo vs $30+, free plan, zero message markup, unlimited users, simple setup. Better for small teams.",
+    title: "WATI Alternative for Growing Teams | WhachatCRM",
+    description: "Compare WATI and WhachatCRM for WhatsApp support, shared inboxes, Instagram messaging, CRM workflows, automation, and team needs."
     canonical: `${BASE_URL}/wati-alternative`
   },
   "/pabbly-alternative": {
@@ -371,13 +371,13 @@ export const PAGE_META: Record<string, PageMeta> = {
     canonical: `${BASE_URL}/crm-for-whatsapp-business`
   },
   "/zoko-alternative": {
-    title: "Best Zoko Alternative for Shopify | WhachatCRM",
-    description: "Switch from Zoko to WhachatCRM: $49/mo vs $35+, zero per-message fees, unlimited flows, and affordable AI. Best for Shopify sellers.",
+    title: "Zoko Alternative for Shopify Teams | WhachatCRM",
+    description: "Compare Zoko and WhachatCRM for Shopify conversations, shared inboxes, CRM features, social messaging, and team workflows. See which approach fits.",
     canonical: `${BASE_URL}/zoko-alternative`
   },
   "/manychat-alternative": {
-    title: "Best Manychat Alternative | WhachatCRM",
-    description: "Looking for a Manychat alternative? WhachatCRM offers a unified inbox for 7+ channels, no message markups, and advanced AI automation for SMBs.",
+    title: "ManyChat Alternative for Team Inboxes | WhachatCRM",
+    description: "Compare ManyChat and WhachatCRM for messaging automation, shared team inboxes, WhatsApp conversations, lead management, and CRM workflows."
     canonical: `${BASE_URL}/manychat-alternative`
   },
   "/best-whatsapp-crm-2026": {
