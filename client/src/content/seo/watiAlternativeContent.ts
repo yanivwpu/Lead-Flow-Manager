@@ -16,9 +16,9 @@ export const watiAlternativeContent: CompetitorAlternativeContent = {
   slug: SLUG,
   competitorName: "WATI",
   meta: {
-    title: "WATI Alternative for Growing Teams | WhachatCRM"
+    title: "WATI Alternative for Growing Teams | WhachatCRM",
     description:
-      "Compare WATI and WhachatCRM for WhatsApp support, shared inboxes, Instagram messaging, CRM workflows, automation, and team needs."
+      "Compare WATI and WhachatCRM for WhatsApp support, shared inboxes, Instagram messaging, CRM workflows, automation, and team needs.",
     keywords:
       "WATI alternative, WATI vs WhachatCRM, WATI competitor, WhatsApp CRM comparison, WATI pricing alternative, omnichannel WhatsApp inbox",
     h1: "WATI Alternative: WhatsApp Ops Maturity vs Omnichannel CRM Simplicity",

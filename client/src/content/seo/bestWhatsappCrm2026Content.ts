@@ -1,7 +1,7 @@
 export const BEST_WHATSAPP_CRM_2026_META = {
   title: "Best WhatsApp CRM in 2026 | Omnichannel CRM Comparison",
   description:
-    "Compare WhatsApp CRM options for 2026, including shared team inboxes, AI-assisted follow-up, omnichannel conversations, automation, and Shopify workflows."
+    "Compare WhatsApp CRM options for 2026, including shared team inboxes, AI-assisted follow-up, omnichannel conversations, automation, and Shopify workflows.",
   keywords:
     "best WhatsApp CRM 2026, best CRM for WhatsApp, WhatsApp CRM comparison, omnichannel CRM platform, WhatsApp CRM vs omnichannel CRM",
   h1: "Best WhatsApp CRM in 2026: Why Businesses Are Choosing Omnichannel CRM Platforms",
