@@ -754,3 +754,51 @@ test("private allowance discovers, selects and reverifies while live Web Chat an
     await f.cleanup();
   }
 });
+
+test("production Liquid availability question discovers before live verification despite stale inventory and trailing questions", async () => {
+  const f = await fixture();
+  try {
+    const prompt = "I'm looking for The Collection Snowboard: Liquid. Is it available right now? What's its current price and how many units are in stock? Please verify using Shopify.";
+    await f.db.update(schema.catalogProducts).set({title:"The Collection Snowboard: Liquid",searchText:"The Collection Snowboard: Liquid snowboard Default Title",variantCount:1}).where(eq(schema.catalogProducts.id,"product-a"));
+    await f.db.delete(schema.catalogVariants).where(eq(schema.catalogVariants.id,"variant-1"));
+    await f.db.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}],price:"749.95",quantity:50,verifiedAt:new Date(Date.now()-25*60_000)}).where(eq(schema.catalogVariants.id,"variant-0"));
+    const saved = shoppingSettings({enabled:false});
+    let calls=0, clock=Date.now();
+    const request=fixtureInventoryRequest(f.db);
+    const commerce=createCommerceStore(f.db,(shop,token)=>async(query,variables)=>{
+      calls++;
+      assert.match(query,/query VerifyInventoryBatch/);
+      assert.deepEqual(variables?.ids,["gid://shopify/ProductVariant/1"]);
+      return request(shop,token)(query,variables);
+    });
+    const sessions=createTestChatSessions(f.db,()=>clock),chat=await sessions.create(auth);
+    const generate=createTestChatGenerator({ai:aiService,commerce,settings:async()=>saved,entitled:async()=>true,
+      privateShoppingAllowed:async id=>id===auth.workspaceUserId,knowledge:async()=>undefined,aiSettings:async()=>undefined,
+      meter:async()=>{throw Error("deterministic Shopping must not invoke the reply model");}});
+    async function send(text:string){
+      clock+=1100;
+      await inventoryDue(f.db,f.source.id);
+      return sessions.turn(auth,chat.id,randomUUID(),text,({history,sessions:adapter})=>
+        generate({userId:auth.workspaceUserId,sessionId:chat.id,history,sessions:adapter}));
+    }
+    let result=await send(prompt);
+    assert.equal(result.state.step,"selecting");
+    assert.equal(calls,1,"discovery must reach live Shopify verification, not return the early no-candidate fallback");
+    assert.equal(result.state.choices?.length,1);
+    assert.equal(result.state.choices![0].productId,"product-a");
+    assert.equal(result.state.choices![0].variantId,"variant-0");
+    assert.equal(result.state.choices![0].price,"749.95");
+    assert.match(result.transcript.at(-1)!.content,/The Collection Snowboard: Liquid.*USD 749\.95/);
+    result=await send("option 1");
+    assert.equal(result.state.step,"confirming");
+    assert.equal(result.state.selected?.variantId,"variant-0");
+    assert.equal(calls,2);
+    result=await send("yes confirm");
+    assert.equal(result.state.step,"confirmed");
+    assert.equal(result.state.checkout,undefined);
+    assert.equal(calls,3);
+    assert.equal(saved.enabled,false);
+    for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.flowJobs,schema.dripEnrollments])
+      assert.equal((await f.db.select().from(table)).length,0,getTableConfig(table).name);
+  } finally {await f.cleanup();}
+});

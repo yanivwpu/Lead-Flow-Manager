@@ -49,7 +49,13 @@ export function shoppingFilters(text: string, defaultCurrency: string): {currenc
   const currency = explicit || ({"$": defaultCurrency, "€":"EUR", "£":"GBP", "₪":"ILS"} as Record<string,string>)[symbol || ""] || defaultCurrency;
   const max = text.match(/(?:under|below|less than|hasta|menos de|מתחת ל?|עד)\s*[$€£₪]?\s*(\d{1,12}(?:\.\d{1,6})?)/iu);
   const range = text.match(/(?:between|entre|בין)\s*[$€£₪]?\s*(\d{1,12}(?:\.\d{1,6})?)\s*(?:and|y|ל|ו|-)\s*[$€£₪]?\s*(\d{1,12}(?:\.\d{1,6})?)/iu);
-  const query = text.replace(/(?:under|below|less than|hasta|menos de|מתחת ל?|עד)\s*[$€£₪]?\s*\d+(?:\.\d+)?/giu," ")
+  // Keep the product request separate from generic follow-up questions. Otherwise
+  // indexed discovery ANDs words such as "right now/current price/verify Shopify"
+  // into the product name and returns no candidates before live verification.
+  // Require a sentence boundary + a generic question; preserve decimal prices,
+  // dotted product names, variant descriptors and all full-message budget filters.
+  const productRequest = text.replace(/[.!?]\s+(?=(?:(?:is|are)\s+(?:it|this|that|they|these|those)\b|what(?:['’]s|\s+is)\s+(?:its|their|the)\b|how\s+(?:many|much)\b|please\s+(?:verify|check)\b))[\s\S]*$/iu, "");
+  const query = productRequest.replace(/(?:under|below|less than|hasta|menos de|מתחת ל?|עד)\s*[$€£₪]?\s*\d+(?:\.\d+)?/giu," ")
     .replace(/(?:between|entre|בין)\s*[$€£₪]?\s*\d+(?:\.\d+)?\s*(?:and|y|ל|ו|-)\s*[$€£₪]?\s*\d+(?:\.\d+)?/giu," ")
     .replace(/\b(?:i'm|im|looking|look|search|find|show|recommend\w*|options|variants|compare|comparison|with|some|different|busco|buscar|muestra|recomiend\w*|opciones|variantes|comparar|por|favor|USD|EUR|GBP|ILS|CAD|AUD)\b|מחפשת?|אפשרויות|המלצה|ממליצים|בבקשה/giu," ")
     .replace(/[^\p{L}\p{N}\s-]/gu," ").trim().slice(0,200);
