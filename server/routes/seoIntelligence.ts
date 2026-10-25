@@ -1,3 +1,4 @@
+import { registerSeoBacklinkRoutes } from "./seoBacklinks";
 import { db } from "../../drizzle/db";
 import { sql } from "drizzle-orm";
 import { requestSeoPublication } from "../seo/publicationService";
@@ -11,6 +12,7 @@ import { extractSanitizedDatabaseError, safeSeoSyncHttpFailure } from "../seo/sy
 import { analyzeSeoOpportunities, listSeoActions, refreshSeoAction, startSeoActionRefresh, SeoAnalysisInProgressError, transitionSeoAction } from "../seo/actionService";
 
 export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: RequestHandler) {
+  registerSeoBacklinkRoutes(app, requireAdmin);
   app.get("/api/admin/seo-intelligence", requireAdmin, async (_req, res) => {
     try { res.json(await getSeoDashboard()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load SEO intelligence" }); }
   });
