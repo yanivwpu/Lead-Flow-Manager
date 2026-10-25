@@ -11164,7 +11164,7 @@ export async function registerRoutes(
     authorize: requireWorkspaceOffersAdmin,
     onTurnSaved: async event => {
       if (await privateShoppingAllowed(event.workspaceUserId))
-        console.info("[PrivateShoppingTurn]", event);
+        console.info("[PrivateShoppingTurn]", JSON.stringify(event));
     },
     access: async (userId, generating) => {
       const access = await checkAiBrainAccess(userId, "suggest");
