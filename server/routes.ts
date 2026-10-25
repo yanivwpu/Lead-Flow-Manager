@@ -11162,6 +11162,10 @@ export async function registerRoutes(
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
+    onTurnSaved: async event => {
+      if (await privateShoppingAllowed(event.workspaceUserId))
+        console.info("[PrivateShoppingTurn]", JSON.stringify(event));
+    },
     access: async (userId, generating) => {
       const access = await checkAiBrainAccess(userId, "suggest");
       if (!access.hasAccess || !access.hasAIBrain) return { allowed: false };

@@ -15,7 +15,7 @@ import { ensureCatalogSource } from "../server/salesCatalog/shopify/installation
 import { createCommerceStore } from "../server/salesCatalog/commerceStore";
 import { createTestChatSessions } from "../server/aiTestChat/sessions";
 import { createTestChatGenerator } from "../server/aiTestChat/generate";
-import { registerTestChatRoutes } from "../server/aiTestChat/routes";
+import { registerTestChatRoutes, type PrivateTestTurnDiagnostic } from "../server/aiTestChat/routes";
 import { AI_TEST_CHAT_SCHEMA_SQL } from "../server/aiTestChat/schemaSql";
 import { privateTestShoppingAllowed, privateTestShoppingSettings } from "../server/aiTestChat/shoppingAllowance";
 import { createShoppingService } from "../server/shopping/service";
@@ -824,4 +824,83 @@ test("production Liquid availability question discovers before live verification
     for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.flowJobs,schema.dripEnrollments])
       assert.equal((await f.db.select().from(table)).length,0,getTableConfig(table).name);
   } finally {await f.cleanup();}
+});
+
+test("authenticated Liquid sequence survives reload, exact possessive follow-up and durable cooldown without rediscovering", async()=>{
+ const f=await fixture();
+ try {
+  await f.db.update(schema.catalogProducts).set({title:"The Collection Snowboard: Liquid",searchText:"The Collection Snowboard: Liquid snowboard Default Title",variantCount:1}).where(eq(schema.catalogProducts.id,"product-a"));
+  await f.db.delete(schema.catalogVariants).where(eq(schema.catalogVariants.id,"variant-1"));
+  await f.db.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}],price:"749.95",quantity:50}).where(eq(schema.catalogVariants.id,"variant-0"));
+  const saved=shoppingSettings({enabled:false});
+  const request=fixtureInventoryRequest(f.db);
+  let calls=0, searches=0;
+  const base=createCommerceStore(f.db,(shop,token)=>async(query,variables)=>{
+   calls++;assert.match(query,/query VerifyInventoryBatch/);
+   assert.deepEqual(variables?.ids,["gid://shopify/ProductVariant/1"]);
+   return request(shop,token)(query,variables);
+  });
+  const commerce={...base,purchaseCandidates:async(...args:Parameters<typeof base.purchaseCandidates>)=>{searches++;return base.purchaseCandidates(...args);}};
+  const handlers=new Map<string,Function>();
+  const savedEvents:PrivateTestTurnDiagnostic[]=[];
+  let failLogging=false;
+  function mount(){
+   handlers.clear();
+   const app:any=Object.fromEntries(["get","post","delete"].map(method=>[method,(path:string,handler:Function)=>handlers.set(method+" "+path,handler)]));
+   registerTestChatRoutes(app,{db:f.db,onTurnSaved:event=>{savedEvents.push(event);if(failLogging)throw Error("fixture diagnostic unavailable");},authorize:async(req,res)=>{if(req.user?.id!==auth.actorUserId){res.status(401).json({error:"Unauthorized"});return null;}return auth;},access:async()=>({allowed:true}),
+    generate:createTestChatGenerator({ai:aiService,commerce,settings:async()=>saved,entitled:async()=>true,privateShoppingAllowed:async id=>id===auth.workspaceUserId,knowledge:async()=>undefined,aiSettings:async()=>undefined,meter:async()=>{throw Error("no reply-model fallback");}}),diagnostics:async()=>({checkoutEnabled:false})});
+  }
+  async function http(key:string,id="",body:unknown={},actor=auth.actorUserId){
+   let status=200,data:any;
+   const res:any={set:()=>res,status:(n:number)=>{status=n;return res;},json:(d:any)=>{data=d;return res;},sendStatus:(n:number)=>{status=n;return res;}};
+   await handlers.get(key)!({user:{id:actor},params:{id},body},res);
+   return {status,data};
+  }
+  mount();assert.equal((await http("post /api/ai/test-chat","",{},"foreign")).status,401);
+  const chat=(await http("post /api/ai/test-chat")).data;
+  async function send(text:string,due=true){
+   if(due)await inventoryDue(f.db,f.source.id);
+   await f.db.update(schema.aiTestSessions).set({lastTurnAt:new Date(0)}).where(eq(schema.aiTestSessions.id,chat.id));
+   const result=await http("post /api/ai/test-chat/:id/turn",chat.id,{eventId:randomUUID(),text});
+   assert.equal(result.status,200);return result.data;
+  }
+  const prompt="I'm looking for The Collection Snowboard: Liquid. Is it available right now? What's its current price and how many units are in stock? Please verify using Shopify.";
+  let result=await send(prompt);
+  assert.equal(result.state.step,"selecting");assert.equal(searches,1);
+  mount();result=(await http("get /api/ai/test-chat/:id",chat.id)).data;
+  assert.equal(result.state.choices[0].variantId,"variant-0");
+  result=await send("1");assert.equal(result.state.step,"confirming");assert.equal(calls,2);
+  mount();result=(await http("get /api/ai/test-chat/:id",chat.id)).data;
+  assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");
+  const exact="Please verify the selected variant's current price, availability, and exact inventory quantity against Shopify.";
+  result=await send(exact);
+  assert.equal(result.state.step,"confirming","production follow-up must not regress to discovery after reload");
+  assert.equal(result.state.selected.variantId,"variant-0");assert.equal(result.state.selected.inventoryQuantity,50);
+  assert.doesNotMatch(result.transcript.at(-1).content,/^1\.|Choose an option/);
+  assert.equal(searches,1);assert.equal(calls,3);
+  const [source]=await f.db.select().from(schema.catalogSources).where(eq(schema.catalogSources.id,f.source.id));
+  const deadline=Date.now()+60_000;
+  await f.db.update(schema.catalogSources).set({checkpoint:{...(source.checkpoint as any),inventory:{...(source.checkpoint as any).inventory,apiAfter:deadline}}}).where(eq(schema.catalogSources.id,f.source.id));
+  result=await send(exact,false);assert.equal(result.state.step,"pending");assert.equal(result.state.selected.variantId,"variant-0");assert.equal(calls,3);
+  const [blocked]=await f.db.select().from(schema.catalogSources).where(eq(schema.catalogSources.id,f.source.id));
+  assert.equal((blocked.checkpoint as any).inventory.apiAfter,deadline);
+  mount();result=(await http("get /api/ai/test-chat/:id",chat.id)).data;
+  assert.equal(result.state.step,"pending");assert.equal(result.state.selected.variantId,"variant-0");
+  result=await send("retry");assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");assert.equal(searches,1);assert.equal(calls,4);
+  result=await send("Please verify the selected variant’s current price, availability, and exact inventory quantity against Shopify.");
+  assert.equal(result.state.step,"confirming");assert.equal(searches,1);assert.equal(calls,5);
+  failLogging=true;
+  result=await send("Could you double-check availability for this chosen variant?",false);
+  assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");assert.equal(searches,1);
+  assert.doesNotMatch(result.transcript.at(-1).content,/Choose an option|^1\./);
+  assert.deepEqual(savedEvents.map(e=>e.step),["selecting","confirming","confirming","pending","confirming","confirming","confirming"]);
+  for(const event of savedEvents){
+   assert.deepEqual(Object.keys(event).sort(),["workspaceUserId","sessionId","eventId","step","intent","choicesCount","selectedVariantId","lastProofAt"].sort());
+   assert.doesNotMatch(JSON.stringify(event),/Liquid|Shopify|fixture-token|current price/);
+  }
+  assert.ok(savedEvents.slice(1).every(e=>e.selectedVariantId==="variant-0"));
+  assert.equal(saved.enabled,false);
+  assert.equal(result.state.checkout,undefined);
+  for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.flowJobs,schema.dripEnrollments])assert.equal((await f.db.select().from(table)).length,0);
+ } finally {await f.cleanup();}
 });
