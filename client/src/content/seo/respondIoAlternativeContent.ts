@@ -16,9 +16,9 @@ export const respondIoAlternativeContent: CompetitorAlternativeContent = {
   slug: SLUG,
   competitorName: "Respond.io",
   meta: {
-    title: "Respond.io Alternative for Small Teams | WhachatCRM"
+    title: "Respond.io Alternative for Small Teams | WhachatCRM",
     description:
-      "Compare Respond.io and WhachatCRM for omnichannel messaging, team inboxes, CRM follow-up, automation, and the needs of growing businesses."
+      "Compare Respond.io and WhachatCRM for omnichannel messaging, team inboxes, CRM follow-up, automation, and the needs of growing businesses.",
     keywords:
       "Respond.io alternative, respond.io vs WhachatCRM, Respond.io competitor, omnichannel CRM alternative, affordable team inbox WhatsApp",
     h1: "Respond.io Alternative: Omnichannel Scale vs SMB-Friendly Team Inbox",

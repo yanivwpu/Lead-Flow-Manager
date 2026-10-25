@@ -340,12 +340,12 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   "/respond-io-alternative": {
     title: "Respond.io Alternative for Small Teams | WhachatCRM",
-    description: "Compare Respond.io and WhachatCRM for omnichannel messaging, team inboxes, CRM follow-up, automation, and the needs of growing businesses."
+    description: "Compare Respond.io and WhachatCRM for omnichannel messaging, team inboxes, CRM follow-up, automation, and the needs of growing businesses.",
     canonical: `${BASE_URL}/respond-io-alternative`
   },
   "/wati-alternative": {
     title: "WATI Alternative for Growing Teams | WhachatCRM",
-    description: "Compare WATI and WhachatCRM for WhatsApp support, shared inboxes, Instagram messaging, CRM workflows, automation, and team needs."
+    description: "Compare WATI and WhachatCRM for WhatsApp support, shared inboxes, Instagram messaging, CRM workflows, automation, and team needs.",
     canonical: `${BASE_URL}/wati-alternative`
   },
   "/pabbly-alternative": {
@@ -377,7 +377,7 @@ export const PAGE_META: Record<string, PageMeta> = {
   },
   "/manychat-alternative": {
     title: "ManyChat Alternative for Team Inboxes | WhachatCRM",
-    description: "Compare ManyChat and WhachatCRM for messaging automation, shared team inboxes, WhatsApp conversations, lead management, and CRM workflows."
+    description: "Compare ManyChat and WhachatCRM for messaging automation, shared team inboxes, WhatsApp conversations, lead management, and CRM workflows.",
     canonical: `${BASE_URL}/manychat-alternative`
   },
   "/best-whatsapp-crm-2026": {
