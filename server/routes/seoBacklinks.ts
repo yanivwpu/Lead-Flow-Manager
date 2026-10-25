@@ -1,3 +1,4 @@
+import { searchBacklinkOpportunities } from "../seo/backlinkDiscovery";
 import { sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { createBacklinkReviewQueue, type BacklinkResearchRecord } from "../seo/backlinkResearch";
@@ -22,6 +23,21 @@ function parseRecord(input: unknown): BacklinkResearchRecord {
 }
 
 export function registerSeoBacklinkRoutes(app: Express, requireAdmin: RequestHandler) {
+  app.post("/api/admin/seo-intelligence/backlinks/discover", requireAdmin, async (_req,res) => {
+    try {
+      const results=await searchBacklinkOpportunities(process.env.BRAVE_SEARCH_API_KEY??"");
+      let inserted=0;
+      for(const r of results){
+        // Search results identify prospective publications, NOT live backlinks or contact consent.
+        // Keep these in evidence-review state, never advance to approved outreach automatically.
+        const q=await db.execute(sql`INSERT INTO seo_backlink_opportunities(source_url,target_url,source_host,topic,evidence,source_kind,source_reference,placement,intent,score,status,notes)
+        VALUES(${r.sourceUrl},${r.targetUrl},${r.sourceHost},${r.topic},${r.evidence},'provider_export',${r.sourceReference},'unknown','editorial_opportunity',0,'needs_review','DISCOVERED — verify source relevance, editorial fit, existing backlinks and contact permission before outreach.')
+        ON CONFLICT(source_url,target_url) DO NOTHING RETURNING id`);
+        inserted+=q.rows.length;
+      }
+      res.json({found:results.length,inserted,reviewRequired:true});
+    }catch(e){res.status(503).json({error:e instanceof Error?e.message:"Discovery unavailable"});}
+  });
   app.get("/api/admin/seo-intelligence/backlinks", requireAdmin, async (_req,res) => {
     try {
       const rows = await db.execute(sql`SELECT id, source_url AS "sourceUrl", target_url AS "targetUrl", source_host AS "sourceHost", topic, evidence, source_kind AS "sourceKind", source_reference AS "sourceReference", placement, intent, score, status, notes, created_at AS "createdAt", updated_at AS "updatedAt" FROM seo_backlink_opportunities ORDER BY CASE WHEN status='needs_review' THEN 0 ELSE 1 END, score DESC, created_at DESC LIMIT 200`);

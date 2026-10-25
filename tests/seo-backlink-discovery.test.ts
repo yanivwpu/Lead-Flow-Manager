@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { BACKLINK_DISCOVERY_QUERIES, normalizeDiscoveryResult } from "../server/seo/backlinkDiscovery";
+assert.equal(BACKLINK_DISCOVERY_QUERIES.length,4);
+const candidate=normalizeDiscoveryResult("https://example.org/guide?utm=x#section","Shopify CRM guide","A comparison of ecommerce messaging solutions.","shopify","https://www.whachatcrm.com/zoko-alternative");
+assert.equal(candidate?.sourceUrl,"https://example.org/guide");
+assert.equal(candidate?.topic,"shopify");
+assert.equal(normalizeDiscoveryResult("http://example.org/","Guide","Description","shopify","https://www.whachatcrm.com"),null);
+assert.equal(normalizeDiscoveryResult("https://app.whachatcrm.com/","Guide","Description","shopify","https://www.whachatcrm.com"),null);
+assert.equal(normalizeDiscoveryResult("not-a-url","Guide","Description","shopify","https://www.whachatcrm.com"),null);
+console.log("Backlink discovery normalization tests passed");
