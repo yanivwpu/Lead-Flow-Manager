@@ -30,7 +30,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
-   const verificationFollowup=shoppingVerificationFollowup(turn.text);
+   const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
    const requestedIntent=verificationFollowup?"availability":shoppingIntent(turn.text);
    const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
    const intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;

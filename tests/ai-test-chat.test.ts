@@ -889,11 +889,17 @@ test("authenticated Liquid sequence survives reload, exact possessive follow-up 
   result=await send("retry");assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");assert.equal(searches,1);assert.equal(calls,4);
   result=await send("Please verify the selected variant’s current price, availability, and exact inventory quantity against Shopify.");
   assert.equal(result.state.step,"confirming");assert.equal(searches,1);assert.equal(calls,5);
+  mount();
+  result=await send("Please verify the selected snowboard's current price and available inventory against Shopify.");
+  assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");
+  assert.equal(searches,1);assert.equal(calls,6);
+  assert.equal(result.state.selected.inventoryQuantity,50);
+  assert.doesNotMatch(result.transcript.at(-1).content,/^1\.|Choose an option|Your exact selection is saved/);
   failLogging=true;
   result=await send("Could you double-check availability for this chosen variant?",false);
   assert.equal(result.state.step,"confirming");assert.equal(result.state.selected.variantId,"variant-0");assert.equal(searches,1);
   assert.doesNotMatch(result.transcript.at(-1).content,/Choose an option|^1\./);
-  assert.deepEqual(savedEvents.map(e=>e.step),["selecting","confirming","confirming","pending","confirming","confirming","confirming"]);
+  assert.deepEqual(savedEvents.map(e=>e.step),["selecting","confirming","confirming","pending","confirming","confirming","confirming","confirming"]);
   for(const event of savedEvents){
    assert.deepEqual(Object.keys(event).sort(),["workspaceUserId","sessionId","eventId","step","intent","choicesCount","selectedVariantId","lastProofAt"].sort());
    assert.doesNotMatch(JSON.stringify(event),/Liquid|Shopify|fixture-token|current price/);

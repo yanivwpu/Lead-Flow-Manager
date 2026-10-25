@@ -4,6 +4,15 @@ import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, 
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
 
+test("selected product nouns resolve only from the persisted selection",()=>{
+ const selected={productTitle:"The Collection Snowboard: Liquid"};
+ for(const quote of ["'","’"])
+  assert.equal(shoppingVerificationFollowup(`Please verify the selected snowboard${quote}s current price and available inventory against Shopify.`,selected),true);
+ assert.equal(shoppingVerificationFollowup("Please verify the selected snowboard's current price and available inventory against Shopify."),false);
+ assert.equal(shoppingVerificationFollowup("Please verify the selected boot's current price and available inventory against Shopify.",selected),false);
+ assert.equal(shoppingVerificationFollowup("Please verify the selected Oxygen's current price and available inventory against Shopify.",selected),false);
+});
+
 test("product discovery excludes generic trailing questions without broadening product terms or losing budgets", () => {
  const text="I'm looking for The Collection Snowboard: Liquid. Is it available right now? What's its current price and how many units are in stock? Please verify using Shopify.";
  assert.equal(catalogSearchTerms(shoppingFilters(text,"USD").query),"collection snowboard liquid");
