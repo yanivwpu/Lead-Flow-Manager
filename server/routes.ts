@@ -4,6 +4,7 @@ import { registerTestChatRoutes } from "./aiTestChat/routes";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
 import { readShoppingSettings } from "./shopping/runtime";
+import { privateTestShoppingAllowed, privateTestShoppingSettings } from "./aiTestChat/shoppingAllowance";
 import { inventoryState } from "./salesCatalog/shopify/inventory";
 import { registerShoppingRoutes } from "./shopping/routes";
 import { shoppingEntitled } from "./shopping/runtime";
@@ -11155,6 +11156,9 @@ export async function registerRoutes(
   registerSalesCatalogRoutes(app, salesCatalog);
   registerShopifyCatalogRoutes(app, db, salesCatalog.commerce);
   registerShoppingRoutes(app, db, shoppingEntitled);
+  // Private transport only: never passed to the live Shopping runtime or saved settings.
+  const privateShoppingAllowed = async (userId: string) =>
+    privateTestShoppingAllowed(await storage.getUser(userId), process.env);
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
@@ -11169,6 +11173,7 @@ export async function registerRoutes(
     },
     generate: createTestChatGenerator({
       ai: aiService, commerce: salesCatalog.commerce, settings: readShoppingSettings, entitled: shoppingEntitled,
+      privateShoppingAllowed,
       knowledge: async id => (await storage.getAiBusinessKnowledge(id)) || undefined,
       aiSettings: async id => (await storage.getAiSettings(id)) || undefined,
       meter: async id => { await storage.incrementAiUsage(id, "repliesSuggested"); },
@@ -11177,10 +11182,15 @@ export async function registerRoutes(
       const source = await salesCatalog.commerce.source(userId);
       const inventory = inventoryState(source?.checkpoint);
       const settings = await storage.getAiSettings(userId);
-      const shopping = await readShoppingSettings(userId);
+      const savedShopping = await readShoppingSettings(userId);
+      const testOnlyShopping = await privateShoppingAllowed(userId);
+      const shopping = privateTestShoppingSettings(savedShopping, testOnlyShopping);
+      const entitled = await shoppingEntitled(userId);
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
-        shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && await shoppingEntitled(userId),
+        shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && entitled,
+        shoppingTestOnly: testOnlyShopping && entitled,
+        liveShoppingEnabled: savedShopping.enabled && savedShopping.allowedChannels.includes("webchat") && entitled,
         catalogConnected: !!source, catalogStatus: source?.status ?? "disconnected",
         inventoryStatus: inventory.errorCode ? "temporarily_unavailable" : (inventory.apiAfter ?? 0) > Date.now() ? "cooldown" : "ready_to_check",
         retryAt: Math.max(inventory.apiAfter ?? 0, inventory.errorCode ? inventory.nextAt ?? 0 : 0) || null };

@@ -17,9 +17,37 @@ import { createTestChatSessions } from "../server/aiTestChat/sessions";
 import { createTestChatGenerator } from "../server/aiTestChat/generate";
 import { registerTestChatRoutes } from "../server/aiTestChat/routes";
 import { AI_TEST_CHAT_SCHEMA_SQL } from "../server/aiTestChat/schemaSql";
+import { privateTestShoppingAllowed, privateTestShoppingSettings } from "../server/aiTestChat/shoppingAllowance";
+import { createShoppingService } from "../server/shopping/service";
 import { aiService } from "../server/aiService";
 const auth = { workspaceUserId: "tenant-a", actorUserId: "tenant-a" },
   other = { workspaceUserId: "tenant-b", actorUserId: "tenant-b" };
+
+test("private Shopping allowance requires the exact database owner and production pilot configuration", () => {
+  const id = "6868785e-e8af-4152-8e2d-8d031c2e97d0";
+  const owner = { id, email: "marketing@whachatcrm.com" };
+  const env = { ECOMMERCE_PILOT_ENABLED: "true", RAILWAY_ENVIRONMENT_NAME: "production",
+    APP_URL: "https://app.whachatcrm.com", ECOMMERCE_PILOT_WORKSPACE_ID: id,
+    ECOMMERCE_PILOT_OWNER_EMAIL: owner.email };
+  assert.equal(privateTestShoppingAllowed(owner, env), true);
+  for (const denied of [undefined, { ...owner, id: "another-workspace" }, { ...owner, email: "other@example.invalid" }])
+    assert.equal(privateTestShoppingAllowed(denied, env), false);
+  for (const patch of [{ ECOMMERCE_PILOT_ENABLED: "false" }, { RAILWAY_ENVIRONMENT_NAME: "staging" },
+    { APP_URL: "https://staging.whachatcrm.com" }, { ECOMMERCE_PILOT_WORKSPACE_ID: "another-workspace" },
+    { ECOMMERCE_PILOT_OWNER_EMAIL: "other@example.invalid" }])
+    assert.equal(privateTestShoppingAllowed(owner, { ...env, ...patch }), false);
+  const reassigned = "271c48f9-3515-4682-b391-2fead371593d";
+  assert.equal(privateTestShoppingAllowed({ ...owner, id: reassigned }, { ...env, ECOMMERCE_PILOT_WORKSPACE_ID: reassigned }), false);
+  const saved = shoppingSettings({ enabled: false, allowedChannels: ["sms"], checkoutEnabled: true, handoffOnFailure: true });
+  const snapshot = structuredClone(saved);
+  const privateSettings = privateTestShoppingSettings(saved, true);
+  assert.equal(privateSettings.enabled, true);
+  assert.deepEqual(privateSettings.allowedChannels, ["webchat"]);
+  assert.equal(privateSettings.checkoutEnabled, false);
+  assert.equal(privateSettings.handoffOnFailure, false);
+  assert.deepEqual(saved, snapshot);
+  assert.strictEqual(privateTestShoppingSettings(saved, false), saved);
+});
 async function fixture() {
   const f = await catalogFixture(),
     db = f.database;
@@ -641,6 +669,87 @@ test("reported numbered selection sequence retains the original under-$750 recom
     );
     assert.equal(searches, beforeSearches);
     assert.equal(requestedIds.length, beforeRequests);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("private allowance discovers, selects and reverifies while live Web Chat and all other channels remain disabled", async () => {
+  const f = await fixture();
+  try {
+    const saved = shoppingSettings({ enabled: false });
+    const original = structuredClone(saved);
+    let calls = 0, price = "699.95", stock = 5;
+    const request = fixtureInventoryRequest(f.db, node => ({ ...node, price, inventoryQuantity: stock }));
+    const commerce = createCommerceStore(f.db, (shop, token) => async (query, variables) => {
+      calls++;
+      assert.match(query, /query VerifyInventoryBatch/);
+      assert.doesNotMatch(query, /mutation|cartCreate|checkoutCreate/);
+      return request(shop, token)(query, variables);
+    });
+    let clock = Date.now();
+    const sessions = createTestChatSessions(f.db, () => clock);
+    const chat = await sessions.create(auth);
+    const generate = createTestChatGenerator({
+      ai: aiService, commerce, settings: async () => saved, entitled: async () => true,
+      privateShoppingAllowed: async id => id === auth.workspaceUserId,
+      knowledge: async () => undefined, aiSettings: async () => undefined,
+      meter: async () => { throw new Error("Shopping must not invoke the reply model"); },
+    });
+    async function send(text: string) {
+      clock += 1100;
+      await inventoryDue(f.db, f.source.id);
+      return sessions.turn(auth, chat.id, randomUUID(), text, ({ history, sessions: adapter }) =>
+        generate({ userId: auth.workspaceUserId, sessionId: chat.id, history, sessions: adapter }));
+    }
+    let result = await send("show snowboard under 750");
+    assert.equal(result.state.step, "selecting");
+    assert.equal(result.state.choices?.length, 2);
+    assert.equal(calls, 1);
+    const choice = result.state.choices![0];
+    result = await send("option 1");
+    assert.equal(result.state.selected?.variantId, choice.variantId);
+    assert.equal(result.state.step, "confirming");
+    assert.equal(calls, 2, "selection rechecks the exact variant with Shopify");
+    price = "710.00";
+    stock = 3;
+    result = await send("yes confirm");
+    assert.equal(result.state.selected?.price, price);
+    assert.equal(result.state.step, "confirming", "changed provider price must be reviewed");
+    result = await send("yes confirm");
+    assert.equal(result.state.step, "confirmed");
+    assert.equal(result.state.checkout, undefined);
+    assert.match(result.transcript.at(-1)!.content, /checkout assistance is not available/);
+    assert.doesNotMatch(result.transcript.at(-1)!.content, /https?:|Private preview/);
+    stock = 0;
+    result = await send("option 1");
+    assert.equal(result.state.selected, undefined, "new provider stock cannot be replaced by prior selection");
+    const beforeLive = calls;
+    const live = createShoppingService({ commerce, settings: async () => saved, entitled: async () => true,
+      sessions: { withTurn: async () => { throw new Error("disabled live Shopping must never touch conversation state"); } } });
+    for (const userId of [auth.workspaceUserId, other.workspaceUserId])
+      for (const channel of ["webchat", "whatsapp", "sms", "instagram", "facebook", "telegram"])
+        assert.equal(await live.turn({ userId, conversationId: "live", eventId: randomUUID(), text: "show snowboard", channel }), null);
+    assert.equal(calls, beforeLive);
+    assert.deepEqual(saved, original);
+    // The allowance cannot waive normal paid Shopping eligibility.
+    const noEntitlement = createTestChatGenerator({
+      ai: { suggestReply: async (...args: Parameters<typeof aiService.suggestReply>) => {
+        const suggestion = await args[10]!.shoppingSuggestion({ userId: auth.workspaceUserId, conversationId: chat.id, text: args[2].at(-1)!.content, channel: "webchat" });
+        assert.equal(suggestion, null);
+        return { suggestion: "ordinary test reply", modelGenerationSucceeded: false } as any;
+      } },
+      commerce, settings: async () => saved, entitled: async () => false,
+      privateShoppingAllowed: async () => true, knowledge: async () => undefined,
+      aiSettings: async () => undefined, meter: async () => {},
+    });
+    clock += 1100;
+    await sessions.turn(auth, chat.id, randomUUID(), "show snowboard", ({ history, sessions: adapter }) =>
+      noEntitlement({ userId: auth.workspaceUserId, sessionId: chat.id, history, sessions: adapter }));
+    assert.equal(calls, beforeLive);
+    for (const table of [schema.contacts, schema.conversations, schema.messages, schema.activityEvents,
+      schema.dripEnrollments, schema.flowJobs, schema.noReplyJobs, schema.automationTimerJobs])
+      assert.equal((await f.db.select().from(table)).length, 0, getTableConfig(table).name);
   } finally {
     await f.cleanup();
   }
