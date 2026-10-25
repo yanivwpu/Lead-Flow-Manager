@@ -1,18 +1,23 @@
 """Generate reviewable branch-only rehearsal SQL. Never connects to a database."""
 from pathlib import Path
-import json
+import argparse
+parser=argparse.ArgumentParser()
+parser.add_argument("--rehearsal-branch",default="br-empty-truth-anrppwpf")
+args=parser.parse_args()
+if not args.rehearsal_branch.startswith("br-") or args.rehearsal_branch=="br-lucky-salad-anatrtle": raise ValueError("isolated branch required")
 root=Path(__file__).parent
 source='271c48f9-3515-4682-b391-2fead371593d'
 target='6868785e-e8af-4152-8e2d-8d031c2e97d0'
 shop='whachatcrm.myshopify.com'
 integration='ec9d963d-f0f8-4f40-af10-166e2392ebba'
-branch='br-empty-truth-anrppwpf'
+branch=args.rehearsal_branch
 usercols=['shopify_shop','shopify_charge_id','shopify_subscription_status','shopify_installed_at','shopify_ai_brain_enabled','shopify_owner_email','billing_plan','subscription_plan','subscription_status']
 spec=[('users','id',usercols,None),('integrations','id',['user_id'],1),('contacts','id',['user_id'],3),('conversations','id',['user_id'],2),('messages','id',['user_id'],3),('activity_events','id',['user_id'],11),('catalog_sources','id',['user_id'],1),('catalog_products','id',['user_id'],17),('catalog_variants','id',['user_id'],26),('catalog_media','id',['user_id'],18),('catalog_collections','id',['user_id'],3),('catalog_events','id',['user_id'],0),('shopify_merchant_contacts','user_id',['user_id'],1)]
 def scope(t):return f"id IN ('{source}','{target}')" if t=='users' else f"user_id IN ('{source}','{target}')"
 def selected(t):return f"id='{integration}'" if t=='integrations' else f"user_id='{source}'"
 def digest(t):return f"SELECT md5(coalesce(string_agg(to_jsonb(t)::text,',' ORDER BY to_jsonb(t)::text),'')) FROM public.{t} t WHERE {scope(t)}"
 header=f"""-- GENERATED: preparation only, deliberately refuses production. Final approval has not been given.
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL lock_timeout='3s';
 SET LOCAL statement_timeout='30s';
 DO $$ BEGIN IF current_setting('neon.branch_id',true) IS DISTINCT FROM '{branch}' THEN
@@ -30,7 +35,7 @@ pre=f"""DO $$ BEGIN
 END $$;
 SELECT id FROM catalog_sources WHERE user_id='{source}' FOR UPDATE;
 DO $$ BEGIN IF EXISTS(SELECT 1 FROM catalog_sources WHERE user_id='{source}' AND (shop<>'{shop}' OR lease_token IS NOT NULL OR lease_expires_at>now())) THEN RAISE EXCEPTION 'CATALOG_WORK_IN_FLIGHT'; END IF; END $$;
--- Live billing is a separate unresolved gate. Rehearsal uses recorded local state only.
+-- Preserves the existing charge. Owner Admin evidence and optional unknown provider metadata are documented in the approval packet.
 CREATE SCHEMA IF NOT EXISTS shopify_reassignment_private;
 REVOKE ALL ON SCHEMA shopify_reassignment_private FROM PUBLIC;
 CREATE TABLE shopify_reassignment_private.manifest(table_name text PRIMARY KEY,before_digest text,after_digest text,patches jsonb NOT NULL);
@@ -39,7 +44,8 @@ REVOKE ALL ON shopify_reassignment_private.manifest FROM PUBLIC;
 fks=[('catalog_sources','catalog_source_integration_fk'),('catalog_products','catalog_product_tenant_fk'),('catalog_variants','catalog_variant_tenant_fk'),('catalog_media','catalog_media_tenant_fk'),('catalog_collections','catalog_collection_tenant_fk'),('catalog_events','catalog_event_tenant_fk')]
 defer='\n'.join(f'ALTER TABLE {t} ALTER CONSTRAINT {c} DEFERRABLE INITIALLY DEFERRED;' for t,c in fks)
 restore='SET CONSTRAINTS ALL IMMEDIATE;\n'+'\n'.join(f'ALTER TABLE {t} ALTER CONSTRAINT {c} NOT DEFERRABLE;' for t,c in fks)
-forward=[header,pre,defer,root.joinpath('ownership-guard.sql').read_text()]
+rowlocks='\n'.join(f'SELECT {pk} FROM public.{t} WHERE {scope(t)} FOR UPDATE;' for t,pk,*_ in spec if t!='users')
+forward=[header,rowlocks,pre,defer,root.joinpath('ownership-guard.sql').read_text()]
 for t,pk,cols,n in spec:
  if n is not None:forward.append(f"DO $$ BEGIN IF (SELECT count(*) FROM {t} WHERE {selected(t)})<>{n} THEN RAISE EXCEPTION 'ROW_COUNT_DRIFT_{t}'; END IF; END $$;")
  cond=scope(t) if t=='users' else selected(t)
@@ -57,7 +63,7 @@ forward.append(f"DO $$ BEGIN IF (SELECT count(*) FROM users WHERE shopify_shop='
 forward.append(restore)
 forward.append("SELECT table_name,jsonb_array_length(patches) AS changed_rows FROM shopify_reassignment_private.manifest ORDER BY table_name;")
 root.joinpath('forward-rehearsal.sql').write_text('\n'.join(forward)+'\n')
-rollback=[header,defer]
+rollback=[header,rowlocks,defer]
 for t,*_ in spec:rollback.append(f"DO $$ BEGIN IF ({digest(t)}) IS DISTINCT FROM (SELECT after_digest FROM shopify_reassignment_private.manifest WHERE table_name='{t}') THEN RAISE EXCEPTION 'ROLLBACK_DRIFT_{t}'; END IF; END $$;")
 rollback.append(f"UPDATE shopify_store_assignments SET target_user_id=source_user_id,source_user_id=target_user_id WHERE shop='{shop}';")
 rollback.append(f"UPDATE users SET shopify_shop=NULL WHERE id='{target}';")
@@ -73,3 +79,16 @@ rollback.append(f"DELETE FROM shopify_store_assignments WHERE shop='{shop}' AND 
 rollback.append(restore)
 rollback.append("SELECT 'rollback verified: all touched rows match original checksums' AS result;")
 root.joinpath('rollback-rehearsal.sql').write_text('\n'.join(rollback)+'\n')
+
+# Production files are review artifacts. A transaction-local approval marker is deliberately absent by default.
+for direction in ['forward','rollback']:
+ text=root.joinpath(direction+'-rehearsal.sql').read_text()
+ text=text.replace(branch,'br-lucky-salad-anatrtle').replace('REHEARSAL_BRANCH_ONLY','PRODUCTION_BRANCH_REQUIRED')
+ text=text.replace('-- GENERATED: preparation only, deliberately refuses production. Final approval has not been given.', '-- GENERATED: production proposal only. DO NOT EXECUTE without explicit owner final approval.')
+ marker="DO $$ BEGIN IF current_setting('whachat.reassignment_approval',true) IS DISTINCT FROM 'whachatcrm-marketing-20261025-v1' THEN RAISE EXCEPTION 'EXPLICIT_FINAL_APPROVAL_REQUIRED'; END IF; END $$;\n"
+ text=text.replace("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;", "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;\n"+marker,1)
+ root.joinpath(direction+'-production.sql').write_text(text)
+# Files are fail-closed even under psql autocommit: any guard failure aborts all writes.
+for name in ['forward-rehearsal.sql','rollback-rehearsal.sql','forward-production.sql','rollback-production.sql']:
+ path=root/name
+ path.write_text('BEGIN;\n'+path.read_text()+'\nCOMMIT;\n')

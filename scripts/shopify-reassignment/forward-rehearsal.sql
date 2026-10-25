@@ -1,11 +1,25 @@
+BEGIN;
 -- GENERATED: preparation only, deliberately refuses production. Final approval has not been given.
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL lock_timeout='3s';
 SET LOCAL statement_timeout='30s';
-DO $$ BEGIN IF current_setting('neon.branch_id',true) IS DISTINCT FROM 'br-empty-truth-anrppwpf' THEN
+DO $$ BEGIN IF current_setting('neon.branch_id',true) IS DISTINCT FROM 'br-nameless-band-anh6jkkc' THEN
  RAISE EXCEPTION 'REHEARSAL_BRANCH_ONLY'; END IF; END $$;
 SELECT pg_advisory_xact_lock(hashtextextended('whachatcrm.myshopify.com',0));
 SELECT id FROM public.users WHERE id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') ORDER BY id FOR UPDATE;
 
+SELECT id FROM public.integrations WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.contacts WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.conversations WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.messages WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.activity_events WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_sources WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_products WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_variants WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_media WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_collections WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_events WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT user_id FROM public.shopify_merchant_contacts WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
 DO $$ BEGIN
  IF (SELECT count(*) FROM users WHERE id='271c48f9-3515-4682-b391-2fead371593d' AND email='whachatcrm@shopify.whachatcrm.com' AND shopify_shop='whachatcrm.myshopify.com' AND shopify_access_token IS NOT NULL AND stripe_subscription_id IS NULL AND billing_plan='pro' AND subscription_plan='pro' AND subscription_status='active' AND shopify_subscription_status='active' AND shopify_charge_id='gid://shopify/AppSubscription/58073350426')<>1 THEN RAISE EXCEPTION 'SOURCE_DRIFT'; END IF;
  IF (SELECT count(*) FROM users WHERE id='6868785e-e8af-4152-8e2d-8d031c2e97d0' AND email='marketing@whachatcrm.com' AND shopify_shop IS NULL AND shopify_access_token IS NULL AND shopify_charge_id IS NULL AND stripe_subscription_id IS NULL AND billing_plan='free' AND subscription_plan='free' AND subscription_status='active')<>1 THEN RAISE EXCEPTION 'TARGET_DRIFT'; END IF;
@@ -16,7 +30,7 @@ DO $$ BEGIN
 END $$;
 SELECT id FROM catalog_sources WHERE user_id='271c48f9-3515-4682-b391-2fead371593d' FOR UPDATE;
 DO $$ BEGIN IF EXISTS(SELECT 1 FROM catalog_sources WHERE user_id='271c48f9-3515-4682-b391-2fead371593d' AND (shop<>'whachatcrm.myshopify.com' OR lease_token IS NOT NULL OR lease_expires_at>now())) THEN RAISE EXCEPTION 'CATALOG_WORK_IN_FLIGHT'; END IF; END $$;
--- Live billing is a separate unresolved gate. Rehearsal uses recorded local state only.
+-- Preserves the existing charge. Owner Admin evidence and optional unknown provider metadata are documented in the approval packet.
 CREATE SCHEMA IF NOT EXISTS shopify_reassignment_private;
 REVOKE ALL ON SCHEMA shopify_reassignment_private FROM PUBLIC;
 CREATE TABLE shopify_reassignment_private.manifest(table_name text PRIMARY KEY,before_digest text,after_digest text,patches jsonb NOT NULL);
@@ -112,3 +126,5 @@ ALTER TABLE catalog_media ALTER CONSTRAINT catalog_media_tenant_fk NOT DEFERRABL
 ALTER TABLE catalog_collections ALTER CONSTRAINT catalog_collection_tenant_fk NOT DEFERRABLE;
 ALTER TABLE catalog_events ALTER CONSTRAINT catalog_event_tenant_fk NOT DEFERRABLE;
 SELECT table_name,jsonb_array_length(patches) AS changed_rows FROM shopify_reassignment_private.manifest ORDER BY table_name;
+
+COMMIT;

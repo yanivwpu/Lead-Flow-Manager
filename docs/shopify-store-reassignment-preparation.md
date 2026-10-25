@@ -1,3 +1,5 @@
+> Historical preparation record. Current verification decisions, exact production SQL and approval scope are in [the final approval packet](shopify-store-reassignment-final-approval.md). Earlier open-gate statements below are superseded by that packet.
+
 # Shopify store reassignment — preparation only
 
 **Not approved for production execution.** No production mapping, billing or credential changes have been made. Staging is unchanged. The SQL deliberately refuses every branch except the named isolated rehearsal branch. This PR must remain draft until the open gates are resolved and the owner gives final approval of a production-specific cutover.

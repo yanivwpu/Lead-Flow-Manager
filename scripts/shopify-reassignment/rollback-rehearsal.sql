@@ -1,11 +1,25 @@
+BEGIN;
 -- GENERATED: preparation only, deliberately refuses production. Final approval has not been given.
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL lock_timeout='3s';
 SET LOCAL statement_timeout='30s';
-DO $$ BEGIN IF current_setting('neon.branch_id',true) IS DISTINCT FROM 'br-empty-truth-anrppwpf' THEN
+DO $$ BEGIN IF current_setting('neon.branch_id',true) IS DISTINCT FROM 'br-nameless-band-anh6jkkc' THEN
  RAISE EXCEPTION 'REHEARSAL_BRANCH_ONLY'; END IF; END $$;
 SELECT pg_advisory_xact_lock(hashtextextended('whachatcrm.myshopify.com',0));
 SELECT id FROM public.users WHERE id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') ORDER BY id FOR UPDATE;
 
+SELECT id FROM public.integrations WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.contacts WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.conversations WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.messages WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.activity_events WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_sources WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_products WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_variants WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_media WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_collections WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT id FROM public.catalog_events WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
+SELECT user_id FROM public.shopify_merchant_contacts WHERE user_id IN ('271c48f9-3515-4682-b391-2fead371593d','6868785e-e8af-4152-8e2d-8d031c2e97d0') FOR UPDATE;
 ALTER TABLE catalog_sources ALTER CONSTRAINT catalog_source_integration_fk DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE catalog_products ALTER CONSTRAINT catalog_product_tenant_fk DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE catalog_variants ALTER CONSTRAINT catalog_variant_tenant_fk DEFERRABLE INITIALLY DEFERRED;
@@ -64,3 +78,5 @@ ALTER TABLE catalog_media ALTER CONSTRAINT catalog_media_tenant_fk NOT DEFERRABL
 ALTER TABLE catalog_collections ALTER CONSTRAINT catalog_collection_tenant_fk NOT DEFERRABLE;
 ALTER TABLE catalog_events ALTER CONSTRAINT catalog_event_tenant_fk NOT DEFERRABLE;
 SELECT 'rollback verified: all touched rows match original checksums' AS result;
+
+COMMIT;
