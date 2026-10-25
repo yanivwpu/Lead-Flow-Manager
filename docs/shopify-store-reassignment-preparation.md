@@ -41,6 +41,7 @@ Observed isolated-copy results:
 - Final forward transaction succeeded with all row counts above and no ID/content changes beyond the declared fields.
 - A database guard rejected the old account attempting to reacquire the shop (`SHOPIFY_STORE_ASSIGNED_ELSEWHERE`).
 - A simulated contact edit caused rollback to stop with `ROLLBACK_DRIFT_contacts`; that entire test transaction rolled back, including the edit.
+- A target contact identity collision and an unapproved branch were both rejected; the collision fixture transaction rolled back without leaving a record.
 - Clean inverse transaction succeeded. All 13 touched relations' complete source/target row checksums matched their original values, including user credentials and billing fields. Source token was restored from the target inside the database; it was never exported or saved in the manifest.
 - All six composite foreign keys returned to their original non-deferrable state. The new guard/schema and private manifest remain as inert preparation artifacts on the isolated branch; the assignment row is removed by rollback. The inverse is intentionally one-shot and must not be rerun blindly.
 
@@ -58,6 +59,14 @@ Immediate rollback uses the same shop advisory fence and both user row locks. It
 
 Before production cutover, coordinate store ingestion, OAuth, billing callbacks and catalog workers so no in-flight work writes mixed tenant ownership. The advisory lock covers existing install/ingestion/privacy fences; catalog workers also require their source lock/lease check. New OAuth code plus database guard must be in place. Stop and reconcile rather than forcing rollback if post-cutover traffic changes any guarded row.
 
+## Shopify billing reconciliation
+
+The owner checked Shopify Admin for the **production app** and confirmed Pro, “Free trial”, five days remaining, $0/year after trial, installed October 14, permissions updated October 15. The owner also confirmed that production and staging are separately installed. The page does not expose the test-charge flag or exact current period end.
+
+Production stores subscription reference `gid://shopify/AppSubscription/58073350426` and Active/Pro. This is compatible with a Shopify subscription that is active while its provider trial is still running; Active is not proof that the trial ended or a payment occurred. The local trial fields refer to the historical May 20–June 3 CRM trial and must not be overwritten with an invented Shopify period. Keep that history and consumed-trial ledger unchanged. The proposed forward operation is now additionally pinned to this exact existing subscription reference; it neither creates nor replaces a charge. A differing provider reference must stop the cutover.
+
+The user-confirmed plan/price/install evidence is accepted as such. The actual provider ID match, test flag and period remain unverified because the connected Railway tools do not expose commands inside the existing container and no Railway CLI credentials are available here. The read-only verifier is prepared but not deployed/executed. A separately authorized diagnostic deployment or operator execution of this secret-free file inside the existing app container is needed; do not move the installation token to another process/service merely to obtain these fields.
+
 ## Preflight status and open gates
 
 | Gate | Result |
@@ -68,7 +77,7 @@ Before production cutover, coordinate store ingestion, OAuth, billing callbacks 
 | Source installation | Exactly one active integration; credential present on source user |
 | Backup restore and inverse | Passed on isolated real database copy |
 | OAuth fallback/database reclaim protection | Implemented in draft code; branch guard tested; not deployed |
-| Live Shopify subscription, test-charge flag, price/currency and period | **Pending**; local Active/Pro is not current provider evidence |
+| Live Shopify billing | Owner confirmed Pro/free trial/five days/$0 per year; provider ID match, test flag and exact period remain **pending** |
 | Privacy tasks | **Pending scope review**: two store-erasure tasks are blocked with `missing_configuration`, requested October 17 New York time; no plaintext shop selector in task rows. Their applicability must be established through authorized privacy tooling before cutover. Do not mark them complete or bypass them |
 | Final production migration approval | **Not requested yet**; required only after all gates pass and production-specific SQL is reviewed |
 
@@ -78,6 +87,6 @@ Final approval packet must include fresh provider evidence, resolved privacy sco
 
 ## UI/AI acceptance and staging
 
-25 local UI/AI/guard tests passed, including localized private dashboard/preview/setup/tasks, RTL and AI Shopping preference/session handling. Five additional assigned-owner/live-billing-verifier tests passed, including wrong app/shop, missing price/test evidence, unknown charge, provider failures and no-binding behavior. Tests use fixtures and create no Shopify checkout/order or customer messages. Broader PR CI is recorded separately.
+25 local UI/AI/guard tests passed, including localized private dashboard/preview/setup/tasks, RTL and AI Shopping preference/session handling. A five-test assigned-owner/live-billing-verifier suite also passed (three tests overlap the 25-test run), including wrong app/shop, missing price/test evidence, unknown charge, provider failures and no-binding behavior. Tests use fixtures and create no Shopify checkout/order or customer messages. Eight additional checkout handoff/transport/filesystem-claim fixture tests passed with no Shopify calls or checkout creation. Broader PR CI is recorded separately.
 
 Staging's app `2e424c769c25776a9086c36490ed14fc`, database, credentials, webhooks and callbacks are outside this operation. Production app is `e4585d4da1434c9e5649a2269e716076`. No staging change, uninstall, consent activation, customer send or recovery worker is included. Live authenticated browser acceptance still needs normal owner access and network permission for the production domains.
