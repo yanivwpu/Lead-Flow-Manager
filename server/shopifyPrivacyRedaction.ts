@@ -1,5 +1,6 @@
 import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { enqueuePrivacyRequest } from "./shopifyPrivacyRequests";
+import { assignmentPrivacyTablesQuery, assignmentPrivacyQueries } from "./shopifyAssignmentPrivacy";
 import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryStoreErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import crypto from "crypto";
 import { and, eq, inArray, or, sql } from "drizzle-orm";
@@ -140,6 +141,9 @@ export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
         ids.length ? and(inArray(integrations.userId, ids), sql`COALESCE(${integrations.config}->>'shopUrl', '') = ''`) : sql`false`)));
     await tx.delete(shopifyMerchantContacts).where(eq(shopifyMerchantContacts.canonicalShop, shop));
     await tx.delete(shopifyShopTrials).where(eq(shopifyShopTrials.canonicalShop, shop));
+    const assignmentTables = await tx.execute(assignmentPrivacyTablesQuery);
+    for (const query of assignmentPrivacyQueries(shop, assignmentTables.rows[0]))
+      await tx.execute(query);
     const dates = merchantRows.map(u => u.shopifyInstalledAt).filter((d): d is Date => !!d);
     // No address/domain/hash/user selector is retained in this task. Purge streams for the time window.
     await enqueuePrivacyRequest(tx, {
