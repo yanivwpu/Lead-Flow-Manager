@@ -134,6 +134,10 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     return finish(`${line(current)} × ${state.quantity}${stockNote(current,copy.verifiedStock)}\n${copy.confirm}`,"confirming");
    }
    if(intent==="confirm" && !state.query) return clarify(copy.repeatSearch);
+   // A failed follow-up classification must not erase an explicit selection.
+   // Only an explicit new search (or the cancel/restart paths above) may return
+   // to discovery; uncertain follow-ups require clarification, not re-selection.
+   if(state.selected && intent!=="search") return clarify(copy.selectedRetained);
    // An unrecognized selection or contextual reply cannot replace the search/filters.
    // An initial product purchase request can still start discovery.
    if((intent==="select" && !!previous?.choices.length) || intent==="other") return clarify(state.choices.length?copy.options:copy.repeatSearch);

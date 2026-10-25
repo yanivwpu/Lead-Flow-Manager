@@ -63,8 +63,12 @@ test("Inbox and private console share localized shopping presentation; pending s
     assert.doesNotMatch(html, /699.95/);
     assert.ok(html.includes(resource.shopping.steps.pending));
     state.step = "confirming";
+    // A reload can return both the offered list and a saved exact selection.
+    // Presentation must use the selected result, not stale discovery choices.
+    state.choices = [{ ...state.selected!, productId:"other", variantId:"other", productTitle:"Other discovery product" }];
     html = render();
     assert.match(html, /699.95/);
+    assert.doesNotMatch(html, /Other discovery product/);
     assert.ok(html.includes(resource.shopping.priceChecked));
     if (lng === "he") assert.match(html, /dir="rtl"/);
   }

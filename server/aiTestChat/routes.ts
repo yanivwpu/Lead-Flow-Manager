@@ -7,6 +7,11 @@ import {
   type TestOwner,
 } from "./sessions";
 import type { createTestChatGenerator } from "./generate";
+export type PrivateTestTurnDiagnostic = {
+  workspaceUserId: string; sessionId: string; eventId: string;
+  step: string | null; intent: string | null; choicesCount: number;
+  selectedVariantId: string | null; lastProofAt: string | null;
+};
 export function registerTestChatRoutes(
   app: Express,
   deps: {
@@ -18,6 +23,7 @@ export function registerTestChatRoutes(
     ) => Promise<{ allowed: boolean; limited?: boolean }>;
     generate: ReturnType<typeof createTestChatGenerator>;
     diagnostics: (id: string) => Promise<unknown>;
+    onTurnSaved?: (event: PrivateTestTurnDiagnostic) => void | Promise<void>;
   },
 ) {
   const sessions = createTestChatSessions(deps.db);
@@ -81,8 +87,7 @@ export function registerTestChatRoutes(
       .safeParse(req.body);
     if (!input.success)
       return res.status(400).json({ error: "invalid_test_message" });
-    return res.json(
-      await sessions.turn(
+    const view = await sessions.turn(
         auth,
         req.params.id,
         input.data.eventId,
@@ -94,7 +99,18 @@ export function registerTestChatRoutes(
             history,
             sessions: adapter,
           }),
-      ),
-    );
+      );
+    // Only committed state and opaque correlation IDs. Never pass prompts,
+    // transcripts, customer data, provider responses or credentials to logging.
+    try {
+      await deps.onTurnSaved?.({
+        workspaceUserId: auth.workspaceUserId, sessionId: view.id, eventId: input.data.eventId,
+        step: view.state.step ?? null, intent: view.state.intent ?? null,
+        choicesCount: view.state.choices?.length ?? 0,
+        selectedVariantId: view.state.selected?.variantId ?? null,
+        lastProofAt: view.state.selected?.verifiedAt ?? view.state.choices?.[0]?.verifiedAt ?? null,
+      });
+    } catch { /* A diagnostic failure cannot change a committed test turn. */ }
+    return res.json(view);
   });
 }
