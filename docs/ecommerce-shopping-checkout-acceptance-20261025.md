@@ -64,3 +64,6 @@ If a later merchant workflow specifically requires a manually prepared invoice/c
 ## Status at preparation
 
 Shopping acceptance is recorded. Natural selected-product verification is covered by focused regression tests. Native checkout/provider, freshness, duplicate-prevention and private administrative test components exist. Missing pieces are the private selected-session adapter, verified allowlist targeting, and a successful live read-only Storefront preflight for Liquid. Full customer runtime additionally requires separately reviewed schema/key readiness and activation. No live checkout/handoff acceptance is claimed, and checkout mutations, public Shopping, recovery and outbound messaging remain disabled.
+
+
+Follow-up: PR #190 is deployed. See [private checkout preflight preparation](shopify-private-checkout-preflight.md) for the existing Headless storefront evidence, secure credential binding, new read-only adapter and remaining provider/approval gates.

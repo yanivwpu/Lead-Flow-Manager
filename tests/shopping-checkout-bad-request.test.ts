@@ -48,3 +48,11 @@ test('existing verification serializes the exact named query and ID variables; H
  await assert.rejects(provider.verify({productId:'gid://shopify/Product/10108113912090',variantId:id,quantity:1,price:'600.00',currency:'USD',options:[{name:'Title',value:'Default Title'}],inventoryProof:{at:Date.now(),quantity:50,unrestricted:false}}),(e:any)=>e.code==='unavailable' && e.detail==='http_client_error');
  assert.equal(calls,1);
 });
+
+test('only the exact known Shopify BAD_REQUEST maps to the protected Online Store category',()=>{
+ const locked={message:'Online Store channel is locked.',extensions:{code:'BAD_REQUEST'}};
+ assert.equal(classifyBadRequest({errors:[locked]}),'online_store_channel_locked');
+ assert.equal(classifyBadRequest({errors:[{...locked,message:'Online Store channel is locked. token=private'}]}),'graphql_error_unclassified');
+ assert.equal(classifyBadRequest({errors:[{...locked,extensions:{code:'UNKNOWN'}}]}),'graphql_error_unclassified');
+ assert.equal(classifyBadRequest({errors:[locked,...failure('ACCESS_DENIED').errors]}),'graphql_errors_mixed');
+});

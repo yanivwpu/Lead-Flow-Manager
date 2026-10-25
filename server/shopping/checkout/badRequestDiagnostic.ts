@@ -21,7 +21,10 @@ export function classifyBadRequest(value: unknown): string {
   const categories = new Set<string>(), rejectedFields = new Set<string>();
   for (const error of errors) {
     const code = error?.extensions?.code;
-    const category = typeof code==='string' && Object.prototype.hasOwnProperty.call(codes,code) ? codes[code] : undefined;
+    // Exact known Shopify rejection only; never echo or classify arbitrary message fragments.
+    const category = code === 'BAD_REQUEST' && error?.message === 'Online Store channel is locked.'
+      ? 'online_store_channel_locked'
+      : typeof code==='string' && Object.prototype.hasOwnProperty.call(codes,code) ? codes[code] : undefined;
     if (!category) return 'graphql_error_unclassified';
     categories.add(category);
     const field = error?.extensions?.fieldName;

@@ -94,7 +94,7 @@ jobs:
         env:
           # Use the existing in-memory fixture: the admin journal intentionally requires public schema.
           CATALOG_TEST_DATABASE_URL: ""
-        run: node --import tsx tests/shopify-checkout-admin-test.test.ts
+        run: node --import tsx --test tests/shopify-checkout-admin-test.test.ts tests/ai-test-chat-checkout.test.ts
       - name: Conversational shopping and PostgreSQL session integration
         run: |
           node --import tsx tests/shopping-checkout-harness.test.ts

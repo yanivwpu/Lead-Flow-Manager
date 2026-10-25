@@ -1553,6 +1553,14 @@
     }
   },
   "testChat": {
+    "checkoutReadiness": "Check checkout readiness",
+    "checkoutReadOnly": "Private read-only check. No cart, order, payment, or message will be created.",
+    "checkoutReady": "Shopify readiness verified. Cart creation still requires separate approval.",
+    "checkoutLocked": "Shopify requires Storefront authorization for this protected store. No cart was created.",
+    "checkoutUnavailable": "Checkout readiness could not be verified. Refresh the selected variant and try again. No cart was created.",
+    "checkoutInventoryUnknown": "Exact tracked inventory quantity was not supplied.",
+    "checkoutInventory": "Verified tracked inventory: {{quantity}} units",
+    "checkoutVerifiedAt": "Verified at",
     "title": "Test Chat",
     "mode": "TEST MODE",
     "description": "Private internal testing. No messages are sent to customers.",

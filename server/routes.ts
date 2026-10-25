@@ -1,6 +1,7 @@
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
+import { createPrivateCheckoutPreflight } from "./aiTestChat/checkoutPreflight";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
 import { readShoppingSettings } from "./shopping/runtime";
@@ -11162,6 +11163,7 @@ export async function registerRoutes(
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
+    checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
     onTurnSaved: async event => {
       if (await privateShoppingAllowed(event.workspaceUserId))
         console.info("[PrivateShoppingTurn]", JSON.stringify(event));
@@ -11192,6 +11194,7 @@ export async function registerRoutes(
       const entitled = await shoppingEntitled(userId);
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
+        checkoutPreflightAvailable: testOnlyShopping && entitled,
         shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && entitled,
         shoppingTestOnly: testOnlyShopping && entitled,
         liveShoppingEnabled: savedShopping.enabled && savedShopping.allowedChannels.includes("webchat") && entitled,

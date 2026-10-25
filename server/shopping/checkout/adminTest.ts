@@ -26,23 +26,24 @@ export function configuredTestAccess(auth: {workspaceUserId:string;actorUserId:s
     auth.workspaceUserId === env.SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID &&
     (env.SHOPIFY_CHECKOUT_TEST_OPERATOR_IDS ?? '').split(',').map(s=>s.trim()).filter(Boolean).includes(auth.actorUserId);
 }
+export async function verifyCheckoutTestSetup(database: CatalogDb) {
+  const result = await database.execute(sql`SELECT to_regclass('public.shopify_checkout_admin_tests') AS name`);
+  if (!result.rows[0]?.name) throw new TestError(503,'checkout_test_setup_required_apply_reviewed_0112');
+  const index = await database.execute(sql`SELECT i.indisunique, i.indisvalid,
+    pg_get_expr(i.indpred,i.indrelid) AS predicate, pg_get_indexdef(i.indexrelid,1,true) AS column_name
+    FROM pg_index i WHERE i.indexrelid=to_regclass('public.shopify_checkout_admin_one_dispatch')
+    AND i.indrelid=to_regclass('public.shopify_checkout_admin_tests') AND i.indnkeyatts=1`);
+  const fence = index.rows[0];
+  if (fence?.indisunique !== true || fence.indisvalid !== true || fence.column_name !== 'shop' ||
+    fence.predicate !== '(claimed_at IS NOT NULL)')
+    throw new TestError(503,'checkout_test_setup_required_apply_reviewed_0112');
+}
 export function registerShopifyCheckoutAdminTest(app: Express, database: CatalogDb,
   authorize: (req:Request,res:Response)=>Promise<{workspaceUserId:string;actorUserId:string}|null>,
   requestFor = shopifyCatalogRequest, storefrontFetch = fetch,
 ) {
   const base = '/api/sales-catalog/commerce/checkout-test';
-  async function setup() {
-    const result = await database.execute(sql`SELECT to_regclass('public.shopify_checkout_admin_tests') AS name`);
-    if (!result.rows[0]?.name) throw new TestError(503,'checkout_test_setup_required_apply_reviewed_0112');
-    const index = await database.execute(sql`SELECT i.indisunique, i.indisvalid,
-      pg_get_expr(i.indpred,i.indrelid) AS predicate, pg_get_indexdef(i.indexrelid,1,true) AS column_name
-      FROM pg_index i WHERE i.indexrelid=to_regclass('public.shopify_checkout_admin_one_dispatch')
-      AND i.indrelid=to_regclass('public.shopify_checkout_admin_tests') AND i.indnkeyatts=1`);
-    const fence = index.rows[0];
-    if (fence?.indisunique !== true || fence.indisvalid !== true || fence.column_name !== 'shop' ||
-      fence.predicate !== '(claimed_at IS NOT NULL)')
-      throw new TestError(503,'checkout_test_setup_required_apply_reviewed_0112');
-  }
+  async function setup() { await verifyCheckoutTestSetup(database); }
   for (const action of ['access','preflight','diagnose','approve','create'] as const) {
     app[action === 'access' ? 'get' : 'post'](`${base}/${action}`, async(req,res)=>{
       res.set({'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});
