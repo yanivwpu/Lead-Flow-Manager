@@ -47,8 +47,13 @@ export function shoppingIntent(text: string): ShoppingIntent {
 }
 /** Generic price/stock follow-up only. Unknown product words must never bind a
  * new request to the saved selection or silently choose an offered variant. */
-export function shoppingVerificationFollowup(text: string): boolean {
+export function shoppingVerificationFollowup(text: string, selected?: Pick<ShoppingChoice,"productTitle">): boolean {
+  const productWords = new Set(selected?.productTitle.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
   const normalized = text.toLowerCase()
+    // A product noun is a reference only when it names the persisted selection.
+    // Never add arbitrary catalog words to the generic follow-up allowlist.
+    .replace(/\bselected\s+([\p{L}\p{N}]+)['’]s\b/gu, (reference, noun: string) =>
+      productWords.has(noun) ? "selected variant" : reference)
     .replace(/\b(variant|option|product)['’]s\b/gu, "$1")
     .replace(/['’]/g, "");
   const words = normalized.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
