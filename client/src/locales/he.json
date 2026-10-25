@@ -1560,6 +1560,14 @@
     }
   },
   "testChat": {
+    "checkoutReadiness": "בדיקת מוכנות לתשלום",
+    "checkoutReadOnly": "בדיקה פרטית לקריאה בלבד. לא ייווצרו עגלה, הזמנה, תשלום או הודעה.",
+    "checkoutReady": "המוכנות אומתה מול Shopify. יצירת עגלה עדיין דורשת אישור נפרד.",
+    "checkoutLocked": "Shopify דורשת הרשאת Storefront לחנות המוגנת הזו. לא נוצרה עגלה.",
+    "checkoutUnavailable": "לא ניתן היה לאמת את המוכנות לתשלום. יש לרענן את האפשרות שנבחרה ולנסות שוב. לא נוצרה עגלה.",
+    "checkoutInventoryUnknown": "לא סופקה כמות מלאי מנוהל מדויקת.",
+    "checkoutInventory": "מלאי מנוהל מאומת: {{quantity}} יחידות",
+    "checkoutVerifiedAt": "אומת בשעה",
     "title": "צ׳אט לבדיקה",
     "mode": "מצב בדיקה",
     "description": "בדיקה פנימית פרטית. לא נשלחות הודעות ללקוחות.",

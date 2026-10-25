@@ -2,7 +2,7 @@ import { CheckoutGuardError, verificationStage, verificationFailure } from './pr
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { compareMoney } from '../../../shared/shoppingAssistant';
-import { createShopifyCheckoutProvider } from './shopify';
+import { createShopifyCheckoutProvider, type StorefrontCredential } from './shopify';
 import { isShopifyProductPublished } from '../../salesCatalog/shopify/publication';
 import { SHOPIFY_INVENTORY_BATCH_QUERY } from '../../salesCatalog/shopify/inventory';
 import type { CatalogRequest } from '../../salesCatalog/shopify/api';
@@ -36,6 +36,8 @@ export async function runValidation(raw: unknown, deps: {
   installation: () => Promise<{shop:string;integrationId:string;token:string}|null>;
   requestFor: (shop:string,token:string)=>CatalogRequest;
   storefrontFetch: typeof fetch;
+  // Server-owned credential only. Legacy callers remain tokenless.
+  storefrontCredential?: StorefrontCredential;
   approval?: unknown;
   consume: () => Promise<void>;
   saveReceipt: (receipt: unknown)=>Promise<void>;
@@ -71,9 +73,11 @@ export async function runValidation(raw: unknown, deps: {
     throw new CheckoutGuardError('inventory_insufficient');
   const {shop,userId,...item} = selection;
   const verified = {...item,inventoryProof:{at:Date.now(),quantity:v.inventoryQuantity ?? null,unrestricted}};
-  const provider = createShopifyCheckoutProvider({shop:SHOP,credential:{kind:'tokenless'},fetch:deps.storefrontFetch});
+  const provider = createShopifyCheckoutProvider({shop:SHOP,credential:deps.storefrontCredential ?? {kind:'tokenless'},fetch:deps.storefrontFetch});
   await verificationStage('storefront',()=>provider.verify(verified));
-  if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false};
+  if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false,
+    inventory:{tracked:v.inventoryItem.tracked,quantity:v.inventoryItem.tracked && Number.isSafeInteger(v.inventoryQuantity) ? v.inventoryQuantity : null,
+      verifiedAt:new Date(verified.inventoryProof.at).toISOString()}};
   authorize(selection,deps.approval);
   const current = await verificationStage('installation',deps.installation);
   if (!current || current.shop!==SHOP || current.integrationId!==install.integrationId || current.token!==install.token)

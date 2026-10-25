@@ -13,7 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ShoppingActivityView } from "@/components/inbox/ShoppingActivity";
-import type { TestChatView } from "@shared/aiTestChat";
+import type { TestChatView, PrivateCheckoutPreflight } from "@shared/aiTestChat";
 type Diagnostics = {
   aiMode: string;
   shoppingEnabled: boolean;
@@ -21,6 +21,7 @@ type Diagnostics = {
   catalogStatus: string;
   inventoryStatus: string;
   retryAt: number | null;
+  checkoutPreflightAvailable?: boolean;
 };
 export function AiTestChat() {
   const { user, sessionAligned } = useAuth();
@@ -32,6 +33,7 @@ function Console() {
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
+  const [checkoutResult,setCheckoutResult] = useState<PrivateCheckoutPreflight>();
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(false);
@@ -49,6 +51,19 @@ function Console() {
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: "nearest" });
   }, [chat, busy]);
+  useEffect(() => { setCheckoutResult(undefined); }, [chat?.id,chat?.state.updatedAt]);
+  async function checkCheckout() {
+    if (!chat || busy) return;
+    setBusy(true); setCheckoutResult(undefined);
+    try {
+      const response = await apiRequest("POST",`/api/ai/test-chat/${chat.id}/checkout-preflight`,{});
+      const result = await response.json();
+      if (mounted.current) setCheckoutResult(result);
+    } catch {
+      if (mounted.current) setCheckoutResult({ready:false,cartCreated:false,cartCreationEnabled:false,
+        error:"checkout_preflight_unavailable"});
+    } finally { if (mounted.current) setBusy(false); }
+  }
   async function diagnose(id: string) {
     try {
       const r = await apiRequest("GET", `/api/ai/test-chat/${id}/diagnostics`);
@@ -157,6 +172,24 @@ function Console() {
         </p>
         <p className="text-xs text-muted-foreground">{t("testChat.scope")}</p>
         {chat && <ShoppingActivityView state={chat.state} />}
+        {diagnostics?.checkoutPreflightAvailable && chat && (
+          <aside className="rounded border p-3 space-y-2" aria-label={t("testChat.checkoutReadiness")}>
+            <p className="text-sm">{t("testChat.checkoutReadOnly")}</p>
+            <Button variant="outline" disabled={busy || chat.state.step!=="confirming" || !chat.state.selected}
+              onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
+            {checkoutResult && <div role="status" className="text-sm">
+              <p>{t(checkoutResult.ready ? "testChat.checkoutReady" :
+                checkoutResult.error.endsWith("online_store_channel_locked") ? "testChat.checkoutLocked" : "testChat.checkoutUnavailable")}</p>
+              {checkoutResult.ready && <>
+                <p>{checkoutResult.selection.quantity} × {chat.state.selected?.productTitle} / {chat.state.selected?.variantTitle}
+                  {" · "}{checkoutResult.selection.currency} {checkoutResult.selection.price}</p>
+                <p>{checkoutResult.inventory.quantity===null ? t("testChat.checkoutInventoryUnknown") :
+                  t("testChat.checkoutInventory",{quantity:checkoutResult.inventory.quantity})}</p>
+                <p>{t("testChat.checkoutVerifiedAt")}: {new Date(checkoutResult.inventory.verifiedAt).toLocaleTimeString()}</p>
+              </>}
+            </div>}
+          </aside>
+        )}
         <div
           role="log"
           aria-label={t("testChat.transcript")}

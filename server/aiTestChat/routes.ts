@@ -7,6 +7,7 @@ import {
   type TestOwner,
 } from "./sessions";
 import type { createTestChatGenerator } from "./generate";
+import type { PrivateCheckoutPreflight } from "@shared/aiTestChat";
 export type PrivateTestTurnDiagnostic = {
   workspaceUserId: string; sessionId: string; eventId: string;
   step: string | null; intent: string | null; choicesCount: number;
@@ -23,6 +24,7 @@ export function registerTestChatRoutes(
     ) => Promise<{ allowed: boolean; limited?: boolean }>;
     generate: ReturnType<typeof createTestChatGenerator>;
     diagnostics: (id: string) => Promise<unknown>;
+    checkoutPreflight?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<PrivateCheckoutPreflight>;
     onTurnSaved?: (event: PrivateTestTurnDiagnostic) => void | Promise<void>;
   },
 ) {
@@ -72,6 +74,15 @@ export function registerTestChatRoutes(
   route("get", "/api/ai/test-chat/:id/diagnostics", async (auth, req, res) => {
     await sessions.read(auth, req.params.id);
     return res.json(await deps.diagnostics(auth.workspaceUserId));
+  });
+  if (deps.checkoutPreflight) route("post", "/api/ai/test-chat/:id/checkout-preflight", async (auth, req, res) => {
+    res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
+    if (!req.sessionID) throw new TestChatError(403,"authenticated_session_required");
+    if (!req.is("application/json") || req.get("sec-fetch-site")==="cross-site")
+      throw new TestChatError(403,"same_origin_json_required");
+    if (!z.object({}).strict().safeParse(req.body).success)
+      throw new TestChatError(400,"invalid_checkout_preflight");
+    return res.json(await deps.checkoutPreflight!(auth,req.params.id,req.sessionID));
   });
   route("delete", "/api/ai/test-chat/:id", async (auth, req, res) => {
     await sessions.reset(auth, req.params.id);
