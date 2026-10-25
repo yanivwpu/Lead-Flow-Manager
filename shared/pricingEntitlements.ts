@@ -447,7 +447,7 @@ export function buildCanonicalOfferJsonLd(
   if (englishPath === "/pricing") {
     return {
       "@context": "https://schema.org",
-      "@graph": catalog.map((item) => {
+      "@graph": catalog.filter((item) => item.kind === "subscription_plan").map((item) => {
         const url = `${origin}${item.urlPath}`;
         if (item.kind === "subscription_plan") {
           return {
@@ -470,18 +470,10 @@ export function buildCanonicalOfferJsonLd(
     };
   }
 
-  if (englishPath === REALTOR_GROWTH_ENGINE_PATH) {
-    const item = catalog.find((row) => row.id === "realtor-growth-engine");
-    if (!item) return null;
-    return {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      name: item.name,
-      url: pageUrl,
-      description: item.description,
-      offers: item.offers.map((offer) => schemaOfferNode(offer, pageUrl)),
-    };
-  }
+  // RGE is included in Pro rather than sold as a standalone product.
+  // Its landing page already receives WebPage metadata; emitting a Product
+  // without an Offer or authentic reviews produces invalid Product snippets.
+  if (englishPath === REALTOR_GROWTH_ENGINE_PATH) return null;
 
   return null;
 }
