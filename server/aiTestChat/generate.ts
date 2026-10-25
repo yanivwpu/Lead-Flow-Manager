@@ -10,12 +10,14 @@ import {
 import { createShoppingSuggestion } from "../shopping/suggestion";
 import type { ShoppingSettings } from "@shared/shoppingAssistant";
 import type { aiService } from "../aiService";
+import { privateTestShoppingSettings } from "./shoppingAllowance";
 /** Same AI Brain method, router and shopping action; only the inbound/state adapter differs. */
 export function createTestChatGenerator(deps: {
   ai: Pick<typeof aiService, "suggestReply">;
   commerce: CommerceShoppingProvider;
   settings: (id: string) => Promise<ShoppingSettings>;
   entitled: (id: string) => Promise<boolean>;
+  privateShoppingAllowed?: (id: string) => Promise<boolean>;
   knowledge: (id: string) => Promise<AiBusinessKnowledge | undefined>;
   aiSettings: (id: string) => Promise<AiSettings | undefined>;
   meter: (id: string) => Promise<void>;
@@ -37,17 +39,23 @@ export function createTestChatGenerator(deps: {
       .map((m) => detectConversationLanguage(m.content))
       .find((d) => d.confident);
     const locale = detected.confident ? detected.code : (prior?.code ?? "en");
+    const privateShopping = await deps.privateShoppingAllowed?.(input.userId) ?? false;
+    const settings = async (id: string) => privateTestShoppingSettings(
+      await deps.settings(id), privateShopping && id === input.userId,
+    );
     const shopping = createShoppingService({
       commerce: deps.commerce,
       sessions: input.sessions,
-      settings: async id => ({...await deps.settings(id),checkoutEnabled:true}),
+      settings: async id => ({...await settings(id),checkoutEnabled:!privateShopping}),
       entitled: deps.entitled,
       // Pure preview: this generator has no provider/cart capability or customer-message sender.
-      checkout: async () => ({status:"ready"}),
-      checkoutPreview: true,
+      ...(privateShopping ? {} : {
+        checkout: async () => ({status:"ready" as const}),
+        checkoutPreview: true,
+      }),
     });
     const suggestion = createShoppingSuggestion({
-      settings: deps.settings,
+      settings,
       latestInbound: async (userId, conversationId) =>
         userId === input.userId && conversationId === input.sessionId
           ? { id: latest.id, content: latest.content }
