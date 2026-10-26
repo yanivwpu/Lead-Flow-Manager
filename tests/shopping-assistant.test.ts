@@ -23,7 +23,7 @@ test("product discovery excludes generic trailing questions without broadening p
  assert.equal(catalogSearchTerms(shoppingFilters("show Liquid blue medium snowboard","USD").query),"liquid blue medium snowboard");
  assert.equal(catalogSearchTerms(shoppingFilters("show Oxygen snowboard. Compare Liquid snowboard","USD").query),"oxygen snowboard liquid snowboard");
 });
-function fixture() {
+function fixture(options:{catalogTitleDiscovery?:boolean}={}) {
  let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
  let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5 as number|null, tracked=true, entitled=true;
  const config=shoppingSettings({enabled:true,handoffOnFailure:true});
@@ -32,7 +32,7 @@ function fixture() {
  const commerce={source:async(id:string)=>id==="tenant-a"?{id:"s1",currency:"USD"}:null,purchaseCandidates:async(_id:string,request:any)=>{assert.equal(request.filters.currency,"USD");return [{...product,variants}];},lookupVariant:async()=>null,
  verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;if(mode==="empty")return [];if(mode==="throw")throw Error("provider_unavailable");return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked,inventoryPolicy:"DENY",verifiedAt:new Date(mode==="stale"?clock-120_000:clock)},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
  const sessions:ShoppingSessionStore={async withTurn(turn,run){if(turn.userId!=="tenant-a")return null;return run(state,async s=>{state=s;});}};
- const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled,now:()=>clock});
+ const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled,now:()=>clock,...options});
  let event=0;
  return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number|null)=>quantity=n,tracked:(value:boolean)=>tracked=value,config,entitled:(b:boolean)=>entitled=b};
 }
@@ -191,4 +191,21 @@ test("only fresh known tracked inventory is reported; unknown counts and untrack
  const stale=fixture();stale.mode("stale");result=(await stale.turn("show snowboard"))!;
  assert.equal(result.state.step,"pending");
  assert.doesNotMatch(result.reply,/Tracked stock|5 units/);
+});
+
+test("bare-title discovery is private opt-in, exact catalog-grounded and never replaces a saved selection",async()=>{
+ const publicChat=fixture();assert.equal(await publicChat.turn("Snowboard"),null);assert.equal(publicChat.calls(),0);
+ for(const text of ["Snow","Snowboard boots","What does WhachatCRM do?"]){
+  const f=fixture({catalogTitleDiscovery:true});assert.equal(await f.turn(text),null);assert.equal(f.calls(),0);assert.equal(f.state(),null);
+ }
+ const f=fixture({catalogTitleDiscovery:true});const result=await f.turn("Snowboard");
+ assert.equal(result!.state.intent,"search");assert.equal(result!.state.step,"selecting");assert.equal(result!.state.selected,undefined);
+ assert.equal(result!.state.choices.length,2);assert.equal(f.calls(),1);
+ await f.turn("Ice");const selected=await f.turn("Snowboard");
+ assert.equal(selected!.state.selected?.variantId,"v1");assert.equal(selected!.state.step,"confirming");
+ assert.match(selected!.reply,/selection is saved/);
+ for(const setup of [(v:ReturnType<typeof fixture>)=>v.entitled(false),(v:ReturnType<typeof fixture>)=>{v.config.enabled=false;}]){
+  const denied=fixture({catalogTitleDiscovery:true});setup(denied);assert.equal(await denied.turn("Snowboard"),null);assert.equal(denied.calls(),0);
+ }
+ const denied=fixture({catalogTitleDiscovery:true});assert.equal(await denied.turn("Snowboard",{userId:"tenant-b"}),null);assert.equal(denied.calls(),0);
 });
