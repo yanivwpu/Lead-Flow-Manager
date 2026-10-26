@@ -26,10 +26,10 @@ const scope = (row: any) => hash([row.request_id,row.workspace_id,row.operator_i
 export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {executionEnabled?:()=>boolean}) {
   const preflight = createPrivateCheckoutPreflight(deps);
   const enabled = deps.executionEnabled ?? (()=>PRIVATE_CART_EXECUTION_ENABLED);
-  async function context(auth:TestOwner,sessionId:string,httpSessionId:string) {
+  async function context(auth:TestOwner,sessionId:string,httpSessionId:string,inspection=false) {
     // Deliberately owner-only; do not retarget the unrelated legacy Hydrogen allowlist.
     if (auth.workspaceUserId !== auth.actorUserId) throw new TestChatError(404,"not_found");
-    const ctx = await privateCheckoutSnapshot(deps,auth,sessionId,httpSessionId);
+    const ctx = await privateCheckoutSnapshot(deps,auth,sessionId,httpSessionId,{allowExpiredForInspection:inspection});
     if (ctx.credential.kind === "tokenless") throw new TestChatError(503,"storefront_test_credential_setup_required");
     if (ctx.selection.productId!==LIQUID_PRODUCT || ctx.selection.variantId!==LIQUID_VARIANT || ctx.selection.quantity!==1)
       throw new TestChatError(409,"exact_liquid_quantity_one_required");
@@ -54,6 +54,29 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
     const row=result.rows[0];
     return {requestId:row.request_id,scopeSha256:scope(row),expiresAt,selection:after.selection,inventory:proof.inventory,quantityRule:proof.quantityRule,
       cartCreated:false,cartCreationEnabled:false,nextAction:"separate_cart_approval_required"};
+  }
+  /** Read only: inspect the existing request for this exact current session/credential binding.
+   * Expired approval rows stay expired. No Shopify request or journal write occurs here. */
+  async function inspect(auth:TestOwner,sessionId:string,httpSessionId:string) {
+    const ctx=await context(auth,sessionId,httpSessionId,true);
+    await verifyCheckoutTestSetup(deps.db);
+    const found=await deps.db.execute(sql`SELECT * FROM public.shopify_checkout_admin_tests
+      WHERE workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId}
+      AND session_digest=${ctx.sessionDigest} AND shop=${SHOP} AND integration_id=${ctx.integrationId}
+      AND installation_digest=${ctx.installationDigest} AND selection_digest=${selectionDigest(ctx.selection)}
+      AND selection->>'kind'='private_liquid_v1' ORDER BY created_at DESC,request_id DESC LIMIT 1`);
+    const after=await context(auth,sessionId,httpSessionId,true);
+    if(ctx.sessionDigest!==after.sessionDigest)throw new TestChatError(409,"session_changed");
+    const row=found.rows[0];
+    if(!row)return {status:"no_request_for_current_binding",cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
+    const saved=envelope.safeParse(row.selection);
+    if(!saved.success || selectionDigest(saved.data.selection)!==row.selection_digest)
+      throw new TestChatError(409,"selection_changed");
+    const expiresAt=new Date(row.expires_at as string).toISOString();
+    return {status:row.claimed_at?"dispatch_claimed_result_unknown":Date.parse(expiresAt)<=Date.now()?"expired":row.approved_at?"approved":"prepared_unapproved",
+      testSessionExpired:ctx.sessionExpired,createdAt:new Date(row.created_at as string).toISOString(),requestId:row.request_id,scopeSha256:scope(row),expiresAt,selection:saved.data.selection,
+      approved:!!row.approved_at,dispatchClaimed:!!row.claimed_at,originalInventoryProofAvailable:false,
+      cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
   }
   async function execute(auth:TestOwner,sessionId:string,httpSessionId:string,raw:unknown,signal?:AbortSignal) {
     const available=()=>{if(!enabled())throw new TestChatError(403,"private_cart_execution_disabled");
@@ -112,5 +135,5 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
     if(!receipt)throw new TestChatError(409,"private_cart_failed_closed_do_not_retry");
     return {checkoutUrl:receipt.checkoutUrl,cartCreated:true,paymentStatus:"unknown",navigation:"separate_approval_required"};
   }
-  return {prepare,execute};
+  return {prepare,inspect,execute};
 }

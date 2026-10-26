@@ -11161,11 +11161,13 @@ export async function registerRoutes(
   // Private transport only: never passed to the live Shopping runtime or saved settings.
   const privateShoppingAllowed = async (userId: string) =>
     privateTestShoppingAllowed(await storage.getUser(userId), process.env);
+  const privateCartHandoff = createPrivateCartHandoff({db,entitled:shoppingEntitled});
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
-    checkoutHandoffPrepare: createPrivateCartHandoff({db,entitled:shoppingEntitled}).prepare,
+    checkoutHandoffPrepare: privateCartHandoff.prepare,
+    checkoutHandoffInspect: privateCartHandoff.inspect,
     onTurnSaved: async event => {
       if (await privateShoppingAllowed(event.workspaceUserId))
         console.info("[PrivateShoppingTurn]", JSON.stringify(event));

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
-import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
+import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, privateCartServerTime, PrivateCartResponseError, type PrivateCartTestSummary, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
 import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,8 +35,17 @@ function Console() {
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
   const [prepared,setPrepared] = useState<PrivateCartTestRequest>();
-  const [prepareError,setPrepareError] = useState<"expired"|"unavailable">();
+  const [prepareError,setPrepareError] = useState<"expired"|"unavailable"|"review">();
+  const [reportedRequest,setReportedRequest] = useState<PrivateCartTestSummary>();
+  const serverClockOffset = useRef(0);
+  const serverNow = () => Date.now()+serverClockOffset.current;
+  function observeServerTime(response:Response) {
+    serverClockOffset.current=privateCartServerTime(response.headers.get("date"))-Date.now();
+    setNow(serverNow());
+  }
   const [now,setNow] = useState(Date.now);
+  const displayedRequest=prepared??reportedRequest;
+  const requestIsLive=!!displayedRequest && Date.parse(displayedRequest.expiresAt)>now;
   const preparing = useRef(false);
   const requestGeneration = useRef(0);
   const selectionVersion = useRef("");
@@ -59,32 +68,36 @@ function Console() {
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: "nearest" });
   }, [chat, busy]);
-  useEffect(() => { setCheckoutResult(undefined); setPrepared(undefined); setPrepareError(undefined); }, [chat?.id,chat?.state.updatedAt]);
+  useEffect(() => { setCheckoutResult(undefined); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined); }, [chat?.id,chat?.state.updatedAt]);
   useEffect(() => {
-    if (!open) { requestGeneration.current++; setPrepared(undefined); setPrepareError(undefined); setCheckoutResult(undefined); return; }
-    setNow(Date.now());
-    const timer=setInterval(()=>setNow(Date.now()),1000);
+    if (!open) { requestGeneration.current++; setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined); setCheckoutResult(undefined); return; }
+    setNow(serverNow());
+    const timer=setInterval(()=>setNow(serverNow()),1000);
     return ()=>clearInterval(timer);
   },[open]);
   async function prepareCartTest() {
-    if(!chat || busy || preparing.current || !cartTestPreparationAllowed(chat,checkoutResult))return;
+    if(!chat || busy || preparing.current || prepareError || requestIsLive || !cartTestPreparationAllowed(chat,checkoutResult,serverNow()))return;
     const version=selectionVersion.current, generation=requestGeneration.current;
-    preparing.current=true; setBusy(true); setPrepared(undefined); setPrepareError(undefined);
+    preparing.current=true; setBusy(true); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined);
     try {
       const result=await preparePrivateCartTest(chat,checkoutResult,async(path,body)=>{
-        const response=await apiRequest("POST",path,body); return response.json();
-      });
+        const response=await apiRequest("POST",path,body); observeServerTime(response);
+        return {data:await response.json(),serverDate:response.headers.get("date")};
+      },serverNow);
       if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setPrepared(result);
-    }catch(failure){if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setPrepareError(privateCartPreparationError(failure));}
+    }catch(failure){if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation){ setPrepareError(privateCartPreparationError(failure));
+      if(failure instanceof PrivateCartResponseError)setReportedRequest(failure.summary); }}
     finally {preparing.current=false;if(mounted.current)setBusy(false);}
   }
   async function checkCheckout() {
     if (!chat || busy) return;
     requestGeneration.current++;
     const version=selectionVersion.current, generation=requestGeneration.current;
-    setBusy(true); setCheckoutResult(undefined); setPrepared(undefined); setPrepareError(undefined);
+    setBusy(true); setCheckoutResult(undefined);
+    if(!requestIsLive)setPrepareError(undefined);
     try {
       const response = await apiRequest("POST",`/api/ai/test-chat/${chat.id}/checkout-preflight`,{});
+      observeServerTime(response);
       const result = await response.json();
       if (mounted.current && selectionVersion.current===version && requestGeneration.current===generation) setCheckoutResult(result);
     } catch {
@@ -110,6 +123,7 @@ function Console() {
     setError(false);
     try {
       const r = await apiRequest("POST", "/api/ai/test-chat", {});
+      observeServerTime(r);
       const data = await r.json();
       if (mounted.current) {
         setChat(data);
@@ -131,7 +145,7 @@ function Console() {
         ? pending.current
         : { eventId: crypto.randomUUID(), text: text.trim() };
     requestGeneration.current++;
-    setPrepared(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
+    setPrepared(undefined); setReportedRequest(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
     pending.current = turn;
     setBusy(true);
     setError(false);
@@ -165,7 +179,7 @@ function Console() {
   async function reset() {
     if (!chat || busy) return;
     requestGeneration.current++;
-    setPrepared(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
+    setPrepared(undefined); setReportedRequest(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
     setBusy(true);
     setError(false);
     try {
@@ -211,15 +225,15 @@ function Console() {
               onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
             {Date.parse(chat.expiresAt)<=now && <p role="status" className="text-sm">{t("testChat.checkoutSessionExpired")}</p>}
             {checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
-              <Button variant="outline" disabled={busy || (!!prepared && Date.parse(prepared.expiresAt)>now)}
+              <Button variant="outline" disabled={busy || !!prepareError || requestIsLive}
                 onClick={()=>void prepareCartTest()}>{t("testChat.prepareCartTest")}</Button>}
             {checkoutResult?.ready && !cartTestPreparationAllowed(chat,checkoutResult,now) &&
               <p className="text-sm">{t(Date.parse(chat.expiresAt)<=now?"testChat.checkoutSessionExpired":"testChat.prepareRefreshReadiness")}</p>}
-            {prepareError && <p role="alert" className="text-sm">{t(prepareError==="expired"?"testChat.checkoutSessionExpired":"testChat.prepareUnavailable")}</p>}
-            {prepared && <section aria-label={t("testChat.preparedCartTest")} className="space-y-2 text-sm">
-              <p role="status">{t(Date.parse(prepared.expiresAt)<=now?"testChat.prepareExpired":"testChat.prepareApprovalRequired")}</p>
-              <p>{t("testChat.prepareExpiresAt")}: <time dateTime={prepared.expiresAt}>{new Date(prepared.expiresAt).toLocaleString()}</time></p>
-              <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 select-text">{JSON.stringify(prepared,null,2)}</pre>
+            {prepareError && <p role="alert" className="text-sm">{t(prepareError==="expired"?"testChat.checkoutSessionExpired":prepareError==="review"?"testChat.prepareResponseReview":"testChat.prepareUnavailable")}</p>}
+            {displayedRequest && <section aria-label={t("testChat.preparedCartTest")} className="space-y-2 text-sm">
+              <p role="status">{t(Date.parse(displayedRequest.expiresAt)<=now?"testChat.prepareExpired":prepareError==="review"?"testChat.prepareResponseReview":"testChat.prepareApprovalRequired")}</p>
+              <p>{t("testChat.prepareExpiresAt")}: <time dateTime={displayedRequest.expiresAt}>{new Date(displayedRequest.expiresAt).toLocaleString()}</time></p>
+              <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 select-text">{JSON.stringify(displayedRequest,null,2)}</pre>
             </section>}
             {checkoutResult && <div role="status" className="text-sm">
               <p>{t(checkoutResult.ready ? "testChat.checkoutReady" :

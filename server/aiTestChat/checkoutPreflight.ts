@@ -32,7 +32,7 @@ export type PrivateCheckoutDependencies = {
   storefrontFetch?: typeof fetch;
 };
 /** Server-only snapshot: no Shopify mutation and no journal writes. */
-export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies, auth: TestOwner, sessionId: string, httpSessionId: string) {
+export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies, auth: TestOwner, sessionId: string, httpSessionId: string, inspection: { allowExpiredForInspection?: boolean } = {}) {
   const { db } = deps, env = deps.env ?? process.env;
   if (!httpSessionId) throw new TestChatError(403, "authenticated_session_required");
   if (!z.string().uuid().safeParse(sessionId).success) throw new TestChatError(400, "invalid_test_session");
@@ -40,14 +40,15 @@ export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies,
   const [owner] = await db.select({id:users.id,email:users.email}).from(users).where(eq(users.id,auth.workspaceUserId)).limit(1);
   if (!privateTestShoppingAllowed(owner,env)) throw new TestChatError(404,"not_found");
   if (!await deps.entitled(auth.workspaceUserId)) throw new TestChatError(403,"shopping_entitlement_required");
-  const [row] = await db.select({state:aiTestSessions.shoppingState,leaseUntil:aiTestSessions.leaseUntil})
+  // Only the authenticated metadata inspector opts into expired-row reads; live callers retain the expiry predicate.
+  const [row] = await db.select({state:aiTestSessions.shoppingState,leaseUntil:aiTestSessions.leaseUntil,expiresAt:aiTestSessions.expiresAt})
     .from(aiTestSessions).where(and(eq(aiTestSessions.id,sessionId),eq(aiTestSessions.userId,auth.workspaceUserId),
-      eq(aiTestSessions.actorId,auth.actorUserId),gt(aiTestSessions.expiresAt,new Date()))).limit(1);
+      eq(aiTestSessions.actorId,auth.actorUserId),...(inspection.allowExpiredForInspection?[]:[gt(aiTestSessions.expiresAt,new Date())]))).limit(1);
   const state = row?.state as ShoppingState | undefined, age = Date.now()-Date.parse(state?.updatedAt ?? "");
   if (!row) throw new TestChatError(404,"session_expired");
   if (row.leaseUntil && row.leaseUntil.getTime()>Date.now()) throw new TestChatError(409,"turn_processing");
   if (state?.version!==1 || state.step!=="confirming" || !state.selected || state.pending ||
-      !state.consumedEventIds?.includes(state.lastEventId) || !Number.isFinite(age) || age<0 || age>30*60_000)
+      !state.consumedEventIds?.includes(state.lastEventId) || !Number.isFinite(age) || age<0 || (!inspection.allowExpiredForInspection && age>30*60_000))
     throw new TestChatError(409,"selected_variant_required");
   const install = await resolveCatalogInstallation(db,auth.workspaceUserId,SHOP);
   if (credential.kind!=="tokenless" && credential.token===install?.token)
@@ -66,7 +67,7 @@ export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies,
   const selection = selectionSchema.safeParse({shop:SHOP,userId:auth.workspaceUserId,productId:product.externalId,
     variantId:variant.externalId,quantity:state.quantity,price:state.selected.price,currency:state.selected.currency,options:state.selected.options});
   if (!selection.success) throw new TestChatError(409,"selected_variant_required");
-  return {credential,credentialBinding:digest(credential),selection:selection.data,integrationId:install.integrationId,binding:digest([sessionId,auth,httpSessionId,state,selection.data,source.id,source.integrationId,install.integrationId,install.token])};
+  return {sessionExpired:row.expiresAt.getTime()<=Date.now(),credential,credentialBinding:digest(credential),selection:selection.data,integrationId:install.integrationId,binding:digest([sessionId,auth,httpSessionId,state,selection.data,source.id,source.integrationId,install.integrationId,install.token])};
 }
 /** Read-only adapter. It has no approval/claim, cart preparation, receipt or messaging entry point. */
 export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies) {
