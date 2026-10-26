@@ -9,7 +9,8 @@ import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation
 import { shopifyCatalogRequest } from "../salesCatalog/shopify/api";
 import type { CheckoutReceipt } from "../shopping/checkout/contract";
 
-export const PRIVATE_CART_EXECUTION_ENABLED = false;
+// Phase 1 activates only the guarded pilot transport; preparation is not execution approval.
+export const PRIVATE_CART_EXECUTION_ENABLED = true;
 export const LIQUID_PRODUCT = "gid://shopify/Product/10108114174234";
 export const LIQUID_VARIANT = "gid://shopify/ProductVariant/51638769221914";
 export const PRIVATE_CART_CONFIRMATION = "CREATE EXACTLY ONE DEVELOPMENT STORE CART";
@@ -20,9 +21,9 @@ const envelope = z.object({kind:z.literal("private_liquid_v1"),selection:selecti
 const scope = (row: any) => hash([row.request_id,row.workspace_id,row.operator_id,row.session_digest,
   row.shop,row.integration_id,row.installation_digest,row.selection,row.selection_digest,new Date(row.expires_at).toISOString()]);
 
-/** Private Test Chat transport only. Execution stays source-disabled by default.
- * executionEnabled is an internal dependency for exercising the future bridge in fixtures;
- * production uses the false source gate, independent of public Shopping settings. */
+/** Private Test Chat transport only. Production uses the reviewed source gate;
+ * executionEnabled is an internal fixture/rollback dependency, never a browser input.
+ * Every execution still requires exact explicit approval and all independent pilot guards. */
 export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {executionEnabled?:()=>boolean}) {
   const preflight = createPrivateCheckoutPreflight(deps);
   const enabled = deps.executionEnabled ?? (()=>PRIVATE_CART_EXECUTION_ENABLED);

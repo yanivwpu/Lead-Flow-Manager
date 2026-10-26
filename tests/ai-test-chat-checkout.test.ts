@@ -59,14 +59,15 @@ async function fixture() {
    {data:{node:nodePatch===null?null:{...live(),price:{amount:changed?'999.00':'749.95',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1},quantityAvailable:50,currentlyNotInStock:false,...nodePatch}}};
   return new Response(JSON.stringify(response),{status,headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
  }) as typeof fetch;
- let executionEnabled=false;
+ let executionEnabled:boolean|undefined=false;
  let handlers:Record<string,any>={};
  function mount(){
+  const executionGate=executionEnabled===undefined?{}:{executionEnabled:()=>executionEnabled!};
   handlers={};const app={get:(p:string,h:any)=>handlers['GET '+p]=h,post:(p:string,h:any)=>handlers['POST '+p]=h,delete:(p:string,h:any)=>handlers['DELETE '+p]=h};
   registerTestChatRoutes(app as any,{db,authorize:async(req,res)=>{if(!authorized){res.status(401).json({error:'unauthorized'});return null;}return req.auth??auth;},
    access:async()=>({allowed:entitled}),generate:(async()=>{throw Error('AI must not run');}) as any,diagnostics:async()=>({}),
-   checkoutHandoffExecute:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch,executionEnabled:()=>executionEnabled}).execute,
-   checkoutHandoffInspect:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).inspect,
+   checkoutHandoffExecute:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch,...executionGate}).execute,
+   checkoutHandoffInspect:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch,...executionGate}).inspect,
    checkoutHandoffPrepare:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).prepare,
    checkoutPreflight:createPrivateCheckoutPreflight({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch})});
  }
@@ -75,7 +76,7 @@ async function fixture() {
   patch.captureResponse?.(res);
   await handlers[(patch.method??'POST')+' /api/ai/test-chat/:id/'+(patch.action??'checkout-preflight')](Object.assign(new EventEmitter(),{params:{id:session.id},sessionID:'authenticated-fixture-session',body,is:()=>true,get:()=>undefined,...patch}),res);
   return {code,data};}
- return {...f,db,session,source,save,call,mount,configured,headers,requestFor,storefrontFetch,executionEnabled:(v:boolean)=>{executionEnabled=v;},
+ return {...f,db,session,source,save,call,mount,configured,headers,requestFor,storefrontFetch,executionEnabled:(v:boolean)=>{executionEnabled=v;},useSourceGate:()=>{executionEnabled=undefined;mount();},
   nodePatch:(value:any)=>{nodePatch=value;},cartMode:(value:typeof cartMode)=>{cartMode=value;},entitled:async()=>entitled,state:()=>state,reads:()=>reads,creates:()=>creates,
   provider:(s:number,c=false)=>{status=s;changed=c;},afterFetch:(run?:()=>Promise<void>)=>{afterFetch=run;},authorize:(value:boolean)=>{authorized=value;},entitle:(value:boolean)=>{entitled=value;}};
  } catch(error) { await f.cleanup(); throw error; }
@@ -174,9 +175,9 @@ async function bridgeFixture() {
  const claims=async()=>Number((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests WHERE claimed_at IS NOT NULL')).rows[0].n);
  return {...f,bridge,deps,prepare,approval,execute,claims,enable:(v:boolean)=>{enabled=v;}};
 }
-test('private handoff prepares a precise approval request only; production execution stays source-disabled',async()=>{
+test('private handoff preparation grants no execution approval; explicit rollback gate still disables execution',async()=>{
  const f=await bridgeFixture();try{
-  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
+  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
   const prepared=await f.call({},{action:'checkout-handoff-request'});assert.equal(prepared.code,200);
   const request=prepared.data;
   assert.equal(request.selection.variantId,variant);assert.equal(request.selection.quantity,1);
@@ -187,7 +188,7 @@ test('private handoff prepares a precise approval request only; production execu
   const rows=await f.pg.query('SELECT * FROM shopify_checkout_admin_tests');
   assert.equal(rows.rows[0].approved_at,null);assert.equal(rows.rows[0].claimed_at,null);
   assert.doesNotMatch(JSON.stringify(rows.rows),/synthetic-storefront|fixture-token|authenticated-fixture-session|checkoutUrl/);
-  await assert.rejects(createPrivateCartHandoff(f.deps).execute(auth,f.session.id,'authenticated-fixture-session',f.approval(request)),/private_cart_execution_disabled/);
+  await assert.rejects(createPrivateCartHandoff({...f.deps,executionEnabled:()=>false}).execute(auth,f.session.id,'authenticated-fixture-session',f.approval(request)),/private_cart_execution_disabled/);
   const source=readFileSync('server/aiTestChat/routes.ts','utf8');
   assert.doesNotMatch(source,/route\("post",[^\n]*(?:cart-create|cart-approve)/);
   assert.doesNotMatch(readFileSync('server/aiTestChat/generate.ts','utf8'),/cartHandoff|checkout-handoff-request/);
@@ -343,7 +344,7 @@ test('single GET inspects the same persisted request, including expiry, without 
 
 const executionHeaders=(name:string)=>name==='origin'?'https://app.whachatcrm.com':name==='sec-fetch-site'?'same-origin':undefined;
 const routePatch={action:'checkout-handoff-execute',get:executionHeaders};
-test('execution HTTP route: default false gate, exact expiry and explicit confirmation; no journal/provider action while disabled',async()=>{
+test('execution HTTP route: rollback false gate, exact expiry and explicit confirmation; no journal/provider action while disabled',async()=>{
  const f=await bridgeFixture();try{
   const request=await f.prepare(),before=await f.pg.query('SELECT * FROM shopify_checkout_admin_tests');
   const reads=f.reads(),providerCalls=f.headers.length;
@@ -403,5 +404,33 @@ test('execution HTTP route: ambiguous mutation consumes the shared claim, and cl
   const result=await f.call(f.approval(request),{...routePatch,captureResponse:(value:any)=>{res=value;}});
   assert.equal(result.code,409);assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
   assert.equal(res.listenerCount('close'),0);
+ }finally{await f.cleanup();}
+});
+
+
+test('activated source gate: defaults to denial without a fresh exact approval; foreign owner, session and environment never dispatch',async()=>{
+ const f=await bridgeFixture();try{
+  f.useSourceGate();assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
+  const status=await f.call({},{method:'GET',action:'checkout-handoff-request'});
+  assert.equal(status.code,200);assert.equal(status.data.executionEnabled,true);
+  assert.equal(status.data.status,'no_request_for_current_binding');assert.equal(status.data.cartCreationEnabled,false);
+  const body={requestId:'00000000-0000-4000-8000-000000000001',scopeSha256:'0'.repeat(64),
+   expiresAt:new Date(Date.now()+300000).toISOString(),confirmation:PRIVATE_CART_CONFIRMATION};
+  for(const raw of [{},{...body,confirmation:undefined},{...body,confirmation:'yes'},
+   {...body,expiresAt:undefined},{...body,quantity:1}])assert.equal((await f.call(raw,routePatch)).code,400);
+  assert.equal((await f.call(body,routePatch)).code,409); // No persisted request; the gate is not approval.
+  f.authorize(false);assert.equal((await f.call(body,routePatch)).code,401);f.authorize(true);
+  for(const bad of [{workspaceUserId:'tenant-b',actorUserId:'tenant-b'},{...auth,actorUserId:'tenant-b'}])
+   assert.equal((await f.call(body,{...routePatch,auth:bad})).code,404);
+  f.configured.RAILWAY_ENVIRONMENT_NAME='staging';assert.equal((await f.call(body,routePatch)).code,404);
+  f.configured.RAILWAY_ENVIRONMENT_NAME='production';
+  await f.db.update(users).set({email:'other@example.invalid'}).where(eq(users.id,id));
+  assert.equal((await f.call(body,routePatch)).code,404);
+  await f.db.update(users).set({email:'marketing@whachatcrm.com'}).where(eq(users.id,id));
+  assert.equal((await f.call(body,{...routePatch,sessionID:null})).code,403);
+  await f.db.update(aiTestSessions).set({expiresAt:new Date(0)}).where(eq(aiTestSessions.id,f.session.id));
+  assert.equal((await f.call(body,routePatch)).code,404);
+  assert.equal(f.reads(),0);assert.equal(f.headers.length,0);assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+  assert.equal((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests')).rows[0].n,0);
  }finally{await f.cleanup();}
 });
