@@ -177,7 +177,7 @@ async function bridgeFixture() {
 }
 test('private handoff preparation grants no execution approval; explicit rollback gate still disables execution',async()=>{
  const f=await bridgeFixture();try{
-  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
+  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
   const prepared=await f.call({},{action:'checkout-handoff-request'});assert.equal(prepared.code,200);
   const request=prepared.data;
   assert.equal(request.selection.variantId,variant);assert.equal(request.selection.quantity,1);
@@ -408,17 +408,17 @@ test('execution HTTP route: ambiguous mutation consumes the shared claim, and cl
 });
 
 
-test('self-service review source gate: execution stays disabled and unauthorized owners never dispatch',async()=>{
+test('activated self-service source gate: exact approval is required and unauthorized owners never dispatch',async()=>{
  const f=await bridgeFixture();try{
-  f.useSourceGate();assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
+  f.useSourceGate();assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
   const status=await f.call({},{method:'GET',action:'checkout-handoff-request'});
-  assert.equal(status.code,200);assert.equal(status.data.executionEnabled,false);
+  assert.equal(status.code,200);assert.equal(status.data.executionEnabled,true);
   assert.equal(status.data.status,'no_request_for_current_binding');assert.equal(status.data.cartCreationEnabled,false);
   const body={requestId:'00000000-0000-4000-8000-000000000001',scopeSha256:'0'.repeat(64),
    expiresAt:new Date(Date.now()+300000).toISOString(),confirmation:PRIVATE_CART_CONFIRMATION};
   for(const raw of [{},{...body,confirmation:undefined},{...body,confirmation:'yes'},
    {...body,expiresAt:undefined},{...body,quantity:1}])assert.equal((await f.call(raw,routePatch)).code,400);
-  assert.equal((await f.call(body,routePatch)).code,403); // Review release denies execution before request/provider IO.
+  assert.equal((await f.call(body,routePatch)).code,409); // No persisted request: activation alone is never approval.
   f.authorize(false);assert.equal((await f.call(body,routePatch)).code,401);f.authorize(true);
   for(const bad of [{workspaceUserId:'tenant-b',actorUserId:'tenant-b'},{...auth,actorUserId:'tenant-b'}])
    assert.equal((await f.call(body,{...routePatch,auth:bad})).code,404);
