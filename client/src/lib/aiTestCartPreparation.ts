@@ -15,6 +15,21 @@ const request = z.object({
   cartCreated:z.literal(false),cartCreationEnabled:z.literal(false),
 });
 export type PrivateCartTestRequest = z.infer<typeof request>;
+const summary = request.pick({requestId:true,scopeSha256:true,expiresAt:true});
+export type PrivateCartTestSummary = z.infer<typeof summary>;
+export class PrivateCartResponseError extends Error {
+  readonly summary?: PrivateCartTestSummary;
+  constructor(raw:unknown, readonly reason:"response_contract"|"response_timing"|"selection_changed"="response_contract") {
+    super("preparation_response_needs_review");
+    const parsed=summary.safeParse(raw);
+    if(parsed.success)this.summary=parsed.data;
+  }
+}
+/** HTTP Date is supplied by the authenticated same-origin server, at second precision. */
+export function privateCartServerTime(date:string|null, fallback=Date.now()) {
+  const value=date===null?NaN:Date.parse(date);
+  return Number.isFinite(value)?value:fallback;
+}
 export function cartTestPreparationAllowed(chat:TestChatView,proof:PrivateCheckoutPreflight|undefined,now=Date.now()) {
   if(!proof?.ready || chat.state.step!=="confirming" || !chat.state.selected || chat.state.quantity!==1 ||
     !Number.isFinite(Date.parse(chat.expiresAt)) || Date.parse(chat.expiresAt)<=now || !selection.safeParse(proof.selection).success)return false;
@@ -22,22 +37,29 @@ export function cartTestPreparationAllowed(chat:TestChatView,proof:PrivateChecko
   if(Number(selected.price)!==Number(proof.selection.price)||selected.currency!==proof.selection.currency||
     JSON.stringify(selected.options)!==JSON.stringify(proof.selection.options))return false;
   const age=now-Date.parse(proof.inventory.verifiedAt);
-  return Number.isFinite(age)&&age>=0&&age<=60_000;
+  return Number.isFinite(age)&&age>=-1000&&age<=60_000;
 }
 /** Only the existing preparation endpoint. Never forward selection/approval fields or create/retry a cart. */
 export async function preparePrivateCartTest(chat:TestChatView,proof:PrivateCheckoutPreflight|undefined,
-  post:(path:string,body:Record<string,never>)=>Promise<unknown>,now=Date.now) {
+  post:(path:string,body:Record<string,never>)=>Promise<{data:unknown;serverDate:string|null}>,now=Date.now) {
   if(!cartTestPreparationAllowed(chat,proof,now()) || !proof?.ready)throw Error("readiness_required");
-  const result=request.parse(await post(`/api/ai/test-chat/${chat.id}/checkout-handoff-request`,{}));
-  const age=now()-Date.parse(result.inventory.verifiedAt),remaining=Date.parse(result.expiresAt)-now();
+  const response=await post(`/api/ai/test-chat/${chat.id}/checkout-handoff-request`,{});
+  const parsed=request.safeParse(response.data);
+  if(!parsed.success)throw new PrivateCartResponseError(response.data);
+  const result=parsed.data,serverNow=privateCartServerTime(response.serverDate,now());
+  const age=serverNow-Date.parse(result.inventory.verifiedAt),remaining=Date.parse(result.expiresAt)-serverNow;
   const a=result.selection,b=proof.selection;
-  if(remaining<=0||remaining>5*60_000||age<0||age>60_000||a.productId!==b.productId||a.variantId!==b.variantId||
-    a.quantity!==b.quantity||Number(a.price)!==Number(b.price)||a.currency!==b.currency||JSON.stringify(a.options)!==JSON.stringify(b.options))
-    throw Error("readiness_required");
+  if(remaining<=0||remaining>5*60_000+1000||age< -1000||age>60_000)
+    throw new PrivateCartResponseError(response.data,"response_timing");
+  if(a.productId!==b.productId||a.variantId!==b.variantId||a.quantity!==b.quantity||Number(a.price)!==Number(b.price)||
+    a.currency!==b.currency||JSON.stringify(a.options)!==JSON.stringify(b.options))
+    throw new PrivateCartResponseError(response.data,"selection_changed");
   return result; // zod strips unknown fields, including server/session/credential additions.
 }
-export function privateCartPreparationError(error:unknown):"expired"|"unavailable" {
+export function privateCartPreparationError(error:unknown):"expired"|"unavailable"|"review" {
+  if(error instanceof PrivateCartResponseError)return "review";
   if(error instanceof Error) {
+    if(error.message === "404: session_expired")return "expired";
     try { const body=JSON.parse(error.message.slice(error.message.indexOf("{")));
       if(body?.error==="session_expired")return "expired";
     }catch { /* No provider text is displayed. */ }

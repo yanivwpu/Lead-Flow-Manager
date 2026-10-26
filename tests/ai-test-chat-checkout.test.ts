@@ -286,3 +286,22 @@ test('authenticated readiness distinguishes locked/unauthorized/invisible varian
   assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
  }finally{await f.cleanup();}
 });
+
+test('actual preparation adapter JSON is accepted by the client using server response time, with exactly one unapproved record and no cart',async()=>{
+ const {preparePrivateCartTest}=await import('../client/src/lib/aiTestCartPreparation');
+ const f=await bridgeFixture();try{
+  const ready=await f.call();assert.equal(ready.data.ready,true);
+  const view=await createTestChatSessions(f.db).read(auth,f.session.id);
+  let calls=0;
+  const parsed=await preparePrivateCartTest(view,ready.data,async(path,body)=>{
+   calls++;assert.equal(path,`/api/ai/test-chat/${f.session.id}/checkout-handoff-request`);assert.deepEqual(body,{});
+   const prepared=await f.prepare();
+   return {data:JSON.parse(JSON.stringify(prepared)),serverDate:new Date().toUTCString()};
+  });
+  assert.equal(calls,1);assert.match(parsed.scopeSha256,/^[a-f0-9]{64}$/);
+  const records=await f.pg.query('SELECT request_id,approved_at,claimed_at FROM shopify_checkout_admin_tests');
+  assert.equal(records.rows.length,1);assert.equal(records.rows[0].request_id,parsed.requestId);
+  assert.equal(records.rows[0].approved_at,null);assert.equal(records.rows[0].claimed_at,null);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+ }finally{await f.cleanup();}
+});
