@@ -1483,6 +1483,16 @@
     }
   },
   "testChat": {
+    "approveCreateCart": "Aprobar y crear carrito de prueba",
+    "cartActivationRequired": "La creación de carritos está desactivada hasta recibir aprobación independiente para activarla.",
+    "cartConfirmTitle": "Confirmar un carrito de prueba privado",
+    "cartConsent": "Apruebo un carrito para esta selección y precio exactos. No abrir el pago, cobrar, crear pedidos ni enviar mensajes.",
+    "cartConfirmOnce": "Confirmar y crear una vez",
+    "cartCancel": "Cancelar",
+    "cartAttemptRunning": "Preparando e intentando crear un carrito. No cierre esta ventana ni repita la acción.",
+    "cartAttemptStopped": "El intento se detuvo o su resultado es desconocido. No reintente ni prepare otro carrito hasta revisar su estado en el servidor.",
+    "cartCreatedPrivate": "Carrito de prueba creado. Mantenga esta URL de pago privada y sin abrir. No se inició ningún pago ni pedido.",
+    "cartPrivateUrl": "URL privada de pago de Shopify (no abrir)",
     "prepareCartTest": "Preparar prueba de carrito",
     "preparedCartTest": "Solicitud preparada para la prueba de carrito",
     "prepareApprovalRequired": "Solicitud preparada. Se requiere aprobación por separado. No se ha creado ningún carrito.",

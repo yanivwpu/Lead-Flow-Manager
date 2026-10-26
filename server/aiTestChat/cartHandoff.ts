@@ -9,8 +9,8 @@ import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation
 import { shopifyCatalogRequest } from "../salesCatalog/shopify/api";
 import type { CheckoutReceipt } from "../shopping/checkout/contract";
 
-// Phase 1 activates only the guarded pilot transport; preparation is not execution approval.
-export const PRIVATE_CART_EXECUTION_ENABLED = true;
+// Self-service review release: activation requires separate approval; preparation is not approval.
+export const PRIVATE_CART_EXECUTION_ENABLED = false;
 export const LIQUID_PRODUCT = "gid://shopify/Product/10108114174234";
 export const LIQUID_VARIANT = "gid://shopify/ProductVariant/51638769221914";
 export const PRIVATE_CART_CONFIRMATION = "CREATE EXACTLY ONE DEVELOPMENT STORE CART";

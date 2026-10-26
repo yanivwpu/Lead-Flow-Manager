@@ -71,3 +71,59 @@ test('a successful HTTP response that fails client validation retains only sanit
  assert.equal(calls,1);
  assert.equal(privateCartPreparationError(Error('404: session_expired')),'expired');
 });
+
+// The self-service flow uses only fixture HTTP callbacks; it never contacts Shopify.
+import { createPrivateCartTestRunner, privateCartConfirmationAllowed } from '../client/src/lib/aiTestCartExecution';
+const receipt=()=>({cartCreated:true,paymentStatus:'unknown',navigation:'separate_approval_required',
+ checkoutUrl:'https://whachatcrm.myshopify.com/cart/c/fixture?key=private-fixture'});
+function executionInput(patch:any={}) {
+ const calls:{path:string;body:any}[]=[],claims:string[]=[];
+ return {calls,claims,input:{enabled:true,confirmed:true,chat,proof,current:()=>true,now:()=>stamp,
+  claimLocalAttempt:()=>{claims.push('attempted');return true;},
+  post:async(path:string,body:any)=>{calls.push({path,body});return response(path.endsWith('/checkout-handoff-request')?request():receipt());},...patch}};
+}
+test('self-service requires enabled rollout, explicit confirmation, exact fresh selection and tracked available inventory before any IO',async()=>{
+ for(const patch of [{enabled:false},{confirmed:false},{current:()=>false},{now:()=>stamp+60001},
+  {proof:{...proof,inventory:{...inventory,tracked:false}}},{proof:{...proof,inventory:{...inventory,quantity:0}}},
+  {proof:{...proof,quantityRule:{minimum:2,maximum:null,increment:1}}}]) {
+  const f=executionInput(patch);await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,0);assert.equal(f.claims.length,0);
+ }
+ assert.equal(privateCartConfirmationAllowed(chat,proof,stamp),true);
+});
+test('one UI confirmation prepares a new exact request then dispatches once; double click/replay never prepares or executes twice',async()=>{
+ const f=executionInput(),run=createPrivateCartTestRunner();
+ const results=await Promise.allSettled([run(f.input),run(f.input)]);
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.deepEqual(f.claims,['attempted']);
+ assert.deepEqual(f.calls,[{path:`/api/ai/test-chat/${chat.id}/checkout-handoff-request`,body:{}},
+  {path:`/api/ai/test-chat/${chat.id}/checkout-handoff-execute`,body:{requestId:request().requestId,scopeSha256:request().scopeSha256,
+   expiresAt:request().expiresAt,confirmation:'CREATE EXACTLY ONE DEVELOPMENT STORE CART'}}]);
+ const result=(results.find(r=>r.status==='fulfilled') as PromiseFulfilledResult<any>).value;
+ assert.deepEqual(result,{checkoutUrl:receipt().checkoutUrl,cartCreated:true});
+ await assert.rejects(run(f.input));assert.equal(f.calls.length,2);
+});
+test('selection/session changes or expiry while preparing abort before execution; preparation failure is never renewed',async()=>{
+ for(const mode of ['changed','expired','response-price','lost-preparation'] as const) {
+  let current=true,time=stamp;const f=executionInput({current:()=>current,now:()=>time});
+  f.input.post=async(path:string,body:Record<string,unknown>)=>{
+   f.calls.push({path,body});assert.ok(path.endsWith('/checkout-handoff-request'));
+   if(mode==='changed')current=false;if(mode==='expired')time=stamp+300001;
+   if(mode==='lost-preparation')throw Error('synthetic lost response');
+   return response(mode==='response-price'?{...request(),selection:{...selection,price:'750.00'}}:request());
+  };
+  const run=createPrivateCartTestRunner();await assert.rejects(run(f.input));await assert.rejects(run(f.input));assert.equal(f.calls.length,1);
+ }
+});
+test('ambiguous/error/invalid execution responses remain terminal and never cause another preparation or dispatch',async()=>{
+ for(const mode of ['lost','rejected','invalid-receipt','evil-url','wrong-host','redirect-query'] as const) {
+  const f=executionInput();f.input.post=async(path:string,body:Record<string,unknown>)=>{
+   f.calls.push({path,body});if(path.endsWith('/checkout-handoff-request'))return response(request());
+   if(mode==='lost'||mode==='rejected')throw Error('synthetic private provider error');
+   const data=mode==='invalid-receipt'?{...receipt(),cartCreated:false}:mode==='evil-url'?{...receipt(),checkoutUrl:'javascript:alert(1)'}:
+    mode==='wrong-host'?{...receipt(),checkoutUrl:'https://evil.example/cart/c/fixture'}:
+    {...receipt(),checkoutUrl:receipt().checkoutUrl+'&return_to=https://evil.example'};
+   return response(data);
+  };
+  const run=createPrivateCartTestRunner();await assert.rejects(run(f.input));await assert.rejects(run(f.input));assert.equal(f.calls.length,2);
+ }
+ const f=executionInput({claimLocalAttempt:()=>false});await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,0);
+});
