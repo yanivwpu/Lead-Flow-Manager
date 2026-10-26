@@ -4,6 +4,13 @@ import { cartTestPreparationAllowed, preparePrivateCartTest } from "./aiTestCart
 
 const receipt = z.object({cartCreated:z.literal(true),paymentStatus:z.literal("unknown"),
   navigation:z.literal("separate_approval_required"),checkoutUrl:z.string().max(4096)});
+/** New server-authorized capability gets its own marker; never remove the original marker. */
+export function privateCartAttemptKey(userId:string|undefined,proof:PrivateCheckoutPreflight|undefined) {
+  const original=`private-cart-ui-attempt:v1:${userId}:whachatcrm.myshopify.com`;
+  if(!proof?.ready||!proof.authorizationId)return original;
+  const id=z.string().uuid().safeParse(proof.authorizationId);
+  return id.success?`${original}:authorization:${id.data}`:original;
+}
 export function privateCartConfirmationAllowed(chat:TestChatView,proof:PrivateCheckoutPreflight|undefined,now:number) {
   if(!cartTestPreparationAllowed(chat,proof,now)||!proof?.ready)return false;
   const {quantity}=proof.selection,{minimum,maximum,increment}=proof.quantityRule;

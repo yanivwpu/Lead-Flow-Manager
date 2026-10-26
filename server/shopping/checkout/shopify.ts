@@ -27,7 +27,7 @@ const CART_FIELDS = `id checkoutUrl totalQuantity lines(first:2) { nodes { quant
 const CREATE = `mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${CART_FIELDS} } userErrors { code } warnings { code } } }`;
 const STATUS = `query CheckoutStatus($id:ID!) { cart(id:$id) { ${CART_FIELDS} } }`;
 /** No Admin token, no automatic retry, no redirects, bounded timeout, bounded diagnostics. */
-export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch; diagnostic?:ProviderObserver }): CommerceCheckoutProvider {
+export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch; diagnostic?:ProviderObserver; captureReceipt?:(candidate:CheckoutReceipt)=>Promise<void> }): CommerceCheckoutProvider {
   const shop = normalizeShopifyShopDomain(config.shop);
   if (!shop || !config.credential || (config.credential.kind !== "tokenless" && (!config.credential.token || !["public", "private"].includes(config.credential.kind)))) throw new CheckoutError("setup_required");
   const requestFetch = config.fetch ?? fetch;
@@ -69,9 +69,14 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
     try { body = await response.json(); } catch (error) { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,
       signal.aborted || transportDetail(error)==="transport_timeout" ? "response_body_timeout" :
       error instanceof SyntaxError ? (html ? "http_html_response" : "invalid_json") : "response_body_read_failed"); }
+    const candidate=mutation?body?.data?.cartCreate?.cart:undefined;
+    if(typeof candidate?.id==="string"&&candidate.id.startsWith("gid://shopify/Cart/")){
+      emit({operation,event:"cart_reported"});
+      // Private encrypted evidence only; capture does not validate or authorize navigation.
+      if(config.captureReceipt&&candidate.id.length<=8192&&!(typeof candidate.checkoutUrl==="string"&&candidate.checkoutUrl.length>4096))
+        await config.captureReceipt({providerCartId:candidate.id,checkoutUrl:typeof candidate.checkoutUrl==="string"?candidate.checkoutUrl:"",paymentStatus:"unknown"});
+    }
     if (body?.errors?.length) {
-      if(mutation && typeof body?.data?.cartCreate?.cart?.id==="string" && body.data.cartCreate.cart.id.startsWith("gid://shopify/Cart/"))
-        emit({operation,event:"cart_reported"});
       emit({operation,event:"provider_rejected",reason:"graphql_errors"});
       if (!body.data && body.errors.every((e:any)=>e?.extensions?.code === "THROTTLED")) { nextRequestAt=Date.now()+60_000; throw new CheckoutError("throttled",60_000); }
       throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"graphql_error");

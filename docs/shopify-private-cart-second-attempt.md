@@ -1,0 +1,36 @@
+# Separately authorized second private cart test
+
+## Release boundary
+
+Implementation only: `PRIVATE_CART_EXECUTION_ENABLED=false` and `PRIVATE_CART_SECOND_EXECUTION_ENABLED=false`. No migration, authorization provisioning, credential change, live preflight/preparation or cart execution is part of this PR. The existing private Test Chat selection, readiness, confirmation and one-shot client runner are reused. Public Shopping, checkout navigation, orders, payments and customer messages stay outside this path.
+
+The owner reports Shopify Support advised that another cart test can be safe. That advice does not determine the original outcome. The original request and its unknown outcome remain permanently consumed; migration 0112 and `shopify_checkout_admin_one_dispatch` are unchanged. Existing legacy dispatch remains blocked by that index.
+
+## Small authorization model
+
+Migration 0115 adds one table: a singleton authorization slot for attempt **2**, linked by foreign key to the original consumed request. This is a separately reviewed capability, not a replacement request or reset of the original claim. No API provisions, renews, resets or deletes it. The table starts empty. An immutable audit record binds the approving owner, shop, installation/credential digest, original request, approval reference and expiry. Its trigger prevents deletion, reauthorization, expiry extension, claim reset, request/scope rebinding and reversal of revocation or outcome timestamps. There is no slot 3 or general retry policy.
+
+Only a later separately approved, parameterized provisioning operation may insert that record, using independently verified production owner/installation metadata. Do not copy credentials into SQL, chat or GitHub; installation_digest is a server-derived hash. Do not provision from browser-supplied identity, shop, digest or approval text. Confirm the original row, original unique index and second-slot primary index before and after any approved migration/provisioning. Missing or malformed setup fails closed. This PR does not perform those operations.
+
+## Execution sequence after a separate activation approval
+
+1. Verify the exact reviewed commit, migration and canonical 32-byte base64 `SHOPPING_CHECKOUT_RECEIPT_KEY` through secure server configuration. Reuse the existing AES-256-GCM receipt codec/key setting; never reuse a Shopify token as an encryption key. Key availability is a blocker until verified securely. Keep it stable while receipts require recovery.
+2. Provision only the specifically approved second authorization with a bounded expiry and durable approval reference. Separately review enabling the second source gate. The original source gate stays false. The button still requires a matching fresh readiness proof and explicit owner confirmation; a flag or an unclaimed authorization alone never calls Shopify.
+3. In the existing authenticated pilot-owner Test Chat session, select the exact Liquid/Default Title variant, quantity one. Existing live Admin/Storefront identity, development-store plan/app/scopes, price, currency, inventory, options and quantity-rule checks remain authoritative. A changed price requires fresh displayed confirmation.
+4. Owner confirmation prepares a new five-minute request whose signed-by-hash scope includes the authorization UUID, selection, owner/session, credentials, installation and original expiry. The existing client runner submits only this new request, once. All preparations compete for the same singleton authorization; preparing more than one cannot grant more dispatches.
+5. After fresh verification, atomically claim the authorization with exact request UUID/scope in a standalone autocommitted UPDATE. The original row is never updated. Another worker/request cannot claim that authorization, even after expiry, rejection, crash or ambiguous response. Lost SQL acknowledgement stops provider work and leaves a durable claim checkpoint.
+6. Reverify the variant and final owner/session/selection/credential/expiry/authorization guards. Persist a conservative dispatch-intent diagnostic checkpoint, recheck guards after that write, then invoke the existing cart adapter at most once. A persisted dispatch marker means dispatch may have occurred, not that Shopify received or executed it.
+7. Encrypt and persist bounded provider cart-ID/URL evidence immediately on a cart-shaped response, including partial GraphQL errors and receipts that later fail validation. This evidence is untrusted and must never authorize navigation. Persist the validated receipt again before the final read-only cart status check. AES-GCM additional data binds it to authorization UUID + request UUID. A status failure retains that receipt with an unverified outcome; a receipt-write failure leaves the claim consumed and outcome uncertain. Completion is recorded durably before a successful response returns the URL only to the authorized operator. No navigation occurs.
+8. Never retry on a 409, timeout, disconnect, crash or uncertain persistence. Use owner-bound existing request inspection for consumed/receipt/status metadata. Encrypted receipts require authorized server-side reconciliation; do not put raw cart IDs or URLs in diagnostics, reports, transcripts or analytics. The server returns the matching authorization UUID in fresh readiness and preparation; the client requires them to match and namespaces its marker/one-shot runner by that capability. The original marker is never removed or reset. A repeated request under the same authorization remains blocked. No new authorization is inferred from a fresh session or request UUID. A blocked browser requires review, not marker deletion.
+
+## Diagnostics, privacy and rollback
+
+Existing fixed-vocabulary console diagnostics remain. The authorization row also stores the last safe execution checkpoint and receipt/status milestones, including a claim checkpoint committed with the claim itself. It stores no provider bodies, error text, customer data, tokens or raw checkout URL. A process crash can leave the last checkpoint incomplete; absence of a dispatch marker is not proof of no cart after uncertain storage acknowledgement.
+
+Uninstall/redaction reuses `cleanupCheckout`: revoke this capability, erase ciphertext and diagnostic metadata, preserve both consumed claims and audit identity/timestamps. Revocation cannot be undone. Do not use ordinary cleanup to clear the singleton row or original fence. Existing installation/entitlement/privacy checks continue to apply.
+
+Rollback is source-gate disablement. Preserve the additive table, original fence and any consumed second claim; do not drop/restore the table, extend approval or repeat provider work. A third attempt is outside this design and requires a separate policy review.
+
+## Validation
+
+Focused injected-adapter tests cover default deny, owner/session/scope/credential/expiry/price checks, success, ambiguous mutation, invalid receipt, final status failure, durable receipt loss handling and lost claim acknowledgement. A separate disposable native PostgreSQL test database covers competing claims, unchanged original index/row, immutable authorization, encrypted receipt binding, expiry, invalid-index denial and receipt erasure/revocation. No test uses production credentials or contacts Shopify.

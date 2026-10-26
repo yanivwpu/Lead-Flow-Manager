@@ -127,3 +127,23 @@ test('ambiguous/error/invalid execution responses remain terminal and never caus
  }
  const f=executionInput({claimLocalAttempt:()=>false});await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,0);
 });
+
+test('second authorization gets a separate client marker without clearing original; preparation cannot substitute authorization',async()=>{
+ const {privateCartAttemptKey}=await import('../client/src/lib/aiTestCartExecution');
+ const authorizationId='ad88a411-429a-455b-8de1-a661938e637e';
+ const authorized={...proof,authorizationId} as PrivateCheckoutPreflight;
+ const original=privateCartAttemptKey('owner',proof),second=privateCartAttemptKey('owner',authorized);
+ assert.equal(original,'private-cart-ui-attempt:v1:owner:whachatcrm.myshopify.com');
+ assert.equal(second,`${original}:authorization:${authorizationId}`);
+ assert.notEqual(privateCartAttemptKey('other',authorized),second);
+ const markers=new Map([[original,'consumed-original']]);markers.set(second,'attempted-do-not-retry');
+ assert.equal(markers.get(original),'consumed-original');assert.equal(markers.size,2);
+ const f=executionInput({proof:authorized});
+ f.input.post=async(path:string,body:any)=>{f.calls.push({path,body});return response(request());};
+ await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,1);
+ assert.ok(f.calls[0].path.endsWith('/checkout-handoff-request'));
+ const valid=executionInput({proof:authorized});
+ valid.input.post=async(path:string,body:any)=>{valid.calls.push({path,body});return response(path.endsWith('/checkout-handoff-request')?{...request(),authorizationId}:receipt());};
+ await createPrivateCartTestRunner()(valid.input);assert.equal(valid.calls.length,2);
+ assert.equal(privateCartConfirmationAllowed(chat,{...proof,authorizationId:'invalid'} as PrivateCheckoutPreflight,stamp),false);
+});

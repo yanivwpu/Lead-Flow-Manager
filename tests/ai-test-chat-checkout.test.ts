@@ -169,11 +169,11 @@ test('private readiness honors an existing consumed dispatch and the same durabl
  }finally{await f.cleanup();}
 });
 
-async function bridgeFixture() {
+async function bridgeFixture(second=false) {
  const f=await fixture();
  Object.assign(f.configured,{SHOPIFY_STOREFRONT_TEST_TOKEN:'synthetic-storefront-credential',SHOPIFY_STOREFRONT_TEST_TOKEN_KIND:'private',SHOPIFY_STOREFRONT_TEST_SHOP:SHOP});
  let enabled=true;const diagnostics:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic[]=[];
- const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch,executionDiagnostic:(event:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic)=>{diagnostics.push(event);}};
+ const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch,secondExecutionEnabled:()=>second,executionDiagnostic:(event:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic)=>{diagnostics.push(event);}};
  const bridge=createPrivateCartHandoff({...deps,executionEnabled:()=>enabled});
  const prepare=()=>bridge.prepare(auth,f.session.id,'authenticated-fixture-session');
  const approval=(request:any)=>({requestId:request.requestId,scopeSha256:request.scopeSha256,expiresAt:request.expiresAt,confirmation:PRIVATE_CART_CONFIRMATION});
@@ -493,5 +493,97 @@ test('stage diagnostics separate pre-claim price rejection from uncertain claim 
   assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
   const last=f.diagnostics.at(-1)!;assert.equal(last.stage,'claim_commit');assert.equal(last.claim,'unknown');assert.equal(last.dispatchStarted,false);
   assert.doesNotMatch(JSON.stringify(f.diagnostics),/lost SQL|private value/);
+ }finally{await f.cleanup();}
+});
+
+
+async function secondFixture() {
+ const f=await bridgeFixture(true);
+ await f.pg.exec(readFileSync('migrations/0115_private_cart_second_authorization.sql','utf8'));
+ f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY=Buffer.alloc(32,9).toString('base64');
+ // Seed a synthetic consumed original. Never run this fixture against a remote database.
+ const legacy=createPrivateCartHandoff({...f.deps,secondExecutionEnabled:()=>false,executionEnabled:()=>true});
+ const original=await legacy.prepare(auth,f.session.id,'authenticated-fixture-session');
+ await f.pg.query('UPDATE shopify_checkout_admin_tests SET approved_at=now(),claimed_at=now() WHERE request_id=$1',[original.requestId]);
+ const grant=crypto.randomUUID();
+ await f.pg.query(`INSERT INTO shopify_private_cart_second_authorization
+  (attempt_number,authorization_id,original_request_id,workspace_id,operator_id,shop,integration_id,installation_digest,approved_by,approval_reference,expires_at)
+  SELECT 2,$1,request_id,workspace_id,operator_id,shop,integration_id,installation_digest,operator_id,'synthetic-explicit-second-approval',now()+interval '1 hour'
+  FROM shopify_checkout_admin_tests WHERE request_id=$2`,[grant,original.requestId]);
+ return {...f,grant,original};
+}
+test('second attempt stays default-denied and cannot activate through a request body or ordinary configuration',async()=>{
+ const {PRIVATE_CART_SECOND_EXECUTION_ENABLED}=await import('../server/aiTestChat/secondCartAuthorization');
+ assert.equal(PRIVATE_CART_SECOND_EXECUTION_ENABLED,false);
+ const f=await secondFixture();try{
+  const request=await f.prepare();const prod=createPrivateCartHandoff({...f.deps,secondExecutionEnabled:()=>false});
+  await assert.rejects(prod.execute(auth,f.session.id,'authenticated-fixture-session',f.approval(request)),/execution_disabled/);
+  await assert.rejects(f.execute({...request,scopeSha256:'0'.repeat(64)}));
+  await assert.rejects(f.bridge.execute({...auth,actorUserId:'not-owner'},f.session.id,'authenticated-fixture-session',f.approval(request)));
+  await assert.rejects(f.bridge.execute(auth,f.session.id,'other-http-session',f.approval(request)));
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),1);
+ }finally{await f.cleanup();}
+});
+for(const mode of ['success','ambiguous','mismatch','status-failed','graphql-partial'] as const)
+test(`second guarded attempt ${mode}: original unchanged, one new claim, no replay, encrypted durable receipt`,async()=>{
+ const f=await secondFixture();try{
+  const before=(await f.pg.query('SELECT * FROM shopify_checkout_admin_tests WHERE request_id=$1',[f.original.requestId])).rows[0];
+  const request=await f.prepare();f.cartMode(mode);
+  if(mode==='success')assert.equal((await f.execute(request)).cartCreated,true);else await assert.rejects(f.execute(request));
+  assert.equal(f.creates(),1);assert.equal(await f.claims(),1);
+  const row=(await f.pg.query('SELECT * FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.equal(row.request_id,request.requestId);assert.ok(row.claimed_at);assert.equal(row.scope_digest,request.scopeSha256);
+  assert.equal(!!row.encrypted_receipt,['success','mismatch','status-failed','graphql-partial'].includes(mode));
+  assert.equal(!!row.verified_at,mode==='success');assert.ok(row.diagnostic);
+  assert.doesNotMatch(JSON.stringify(row),/fixture-secret|checkoutUrl|providerCartId|synthetic-storefront/);
+  if(row.encrypted_receipt){
+   const {privateCartReceiptCodec}=await import('../server/aiTestChat/secondCartAuthorization');
+   const codec=privateCartReceiptCodec(f.configured);
+   assert.ok(codec.open(row.encrypted_receipt,`${f.grant}:${request.requestId}`).providerCartId);
+   assert.throws(()=>codec.open(row.encrypted_receipt,`${f.grant}:other-request`));
+  }
+  await assert.rejects(f.execute(request));await assert.rejects(f.prepare());assert.equal(f.creates(),1);
+  assert.deepEqual((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests WHERE request_id=$1',[f.original.requestId])).rows[0],before);
+ }finally{await f.cleanup();}
+});
+test('second attempt missing receipt key, revoked authorization and changed price never claim or dispatch',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');
+  delete f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY;await assert.rejects(f.execute(request),/receipt_setup/);
+  f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY=Buffer.alloc(32,9).toString('base64');
+  f.provider(200,true);await assert.rejects(f.execute(request));f.provider(200);
+  await f.pg.exec("UPDATE shopify_private_cart_second_authorization SET revoked_at=now()");
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);
+  assert.equal((await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0].claimed_at,null);
+ }finally{await f.cleanup();}
+});
+test('second attempt status persistence failure retains encrypted receipt and permanent claim; no mutation retry',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');const execute=f.db.execute.bind(f.db);let receiptSaved=false;
+  (f.db as any).execute=async(query:any)=>{
+   if(receiptSaved)throw Error('synthetic database unavailable');
+   const result=await execute(query);
+   const row=(await f.pg.query('SELECT encrypted_receipt FROM shopify_private_cart_second_authorization')).rows[0];
+   if(row?.encrypted_receipt)receiptSaved=true;
+   return result;
+  };
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),1);
+  const row=(await f.pg.query('SELECT claimed_at,encrypted_receipt FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.ok(row.claimed_at);assert.ok(row.encrypted_receipt);
+ }finally{await f.cleanup();}
+});
+test('second claim lost acknowledgement is permanently consumed with durable checkpoint and zero provider mutations',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');const execute=f.db.execute.bind(f.db);let lost=false;
+  (f.db as any).execute=async(query:any)=>{
+   const result=await execute(query);
+   const row=(await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0];
+   if(row?.claimed_at&&!lost){lost=true;throw Error('synthetic lost claim acknowledgement');}
+   return result;
+  };
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);assert.equal(await f.claims(),1);
+  const row=(await f.pg.query('SELECT claimed_at,diagnostic FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.ok(row.claimed_at);assert.equal(row.diagnostic.stage,'claim_commit');assert.equal(row.diagnostic.dispatchStarted,false);
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);
  }finally{await f.cleanup();}
 });

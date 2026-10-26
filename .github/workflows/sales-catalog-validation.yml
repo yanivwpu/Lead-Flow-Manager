@@ -20,6 +20,7 @@ on:
       - "tests/shopify-checkout-admin-test.test.ts"
       - "client/src/components/ShopifyCheckoutTest.tsx"
       - "migrations/0112_shopify_checkout_admin_tests.sql"
+      - "migrations/0115_private_cart_second_authorization.sql"
       - "docs/shopify-checkout-admin-test.md"
       - "migrations/0110_checkout_preparation_attempts.sql"
       - "migrations/0111_checkout_provider_gates.sql"
@@ -95,6 +96,8 @@ jobs:
           # Use the existing in-memory fixture: the admin journal intentionally requires public schema.
           CATALOG_TEST_DATABASE_URL: ""
         run: node --import tsx --test tests/shopify-checkout-admin-test.test.ts tests/ai-test-chat-checkout.test.ts tests/shopping-checkout-execution-diagnostics.test.ts
+      - name: Native PostgreSQL second cart authorization, receipt and privacy fence
+        run: node --import tsx --test tests/shopping-checkout-second-authorization.test.ts
       - name: Conversational shopping and PostgreSQL session integration
         run: |
           node --import tsx tests/shopping-checkout-harness.test.ts

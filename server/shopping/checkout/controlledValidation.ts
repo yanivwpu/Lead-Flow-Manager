@@ -1,4 +1,5 @@
 import type { ProviderObserver } from "./executionDiagnostics";
+import type { CheckoutReceipt } from "./contract";
 import { CheckoutGuardError, verificationStage, verificationFailure } from './preflightDiagnostics';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -40,6 +41,7 @@ export async function runValidation(raw: unknown, deps: {
   // Server-owned credential only. Legacy callers remain tokenless.
   storefrontCredential?: StorefrontCredential;
   diagnostic?:ProviderObserver;
+  captureReceipt?:(candidate:CheckoutReceipt)=>Promise<void>;
   approval?: unknown;
   consume: () => Promise<void>;
   saveReceipt: (receipt: unknown)=>Promise<void>;
@@ -75,7 +77,7 @@ export async function runValidation(raw: unknown, deps: {
     throw new CheckoutGuardError('inventory_insufficient');
   const {shop,userId,...item} = selection;
   const verified = {...item,inventoryProof:{at:Date.now(),quantity:v.inventoryQuantity ?? null,unrestricted}};
-  const provider = createShopifyCheckoutProvider({shop:SHOP,credential:deps.storefrontCredential ?? {kind:'tokenless'},fetch:deps.storefrontFetch,diagnostic:deps.diagnostic});
+  const provider = createShopifyCheckoutProvider({shop:SHOP,credential:deps.storefrontCredential ?? {kind:'tokenless'},fetch:deps.storefrontFetch,diagnostic:deps.diagnostic,captureReceipt:deps.captureReceipt});
   const storefrontProof = await verificationStage('storefront',()=>provider.verify(verified));
   if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false,
     quantityRule:storefrontProof ? storefrontProof.quantityRule : undefined,
