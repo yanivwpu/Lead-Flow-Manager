@@ -6,7 +6,7 @@ import { isEcommercePilotOwner, type EcommercePilotEnv, type EcommercePilotOwner
  */
 export function privateTestShoppingAllowed(owner: EcommercePilotOwner | null | undefined, env: EcommercePilotEnv): boolean {
   // Two independently configured server-side grants must agree. Neither comes from the request.
-  return !!owner && owner.id === env.SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID && isEcommercePilotOwner(owner, env);
+  return !!owner && owner.id === env.PRIVATE_SHOPPING_PILOT_WORKSPACE_ID && isEcommercePilotOwner(owner, env);
 }
 
 export function privateTestShoppingSettings(saved: ShoppingSettings, allowed: boolean): ShoppingSettings {

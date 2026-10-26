@@ -28,14 +28,15 @@ test("private Shopping allowance requires the exact database owner and productio
   const owner = { id, email: "pilot-owner@example.invalid" };
   const env = { ECOMMERCE_PILOT_ENABLED: "true", RAILWAY_ENVIRONMENT_NAME: "production",
     APP_URL: "https://app.whachatcrm.com", ECOMMERCE_PILOT_WORKSPACE_ID: id,
-    ECOMMERCE_PILOT_OWNER_EMAIL: owner.email, SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID:id };
+    ECOMMERCE_PILOT_OWNER_EMAIL: owner.email, PRIVATE_SHOPPING_PILOT_WORKSPACE_ID:id };
   assert.equal(privateTestShoppingAllowed(owner, env), true);
+  assert.equal(privateTestShoppingAllowed(owner,{...env,SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID:"legacy-fixture"}),true);
   for (const denied of [undefined, { ...owner, id: "another-workspace" }, { ...owner, email: "other@example.invalid" }])
     assert.equal(privateTestShoppingAllowed(denied, env), false);
   for (const patch of [{ ECOMMERCE_PILOT_ENABLED: "false" }, { RAILWAY_ENVIRONMENT_NAME: "staging" },
     { APP_URL: "https://staging.whachatcrm.com" }, { ECOMMERCE_PILOT_WORKSPACE_ID: "another-workspace" },
-    { ECOMMERCE_PILOT_OWNER_EMAIL: "other@example.invalid" }, { SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID: undefined },
-    { SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID: "10000000-0000-4000-8000-000000000099" }])
+    { ECOMMERCE_PILOT_OWNER_EMAIL: "other@example.invalid" }, { PRIVATE_SHOPPING_PILOT_WORKSPACE_ID: undefined },
+    { PRIVATE_SHOPPING_PILOT_WORKSPACE_ID: "10000000-0000-4000-8000-000000000099" }])
     assert.equal(privateTestShoppingAllowed(owner, { ...env, ...patch }), false);
   const reassigned = "271c48f9-3515-4682-b391-2fead371593d";
   assert.equal(privateTestShoppingAllowed({ ...owner, id: reassigned }, { ...env, ECOMMERCE_PILOT_WORKSPACE_ID: reassigned }), false);

@@ -16,7 +16,7 @@ import { SHOP,META } from '../server/shopping/checkout/controlledValidation';
 const id='10000000-0000-4000-8000-000000000042',auth={workspaceUserId:id,actorUserId:id};
 const product='gid://shopify/Product/10108114174234',variant='gid://shopify/ProductVariant/51638769221914';
 const env=()=>({ECOMMERCE_PILOT_ENABLED:'true',RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
- ECOMMERCE_PILOT_WORKSPACE_ID:id,ECOMMERCE_PILOT_OWNER_EMAIL:'pilot-owner@example.invalid',
+ ECOMMERCE_PILOT_WORKSPACE_ID:id,ECOMMERCE_PILOT_OWNER_EMAIL:'pilot-owner@example.invalid',PRIVATE_SHOPPING_PILOT_WORKSPACE_ID:id,
  SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID:id,SHOPIFY_CHECKOUT_TEST_OPERATOR_IDS:id});
 async function fixture() {
  const f=await catalogFixture(),db=f.database;

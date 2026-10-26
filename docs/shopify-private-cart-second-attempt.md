@@ -4,7 +4,7 @@ Both execution source gates remain false. This change does not apply migrations,
 
 ## Security properties
 
-- Trusted server configuration identifies the pilot workspace and owner email. A fresh database owner must match both. Private Shopping additionally requires the independently configured checkout workspace to match. Browser input, model output and administrator status cannot grant access.
+- Trusted server configuration identifies the pilot workspace and owner email. A fresh database owner must match both. Private Shopping additionally requires an independent private-shopping workspace pin to match; the legacy checkout allowlist is unchanged. Missing configuration fails closed and must be checked before any deployment. Browser input, model output and administrator status cannot grant access.
 - The pre-existing consumed request and its unique dispatch fence remain unchanged. A separate immutable singleton authorization can be claimed at most once. A new session, preparation, expiry or uncertain result never resets that claim.
 - Existing saved-session selection, exact scope digest, installation/credential binding, development-store attestation, fresh price/inventory checks and explicit confirmation remain required.
 - Claims commit before provider mutation. Ambiguous outcomes fail closed without automatic retries. No checkout navigation, orders, payments or customer messaging are introduced.
