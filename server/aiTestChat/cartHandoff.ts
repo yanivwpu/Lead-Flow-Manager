@@ -7,10 +7,11 @@ import { verifyCheckoutTestSetup } from "../shopping/checkout/adminTest";
 import { runValidation, selectionSchema, selectionDigest, SHOP } from "../shopping/checkout/controlledValidation";
 import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation";
 import { shopifyCatalogRequest } from "../salesCatalog/shopify/api";
+import { createExecutionDiagnostics, type ExecutionDiagnostic } from "../shopping/checkout/executionDiagnostics";
 import type { CheckoutReceipt } from "../shopping/checkout/contract";
 
-// Approved owner-only self-service activation; preparation alone is not execution approval.
-export const PRIVATE_CART_EXECUTION_ENABLED = true;
+// Further execution is disabled pending reconciliation and a separate safety review.
+export const PRIVATE_CART_EXECUTION_ENABLED = false;
 export const LIQUID_PRODUCT = "gid://shopify/Product/10108114174234";
 export const LIQUID_VARIANT = "gid://shopify/ProductVariant/51638769221914";
 export const PRIVATE_CART_CONFIRMATION = "CREATE EXACTLY ONE DEVELOPMENT STORE CART";
@@ -24,7 +25,7 @@ const scope = (row: any) => hash([row.request_id,row.workspace_id,row.operator_i
 /** Private Test Chat transport only. Production uses the reviewed source gate;
  * executionEnabled is an internal fixture/rollback dependency, never a browser input.
  * Every execution still requires exact explicit approval and all independent pilot guards. */
-export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {executionEnabled?:()=>boolean}) {
+export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {executionEnabled?:()=>boolean;executionDiagnostic?:(event:ExecutionDiagnostic)=>void}) {
   const preflight = createPrivateCheckoutPreflight(deps);
   const enabled = deps.executionEnabled ?? (()=>PRIVATE_CART_EXECUTION_ENABLED);
   async function context(auth:TestOwner,sessionId:string,httpSessionId:string,inspection=false) {
@@ -80,6 +81,8 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
       executionEnabled:enabled(),cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
   }
   async function execute(auth:TestOwner,sessionId:string,httpSessionId:string,raw:unknown,signal?:AbortSignal) {
+    const diagnostic=createExecutionDiagnostics(randomUUID(),deps.executionDiagnostic??(event=>console.info("[PrivateCartExecution]",JSON.stringify(event))));
+    try {
     const available=()=>{if(!enabled())throw new TestChatError(403,"private_cart_execution_disabled");
       if(signal?.aborted)throw new TestChatError(409,"private_cart_aborted");};
     // Authorize the real pilot owner/session before disclosing the disabled execution route.
@@ -89,6 +92,7 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
     if(!parsed.success)throw new TestChatError(400,"invalid_private_cart_approval");
     await verifyCheckoutTestSetup(deps.db);
     const {requestId,scopeSha256,expiresAt}=parsed.data;
+    diagnostic.bind(requestId);diagnostic.stage("request_binding");
     const result=await deps.db.execute(sql`SELECT * FROM public.shopify_checkout_admin_tests WHERE request_id=${requestId}::uuid
       AND workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId} AND session_digest=${ctx.sessionDigest}
       AND shop=${SHOP} AND integration_id=${ctx.integrationId} AND installation_digest=${ctx.installationDigest}
@@ -106,13 +110,21 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
       available();
     };
     let receipt:CheckoutReceipt|undefined;
+    diagnostic.stage("pre_dispatch_validation");
     try {
       await runValidation(saved.data.selection,{
         installation:()=>resolveCatalogInstallation(deps.db,auth.workspaceUserId,SHOP),
         requestFor:deps.requestFor??shopifyCatalogRequest,storefrontCredential:ctx.credential,
+        diagnostic:diagnostic.provider,
         storefrontFetch:async(url,init)=>{
-          if(/^mutation /.test(JSON.parse(String(init?.body)).query))await unchanged();
+          const mutation=/^mutation /.test(JSON.parse(String(init?.body)).query);
+          if(mutation){
+            diagnostic.stage("post_claim_validation");
+            try{await unchanged();}catch(error){diagnostic.failed(error);throw error;}
+          }
           const requestSignal=signal ? AbortSignal.any([...(init?.signal?[init.signal]:[]),signal]) : init?.signal;
+          // Mark only after the final binding/abort checks, immediately before fetch invocation.
+          if(mutation)diagnostic.dispatch();
           return (deps.storefrontFetch??fetch)(url,{...init,signal:requestSignal});
         },
         approval:{action:PRIVATE_CART_CONFIRMATION,selectionSha256:row.selection_digest,
@@ -122,21 +134,26 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
           await unchanged();
           // Standalone autocommitted statement, shared unique shop index with the legacy path.
           // Never put provider IO in a transaction or clear/reset this claim on any failure.
+          diagnostic.claimStarted();
           const claim=await deps.db.execute(sql`UPDATE public.shopify_checkout_admin_tests
             SET approved_at=now(),claimed_at=now() WHERE request_id=${requestId}::uuid
             AND session_digest=${ctx.sessionDigest} AND selection_digest=${row.selection_digest}
             AND claimed_at IS NULL AND expires_at>now() RETURNING request_id`);
           if(!claim.rows.length)throw new TestChatError(409,"development_store_dispatch_already_consumed");
+          diagnostic.claimed();
         },
         saveReceipt:async(value)=>{receipt=value as CheckoutReceipt;},
       });
     } catch(error) {
+      diagnostic.failed(error);
       if(error instanceof TestChatError)throw error;
       // Includes unique-index conflicts, ambiguous mutations and status failures. No raw errors or retries.
       throw new TestChatError(409,"private_cart_failed_closed_do_not_retry");
     }
     if(!receipt)throw new TestChatError(409,"private_cart_failed_closed_do_not_retry");
+    diagnostic.complete();
     return {checkoutUrl:receipt.checkoutUrl,cartCreated:true,paymentStatus:"unknown",navigation:"separate_approval_required"};
+    }catch(error){diagnostic.failed(error);throw error;}
   }
   return {prepare,inspect,execute};
 }
