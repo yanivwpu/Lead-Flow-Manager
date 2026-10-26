@@ -10,12 +10,12 @@ import { getMarketingRoutes, isNoIndexPath } from "../server/seo";
 
 const id = "10000000-0000-4000-8000-000000000001";
 const env = { ECOMMERCE_PILOT_ENABLED: "true", ECOMMERCE_PILOT_WORKSPACE_ID: id,
-  ECOMMERCE_PILOT_OWNER_EMAIL: "marketing@whachatcrm.com", RAILWAY_ENVIRONMENT_NAME: "production",
+  ECOMMERCE_PILOT_OWNER_EMAIL: "pilot-owner@example.invalid", RAILWAY_ENVIRONMENT_NAME: "production",
   APP_URL: "https://app.whachatcrm.com", ECOMMERCE_EVENT_RECORDING_ENABLED: "true",
   ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED: "true" };
 
 test("pilot grant requires deployment origin, exact workspace and a fresh matching database owner", () => {
-  const owner = { id, email: "marketing@whachatcrm.com" };
+  const owner = { id, email: "pilot-owner@example.invalid" };
   assert.equal(isEcommercePilotOwner(owner, env), true);
   for (const key of Object.keys(env)) {
     if (key === "ECOMMERCE_EVENT_RECORDING_ENABLED" || key === "ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED") continue;
@@ -26,13 +26,15 @@ test("pilot grant requires deployment origin, exact workspace and a fresh matchi
   assert.equal(ecommercePilotConfigured({ ...env, APP_URL: "https://app.whachatcrm.com.evil.invalid" }), false);
   assert.equal(ecommercePilotConfigured({ ...env, RAILWAY_ENVIRONMENT_NAME: "staging" }), false);
   assert.equal(ecommercePilotConfigured({ ...env, ECOMMERCE_PILOT_ENABLED: "TRUE" }), false);
+  for(const email of ["", "missing-at", "owner@example.invalid\r\nforged", "Owner@example.invalid", " owner@example.invalid", "a".repeat(255)+"@example.invalid"])
+    assert.equal(ecommercePilotConfigured({...env,ECOMMERCE_PILOT_OWNER_EMAIL:email}),false);
   assert.equal(ecommerceInternalTasksEnabled(env), true);
   assert.equal(ecommerceInternalTasksEnabled({ ...env, ECOMMERCE_EVENT_RECORDING_ENABLED: "false" }), false);
   assert.equal(ecommerceInternalTasksEnabled({ ...env, ECOMMERCE_ORDER_SUPPORT_TASKS_ENABLED: "false" }), false);
 });
 
 test("real HTTP guard rejects forged identity, nonpilot/admin, cross-origin and unavailable owner before handler execution", async () => {
-  let owner: { id: string; email: string } | undefined = { id, email: "marketing@whachatcrm.com" };
+  let owner: { id: string; email: string } | undefined = { id, email: "pilot-owner@example.invalid" };
   let failLookup = false, ownerReads = 0, writes = 0;
   const app = express();
   app.use(express.json());

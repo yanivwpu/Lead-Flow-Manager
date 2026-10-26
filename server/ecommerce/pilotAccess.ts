@@ -7,7 +7,10 @@ export function ecommercePilotConfigured(env: EcommercePilotEnv): boolean {
     env.RAILWAY_ENVIRONMENT_NAME === "production" &&
     env.APP_URL?.replace(/\/$/, "") === "https://app.whachatcrm.com" &&
     /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(env.ECOMMERCE_PILOT_WORKSPACE_ID || "") &&
-    env.ECOMMERCE_PILOT_OWNER_EMAIL === "marketing@whachatcrm.com";
+    typeof env.ECOMMERCE_PILOT_OWNER_EMAIL === "string" &&
+    env.ECOMMERCE_PILOT_OWNER_EMAIL.length <= 254 &&
+    env.ECOMMERCE_PILOT_OWNER_EMAIL === env.ECOMMERCE_PILOT_OWNER_EMAIL.toLowerCase() &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.ECOMMERCE_PILOT_OWNER_EMAIL);
 }
 
 export function ecommercePilotAccountMatches(accountId: unknown, env: EcommercePilotEnv): accountId is string {

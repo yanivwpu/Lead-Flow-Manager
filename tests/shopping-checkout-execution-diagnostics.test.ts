@@ -32,3 +32,21 @@ test('logging failures never authorize, repeat or prevent provider work; safe Sh
  assert.doesNotMatch(JSON.stringify(events),/synthetic-private-token|private-body|private-cookie|set-cookie/);
  const logger=createExecutionDiagnostics(uuid,()=>{throw Error('broken sink');});assert.doesNotThrow(()=>{logger.claimStarted();logger.claimed();logger.dispatch();logger.failed(Error('private'));});
 });
+
+test('private receipt evidence is captured before API-version or HTTP rejection without validating or retrying the cart',async()=>{
+ const item={productId:'gid://shopify/Product/1',variantId:'gid://shopify/ProductVariant/2',quantity:1,price:'1.00',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
+ for(const mode of ['missing-version','mismatched-version','http-error'] as const){
+  let calls=0;const captured:any[]=[],events:any[]=[];
+  const provider=createShopifyCheckoutProvider({shop:'fixture.myshopify.com',credential:{kind:'private',token:'synthetic-private-token'},
+   captureReceipt:async value=>{captured.push(value);},diagnostic:e=>events.push(e),fetch:async(_url,init)=>{
+    calls++;const mutation=JSON.parse(String(init?.body)).query.startsWith('mutation');
+    const node={id:item.variantId,product:{id:item.productId,requiresSellingPlan:false},availableForSale:true,quantityAvailable:5,currentlyNotInStock:false,requiresComponents:false,quantityRule:{minimum:1,maximum:null,increment:1},selectedOptions:item.options,price:{amount:'1.00',currencyCode:'USD'}};
+    return new Response(JSON.stringify({data:mutation?{cartCreate:{cart:{id:'gid://shopify/Cart/synthetic?key=private-evidence',checkoutUrl:'https://fixture.myshopify.com/cart/c/synthetic?key=private-evidence'},userErrors:[],warnings:[]}}:{node}}),
+     {status:mutation&&mode==='http-error'?500:200,headers:mutation&&mode==='missing-version'?{}:{'x-shopify-api-version':mutation&&mode==='mismatched-version'?'2026-07':'2026-10'}});
+   }});
+  await assert.rejects(provider.prepare(item));assert.equal(calls,2);assert.equal(captured.length,1);
+  assert.ok(captured[0].providerCartId.startsWith('gid://shopify/Cart/'));
+  assert.ok(events.some(e=>e.event==='cart_reported'));assert.ok(!events.some(e=>e.event==='receipt_validated'));
+  assert.doesNotMatch(JSON.stringify(events),/private-evidence|synthetic-private-token|checkoutUrl|providerCartId/);
+ }
+});

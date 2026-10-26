@@ -53,11 +53,11 @@ export function secondCartAuthorization(db:CatalogDb,b:SecondCartBinding) {
       AND r.claimed_at IS NULL AND r.expires_at>now()) RETURNING authorization_id`);
    if(result.rows.length!==1)throw denied();
   },
-  async persist(id:string,requestId:string,event:ExecutionDiagnostic,receipt?:{value:CheckoutReceipt;env:NodeJS.ProcessEnv},verified=false) {
+  async persist(id:string,requestId:string,event:ExecutionDiagnostic,receipt?:{value:CheckoutReceipt;env:NodeJS.ProcessEnv},verified=false,events:readonly ExecutionDiagnostic[]=[]) {
    // event is constructed by the existing fixed-vocabulary diagnostics, not provider input.
    const encrypted=receipt?privateCartReceiptCodec(receipt.env).seal(receipt.value,`${id}:${requestId}`):undefined;
    const result=await db.execute(sql`UPDATE public.shopify_private_cart_second_authorization a SET
-    diagnostic=${JSON.stringify(event)}::jsonb,
+    diagnostic=${JSON.stringify({...event,events:events.slice(-64)})}::jsonb,
     dispatch_started_at=CASE WHEN ${event.dispatchStarted} THEN COALESCE(a.dispatch_started_at,now()) ELSE a.dispatch_started_at END,
     encrypted_receipt=COALESCE(${encrypted??null},a.encrypted_receipt),
     receipt_at=CASE WHEN ${!!receipt} THEN COALESCE(a.receipt_at,now()) ELSE a.receipt_at END,

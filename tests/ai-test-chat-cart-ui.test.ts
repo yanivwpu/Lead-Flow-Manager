@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, PrivateCartResponseError, privateCartServerTime } from '../client/src/lib/aiTestCartPreparation';
 import type { TestChatView, PrivateCheckoutPreflight } from '../shared/aiTestChat';
-const stamp=Date.parse('2026-10-26T04:30:12Z');
+const stamp=Date.parse('2024-01-01T12:00:00Z');
 const selection={shop:'whachatcrm.myshopify.com',productId:'gid://shopify/Product/10108114174234',variantId:'gid://shopify/ProductVariant/51638769221914',quantity:1 as const,price:'749.95',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const inventory={tracked:true,quantity:50,verifiedAt:new Date(stamp).toISOString()};
 const proof:PrivateCheckoutPreflight={ready:true,cartCreated:false,cartCreationEnabled:false,credentialKind:'private',selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},selectionSha256:'a'.repeat(64),sessionBinding:'b'.repeat(64),operatorCartAccessConfigured:false,nextAction:'separate_cart_approval_required'};
-const chat={id:'b914b9e8-20ab-4941-84be-91b727a6b612',testMode:true,channel:'webchat',expiresAt:new Date(stamp+600000).toISOString(),transcript:[],state:{step:'confirming',quantity:1,selected:{productId:'owned-product',variantId:'owned-variant',price:'749.95',currency:'USD',options:selection.options}}} as TestChatView;
+const chat={id:'10000000-0000-4000-8000-000000000011',testMode:true,channel:'webchat',expiresAt:new Date(stamp+600000).toISOString(),transcript:[],state:{step:'confirming',quantity:1,selected:{productId:'owned-product',variantId:'owned-variant',price:'749.95',currency:'USD',options:selection.options}}} as TestChatView;
 const response=(data:unknown,serverStamp=stamp)=>({data,serverDate:new Date(serverStamp).toUTCString()});
-const request=()=>({requestId:'1d7b312f-1a14-4ea6-88a8-6f97e02fa510',scopeSha256:'c'.repeat(64),expiresAt:new Date(stamp+300000).toISOString(),selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},cartCreated:false,cartCreationEnabled:false});
+const request=()=>({requestId:'20000000-0000-4000-8000-000000000011',scopeSha256:'c'.repeat(64),expiresAt:new Date(stamp+300000).toISOString(),selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},cartCreated:false,cartCreationEnabled:false});
 test('uses current saved session and only empty-body preparation; sanitized response excludes unexpected fields at every level',async()=>{
  const calls:any[]=[];
  const result=await preparePrivateCartTest(chat,proof,async(path,body)=>{calls.push({path,body});return response({...request(),token:'synthetic-secret',checkoutUrl:'https://example.test/private',sessionDigest:'hidden',selection:{...selection,credential:'hidden'},inventory:{...inventory,internal:'hidden'}});},()=>stamp);

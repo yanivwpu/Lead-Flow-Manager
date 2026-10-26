@@ -67,11 +67,14 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
   async function inspect(auth:TestOwner,sessionId:string,httpSessionId:string) {
     const ctx=await context(auth,sessionId,httpSessionId,true);
     await verifyCheckoutTestSetup(deps.db);
+    const schema=await deps.db.execute(sql`SELECT to_regclass('public.shopify_private_cart_second_authorization') AS name`);
+    const claimedFirst=schema.rows[0]?.name?sql`EXISTS (SELECT 1 FROM public.shopify_private_cart_second_authorization a
+      WHERE a.request_id=shopify_checkout_admin_tests.request_id AND a.claimed_at IS NOT NULL) DESC,`:sql``;
     const found=await deps.db.execute(sql`SELECT * FROM public.shopify_checkout_admin_tests
       WHERE workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId}
       AND session_digest=${ctx.sessionDigest} AND shop=${SHOP} AND integration_id=${ctx.integrationId}
       AND installation_digest=${ctx.installationDigest} AND selection_digest=${selectionDigest(ctx.selection)}
-      AND selection->>'kind'='private_liquid_v1' ORDER BY created_at DESC,request_id DESC LIMIT 1`);
+      AND selection->>'kind'='private_liquid_v1' ORDER BY ${claimedFirst} created_at DESC,request_id DESC LIMIT 1`);
     const after=await context(auth,sessionId,httpSessionId,true);
     if(ctx.sessionDigest!==after.sessionDigest)throw new TestChatError(409,"session_changed");
     const row=found.rows[0];
@@ -81,31 +84,34 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
       throw new TestChatError(409,"selection_changed");
     let secondOutcome:Record<string,unknown>={};
     if(saved.data.authorizationId){
-      const outcome=await deps.db.execute(sql`SELECT claimed_at,receipt_at,verified_at,encrypted_receipt IS NOT NULL AS has_receipt FROM public.shopify_private_cart_second_authorization
-        WHERE authorization_id=${saved.data.authorizationId}::uuid AND request_id=${row.request_id}::uuid
-        AND workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId}`);
+      const outcome=await deps.db.execute(sql`SELECT request_id,claimed_at,receipt_at,verified_at,encrypted_receipt IS NOT NULL AS has_receipt FROM public.shopify_private_cart_second_authorization
+        WHERE authorization_id=${saved.data.authorizationId}::uuid AND workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId}
+        AND shop=${SHOP} AND integration_id=${ctx.integrationId} AND installation_digest=${ctx.installationDigest}`);
       const attempt=outcome.rows[0];
       secondOutcome={secondAttemptClaimed:!!attempt?.claimed_at,receiptAvailable:attempt?.has_receipt===true,
+        authorizationConsumedByAnotherRequest:!!attempt?.claimed_at&&attempt.request_id!==row.request_id,
         secondAttemptStatus:attempt?.verified_at?"verified":attempt?.receipt_at?"receipt_received_status_unverified":attempt?.claimed_at?"consumed_outcome_unknown":"not_claimed"};
     }
     const expiresAt=new Date(row.expires_at as string).toISOString();
     const consumed=!!row.claimed_at||secondOutcome.secondAttemptClaimed===true;
-    return {status:secondOutcome.secondAttemptStatus==="verified"?"cart_verified":consumed?"dispatch_claimed_result_unknown":Date.parse(expiresAt)<=Date.now()?"expired":row.approved_at?"approved":"prepared_unapproved",
+    return {status:secondOutcome.authorizationConsumedByAnotherRequest?"authorization_consumed_by_another_request":secondOutcome.secondAttemptStatus==="verified"?"cart_verified":consumed?"dispatch_claimed_result_unknown":Date.parse(expiresAt)<=Date.now()?"expired":row.approved_at?"approved":"prepared_unapproved",
       testSessionExpired:ctx.sessionExpired,createdAt:new Date(row.created_at as string).toISOString(),requestId:row.request_id,scopeSha256:scope(row),expiresAt,selection:saved.data.selection,
-      approved:!!row.approved_at||consumed,dispatchClaimed:consumed,originalInventoryProofAvailable:false,
+      approved:!!row.approved_at||(consumed&&!secondOutcome.authorizationConsumedByAnotherRequest),dispatchClaimed:consumed,originalInventoryProofAvailable:false,
       executionEnabled:enabled(),cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false,...secondOutcome};
   }
   async function execute(auth:TestOwner,sessionId:string,httpSessionId:string,raw:unknown,signal?:AbortSignal) {
     let lastDiagnostic:ExecutionDiagnostic|undefined;
+    const diagnosticEvents:ExecutionDiagnostic[]=[];
     let secondClaimed=false,secondAuthorizationId:string|undefined,secondRequestId:string|undefined;
     let secondJournal:ReturnType<typeof secondCartAuthorization>|undefined;
     const diagnostic=createExecutionDiagnostics(randomUUID(),event=>{
       lastDiagnostic={...event};
+      diagnosticEvents.push(lastDiagnostic);if(diagnosticEvents.length>64)diagnosticEvents.shift();
       (deps.executionDiagnostic??(value=>console.info("[PrivateCartExecution]",JSON.stringify(value))))(event);
     });
     const persist=async(receipt?:CheckoutReceipt,verified=false)=>{
       if(secondClaimed&&secondJournal&&secondAuthorizationId&&secondRequestId&&lastDiagnostic)
-        await secondJournal.persist(secondAuthorizationId,secondRequestId,lastDiagnostic,receipt?{value:receipt,env:deps.env??process.env}:undefined,verified);
+        await secondJournal.persist(secondAuthorizationId,secondRequestId,lastDiagnostic,receipt?{value:receipt,env:deps.env??process.env}:undefined,verified,diagnosticEvents);
     };
     try {
     const available=()=>{if(!enabled())throw new TestChatError(403,"private_cart_execution_disabled");
