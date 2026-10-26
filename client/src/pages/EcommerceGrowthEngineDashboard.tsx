@@ -5,6 +5,7 @@ import { ShoppingBag, MessageSquare, Brain, ListTodo, Workflow, ArrowRight, Plug
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { ShopifySimpleSetup } from "@/components/integrations/ShopifySimpleSetup";
 
 const copy = {
   en: {
@@ -74,6 +75,7 @@ export function EcommerceGrowthEngineDashboardContent() {
       </div>
       <p className="mt-4 text-xs text-slate-500">{t.details}</p>
     </section>
+    {connected && <ShopifySimpleSetup syncEnabled={data?.syncEnabled === true} />}
     <section className="grid gap-4 sm:grid-cols-2">
       {cards.map(({title,description,icon:Icon,href})=><Link asChild key={href} href={href}><a className="group flex min-h-40 flex-col rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-blue-300 hover:shadow-sm"><Icon className="mb-3 h-6 w-6 text-blue-600" /><h2 className="font-semibold text-slate-950">{title}</h2><p className="mt-2 flex-1 text-sm text-slate-600">{description}</p><span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">{t.action}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></span></a></Link>)}
     </section>
