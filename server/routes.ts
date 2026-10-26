@@ -11168,6 +11168,7 @@ export async function registerRoutes(
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
     checkoutHandoffPrepare: privateCartHandoff.prepare,
     checkoutHandoffInspect: privateCartHandoff.inspect,
+    checkoutHandoffExecute: privateCartHandoff.execute,
     onTurnSaved: async event => {
       if (await privateShoppingAllowed(event.workspaceUserId))
         console.info("[PrivateShoppingTurn]", JSON.stringify(event));
