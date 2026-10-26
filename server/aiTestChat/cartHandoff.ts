@@ -14,13 +14,13 @@ export const LIQUID_PRODUCT = "gid://shopify/Product/10108114174234";
 export const LIQUID_VARIANT = "gid://shopify/ProductVariant/51638769221914";
 export const PRIVATE_CART_CONFIRMATION = "CREATE EXACTLY ONE DEVELOPMENT STORE CART";
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const input = z.object({requestId:z.string().uuid(),scopeSha256:z.string().regex(/^[a-f0-9]{64}$/),
-  confirmation:z.literal(PRIVATE_CART_CONFIRMATION)}).strict();
+export const privateCartExecutionInput = z.object({requestId:z.string().uuid(),scopeSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  expiresAt:z.string().datetime(),confirmation:z.literal(PRIVATE_CART_CONFIRMATION)}).strict();
 const envelope = z.object({kind:z.literal("private_liquid_v1"),selection:selectionSchema}).strict();
 const scope = (row: any) => hash([row.request_id,row.workspace_id,row.operator_id,row.session_digest,
   row.shop,row.integration_id,row.installation_digest,row.selection,row.selection_digest,new Date(row.expires_at).toISOString()]);
 
-/** Preparation is wired only to private Test Chat. Execution has no HTTP/UI/model entry point.
+/** Private Test Chat transport only. Execution stays source-disabled by default.
  * executionEnabled is an internal dependency for exercising the future bridge in fixtures;
  * production uses the false source gate, independent of public Shopping settings. */
 export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {executionEnabled?:()=>boolean}) {
@@ -68,7 +68,7 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
     const after=await context(auth,sessionId,httpSessionId,true);
     if(ctx.sessionDigest!==after.sessionDigest)throw new TestChatError(409,"session_changed");
     const row=found.rows[0];
-    if(!row)return {status:"no_request_for_current_binding",cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
+    if(!row)return {status:"no_request_for_current_binding",executionEnabled:enabled(),cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
     const saved=envelope.safeParse(row.selection);
     if(!saved.success || selectionDigest(saved.data.selection)!==row.selection_digest)
       throw new TestChatError(409,"selection_changed");
@@ -76,23 +76,24 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
     return {status:row.claimed_at?"dispatch_claimed_result_unknown":Date.parse(expiresAt)<=Date.now()?"expired":row.approved_at?"approved":"prepared_unapproved",
       testSessionExpired:ctx.sessionExpired,createdAt:new Date(row.created_at as string).toISOString(),requestId:row.request_id,scopeSha256:scope(row),expiresAt,selection:saved.data.selection,
       approved:!!row.approved_at,dispatchClaimed:!!row.claimed_at,originalInventoryProofAvailable:false,
-      cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
+      executionEnabled:enabled(),cartCreationEnabled:false,canApprove:false,recordCreatedByThisCheck:false};
   }
   async function execute(auth:TestOwner,sessionId:string,httpSessionId:string,raw:unknown,signal?:AbortSignal) {
     const available=()=>{if(!enabled())throw new TestChatError(403,"private_cart_execution_disabled");
       if(signal?.aborted)throw new TestChatError(409,"private_cart_aborted");};
-    available();
-    const parsed=input.safeParse(raw);
-    if(!parsed.success)throw new TestChatError(400,"invalid_private_cart_approval");
+    // Authorize the real pilot owner/session before disclosing the disabled execution route.
     const ctx=await context(auth,sessionId,httpSessionId);
+    available();
+    const parsed=privateCartExecutionInput.safeParse(raw);
+    if(!parsed.success)throw new TestChatError(400,"invalid_private_cart_approval");
     await verifyCheckoutTestSetup(deps.db);
-    const {requestId,scopeSha256}=parsed.data;
+    const {requestId,scopeSha256,expiresAt}=parsed.data;
     const result=await deps.db.execute(sql`SELECT * FROM public.shopify_checkout_admin_tests WHERE request_id=${requestId}::uuid
       AND workspace_id=${auth.workspaceUserId} AND operator_id=${auth.actorUserId} AND session_digest=${ctx.sessionDigest}
       AND shop=${SHOP} AND integration_id=${ctx.integrationId} AND installation_digest=${ctx.installationDigest}
       AND expires_at>now() AND claimed_at IS NULL`);
     const row=result.rows[0];
-    if(!row || scope(row)!==scopeSha256)throw new TestChatError(409,"private_cart_expired_changed_or_consumed");
+    if(!row || scope(row)!==scopeSha256 || Date.parse(expiresAt)!==new Date(row.expires_at as string).getTime())throw new TestChatError(409,"private_cart_expired_changed_or_consumed");
     const saved=envelope.safeParse(row.selection);
     if(!saved.success || selectionDigest(saved.data.selection)!==row.selection_digest ||
       selectionDigest(ctx.selection)!==row.selection_digest)throw new TestChatError(409,"selection_changed");
@@ -110,7 +111,8 @@ export function createPrivateCartHandoff(deps: PrivateCheckoutDependencies & {ex
         requestFor:deps.requestFor??shopifyCatalogRequest,storefrontCredential:ctx.credential,
         storefrontFetch:async(url,init)=>{
           if(/^mutation /.test(JSON.parse(String(init?.body)).query))await unchanged();
-          return (deps.storefrontFetch??fetch)(url,init);
+          const requestSignal=signal ? AbortSignal.any([...(init?.signal?[init.signal]:[]),signal]) : init?.signal;
+          return (deps.storefrontFetch??fetch)(url,{...init,signal:requestSignal});
         },
         approval:{action:PRIVATE_CART_CONFIRMATION,selectionSha256:row.selection_digest,
           expiresAt:new Date(row.expires_at as string).toISOString(),approvedBy:auth.actorUserId,

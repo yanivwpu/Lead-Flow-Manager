@@ -7,6 +7,7 @@ import {
   type TestOwner,
 } from "./sessions";
 import type { createTestChatGenerator } from "./generate";
+import { privateCartExecutionInput } from "./cartHandoff";
 import type { PrivateCheckoutPreflight } from "@shared/aiTestChat";
 export type PrivateTestTurnDiagnostic = {
   workspaceUserId: string; sessionId: string; eventId: string;
@@ -25,6 +26,7 @@ export function registerTestChatRoutes(
     generate: ReturnType<typeof createTestChatGenerator>;
     diagnostics: (id: string) => Promise<unknown>;
     checkoutPreflight?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<PrivateCheckoutPreflight>;
+    checkoutHandoffExecute?: (auth: TestOwner, id: string, httpSessionId: string, input: unknown, signal: AbortSignal) => Promise<unknown>;
     checkoutHandoffInspect?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
     checkoutHandoffPrepare?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
     onTurnSaved?: (event: PrivateTestTurnDiagnostic) => void | Promise<void>;
@@ -92,7 +94,7 @@ export function registerTestChatRoutes(
     if(req.get("sec-fetch-site")==="cross-site")throw new TestChatError(403,"same_origin_required");
     return res.json(await deps.checkoutHandoffInspect!(auth,req.params.id,req.sessionID));
   });
-  // Preparation only. No approve/create/execute endpoint is registered in this milestone.
+  // Preparation never grants execution; the separate execution route retains the adapter's false source gate.
   if (deps.checkoutHandoffPrepare) route("post", "/api/ai/test-chat/:id/checkout-handoff-request", async (auth, req, res) => {
     res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
     if (!req.sessionID) throw new TestChatError(403,"authenticated_session_required");
@@ -101,6 +103,22 @@ export function registerTestChatRoutes(
     if (!z.object({}).strict().safeParse(req.body).success)
       throw new TestChatError(400,"invalid_checkout_handoff_request");
     return res.json(await deps.checkoutHandoffPrepare!(auth,req.params.id,req.sessionID));
+  });
+  if (deps.checkoutHandoffExecute) route("post", "/api/ai/test-chat/:id/checkout-handoff-execute", async(auth,req,res)=>{
+    res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
+    if(!req.sessionID)throw new TestChatError(403,"authenticated_session_required");
+    if(!req.is("application/json") || req.get("origin")!=="https://app.whachatcrm.com" || req.get("sec-fetch-site")==="cross-site")
+      throw new TestChatError(403,"same_origin_json_required");
+    const parsed=privateCartExecutionInput.safeParse(req.body);
+    if(!parsed.success)throw new TestChatError(400,"invalid_private_cart_approval");
+    const abort=new AbortController();
+    const disconnected=()=>{if(!res.writableEnded)abort.abort();};
+    if(req.aborted)abort.abort();
+    req.on?.("aborted",disconnected);res.on?.("close",disconnected);
+    try {
+      // Only this authenticated operator receives the JSON result; no redirect or transcript write.
+      return res.json(await deps.checkoutHandoffExecute!(auth,req.params.id,req.sessionID,parsed.data,abort.signal));
+    }finally{req.off?.("aborted",disconnected);res.off?.("close",disconnected);}
   });
   route("delete", "/api/ai/test-chat/:id", async (auth, req, res) => {
     await sessions.reset(auth, req.params.id);
