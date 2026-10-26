@@ -67,7 +67,10 @@ export function createExecutionDiagnostics(attemptId:string,sink:(event:Executio
     dispatch(){stage="provider_dispatch";dispatchStarted=true;emit("dispatch_started");},
     provider(event:ProviderDiagnostic){
       if(failureReported)return;
-      stage=event.operation==="verify"?(claim==="committed"?"post_claim_validation":"pre_dispatch_validation"):
+      // performRequest reports a rejection before request() reports the trailing failure.
+      // Preserve the stronger evidence instead of downgrading the terminal stage.
+      const rejectedFailure=event.operation==="create" && event.event==="request_failed" && stage==="provider_rejection";
+      if(!rejectedFailure)stage=event.operation==="verify"?(claim==="committed"?"post_claim_validation":"pre_dispatch_validation"):
         event.operation==="status"?"status_verification":event.event==="provider_rejected"?"provider_rejection":
         ["response_validation","cart_reported","receipt_validated"].includes(event.event)?"response_validation":"provider_response";
       if(event.event==="cart_reported")cartReported=true;

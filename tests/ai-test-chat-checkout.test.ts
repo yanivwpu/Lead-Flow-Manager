@@ -41,7 +41,7 @@ async function fixture() {
  const requestFor=()=>async(query:string)=>{reads++;return query===META?{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}:
   {shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[live()]};};
  let nodePatch:any=undefined;
- let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|'rejected'|undefined;
+ let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|'rejected'|'http-denied'|'http-throttled'|'graphql-rejected'|'graphql-partial'|undefined;
  const cart=()=>({id:'gid://shopify/Cart/fixture',checkoutUrl:'https://whachatcrm.myshopify.com/cart/c/fixture?key=fixture-secret',totalQuantity:1,
   lines:{nodes:[{quantity:1,merchandise:{id:variant,product:{id:product}},cost:{amountPerQuantity:{amount:cartMode==='mismatch'?'999.00':'749.95',currencyCode:'USD'}}}]}});
  const cartResponse=(data:any)=>new Response(JSON.stringify({data}),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
@@ -50,6 +50,12 @@ async function fixture() {
   const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){
    creates++;if(!cartMode)throw Error('MUTATION FORBIDDEN');
    if(cartMode==='ambiguous')throw Error('synthetic lost response');
+   if(cartMode==='http-denied'||cartMode==='http-throttled')return new Response('private-provider-message',{status:cartMode==='http-denied'?403:429,
+    headers:{'x-shopify-api-version':'2026-10','x-request-id':'05185397-bb4e-4a80-9c67-e986fc5abb12'}});
+   if(cartMode==='graphql-rejected'||cartMode==='graphql-partial')return new Response(JSON.stringify({
+    data:cartMode==='graphql-partial'?{cartCreate:{cart:cart()}}:null,
+    errors:[{message:'private-provider-message',extensions:{code:'ACCESS_DENIED'}}],
+   }),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
    return cartResponse({cartCreate:{cart:cartMode==='rejected'?null:cart(),userErrors:cartMode==='rejected'?[{code:'INVALID',message:'private-provider-message'}]:[],warnings:[]}});
   }
   if(body.query.startsWith('query CheckoutStatus'))return cartResponse({cart:cartMode==='status-failed'?null:cart()});
@@ -436,7 +442,7 @@ test('diagnostic-only source gate: execution remains disabled and unauthorized o
 });
 
 test('structured execution stages distinguish post-claim/pre-dispatch abort, provider rejection, ambiguous transport, invalid receipt and verified success without secrets',async()=>{
- for(const mode of ['rejected','ambiguous','mismatch','status-failed','success'] as const){
+ for(const mode of ['rejected','http-denied','http-throttled','graphql-rejected','graphql-partial','ambiguous','mismatch','status-failed','success'] as const){
   const f=await bridgeFixture();try{
    const request=await f.prepare();f.cartMode(mode);
    if(mode==='success')await f.execute(request);else await assert.rejects(f.execute(request));
@@ -445,7 +451,12 @@ test('structured execution stages distinguish post-claim/pre-dispatch abort, pro
    const committed=events.findIndex(e=>e.event==='claim_committed'),dispatch=events.findIndex(e=>e.event==='dispatch_started');
    assert.ok(committed>=0 && dispatch>committed);assert.equal(events[committed].claim,'committed');
    const terminal=events.at(-1)!;assert.equal(terminal.dispatchStarted,true);assert.equal(terminal.requestId,request.requestId);
-   if(mode==='rejected'){assert.equal(terminal.stage,'provider_rejection');assert.equal(terminal.cartReported,false);}
+   if(['rejected','http-denied','http-throttled','graphql-rejected','graphql-partial'].includes(mode)){assert.equal(terminal.stage,'provider_rejection');assert.equal(terminal.cartReported,mode==='graphql-partial');assert.equal(terminal.receiptValidated,false);}
+   if(mode==='http-denied'||mode==='http-throttled'){
+    assert.ok(events.some(e=>e.event==='response_received'&&e.httpStatus===(mode==='http-denied'?403:429)&&e.shopifyRequestId==='05185397-bb4e-4a80-9c67-e986fc5abb12'));
+    assert.equal(terminal.reason,mode==='http-denied'?'setup_required':'throttled');
+   }
+   if(mode==='graphql-rejected'||mode==='graphql-partial')assert.equal(terminal.reason,'ambiguous:graphql_error');
    if(mode==='ambiguous'){assert.equal(terminal.stage,'provider_response');assert.equal(terminal.receiptValidated,false);}
    if(mode==='mismatch'){assert.equal(terminal.stage,'response_validation');assert.equal(terminal.cartReported,true);assert.equal(terminal.receiptValidated,false);}
    if(mode==='status-failed'){assert.equal(terminal.stage,'status_verification');assert.equal(terminal.receiptValidated,true);}
