@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
+import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
 import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +34,13 @@ function Console() {
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
+  const [prepared,setPrepared] = useState<PrivateCartTestRequest>();
+  const [prepareError,setPrepareError] = useState<"expired"|"unavailable">();
+  const [now,setNow] = useState(Date.now);
+  const preparing = useRef(false);
+  const requestGeneration = useRef(0);
+  const selectionVersion = useRef("");
+  selectionVersion.current = JSON.stringify([open,chat?.id,chat?.state.updatedAt,chat?.state.selected,chat?.state.quantity]);
   const [checkoutResult,setCheckoutResult] = useState<PrivateCheckoutPreflight>();
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
@@ -51,16 +59,36 @@ function Console() {
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: "nearest" });
   }, [chat, busy]);
-  useEffect(() => { setCheckoutResult(undefined); }, [chat?.id,chat?.state.updatedAt]);
+  useEffect(() => { setCheckoutResult(undefined); setPrepared(undefined); setPrepareError(undefined); }, [chat?.id,chat?.state.updatedAt]);
+  useEffect(() => {
+    if (!open) { requestGeneration.current++; setPrepared(undefined); setPrepareError(undefined); setCheckoutResult(undefined); return; }
+    setNow(Date.now());
+    const timer=setInterval(()=>setNow(Date.now()),1000);
+    return ()=>clearInterval(timer);
+  },[open]);
+  async function prepareCartTest() {
+    if(!chat || busy || preparing.current || !cartTestPreparationAllowed(chat,checkoutResult))return;
+    const version=selectionVersion.current, generation=requestGeneration.current;
+    preparing.current=true; setBusy(true); setPrepared(undefined); setPrepareError(undefined);
+    try {
+      const result=await preparePrivateCartTest(chat,checkoutResult,async(path,body)=>{
+        const response=await apiRequest("POST",path,body); return response.json();
+      });
+      if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setPrepared(result);
+    }catch(failure){if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setPrepareError(privateCartPreparationError(failure));}
+    finally {preparing.current=false;if(mounted.current)setBusy(false);}
+  }
   async function checkCheckout() {
     if (!chat || busy) return;
-    setBusy(true); setCheckoutResult(undefined);
+    requestGeneration.current++;
+    const version=selectionVersion.current, generation=requestGeneration.current;
+    setBusy(true); setCheckoutResult(undefined); setPrepared(undefined); setPrepareError(undefined);
     try {
       const response = await apiRequest("POST",`/api/ai/test-chat/${chat.id}/checkout-preflight`,{});
       const result = await response.json();
-      if (mounted.current) setCheckoutResult(result);
+      if (mounted.current && selectionVersion.current===version && requestGeneration.current===generation) setCheckoutResult(result);
     } catch {
-      if (mounted.current) setCheckoutResult({ready:false,cartCreated:false,cartCreationEnabled:false,
+      if (mounted.current && selectionVersion.current===version && requestGeneration.current===generation) setCheckoutResult({ready:false,cartCreated:false,cartCreationEnabled:false,
         error:"checkout_preflight_unavailable"});
     } finally { if (mounted.current) setBusy(false); }
   }
@@ -102,6 +130,8 @@ function Console() {
       pending.current?.text === text.trim()
         ? pending.current
         : { eventId: crypto.randomUUID(), text: text.trim() };
+    requestGeneration.current++;
+    setPrepared(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
     pending.current = turn;
     setBusy(true);
     setError(false);
@@ -134,6 +164,8 @@ function Console() {
   }
   async function reset() {
     if (!chat || busy) return;
+    requestGeneration.current++;
+    setPrepared(undefined); setCheckoutResult(undefined); setPrepareError(undefined);
     setBusy(true);
     setError(false);
     try {
@@ -175,8 +207,20 @@ function Console() {
         {diagnostics?.checkoutPreflightAvailable && chat && (
           <aside className="rounded border p-3 space-y-2" aria-label={t("testChat.checkoutReadiness")}>
             <p className="text-sm">{t("testChat.checkoutReadOnly")}</p>
-            <Button variant="outline" disabled={busy || chat.state.step!=="confirming" || !chat.state.selected}
+            <Button variant="outline" disabled={busy || Date.parse(chat.expiresAt)<=now || chat.state.step!=="confirming" || !chat.state.selected}
               onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
+            {Date.parse(chat.expiresAt)<=now && <p role="status" className="text-sm">{t("testChat.checkoutSessionExpired")}</p>}
+            {checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
+              <Button variant="outline" disabled={busy || (!!prepared && Date.parse(prepared.expiresAt)>now)}
+                onClick={()=>void prepareCartTest()}>{t("testChat.prepareCartTest")}</Button>}
+            {checkoutResult?.ready && !cartTestPreparationAllowed(chat,checkoutResult,now) &&
+              <p className="text-sm">{t(Date.parse(chat.expiresAt)<=now?"testChat.checkoutSessionExpired":"testChat.prepareRefreshReadiness")}</p>}
+            {prepareError && <p role="alert" className="text-sm">{t(prepareError==="expired"?"testChat.checkoutSessionExpired":"testChat.prepareUnavailable")}</p>}
+            {prepared && <section aria-label={t("testChat.preparedCartTest")} className="space-y-2 text-sm">
+              <p role="status">{t(Date.parse(prepared.expiresAt)<=now?"testChat.prepareExpired":"testChat.prepareApprovalRequired")}</p>
+              <p>{t("testChat.prepareExpiresAt")}: <time dateTime={prepared.expiresAt}>{new Date(prepared.expiresAt).toLocaleString()}</time></p>
+              <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 select-text">{JSON.stringify(prepared,null,2)}</pre>
+            </section>}
             {checkoutResult && <div role="status" className="text-sm">
               <p>{t(checkoutResult.ready ? "testChat.checkoutReady" :
                 checkoutResult.error.endsWith("online_store_channel_locked") ? "testChat.checkoutLocked" : "testChat.checkoutUnavailable")}</p>
