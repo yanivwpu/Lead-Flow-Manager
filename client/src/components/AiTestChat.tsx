@@ -115,7 +115,7 @@ function Console() {
     finally {preparing.current=false;if(mounted.current)setBusy(false);}
   }
   async function prepareCartTest() {
-    if(!chat || busy || preparing.current || prepareError || requestIsLive || !cartTestPreparationAllowed(chat,checkoutResult,serverNow()))return;
+    if(!chat || busy || cartAttempted || preparing.current || prepareError || requestIsLive || !cartTestPreparationAllowed(chat,checkoutResult,serverNow()))return;
     const version=selectionVersion.current, generation=requestGeneration.current;
     preparing.current=true; setBusy(true); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined);
     try {
@@ -132,7 +132,7 @@ function Console() {
     if (!chat || busy) return;
     requestGeneration.current++;
     const version=selectionVersion.current, generation=requestGeneration.current;
-    setBusy(true); setCheckoutResult(undefined);
+    setBusy(true); setCheckoutResult(undefined); setCartConfirmation(undefined); setCartConsent(false);
     if(!requestIsLive)setPrepareError(undefined);
     try {
       const response = await apiRequest("POST",`/api/ai/test-chat/${chat.id}/checkout-preflight`,{});
@@ -267,7 +267,7 @@ function Console() {
               onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
             {Date.parse(chat.expiresAt)<=now && <p role="status" className="text-sm">{t("testChat.checkoutSessionExpired")}</p>}
             {!diagnostics.checkoutCartExecutionEnabled && checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
-              <Button variant="outline" disabled={busy || !!prepareError || requestIsLive}
+              <Button variant="outline" disabled={busy || cartAttempted || !!prepareError || requestIsLive}
                 onClick={()=>void prepareCartTest()}>{t("testChat.prepareCartTest")}</Button>}
             {checkoutResult?.ready && !cartTestPreparationAllowed(chat,checkoutResult,now) &&
               <p className="text-sm">{t(Date.parse(chat.expiresAt)<=now?"testChat.checkoutSessionExpired":"testChat.prepareRefreshReadiness")}</p>}
