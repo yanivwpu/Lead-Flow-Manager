@@ -8,6 +8,7 @@ export type PrivateCheckoutPreflight = {
   credentialKind: "tokenless" | "public" | "private";
   selection: {shop:string;productId:string;variantId:string;quantity:number;price:string;currency:string;options:Array<{name:string;value:string}>};
   selectionSha256: string; sessionBinding: string;
+  quantityRule: {minimum:number;maximum:number|null;increment:number};
   inventory: {tracked:boolean;quantity:number|null;verifiedAt:string};
   operatorCartAccessConfigured: boolean; nextAction: "separate_cart_approval_required";
 };

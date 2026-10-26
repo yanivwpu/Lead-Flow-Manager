@@ -1,6 +1,7 @@
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
+import { createPrivateCartHandoff } from "./aiTestChat/cartHandoff";
 import { createPrivateCheckoutPreflight } from "./aiTestChat/checkoutPreflight";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
@@ -11164,6 +11165,7 @@ export async function registerRoutes(
     db,
     authorize: requireWorkspaceOffersAdmin,
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
+    checkoutHandoffPrepare: createPrivateCartHandoff({db,entitled:shoppingEntitled}).prepare,
     onTurnSaved: async event => {
       if (await privateShoppingAllowed(event.workspaceUserId))
         console.info("[PrivateShoppingTurn]", JSON.stringify(event));

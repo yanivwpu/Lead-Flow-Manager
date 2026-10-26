@@ -16,7 +16,7 @@ export type CheckoutReceipt = {
   paymentStatus: "unknown";
 };
 export interface CommerceCheckoutProvider {
-  verify(item: VerifiedCheckoutItem): Promise<void>;
+  verify(item: VerifiedCheckoutItem): Promise<void | { quantityRule: { minimum: number; maximum: number | null; increment: number } }>;
   prepare(item: VerifiedCheckoutItem): Promise<CheckoutReceipt>;
   // Cart existence does not establish an order/payment status.
   status?: (receipt: CheckoutReceipt, item?: VerifiedCheckoutItem) => Promise<"available" | "expired" | "unknown">;

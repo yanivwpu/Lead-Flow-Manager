@@ -74,8 +74,9 @@ export async function runValidation(raw: unknown, deps: {
   const {shop,userId,...item} = selection;
   const verified = {...item,inventoryProof:{at:Date.now(),quantity:v.inventoryQuantity ?? null,unrestricted}};
   const provider = createShopifyCheckoutProvider({shop:SHOP,credential:deps.storefrontCredential ?? {kind:'tokenless'},fetch:deps.storefrontFetch});
-  await verificationStage('storefront',()=>provider.verify(verified));
+  const storefrontProof = await verificationStage('storefront',()=>provider.verify(verified));
   if (deps.approval === undefined) return {result:'preflight_passed',selectionSha256:selectionDigest(selection),cartCreated:false,
+    quantityRule:storefrontProof ? storefrontProof.quantityRule : undefined,
     inventory:{tracked:v.inventoryItem.tracked,quantity:v.inventoryItem.tracked && Number.isSafeInteger(v.inventoryQuantity) ? v.inventoryQuantity : null,
       verifiedAt:new Date(verified.inventoryProof.at).toISOString()}};
   authorize(selection,deps.approval);
