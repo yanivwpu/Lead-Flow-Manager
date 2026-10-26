@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createPrivateCartHandoff, PRIVATE_CART_CONFIRMATION, PRIVATE_CART_EXECUTION_ENABLED } from '../server/aiTestChat/cartHandoff';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { eq,sql } from 'drizzle-orm';
@@ -38,13 +39,23 @@ async function fixture() {
   product:{id:product,title:'The Collection Snowboard: Liquid',status:'ACTIVE',publishedAt:'2020-01-01T00:00:00Z',requiresSellingPlan:false}});
  const requestFor=()=>async(query:string)=>{reads++;return query===META?{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}:
   {shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[live()]};};
+ let nodePatch:any=undefined;
+ let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|undefined;
+ const cart=()=>({id:'gid://shopify/Cart/fixture',checkoutUrl:'https://whachatcrm.myshopify.com/cart/c/fixture?key=fixture-secret',totalQuantity:1,
+  lines:{nodes:[{quantity:1,merchandise:{id:variant,product:{id:product}},cost:{amountPerQuantity:{amount:cartMode==='mismatch'?'999.00':'749.95',currencyCode:'USD'}}}]}});
+ const cartResponse=(data:any)=>new Response(JSON.stringify({data}),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
  const headers:any[]=[];
  const storefrontFetch=(async(_url:any,init:any)=>{
-  const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){creates++;throw Error('MUTATION FORBIDDEN');}
+  const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){
+   creates++;if(!cartMode)throw Error('MUTATION FORBIDDEN');
+   if(cartMode==='ambiguous')throw Error('synthetic lost response');
+   return cartResponse({cartCreate:{cart:cart(),userErrors:[],warnings:[]}});
+  }
+  if(body.query.startsWith('query CheckoutStatus'))return cartResponse({cart:cartMode==='status-failed'?null:cart()});
   assert.match(body.query,/^query CheckoutVariant\(/);assert.equal(body.variables.id,variant);headers.push(init.headers);
   if(afterFetch)await afterFetch();
   const response=status===400?{errors:[{message:'Online Store channel is locked.',extensions:{code:'BAD_REQUEST'}}]}:
-   {data:{node:{...live(),price:{amount:changed?'999.00':'749.95',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1},quantityAvailable:50,currentlyNotInStock:false}}};
+   {data:{node:nodePatch===null?null:{...live(),price:{amount:changed?'999.00':'749.95',currencyCode:'USD'},quantityRule:{minimum:1,maximum:null,increment:1},quantityAvailable:50,currentlyNotInStock:false,...nodePatch}}};
   return new Response(JSON.stringify(response),{status,headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
  }) as typeof fetch;
  let handlers:Record<string,any>={};
@@ -52,13 +63,15 @@ async function fixture() {
   handlers={};const app={get:(p:string,h:any)=>handlers['GET '+p]=h,post:(p:string,h:any)=>handlers['POST '+p]=h,delete:(p:string,h:any)=>handlers['DELETE '+p]=h};
   registerTestChatRoutes(app as any,{db,authorize:async(req,res)=>{if(!authorized){res.status(401).json({error:'unauthorized'});return null;}return req.auth??auth;},
    access:async()=>({allowed:entitled}),generate:(async()=>{throw Error('AI must not run');}) as any,diagnostics:async()=>({}),
+   checkoutHandoffPrepare:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).prepare,
    checkoutPreflight:createPrivateCheckoutPreflight({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch})});
  }
  mount();
  async function call(body:any={},patch:any={}){let code=200,data:any;const res:any={set:()=>res,status:(n:number)=>{code=n;return res;},json:(d:any)=>{data=d;return res;}};
-  await handlers['POST /api/ai/test-chat/:id/checkout-preflight']({params:{id:session.id},sessionID:'authenticated-fixture-session',body,is:()=>true,get:()=>undefined,...patch},res);
+  await handlers['POST /api/ai/test-chat/:id/'+(patch.action??'checkout-preflight')]({params:{id:session.id},sessionID:'authenticated-fixture-session',body,is:()=>true,get:()=>undefined,...patch},res);
   return {code,data};}
- return {...f,db,session,source,save,call,mount,configured,headers,state:()=>state,reads:()=>reads,creates:()=>creates,
+ return {...f,db,session,source,save,call,mount,configured,headers,requestFor,storefrontFetch,
+  nodePatch:(value:any)=>{nodePatch=value;},cartMode:(value:typeof cartMode)=>{cartMode=value;},entitled:async()=>entitled,state:()=>state,reads:()=>reads,creates:()=>creates,
   provider:(s:number,c=false)=>{status=s;changed=c;},afterFetch:(run?:()=>Promise<void>)=>{afterFetch=run;},authorize:(value:boolean)=>{authorized=value;},entitle:(value:boolean)=>{entitled=value;}};
  } catch(error) { await f.cleanup(); throw error; }
 }
@@ -141,5 +154,135 @@ test('private readiness honors an existing consumed dispatch and the same durabl
   await f.pg.exec('DROP INDEX shopify_checkout_admin_one_dispatch');
   assert.equal((await f.call()).code,503);assert.equal(f.reads(),0);
   assert.equal((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests WHERE claimed_at IS NOT NULL')).rows[0].n,1);
+ }finally{await f.cleanup();}
+});
+
+async function bridgeFixture() {
+ const f=await fixture();
+ Object.assign(f.configured,{SHOPIFY_STOREFRONT_TEST_TOKEN:'synthetic-storefront-credential',SHOPIFY_STOREFRONT_TEST_TOKEN_KIND:'private',SHOPIFY_STOREFRONT_TEST_SHOP:SHOP});
+ let enabled=true;
+ const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch};
+ const bridge=createPrivateCartHandoff({...deps,executionEnabled:()=>enabled});
+ const prepare=()=>bridge.prepare(auth,f.session.id,'authenticated-fixture-session');
+ const approval=(request:any)=>({requestId:request.requestId,scopeSha256:request.scopeSha256,confirmation:PRIVATE_CART_CONFIRMATION});
+ const execute=(request:any,signal?:AbortSignal)=>bridge.execute(auth,f.session.id,'authenticated-fixture-session',approval(request),signal);
+ const claims=async()=>Number((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests WHERE claimed_at IS NOT NULL')).rows[0].n);
+ return {...f,bridge,deps,prepare,approval,execute,claims,enable:(v:boolean)=>{enabled=v;}};
+}
+test('private handoff prepares a precise approval request only; production execution has no route and stays disabled',async()=>{
+ const f=await bridgeFixture();try{
+  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
+  const prepared=await f.call({},{action:'checkout-handoff-request'});assert.equal(prepared.code,200);
+  const request=prepared.data;
+  assert.equal(request.selection.variantId,variant);assert.equal(request.selection.quantity,1);
+  assert.deepEqual(request.quantityRule,{minimum:1,maximum:null,increment:1});
+  assert.equal(request.cartCreated,false);assert.equal(request.cartCreationEnabled,false);
+  assert.doesNotMatch(JSON.stringify(request),/synthetic-storefront|fixture-token|fixture-secret|checkoutUrl|providerCartId/);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+  const rows=await f.pg.query('SELECT * FROM shopify_checkout_admin_tests');
+  assert.equal(rows.rows[0].approved_at,null);assert.equal(rows.rows[0].claimed_at,null);
+  assert.doesNotMatch(JSON.stringify(rows.rows),/synthetic-storefront|fixture-token|authenticated-fixture-session|checkoutUrl/);
+  await assert.rejects(createPrivateCartHandoff(f.deps).execute(auth,f.session.id,'authenticated-fixture-session',f.approval(request)),/private_cart_execution_disabled/);
+  const source=readFileSync('server/aiTestChat/routes.ts','utf8');
+  assert.doesNotMatch(source,/route\("post",[^\n]*(?:cart-create|cart-execute|cart-approve)/);
+  assert.doesNotMatch(readFileSync('server/aiTestChat/generate.ts','utf8'),/cartHandoff|checkout-handoff-request/);
+ }finally{await f.cleanup();}
+});
+test('handoff preparation enforces authentication, owner-only pilot, exact Liquid quantity, same-origin empty JSON and entitlement',async()=>{
+ const f=await bridgeFixture();try{
+  f.authorize(false);assert.equal((await f.call({},{action:'checkout-handoff-request'})).code,401);f.authorize(true);
+  for(const patch of [{sessionID:null},{is:()=>false},{get:()=> 'cross-site'}])assert.equal((await f.call({},{action:'checkout-handoff-request',...patch})).code,403);
+  assert.equal((await f.call({quantity:1},{action:'checkout-handoff-request'})).code,400);
+  await assert.rejects(f.bridge.prepare({...auth,actorUserId:'another-operator'},f.session.id,'http'),/not_found/);
+  f.entitle(false);await assert.rejects(f.prepare(),/shopping_entitlement_required/);f.entitle(true);
+  f.configured.RAILWAY_ENVIRONMENT_NAME='staging';await assert.rejects(f.prepare(),/not_found/);f.configured.RAILWAY_ENVIRONMENT_NAME='production';
+  await f.save({quantity:2});await assert.rejects(f.prepare(),/exact_liquid_quantity_one_required/);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+ }finally{await f.cleanup();}
+});
+test('approval binds operator, HTTP/private session, exact price/selection, credential and expiry; invalid or stale approvals never dispatch',async()=>{
+ const f=await bridgeFixture();try{
+  const request=await f.prepare();
+  for(const raw of [{...f.approval(request),confirmation:'yes'},{...f.approval(request),quantity:2}])
+   await assert.rejects(f.bridge.execute(auth,f.session.id,'authenticated-fixture-session',raw),/invalid_private_cart_approval/);
+  await assert.rejects(f.bridge.execute(auth,f.session.id,'different-http',f.approval(request)),/expired_changed_or_consumed/);
+  await assert.rejects(f.execute({...request,scopeSha256:'0'.repeat(64)}),/expired_changed_or_consumed/);
+  f.provider(200,true);await assert.rejects(f.execute(request),/failed_closed/);assert.equal(await f.claims(),0);f.provider(200);
+  await f.save({selected:{...f.state().selected,price:'750.00'}});await assert.rejects(f.execute(request),/expired_changed_or_consumed/);
+  await f.save({selected:{...f.state().selected,price:'749.95'}});
+  f.configured.SHOPIFY_STOREFRONT_TEST_TOKEN='synthetic-replaced-credential';await assert.rejects(f.execute(request),/expired_changed_or_consumed/);
+  f.configured.SHOPIFY_STOREFRONT_TEST_TOKEN='synthetic-storefront-credential';
+  await f.pg.exec("UPDATE shopify_checkout_admin_tests SET expires_at=now()-interval '1 second'");
+  await assert.rejects(f.execute(request),/expired_changed_or_consumed/);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+ }finally{await f.cleanup();}
+});
+test('separately scoped synthetic execution reuses the provider and autocommitted fence across workers, requests and the legacy path',async()=>{
+ const f=await bridgeFixture();try{
+  f.cartMode('success');const a=await f.prepare(),b=await f.prepare();
+  const other=createPrivateCartHandoff({...f.deps,executionEnabled:()=>true});
+  const results=await Promise.allSettled([f.execute(a),other.execute(auth,f.session.id,'authenticated-fixture-session',f.approval(b))]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(f.creates(),1);assert.equal(await f.claims(),1);
+  const success=results.find(r=>r.status==='fulfilled') as PromiseFulfilledResult<any>;
+  assert.equal(success.value.paymentStatus,'unknown');assert.equal(success.value.navigation,'separate_approval_required');
+  await assert.rejects(f.execute(a));await assert.rejects(f.execute(b));assert.equal(f.creates(),1);
+  // A legacy request cannot acquire a second claim for the same shop.
+  await assert.rejects(f.db.execute(sql`INSERT INTO public.shopify_checkout_admin_tests
+   (request_id,workspace_id,operator_id,session_digest,shop,integration_id,installation_digest,selection,selection_digest,expires_at,claimed_at)
+   VALUES (gen_random_uuid(),${id},${id},'legacy',${SHOP},'integration-a','legacy','{}'::jsonb,'legacy',now()+interval '1 minute',now())`));
+  assert.equal(await f.claims(),1);
+  assert.doesNotMatch(JSON.stringify((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests')).rows),/checkoutUrl|fixture-secret|providerCartId/);
+ }finally{await f.cleanup();}
+});
+for(const mode of ['ambiguous','mismatch','status-failed'] as const)test(`provider ${mode} permanently consumes the dispatch; no retry or receipt persistence`,async()=>{
+ const f=await bridgeFixture();try{
+  const request=await f.prepare();f.cartMode(mode);
+  await assert.rejects(f.execute(request),/failed_closed_do_not_retry/);
+  assert.equal(await f.claims(),1);assert.equal(f.creates(),1);
+  await assert.rejects(f.execute(request));await assert.rejects(f.prepare(),/development_store_dispatch_already_consumed/);
+  assert.equal(f.creates(),1);
+  assert.doesNotMatch(JSON.stringify((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests')).rows),/fixture-secret|checkoutUrl|providerCartId/);
+ }finally{await f.cleanup();}
+});
+test('abort/rollback before dispatch stops safely; abort after claim burns the fence without rollback or mutation',async()=>{
+ const f=await bridgeFixture();try{
+  const request=await f.prepare(),controller=new AbortController();controller.abort();
+  await assert.rejects(f.execute(request,controller.signal),/private_cart_aborted/);assert.equal(await f.claims(),0);
+  f.enable(false);await assert.rejects(f.execute(request),/execution_disabled/);f.enable(true);
+  // Provider.verify runs again after the durable claim. Abort at that boundary.
+  let checks=0;const after=new AbortController();
+  f.afterFetch(async()=>{if(++checks===2)after.abort();});
+  await assert.rejects(f.execute(request,after.signal),/failed_closed_do_not_retry/);
+  assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
+  await assert.rejects(f.execute(request));assert.equal(await f.claims(),1);
+ }finally{await f.cleanup();}
+});
+test('selection/credential changes during provider IO abort before mutation and retain any committed claim',async()=>{
+ const f=await bridgeFixture();try{
+  const request=await f.prepare();let checks=0;
+  f.afterFetch(async()=>{if(++checks===2)await f.save({quantity:2});});
+  await assert.rejects(f.execute(request),/failed_closed_do_not_retry/);
+  assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
+ }finally{await f.cleanup();}
+});
+
+
+test('authenticated readiness distinguishes locked/unauthorized/invisible variants and reports validated quantity rules',async()=>{
+ const f=await bridgeFixture();try{
+  for(const status of [401,403]){f.provider(status);const r=await f.call();assert.equal(r.data.ready,false);assert.equal(r.data.error,'checkout_test_storefront_setup_required');}
+  f.provider(400);assert.equal((await f.call()).data.error,'checkout_test_storefront_bad_request_online_store_channel_locked');
+  f.provider(200);f.nodePatch(null);assert.equal((await f.call()).data.error,'checkout_test_storefront_variant_not_visible');
+  for(const [patch,category] of [
+   [{id:'gid://shopify/ProductVariant/9'},'variant_identity_mismatch'],
+   [{quantityRule:{minimum:2,maximum:null,increment:1}},'quantity_rule_rejected'],
+   [{quantityAvailable:0},'variant_unavailable'],
+   [{price:{amount:'749.95',currencyCode:'EUR'}},'changed'],
+  ] as const){f.nodePatch(patch);assert.equal((await f.call()).data.error,'checkout_test_storefront_'+category);}
+  f.nodePatch(undefined);const r=await f.call();assert.equal(r.data.ready,true);
+  assert.deepEqual(r.data.quantityRule,{minimum:1,maximum:null,increment:1});
+  assert.equal(r.data.selection.productId,product);assert.equal(r.data.selection.variantId,variant);
+  assert.equal(r.data.selection.currency,'USD');assert.equal(r.data.selection.price,'749.95');
+  assert.equal(r.data.inventory.tracked,true);assert.equal(r.data.inventory.quantity,50);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
  }finally{await f.cleanup();}
 });

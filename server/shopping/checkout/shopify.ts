@@ -95,6 +95,7 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       if(!rule || !Number.isInteger(rule.minimum) || rule.minimum<1 || !Number.isInteger(rule.increment) || rule.increment<1 || (rule.maximum!==null && (!Number.isInteger(rule.maximum)||rule.maximum<rule.minimum))) throw new CheckoutError("unavailable",30_000,"quantity_rule_invalid");
       if(item.quantity<rule.minimum || (rule.maximum!==null && item.quantity>rule.maximum) || item.quantity%rule.increment!==0) throw new CheckoutError("unavailable",30_000,"quantity_rule_rejected");
       if(!money(v.price?.amount) || v.price.currencyCode!==item.currency || compareMoney(v.price.amount,item.price)!==0 || JSON.stringify(v.selectedOptions)!==JSON.stringify(item.options)) throw new CheckoutError("changed");
+      return {quantityRule:{minimum:rule.minimum,maximum:rule.maximum,increment:rule.increment}};
     },
     async prepare(item) {
       await provider.verify(item);
