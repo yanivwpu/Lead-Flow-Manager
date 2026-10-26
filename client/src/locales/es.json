@@ -1483,6 +1483,14 @@
     }
   },
   "testChat": {
+    "prepareCartTest": "Preparar prueba de carrito",
+    "preparedCartTest": "Solicitud preparada para la prueba de carrito",
+    "prepareApprovalRequired": "Solicitud preparada. Se requiere aprobación por separado. No se ha creado ningún carrito.",
+    "prepareExpiresAt": "Vence el",
+    "prepareExpired": "Esta solicitud ha vencido. Comprueba la disponibilidad antes de preparar otra solicitud.",
+    "prepareRefreshReadiness": "Comprueba de nuevo la disponibilidad del pago antes de preparar la prueba.",
+    "prepareUnavailable": "No se pudo preparar la solicitud. Comprueba la disponibilidad de nuevo. No se creó ningún carrito.",
+    "checkoutSessionExpired": "Esta sesión de prueba ha vencido. Actualiza la página, abre el chat de prueba y selecciona el artículo otra vez.",
     "checkoutReadiness": "Comprobar disponibilidad del checkout",
     "checkoutReadOnly": "Comprobación privada de solo lectura. No se crearán carritos, pedidos, pagos ni mensajes.",
     "checkoutReady": "Disponibilidad verificada en Shopify. Crear un carrito requiere una autorización independiente.",
