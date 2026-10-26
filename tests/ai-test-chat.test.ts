@@ -910,3 +910,30 @@ test("authenticated Liquid sequence survives reload, exact possessive follow-up 
   for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.flowJobs,schema.dripEnrollments])assert.equal((await f.db.select().from(table)).length,0);
  } finally {await f.cleanup();}
 });
+
+test("private bare catalog title enters real Shopping discovery without reply-model fallback or cart capability",async()=>{
+ const f=await fixture();try{
+  await f.db.update(schema.catalogProducts).set({title:"The Collection Snowboard: Liquid",searchText:"The Collection Snowboard: Liquid snowboard Default Title",variantCount:1}).where(eq(schema.catalogProducts.id,"product-a"));
+  await f.db.delete(schema.catalogVariants).where(eq(schema.catalogVariants.id,"variant-1"));
+  await f.db.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}],price:"749.95",quantity:50}).where(eq(schema.catalogVariants.id,"variant-0"));
+  const request=fixtureInventoryRequest(f.db,node=>({...node,inventoryQuantity:50}));let checks=0,searches=0;
+  const base=createCommerceStore(f.db,(shop,token)=>async(query,variables)=>{checks++;assert.match(query,/query VerifyInventoryBatch/);return request(shop,token)(query,variables);});
+  const commerce={...base,purchaseCandidates:async(...args:Parameters<typeof base.purchaseCandidates>)=>{searches++;return base.purchaseCandidates(...args);}};
+  const sessions=createTestChatSessions(f.db),chat=await sessions.create(auth);
+  const generate=createTestChatGenerator({ai:aiService,commerce,settings:async()=>shoppingSettings({enabled:false}),entitled:async()=>true,
+   privateShoppingAllowed:async id=>id===auth.workspaceUserId,knowledge:async()=>undefined,aiSettings:async()=>undefined,
+   meter:async()=>{throw Error("no reply-model fallback");}});
+  await inventoryDue(f.db,f.source.id);
+  const result=await sessions.turn(auth,chat.id,randomUUID(),"The Collection Snowboard: Liquid",({history,sessions:adapter})=>
+   generate({userId:auth.workspaceUserId,sessionId:chat.id,history,sessions:adapter}));
+  assert.equal(result.state.intent,"search");assert.equal(result.state.step,"selecting");assert.equal(result.state.choices?.length,1);
+  assert.equal(result.state.selected,undefined);assert.equal(result.state.choices![0].variantId,"variant-0");
+  assert.equal(result.state.choices![0].price,"749.95");assert.equal(result.state.choices![0].inventoryQuantity,50);
+  assert.equal(checks,1);assert.equal(searches,1,"reuse title candidates for ordinary discovery");
+  assert.equal(result.transcript[0].content,"The Collection Snowboard: Liquid","keep actual inbound/session binding");
+  assert.match(result.transcript.at(-1)!.content,/The Collection Snowboard: Liquid.*USD 749\.95/);
+  assert.doesNotMatch(result.transcript.at(-1)!.content,/https?:|WhachatCRM/);
+  for(const table of [schema.contacts,schema.conversations,schema.messages,schema.activityEvents,schema.dripEnrollments,schema.flowJobs,schema.noReplyJobs,schema.automationTimerJobs])
+   assert.equal((await f.db.select().from(table)).length,0);
+ }finally{await f.cleanup();}
+});

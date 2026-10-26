@@ -48,6 +48,7 @@ export function createTestChatGenerator(deps: {
       sessions: input.sessions,
       settings: async id => ({...await settings(id),checkoutEnabled:!privateShopping}),
       entitled: deps.entitled,
+      catalogTitleDiscovery: privateShopping,
       // Pure preview: this generator has no provider/cart capability or customer-message sender.
       ...(privateShopping ? {} : {
         checkout: async () => ({status:"ready" as const}),

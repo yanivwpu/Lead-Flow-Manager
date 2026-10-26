@@ -22,7 +22,7 @@ function inventoryProof(v:ShoppingInventory): Pick<ShoppingChoice,"inventoryQuan
 }
 function stockNote(c:ShoppingChoice,template:string) {return c.inventoryQuantity===undefined?"":`\n${template.replace("{quantity}",String(c.inventoryQuantity))}`;}
 function options(raw:unknown):ShoppingChoice["options"] {return Array.isArray(raw)?raw.filter(o=>typeof o?.name==="string"&&typeof o?.value==="string").map(o=>({name:o.name,value:o.value})):[];}
-export function createShoppingService(deps:{commerce:CommerceShoppingProvider; sessions:ShoppingSessionStore; settings:(userId:string)=>Promise<ShoppingSettings>; entitled:(userId:string)=>Promise<boolean>; checkout?: ShoppingCheckout; checkoutPreview?: boolean; now?:()=>number}) {
+export function createShoppingService(deps:{commerce:CommerceShoppingProvider; sessions:ShoppingSessionStore; settings:(userId:string)=>Promise<ShoppingSettings>; entitled:(userId:string)=>Promise<boolean>; checkout?: ShoppingCheckout; checkoutPreview?: boolean; catalogTitleDiscovery?: boolean; now?:()=>number}) {
  const now=deps.now??Date.now;
  return { async turn(turn:ShoppingTurn):Promise<ShoppingResult|null> {
   const config=await deps.settings(turn.userId);
@@ -33,7 +33,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
    const requestedIntent=verificationFollowup?"availability":shoppingIntent(turn.text);
    const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
-   const intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
+   let intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
    const expired=stored && (stamp-new Date(stored.updatedAt).getTime()>SESSION_MS || !Number.isFinite(new Date(stored.updatedAt).getTime()));
    const source=await deps.commerce.source(turn.userId);
    if(!source) return null;
@@ -49,7 +49,19 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     const reply=stored.lastEventId===turn.eventId && stamp-new Date(stored.updatedAt).getTime()<REPLAY_MS ? stored.reply:copy.busy;
     return {reply,state:stored,handoff:stored.step==="handoff"};
    }
-   if(!stored && intent==="other") return null;
+   let titleProducts:Awaited<ReturnType<CommerceShoppingProvider["purchaseCandidates"]>>|undefined;
+   if(!stored && intent==="other") {
+    // Private transport opt-in only: a bare owned catalog title is a discovery request.
+    // Do not rewrite the persisted inbound, broaden arbitrary chat, or replace a saved selection.
+    if(!deps.catalogTitleDiscovery || !source.currency || turn.text.trim().length>200)return null;
+    const title=(value:string)=>value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+    const exact=title(turn.text);
+    if(!exact)return null;
+    titleProducts=(await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:turn.text,limit:8,
+      filters:{currency:source.currency}})).filter(product=>title(product.title)===exact);
+    if(!titleProducts.length)return null;
+    intent="search";
+   }
    const previous=!expired && stored?.sourceId===source.id
     ? {...stored,step:stored.step==="pending"?(stored.pending?.resumeStep??"discovering"):stored.step}:null;
    let state:ShoppingState=previous?{...previous,choices:[...previous.choices]}:{version:1,sourceId:source.id,step:"discovering",intent,choices:[],quantity:1,updatedAt:new Date(stamp).toISOString(),lastEventId:turn.eventId,reply:"",consumedEventIds:[]};
@@ -149,7 +161,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(intent==="search" && !retryTurn) {state.checkout=undefined;state.choices=[];state.selected=undefined;state.quantity=1;}
    state.query=query;state.currency=source.currency;
    let products;
-   try { products=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
+   try { products=titleProducts??await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
    const candidates=products.flatMap(p=>p.variants.map(v=>({p,v}))).slice(0,8);
    if(!candidates.length) return unavailable();
    const live=await verify(candidates.map(c=>c.v.id));
