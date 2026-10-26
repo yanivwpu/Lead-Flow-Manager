@@ -41,7 +41,7 @@ async function fixture() {
  const requestFor=()=>async(query:string)=>{reads++;return query===META?{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}:
   {shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[live()]};};
  let nodePatch:any=undefined;
- let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|undefined;
+ let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|'rejected'|'http-denied'|'http-throttled'|'graphql-rejected'|'graphql-partial'|undefined;
  const cart=()=>({id:'gid://shopify/Cart/fixture',checkoutUrl:'https://whachatcrm.myshopify.com/cart/c/fixture?key=fixture-secret',totalQuantity:1,
   lines:{nodes:[{quantity:1,merchandise:{id:variant,product:{id:product}},cost:{amountPerQuantity:{amount:cartMode==='mismatch'?'999.00':'749.95',currencyCode:'USD'}}}]}});
  const cartResponse=(data:any)=>new Response(JSON.stringify({data}),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
@@ -50,7 +50,13 @@ async function fixture() {
   const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){
    creates++;if(!cartMode)throw Error('MUTATION FORBIDDEN');
    if(cartMode==='ambiguous')throw Error('synthetic lost response');
-   return cartResponse({cartCreate:{cart:cart(),userErrors:[],warnings:[]}});
+   if(cartMode==='http-denied'||cartMode==='http-throttled')return new Response('private-provider-message',{status:cartMode==='http-denied'?403:429,
+    headers:{'x-shopify-api-version':'2026-10','x-request-id':'05185397-bb4e-4a80-9c67-e986fc5abb12'}});
+   if(cartMode==='graphql-rejected'||cartMode==='graphql-partial')return new Response(JSON.stringify({
+    data:cartMode==='graphql-partial'?{cartCreate:{cart:cart()}}:null,
+    errors:[{message:'private-provider-message',extensions:{code:'ACCESS_DENIED'}}],
+   }),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
+   return cartResponse({cartCreate:{cart:cartMode==='rejected'?null:cart(),userErrors:cartMode==='rejected'?[{code:'INVALID',message:'private-provider-message'}]:[],warnings:[]}});
   }
   if(body.query.startsWith('query CheckoutStatus'))return cartResponse({cart:cartMode==='status-failed'?null:cart()});
   assert.match(body.query,/^query CheckoutVariant\(/);assert.equal(body.variables.id,variant);headers.push(init.headers);
@@ -166,18 +172,18 @@ test('private readiness honors an existing consumed dispatch and the same durabl
 async function bridgeFixture() {
  const f=await fixture();
  Object.assign(f.configured,{SHOPIFY_STOREFRONT_TEST_TOKEN:'synthetic-storefront-credential',SHOPIFY_STOREFRONT_TEST_TOKEN_KIND:'private',SHOPIFY_STOREFRONT_TEST_SHOP:SHOP});
- let enabled=true;
- const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch};
+ let enabled=true;const diagnostics:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic[]=[];
+ const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch,executionDiagnostic:(event:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic)=>{diagnostics.push(event);}};
  const bridge=createPrivateCartHandoff({...deps,executionEnabled:()=>enabled});
  const prepare=()=>bridge.prepare(auth,f.session.id,'authenticated-fixture-session');
  const approval=(request:any)=>({requestId:request.requestId,scopeSha256:request.scopeSha256,expiresAt:request.expiresAt,confirmation:PRIVATE_CART_CONFIRMATION});
  const execute=(request:any,signal?:AbortSignal)=>bridge.execute(auth,f.session.id,'authenticated-fixture-session',approval(request),signal);
  const claims=async()=>Number((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests WHERE claimed_at IS NOT NULL')).rows[0].n);
- return {...f,bridge,deps,prepare,approval,execute,claims,enable:(v:boolean)=>{enabled=v;}};
+ return {...f,bridge,deps,diagnostics,prepare,approval,execute,claims,enable:(v:boolean)=>{enabled=v;}};
 }
 test('private handoff preparation grants no execution approval; explicit rollback gate still disables execution',async()=>{
  const f=await bridgeFixture();try{
-  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
+  assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
   const prepared=await f.call({},{action:'checkout-handoff-request'});assert.equal(prepared.code,200);
   const request=prepared.data;
   assert.equal(request.selection.variantId,variant);assert.equal(request.selection.quantity,1);
@@ -408,17 +414,17 @@ test('execution HTTP route: ambiguous mutation consumes the shared claim, and cl
 });
 
 
-test('activated self-service source gate: exact approval is required and unauthorized owners never dispatch',async()=>{
+test('diagnostic-only source gate: execution remains disabled and unauthorized owners never dispatch',async()=>{
  const f=await bridgeFixture();try{
-  f.useSourceGate();assert.equal(PRIVATE_CART_EXECUTION_ENABLED,true);
+  f.useSourceGate();assert.equal(PRIVATE_CART_EXECUTION_ENABLED,false);
   const status=await f.call({},{method:'GET',action:'checkout-handoff-request'});
-  assert.equal(status.code,200);assert.equal(status.data.executionEnabled,true);
+  assert.equal(status.code,200);assert.equal(status.data.executionEnabled,false);
   assert.equal(status.data.status,'no_request_for_current_binding');assert.equal(status.data.cartCreationEnabled,false);
   const body={requestId:'00000000-0000-4000-8000-000000000001',scopeSha256:'0'.repeat(64),
    expiresAt:new Date(Date.now()+300000).toISOString(),confirmation:PRIVATE_CART_CONFIRMATION};
   for(const raw of [{},{...body,confirmation:undefined},{...body,confirmation:'yes'},
    {...body,expiresAt:undefined},{...body,quantity:1}])assert.equal((await f.call(raw,routePatch)).code,400);
-  assert.equal((await f.call(body,routePatch)).code,409); // No persisted request: activation alone is never approval.
+  assert.equal((await f.call(body,routePatch)).code,403); // Diagnostic-only release blocks execution before provider IO.
   f.authorize(false);assert.equal((await f.call(body,routePatch)).code,401);f.authorize(true);
   for(const bad of [{workspaceUserId:'tenant-b',actorUserId:'tenant-b'},{...auth,actorUserId:'tenant-b'}])
    assert.equal((await f.call(body,{...routePatch,auth:bad})).code,404);
@@ -432,5 +438,60 @@ test('activated self-service source gate: exact approval is required and unautho
   assert.equal((await f.call(body,routePatch)).code,404);
   assert.equal(f.reads(),0);assert.equal(f.headers.length,0);assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
   assert.equal((await f.pg.query('SELECT count(*)::int AS n FROM shopify_checkout_admin_tests')).rows[0].n,0);
+ }finally{await f.cleanup();}
+});
+
+test('structured execution stages distinguish post-claim/pre-dispatch abort, provider rejection, ambiguous transport, invalid receipt and verified success without secrets',async()=>{
+ for(const mode of ['rejected','http-denied','http-throttled','graphql-rejected','graphql-partial','ambiguous','mismatch','status-failed','success'] as const){
+  const f=await bridgeFixture();try{
+   const request=await f.prepare();f.cartMode(mode);
+   if(mode==='success')await f.execute(request);else await assert.rejects(f.execute(request));
+   assert.equal(await f.claims(),1);assert.equal(f.creates(),1);
+   const events=f.diagnostics;
+   const committed=events.findIndex(e=>e.event==='claim_committed'),dispatch=events.findIndex(e=>e.event==='dispatch_started');
+   assert.ok(committed>=0 && dispatch>committed);assert.equal(events[committed].claim,'committed');
+   const terminal=events.at(-1)!;assert.equal(terminal.dispatchStarted,true);assert.equal(terminal.requestId,request.requestId);
+   if(['rejected','http-denied','http-throttled','graphql-rejected','graphql-partial'].includes(mode)){assert.equal(terminal.stage,'provider_rejection');assert.equal(terminal.cartReported,mode==='graphql-partial');assert.equal(terminal.receiptValidated,false);}
+   if(mode==='http-denied'||mode==='http-throttled'){
+    assert.ok(events.some(e=>e.event==='response_received'&&e.httpStatus===(mode==='http-denied'?403:429)&&e.shopifyRequestId==='05185397-bb4e-4a80-9c67-e986fc5abb12'));
+    assert.equal(terminal.reason,mode==='http-denied'?'setup_required':'throttled');
+   }
+   if(mode==='graphql-rejected'||mode==='graphql-partial')assert.equal(terminal.reason,'ambiguous:graphql_error');
+   if(mode==='ambiguous'){assert.equal(terminal.stage,'provider_response');assert.equal(terminal.receiptValidated,false);}
+   if(mode==='mismatch'){assert.equal(terminal.stage,'response_validation');assert.equal(terminal.cartReported,true);assert.equal(terminal.receiptValidated,false);}
+   if(mode==='status-failed'){assert.equal(terminal.stage,'status_verification');assert.equal(terminal.receiptValidated,true);}
+   if(mode==='success'){assert.equal(terminal.event,'execution_completed');assert.equal(terminal.receiptValidated,true);}
+   assert.doesNotMatch(JSON.stringify(events),/fixture-secret|fixture-token|synthetic-storefront|authenticated-fixture-session|private-provider-message|checkoutUrl|providerCartId|gid:\/\/shopify\/Cart/);
+  }finally{await f.cleanup();}
+ }
+ const f=await bridgeFixture();try{
+  const request=await f.prepare();f.cartMode('success');const controller=new AbortController();let checks=0;
+  f.afterFetch(async()=>{if(++checks===2)controller.abort();});
+  await assert.rejects(f.execute(request,controller.signal));
+  assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
+  assert.equal(f.diagnostics.at(-1)!.claim,'committed');assert.equal(f.diagnostics.at(-1)!.dispatchStarted,false);
+ }finally{await f.cleanup();}
+});
+
+test('stage diagnostics separate pre-claim price rejection from uncertain claim acknowledgement without permitting a provider mutation',async()=>{
+ let f=await bridgeFixture();try{
+  const request=await f.prepare();f.provider(200,true);
+  await assert.rejects(f.execute(request));
+  assert.equal(await f.claims(),0);assert.equal(f.creates(),0);
+  const last=f.diagnostics.at(-1)!;assert.equal(last.stage,'pre_dispatch_validation');assert.equal(last.claim,'not_attempted');
+  assert.equal(last.dispatchStarted,false);assert.equal(last.reason,'checkout_test_storefront_changed');
+ }finally{await f.cleanup();}
+ f=await bridgeFixture();try{
+  const request=await f.prepare(),execute=f.db.execute.bind(f.db);
+  (f.db as any).execute=async(query:any)=>{
+   const result=await execute(query);
+   if(result.rows.length===1 && Object.keys(result.rows[0]).length===1 && typeof result.rows[0].request_id==='string')
+    throw Error('synthetic lost SQL acknowledgement: private value');
+   return result;
+  };
+  await assert.rejects(f.execute(request));
+  assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
+  const last=f.diagnostics.at(-1)!;assert.equal(last.stage,'claim_commit');assert.equal(last.claim,'unknown');assert.equal(last.dispatchStarted,false);
+  assert.doesNotMatch(JSON.stringify(f.diagnostics),/lost SQL|private value/);
  }finally{await f.cleanup();}
 });

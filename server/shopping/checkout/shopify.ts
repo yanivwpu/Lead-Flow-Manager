@@ -1,3 +1,4 @@
+import { observeProvider, shopifyDiagnosticRequestId, type ProviderDiagnostic, type ProviderObserver } from "./executionDiagnostics";
 import { transportDetail } from "./storefrontDiagnostics";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { compareMoney } from "@shared/shoppingAssistant";
@@ -26,12 +27,19 @@ const CART_FIELDS = `id checkoutUrl totalQuantity lines(first:2) { nodes { quant
 const CREATE = `mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${CART_FIELDS} } userErrors { code } warnings { code } } }`;
 const STATUS = `query CheckoutStatus($id:ID!) { cart(id:$id) { ${CART_FIELDS} } }`;
 /** No Admin token, no automatic retry, no redirects, bounded timeout, bounded diagnostics. */
-export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch }): CommerceCheckoutProvider {
+export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch; diagnostic?:ProviderObserver }): CommerceCheckoutProvider {
   const shop = normalizeShopifyShopDomain(config.shop);
   if (!shop || !config.credential || (config.credential.kind !== "tokenless" && (!config.credential.token || !["public", "private"].includes(config.credential.kind)))) throw new CheckoutError("setup_required");
   const requestFetch = config.fetch ?? fetch;
   let nextRequestAt = 0;
-  async function request(query: string, variables: Record<string, unknown>, mutation = false): Promise<any> {
+  const emit=(event:ProviderDiagnostic)=>observeProvider(config.diagnostic,event);
+  async function request(query:string,variables:Record<string,unknown>,mutation=false):Promise<any> {
+    const operation=mutation?"create":query===STATUS?"status":"verify";
+    emit({operation,event:"request_started"});
+    try {return await performRequest(query,variables,mutation,operation);}
+    catch(error){emit({operation,event:"request_failed"});throw error;}
+  }
+  async function performRequest(query:string,variables:Record<string,unknown>,mutation:boolean,operation:ProviderDiagnostic["operation"]):Promise<any> {
     if (Date.now() < nextRequestAt) throw new CheckoutError("throttled", nextRequestAt - Date.now());
     let response: Response;
     const signal = AbortSignal.timeout(15_000);
@@ -42,13 +50,15 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
         body: JSON.stringify({ query, variables }),
       });
     } catch (error) { throw new CheckoutError(mutation ? "ambiguous" : "unavailable",30_000,signal.aborted ? "transport_timeout" : transportDetail(error)); }
+    emit({operation,event:"response_received",httpStatus:response.status,shopifyRequestId:shopifyDiagnosticRequestId(response.headers.get("x-request-id"))});
     if (response.status === 429) {
+      emit({operation,event:"provider_rejected",reason:"http_throttled"});
       const delay = Number(response.headers.get("retry-after"));
       const retryMs = Number.isFinite(delay) && delay > 0 ? Math.min(delay * 1000, 600_000) : 60_000;
       nextRequestAt = Date.now() + retryMs;
       throw new CheckoutError("throttled", retryMs);
     }
-    if ([401,403].includes(response.status)) throw new CheckoutError("setup_required",600_000);
+    if ([401,403].includes(response.status)) {emit({operation,event:"provider_rejected",reason:"http_access_denied"});throw new CheckoutError("setup_required",600_000);}
     if (!response.ok) throw new CheckoutError(mutation ? "ambiguous" : "unavailable",30_000,
       response.status>=300 && response.status<400 ? "http_redirect" :
       response.status>=500 && response.status<600 ? "http_server_error" :
@@ -60,6 +70,9 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       signal.aborted || transportDetail(error)==="transport_timeout" ? "response_body_timeout" :
       error instanceof SyntaxError ? (html ? "http_html_response" : "invalid_json") : "response_body_read_failed"); }
     if (body?.errors?.length) {
+      if(mutation && typeof body?.data?.cartCreate?.cart?.id==="string" && body.data.cartCreate.cart.id.startsWith("gid://shopify/Cart/"))
+        emit({operation,event:"cart_reported"});
+      emit({operation,event:"provider_rejected",reason:"graphql_errors"});
       if (!body.data && body.errors.every((e:any)=>e?.extensions?.code === "THROTTLED")) { nextRequestAt=Date.now()+60_000; throw new CheckoutError("throttled",60_000); }
       throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"graphql_error");
     }
@@ -101,16 +114,27 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       await provider.verify(item);
       const data=await request(CREATE,{input:{lines:[{merchandiseId:item.variantId,quantity:item.quantity}]}},true);
       const payload=data.cartCreate;
-      if (!Array.isArray(payload?.userErrors) || !Array.isArray(payload?.warnings)) throw new CheckoutError("ambiguous");
-      if (payload.userErrors.length || payload.warnings.length) throw new CheckoutError(payload.cart ? "ambiguous" : "unavailable");
-      return receipt(payload.cart,item);
+      emit({operation:"create",event:"response_validation"});
+      if(typeof payload?.cart?.id==="string" && payload.cart.id.startsWith("gid://shopify/Cart/"))emit({operation:"create",event:"cart_reported"});
+      if (!Array.isArray(payload?.userErrors) || !Array.isArray(payload?.warnings)) {
+        emit({operation:"create",event:"response_validation",reason:"invalid_payload"});throw new CheckoutError("ambiguous");
+      }
+      if (payload.userErrors.length || payload.warnings.length) {
+        emit({operation:"create",event:"provider_rejected",reason:payload.userErrors.length?"cart_user_errors":"cart_warnings"});
+        throw new CheckoutError(payload.cart ? "ambiguous" : "unavailable");
+      }
+      const result=receipt(payload.cart,item);
+      emit({operation:"create",event:"receipt_validated"});
+      return result;
     },
     async status(previous, item) {
       validateCheckoutUrl(previous.checkoutUrl,shop!,config.attestedCheckoutHost);
       const data=await request(STATUS,{id:previous.providerCartId});
-      if(data.cart===null)return "expired";
+      if(data.cart===null){emit({operation:"status",event:"status_expired"});return "expired";}
       const current=receipt(data.cart,item);
-      return current.providerCartId===previous.providerCartId && current.checkoutUrl===previous.checkoutUrl ? "available" : "unknown";
+      const result=current.providerCartId===previous.providerCartId && current.checkoutUrl===previous.checkoutUrl ? "available" : "unknown";
+      emit({operation:"status",event:result==="available"?"status_available":"status_unknown"});
+      return result;
     },
   };
   return provider;
