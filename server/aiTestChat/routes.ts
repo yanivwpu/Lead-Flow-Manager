@@ -24,7 +24,7 @@ export function registerTestChatRoutes(
       generating: boolean,
     ) => Promise<{ allowed: boolean; limited?: boolean }>;
     generate: ReturnType<typeof createTestChatGenerator>;
-    diagnostics: (id: string) => Promise<unknown>;
+    diagnostics: (id: string, actorId?: string) => Promise<unknown>;
     checkoutPreflight?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<PrivateCheckoutPreflight>;
     checkoutHandoffExecute?: (auth: TestOwner, id: string, httpSessionId: string, input: unknown, signal: AbortSignal) => Promise<unknown>;
     checkoutHandoffInspect?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
@@ -77,7 +77,7 @@ export function registerTestChatRoutes(
   );
   route("get", "/api/ai/test-chat/:id/diagnostics", async (auth, req, res) => {
     await sessions.read(auth, req.params.id);
-    return res.json(await deps.diagnostics(auth.workspaceUserId));
+    return res.json(await deps.diagnostics(auth.workspaceUserId,auth.actorUserId));
   });
   if (deps.checkoutPreflight) route("post", "/api/ai/test-chat/:id/checkout-preflight", async (auth, req, res) => {
     res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});

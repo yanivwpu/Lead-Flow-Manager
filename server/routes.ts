@@ -1,7 +1,7 @@
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
-import { createPrivateCartHandoff } from "./aiTestChat/cartHandoff";
+import { createPrivateCartHandoff, PRIVATE_CART_EXECUTION_ENABLED } from "./aiTestChat/cartHandoff";
 import { createPrivateCheckoutPreflight } from "./aiTestChat/checkoutPreflight";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
@@ -11189,7 +11189,7 @@ export async function registerRoutes(
       aiSettings: async id => (await storage.getAiSettings(id)) || undefined,
       meter: async id => { await storage.incrementAiUsage(id, "repliesSuggested"); },
     }),
-    diagnostics: async userId => {
+    diagnostics: async (userId, actorId) => {
       const source = await salesCatalog.commerce.source(userId);
       const inventory = inventoryState(source?.checkpoint);
       const settings = await storage.getAiSettings(userId);
@@ -11200,6 +11200,8 @@ export async function registerRoutes(
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
         checkoutPreflightAvailable: testOnlyShopping && entitled,
+        checkoutCartTestAvailable: testOnlyShopping && entitled && actorId===userId,
+        checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && PRIVATE_CART_EXECUTION_ENABLED,
         shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && entitled,
         shoppingTestOnly: testOnlyShopping && entitled,
         liveShoppingEnabled: savedShopping.enabled && savedShopping.allowedChannels.includes("webchat") && entitled,

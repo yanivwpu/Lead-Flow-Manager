@@ -1553,6 +1553,16 @@
     }
   },
   "testChat": {
+    "approveCreateCart": "Approve & Create Test Cart",
+    "cartActivationRequired": "Cart creation is disabled until activation is separately approved.",
+    "cartConfirmTitle": "Confirm one private test cart",
+    "cartConsent": "I approve one cart for exactly this selection and price. Do not open checkout, take payment, create an order or send messages.",
+    "cartConfirmOnce": "Confirm & create once",
+    "cartCancel": "Cancel",
+    "cartAttemptRunning": "Preparing and attempting one cart. Do not close this window or repeat the action.",
+    "cartAttemptStopped": "This attempt is stopped or its result is unknown. Do not retry or prepare another cart until its server status is reviewed.",
+    "cartCreatedPrivate": "Test cart created. Keep this checkout URL private and unopened. No payment or order was initiated.",
+    "cartPrivateUrl": "Private Shopify checkout URL (do not open)",
     "prepareCartTest": "Prepare cart test",
     "preparedCartTest": "Prepared cart test request",
     "prepareApprovalRequired": "Request prepared. Separate approval is required. No cart has been created.",

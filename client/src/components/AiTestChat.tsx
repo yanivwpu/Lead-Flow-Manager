@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
 import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, privateCartServerTime, PrivateCartResponseError, type PrivateCartTestSummary, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
+import { createPrivateCartTestRunner, privateCartConfirmationAllowed } from "@/lib/aiTestCartExecution";
 import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,8 @@ type Diagnostics = {
   inventoryStatus: string;
   retryAt: number | null;
   checkoutPreflightAvailable?: boolean;
+  checkoutCartTestAvailable?: boolean;
+  checkoutCartExecutionEnabled?: boolean;
 };
 export function AiTestChat() {
   const { user, sessionAligned } = useAuth();
@@ -31,6 +34,14 @@ export function AiTestChat() {
 }
 function Console() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const attemptKey=`private-cart-ui-attempt:v1:${user?.id}:whachatcrm.myshopify.com`;
+  const [cartAttempted,setCartAttempted]=useState(()=>{try{return !!sessionStorage.getItem(attemptKey);}catch{return true;}});
+  const [cartConfirmation,setCartConfirmation]=useState<{proof:PrivateCheckoutPreflight;version:string}>();
+  const [cartConsent,setCartConsent]=useState(false),[cartFailure,setCartFailure]=useState(false);
+  const [privateCheckoutUrl,setPrivateCheckoutUrl]=useState<string>();
+  const cartRunner=useRef(createPrivateCartTestRunner());
+  const cartAbort=useRef<AbortController|undefined>(undefined);
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
@@ -63,20 +74,48 @@ function Console() {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      cartAbort.current?.abort();
     };
   }, []);
   useEffect(() => {
     transcriptEnd.current?.scrollIntoView({ block: "nearest" });
   }, [chat, busy]);
-  useEffect(() => { setCheckoutResult(undefined); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined); }, [chat?.id,chat?.state.updatedAt]);
+  useEffect(() => { cartAbort.current?.abort(); setCartConfirmation(undefined); setCartConsent(false); setPrivateCheckoutUrl(undefined); setCheckoutResult(undefined); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined); }, [chat?.id,chat?.state.updatedAt]);
   useEffect(() => {
     if (!open) { requestGeneration.current++; setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined); setCheckoutResult(undefined); return; }
     setNow(serverNow());
     const timer=setInterval(()=>setNow(serverNow()),1000);
     return ()=>clearInterval(timer);
   },[open]);
+  async function approveAndCreateCart() {
+    const confirmation=cartConfirmation;
+    if(!chat||busy||preparing.current||cartAttempted||!cartConsent||!confirmation||
+      !diagnostics?.checkoutCartExecutionEnabled||selectionVersion.current!==confirmation.version)return;
+    preparing.current=true;
+    const controller=new AbortController();cartAbort.current=controller;
+    const generation=requestGeneration.current;
+    const current=()=>mounted.current&&!controller.signal.aborted&&selectionVersion.current===confirmation.version&&requestGeneration.current===generation;
+    setCartAttempted(true);setBusy(true);setCartFailure(false);setPrivateCheckoutUrl(undefined);
+    setPrepared(undefined);setReportedRequest(undefined);setCartConfirmation(undefined);setCartConsent(false);
+    try {
+      const result=await cartRunner.current({enabled:diagnostics.checkoutCartExecutionEnabled,confirmed:cartConsent,chat,proof:confirmation.proof,
+        current,now:serverNow,claimLocalAttempt:()=>{
+          try {if(sessionStorage.getItem(attemptKey))return false;sessionStorage.setItem(attemptKey,"attempted-do-not-retry");return true;}
+          catch{return false;}
+        },post:async(path,body)=>{
+          if(!current())throw Error("private_cart_aborted");
+          const response=await fetch(path,{method:"POST",credentials:"same-origin",redirect:"error",cache:"no-store",
+            headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller.signal});
+          if(mounted.current)observeServerTime(response);
+          if(!response.ok)throw Error("private_cart_stopped_do_not_retry");
+          return {data:await response.json(),serverDate:response.headers.get("date")};
+        }});
+      if(current())setPrivateCheckoutUrl(result.checkoutUrl);
+    }catch {if(mounted.current)setCartFailure(true);}
+    finally {preparing.current=false;if(mounted.current)setBusy(false);}
+  }
   async function prepareCartTest() {
-    if(!chat || busy || preparing.current || prepareError || requestIsLive || !cartTestPreparationAllowed(chat,checkoutResult,serverNow()))return;
+    if(!chat || busy || cartAttempted || preparing.current || prepareError || requestIsLive || !cartTestPreparationAllowed(chat,checkoutResult,serverNow()))return;
     const version=selectionVersion.current, generation=requestGeneration.current;
     preparing.current=true; setBusy(true); setPrepared(undefined); setReportedRequest(undefined); setPrepareError(undefined);
     try {
@@ -93,7 +132,7 @@ function Console() {
     if (!chat || busy) return;
     requestGeneration.current++;
     const version=selectionVersion.current, generation=requestGeneration.current;
-    setBusy(true); setCheckoutResult(undefined);
+    setBusy(true); setCheckoutResult(undefined); setCartConfirmation(undefined); setCartConsent(false);
     if(!requestIsLive)setPrepareError(undefined);
     try {
       const response = await apiRequest("POST",`/api/ai/test-chat/${chat.id}/checkout-preflight`,{});
@@ -198,7 +237,10 @@ function Console() {
     }
   }
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={value=>{
+      if(!value){requestGeneration.current++;cartAbort.current?.abort();setCartConfirmation(undefined);setCartConsent(false);setPrivateCheckoutUrl(undefined);}
+      setOpen(value);
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline">{t("testChat.title")}</Button>
       </DialogTrigger>
@@ -224,11 +266,37 @@ function Console() {
             <Button variant="outline" disabled={busy || Date.parse(chat.expiresAt)<=now || chat.state.step!=="confirming" || !chat.state.selected}
               onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
             {Date.parse(chat.expiresAt)<=now && <p role="status" className="text-sm">{t("testChat.checkoutSessionExpired")}</p>}
-            {checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
-              <Button variant="outline" disabled={busy || !!prepareError || requestIsLive}
+            {!diagnostics.checkoutCartExecutionEnabled && checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
+              <Button variant="outline" disabled={busy || cartAttempted || !!prepareError || requestIsLive}
                 onClick={()=>void prepareCartTest()}>{t("testChat.prepareCartTest")}</Button>}
             {checkoutResult?.ready && !cartTestPreparationAllowed(chat,checkoutResult,now) &&
               <p className="text-sm">{t(Date.parse(chat.expiresAt)<=now?"testChat.checkoutSessionExpired":"testChat.prepareRefreshReadiness")}</p>}
+            {diagnostics.checkoutCartTestAvailable && <section className="space-y-2" aria-label={t("testChat.approveCreateCart")}>
+              <Button disabled={!diagnostics.checkoutCartExecutionEnabled||busy||cartAttempted||!privateCartConfirmationAllowed(chat,checkoutResult,now)}
+                onClick={()=>{if(checkoutResult?.ready){setCartConfirmation({proof:checkoutResult,version:selectionVersion.current});setCartConsent(false);}}}>
+                {t("testChat.approveCreateCart")}</Button>
+              {!diagnostics.checkoutCartExecutionEnabled && <p role="status" className="text-sm">{t("testChat.cartActivationRequired")}</p>}
+              {cartConfirmation?.proof.ready && <section className="rounded border p-3 space-y-2" aria-label={t("testChat.cartConfirmTitle")}>
+                <p className="font-medium">{t("testChat.cartConfirmTitle")}</p>
+                <p>{chat.state.selected?.productTitle} / {chat.state.selected?.variantTitle}</p>
+                <p>{cartConfirmation.proof.selection.shop} · {cartConfirmation.proof.selection.variantId}</p>
+                <p>{cartConfirmation.proof.selection.quantity} × {cartConfirmation.proof.selection.currency} {cartConfirmation.proof.selection.price}</p>
+                <p>{t("testChat.checkoutInventory",{quantity:cartConfirmation.proof.inventory.quantity})}</p>
+                <p>{t("testChat.checkoutVerifiedAt")}: {new Date(cartConfirmation.proof.inventory.verifiedAt).toLocaleTimeString()}</p>
+                <label className="flex gap-2 text-sm"><input type="checkbox" checked={cartConsent} disabled={busy}
+                  onChange={event=>setCartConsent(event.target.checked)}/>{t("testChat.cartConsent")}</label>
+                <Button disabled={!diagnostics.checkoutCartExecutionEnabled||busy||cartAttempted||!cartConsent||
+                  selectionVersion.current!==cartConfirmation.version||!privateCartConfirmationAllowed(chat,cartConfirmation.proof,now)}
+                  onClick={()=>void approveAndCreateCart()}>{t("testChat.cartConfirmOnce")}</Button>
+                <Button variant="outline" disabled={busy} onClick={()=>{setCartConfirmation(undefined);setCartConsent(false);}}>{t("testChat.cartCancel")}</Button>
+              </section>}
+              {cartAttempted && !privateCheckoutUrl && <p role={cartFailure?"alert":"status"} className="text-sm">
+                {t(busy?"testChat.cartAttemptRunning":"testChat.cartAttemptStopped")}</p>}
+              {privateCheckoutUrl && <section className="space-y-2" aria-label={t("testChat.cartCreatedPrivate")}>
+                <p role="status">{t("testChat.cartCreatedPrivate")}</p>
+                <textarea aria-label={t("testChat.cartPrivateUrl")} value={privateCheckoutUrl} readOnly autoComplete="off" dir="ltr" className="w-full rounded border p-2 text-sm"/>
+              </section>}
+            </section>}
             {prepareError && <p role="alert" className="text-sm">{t(prepareError==="expired"?"testChat.checkoutSessionExpired":prepareError==="review"?"testChat.prepareResponseReview":"testChat.prepareUnavailable")}</p>}
             {displayedRequest && <section aria-label={t("testChat.preparedCartTest")} className="space-y-2 text-sm">
               <p role="status">{t(Date.parse(displayedRequest.expiresAt)<=now?"testChat.prepareExpired":prepareError==="review"?"testChat.prepareResponseReview":"testChat.prepareApprovalRequired")}</p>
