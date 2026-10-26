@@ -25,6 +25,7 @@ export function registerTestChatRoutes(
     generate: ReturnType<typeof createTestChatGenerator>;
     diagnostics: (id: string) => Promise<unknown>;
     checkoutPreflight?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<PrivateCheckoutPreflight>;
+    checkoutHandoffInspect?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
     checkoutHandoffPrepare?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
     onTurnSaved?: (event: PrivateTestTurnDiagnostic) => void | Promise<void>;
   },
@@ -84,6 +85,12 @@ export function registerTestChatRoutes(
     if (!z.object({}).strict().safeParse(req.body).success)
       throw new TestChatError(400,"invalid_checkout_preflight");
     return res.json(await deps.checkoutPreflight!(auth,req.params.id,req.sessionID));
+  });
+  if (deps.checkoutHandoffInspect) route("get", "/api/ai/test-chat/:id/checkout-handoff-request", async (auth,req,res)=>{
+    res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
+    if(!req.sessionID)throw new TestChatError(403,"authenticated_session_required");
+    if(req.get("sec-fetch-site")==="cross-site")throw new TestChatError(403,"same_origin_required");
+    return res.json(await deps.checkoutHandoffInspect!(auth,req.params.id,req.sessionID));
   });
   // Preparation only. No approve/create/execute endpoint is registered in this milestone.
   if (deps.checkoutHandoffPrepare) route("post", "/api/ai/test-chat/:id/checkout-handoff-request", async (auth, req, res) => {

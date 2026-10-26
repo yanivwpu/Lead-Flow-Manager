@@ -63,12 +63,13 @@ async function fixture() {
   handlers={};const app={get:(p:string,h:any)=>handlers['GET '+p]=h,post:(p:string,h:any)=>handlers['POST '+p]=h,delete:(p:string,h:any)=>handlers['DELETE '+p]=h};
   registerTestChatRoutes(app as any,{db,authorize:async(req,res)=>{if(!authorized){res.status(401).json({error:'unauthorized'});return null;}return req.auth??auth;},
    access:async()=>({allowed:entitled}),generate:(async()=>{throw Error('AI must not run');}) as any,diagnostics:async()=>({}),
+   checkoutHandoffInspect:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).inspect,
    checkoutHandoffPrepare:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).prepare,
    checkoutPreflight:createPrivateCheckoutPreflight({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch})});
  }
  mount();
  async function call(body:any={},patch:any={}){let code=200,data:any;const res:any={set:()=>res,status:(n:number)=>{code=n;return res;},json:(d:any)=>{data=d;return res;}};
-  await handlers['POST /api/ai/test-chat/:id/'+(patch.action??'checkout-preflight')]({params:{id:session.id},sessionID:'authenticated-fixture-session',body,is:()=>true,get:()=>undefined,...patch},res);
+  await handlers[(patch.method??'POST')+' /api/ai/test-chat/:id/'+(patch.action??'checkout-preflight')]({params:{id:session.id},sessionID:'authenticated-fixture-session',body,is:()=>true,get:()=>undefined,...patch},res);
   return {code,data};}
  return {...f,db,session,source,save,call,mount,configured,headers,requestFor,storefrontFetch,
   nodePatch:(value:any)=>{nodePatch=value;},cartMode:(value:typeof cartMode)=>{cartMode=value;},entitled:async()=>entitled,state:()=>state,reads:()=>reads,creates:()=>creates,
@@ -302,6 +303,35 @@ test('actual preparation adapter JSON is accepted by the client using server res
   const records=await f.pg.query('SELECT request_id,approved_at,claimed_at FROM shopify_checkout_admin_tests');
   assert.equal(records.rows.length,1);assert.equal(records.rows[0].request_id,parsed.requestId);
   assert.equal(records.rows[0].approved_at,null);assert.equal(records.rows[0].claimed_at,null);
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
+ }finally{await f.cleanup();}
+});
+
+test('single GET inspects the same persisted request, including expiry, without provider IO or any insert/approval/claim/renewal',async()=>{
+ const f=await bridgeFixture();try{
+  const request=await f.prepare(),before=await f.pg.query('SELECT * FROM shopify_checkout_admin_tests');
+  const reads=f.reads(),providerCalls=f.headers.length;
+  const result=await f.call({},{method:'GET',action:'checkout-handoff-request'});
+  assert.equal(result.code,200);assert.equal(result.data.status,'prepared_unapproved');
+  assert.equal(result.data.requestId,request.requestId);assert.equal(result.data.scopeSha256,request.scopeSha256);
+  assert.equal(result.data.expiresAt,request.expiresAt);assert.equal(result.data.canApprove,false);
+  assert.equal(result.data.recordCreatedByThisCheck,false);assert.equal(result.data.originalInventoryProofAvailable,false);
+  assert.equal(f.reads(),reads);assert.equal(f.headers.length,providerCalls);assert.equal(f.creates(),0);
+  assert.deepEqual((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests')).rows,before.rows);
+  await f.pg.exec("UPDATE shopify_checkout_admin_tests SET expires_at=now()-interval '1 minute'");
+  const expiredBefore=await f.pg.query('SELECT * FROM shopify_checkout_admin_tests');
+  const expired=await f.bridge.inspect(auth,f.session.id,'authenticated-fixture-session');
+  assert.equal(expired.status,'expired');assert.equal(expired.requestId,request.requestId);assert.equal(expired.canApprove,false);
+  assert.deepEqual((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests')).rows,expiredBefore.rows);
+  assert.equal((await f.bridge.inspect(auth,f.session.id,'different-http')).status,'no_request_for_current_binding');
+  await f.db.update(aiTestSessions).set({expiresAt:new Date(0)}).where(eq(aiTestSessions.id,f.session.id));
+  const old=await f.bridge.inspect(auth,f.session.id,'authenticated-fixture-session');
+  assert.equal(old.status,'expired');assert.equal(old.testSessionExpired,true);
+  assert.equal((await f.call()).code,404); // The live preflight still refuses this expired session.
+
+  f.authorize(false);assert.equal((await f.call({},{method:'GET',action:'checkout-handoff-request'})).code,401);f.authorize(true);
+  for(const patch of [{sessionID:null},{get:()=> 'cross-site'}])assert.equal((await f.call({},{method:'GET',action:'checkout-handoff-request',...patch})).code,403);
+  assert.doesNotMatch(JSON.stringify(result.data),/fixture-token|synthetic-storefront|authenticated-fixture-session|checkoutUrl|providerCartId/);
   assert.equal(f.creates(),0);assert.equal(await f.claims(),0);
  }finally{await f.cleanup();}
 });
