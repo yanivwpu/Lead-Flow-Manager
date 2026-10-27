@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { and, eq, sql } from "drizzle-orm";
 import { users, integrations } from "@shared/schema";
-import { db } from "./drizzle/db";
+import { db } from "../drizzle/db";
 import { storage } from "./storage";
 import { isEcommercePilotOwner } from "./ecommerce/pilotAccess";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
