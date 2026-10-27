@@ -1,4 +1,4 @@
-import { EcommercePilotBoundary } from "@/lib/ecommercePilot";
+import { EcommerceWorkspaceBoundary } from "@/lib/ecommercePilot";
 import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { ShoppingBag, MessageSquare, Brain, ListTodo, Workflow, ArrowRight, Plug } from "lucide-react";
@@ -98,5 +98,5 @@ export function EcommerceGrowthEngineDashboardContent() {
 }
 
 export function EcommerceGrowthEngineDashboard() {
-  return <EcommercePilotBoundary><EcommerceGrowthEngineDashboardContent /></EcommercePilotBoundary>;
+  return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent /></EcommerceWorkspaceBoundary>;
 }

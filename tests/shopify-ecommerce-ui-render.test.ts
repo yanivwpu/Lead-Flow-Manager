@@ -14,6 +14,7 @@ const scratch = mkdtempSync(resolve("work/ecommerce-render-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const state = { locale: "en", user: { id: "fixture" } as { id: string } | null,
   aligned: true, available: true, grantFailed: false,
+  activation: { eligible: false, activated: false, connected: false, planEligible: false },
   support: { data: { internalTasks: { schemaReady: true, operatorEnabled: true, merchantEnabled: false, openCount: 0, completedCount: 0 } }, isLoading: false, isFetching: false, isError: false },
   query: { data: { connected: true, shop: "fixture.myshopify.com", syncEnabled: true } as any,
     isLoading: false, isError: false } };
@@ -25,6 +26,7 @@ const stubs: Record<string, string> = {
   "@tanstack/react-query": `export const useQuery=(options)=>{
     const s=globalThis.__ecommerceRender;
     if(options.queryKey.includes('/api/shopify/ecommerce/capabilities'))return {data:{available:s.available},isError:s.grantFailed};
+    if(options.queryKey.includes('/api/shopify/merchant-engine/status'))return {data:s.activation,isLoading:false,isPending:false,isError:false};
     if(options.queryKey.includes('/api/shopify/ecommerce/event-inbox-preview'))return s.support;
     return s.query;
   }; export const useQueryClient=()=>({invalidateQueries:async()=>{}});
@@ -153,4 +155,23 @@ test("actual dashboard pilot boundary denies missing grant, failed grant and sta
     assert.ok(html.includes('noindex,nofollow'));
   }
   state.available=true;state.grantFailed=false;state.aligned=true;state.user={id:'fixture'};
+});
+
+test("preview exposes activation only to eligible merchants and opens the active workspace", () => {
+  state.user = { id: "fixture" }; state.aligned = true; state.locale = "en";
+  state.activation = { eligible: false, activated: false, connected: true, planEligible: false };
+  let html = renderToStaticMarkup(React.createElement(Preview));
+  assert.ok(!html.includes('data-testid="ecommerce-activate-engine"'));
+  assert.ok(html.includes("Requires Pro"));
+  state.activation = { eligible: true, activated: false, connected: true, planEligible: true };
+  html = renderToStaticMarkup(React.createElement(Preview));
+  assert.ok(html.includes('data-testid="ecommerce-activate-engine"'));
+  assert.equal(parseHTML(html).document.querySelector('[data-testid="ecommerce-preview-primary-cta"]')?.getAttribute("href"),
+    "/app/integrations?setup=shopify");
+  state.activation = { eligible: true, activated: true, connected: true, planEligible: true };
+  html = renderToStaticMarkup(React.createElement(Preview));
+  assert.ok(!html.includes('data-testid="ecommerce-activate-engine"'));
+  assert.equal(parseHTML(html).document.querySelector('[data-testid="ecommerce-preview-primary-cta"]')?.getAttribute("href"),
+    "/app/ecommerce-growth-engine");
+  state.activation = { eligible: false, activated: false, connected: false, planEligible: false };
 });

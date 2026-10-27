@@ -68,7 +68,7 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
-import { useEcommercePilot } from "@/lib/ecommercePilot";
+import { useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
 import {
   PROSPECT_AI_PATH,
   useProspectAiStatus,
@@ -492,6 +492,7 @@ export function GrowthEngineGalleryCard({
   setLocation,
   rgeEntitlement,
   prospectAiActivated,
+  ecommerceActivated,
   hasPro,
   accessOk,
   entitlementLoading,
@@ -505,6 +506,7 @@ export function GrowthEngineGalleryCard({
     onboardingSubmittedAt?: string | null;
   } | null;
   prospectAiActivated?: boolean;
+  ecommerceActivated?: boolean;
   hasPro?: boolean;
   accessOk?: boolean;
   entitlementLoading?: boolean;
@@ -513,6 +515,7 @@ export function GrowthEngineGalleryCard({
   const isComingSoon = engine.status === "coming_soon";
   const showRealtorMark = engine.slug.startsWith("realtor-growth-engine");
   const isProspectAi = engine.slug === "prospect-ai";
+  const isEcommerce = engine.slug === "ecommerce-growth-engine";
   const isRge = engine.slug.startsWith("realtor-growth-engine");
   const rgeEntitlementStatus = rgeEntitlement?.status ?? null;
   // Prospect AI must open the authenticated workspace — never the public /prospect-ai landing.
@@ -520,7 +523,7 @@ export function GrowthEngineGalleryCard({
     ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement)
     : isProspectAi
       ? PROSPECT_AI_PATH
-      : engine.detailHref;
+      : isEcommerce && ecommerceActivated ? "/app/ecommerce-growth-engine" : engine.detailHref;
   const rgeState = isRge
     ? resolveRgeGalleryState({
         catalogStatus: engine.status,
@@ -536,8 +539,8 @@ export function GrowthEngineGalleryCard({
     ? rgeState!.label
     : isProspectAi && prospectAiActivated
       ? "Open"
-      : engine.ctaLabel;
-  const statusLabel = isRge ? rgeState!.statusLabel : null;
+      : isEcommerce && ecommerceActivated ? "Open Engine" : engine.ctaLabel;
+  const statusLabel = isRge ? rgeState!.statusLabel : isEcommerce ? (ecommerceActivated ? "Active" : "Preview") : null;
   const EngineIcon = isProspectAi
     ? Bot
     : isRge
@@ -639,7 +642,8 @@ export function GrowthEngineGalleryCard({
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
-  const { available: ecommercePilotAvailable } = useEcommercePilot();
+  const activation = useEcommerceMerchantActivationStatus();
+  const ecommerceActivated = activation.data?.activated === true && activation.data?.eligible === true;
   const showSyntheticPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("growthEnginePreview") === "1";
   const rgeQuery = useQuery<{
     entitlement?: { status?: RgeEntitlementStatus; purchasedAt?: string | null; onboardingSubmittedAt?: string | null };
@@ -703,9 +707,7 @@ function GrowthEnginesTab() {
                 { engine: GROWTH_ENGINE_CARDS.find((engine) => engine.status === "coming_soon")!, fixture: null },
               ]
             : sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => ({
-                engine: engine.slug === "ecommerce-growth-engine" && ecommercePilotAvailable
-                  ? { ...engine, status: "available" as const, detailHref: "/ecommerce-growth-engine", ctaLabel: "View preview" }
-                  : engine,
+                engine,
                 fixture: null,
               })))
             .map(({ engine, fixture }) => (
@@ -715,6 +717,7 @@ function GrowthEnginesTab() {
               setLocation={setLocation}
               rgeEntitlement={fixture?.entitlement ?? (engine.slug === "realtor-growth-engine" ? rgeEntitlement : undefined)}
               prospectAiActivated={engine.slug === "prospect-ai" ? prospectAiActivated : undefined}
+              ecommerceActivated={engine.slug === "ecommerce-growth-engine" ? ecommerceActivated : undefined}
               hasPro={fixture?.hasPro ?? (engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.hasPro : undefined)}
               accessOk={fixture?.accessOk ?? (engine.slug === "realtor-growth-engine" ? rgeTemplate?.subscription?.accessOk : undefined)}
               entitlementLoading={fixture?.loading ?? (engine.slug === "realtor-growth-engine" ? rgeQuery.isLoading : undefined)}

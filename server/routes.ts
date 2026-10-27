@@ -232,7 +232,7 @@ import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ecommercePilotRoutes from "./ecommercePilotRoutes";
-import { requireEcommercePilot } from "./ecommerce/pilotMiddleware";
+import ecommerceMerchantActivationRoutes, { requireEcommerceWorkspace } from "./ecommerceMerchantActivationRoutes";
 import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
@@ -555,7 +555,11 @@ export async function registerRoutes(
 
   // Shopify integration routes
   app.use('/api/shopify/ecommerce', ecommercePilotRoutes);
-  app.use(['/ecommerce-growth-engine', '/app/ecommerce-growth-engine'], requireEcommercePilot);
+  app.use('/api/shopify/merchant-engine', ecommerceMerchantActivationRoutes);
+  // Public gallery preview requires a signed-in session; the owner workspace
+  // remains pilot-or-persisted-activation only, never based on a client flag.
+  app.use('/ecommerce-growth-engine', (req, res, next) => req.user ? next() : res.status(401).end());
+  app.use('/app/ecommerce-growth-engine', requireEcommerceWorkspace);
   app.use('/api/shopify', shopifyRoutes);
 
   // LeadConnector integration routes
