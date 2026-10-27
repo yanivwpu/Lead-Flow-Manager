@@ -1553,6 +1553,14 @@
     }
   },
   "testChat": {
+    "secondReviewTitle": "Second cart test review",
+    "secondReviewScope": "Read-only review of the saved selection. This does not approve or create a cart.",
+    "secondReviewRun": "Review test without creating a cart",
+    "secondReviewUnavailable": "Review unavailable. Check the selected item and private setup.",
+    "secondReviewState": {"ready_for_owner_review": "Live selection verified for review. Separate test approval is still required.", "blocked": "The test is blocked. No cart was created."},
+    "secondReviewChecks": {"originalAttempt": "Original consumed attempt and fence preserved", "receiptStorage": "Encrypted receipt storage", "authorizationSchema": "Second-test authorization schema", "secondAuthorization": "Separate second-test authorization", "storefront": "Fresh Storefront price and inventory", "executionApproval": "Explicit approval and execution release"},
+    "secondReviewStatus": {"passed": "Verified", "required": "Still required", "blocked": "Blocked; do not retry execution"},
+
     "approveCreateCart": "Approve & Create Test Cart",
     "cartActivationRequired": "Cart creation is disabled until activation is separately approved.",
     "cartConfirmTitle": "Confirm one private test cart",
