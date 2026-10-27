@@ -39,16 +39,17 @@ async function currentForAccount(accountId: string): Promise<Current | null> {
   )).limit(2);
   const installation = installations.length === 1 ? installations[0] : null;
   const cfg = (installation?.config ?? {}) as Record<string, unknown>;
-  const configMatches = cfg.shop == null || (
-    typeof cfg.shop === "string" && normalizeShopifyShopDomain(cfg.shop) === shop
-  );
-  const connected = !!(shop && installation?.isActive && configMatches &&
+  const configMatches = [cfg.shop, cfg.shopUrl].every(value => value == null ||
+    (typeof value === "string" && normalizeShopifyShopDomain(value) === shop));
+  const hasToken = typeof owner.shopifyAccessToken === "string" &&
+    owner.shopifyAccessToken.trim().length > 0;
+  const connected = !!(shop && installation?.isActive && configMatches && hasToken &&
     isShopifyContactInstallationActive(owner));
   const planEligible = getEffectivePlanForUser(owner) === "pro";
   const eligible = canActivateMerchantWorkspace({
     accountId, sessionAccountId: owner.id, sessionAligned: true,
     connectedShop: connected ? shop : null,
-    hasInstalledToken: connected && !!owner.shopifyAccessToken,
+    hasInstalledToken: connected && hasToken,
     isShopifyOwner: !!installation && installation.userId === accountId,
     planEligible,
   });
@@ -110,12 +111,13 @@ router.post("/activate", async (req: Request, res: Response) => {
       if (installations.length !== 1 || !installations[0].isActive) return null;
       const installation = installations[0];
       const cfg = (installation.config ?? {}) as Record<string, unknown>;
-      if (cfg.shop != null && (typeof cfg.shop !== "string" ||
-          normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
+      if (![cfg.shop, cfg.shopUrl].every(value => value == null ||
+          (typeof value === "string" && normalizeShopifyShopDomain(value) === shop))) return null;
       if (!canActivateMerchantWorkspace({
         accountId, sessionAccountId: liveOwner.id, sessionAligned: true,
         isShopifyOwner: installation.userId === accountId,
-        connectedShop: shop, hasInstalledToken: !!liveOwner.shopifyAccessToken,
+        connectedShop: shop, hasInstalledToken: typeof liveOwner.shopifyAccessToken === "string" &&
+          liveOwner.shopifyAccessToken.trim().length > 0,
         planEligible: getEffectivePlanForUser(liveOwner) === "pro",
       })) return null;
       // Idempotent for this exact installation. A new installation requires
