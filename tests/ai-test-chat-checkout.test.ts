@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { createSecondCartReview } from '../server/aiTestChat/secondCartReview';
 import { EventEmitter } from 'node:events';
 import { createPrivateCartHandoff, PRIVATE_CART_CONFIRMATION, PRIVATE_CART_EXECUTION_ENABLED } from '../server/aiTestChat/cartHandoff';
 import assert from 'node:assert/strict';
@@ -76,6 +77,7 @@ async function fixture() {
    checkoutHandoffExecute:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch,...executionGate}).execute,
    checkoutHandoffInspect:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch,...executionGate}).inspect,
    checkoutHandoffPrepare:createPrivateCartHandoff({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}).prepare,
+   secondCartReview:createSecondCartReview({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch}),
    checkoutPreflight:createPrivateCheckoutPreflight({db,entitled:async()=>entitled,env:configured,requestFor,storefrontFetch})});
  }
  mount();
@@ -604,5 +606,85 @@ test('second inspection prefers the winning claim and reports shared consumption
   assert.equal(separate.dispatchClaimed,true);assert.equal(separate.approved,false);
   assert.equal((separate as any).authorizationConsumedByAnotherRequest,true);assert.equal(f.creates(),1);
   assert.doesNotMatch(JSON.stringify([current,separate]),/checkoutUrl|providerCartId|fixture-secret|synthetic-storefront/);
+ }finally{await f.cleanup();}
+});
+
+test('second-test review verifies Storefront with both execution gates false and never writes a claim, preparation, receipt or session',async()=>{
+ const f=await secondFixture();try{
+  const review=createSecondCartReview({...f.deps,secondExecutionEnabled:()=>false});
+  const before=(await f.pg.query('SELECT * FROM shopify_checkout_admin_tests ORDER BY request_id')).rows;
+  const authorization=(await f.pg.query('SELECT * FROM shopify_private_cart_second_authorization')).rows;
+  const session=(await f.db.select().from(aiTestSessions));
+  const index=(await f.pg.query("SELECT indexdef FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shopify_checkout_admin_one_dispatch'")).rows;
+  const result=await review(auth,f.session.id,'authenticated-fixture-session');
+  assert.equal(result.status,'ready_for_owner_review');assert.equal(result.executionEnabled,false);assert.equal(result.canApprove,false);
+  assert.equal(result.reviewOnly,true);assert.equal(result.cartCreated,false);assert.equal(result.cartCreationEnabled,false);
+  assert.equal(result.selection?.variantId,variant);assert.equal(result.selection?.quantity,1);assert.equal(result.inventory?.quantity,50);
+  assert.equal(result.checks.find(c=>c.id==='executionApproval')?.status,'required');
+  assert.equal(result.checks.find(c=>c.id==='secondAuthorization')?.status,'passed');
+  assert.doesNotMatch(JSON.stringify(result),/fixture-token|checkoutUrl|providerCartId|scopeSha256|selectionSha256|sessionBinding|authorizationId|synthetic-explicit/);
+  assert.equal(f.creates(),0);assert.deepEqual((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests ORDER BY request_id')).rows,before);
+  assert.deepEqual((await f.pg.query('SELECT * FROM shopify_private_cart_second_authorization')).rows,authorization);
+  assert.deepEqual(await f.db.select().from(aiTestSessions),session);
+  assert.deepEqual((await f.pg.query("SELECT indexdef FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shopify_checkout_admin_one_dispatch'")).rows,index);
+  // The normal execution/preparation preflight remains fenced by the original consumption.
+  await assert.rejects(()=>createPrivateCheckoutPreflight({...f.deps,secondExecutionEnabled:()=>false})(auth,f.session.id,'authenticated-fixture-session'),/development_store_dispatch_already_consumed/);
+ }finally{await f.cleanup();}
+});
+test('review identifies missing receipt key and authorization migration without provisioning either or authorizing execution',async()=>{
+ const f=await fixture();try{
+  Object.assign(f.configured,{SHOPIFY_STOREFRONT_TEST_TOKEN:'synthetic-storefront',SHOPIFY_STOREFRONT_TEST_TOKEN_KIND:'private',SHOPIFY_STOREFRONT_TEST_SHOP:SHOP});
+  await f.db.execute(sql`INSERT INTO public.shopify_checkout_admin_tests
+   (request_id,workspace_id,operator_id,session_digest,shop,integration_id,installation_digest,selection,selection_digest,expires_at,claimed_at)
+   VALUES(gen_random_uuid(),${id},${id},'fixture',${SHOP},'integration-a','fixture','{}','fixture',now()+interval '5 minutes',now())`);
+  const result=await createSecondCartReview({db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch})(auth,f.session.id,'s');
+  for(const check of ['receiptStorage','authorizationSchema','secondAuthorization'])assert.equal(result.checks.find(c=>c.id===check)?.status,'required');
+  assert.equal(result.canApprove,false);assert.equal(f.creates(),0);
+  assert.equal((await f.pg.query('SELECT count(*)::int n FROM shopify_checkout_admin_tests')).rows[0].n,1);
+ }finally{await f.cleanup();}
+});
+test('second-test review refuses a consumed second slot without additional provider requests',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.enable(true);f.cartMode('ambiguous');await assert.rejects(f.execute(request));
+  const reads=f.reads(),creates=f.creates();
+  const result=await createSecondCartReview({...f.deps,secondExecutionEnabled:()=>false})(auth,f.session.id,'authenticated-fixture-session');
+  assert.equal(result.status,'blocked');assert.equal(result.checks.find(c=>c.id==='secondAuthorization')?.status,'blocked');
+  assert.equal(f.reads(),reads);assert.equal(f.creates(),creates);
+ }finally{await f.cleanup();}
+});
+test('review HTTP keeps Brain/admin/owner/session/origin and strict empty JSON gates; missing pins fail before provider IO',async()=>{
+ const f=await secondFixture();try{
+  const call=(patch:any={},body:any={})=>f.call(body,{action:'second-cart-review',get:(name:string)=>name==='origin'?'https://app.whachatcrm.com':undefined,...patch});
+  f.authorize(false);assert.equal((await call()).code,401);f.authorize(true);f.entitle(false);assert.equal((await call()).code,403);f.entitle(true);
+  for(const patch of [{sessionID:null},{is:()=>false},{get:()=>undefined},{get:()=> 'cross-site'}])assert.equal((await call(patch)).code,403);
+  assert.equal((await call({}, {approve:true,variantId:variant})).code,400);
+  assert.equal((await call({auth:{...auth,actorUserId:'other-owner'}})).code,404);
+  const before=f.reads();delete f.configured.PRIVATE_SHOPPING_PILOT_WORKSPACE_ID;
+  assert.equal((await call()).code,404);assert.equal(f.reads(),before);assert.equal(f.creates(),0);
+ }finally{await f.cleanup();}
+});
+test('review rejects changed price and superseded session without ever preparing or creating a cart',async()=>{
+ const f=await secondFixture();try{
+  const review=createSecondCartReview({...f.deps,secondExecutionEnabled:()=>false});
+  f.provider(200,true);let result=await review(auth,f.session.id,'s');assert.equal(result.status,'blocked');
+  assert.equal(result.checks.find(c=>c.id==='storefront')?.status,'blocked');
+  f.provider(200);f.afterFetch(async()=>f.save({quantity:2}));await assert.rejects(()=>review(auth,f.session.id,'s'),/session_changed/);
+  assert.equal(f.creates(),0);
+ }finally{await f.cleanup();}
+});
+test('second authorization revocation during a review discards the fresh proof without authorizing a retry',async()=>{
+ const f=await secondFixture();try{
+  f.afterFetch(async()=>{await f.pg.query('UPDATE shopify_private_cart_second_authorization SET revoked_at=now()');});
+  await assert.rejects(()=>createSecondCartReview({...f.deps,secondExecutionEnabled:()=>false})(auth,f.session.id,'s'),/review_context_changed/);
+  assert.equal(f.creates(),0);assert.equal((await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0].claimed_at,null);
+ }finally{await f.cleanup();}
+});
+test('review cannot return an intervening selection proof when the outer selection changes back',async()=>{
+ const f=await secondFixture();try{
+  let snapshots=0;
+  const entitled=async()=>{snapshots++;if(snapshots===2)await f.save({quantity:2});if(snapshots===4)await f.save({quantity:1});return true;};
+  await assert.rejects(()=>createSecondCartReview({...f.deps,entitled,secondExecutionEnabled:()=>false})(auth,f.session.id,'s'),/review_context_changed/);
+  assert.equal(f.creates(),0);
+  assert.equal((await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0].claimed_at,null);
  }finally{await f.cleanup();}
 });

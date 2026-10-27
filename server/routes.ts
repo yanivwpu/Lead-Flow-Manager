@@ -1,3 +1,4 @@
+import { createSecondCartReview } from "./aiTestChat/secondCartReview";
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
@@ -11166,6 +11167,7 @@ export async function registerRoutes(
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
+    secondCartReview: createSecondCartReview({db,entitled:shoppingEntitled}),
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
     checkoutHandoffPrepare: privateCartHandoff.prepare,
     checkoutHandoffInspect: privateCartHandoff.inspect,

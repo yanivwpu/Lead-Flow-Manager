@@ -1560,6 +1560,14 @@
     }
   },
   "testChat": {
+    "secondReviewTitle": "סקירת בדיקת העגלה השנייה",
+    "secondReviewScope": "סקירה לקריאה בלבד של הבחירה השמורה. אינה מאשרת או יוצרת עגלה.",
+    "secondReviewRun": "סקירה ללא יצירת עגלה",
+    "secondReviewUnavailable": "הסקירה אינה זמינה. בדקו את הפריט שנבחר ואת ההגדרות הפרטיות.",
+    "secondReviewState": {"ready_for_owner_review": "הבחירה אומתה לצורך סקירה. עדיין נדרש אישור נפרד לבדיקה.", "blocked": "הבדיקה חסומה. לא נוצרה עגלה."},
+    "secondReviewChecks": {"originalAttempt": "הניסיון המקורי וההגנה מפני כפילות נשמרו", "receiptStorage": "אחסון מוצפן של אישור העגלה", "authorizationSchema": "מבנה הרשאת הבדיקה השנייה", "secondAuthorization": "הרשאה נפרדת לבדיקה השנייה", "storefront": "מחיר ומלאי עדכניים ב-Storefront", "executionApproval": "אישור מפורש והפעלת ביצוע"},
+    "secondReviewStatus": {"passed": "אומת", "required": "עדיין נדרש", "blocked": "חסום; אין לנסות שוב לבצע"},
+
     "approveCreateCart": "אישור ויצירת עגלת בדיקה",
     "cartActivationRequired": "יצירת עגלות מושבתת עד לקבלת אישור נפרד להפעלה.",
     "cartConfirmTitle": "אישור עגלת בדיקה פרטית אחת",
