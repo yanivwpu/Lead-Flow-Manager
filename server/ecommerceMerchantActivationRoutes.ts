@@ -54,9 +54,14 @@ async function currentForAccount(accountId: string): Promise<Current | null> {
   return {
     accountId, shop, integrationId: installation?.id ?? null,
     connected, planEligible, eligible,
-    activated: eligible && merchantWorkspaceActivated(owner.ecommerceGrowthEngineActivatedAt) &&
-      owner.ecommerceGrowthEngineActivationShop === shop &&
-      owner.ecommerceGrowthEngineActivationIntegrationId === installation?.id,
+    activated: eligible && !!shop && !!installation && await (async () => {
+      const records = await db.execute(sql`
+        SELECT activated_at FROM ecommerce_shopify_workspace_activations
+        WHERE account_id = ${accountId} AND installation_id = ${installation.id} AND shop = ${shop}
+        LIMIT 1
+      `);
+      return merchantWorkspaceActivated(records.rows[0]?.activated_at as Date | string | null | undefined);
+    })(),
   };
 }
 
@@ -111,16 +116,23 @@ router.post("/activate", async (req: Request, res: Response) => {
         connectedShop: shop, hasInstalledToken: !!liveOwner.shopifyAccessToken,
         planEligible: getEffectivePlanForUser(liveOwner) === "pro",
       })) return null;
-      const stillActivated = merchantWorkspaceActivated(liveOwner.ecommerceGrowthEngineActivatedAt) &&
-        liveOwner.ecommerceGrowthEngineActivationShop === shop &&
-        liveOwner.ecommerceGrowthEngineActivationIntegrationId === installation.id;
-      if (!stillActivated) {
-        await tx.update(users).set({
-          ecommerceGrowthEngineActivatedAt: new Date(),
-          ecommerceGrowthEngineActivationShop: shop,
-          ecommerceGrowthEngineActivationIntegrationId: installation.id,
-        }).where(and(eq(users.id, accountId), eq(users.shopifyShop, shop)));
-      }
+      // Idempotent for this exact installation. A new installation requires
+      // a new, explicit merchant action; old activation is never transferred.
+      const written = await tx.execute(sql`
+        INSERT INTO ecommerce_shopify_workspace_activations
+          (account_id, installation_id, shop)
+        VALUES (${accountId}, ${installation.id}, ${shop})
+        ON CONFLICT (account_id) DO UPDATE SET
+          installation_id = EXCLUDED.installation_id,
+          shop = EXCLUDED.shop,
+          activated_at = CASE
+            WHEN ecommerce_shopify_workspace_activations.installation_id = EXCLUDED.installation_id
+             AND ecommerce_shopify_workspace_activations.shop = EXCLUDED.shop
+            THEN ecommerce_shopify_workspace_activations.activated_at
+            ELSE NOW() END
+        RETURNING activated_at
+      `);
+      if (written.rows.length !== 1) return null;
       return { activated: true };
     });
     if (!result) return res.status(403).json({ error: "Eligible Shopify owner and Pro access required" });
