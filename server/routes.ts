@@ -233,7 +233,6 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import shopifyRoutes from "./shopifyRoutes";
 import ecommercePilotRoutes from "./ecommercePilotRoutes";
 import ecommerceMerchantActivationRoutes, { requireEcommerceWorkspace } from "./ecommerceMerchantActivationRoutes";
-import { requireEcommercePilot } from "./ecommerce/pilotMiddleware";
 import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
