@@ -72,7 +72,8 @@ export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies,
   return {sessionExpired:row.expiresAt.getTime()<=Date.now(),credential,credentialBinding:digest(credential),selection:selection.data,integrationId:install.integrationId,binding:digest([sessionId,auth,httpSessionId,state,selection.data,source.id,source.integrationId,install.integrationId,install.token])};
 }
 /** Read-only adapter. It has no approval/claim, cart preparation, receipt or messaging entry point. */
-export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies) {
+export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies, reviewSecondAttempt = false) {
+  // Internal read-only purpose only. It returns no execution authorization and never prepares a journal row.
   const { db } = deps, requestFor = deps.requestFor ?? shopifyCatalogRequest;
   const active = new Set<string>();
   return async (auth: TestOwner, sessionId: string, httpSessionId: string): Promise<PrivateCheckoutPreflight> => {
@@ -90,7 +91,10 @@ export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies
       catch { throw new TestChatError(503,"checkout_test_setup_required_apply_reviewed_0112"); }
       const used = await db.execute(sql`SELECT EXISTS (SELECT 1 FROM public.shopify_checkout_admin_tests WHERE shop=${SHOP} AND claimed_at IS NOT NULL) AS used`);
       let authorizationId:string|undefined;
-      if (used.rows[0]?.used!==false || (deps.secondExecutionEnabled?.() ?? PRIVATE_CART_SECOND_EXECUTION_ENABLED)) {
+      if (reviewSecondAttempt) {
+        if(auth.actorUserId!==auth.workspaceUserId || used.rows[0]?.used!==true)
+          throw new TestChatError(409,"original_consumed_attempt_required");
+      } else if (used.rows[0]?.used!==false || (deps.secondExecutionEnabled?.() ?? PRIVATE_CART_SECOND_EXECUTION_ENABLED)) {
         if (!(deps.secondExecutionEnabled?.() ?? PRIVATE_CART_SECOND_EXECUTION_ENABLED) || auth.actorUserId!==auth.workspaceUserId)
           throw new TestChatError(409,"development_store_dispatch_already_consumed");
         privateCartReceiptCodec(env);
@@ -129,7 +133,7 @@ export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies
       return {ready:true,cartCreated:false,cartCreationEnabled:false,credentialKind:credential.kind,
         selection:before.selection,selectionSha256:proof.selectionSha256,sessionBinding:digest([before.binding,credentialBinding]),
         inventory:proof.inventory,quantityRule:proof.quantityRule,operatorCartAccessConfigured:configuredTestAccess(auth,env),
-        nextAction:"separate_cart_approval_required",...(authorizationId?{authorizationId}:{})};
+        nextAction:"separate_cart_approval_required",...(authorizationId && !reviewSecondAttempt?{authorizationId}:{})};
     } finally { active.delete(key); }
   };
 }
