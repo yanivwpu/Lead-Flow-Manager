@@ -105,6 +105,7 @@ router.post("/activate", async (req: Request, res: Response) => {
       if (!liveOwner || !isShopifyContactInstallationActive(liveOwner)) return null;
       const installations = await tx.select().from(integrations).where(and(
         eq(integrations.userId, accountId), eq(integrations.type, "shopify"),
+        eq(integrations.isActive, true),
       )).limit(2);
       if (installations.length !== 1 || !installations[0].isActive) return null;
       const installation = installations[0];
