@@ -173,6 +173,8 @@ export const APP_NAV_MOBILE_TEST_IDS: Record<AppNavItemId, string> = {
 
 export type AppNavVisibilityFlags = {
   ecommercePilotEnabled?: boolean;
+  /** Persistent merchant workspace activation, distinct from pilot grants and outbound automation. */
+  ecommerceGrowthEngineActivated?: boolean;
   hasPresetCampaigns: boolean;
   prospectAiActivated: boolean;
   realtorGrowthEngineActivated: boolean;
@@ -193,7 +195,7 @@ export function resolveAppNavSections(flags: AppNavVisibilityFlags): ResolvedApp
     "aiBrain",
   ];
   const growth: AppNavItemId[] = [
-    ...(flags.ecommercePilotEnabled ? (["ecommerceGrowthEngine"] as const) : []),
+    ...(flags.ecommercePilotEnabled || flags.ecommerceGrowthEngineActivated ? (["ecommerceGrowthEngine"] as const) : []),
     ...(flags.prospectAiActivated ? (["prospectAi"] as const) : []),
     ...(flags.realtorGrowthEngineActivated ? (["realtorGrowthEngine"] as const) : []),
   ];
