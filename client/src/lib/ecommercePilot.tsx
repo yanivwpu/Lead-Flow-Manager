@@ -4,6 +4,7 @@ import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "./auth-context";
 import { withUserQueryScope } from "./accountQueryScope";
+import { useEcommerceMerchantActivationStatus } from "./ecommerceMerchantActivation";
 
 export function useEcommercePilot() {
   const { user, sessionAligned } = useAuth();
@@ -33,4 +34,24 @@ export function EcommercePilotBoundary({ children }: { children: ReactNode }) {
     ["Checking access…", "This page is not available."];
   return <><Helmet><meta name="robots" content="noindex,nofollow" /></Helmet>
     {available ? children : <p className="p-6 text-sm text-slate-600" role="status" dir={locale === "he" ? "rtl" : "ltr"}>{copy[checking ? 0 : 1]}</p>}</>;
+}
+
+/** Activated merchants see the same workspace as pilots, without receiving pilot-only API access. */
+export function EcommerceWorkspaceBoundary({ children }: { children: ReactNode }) {
+  const pilot = useEcommercePilot();
+  const activation = useEcommerceMerchantActivationStatus();
+  const { user, sessionAligned } = useAuth();
+  const { i18n } = useTranslation();
+  const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+  const allowed = !!user?.id && sessionAligned &&
+    (pilot.available || (activation.data?.activated === true && activation.data?.eligible === true));
+  const loading = sessionAligned && !!user?.id && (pilot.checking || activation.isPending);
+  const message = locale === "he"
+    ? loading ? "בודקים גישה…" : "יש להפעיל את מנוע המסחר האלקטרוני מתוך תבניות."
+    : locale === "es"
+      ? loading ? "Comprobando acceso…" : "Activa el motor de comercio electrónico desde Plantillas."
+      : loading ? "Checking access…" : "Activate E-Commerce Growth Engine from Templates.";
+  return <><Helmet><meta name="robots" content="noindex,nofollow" /></Helmet>
+    {allowed ? children : <p className="p-6 text-sm text-slate-600" role="status" dir={locale === "he" ? "rtl" : "ltr"}>{message}</p>}
+  </>;
 }
