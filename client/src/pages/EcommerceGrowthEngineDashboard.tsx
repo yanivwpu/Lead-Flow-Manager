@@ -55,6 +55,14 @@ export function EcommerceGrowthEngineDashboardContent() {
   const checking = !sessionAligned || !user?.id || isLoading;
   const unavailable = !checking && (isError || !data);
   const connected = !checking && !unavailable && !!data?.connected;
+  const modules = [
+    { id: "overview", label: locale === "he" ? "סקירה" : locale === "es" ? "Resumen" : "Overview" },
+    { id: "shopping", label: locale === "he" ? "קניות AI" : locale === "es" ? "Compras con IA" : "AI Shopping" },
+    { id: "order-support", label: t.tasks },
+    { id: "recovery", label: locale === "he" ? "שחזור עגלות" : locale === "es" ? "Recuperación de carritos" : "Cart Recovery" },
+    { id: "post-purchase", label: locale === "he" ? "לאחר רכישה" : locale === "es" ? "Poscompra" : "Post-Purchase" },
+    { id: "settings", label: locale === "he" ? "הגדרות" : locale === "es" ? "Configuración" : "Settings" },
+  ];
   const cards = [
     { title:t.inbox, description:t.inboxDetail, icon:MessageSquare, href:"/app/inbox" },
     { title:t.ai, description:t.aiDetail, icon:Brain, href:"/app/ai-brain" },
@@ -68,18 +76,23 @@ export function EcommerceGrowthEngineDashboardContent() {
       <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">{t.subtitle}</p>
       <Link asChild href="/app/integrations?setup=shopify"><a className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"><Plug className="h-4 w-4" />{t.connect}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link>
     </header>
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-label={t.sync}>
+    <nav aria-label={locale === "he" ? "ניווט מנוע" : locale === "es" ? "Navegación del motor" : "Engine navigation"} className="flex flex-wrap gap-2" data-testid="ecommerce-module-navigation">
+      {modules.map((module) => <a key={module.id} href={`#${module.id}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{module.label}</a>)}
+    </nav>
+    <section id="overview" className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-label={t.sync}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="text-lg font-semibold">{t.sync}</h2><p className="mt-1 text-sm text-slate-600">{checking ? t.loading : unavailable ? t.unavailable : connected ? t.connected : t.notConnected}</p>{connected && data?.shop && <p className="mt-2 break-all text-xs text-slate-500">{t.shop}: <span dir="ltr">{data.shop}</span></p>}</div>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{checking ? "…" : unavailable ? t.unknown : connected ? (data?.syncEnabled ? t.ready : t.paused) : t.off}</span>
       </div>
       <p className="mt-4 text-xs text-slate-500">{t.details}</p>
     </section>
-    {connected && <ShopifySimpleSetup syncEnabled={data?.syncEnabled === true} />}
-    <section className="grid gap-4 sm:grid-cols-2">
+    <div id="settings" className="scroll-mt-6">{connected && <ShopifySimpleSetup syncEnabled={data?.syncEnabled === true} />}</div>
+    <section id="shopping" className="scroll-mt-6 grid gap-4 sm:grid-cols-2">
       {cards.map(({title,description,icon:Icon,href})=><Link asChild key={href} href={href}><a className="group flex min-h-40 flex-col rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-blue-300 hover:shadow-sm"><Icon className="mb-3 h-6 w-6 text-blue-600" /><h2 className="font-semibold text-slate-950">{title}</h2><p className="mt-2 flex-1 text-sm text-slate-600">{description}</p><span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">{t.action}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></span></a></Link>)}
     </section>
-    <section className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 sm:p-6"><h2 className="text-lg font-semibold">{t.upcoming}</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{[t.cart,t.post].map(label=><div key={label} className="rounded-xl border border-indigo-100 bg-white p-4 text-sm font-medium">{label}</div>)}</div><p className="mt-4 text-sm leading-relaxed text-slate-600">{t.note}</p></section>
+    <section id="order-support" className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold">{t.tasks}</h2><p className="mt-2 text-sm text-slate-600">{t.tasksDetail}</p><Link asChild href="/app/followups"><a className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">{t.action}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link></section>
+    <section id="recovery" className="scroll-mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 sm:p-6"><h2 className="text-lg font-semibold">{t.upcoming}</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{[t.cart,t.post].map(label=><div key={label} className="rounded-xl border border-indigo-100 bg-white p-4 text-sm font-medium">{label}</div>)}</div><p className="mt-4 text-sm leading-relaxed text-slate-600">{t.note}</p></section>
+    <div id="post-purchase" className="scroll-mt-6 text-sm text-slate-600">{t.post}: {t.upcoming}</div>
     <Link asChild href="/ecommerce-growth-engine"><a className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">{t.preview}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link>
   </main>;
 }
