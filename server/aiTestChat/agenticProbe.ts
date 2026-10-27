@@ -69,7 +69,7 @@ export function createAgenticCompatibilityProbe(deps:{db:CatalogDb;entitled:(id:
     active.add(key);last.set(key,Date.now());
     try {
       const before=await snapshot(auth,id),{install,source}=before;
-      const existing=await commerce.searchCandidates(auth.workspaceUserId,{sourceId:source.id,query:before.query,limit:5});
+      const existing=await commerce.purchaseCandidates(auth.workspaceUserId,{sourceId:source.id,query:before.query,limit:5,filters:{currency:source.currency!}});
       const request=(deps.requestFor??shopifyCatalogRequest)(install.shop,install.token);
       const result=await runAgenticProbe({shop:install.shop,query:before.query,currency:source.currency!,profile:env.SHOPIFY_AGENTIC_PROBE_AGENT_PROFILE,
         request,fetcher:deps.fetcher,existing,

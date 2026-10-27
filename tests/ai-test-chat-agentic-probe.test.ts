@@ -155,3 +155,25 @@ test("HTTP route retains auth/Brain/session/same-origin JSON and strict empty in
     assert.doesNotMatch(readFileSync("server/aiTestChat/agenticProbe.ts","utf8"),/deps\.db\.(insert|update|delete)\(|consume\(/);
   }finally{await f.cleanup();}
 });
+test("a real second merchant catalog cannot satisfy returned MCP identity membership",async()=>{
+  const f=await fixture();try{
+    const other=(await ensureCatalogSource(f.db,"tenant-b"))!;
+    await f.db.insert(catalogProducts).values({id:"foreign-p",userId:"tenant-b",sourceId:other.id,externalId:"gid://shopify/Product/999",title:"Board",searchText:"Board",status:"ACTIVE",published:true,complete:true,variantCount:1,providerUpdatedAt:new Date()});
+    await f.db.insert(catalogVariants).values({id:"foreign-v",userId:"tenant-b",sourceId:other.id,productId:"foreign-p",externalId:products[0].variants[0].id,title:"Default",price:"12.34",currency:"USD",verifiedAt:new Date(),providerUpdatedAt:new Date(),generation:"fixture"});
+    const p=provider({foreign:true});
+    const result=await createAgenticCompatibilityProbe({...f.deps,enabled:()=>true,fetcher:p.fetcher})(auth,f.session.id,"s");
+    assert.equal(result.comparison,undefined);
+    assert.ok(result.diagnostics.some(d=>d.reason==="catalog_identity_outside_owned_source"));
+    assert.equal(f.reads(),1); // no Admin variant lookup for the other merchant
+    assert.doesNotMatch(JSON.stringify(result),/foreign-p|foreign-v|Product\/999|fixture-token/);
+  }finally{await f.cleanup();}
+});
+test("provider redirects, oversized bodies and non-JSON responses never become usable discovery",async()=>{
+  for(const response of [()=>new Response(null,{status:302,headers:{location:"https://other.myshopify.com/api/ucp/mcp"}}),
+    ()=>new Response("x".repeat(256001),{headers:{"content-type":"application/json"}}),()=>new Response("<html>private-password-page</html>",{headers:{"content-type":"text/html"}})]){
+    let calls=0;const fetcher=(async()=>{calls++;return response();}) as typeof fetch;
+    const result=await runAgenticProbe(base(fetcher));assert.equal(result.comparison,undefined);
+    assert.equal(calls,2);assert.ok(result.diagnostics.some(d=>d.status==="unavailable"));
+    assert.doesNotMatch(JSON.stringify(result),/other.myshopify.com|private-password-page/);
+  }
+});
