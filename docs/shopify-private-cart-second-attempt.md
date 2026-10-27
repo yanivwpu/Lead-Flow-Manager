@@ -1,6 +1,6 @@
 # Disabled private cart adapter: review notes
 
-Both execution source gates remain false. This change does not apply migrations, issue authorizations, alter credentials, enable execution or contact Shopify. Further custom cart development is paused pending a compatibility audit of Shopify's standard commerce tools.
+Both execution source gates remain false. This change does not apply migrations, issue authorizations, alter credentials, enable execution or contact Shopify. UCP/MCP enhancements are deferred. The existing native Storefront implementation remains the launch path; its next step is a read-only review before any separately approved second test.
 
 ## Security properties
 
