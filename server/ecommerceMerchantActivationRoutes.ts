@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { users, integrations } from "@shared/schema";
 import { db } from "./drizzle/db";
 import { storage } from "./storage";
+import { isEcommercePilotOwner } from "./ecommerce/pilotAccess";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { getEffectivePlanForUser } from "@shared/trialEntitlements";
@@ -128,5 +129,21 @@ router.post("/activate", async (req: Request, res: Response) => {
     return res.status(503).json({ error: "E-Commerce activation unavailable" });
   }
 });
+
+/** Actual server route authorization; do not trust the sidebar or persisted flag alone. */
+export async function requireEcommerceWorkspace(req: Request, res: Response, next: () => void) {
+  res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
+  const accountId = (req.user as { id?: string } | undefined)?.id;
+  if (!accountId) { res.status(401).end(); return; }
+  try {
+    const owner = await storage.getUserForSession(accountId);
+    if (owner && isEcommercePilotOwner(owner, process.env)) { next(); return; }
+    const state = await currentForAccount(accountId);
+    if (state?.activated) { next(); return; }
+    res.status(404).end();
+  } catch {
+    res.status(503).end();
+  }
+}
 
 export default router;
