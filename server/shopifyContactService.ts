@@ -129,6 +129,14 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
     }).where(eq(users.id, user.id));
     await tx.update(integrations).set({ isActive: false, accessToken: null, refreshToken: null, tokenExpiresAt: null })
       .where(and(eq(integrations.userId, user.id), eq(integrations.type, "shopify")));
+    // Engine workspace activation is merchant opt-in for a specific installation.
+    // Reinstall must require an explicit new activation. The isolated table may
+    // not be deployed yet, so this cannot become an uninstall dependency.
+    const activationTable = await tx.execute(sql`SELECT to_regclass('public.ecommerce_shopify_workspace_activations')::text AS activation_table`);
+    if (typeof activationTable.rows[0]?.activation_table === "string") {
+      await tx.execute(sql`DELETE FROM ecommerce_shopify_workspace_activations
+        WHERE account_id = ${user.id} AND shop = ${shop}`);
+    }
     // Never carry order-task merchant opt-in across uninstall/reinstall. The
     // staging-only task migration may not exist yet; no production dependency.
     const existingTaskSettings = await tx.execute(sql`SELECT to_regclass('public.ecommerce_growth_order_task_settings')::text AS settings`);
