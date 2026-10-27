@@ -306,3 +306,15 @@ test("Inbox channel name Web Chat and widget page title are preserved", () => {
   assert.match(channels, /label: 'Web Chat'/);
   assert.equal(en.widgetPage.title, "Website Chat Widget");
 });
+
+
+test("E-Commerce nav distinguishes persistent activation from pilot and other Growth Engines", () => {
+  const flags = { hasPresetCampaigns: false, prospectAiActivated: false, realtorGrowthEngineActivated: false };
+  const absent = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false, ecommercePilotEnabled: false });
+  assert.equal(flattenAppNavItemIds(absent).includes("ecommerceGrowthEngine"), false);
+  const activated = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: true, ecommercePilotEnabled: false });
+  assert.equal(flattenAppNavItemIds(activated).includes("ecommerceGrowthEngine"), true);
+  assert.equal(flattenAppNavItemIds(activated).includes("prospectAi"), false);
+  const pilot = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false, ecommercePilotEnabled: true });
+  assert.equal(flattenAppNavItemIds(pilot).includes("ecommerceGrowthEngine"), true);
+});
