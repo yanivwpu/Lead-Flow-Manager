@@ -1,3 +1,4 @@
+import type { ShopifyAgenticProbe } from "@shared/shopifyAgenticProbe";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
@@ -17,6 +18,7 @@ import {
 import { ShoppingActivityView } from "@/components/inbox/ShoppingActivity";
 import type { TestChatView, PrivateCheckoutPreflight } from "@shared/aiTestChat";
 type Diagnostics = {
+  agenticProbeEnabled?: boolean;
   aiMode: string;
   shoppingEnabled: boolean;
   catalogConnected: boolean;
@@ -45,6 +47,8 @@ function Console() {
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
+  const [probe,setProbe] = useState<ShopifyAgenticProbe>();
+  const [probeFailed,setProbeFailed] = useState(false);
   const [prepared,setPrepared] = useState<PrivateCartTestRequest>();
   const [prepareError,setPrepareError] = useState<"expired"|"unavailable"|"review">();
   const [reportedRequest,setReportedRequest] = useState<PrivateCartTestSummary>();
@@ -65,6 +69,18 @@ function Console() {
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(false);
+  async function probeCompatibility() {
+    if (!chat || busy || !diagnostics?.agenticProbeEnabled) return;
+    const id=chat.id, version=selectionVersion.current;
+    setBusy(true); setProbe(undefined); setProbeFailed(false);
+    try {
+      const response=await apiRequest("POST",`/api/ai/test-chat/${id}/agentic-compatibility`,{});
+      const result=await response.json();
+      if(mounted.current && selectionVersion.current===version)setProbe(result);
+    } catch { if(mounted.current && selectionVersion.current===version)setProbeFailed(true); }
+    finally { if(mounted.current)setBusy(false); }
+  }
+  useEffect(()=>{setProbe(undefined);setProbeFailed(false);},[open,chat?.id,chat?.state.updatedAt]);
   const pending = useRef<{ eventId: string; text: string } | undefined>(
     undefined,
   );
@@ -359,6 +375,18 @@ function Console() {
             )}
             {!diagnostics.shoppingEnabled && <p>{t("testChat.shoppingOff")}</p>}
             <p>{t("shopping.checkoutDisabled")}</p>
+            <details>
+              <summary>{t("testChat.agenticProbeTitle")}</summary>
+              <p>{t("testChat.agenticProbeReadOnly")}</p>
+              <Button type="button" disabled={!diagnostics.agenticProbeEnabled||busy||!chat?.state.selected}
+                onClick={()=>void probeCompatibility()}>{t("testChat.agenticProbeRun")}</Button>
+              {!diagnostics.agenticProbeEnabled && <p>{t("testChat.agenticProbeDisabled")}</p>}
+              {probeFailed && <p role="alert">{t("testChat.agenticProbeUnavailable")}</p>}
+              {probe && <ul>{probe.diagnostics.map((item,index)=><li key={index}>
+                {item.capability}: {item.status} ({item.reason})
+              </li>)}</ul>}
+              {probe?.comparison && <p>{t("testChat.agenticProbeComparison",probe.comparison)}</p>}
+            </details>
           </aside>
         )}
         <form

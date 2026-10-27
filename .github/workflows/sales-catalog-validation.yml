@@ -90,6 +90,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Native PostgreSQL catalog sync, search, HTTP, grounding and UI
         run: node --import tsx --test tests/shopify-billing-return.test.ts tests/shopify-catalog-inventory.test.ts tests/shopify-catalog.test.ts tests/shopify-catalog-registration.test.ts tests/shopify-catalog-authorization.test.ts tests/shopify-catalog-publication.test.ts tests/shopify-catalog-card-state.test.ts tests/shopify-catalog-reconciliation.test.ts tests/shopify-catalog-search.test.ts tests/shopify-catalog-webhooks.test.ts tests/shopify-catalog-ai.test.ts tests/shopify-catalog-routes.test.ts tests/shopify-catalog-ui.test.tsx
+      - name: Disabled read-only Shopify Agentic Commerce probe
+        run: node --import tsx --test tests/ai-test-chat-agentic-probe.test.ts
       - name: Admin Shopify checkout safety
         env:
           # Use the existing in-memory fixture: the admin journal intentionally requires public schema.
@@ -121,3 +123,24 @@ jobs:
 
 
 
+  agentic-codeql:
+    name: Shopify probe CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: shopify-agentic-probe
+          # Retain reviewable SARIF without changing repository code-scanning setup.
+          upload: false
+          output: codeql-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shopify-agentic-probe-codeql
+          path: codeql-results/*.sarif

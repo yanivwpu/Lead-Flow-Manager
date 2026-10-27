@@ -25,6 +25,7 @@ export function registerTestChatRoutes(
     ) => Promise<{ allowed: boolean; limited?: boolean }>;
     generate: ReturnType<typeof createTestChatGenerator>;
     diagnostics: (id: string, actorId?: string) => Promise<unknown>;
+    agenticProbe?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
     checkoutPreflight?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<PrivateCheckoutPreflight>;
     checkoutHandoffExecute?: (auth: TestOwner, id: string, httpSessionId: string, input: unknown, signal: AbortSignal) => Promise<unknown>;
     checkoutHandoffInspect?: (auth: TestOwner, id: string, httpSessionId: string) => Promise<unknown>;
@@ -78,6 +79,15 @@ export function registerTestChatRoutes(
   route("get", "/api/ai/test-chat/:id/diagnostics", async (auth, req, res) => {
     await sessions.read(auth, req.params.id);
     return res.json(await deps.diagnostics(auth.workspaceUserId,auth.actorUserId));
+  });
+  if (deps.agenticProbe) route("post", "/api/ai/test-chat/:id/agentic-compatibility", async (auth, req, res) => {
+    res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
+    if (!req.sessionID) throw new TestChatError(403,"authenticated_session_required");
+    if (!req.is("application/json") || req.get("sec-fetch-site")==="cross-site")
+      throw new TestChatError(403,"same_origin_json_required");
+    if (!z.object({}).strict().safeParse(req.body).success) throw new TestChatError(400,"invalid_probe_request");
+    await sessions.read(auth,req.params.id);
+    return res.json(await deps.agenticProbe!(auth,req.params.id,req.sessionID));
   });
   if (deps.checkoutPreflight) route("post", "/api/ai/test-chat/:id/checkout-preflight", async (auth, req, res) => {
     res.set({"Referrer-Policy":"no-referrer","X-Content-Type-Options":"nosniff"});
