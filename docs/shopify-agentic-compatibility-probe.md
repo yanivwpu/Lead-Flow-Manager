@@ -19,3 +19,5 @@ Tests use synthetic tenants, injected HTTP responses and disposable PostgreSQL/P
 CI runs focused probe tests and the existing catalog, Shopping, authorization, UI and build checks. The CodeQL job runs JavaScript/TypeScript security-extended queries and retains SARIF as a review artifact without altering repository code-scanning configuration.
 
 References: [Shopify Agents](https://shopify.dev/docs/agents), [Storefront Catalog MCP](https://shopify.dev/docs/agents/catalog/storefront-catalog), [UCP catalog MCP binding](https://ucp.dev/specification/shopping/catalog/mcp/). These document `/api/ucp/mcp`, `search_catalog`, `lookup_catalog`, `get_product`, the agent-profile requirement and the UCP catalog response envelope. Legacy `/api/mcp` search tools are not used.
+
+The separately prepared [single-use activation path](shopify-agentic-probe-one-shot.md) adds a second false source gate, private non-network readiness and a durable one-shot authorization. It is not activated by this preparation; the original repeatable source gate remains false.

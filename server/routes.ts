@@ -1,5 +1,5 @@
 import { createAgenticCompatibilityProbe } from "./aiTestChat/agenticProbe";
-import { SHOPIFY_AGENTIC_PROBE_ENABLED } from "./salesCatalog/shopify/agenticProbe";
+import { SHOPIFY_AGENTIC_PROBE_ONE_SHOT_APPROVED } from "./aiTestChat/agenticProbeAuthorization";
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
@@ -11163,11 +11163,13 @@ export async function registerRoutes(
   // Private transport only: never passed to the live Shopping runtime or saved settings.
   const privateShoppingAllowed = async (userId: string) =>
     privateTestShoppingAllowed(await storage.getUser(userId), process.env);
+  const agenticCompatibilityProbe=createAgenticCompatibilityProbe({db,entitled:shoppingEntitled});
   const privateCartHandoff = createPrivateCartHandoff({db,entitled:shoppingEntitled});
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
-    agenticProbe: createAgenticCompatibilityProbe({db,entitled:shoppingEntitled}),
+    agenticProbe: agenticCompatibilityProbe,
+    agenticProbeReadiness: agenticCompatibilityProbe.readiness,
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
     checkoutHandoffPrepare: privateCartHandoff.prepare,
     checkoutHandoffInspect: privateCartHandoff.inspect,
@@ -11202,7 +11204,7 @@ export async function registerRoutes(
       const entitled = await shoppingEntitled(userId);
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
-        agenticProbeEnabled: SHOPIFY_AGENTIC_PROBE_ENABLED,
+        agenticProbeEnabled: testOnlyShopping && entitled && actorId===userId && SHOPIFY_AGENTIC_PROBE_ONE_SHOT_APPROVED,
         checkoutPreflightAvailable: testOnlyShopping && entitled,
         checkoutCartTestAvailable: testOnlyShopping && entitled && actorId===userId,
         checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && PRIVATE_CART_EXECUTION_ENABLED,

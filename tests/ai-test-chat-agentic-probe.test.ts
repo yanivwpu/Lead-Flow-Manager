@@ -104,14 +104,14 @@ test("real tenant-scoped discovery and owned pairs compare without writing sessi
       (request_id,workspace_id,operator_id,session_digest,shop,integration_id,installation_digest,selection,selection_digest,expires_at,claimed_at)
       VALUES ('00000000-0000-4000-8000-000000000001','tenant-a','tenant-a','fixture','whachatcrm.myshopify.com','integration-a','fixture','{}','fixture',now()+interval '10 minutes',now())`);
     const fenceBefore=await f.db.execute('SELECT * FROM shopify_checkout_admin_tests');
-    const indexBefore=await f.db.execute("SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch'");
+    const indexBefore=await f.db.execute("SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch' AND schemaname=current_schema()");
     const before=await f.db.select().from(aiTestSessions),catalog=await f.db.select().from(catalogVariants);
     const run=createAgenticCompatibilityProbe({...f.deps,enabled:()=>true});
     const result=await run(auth,f.session.id,"fixture-session");
     assert.deepEqual(result.comparison,{existingProducts:1,standardProducts:1,overlappingProducts:1});
     assert.equal(f.reads(),2);assert.deepEqual(await f.db.select().from(aiTestSessions),before);assert.deepEqual(await f.db.select().from(catalogVariants),catalog);
     assert.deepEqual((await f.db.execute('SELECT * FROM shopify_checkout_admin_tests')).rows,fenceBefore.rows);
-    assert.deepEqual((await f.db.execute("SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch'")).rows,indexBefore.rows);
+    assert.deepEqual((await f.db.execute("SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch' AND schemaname=current_schema()")).rows,indexBefore.rows);
     await assert.rejects(()=>run(auth,f.session.id,"fixture-session"),/probe_cooldown/);
   }finally{await f.cleanup();}
 });
@@ -145,7 +145,7 @@ test("HTTP route retains auth/Brain/session/same-origin JSON and strict empty in
     const handlers:any={};let allowed=true,authorized=true,invocations=0;
     const app=Object.fromEntries(["get","post","delete"].map(m=>[m,(p:string,h:any)=>{handlers[m+" "+p]=h;}]));
     registerTestChatRoutes(app as any,{db:f.db,authorize:async(req,res)=>{if(!authorized){res.status(401).json({error:"unauthorized"});return null;}return req.auth??auth;},access:async()=>({allowed}),generate:null as any,diagnostics:async()=>({}),agenticProbe:async()=>{invocations++;return {enabled:false};}});
-    async function call(patch:any={}){let status=200;const res:any={set:()=>res,status:(s:number)=>{status=s;return res;},json:()=>res};await handlers['post /api/ai/test-chat/:id/agentic-compatibility']({params:{id:f.session.id},sessionID:"s",is:()=>true,get:()=>undefined,body:{},...patch},res);return status;}
+    async function call(patch:any={}){let status=200;const res:any={set:()=>res,status:(s:number)=>{status=s;return res;},json:()=>res};await handlers['post /api/ai/test-chat/:id/agentic-compatibility']({params:{id:f.session.id},sessionID:"s",is:()=>true,get:(name:string)=>name==="origin"?"https://app.whachatcrm.com":undefined,body:{},...patch},res);return status;}
     authorized=false;assert.equal(await call(),401);authorized=true;allowed=false;assert.equal(await call(),403);allowed=true;
     for(const patch of [{sessionID:null},{is:()=>false},{get:()=>"cross-site"}])assert.equal(await call(patch),403);
     assert.equal(await call({body:{shop:"other.myshopify.com",tool:"create_cart"}}),400);

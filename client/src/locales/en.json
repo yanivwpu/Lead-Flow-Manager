@@ -1557,7 +1557,7 @@
     "agenticProbeReadOnly": "Read-only diagnostics. Cart, checkout, orders, payments and customer messaging stay disabled.",
     "agenticProbeRun": "Check compatibility",
     "agenticProbeDisabled": "Compatibility probe is disabled pending review.",
-    "agenticProbeUnavailable": "Compatibility check unavailable. Try again later.",
+    "agenticProbeUnavailable": "Compatibility result unavailable. Do not retry this attempt.",
     "agenticProbeComparison": "Existing: {{existingProducts}} products. Standard: {{standardProducts}}. Shared: {{overlappingProducts}}.",
 
     "approveCreateCart": "Approve & Create Test Cart",
