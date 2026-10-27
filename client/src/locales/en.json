@@ -1553,6 +1553,13 @@
     }
   },
   "testChat": {
+    "agenticProbeTitle": "Shopify commerce compatibility",
+    "agenticProbeReadOnly": "Read-only diagnostics. Cart, checkout, orders, payments and customer messaging stay disabled.",
+    "agenticProbeRun": "Check compatibility",
+    "agenticProbeDisabled": "Compatibility probe is disabled pending review.",
+    "agenticProbeUnavailable": "Compatibility check unavailable. Try again later.",
+    "agenticProbeComparison": "Existing: {{existingProducts}} products. Standard: {{standardProducts}}. Shared: {{overlappingProducts}}.",
+
     "approveCreateCart": "Approve & Create Test Cart",
     "cartActivationRequired": "Cart creation is disabled until activation is separately approved.",
     "cartConfirmTitle": "Confirm one private test cart",

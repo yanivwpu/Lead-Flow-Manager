@@ -1,3 +1,5 @@
+import { createAgenticCompatibilityProbe } from "./aiTestChat/agenticProbe";
+import { SHOPIFY_AGENTIC_PROBE_ENABLED } from "./salesCatalog/shopify/agenticProbe";
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
@@ -11165,6 +11167,7 @@ export async function registerRoutes(
   registerTestChatRoutes(app, {
     db,
     authorize: requireWorkspaceOffersAdmin,
+    agenticProbe: createAgenticCompatibilityProbe({db,entitled:shoppingEntitled}),
     checkoutPreflight: createPrivateCheckoutPreflight({db,entitled:shoppingEntitled}),
     checkoutHandoffPrepare: privateCartHandoff.prepare,
     checkoutHandoffInspect: privateCartHandoff.inspect,
@@ -11199,6 +11202,7 @@ export async function registerRoutes(
       const entitled = await shoppingEntitled(userId);
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
+        agenticProbeEnabled: SHOPIFY_AGENTIC_PROBE_ENABLED,
         checkoutPreflightAvailable: testOnlyShopping && entitled,
         checkoutCartTestAvailable: testOnlyShopping && entitled && actorId===userId,
         checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && PRIVATE_CART_EXECUTION_ENABLED,

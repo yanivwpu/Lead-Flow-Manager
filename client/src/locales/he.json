@@ -1560,6 +1560,13 @@
     }
   },
   "testChat": {
+    "agenticProbeTitle": "תאימות כלי המסחר של Shopify",
+    "agenticProbeReadOnly": "אבחון לקריאה בלבד. יצירת עגלה, התחלת תשלום, הזמנות, תשלומים והודעות ללקוחות נשארים מושבתים.",
+    "agenticProbeRun": "בדיקת תאימות",
+    "agenticProbeDisabled": "בדיקת התאימות מושבתת עד להשלמת הבדיקה והאישור.",
+    "agenticProbeUnavailable": "בדיקת התאימות אינה זמינה. נסו שוב מאוחר יותר.",
+    "agenticProbeComparison": "מוצרים במנגנון הקיים: {{existingProducts}}. בתקן: {{standardProducts}}. משותפים: {{overlappingProducts}}.",
+
     "approveCreateCart": "אישור ויצירת עגלת בדיקה",
     "cartActivationRequired": "יצירת עגלות מושבתת עד לקבלת אישור נפרד להפעלה.",
     "cartConfirmTitle": "אישור עגלת בדיקה פרטית אחת",
