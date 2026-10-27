@@ -35,6 +35,7 @@ async function currentForAccount(accountId: string): Promise<Current | null> {
   const shop = normalizeShopifyShopDomain(owner.shopifyShop);
   const installations = await db.select().from(integrations).where(and(
     eq(integrations.userId, accountId), eq(integrations.type, "shopify"),
+    eq(integrations.isActive, true),
   )).limit(2);
   const installation = installations.length === 1 ? installations[0] : null;
   const cfg = (installation?.config ?? {}) as Record<string, unknown>;
