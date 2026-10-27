@@ -170,7 +170,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     status: "available",
     ctaLabel: "Preview Engine",
     placeholderKey: "commerce",
-    detailHref: "/ecommerce-growth-engine",
+    detailHref: "/app/templates/ecommerce-growth-engine",
     oneTimePrice: null,
     subscriptionRequirementShort: null,
     galleryPricingMode: "coming_soon",
