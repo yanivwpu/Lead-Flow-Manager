@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { canActivateMerchantWorkspace, merchantWorkspaceActivated, isMerchantActivationPost } from "../server/ecommerce/merchantActivationPolicy";
 
 const eligible = {
@@ -50,4 +51,14 @@ test("activation requires an explicit same-origin empty JSON POST", () => {
 test("persisted activation state validates a real timestamp", () => {
   assert.equal(merchantWorkspaceActivated(new Date("2026-10-27T11:00:00Z")), true);
   assert.equal(merchantWorkspaceActivated(new Date(NaN)), false);
+});
+
+test("uninstall clears installation-bound activation without requiring pre-migration schema", () => {
+  const source = readFileSync("server/shopifyContactService.ts", "utf8");
+  const uninstall = source.slice(source.indexOf("export async function uninstallShopifyStore("),
+    source.indexOf("export async function withShopifyMailPrivacyFence("));
+  assert.match(uninstall, /pg_advisory_xact_lock/);
+  assert.match(uninstall, /to_regclass\('public\.ecommerce_shopify_workspace_activations'\)/);
+  assert.match(uninstall, /DELETE FROM ecommerce_shopify_workspace_activations/);
+  assert.match(uninstall, /account_id = \$\{user\.id\} AND shop = \$\{shop\}/);
 });
