@@ -14,6 +14,7 @@ import { runValidation, selectionSchema, SHOP } from "../shopping/checkout/contr
 import { badRequestDiagnostic } from "../shopping/checkout/badRequestDiagnostic";
 import { CheckoutVerificationError, controlledFailureCode } from "../shopping/checkout/preflightDiagnostics";
 import type { StorefrontCredential } from "../shopping/checkout/shopify";
+import { PRIVATE_CART_SECOND_EXECUTION_ENABLED, privateCartReceiptCodec, secondCartAuthorization } from "./secondCartAuthorization";
 
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 /** Dedicated store-bound server configuration. No browser credentials or token-prefix guesses. */
@@ -30,6 +31,7 @@ export type PrivateCheckoutDependencies = {
   env?: NodeJS.ProcessEnv;
   requestFor?: typeof shopifyCatalogRequest;
   storefrontFetch?: typeof fetch;
+  secondExecutionEnabled?: () => boolean;
 };
 /** Server-only snapshot: no Shopify mutation and no journal writes. */
 export async function privateCheckoutSnapshot(deps: PrivateCheckoutDependencies, auth: TestOwner, sessionId: string, httpSessionId: string, inspection: { allowExpiredForInspection?: boolean } = {}) {
@@ -87,7 +89,14 @@ export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies
       try { await verifyCheckoutTestSetup(db); }
       catch { throw new TestChatError(503,"checkout_test_setup_required_apply_reviewed_0112"); }
       const used = await db.execute(sql`SELECT EXISTS (SELECT 1 FROM public.shopify_checkout_admin_tests WHERE shop=${SHOP} AND claimed_at IS NOT NULL) AS used`);
-      if (used.rows[0]?.used!==false) throw new TestChatError(409,"development_store_dispatch_already_consumed");
+      let authorizationId:string|undefined;
+      if (used.rows[0]?.used!==false || (deps.secondExecutionEnabled?.() ?? PRIVATE_CART_SECOND_EXECUTION_ENABLED)) {
+        if (!(deps.secondExecutionEnabled?.() ?? PRIVATE_CART_SECOND_EXECUTION_ENABLED) || auth.actorUserId!==auth.workspaceUserId)
+          throw new TestChatError(409,"development_store_dispatch_already_consumed");
+        privateCartReceiptCodec(env);
+        authorizationId=await secondCartAuthorization(db,{workspaceId:auth.workspaceUserId,operatorId:auth.actorUserId,shop:SHOP,
+          integrationId:before.integrationId,installationDigest:digest([before.integrationId,before.credentialBinding])}).available();
+      }
       let badRequest: string | undefined;
       let proof: Awaited<ReturnType<typeof runValidation>>;
       try {
@@ -120,7 +129,7 @@ export function createPrivateCheckoutPreflight(deps: PrivateCheckoutDependencies
       return {ready:true,cartCreated:false,cartCreationEnabled:false,credentialKind:credential.kind,
         selection:before.selection,selectionSha256:proof.selectionSha256,sessionBinding:digest([before.binding,credentialBinding]),
         inventory:proof.inventory,quantityRule:proof.quantityRule,operatorCartAccessConfigured:configuredTestAccess(auth,env),
-        nextAction:"separate_cart_approval_required"};
+        nextAction:"separate_cart_approval_required",...(authorizationId?{authorizationId}:{})};
     } finally { active.delete(key); }
   };
 }

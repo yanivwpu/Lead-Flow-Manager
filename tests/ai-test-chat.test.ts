@@ -24,17 +24,19 @@ const auth = { workspaceUserId: "tenant-a", actorUserId: "tenant-a" },
   other = { workspaceUserId: "tenant-b", actorUserId: "tenant-b" };
 
 test("private Shopping allowance requires the exact database owner and production pilot configuration", () => {
-  const id = "6868785e-e8af-4152-8e2d-8d031c2e97d0";
-  const owner = { id, email: "marketing@whachatcrm.com" };
+  const id = "10000000-0000-4000-8000-000000000042";
+  const owner = { id, email: "pilot-owner@example.invalid" };
   const env = { ECOMMERCE_PILOT_ENABLED: "true", RAILWAY_ENVIRONMENT_NAME: "production",
     APP_URL: "https://app.whachatcrm.com", ECOMMERCE_PILOT_WORKSPACE_ID: id,
-    ECOMMERCE_PILOT_OWNER_EMAIL: owner.email };
+    ECOMMERCE_PILOT_OWNER_EMAIL: owner.email, PRIVATE_SHOPPING_PILOT_WORKSPACE_ID:id };
   assert.equal(privateTestShoppingAllowed(owner, env), true);
+  assert.equal(privateTestShoppingAllowed(owner,{...env,SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID:"legacy-fixture"}),true);
   for (const denied of [undefined, { ...owner, id: "another-workspace" }, { ...owner, email: "other@example.invalid" }])
     assert.equal(privateTestShoppingAllowed(denied, env), false);
   for (const patch of [{ ECOMMERCE_PILOT_ENABLED: "false" }, { RAILWAY_ENVIRONMENT_NAME: "staging" },
     { APP_URL: "https://staging.whachatcrm.com" }, { ECOMMERCE_PILOT_WORKSPACE_ID: "another-workspace" },
-    { ECOMMERCE_PILOT_OWNER_EMAIL: "other@example.invalid" }])
+    { ECOMMERCE_PILOT_OWNER_EMAIL: "other@example.invalid" }, { PRIVATE_SHOPPING_PILOT_WORKSPACE_ID: undefined },
+    { PRIVATE_SHOPPING_PILOT_WORKSPACE_ID: "10000000-0000-4000-8000-000000000099" }])
     assert.equal(privateTestShoppingAllowed(owner, { ...env, ...patch }), false);
   const reassigned = "271c48f9-3515-4682-b391-2fead371593d";
   assert.equal(privateTestShoppingAllowed({ ...owner, id: reassigned }, { ...env, ECOMMERCE_PILOT_WORKSPACE_ID: reassigned }), false);

@@ -13,15 +13,15 @@ import { registerTestChatRoutes } from '../server/aiTestChat/routes';
 import { ensureCatalogSource } from '../server/salesCatalog/shopify/installation';
 import { SHOP,META } from '../server/shopping/checkout/controlledValidation';
 
-const id='6868785e-e8af-4152-8e2d-8d031c2e97d0',auth={workspaceUserId:id,actorUserId:id};
+const id='10000000-0000-4000-8000-000000000042',auth={workspaceUserId:id,actorUserId:id};
 const product='gid://shopify/Product/10108114174234',variant='gid://shopify/ProductVariant/51638769221914';
 const env=()=>({ECOMMERCE_PILOT_ENABLED:'true',RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
- ECOMMERCE_PILOT_WORKSPACE_ID:id,ECOMMERCE_PILOT_OWNER_EMAIL:'marketing@whachatcrm.com',
+ ECOMMERCE_PILOT_WORKSPACE_ID:id,ECOMMERCE_PILOT_OWNER_EMAIL:'pilot-owner@example.invalid',PRIVATE_SHOPPING_PILOT_WORKSPACE_ID:id,
  SHOPIFY_CHECKOUT_TEST_WORKSPACE_ID:id,SHOPIFY_CHECKOUT_TEST_OPERATOR_IDS:id});
 async function fixture() {
  const f=await catalogFixture(),db=f.database;
  try {
- await db.update(users).set({id,email:'marketing@whachatcrm.com',shopifyShop:SHOP}).where(eq(users.id,'tenant-a'));
+ await db.update(users).set({id,email:'pilot-owner@example.invalid',shopifyShop:SHOP}).where(eq(users.id,'tenant-a'));
  await db.update(integrations).set({userId:id,config:{shopUrl:SHOP}}).where(eq(integrations.id,'integration-a'));
  await f.pg.exec(AI_TEST_CHAT_SCHEMA_SQL);
  await f.pg.exec(readFileSync('migrations/0112_shopify_checkout_admin_tests.sql','utf8'));
@@ -41,7 +41,7 @@ async function fixture() {
  const requestFor=()=>async(query:string)=>{reads++;return query===META?{shop:{myshopifyDomain:SHOP,plan:{partnerDevelopment:true}},currentAppInstallation:{app:{apiKey:'e4585d4da1434c9e5649a2269e716076'},accessScopes:[{handle:'read_products'},{handle:'read_inventory'}]}}:
   {shop:{myshopifyDomain:SHOP,currencyCode:'USD'},nodes:[live()]};};
  let nodePatch:any=undefined;
- let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|'rejected'|'http-denied'|'http-throttled'|'graphql-rejected'|'graphql-partial'|undefined;
+ let cartMode:'success'|'ambiguous'|'mismatch'|'status-failed'|'rejected'|'http-denied'|'http-throttled'|'graphql-rejected'|'graphql-partial'|'version-mismatch'|undefined;
  const cart=()=>({id:'gid://shopify/Cart/fixture',checkoutUrl:'https://whachatcrm.myshopify.com/cart/c/fixture?key=fixture-secret',totalQuantity:1,
   lines:{nodes:[{quantity:1,merchandise:{id:variant,product:{id:product}},cost:{amountPerQuantity:{amount:cartMode==='mismatch'?'999.00':'749.95',currencyCode:'USD'}}}]}});
  const cartResponse=(data:any)=>new Response(JSON.stringify({data}),{headers:{'content-type':'application/json','x-shopify-api-version':'2026-10'}});
@@ -49,6 +49,7 @@ async function fixture() {
  const storefrontFetch=(async(_url:any,init:any)=>{
   const body=JSON.parse(init.body);if(body.query.startsWith('mutation')){
    creates++;if(!cartMode)throw Error('MUTATION FORBIDDEN');
+   if(cartMode==='version-mismatch')return new Response(JSON.stringify({data:{cartCreate:{cart:cart(),userErrors:[],warnings:[]}}}),{headers:{'x-shopify-api-version':'2026-07'}});
    if(cartMode==='ambiguous')throw Error('synthetic lost response');
    if(cartMode==='http-denied'||cartMode==='http-throttled')return new Response('private-provider-message',{status:cartMode==='http-denied'?403:429,
     headers:{'x-shopify-api-version':'2026-10','x-request-id':'05185397-bb4e-4a80-9c67-e986fc5abb12'}});
@@ -116,7 +117,7 @@ test('private route rejects missing auth, other actor/workspace, invalid input, 
   assert.equal((await f.call({},{params:{id:'invalid'}})).code,400);
   for(const bad of [{workspaceUserId:'tenant-b',actorUserId:'tenant-b'},{...auth,actorUserId:'tenant-b'}])assert.equal((await f.call({},{auth:bad})).code,404);
   await f.db.update(users).set({email:'other@example.invalid'}).where(eq(users.id,id));assert.equal((await f.call()).code,404);
-  await f.db.update(users).set({email:'marketing@whachatcrm.com'}).where(eq(users.id,id));
+  await f.db.update(users).set({email:'pilot-owner@example.invalid'}).where(eq(users.id,id));
   await f.db.update(aiTestSessions).set({expiresAt:new Date(0)}).where(eq(aiTestSessions.id,f.session.id));assert.equal((await f.call()).code,404);
   await f.db.update(aiTestSessions).set({expiresAt:new Date(Date.now()+600000),leaseUntil:new Date(Date.now()+30000)}).where(eq(aiTestSessions.id,f.session.id));assert.equal((await f.call()).code,409);
   await f.db.update(aiTestSessions).set({leaseUntil:null}).where(eq(aiTestSessions.id,f.session.id));
@@ -169,11 +170,11 @@ test('private readiness honors an existing consumed dispatch and the same durabl
  }finally{await f.cleanup();}
 });
 
-async function bridgeFixture() {
+async function bridgeFixture(second=false) {
  const f=await fixture();
  Object.assign(f.configured,{SHOPIFY_STOREFRONT_TEST_TOKEN:'synthetic-storefront-credential',SHOPIFY_STOREFRONT_TEST_TOKEN_KIND:'private',SHOPIFY_STOREFRONT_TEST_SHOP:SHOP});
  let enabled=true;const diagnostics:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic[]=[];
- const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch,executionDiagnostic:(event:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic)=>{diagnostics.push(event);}};
+ const deps={db:f.db,entitled:f.entitled,env:f.configured,requestFor:f.requestFor,storefrontFetch:f.storefrontFetch,secondExecutionEnabled:()=>second,executionDiagnostic:(event:import("../server/shopping/checkout/executionDiagnostics").ExecutionDiagnostic)=>{diagnostics.push(event);}};
  const bridge=createPrivateCartHandoff({...deps,executionEnabled:()=>enabled});
  const prepare=()=>bridge.prepare(auth,f.session.id,'authenticated-fixture-session');
  const approval=(request:any)=>({requestId:request.requestId,scopeSha256:request.scopeSha256,expiresAt:request.expiresAt,confirmation:PRIVATE_CART_CONFIRMATION});
@@ -432,7 +433,7 @@ test('diagnostic-only source gate: execution remains disabled and unauthorized o
   f.configured.RAILWAY_ENVIRONMENT_NAME='production';
   await f.db.update(users).set({email:'other@example.invalid'}).where(eq(users.id,id));
   assert.equal((await f.call(body,routePatch)).code,404);
-  await f.db.update(users).set({email:'marketing@whachatcrm.com'}).where(eq(users.id,id));
+  await f.db.update(users).set({email:'pilot-owner@example.invalid'}).where(eq(users.id,id));
   assert.equal((await f.call(body,{...routePatch,sessionID:null})).code,403);
   await f.db.update(aiTestSessions).set({expiresAt:new Date(0)}).where(eq(aiTestSessions.id,f.session.id));
   assert.equal((await f.call(body,routePatch)).code,404);
@@ -493,5 +494,115 @@ test('stage diagnostics separate pre-claim price rejection from uncertain claim 
   assert.equal(await f.claims(),1);assert.equal(f.creates(),0);
   const last=f.diagnostics.at(-1)!;assert.equal(last.stage,'claim_commit');assert.equal(last.claim,'unknown');assert.equal(last.dispatchStarted,false);
   assert.doesNotMatch(JSON.stringify(f.diagnostics),/lost SQL|private value/);
+ }finally{await f.cleanup();}
+});
+
+
+async function secondFixture() {
+ const f=await bridgeFixture(true);
+ await f.pg.exec(readFileSync('migrations/0115_private_cart_second_authorization.sql','utf8'));
+ f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY=Buffer.alloc(32,9).toString('base64');
+ // Seed a synthetic consumed original. Never run this fixture against a remote database.
+ const legacy=createPrivateCartHandoff({...f.deps,secondExecutionEnabled:()=>false,executionEnabled:()=>true});
+ const original=await legacy.prepare(auth,f.session.id,'authenticated-fixture-session');
+ await f.pg.query('UPDATE shopify_checkout_admin_tests SET approved_at=now(),claimed_at=now() WHERE request_id=$1',[original.requestId]);
+ const grant=crypto.randomUUID();
+ await f.pg.query(`INSERT INTO shopify_private_cart_second_authorization
+  (attempt_number,authorization_id,original_request_id,workspace_id,operator_id,shop,integration_id,installation_digest,approved_by,approval_reference,expires_at)
+  SELECT 2,$1,request_id,workspace_id,operator_id,shop,integration_id,installation_digest,operator_id,'synthetic-explicit-second-approval',now()+interval '1 hour'
+  FROM shopify_checkout_admin_tests WHERE request_id=$2`,[grant,original.requestId]);
+ return {...f,grant,original};
+}
+test('second attempt stays default-denied and cannot activate through a request body or ordinary configuration',async()=>{
+ const {PRIVATE_CART_SECOND_EXECUTION_ENABLED}=await import('../server/aiTestChat/secondCartAuthorization');
+ assert.equal(PRIVATE_CART_SECOND_EXECUTION_ENABLED,false);
+ const f=await secondFixture();try{
+  const request=await f.prepare();const prod=createPrivateCartHandoff({...f.deps,secondExecutionEnabled:()=>false});
+  await assert.rejects(prod.execute(auth,f.session.id,'authenticated-fixture-session',f.approval(request)),/execution_disabled/);
+  await assert.rejects(f.execute({...request,scopeSha256:'0'.repeat(64)}));
+  await assert.rejects(f.bridge.execute({...auth,actorUserId:'not-owner'},f.session.id,'authenticated-fixture-session',f.approval(request)));
+  await assert.rejects(f.bridge.execute(auth,f.session.id,'other-http-session',f.approval(request)));
+  assert.equal(f.creates(),0);assert.equal(await f.claims(),1);
+ }finally{await f.cleanup();}
+});
+for(const mode of ['success','ambiguous','mismatch','status-failed','graphql-partial','http-denied','version-mismatch'] as const)
+test(`second guarded attempt ${mode}: original unchanged, one new claim, no replay, encrypted durable receipt`,async()=>{
+ const f=await secondFixture();try{
+  const before=(await f.pg.query('SELECT * FROM shopify_checkout_admin_tests WHERE request_id=$1',[f.original.requestId])).rows[0];
+  const request=await f.prepare();f.cartMode(mode);
+  if(mode==='success')assert.equal((await f.execute(request)).cartCreated,true);else await assert.rejects(f.execute(request));
+  assert.equal(f.creates(),1);assert.equal(await f.claims(),1);
+  const row=(await f.pg.query('SELECT * FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.equal(row.request_id,request.requestId);assert.ok(row.claimed_at);assert.equal(row.scope_digest,request.scopeSha256);
+  assert.equal(!!row.encrypted_receipt,['success','mismatch','status-failed','graphql-partial','version-mismatch'].includes(mode));
+  assert.equal(!!row.verified_at,mode==='success');assert.ok(row.diagnostic);assert.ok(row.diagnostic.events.length>0);
+  if(mode==='http-denied')assert.ok(row.diagnostic.events.some((e:any)=>e.operation==='create'&&e.shopifyRequestId==='05185397-bb4e-4a80-9c67-e986fc5abb12'));
+  assert.doesNotMatch(JSON.stringify(row),/fixture-secret|checkoutUrl|providerCartId|synthetic-storefront/);
+  if(row.encrypted_receipt){
+   const {privateCartReceiptCodec}=await import('../server/aiTestChat/secondCartAuthorization');
+   const codec=privateCartReceiptCodec(f.configured);
+   assert.ok(codec.open(row.encrypted_receipt,`${f.grant}:${request.requestId}`).providerCartId);
+   assert.throws(()=>codec.open(row.encrypted_receipt,`${f.grant}:other-request`));
+  }
+  await assert.rejects(f.execute(request));await assert.rejects(f.prepare());assert.equal(f.creates(),1);
+  assert.deepEqual((await f.pg.query('SELECT * FROM shopify_checkout_admin_tests WHERE request_id=$1',[f.original.requestId])).rows[0],before);
+ }finally{await f.cleanup();}
+});
+test('second attempt missing receipt key, revoked authorization and changed price never claim or dispatch',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');
+  delete f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY;await assert.rejects(f.execute(request),/receipt_setup/);
+  f.configured.SHOPPING_CHECKOUT_RECEIPT_KEY=Buffer.alloc(32,9).toString('base64');
+  f.provider(200,true);await assert.rejects(f.execute(request));f.provider(200);
+  await f.pg.exec("UPDATE shopify_private_cart_second_authorization SET revoked_at=now()");
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);
+  assert.equal((await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0].claimed_at,null);
+ }finally{await f.cleanup();}
+});
+test('second attempt status persistence failure retains encrypted receipt and permanent claim; no mutation retry',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');const execute=f.db.execute.bind(f.db);let receiptSaved=false;
+  (f.db as any).execute=async(query:any)=>{
+   if(receiptSaved)throw Error('synthetic database unavailable');
+   const result=await execute(query);
+   const row=(await f.pg.query('SELECT encrypted_receipt FROM shopify_private_cart_second_authorization')).rows[0];
+   if(row?.encrypted_receipt)receiptSaved=true;
+   return result;
+  };
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),1);
+  const row=(await f.pg.query('SELECT claimed_at,encrypted_receipt FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.ok(row.claimed_at);assert.ok(row.encrypted_receipt);
+ }finally{await f.cleanup();}
+});
+test('second claim lost acknowledgement is permanently consumed with durable checkpoint and zero provider mutations',async()=>{
+ const f=await secondFixture();try{
+  const request=await f.prepare();f.cartMode('success');const execute=f.db.execute.bind(f.db);let lost=false;
+  (f.db as any).execute=async(query:any)=>{
+   const result=await execute(query);
+   const row=(await f.pg.query('SELECT claimed_at FROM shopify_private_cart_second_authorization')).rows[0];
+   if(row?.claimed_at&&!lost){lost=true;throw Error('synthetic lost claim acknowledgement');}
+   return result;
+  };
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);assert.equal(await f.claims(),1);
+  const row=(await f.pg.query('SELECT claimed_at,diagnostic FROM shopify_private_cart_second_authorization')).rows[0];
+  assert.ok(row.claimed_at);assert.equal(row.diagnostic.stage,'claim_commit');assert.equal(row.diagnostic.dispatchStarted,false);
+  await assert.rejects(f.execute(request));assert.equal(f.creates(),0);
+ }finally{await f.cleanup();}
+});
+
+test('second inspection prefers the winning claim and reports shared consumption across another HTTP session',async()=>{
+ const f=await secondFixture();try{
+  const winner=await f.prepare();await f.prepare();
+  const other=await f.bridge.prepare(auth,f.session.id,'other-authenticated-http-session');
+  f.cartMode('success');await f.execute(winner);
+  const current=await f.bridge.inspect(auth,f.session.id,'authenticated-fixture-session');
+  assert.equal(current.requestId,winner.requestId);assert.equal(current.status,'cart_verified');
+  assert.equal(current.dispatchClaimed,true);assert.equal((current as any).receiptAvailable,true);
+  assert.equal((current as any).authorizationConsumedByAnotherRequest,false);
+  const separate=await f.bridge.inspect(auth,f.session.id,'other-authenticated-http-session');
+  assert.equal(separate.requestId,other.requestId);assert.equal(separate.status,'authorization_consumed_by_another_request');
+  assert.equal(separate.dispatchClaimed,true);assert.equal(separate.approved,false);
+  assert.equal((separate as any).authorizationConsumedByAnotherRequest,true);assert.equal(f.creates(),1);
+  assert.doesNotMatch(JSON.stringify([current,separate]),/checkoutUrl|providerCartId|fixture-secret|synthetic-storefront/);
  }finally{await f.cleanup();}
 });

@@ -22,6 +22,7 @@ const fixedErrors=new Set([
   "exact_liquid_quantity_one_required","selected_variant_required","turn_processing","checkout_installation_changed",
   "shopping_entitlement_required","private_cart_expired_changed_or_consumed","selection_changed",
   "development_store_dispatch_already_consumed","private_cart_failed_closed_do_not_retry",
+  "private_cart_second_authorization_unavailable","private_cart_second_authorization_required","private_cart_receipt_setup_required",
 ]);
 function classifyFailureReason(error:unknown):string {
   if(error instanceof CheckoutVerificationError) {

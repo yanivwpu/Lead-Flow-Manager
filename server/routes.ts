@@ -2,6 +2,7 @@ import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes"
 import { aiService } from "./aiService";
 import { registerTestChatRoutes } from "./aiTestChat/routes";
 import { createPrivateCartHandoff, PRIVATE_CART_EXECUTION_ENABLED } from "./aiTestChat/cartHandoff";
+import { PRIVATE_CART_SECOND_EXECUTION_ENABLED } from "./aiTestChat/secondCartAuthorization";
 import { createPrivateCheckoutPreflight } from "./aiTestChat/checkoutPreflight";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
@@ -11201,7 +11202,7 @@ export async function registerRoutes(
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
         checkoutPreflightAvailable: testOnlyShopping && entitled,
         checkoutCartTestAvailable: testOnlyShopping && entitled && actorId===userId,
-        checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && PRIVATE_CART_EXECUTION_ENABLED,
+        checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && (PRIVATE_CART_EXECUTION_ENABLED || PRIVATE_CART_SECOND_EXECUTION_ENABLED),
         shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && entitled,
         shoppingTestOnly: testOnlyShopping && entitled,
         liveShoppingEnabled: savedShopping.enabled && savedShopping.allowedChannels.includes("webchat") && entitled,

@@ -27,12 +27,20 @@ const CART_FIELDS = `id checkoutUrl totalQuantity lines(first:2) { nodes { quant
 const CREATE = `mutation PrepareCheckout($input:CartInput!) { cartCreate(input:$input) { cart { ${CART_FIELDS} } userErrors { code } warnings { code } } }`;
 const STATUS = `query CheckoutStatus($id:ID!) { cart(id:$id) { ${CART_FIELDS} } }`;
 /** No Admin token, no automatic retry, no redirects, bounded timeout, bounded diagnostics. */
-export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch; diagnostic?:ProviderObserver }): CommerceCheckoutProvider {
+export function createShopifyCheckoutProvider(config: { shop: string; credential: StorefrontCredential; attestedCheckoutHost?:string; fetch?: typeof fetch; diagnostic?:ProviderObserver; captureReceipt?:(candidate:CheckoutReceipt)=>Promise<void> }): CommerceCheckoutProvider {
   const shop = normalizeShopifyShopDomain(config.shop);
   if (!shop || !config.credential || (config.credential.kind !== "tokenless" && (!config.credential.token || !["public", "private"].includes(config.credential.kind)))) throw new CheckoutError("setup_required");
   const requestFetch = config.fetch ?? fetch;
   let nextRequestAt = 0;
   const emit=(event:ProviderDiagnostic)=>observeProvider(config.diagnostic,event);
+  async function captureCartEvidence(body:any) {
+    const candidate=body?.data?.cartCreate?.cart;
+    if(typeof candidate?.id!=="string"||!candidate.id.startsWith("gid://shopify/Cart/"))return;
+    emit({operation:"create",event:"cart_reported"});
+    // Untrusted encrypted evidence; never a validated receipt or navigation permission.
+    if(config.captureReceipt&&candidate.id.length<=8192&&!(typeof candidate.checkoutUrl==="string"&&candidate.checkoutUrl.length>4096))
+      await config.captureReceipt({providerCartId:candidate.id,checkoutUrl:typeof candidate.checkoutUrl==="string"?candidate.checkoutUrl:"",paymentStatus:"unknown"});
+  }
   async function request(query:string,variables:Record<string,unknown>,mutation=false):Promise<any> {
     const operation=mutation?"create":query===STATUS?"status":"verify";
     emit({operation,event:"request_started"});
@@ -51,6 +59,12 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       });
     } catch (error) { throw new CheckoutError(mutation ? "ambiguous" : "unavailable",30_000,signal.aborted ? "transport_timeout" : transportDetail(error)); }
     emit({operation,event:"response_received",httpStatus:response.status,shopifyRequestId:shopifyDiagnosticRequestId(response.headers.get("x-request-id"))});
+    let body:any,bodyParsed=false,bodyReadError:unknown;
+    const evidenceFirst=mutation&&!!config.captureReceipt;
+    if(evidenceFirst){
+      try{body=await response.json();bodyParsed=true;}catch(error){bodyReadError=error;}
+      if(bodyParsed)await captureCartEvidence(body);
+    }
     if (response.status === 429) {
       emit({operation,event:"provider_rejected",reason:"http_throttled"});
       const delay = Number(response.headers.get("retry-after"));
@@ -65,13 +79,11 @@ export function createShopifyCheckoutProvider(config: { shop: string; credential
       response.status>=400 && response.status<500 ? "http_client_error" : "http_unexpected_status");
     const html = /^text\/html(?:;|$)/i.test(response.headers.get("content-type") ?? "");
     if (response.headers.get("x-shopify-api-version") !== STOREFRONT_API_VERSION) throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,html ? "http_html_response" : "api_version_mismatch");
-    let body: any;
-    try { body = await response.json(); } catch (error) { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,
+    try { if(evidenceFirst){if(!bodyParsed)throw bodyReadError;}else body = await response.json(); } catch (error) { throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,
       signal.aborted || transportDetail(error)==="transport_timeout" ? "response_body_timeout" :
       error instanceof SyntaxError ? (html ? "http_html_response" : "invalid_json") : "response_body_read_failed"); }
+    if(mutation&&!evidenceFirst)await captureCartEvidence(body);
     if (body?.errors?.length) {
-      if(mutation && typeof body?.data?.cartCreate?.cart?.id==="string" && body.data.cartCreate.cart.id.startsWith("gid://shopify/Cart/"))
-        emit({operation,event:"cart_reported"});
       emit({operation,event:"provider_rejected",reason:"graphql_errors"});
       if (!body.data && body.errors.every((e:any)=>e?.extensions?.code === "THROTTLED")) { nextRequestAt=Date.now()+60_000; throw new CheckoutError("throttled",60_000); }
       throw new CheckoutError(mutation ? "ambiguous" : "invalid_response",30_000,"graphql_error");

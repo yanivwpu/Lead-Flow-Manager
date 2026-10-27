@@ -10,6 +10,7 @@ const selection = z.object({
 });
 const request = z.object({
   requestId:z.string().uuid(),scopeSha256:z.string().regex(/^[a-f0-9]{64}$/),expiresAt:z.string().datetime(),
+  authorizationId:z.string().uuid().optional(),
   selection,inventory:z.object({tracked:z.boolean(),quantity:z.number().int().nullable(),verifiedAt:z.string().datetime()}),
   quantityRule:z.object({minimum:z.number().int().positive(),maximum:z.number().int().positive().nullable(),increment:z.number().int().positive()}),
   cartCreated:z.literal(false),cartCreationEnabled:z.literal(false),
@@ -31,6 +32,7 @@ export function privateCartServerTime(date:string|null, fallback=Date.now()) {
   return Number.isFinite(value)?value:fallback;
 }
 export function cartTestPreparationAllowed(chat:TestChatView,proof:PrivateCheckoutPreflight|undefined,now=Date.now()) {
+  if(proof?.ready&&proof.authorizationId!==undefined&&!z.string().uuid().safeParse(proof.authorizationId).success)return false;
   if(!proof?.ready || chat.state.step!=="confirming" || !chat.state.selected || chat.state.quantity!==1 ||
     !Number.isFinite(Date.parse(chat.expiresAt)) || Date.parse(chat.expiresAt)<=now || !selection.safeParse(proof.selection).success)return false;
   const selected=chat.state.selected;
@@ -51,7 +53,7 @@ export async function preparePrivateCartTest(chat:TestChatView,proof:PrivateChec
   const a=result.selection,b=proof.selection;
   if(remaining<=0||remaining>5*60_000+1000||age< -1000||age>60_000)
     throw new PrivateCartResponseError(response.data,"response_timing");
-  if(a.productId!==b.productId||a.variantId!==b.variantId||a.quantity!==b.quantity||Number(a.price)!==Number(b.price)||
+  if(result.authorizationId!==proof.authorizationId||a.productId!==b.productId||a.variantId!==b.variantId||a.quantity!==b.quantity||Number(a.price)!==Number(b.price)||
     a.currency!==b.currency||JSON.stringify(a.options)!==JSON.stringify(b.options))
     throw new PrivateCartResponseError(response.data,"selection_changed");
   return result; // zod strips unknown fields, including server/session/credential additions.

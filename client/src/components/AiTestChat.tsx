@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
 import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, privateCartServerTime, PrivateCartResponseError, type PrivateCartTestSummary, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
-import { createPrivateCartTestRunner, privateCartConfirmationAllowed } from "@/lib/aiTestCartExecution";
+import { createPrivateCartTestRunner, privateCartConfirmationAllowed, privateCartAttemptKey } from "@/lib/aiTestCartExecution";
 import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,12 +35,11 @@ export function AiTestChat() {
 function Console() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const attemptKey=`private-cart-ui-attempt:v1:${user?.id}:whachatcrm.myshopify.com`;
-  const [cartAttempted,setCartAttempted]=useState(()=>{try{return !!sessionStorage.getItem(attemptKey);}catch{return true;}});
+  const [attemptedKey,setAttemptedKey]=useState<string>();
   const [cartConfirmation,setCartConfirmation]=useState<{proof:PrivateCheckoutPreflight;version:string}>();
   const [cartConsent,setCartConsent]=useState(false),[cartFailure,setCartFailure]=useState(false);
   const [privateCheckoutUrl,setPrivateCheckoutUrl]=useState<string>();
-  const cartRunner=useRef(createPrivateCartTestRunner());
+  const cartRunners=useRef(new Map<string,ReturnType<typeof createPrivateCartTestRunner>>());
   const cartAbort=useRef<AbortController|undefined>(undefined);
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
@@ -62,6 +61,8 @@ function Console() {
   const selectionVersion = useRef("");
   selectionVersion.current = JSON.stringify([open,chat?.id,chat?.state.updatedAt,chat?.state.selected,chat?.state.quantity]);
   const [checkoutResult,setCheckoutResult] = useState<PrivateCheckoutPreflight>();
+  const attemptKey=privateCartAttemptKey(user?.id,checkoutResult);
+  const cartAttempted=attemptedKey===attemptKey||(()=>{try{return !!sessionStorage.getItem(attemptKey);}catch{return true;}})();
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(false);
@@ -95,10 +96,11 @@ function Console() {
     const controller=new AbortController();cartAbort.current=controller;
     const generation=requestGeneration.current;
     const current=()=>mounted.current&&!controller.signal.aborted&&selectionVersion.current===confirmation.version&&requestGeneration.current===generation;
-    setCartAttempted(true);setBusy(true);setCartFailure(false);setPrivateCheckoutUrl(undefined);
+    setAttemptedKey(attemptKey);setBusy(true);setCartFailure(false);setPrivateCheckoutUrl(undefined);
     setPrepared(undefined);setReportedRequest(undefined);setCartConfirmation(undefined);setCartConsent(false);
     try {
-      const result=await cartRunner.current({enabled:diagnostics.checkoutCartExecutionEnabled,confirmed:cartConsent,chat,proof:confirmation.proof,
+      const runner=cartRunners.current.get(attemptKey)??createPrivateCartTestRunner();cartRunners.current.set(attemptKey,runner);
+      const result=await runner({enabled:diagnostics.checkoutCartExecutionEnabled,confirmed:cartConsent,chat,proof:confirmation.proof,
         current,now:serverNow,claimLocalAttempt:()=>{
           try {if(sessionStorage.getItem(attemptKey))return false;sessionStorage.setItem(attemptKey,"attempted-do-not-retry");return true;}
           catch{return false;}

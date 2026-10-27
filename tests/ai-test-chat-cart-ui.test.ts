@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, PrivateCartResponseError, privateCartServerTime } from '../client/src/lib/aiTestCartPreparation';
 import type { TestChatView, PrivateCheckoutPreflight } from '../shared/aiTestChat';
-const stamp=Date.parse('2026-10-26T04:30:12Z');
+const stamp=Date.parse('2024-01-01T12:00:00Z');
 const selection={shop:'whachatcrm.myshopify.com',productId:'gid://shopify/Product/10108114174234',variantId:'gid://shopify/ProductVariant/51638769221914',quantity:1 as const,price:'749.95',currency:'USD',options:[{name:'Title',value:'Default Title'}]};
 const inventory={tracked:true,quantity:50,verifiedAt:new Date(stamp).toISOString()};
 const proof:PrivateCheckoutPreflight={ready:true,cartCreated:false,cartCreationEnabled:false,credentialKind:'private',selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},selectionSha256:'a'.repeat(64),sessionBinding:'b'.repeat(64),operatorCartAccessConfigured:false,nextAction:'separate_cart_approval_required'};
-const chat={id:'b914b9e8-20ab-4941-84be-91b727a6b612',testMode:true,channel:'webchat',expiresAt:new Date(stamp+600000).toISOString(),transcript:[],state:{step:'confirming',quantity:1,selected:{productId:'owned-product',variantId:'owned-variant',price:'749.95',currency:'USD',options:selection.options}}} as TestChatView;
+const chat={id:'10000000-0000-4000-8000-000000000011',testMode:true,channel:'webchat',expiresAt:new Date(stamp+600000).toISOString(),transcript:[],state:{step:'confirming',quantity:1,selected:{productId:'owned-product',variantId:'owned-variant',price:'749.95',currency:'USD',options:selection.options}}} as TestChatView;
 const response=(data:unknown,serverStamp=stamp)=>({data,serverDate:new Date(serverStamp).toUTCString()});
-const request=()=>({requestId:'1d7b312f-1a14-4ea6-88a8-6f97e02fa510',scopeSha256:'c'.repeat(64),expiresAt:new Date(stamp+300000).toISOString(),selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},cartCreated:false,cartCreationEnabled:false});
+const request=()=>({requestId:'20000000-0000-4000-8000-000000000011',scopeSha256:'c'.repeat(64),expiresAt:new Date(stamp+300000).toISOString(),selection,inventory,quantityRule:{minimum:1,maximum:null,increment:1},cartCreated:false,cartCreationEnabled:false});
 test('uses current saved session and only empty-body preparation; sanitized response excludes unexpected fields at every level',async()=>{
  const calls:any[]=[];
  const result=await preparePrivateCartTest(chat,proof,async(path,body)=>{calls.push({path,body});return response({...request(),token:'synthetic-secret',checkoutUrl:'https://example.test/private',sessionDigest:'hidden',selection:{...selection,credential:'hidden'},inventory:{...inventory,internal:'hidden'}});},()=>stamp);
@@ -126,4 +126,24 @@ test('ambiguous/error/invalid execution responses remain terminal and never caus
   const run=createPrivateCartTestRunner();await assert.rejects(run(f.input));await assert.rejects(run(f.input));assert.equal(f.calls.length,2);
  }
  const f=executionInput({claimLocalAttempt:()=>false});await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,0);
+});
+
+test('second authorization gets a separate client marker without clearing original; preparation cannot substitute authorization',async()=>{
+ const {privateCartAttemptKey}=await import('../client/src/lib/aiTestCartExecution');
+ const authorizationId='ad88a411-429a-455b-8de1-a661938e637e';
+ const authorized={...proof,authorizationId} as PrivateCheckoutPreflight;
+ const original=privateCartAttemptKey('owner',proof),second=privateCartAttemptKey('owner',authorized);
+ assert.equal(original,'private-cart-ui-attempt:v1:owner:whachatcrm.myshopify.com');
+ assert.equal(second,`${original}:authorization:${authorizationId}`);
+ assert.notEqual(privateCartAttemptKey('other',authorized),second);
+ const markers=new Map([[original,'consumed-original']]);markers.set(second,'attempted-do-not-retry');
+ assert.equal(markers.get(original),'consumed-original');assert.equal(markers.size,2);
+ const f=executionInput({proof:authorized});
+ f.input.post=async(path:string,body:any)=>{f.calls.push({path,body});return response(request());};
+ await assert.rejects(createPrivateCartTestRunner()(f.input));assert.equal(f.calls.length,1);
+ assert.ok(f.calls[0].path.endsWith('/checkout-handoff-request'));
+ const valid=executionInput({proof:authorized});
+ valid.input.post=async(path:string,body:any)=>{valid.calls.push({path,body});return response(path.endsWith('/checkout-handoff-request')?{...request(),authorizationId}:receipt());};
+ await createPrivateCartTestRunner()(valid.input);assert.equal(valid.calls.length,2);
+ assert.equal(privateCartConfirmationAllowed(chat,{...proof,authorizationId:'invalid'} as PrivateCheckoutPreflight,stamp),false);
 });

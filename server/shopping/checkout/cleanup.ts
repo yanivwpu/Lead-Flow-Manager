@@ -2,6 +2,9 @@ import { sql } from "drizzle-orm";
 import type { CatalogDb } from "../../salesCatalog/commerceStore";
 /** Runs under the existing uninstall/shop-redaction advisory lock. Tolerates pre-rollout schemas. */
 export async function cleanupCheckout(tx:CatalogDb,shop:string) {
+ const second=await tx.execute(sql`SELECT to_regclass('public.shopify_private_cart_second_authorization') AS name`);
+ if(second.rows[0]?.name)await tx.execute(sql`UPDATE public.shopify_private_cart_second_authorization
+   SET encrypted_receipt=NULL,revoked_at=COALESCE(revoked_at,now()),diagnostic=NULL WHERE shop=${shop}`);
  const owners=sql`SELECT user_id FROM catalog_sources WHERE shop=${shop} UNION SELECT id FROM users WHERE shopify_shop=${shop}`;
  for(const table of ["checkout_preparation_attempts","checkout_provider_gates"] as const) {
   const found=await tx.execute(sql`SELECT to_regclass(${table}) AS name`);
