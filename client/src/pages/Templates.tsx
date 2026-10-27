@@ -68,6 +68,7 @@ import {
 } from "@shared/rgePaths";
 import { cn } from "@/lib/utils";
 import { GROWTH_ENGINE_CARDS, sortGrowthEnginesCatalog, type GrowthEngineCardModel } from "@/lib/growthEnginesCatalog";
+import { useEcommercePilot } from "@/lib/ecommercePilot";
 import {
   PROSPECT_AI_PATH,
   useProspectAiStatus,
@@ -638,6 +639,7 @@ export function GrowthEngineGalleryCard({
 
 function GrowthEnginesTab() {
   const [, setLocation] = useLocation();
+  const { available: ecommercePilotAvailable } = useEcommercePilot();
   const showSyntheticPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("growthEnginePreview") === "1";
   const rgeQuery = useQuery<{
     entitlement?: { status?: RgeEntitlementStatus; purchasedAt?: string | null; onboardingSubmittedAt?: string | null };
@@ -700,7 +702,12 @@ function GrowthEnginesTab() {
                 })),
                 { engine: GROWTH_ENGINE_CARDS.find((engine) => engine.status === "coming_soon")!, fixture: null },
               ]
-            : sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => ({ engine, fixture: null })))
+            : sortGrowthEnginesCatalog(GROWTH_ENGINE_CARDS).map((engine) => ({
+                engine: engine.slug === "ecommerce-growth-engine" && ecommercePilotAvailable
+                  ? { ...engine, status: "available" as const, detailHref: "/ecommerce-growth-engine", ctaLabel: "View preview" }
+                  : engine,
+                fixture: null,
+              })))
             .map(({ engine, fixture }) => (
             <GrowthEngineGalleryCard
               key={engine.slug}
