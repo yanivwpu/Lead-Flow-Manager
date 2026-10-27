@@ -68,6 +68,7 @@ export type ProbeInput = {
   verify: (products: z.infer<typeof product>[]) => Promise<{price:boolean;availability:boolean}>;
   request: CatalogRequest;
   fetcher?: typeof fetch;
+  haltOnProfileFailure?: boolean;
 };
 export async function runAgenticProbe(input: ProbeInput): Promise<ShopifyAgenticProbe> {
   const result: ShopifyAgenticProbe = {enabled:true,readOnly:true,cartCreationEnabled:false,checkoutEnabled:false,diagnostics:[]};
@@ -96,7 +97,7 @@ export async function runAgenticProbe(input: ProbeInput): Promise<ShopifyAgentic
     for(const [label,key] of [["ucp_catalog_search","dev.ucp.shopping.catalog.search"],["ucp_catalog_lookup","dev.ucp.shopping.catalog.lookup"],["ucp_checkout_advertised","dev.ucp.shopping.checkout"]])
       add(label,Array.isArray(capabilities[key])&&capabilities[key].length ? "supported" : "unsupported",
         Array.isArray(capabilities[key])&&capabilities[key].length ? "advertised_only_not_execution_verified" : "not_advertised");
-  } catch(error) { failure("ucp_profile",error); }
+  } catch(error) { failure("ucp_profile",error); if(input.haltOnProfileFailure)return result; }
   const profile=agentProfile(input.profile);
   if(!profile) { add("mcp_authentication","configuration_required","server_agent_profile_required"); return result; }
   const meta={"ucp-agent":{profile}};

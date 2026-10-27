@@ -1487,7 +1487,7 @@
     "agenticProbeReadOnly": "Diagnóstico de solo lectura. El carrito, el pago, los pedidos y los mensajes a clientes permanecen desactivados.",
     "agenticProbeRun": "Comprobar compatibilidad",
     "agenticProbeDisabled": "La prueba de compatibilidad está desactivada hasta su revisión.",
-    "agenticProbeUnavailable": "La comprobación no está disponible. Inténtalo más tarde.",
+    "agenticProbeUnavailable": "El resultado no está disponible. No repitas este intento.",
     "agenticProbeComparison": "Actual: {{existingProducts}} productos. Estándar: {{standardProducts}}. Coincidentes: {{overlappingProducts}}.",
 
     "approveCreateCart": "Aprobar y crear carrito de prueba",

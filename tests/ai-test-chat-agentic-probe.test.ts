@@ -145,7 +145,7 @@ test("HTTP route retains auth/Brain/session/same-origin JSON and strict empty in
     const handlers:any={};let allowed=true,authorized=true,invocations=0;
     const app=Object.fromEntries(["get","post","delete"].map(m=>[m,(p:string,h:any)=>{handlers[m+" "+p]=h;}]));
     registerTestChatRoutes(app as any,{db:f.db,authorize:async(req,res)=>{if(!authorized){res.status(401).json({error:"unauthorized"});return null;}return req.auth??auth;},access:async()=>({allowed}),generate:null as any,diagnostics:async()=>({}),agenticProbe:async()=>{invocations++;return {enabled:false};}});
-    async function call(patch:any={}){let status=200;const res:any={set:()=>res,status:(s:number)=>{status=s;return res;},json:()=>res};await handlers['post /api/ai/test-chat/:id/agentic-compatibility']({params:{id:f.session.id},sessionID:"s",is:()=>true,get:()=>undefined,body:{},...patch},res);return status;}
+    async function call(patch:any={}){let status=200;const res:any={set:()=>res,status:(s:number)=>{status=s;return res;},json:()=>res};await handlers['post /api/ai/test-chat/:id/agentic-compatibility']({params:{id:f.session.id},sessionID:"s",is:()=>true,get:(name:string)=>name==="origin"?"https://app.whachatcrm.com":undefined,body:{},...patch},res);return status;}
     authorized=false;assert.equal(await call(),401);authorized=true;allowed=false;assert.equal(await call(),403);allowed=true;
     for(const patch of [{sessionID:null},{is:()=>false},{get:()=>"cross-site"}])assert.equal(await call(patch),403);
     assert.equal(await call({body:{shop:"other.myshopify.com",tool:"create_cart"}}),400);

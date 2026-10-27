@@ -47,6 +47,8 @@ function Console() {
   const [open, setOpen] = useState(false),
     [chat, setChat] = useState<TestChatView>(),
     [diagnostics, setDiagnostics] = useState<Diagnostics>();
+  const probeAttemptKey=`agentic-probe-one-shot:v1:${user?.id}`;
+  const probeAttempted=useRef((()=>{try{return !!sessionStorage.getItem(probeAttemptKey);}catch{return true;}})());
   const [probe,setProbe] = useState<ShopifyAgenticProbe>();
   const [probeFailed,setProbeFailed] = useState(false);
   const [prepared,setPrepared] = useState<PrivateCartTestRequest>();
@@ -70,7 +72,9 @@ function Console() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(false);
   async function probeCompatibility() {
-    if (!chat || busy || !diagnostics?.agenticProbeEnabled) return;
+    if (!chat || busy || probeAttempted.current || !diagnostics?.agenticProbeEnabled) return;
+    probeAttempted.current=true;
+    try{sessionStorage.setItem(probeAttemptKey,"attempted-do-not-retry");}catch{setProbeFailed(true);return;}
     const id=chat.id, version=selectionVersion.current;
     setBusy(true); setProbe(undefined); setProbeFailed(false);
     try {
@@ -378,7 +382,7 @@ function Console() {
             <details>
               <summary>{t("testChat.agenticProbeTitle")}</summary>
               <p>{t("testChat.agenticProbeReadOnly")}</p>
-              <Button type="button" disabled={!diagnostics.agenticProbeEnabled||busy||!chat?.state.selected}
+              <Button type="button" disabled={!diagnostics.agenticProbeEnabled||probeAttempted.current||busy||!chat?.state.selected}
                 onClick={()=>void probeCompatibility()}>{t("testChat.agenticProbeRun")}</Button>
               {!diagnostics.agenticProbeEnabled && <p>{t("testChat.agenticProbeDisabled")}</p>}
               {probeFailed && <p role="alert">{t("testChat.agenticProbeUnavailable")}</p>}
