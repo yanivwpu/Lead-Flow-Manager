@@ -25,3 +25,10 @@ export function merchantWorkspaceActivated(value: Date | string | null | undefin
   const millis = value instanceof Date ? value.getTime() : Date.parse(value);
   return Number.isFinite(millis);
 }
+
+/** The mutation must be an explicit same-origin, empty JSON POST. */
+export function isMerchantActivationPost(origin: string | undefined, contentType: string | undefined, body: unknown, appOrigin: string): boolean {
+  if (!origin || origin !== appOrigin) return false;
+  if (contentType?.split(";")[0].trim().toLowerCase() !== "application/json") return false;
+  return !!body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 0;
+}
