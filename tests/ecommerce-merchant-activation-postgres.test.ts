@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import pg from "pg";
+import { Client } from "pg";
 
 test("merchant activation migration is installation-bound, unique and cascades on uninstall", async t => {
   const url = process.env.ECOMMERCE_TEST_DATABASE_URL;
   if (!url) { t.skip("Isolated PostgreSQL test database unavailable"); return; }
-  const client = new pg.Client({ connectionString: url });
+  const client = new Client({ connectionString: url });
   await client.connect();
   const schema = "merchant_activation_" + randomUUID().replace(/-/g, "");
   try {
