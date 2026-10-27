@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ShoppingActivityView } from "@/components/inbox/ShoppingActivity";
-import type { TestChatView, PrivateCheckoutPreflight } from "@shared/aiTestChat";
+import type { TestChatView, PrivateCheckoutPreflight, SecondCartReview } from "@shared/aiTestChat";
 type Diagnostics = {
   aiMode: string;
   shoppingEnabled: boolean;
@@ -60,6 +60,8 @@ function Console() {
   const requestGeneration = useRef(0);
   const selectionVersion = useRef("");
   selectionVersion.current = JSON.stringify([open,chat?.id,chat?.state.updatedAt,chat?.state.selected,chat?.state.quantity]);
+  const [secondReview,setSecondReview]=useState<SecondCartReview>();
+  const [secondReviewFailed,setSecondReviewFailed]=useState(false);
   const [checkoutResult,setCheckoutResult] = useState<PrivateCheckoutPreflight>();
   const attemptKey=privateCartAttemptKey(user?.id,checkoutResult);
   const cartAttempted=attemptedKey===attemptKey||(()=>{try{return !!sessionStorage.getItem(attemptKey);}catch{return true;}})();
@@ -130,6 +132,20 @@ function Console() {
       if(failure instanceof PrivateCartResponseError)setReportedRequest(failure.summary); }}
     finally {preparing.current=false;if(mounted.current)setBusy(false);}
   }
+  async function reviewSecondCart() {
+    if(!chat || busy || !diagnostics?.checkoutCartTestAvailable)return;
+    const version=selectionVersion.current,generation=++requestGeneration.current;
+    setBusy(true);setSecondReview(undefined);setSecondReviewFailed(false);
+    // A review can never supply the proof used by the prepare/execute controls.
+    setCheckoutResult(undefined);setCartConfirmation(undefined);setCartConsent(false);
+    try{
+      const response=await apiRequest("POST",`/api/ai/test-chat/${chat.id}/second-cart-review`,{});
+      observeServerTime(response);const result=await response.json();
+      if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setSecondReview(result);
+    }catch{if(mounted.current && selectionVersion.current===version && requestGeneration.current===generation)setSecondReviewFailed(true);}
+    finally{if(mounted.current)setBusy(false);}
+  }
+  useEffect(()=>{setSecondReview(undefined);setSecondReviewFailed(false);},[open,chat?.id,chat?.state.updatedAt]);
   async function checkCheckout() {
     if (!chat || busy) return;
     requestGeneration.current++;
@@ -267,6 +283,22 @@ function Console() {
             <p className="text-sm">{t("testChat.checkoutReadOnly")}</p>
             <Button variant="outline" disabled={busy || Date.parse(chat.expiresAt)<=now || chat.state.step!=="confirming" || !chat.state.selected}
               onClick={() => void checkCheckout()}>{t("testChat.checkoutReadiness")}</Button>
+            {diagnostics.checkoutCartTestAvailable && <details>
+              <summary>{t("testChat.secondReviewTitle")}</summary>
+              <p className="text-sm">{t("testChat.secondReviewScope")}</p>
+              <Button variant="outline" disabled={busy || Date.parse(chat.expiresAt)<=now || chat.state.step!=="confirming" || !chat.state.selected}
+                onClick={()=>void reviewSecondCart()}>{t("testChat.secondReviewRun")}</Button>
+              {secondReviewFailed && <p role="alert">{t("testChat.secondReviewUnavailable")}</p>}
+              {secondReview && <div role="status" className="text-sm">
+                <p>{t(`testChat.secondReviewState.${secondReview.status}`)}</p>
+                {secondReview.selection && <p>{secondReview.selection.currency} {secondReview.selection.price} × {secondReview.selection.quantity}</p>}
+                {secondReview.inventory && <>
+                  <p>{secondReview.inventory.quantity===null?t("testChat.checkoutInventoryUnknown"):t("testChat.checkoutInventory",{quantity:secondReview.inventory.quantity})}</p>
+                  <p>{t("testChat.checkoutVerifiedAt")}: {new Date(secondReview.inventory.verifiedAt).toLocaleTimeString()}</p>
+                </>}
+                <ul>{secondReview.checks.map(check=><li key={check.id}>{t(`testChat.secondReviewChecks.${check.id}`)}: {t(`testChat.secondReviewStatus.${check.status}`)}</li>)}</ul>
+              </div>}
+            </details>}
             {Date.parse(chat.expiresAt)<=now && <p role="status" className="text-sm">{t("testChat.checkoutSessionExpired")}</p>}
             {!diagnostics.checkoutCartExecutionEnabled && checkoutResult?.ready && cartTestPreparationAllowed(chat,checkoutResult,now) &&
               <Button variant="outline" disabled={busy || cartAttempted || !!prepareError || requestIsLive}
