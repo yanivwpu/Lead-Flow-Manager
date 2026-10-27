@@ -173,10 +173,6 @@ export const users = pgTable("users", {
   shopifySubscriptionStatus: text("shopify_subscription_status"), // active, cancelled, pending
   shopifyInstalledAt: timestamp("shopify_installed_at"),
   shopifyAIBrainEnabled: boolean("shopify_ai_brain_enabled").default(false),
-  /** Merchant workspace opt-in only: never enables carts, messaging, sync or order-support sending. */
-  ecommerceGrowthEngineActivatedAt: timestamp("ecommerce_growth_engine_activated_at"),
-  ecommerceGrowthEngineActivationShop: text("ecommerce_growth_engine_activation_shop"),
-  ecommerceGrowthEngineActivationIntegrationId: varchar("ecommerce_growth_engine_activation_integration_id"),
   /**
    * Shopify Admin GraphQL `shop.email` (store owner). Onboarding mail only.
    * Never copied onto users.email — synthetic `{slug}@shopify.whachatcrm.com` stays identity.
