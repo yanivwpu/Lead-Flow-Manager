@@ -1,4 +1,4 @@
-import { EcommercePilotBoundary } from "@/lib/ecommercePilot";
+import { useEcommerceMerchantActivationStatus, useActivateEcommerceMerchant } from "@/lib/ecommerceMerchantActivation";
 import { ArrowRight, CheckCircle2, CircleDot, ShoppingBag, Users, ClipboardCheck, LockKeyhole } from "lucide-react";
 import { Helmet } from "react-helmet";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +12,8 @@ import { SiteFooter } from "@/components/SiteFooter";
  */
 export function EcommerceGrowthEnginePreviewContent() {
   const { user } = useAuth();
+  const activation = useEcommerceMerchantActivationStatus();
+  const activate = useActivateEcommerceMerchant();
   const { i18n } = useTranslation();
   const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
   const translations = {
@@ -24,6 +26,10 @@ export function EcommerceGrowthEnginePreviewContent() {
   const tr = pageCopy[locale as keyof typeof pageCopy] || pageCopy.en;
   const setupPath = "/app/integrations?setup=shopify";
   const setupHref = user ? setupPath : `/auth?redirect=${encodeURIComponent(setupPath)}`;
+  const isActivated = activation.data?.activated === true && activation.data?.eligible === true;
+  const primaryHref = isActivated ? "/app/ecommerce-growth-engine" : setupHref;
+  const activateLabel = locale === "he" ? "הפעלת מנוע הצמיחה" : locale === "es" ? "Activar motor de crecimiento" : "Activate Growth Engine";
+  const openLabel = locale === "he" ? "פתיחת מנוע הצמיחה" : locale === "es" ? "Abrir motor de crecimiento" : "Open Growth Engine";
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-slate-900" data-testid="ecommerce-growth-engine-preview" lang={locale} dir={locale === "he" ? "rtl" : "ltr"}>
       <Helmet>
@@ -48,10 +54,24 @@ export function EcommerceGrowthEnginePreviewContent() {
                 {locale === "he" ? "חברו את החנות, רכזו לקוחות והזמנות ונהלו משימות מעקב במקום אחד. גלו את הכלים הקיימים ואת האוטומציות שבפיתוח." : locale === "es" ? "Conecta tu tienda, reúne clientes y pedidos, y organiza las tareas de seguimiento. Descubre las funciones disponibles y las automatizaciones en desarrollo." : "Connect your store, bring customers and orders together, and organize internal follow-up tasks. Explore available tools and upcoming automation."}
               </p>
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                <a href={setupHref} data-testid="ecommerce-preview-primary-cta"
+                <a href={primaryHref} data-testid="ecommerce-preview-primary-cta"
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700 sm:w-auto">
-                  {l[1]} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
+                  {isActivated ? openLabel : l[1]} <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden="true" />
                 </a>
+                {user && !isActivated && activation.data?.eligible === true && <button
+                  type="button"
+                  data-testid="ecommerce-activate-engine"
+                  disabled={activate.isPending}
+                  onClick={() => activate.mutate()}
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-blue-600 px-6 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50 sm:w-auto"
+                >{activateLabel}</button>}
+                {user && !isActivated && activation.data?.connected && !activation.data?.planEligible &&
+                  <a href="/app/settings?tab=billing" className="text-sm font-medium text-blue-700 underline">
+                    {locale === "he" ? "נדרש מנוי Pro" : locale === "es" ? "Se requiere Pro" : "Requires Pro"}
+                  </a>}
+                {activate.isError && <span role="alert" className="text-xs text-red-700">
+                  {locale === "he" ? "ההפעלה נכשלה. בדקו את החיבור והמנוי." : locale === "es" ? "No se pudo activar. Revisa la conexión y el plan." : "Activation unavailable. Check your Shopify connection and Pro plan."}
+                </span>}
                 <a href="/solutions/ecommerce"
                   className="inline-flex items-center justify-center px-3 py-3 text-sm font-medium text-slate-600 underline-offset-4 hover:underline">
                   {tr.about}
@@ -166,5 +186,5 @@ export function EcommerceGrowthEnginePreviewContent() {
 }
 
 export function EcommerceGrowthEnginePreview() {
-  return <EcommercePilotBoundary><EcommerceGrowthEnginePreviewContent /></EcommercePilotBoundary>;
+  return <EcommerceGrowthEnginePreviewContent />;
 }
