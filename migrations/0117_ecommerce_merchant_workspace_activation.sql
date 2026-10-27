@@ -1,4 +1,9 @@
--- Merchant workspace activation only; independent from carts, messages and support sends.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS ecommerce_growth_engine_activated_at TIMESTAMP;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS ecommerce_growth_engine_activation_shop TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS ecommerce_growth_engine_activation_integration_id VARCHAR;
+-- Merchant's explicit E-Commerce workspace activation. No cart, send or order permissions.
+-- Isolated table: existing users and Shopify data remain usable before this migration.
+CREATE TABLE IF NOT EXISTS ecommerce_shopify_workspace_activations (
+  account_id VARCHAR PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  installation_id VARCHAR NOT NULL UNIQUE REFERENCES integrations(id) ON DELETE CASCADE,
+  shop TEXT NOT NULL,
+  activated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  CONSTRAINT ecommerce_shopify_workspace_shop_chk CHECK (shop LIKE '%.myshopify.com')
+);
