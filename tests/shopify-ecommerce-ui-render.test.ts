@@ -79,7 +79,11 @@ test("dashboard links have one anchor each and point to existing merchant tools"
   assert.doesNotMatch(html, /<a\b[^>]*>\s*<a\b/);
   const { document } = parseHTML(html);
   const links = [...document.querySelectorAll("a")].map(a => a.getAttribute("href"));
-  assert.deepEqual(links, ["/app/integrations?setup=shopify", "/app/inbox", "/app/ai-brain", "/app/followups", "/app/workflows", "/ecommerce-growth-engine"]);
+  assert.deepEqual(links, ["/app/integrations?setup=shopify", "#overview", "#shopping", "#order-support", "#recovery", "#post-purchase", "#settings", "/app/inbox", "/app/ai-brain", "/app/followups", "/app/workflows", "/app/followups", "/ecommerce-growth-engine"]);
+  for (const id of ["overview", "shopping", "order-support", "recovery", "post-purchase", "settings"]) {
+    assert.ok(document.getElementById(id), `missing merchant module ${id}`);
+  }
+  assert.ok(document.querySelector('[data-testid="ecommerce-module-navigation"]'));
 });
 
 test("dashboard preserves unavailable, session-checking and paused-sync states in every locale", () => {
