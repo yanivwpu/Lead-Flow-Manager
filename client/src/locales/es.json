@@ -1483,6 +1483,14 @@
     }
   },
   "testChat": {
+    "secondReviewTitle": "Revisión de la segunda prueba de carrito",
+    "secondReviewScope": "Revisión de solo lectura de la selección guardada. No aprueba ni crea un carrito.",
+    "secondReviewRun": "Revisar sin crear un carrito",
+    "secondReviewUnavailable": "Revisión no disponible. Revisa el artículo seleccionado y la configuración privada.",
+    "secondReviewState": {"ready_for_owner_review": "Selección verificada para revisión. Se requiere una aprobación independiente.", "blocked": "La prueba está bloqueada. No se creó ningún carrito."},
+    "secondReviewChecks": {"originalAttempt": "Intento original consumido y protección conservados", "receiptStorage": "Almacenamiento cifrado del recibo", "authorizationSchema": "Esquema de autorización de la segunda prueba", "secondAuthorization": "Autorización independiente de la segunda prueba", "storefront": "Precio e inventario actuales de Storefront", "executionApproval": "Aprobación explícita y habilitación de ejecución"},
+    "secondReviewStatus": {"passed": "Verificado", "required": "Pendiente", "blocked": "Bloqueado; no repitas la ejecución"},
+
     "approveCreateCart": "Aprobar y crear carrito de prueba",
     "cartActivationRequired": "La creación de carritos está desactivada hasta recibir aprobación independiente para activarla.",
     "cartConfirmTitle": "Confirmar un carrito de prueba privado",
