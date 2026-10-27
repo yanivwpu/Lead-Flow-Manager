@@ -1,4 +1,5 @@
 import { useEcommercePilot } from "./ecommercePilot";
+import { useEcommerceMerchantActivationStatus } from "./ecommerceMerchantActivation";
 import {
   ShoppingBag,
   Inbox,
@@ -102,6 +103,8 @@ export function useAppNavCategories(): {
 } {
   const { t, i18n } = useTranslation();
   const { available: ecommercePilotEnabled } = useEcommercePilot();
+  const activation = useEcommerceMerchantActivationStatus();
+  const ecommerceGrowthEngineActivated = activation.data?.activated === true && activation.data?.eligible === true;
   const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
   const ecommerceLabel = locale === "he" ? "מנוע הצמיחה למסחר אלקטרוני" :
     locale === "es" ? "Motor de comercio electrónico" : "E-Commerce Growth Engine";
@@ -136,6 +139,7 @@ export function useAppNavCategories(): {
   return useMemo(() => {
     const sections = resolveAppNavSections({
       ecommercePilotEnabled,
+      ecommerceGrowthEngineActivated,
       hasPresetCampaigns,
       prospectAiActivated,
       realtorGrowthEngineActivated,
@@ -180,6 +184,7 @@ export function useAppNavCategories(): {
     t,
     location,
     ecommercePilotEnabled,
+    ecommerceGrowthEngineActivated,
     ecommerceLabel,
     hasPresetCampaigns,
     prospectAiActivated,
