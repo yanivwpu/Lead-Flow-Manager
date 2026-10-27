@@ -85,7 +85,7 @@ test("one durable claim wins across independent adapters; reload/restart/session
     (request_id,workspace_id,operator_id,session_digest,shop,integration_id,installation_digest,selection,selection_digest,expires_at,claimed_at)
     VALUES('00000000-0000-4000-8000-000000000002','tenant-a','tenant-a','fixture',${PILOT_PROBE_SHOP},'integration-a','fixture','{}','fixture',now()+interval '5 minutes',now())`);
   const original=await f.db.execute(sql`SELECT * FROM shopify_checkout_admin_tests`);
-  const index=await f.db.execute(sql`SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch'`);
+  const index=await f.db.execute(sql`SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch' AND schemaname=current_schema()`);
   const attempts=await Promise.allSettled([f.adapter()(auth,f.session.id,"http-session"),f.adapter()(auth,f.session.id,"http-session")]);
   assert.equal(attempts.filter(r=>r.status==="fulfilled").length,1);
   const result=(attempts.find(r=>r.status==="fulfilled") as PromiseFulfilledResult<any>).value;
@@ -95,7 +95,7 @@ test("one durable claim wins across independent adapters; reload/restart/session
    await assert.rejects(()=>f.adapter()(auth,f.session.id,session),/probe_authorization_unavailable_or_spent/);
   assert.equal(f.reads(),2);assert.equal(f.httpReads(),3);assert.deepEqual(await f.db.select().from(aiTestSessions),sessionBefore);
   assert.deepEqual((await f.db.execute(sql`SELECT * FROM shopify_checkout_admin_tests`)).rows,original.rows);
-  assert.deepEqual((await f.db.execute(sql`SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch'`)).rows,index.rows);
+  assert.deepEqual((await f.db.execute(sql`SELECT indexdef FROM pg_indexes WHERE indexname='shopify_checkout_admin_one_dispatch' AND schemaname=current_schema()`)).rows,index.rows);
  }finally{await f.cleanup();}
 });
 test("password or ambiguous provider outcomes spend the grant and halt without fallback or retry",async()=>{
