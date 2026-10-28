@@ -94,3 +94,21 @@ test("Design system color hierarchy is documented in gallery wiring", () => {
   assert.ok(catalog.includes("/og/og-realtor-growth-engine.png"));
   assert.ok(catalog.includes("/og/prospect-ai-growth-engine.png"));
 });
+
+
+test("E-Commerce card has a distinct blue icon and emphasizes the commerce feature set", () => {
+  const templates = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
+  const catalog = readFileSync(join(root, "client/src/lib/growthEnginesCatalog.ts"), "utf8");
+  const cardStart = catalog.indexOf('slug: "ecommerce-growth-engine"');
+  const cardEnd = catalog.indexOf('slug: "home-services-engine"', cardStart);
+  const commerceCard = catalog.slice(cardStart, cardEnd);
+  assert.ok(cardStart > 0 && cardEnd > cardStart);
+  assert.match(templates, /isEcommerce \? "border-blue-200 bg-blue-50 text-blue-700"/);
+  assert.match(templates, /isEcommerce \? "border-blue-200 bg-blue-50 text-blue-800"/);
+  for (const term of ["AI Shopping", "abandoned-cart recovery", "order support", "post-purchase follow-ups", "unified customer conversations"]) {
+    assert.ok(commerceCard.includes(term), `E-Commerce card should showcase ${term}`);
+  }
+  assert.doesNotMatch(commerceCard, /upcoming|coming soon|planned/i);
+  assert.ok(commerceCard.includes('status: "available"'));
+  assert.ok(commerceCard.includes('ctaLabel: "Preview Engine"'));
+});
