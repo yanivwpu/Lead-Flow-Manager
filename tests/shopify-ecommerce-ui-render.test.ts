@@ -175,3 +175,39 @@ test("preview exposes activation only to eligible merchants and opens the active
     "/app/ecommerce-growth-engine");
   state.activation = { eligible: false, activated: false, connected: false, planEligible: false };
 });
+
+test("Shopify journey is visual, concise and localized, with deeper descriptions collapsed", () => {
+  for (const [locale, inquiry, recovery, repeat] of [
+    ["en", "Customer inquiry", "Cart recovery", "Repeat purchase"],
+    ["es", "Consulta del cliente", "Recuperar carritos", "Nueva compra"],
+    ["he", "פניית לקוח", "שחזור עגלות", "רכישה חוזרת"],
+  ]) {
+    state.locale = locale;
+    const { document } = parseHTML(renderToStaticMarkup(React.createElement(Preview)));
+    const journey = document.querySelector('[data-testid="shopify-customer-journey"]');
+    assert.ok(journey);
+    assert.equal(journey.querySelectorAll('[role="listitem"]').length, 5);
+    assert.ok(journey.textContent.includes(inquiry));
+    assert.ok(journey.textContent.includes(recovery));
+    assert.ok(journey.textContent.includes(repeat));
+    const details = journey.querySelector('[data-testid="shopify-journey-feature-details"]');
+    assert.ok(details);
+    assert.equal(details.hasAttribute("open"), false);
+  }
+  state.locale = "en";
+  state.activation = { eligible: false, activated: false, connected: false, planEligible: false };
+});
+
+test("eligible merchant sees primary Activate action, with setup as secondary link", () => {
+  state.user = { id: "fixture" };
+  state.aligned = true;
+  state.locale = "en";
+  state.activation = { eligible: true, activated: false, connected: true, planEligible: true };
+  const { document } = parseHTML(renderToStaticMarkup(React.createElement(Preview)));
+  const activate = document.querySelector('[data-testid="ecommerce-activate-engine"]');
+  const setup = document.querySelector('[data-testid="ecommerce-preview-primary-cta"]');
+  assert.ok(activate?.className.includes("bg-blue-600"));
+  assert.equal(setup?.getAttribute("href"), "/app/integrations?setup=shopify");
+  assert.ok(!setup?.className.includes("bg-blue-600"));
+  state.activation = { eligible: false, activated: false, connected: false, planEligible: false };
+});
