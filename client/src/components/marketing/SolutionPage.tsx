@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { MarketingBreadcrumbs } from "@/components/marketing/MarketingBreadcrumbs";
 import { MarketingLandingCta } from "@/components/marketing/MarketingLandingCta";
@@ -99,6 +100,10 @@ export function SolutionPage({ content: baseContent }: Props) {
   const localeHref = (href: string) => localizedInternalHref(href, locale);
   const ogTitle = content.ogTitle ?? content.title;
   const isEcommerceSolution = content.path === "/solutions/ecommerce";
+  const ecommerceActivation = useEcommerceMerchantActivationStatus();
+  const ecommerceActive = ecommerceActivation.data?.activated === true && ecommerceActivation.data?.eligible === true;
+  const ecommerceCtaHref = ecommerceActive ? "/app/ecommerce-growth-engine" : "/ecommerce-growth-engine";
+  const ecommerceCtaText = ecommerceActive ? (locale === "he" ? "פתיחת המנוע" : locale === "es" ? "Abrir motor" : "Open Engine") : ecommerceActivation.data?.eligible ? (locale === "he" ? "הפעלת המנוע" : locale === "es" ? "Activar motor" : "Activate Engine") : (locale === "he" ? "חיבור Shopify" : locale === "es" ? "Conectar Shopify" : "Connect Shopify");
 
   const breadcrumbs = [
     { label: chrome.home, href: localeHref("/") },
@@ -162,25 +167,25 @@ export function SolutionPage({ content: baseContent }: Props) {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Link
-                  href={user ? "/app/inbox" : "/auth"}
+                  href={isEcommerceSolution && user ? ecommerceCtaHref : user ? "/app/inbox" : "/auth"}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-brand-green px-6 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                  {chrome.startFreeTrial}
+                  {isEcommerceSolution && user ? ecommerceCtaText : chrome.startFreeTrial}
                   <ArrowRight className={arrowClass} />
                 </Link>
-                <Link
+                {!(isEcommerceSolution && user) && <Link
                   href={localeHref(content.secondaryCta.href)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-gray-200 bg-white px-6 text-sm font-semibold text-gray-800 hover:bg-gray-50"
                 >
                   {content.secondaryCta.label}
-                </Link>
-                <button
+                </Link>}
+                {!(isEcommerceSolution && user) && <button
                   type="button"
                   onClick={() => setShowDemo(true)}
                   className="inline-flex h-11 items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-6 text-sm font-semibold text-amber-900 hover:bg-amber-100"
                 >
                   {chrome.bookDemo}
-                </button>
+                </button>}
               </div>
             </div>
             <HeroVisual visual={content.heroVisual} leadStageLabel={chrome.leadStage} />
@@ -400,12 +405,12 @@ export function SolutionPage({ content: baseContent }: Props) {
           </div>
         </section>
 
-        <MarketingLandingCta
+        {isEcommerceSolution && user ? <section className="border-t border-gray-100 bg-gray-50 px-4 py-12 text-center"><h2 className="text-2xl font-bold">{content.finalCtaHeadline}</h2><Link href={ecommerceCtaHref} className="mt-5 inline-flex items-center rounded-full bg-blue-600 px-7 py-3 font-semibold text-white hover:bg-blue-700">{ecommerceCtaText} <ArrowRight className="ms-2 h-4 w-4"/></Link></section> : <MarketingLandingCta
           onBookDemo={() => setShowDemo(true)}
           headline={content.finalCtaHeadline}
           startTrialLabel={chrome.startFreeTrial}
           bookDemoLabel={chrome.bookDemo}
-        />
+        /> }
         <p className="-mt-10 mb-10 px-4 text-center text-sm text-gray-500 md:px-6">
           {content.finalCtaSubtitle}
         </p>

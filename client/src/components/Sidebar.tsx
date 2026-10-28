@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
 import { useAppNavCategories } from "@/lib/useAppNav";
+import { useLocation } from "wouter";
 
 function readCollapsed(): boolean {
   try {
@@ -41,6 +42,18 @@ export function Sidebar() {
   const { t } = useTranslation();
   const isRTL = getDirection() === "rtl";
   const { categories, allItems } = useAppNavCategories();
+  const [currentLocation] = useLocation();
+  const commerceSubnav = [
+    {id:"overview", en:"Overview", es:"Resumen", he:"סקירה", href:"/app/ecommerce-growth-engine"},
+    {id:"products", en:"Products", es:"Productos", he:"מוצרים", href:"/app/ecommerce-growth-engine?view=products"},
+    {id:"orders", en:"Orders", es:"Pedidos", he:"הזמנות", href:"/app/ecommerce-growth-engine?view=orders"},
+    {id:"shopping", en:"AI Shopping", es:"Compras con IA", he:"קניות AI", href:"/app/ecommerce-growth-engine?view=shopping"},
+    {id:"recovery", en:"Cart Recovery", es:"Recuperación", he:"שחזור עגלות", href:"/app/ecommerce-growth-engine?view=recovery"},
+    {id:"post", en:"Post-Purchase", es:"Poscompra", he:"לאחר רכישה", href:"/app/ecommerce-growth-engine?view=post"},
+    {id:"settings", en:"Settings", es:"Configuración", he:"הגדרות", href:"/app/ecommerce-growth-engine?view=settings"},
+  ];
+  const { i18n } = useTranslation();
+  const commerceLocale=(i18n.resolvedLanguage || i18n.language || "en").slice(0,2);
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
@@ -268,6 +281,19 @@ export function Sidebar() {
                           </Link>
                         );
                       })}
+                      {category.id === "growthEngines" && category.items.some(item => item.id === "ecommerceGrowthEngine") && !collapsed && (
+                        <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
+                          {commerceSubnav.map(module => (
+                            <Link key={module.id} href={module.href}>
+                              <a data-testid={`ecommerce-sidebar-${module.id}`} className={cn(
+                                "block rounded-md px-2 py-1.5 text-xs hover:bg-blue-50 hover:text-blue-700",
+                                currentLocation.includes("ecommerce-growth-engine") && (module.id === "overview" ? !window.location.search.includes("view=") : window.location.search.includes(`view=${module.id}`))
+                                  ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600"
+                              )}>{isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}</a>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
