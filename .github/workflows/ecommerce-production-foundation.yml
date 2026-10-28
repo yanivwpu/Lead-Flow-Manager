@@ -6,6 +6,7 @@ on:
       - "server/ecommercePilotRoutes.ts"
       - "server/shopify*.ts"
       - "server/routes.ts"
+      - "server/index.ts"
       - "client/src/lib/ecommerce*"
       - "client/src/pages/Ecommerce*"
       - "client/src/pages/FollowUps.tsx"

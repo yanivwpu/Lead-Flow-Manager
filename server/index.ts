@@ -605,6 +605,17 @@ app.use((req, res, next) => {
   // Start cron jobs (trial check-in emails, Search Console sync, and post-sync SEO analysis).
   startCronJobs();
 
+  // Independent staging-only gates remain off by default. Neither bootstrap
+  // can activate production merchants or bypass the outbound approval flags.
+  if (process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED === 'true') {
+    const { startCheckoutRecoveryAutoPreparation } = await import("./ecommerce/checkoutRecoveryAutoPreparationRuntime");
+    startCheckoutRecoveryAutoPreparation();
+  }
+  if (process.env.ECOMMERCE_RECOVERY_WORKER_ENABLED === 'true') {
+    const { startCheckoutRecoveryRuntime } = await import("./ecommerce/checkoutRecoveryWorkerRuntime");
+    startCheckoutRecoveryRuntime();
+  }
+
   // Approved SEO proposals are claimed durably and can only create review-only GitHub PRs.
   const { startSeoGithubExecutionWorker } = await import("./seo/githubExecutionService");
   startSeoGithubExecutionWorker();
