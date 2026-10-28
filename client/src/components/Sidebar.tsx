@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   LogOut,
   ChevronDown,
@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/tooltip";
 import { InboxActivityNavBadge } from "@/components/InboxActivityNavBadge";
 import { useAppNavCategories } from "@/lib/useAppNav";
-import { useLocation } from "wouter";
+
 
 function readCollapsed(): boolean {
   try {
@@ -42,8 +42,8 @@ export function Sidebar() {
   const { t } = useTranslation();
   const isRTL = getDirection() === "rtl";
   const { categories, allItems } = useAppNavCategories();
-  const [currentLocation] = useLocation();
-  const commerceViewParam = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("view");
+  const commerceSearch = useSearch();
+  const commerceViewParam = new URLSearchParams(commerceSearch).get("view");
   const selectedCommerceView = ["products", "orders", "shopping", "recovery", "post", "settings"].includes(commerceViewParam || "") ? commerceViewParam : "overview";
   const commerceSubnav = [
     {id:"overview", en:"Overview", es:"Resumen", he:"סקירה", href:"/app/ecommerce-growth-engine"},
@@ -59,6 +59,7 @@ export function Sidebar() {
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>([]);
+  const [commerceExpanded, setCommerceExpanded] = useState(true);
 
   const toggleSidebar = () => {
     setCollapsed((prev) => {
@@ -264,8 +265,9 @@ export function Sidebar() {
 
                         return (
                           <div key={item.id}>
+                          <div className="flex items-center">
                           <Link href={item.href}>
-                            <a data-testid={item.testId} className={linkClasses}>
+                            <a data-testid={item.testId} className={cn(linkClasses, item.id === "ecommerceGrowthEngine" && "min-w-0 flex-1")}>
                               <span className="relative inline-flex shrink-0">
                                 <item.icon className={iconClasses} />
                                 {item.href === "/app/inbox" ? (
@@ -283,16 +285,26 @@ export function Sidebar() {
                             </a>
                           </Link>
                           {item.id === "ecommerceGrowthEngine" && (
+                            <button type="button"
+                              data-testid="ecommerce-sidebar-toggle"
+                              aria-label={commerceExpanded ? "Collapse E-Commerce modules" : "Expand E-Commerce modules"}
+                              aria-expanded={commerceExpanded}
+                              onClick={() => setCommerceExpanded(v => !v)}
+                              className="shrink-0 rounded-md p-1 text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                              {commerceExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </button>
+                          )}
+                          </div>
+                          {item.id === "ecommerceGrowthEngine" && commerceExpanded && (
                             <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
                               {commerceSubnav.map(module => {
-                                const isSelected = currentLocation.split("?")[0] === "/app/ecommerce-growth-engine" &&
-                                  (module.id === "overview" ? selectedCommerceView === "overview" : selectedCommerceView === module.id);
+                                const isSelected = item.active && selectedCommerceView === module.id;
                                 return (
                                   <Link key={module.id} href={module.href}>
                                     <a data-testid={`ecommerce-sidebar-${module.id}`}
                                       aria-current={isSelected ? "page" : undefined}
-                                      className={cn("block rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-blue-50 hover:text-blue-700",
-                                        isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600")}>
+                                      className={cn("block rounded-md px-2 py-1.5 text-xs transition-colors",
+                                        isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600 hover:text-blue-700 hover:bg-slate-100")}>
                                       {isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}
                                     </a>
                                   </Link>
