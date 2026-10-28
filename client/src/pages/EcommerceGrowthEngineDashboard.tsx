@@ -1,102 +1,66 @@
 import { EcommerceWorkspaceBoundary } from "@/lib/ecommercePilot";
 import { useTranslation } from "react-i18next";
-import { Link } from "wouter";
-import { ShoppingBag, MessageSquare, Brain, ListTodo, Workflow, ArrowRight, Plug } from "lucide-react";
+import { Link, useSearch } from "wouter";
+import { ShoppingBag, Package, ShoppingCart, Brain, RefreshCw, Repeat2, Settings, CheckCircle2, ArrowRight, ListTodo } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { ShopifySimpleSetup } from "@/components/integrations/ShopifySimpleSetup";
 
-const copy = {
-  en: {
-    title:"E-Commerce Growth Engine", subtitle:"Your Shopify store, customer conversations and order follow-ups in one place.",
-    connected:"Shopify connected", notConnected:"Connect your Shopify store", loading:"Checking Shopify connection…", sync:"Customer and order sync", ready:"Connected", off:"Not connected",
-    connect:"Open Shopify setup", inbox:"Unified Inbox", inboxDetail:"Manage conversations from your connected channels.",
-    ai:"AI Brain", aiDetail:"Configure AI assistance for customer replies.", tasks:"Order support", tasksDetail:"View and complete internal follow-up tasks.",
-    workflows:"Automations", workflowsDetail:"Manage existing workflows and settings.", preview:"See the storefront preview",
-    upcoming:"Coming next", cart:"Abandoned-cart messaging", post:"Post-purchase customer journeys", note:"Customer-facing Shopify automations are not active in this preview. Messaging requires supported events, appropriate consent and an enabled channel.",
-    unavailable:"Shopify status unavailable. Refresh to try again.", unknown:"Unavailable", paused:"Sync paused", action:"Open", shop:"Store", details:"Shopify status reflects the connected integration, not live messaging automation.",
-  },
-  es: {
-    title:"Motor de crecimiento para comercio electrónico",subtitle:"Tu tienda Shopify, conversaciones con clientes y seguimientos de pedidos en un solo lugar.",
-    connected:"Shopify conectado",notConnected:"Conecta tu tienda Shopify",loading:"Comprobando la conexión de Shopify…",sync:"Sincronización de clientes y pedidos",ready:"Conectado",off:"Sin conectar",
-    connect:"Configurar Shopify",inbox:"Bandeja de entrada unificada",inboxDetail:"Gestiona conversaciones de tus canales conectados.",
-    ai:"AI Brain",aiDetail:"Configura la asistencia de IA para responder a clientes.",tasks:"Soporte de pedidos",tasksDetail:"Consulta y completa tareas internas de seguimiento.",
-    workflows:"Automatizaciones",workflowsDetail:"Gestiona flujos de trabajo y ajustes existentes.",preview:"Ver vista previa para tiendas",
-    upcoming:"Próximamente",cart:"Mensajes de recuperación de carritos abandonados",post:"Seguimiento poscompra",note:"Las automatizaciones de mensajes para clientes de Shopify aún no están activas. Requieren eventos compatibles, consentimiento adecuado y un canal habilitado.",
-    unavailable:"El estado de Shopify no está disponible. Actualiza para intentarlo de nuevo.",unknown:"No disponible",paused:"Sincronización pausada",action:"Abrir",shop:"Tienda",details:"El estado de Shopify indica la integración conectada, no la automatización de mensajes en vivo.",
-  },
-  he: {
-    title:"מנוע הצמיחה למסחר אלקטרוני",subtitle:"חנות Shopify, שיחות עם לקוחות ומעקב אחר הזמנות — במקום אחד.",
-    connected:"Shopify מחובר",notConnected:"חיבור חנות Shopify",loading:"בודקים את חיבור Shopify…",sync:"סנכרון לקוחות והזמנות",ready:"מחובר",off:"לא מחובר",
-    connect:"הגדרת Shopify",inbox:"תיבת הודעות מאוחדת",inboxDetail:"ניהול שיחות מכל הערוצים המחוברים.",
-    ai:"AI Brain",aiDetail:"הגדרת סיוע בינה מלאכותית למענה ללקוחות.",tasks:"טיפול בהזמנות",tasksDetail:"צפייה והשלמה של משימות מעקב פנימיות.",
-    workflows:"אוטומציות",workflowsDetail:"ניהול תהליכי עבודה והגדרות קיימות.",preview:"צפייה בתצוגה המקדימה לחנות",
-    upcoming:"בקרוב",cart:"הודעות לשחזור עגלות נטושות",post:"מסעות לקוח לאחר רכישה",note:"אוטומציות הודעות ללקוחות Shopify אינן פעילות בתצוגה מקדימה זו. נדרשים אירועים נתמכים, הסכמה מתאימה וערוץ הודעות פעיל.",
-    unavailable:"סטטוס Shopify אינו זמין. רעננו כדי לנסות שוב.",unknown:"לא זמין",paused:"הסנכרון מושהה",action:"פתיחה",shop:"חנות",details:"סטטוס Shopify מציג חיבור חנות בלבד, ולא הפעלה של הודעות אוטומטיות.",
-  }
+const translations = {
+ en: {title:"E-Commerce Growth Engine", subtitle:"Products, orders and customer journeys in one place.", connected:"Shopify connected", disconnected:"Shopify not connected", unavailable:"Connection status unavailable", overview:"Overview", products:"Products", orders:"Orders", shopping:"AI Shopping", recovery:"Cart Recovery", post:"Post-Purchase", settings:"Settings", orderTasks:"Order support tasks", shop:"Store", manage:"Manage", start:"Connect Shopify", productDetail:"View your synced Shopify catalog, variants, prices and inventory.", ordersDetail:"Shopify customer purchases are recorded with contacts. Order-support tasks live in Follow-ups.", shoppingDetail:"Configure AI Brain and review product knowledge from the existing Shopify catalog.", recoveryDetail:"Recovery messaging is not active. Consent and channel delivery remain gated.", postDetail:"Post-purchase customer messaging is not active.", settingsDetail:"Manage your Shopify connection and sync preferences.", noStats:"Live metrics will appear when their sources are available.", recent:"Quick access", seeCatalog:"Open Shopify products", seeContacts:"Customer purchase records", seeTasks:"Follow-ups", seeBrain:"AI Brain", synced:"Connected store", status:"Workspace active", setup:"Shopify setup", noDuplicate:"The catalog and customer records are shared with WhachatCRM; no separate data is created."},
+ es: {title:"Motor de comercio electrónico", subtitle:"Productos, pedidos y recorridos del cliente en un lugar.",connected:"Shopify conectado",disconnected:"Shopify no conectado",unavailable:"Estado de conexión no disponible",overview:"Resumen",products:"Productos",orders:"Pedidos",shopping:"Compras con IA",recovery:"Recuperación de carritos",post:"Poscompra",settings:"Configuración",orderTasks:"Tareas de pedidos",shop:"Tienda",manage:"Gestionar",start:"Conectar Shopify",productDetail:"Consulta el catálogo Shopify, variantes, precios e inventario.",ordersDetail:"Las compras se guardan con los contactos; las tareas están en Seguimientos.",shoppingDetail:"Configura AI Brain y consulta el catálogo Shopify existente.",recoveryDetail:"Los mensajes de recuperación no están activos; requieren consentimiento y canal habilitado.",postDetail:"Los mensajes poscompra no están activos.",settingsDetail:"Gestiona Shopify y las preferencias de sincronización.",noStats:"Las métricas aparecerán cuando estén disponibles.",recent:"Accesos rápidos",seeCatalog:"Abrir productos Shopify",seeContacts:"Historial de clientes",seeTasks:"Seguimientos",seeBrain:"AI Brain",synced:"Tienda conectada",status:"Espacio activo",setup:"Configurar Shopify",noDuplicate:"Los productos y clientes se comparten con WhachatCRM sin duplicar datos."},
+ he: {title:"מנוע צמיחה למסחר אלקטרוני",subtitle:"מוצרים, הזמנות ומסעות לקוח במקום אחד.",connected:"Shopify מחובר",disconnected:"Shopify לא מחובר",unavailable:"סטטוס החיבור אינו זמין",overview:"סקירה",products:"מוצרים",orders:"הזמנות",shopping:"קניות AI",recovery:"שחזור עגלות",post:"לאחר רכישה",settings:"הגדרות",orderTasks:"משימות הזמנה",shop:"חנות",manage:"ניהול",start:"חיבור Shopify",productDetail:"צפייה בקטלוג Shopify, גרסאות, מחירים ומלאי.",ordersDetail:"רכישות נשמרות ברשומות אנשי קשר; המשימות באזור המעקב.",shoppingDetail:"הגדרת AI Brain ושימוש בקטלוג Shopify הקיים.",recoveryDetail:"הודעות שחזור אינן פעילות; דרושה הסכמה וערוץ פעיל.",postDetail:"הודעות לאחר רכישה אינן פעילות.",settingsDetail:"ניהול חיבור Shopify והסנכרון.",noStats:"נתונים יוצגו כאשר יהיו זמינים.",recent:"גישה מהירה",seeCatalog:"פתיחת מוצרי Shopify",seeContacts:"רכישות לקוחות",seeTasks:"מעקבים",seeBrain:"AI Brain",synced:"חנות מחוברת",status:"סביבת עבודה פעילה",setup:"הגדרת Shopify",noDuplicate:"הקטלוג ורשומות הלקוחות משותפים ללא שכפול נתונים."}
 } as const;
-
+type View = "overview" | "products" | "orders" | "shopping" | "recovery" | "post" | "settings";
 export function EcommerceGrowthEngineDashboardContent() {
-  const { i18n } = useTranslation();
-  const { user, sessionAligned } = useAuth();
-  const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0] as keyof typeof copy;
-  const t = copy[locale] || copy.en;
-  const { data, isLoading, isError } = useQuery<{ connected: boolean; shop: string | null; syncEnabled: boolean }>({
-    queryKey: withUserQueryScope(["/api/shopify/connection-status"], user?.id),
-    queryFn: async () => {
-      const r = await fetch("/api/shopify/connection-status", { credentials: "include" });
-      if (!r.ok) throw new Error("Shopify status unavailable");
-      return r.json();
-    },
-    enabled: !!user?.id && sessionAligned,
-    retry: false,
-  });
-  const checking = !sessionAligned || !user?.id || isLoading;
-  const unavailable = !checking && (isError || !data);
-  const connected = !checking && !unavailable && !!data?.connected;
-  const modules = [
-    { id: "overview", label: locale === "he" ? "סקירה" : locale === "es" ? "Resumen" : "Overview" },
-    { id: "shopping", label: locale === "he" ? "קניות AI" : locale === "es" ? "Compras con IA" : "AI Shopping" },
-    { id: "order-support", label: t.tasks },
-    { id: "recovery", label: locale === "he" ? "שחזור עגלות" : locale === "es" ? "Recuperación de carritos" : "Cart Recovery" },
-    { id: "post-purchase", label: locale === "he" ? "לאחר רכישה" : locale === "es" ? "Poscompra" : "Post-Purchase" },
-    { id: "settings", label: locale === "he" ? "הגדרות" : locale === "es" ? "Configuración" : "Settings" },
-  ];
-  const cards = [
-    { title:t.inbox, description:t.inboxDetail, icon:MessageSquare, href:"/app/inbox" },
-    { title:t.ai, description:t.aiDetail, icon:Brain, href:"/app/ai-brain" },
-    { title:t.tasks, description:t.tasksDetail, icon:ListTodo, href:"/app/followups" },
-    { title:t.workflows, description:t.workflowsDetail, icon:Workflow, href:"/app/workflows" },
-  ];
-  return <main data-testid="ecommerce-growth-engine-dashboard" lang={locale} dir={locale === "he" ? "rtl" : "ltr"} className="mx-auto w-full max-w-6xl space-y-7 p-4 pb-16 sm:p-8">
-    <header className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-6 sm:p-9">
-      <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700"><ShoppingBag className="h-4 w-4" /> Shopify</div>
-      <h1 className="text-2xl font-bold text-slate-950 sm:text-4xl">{t.title}</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">{t.subtitle}</p>
-      <Link asChild href="/app/integrations?setup=shopify"><a className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"><Plug className="h-4 w-4" />{t.connect}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link>
-    </header>
-    <nav aria-label={locale === "he" ? "ניווט מנוע" : locale === "es" ? "Navegación del motor" : "Engine navigation"} className="flex flex-wrap gap-2" data-testid="ecommerce-module-navigation">
-      {modules.map((module) => <a key={module.id} href={`#${module.id}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">{module.label}</a>)}
-    </nav>
-    <section id="overview" className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6" aria-label={t.sync}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div><h2 className="text-lg font-semibold">{t.sync}</h2><p className="mt-1 text-sm text-slate-600">{checking ? t.loading : unavailable ? t.unavailable : connected ? t.connected : t.notConnected}</p>{connected && data?.shop && <p className="mt-2 break-all text-xs text-slate-500">{t.shop}: <span dir="ltr">{data.shop}</span></p>}</div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{checking ? "…" : unavailable ? t.unknown : connected ? (data?.syncEnabled ? t.ready : t.paused) : t.off}</span>
-      </div>
-      <p className="mt-4 text-xs text-slate-500">{t.details}</p>
-    </section>
-    <div id="settings" className="scroll-mt-6">{connected && <ShopifySimpleSetup syncEnabled={data?.syncEnabled === true} />}</div>
-    <section id="shopping" className="scroll-mt-6 grid gap-4 sm:grid-cols-2">
-      {cards.map(({title,description,icon:Icon,href})=><Link asChild key={href} href={href}><a className="group flex min-h-40 flex-col rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-blue-300 hover:shadow-sm"><Icon className="mb-3 h-6 w-6 text-blue-600" /><h2 className="font-semibold text-slate-950">{title}</h2><p className="mt-2 flex-1 text-sm text-slate-600">{description}</p><span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-blue-700">{t.action}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></span></a></Link>)}
-    </section>
-    <section id="order-support" className="scroll-mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold">{t.tasks}</h2><p className="mt-2 text-sm text-slate-600">{t.tasksDetail}</p><Link asChild href="/app/followups"><a className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">{t.action}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link></section>
-    <section id="recovery" className="scroll-mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/50 p-5 sm:p-6"><h2 className="text-lg font-semibold">{t.upcoming}</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{[t.cart,t.post].map(label=><div key={label} className="rounded-xl border border-indigo-100 bg-white p-4 text-sm font-medium">{label}</div>)}</div><p className="mt-4 text-sm leading-relaxed text-slate-600">{t.note}</p></section>
-    <div id="post-purchase" className="scroll-mt-6 text-sm text-slate-600">{t.post}: {t.upcoming}</div>
-    <Link asChild href="/ecommerce-growth-engine"><a className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">{t.preview}<ArrowRight className="h-4 w-4 rtl:rotate-180" /></a></Link>
-  </main>;
+ const {i18n}=useTranslation();
+ const locale=(i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+ const t=translations[locale as keyof typeof translations] || translations.en;
+ const search=useSearch();
+ const selected=new URLSearchParams(search).get("view");
+ const view:View=(["overview","products","orders","shopping","recovery","post","settings"] as string[]).includes(selected || "") ? selected as View : "overview";
+ const {user,sessionAligned}=useAuth();
+ const {data,isLoading,isError}=useQuery<{connected:boolean;shop:string|null;syncEnabled:boolean}>({
+   queryKey:withUserQueryScope(["/api/shopify/connection-status"],user?.id),
+   queryFn:async()=>{const response=await fetch("/api/shopify/connection-status",{credentials:"include"});if(!response.ok)throw new Error("Connection unavailable");return response.json();},
+   enabled:!!user?.id && sessionAligned,retry:false
+ });
+ const labels:{id:View;label:string;icon:typeof ShoppingBag}[]=[
+  {id:"overview",label:t.overview,icon:ShoppingBag},{id:"products",label:t.products,icon:Package},{id:"orders",label:t.orders,icon:ShoppingCart},
+  {id:"shopping",label:t.shopping,icon:Brain},{id:"recovery",label:t.recovery,icon:RefreshCw},{id:"post",label:t.post,icon:Repeat2},{id:"settings",label:t.settings,icon:Settings}
+ ];
+ const catalog="/app/sales-catalog?source=shopify";
+ const links=[{label:t.seeCatalog,href:catalog},{label:t.seeContacts,href:"/app/contacts"},{label:t.seeTasks,href:"/app/followups"},{label:t.seeBrain,href:"/app/ai-brain"}];
+ const heading=labels.find(x=>x.id===view)?.label || t.overview;
+ return <main data-testid="ecommerce-growth-engine-dashboard" dir={locale==="he"?"rtl":"ltr"} lang={locale} className="mx-auto w-full max-w-6xl space-y-6 p-4 pb-16 sm:p-8">
+   <header className="rounded-2xl border border-blue-100 bg-white p-5 sm:p-6">
+     <div className="flex flex-wrap items-start justify-between gap-3">
+       <div><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-700"><ShoppingBag className="h-4 w-4"/> Shopify</div><h1 className="text-2xl font-bold text-slate-950">{t.title}</h1><p className="mt-1 text-sm text-slate-600">{t.subtitle}</p></div>
+       <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">{t.status}</span>
+     </div>
+     <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+       {!isLoading && !isError && data?.connected ? <CheckCircle2 className="h-4 w-4 text-emerald-600"/>:null}
+       <span>{isLoading?t.unavailable:isError?t.unavailable:data?.connected?t.connected:t.disconnected}</span>
+       {data?.connected && data.shop && <span className="text-xs" dir="ltr">· {data.shop}</span>}
+       {!data?.connected && !isLoading && <Link href="/app/integrations?setup=shopify" className="font-medium text-blue-700">{t.start}</Link>}
+     </div>
+   </header>
+   <section aria-label={heading} className="space-y-4">
+     <h2 className="text-xl font-semibold text-slate-950">{heading}</h2>
+     {view==="overview" && <>
+       <div className="grid gap-3 sm:grid-cols-3">
+         {[{label:t.products,href:catalog,icon:Package},{label:t.orders,href:"/app/ecommerce-growth-engine?view=orders",icon:ShoppingCart},{label:t.orderTasks,href:"/app/followups",icon:ListTodo}].map(c=><Link key={c.label} href={c.href} className="block rounded-xl border border-slate-200 bg-white p-5 hover:border-blue-300"><c.icon className="mb-3 h-5 w-5 text-blue-600"/><div className="font-semibold">{c.label}</div><p className="mt-2 text-xs text-slate-500">{t.manage} →</p></Link>)}
+       </div>
+       <div className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-semibold">{t.recent}</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{links.map(l=><Link key={l.href} href={l.href} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">{l.label}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>)}</div></div>
+     </>}
+     {view==="products" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.productDetail}</p><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link><p className="mt-4 text-xs text-slate-500">{t.noDuplicate}</p></div>}
+     {view==="orders" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.ordersDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/contacts" className="font-semibold text-blue-700">{t.seeContacts} →</Link><Link href="/app/followups" className="font-semibold text-blue-700">{t.seeTasks} →</Link></div></div>}
+     {view==="shopping" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.shoppingDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/ai-brain" className="font-semibold text-blue-700">{t.seeBrain} →</Link><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link></div></div>}
+     {view==="recovery" && <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">{t.recoveryDetail}</div>}
+     {view==="post" && <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">{t.postDetail}</div>}
+     {view==="settings" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.settingsDetail}</p>{data?.connected ? <ShopifySimpleSetup syncEnabled={data.syncEnabled === true}/> : <Link href="/app/integrations?setup=shopify" className="font-semibold text-blue-700">{t.setup} →</Link>}</div>}
+   </section>
+ </main>;
 }
-
-export function EcommerceGrowthEngineDashboard() {
-  return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent /></EcommerceWorkspaceBoundary>;
-}
+export function EcommerceGrowthEngineDashboard(){return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent/></EcommerceWorkspaceBoundary>;}
