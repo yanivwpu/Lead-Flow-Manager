@@ -99,3 +99,9 @@ zero added. Full typecheck is therefore not globally green.
 Minimum next action: review the PR; the first provider-side prerequisite is a
 fresh staging Meta token through the existing secure connection UI for #151.
 Keep merchant marketing/UI automation claims gated until live acceptance exists.
+
+## Deployment note — October 28, 2026
+
+PR #219 was merged into `main` at `dc69c097cdb2dbffd462fb1ae7761c8c995923be` after five passing GitHub workflow suites. The first Railway production deployment (`9daad578-bc9e-4745-9d88-6d09c93738ad`) failed during the image-build infrastructure stage, before application compilation. Railway logged a BuildKit worker listing error (`failed to list workers`; `buildkitd.sock: use of closed network connection`). This was not an application typecheck or runtime failure. The prior production build remained successful.
+
+This documentation-only follow-up prompts a new Railway build from the already reviewed recovery code. It changes no executable code, migration, variable, Shopify connection, or customer messaging flag. Do not infer that recovery messaging is live from a successful build; the staging authorization and Meta/consent gates above remain applicable.
