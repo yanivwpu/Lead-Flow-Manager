@@ -3329,6 +3329,42 @@ export async function registerRoutes(
         await Promise.all(directJobs);
       }
 
+      // Recovery evidence never accepts the development signature bypass or a
+      // reconstructed JSON body. Persist before ACK so provider retries can
+      // safely finish an interrupted, idempotent consent/receipt transaction.
+      if (signatureValid && rawBodyBuffer && incomingMessage && incomingMessage.type === "text") {
+        const owner = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
+        if (owner) {
+          const { captureRecoveryConsentFromVerifiedMeta } = await import("./ecommerce/checkoutRecoveryInboundConsentCapture");
+          await captureRecoveryConsentFromVerifiedMeta({
+            accountId: owner.id, inboxContactId: metaInboxContact?.id ?? null,
+            candidate: { ...incomingMessage, text: incomingMessage.text, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer) },
+            env: {
+              RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+              APP_URL: process.env.APP_URL,
+              ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED: process.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED,
+            },
+            secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
+          });
+        }
+      }
+      if (signatureValid && rawBodyBuffer && statusUpdate) {
+        const owner = await findUserByMetaPhoneNumberId(statusUpdate.phoneNumberId);
+        if (owner) {
+          const { recordRecoveryReceiptFromVerifiedMeta } = await import("./ecommerce/checkoutRecoveryMetaReceiptHandler");
+          await recordRecoveryReceiptFromVerifiedMeta({
+            accountId: owner.id,
+            candidate: { ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer) },
+            env: {
+              RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
+              APP_URL: process.env.APP_URL,
+              ECOMMERCE_RECOVERY_RECEIPTS_ENABLED: process.env.ECOMMERCE_RECOVERY_RECEIPTS_ENABLED,
+            },
+            secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
+          });
+        }
+      }
+
       res.status(200).send("EVENT_RECEIVED");
 
       // Process legacy chat write and other side effects asynchronously (non-critical)
