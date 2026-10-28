@@ -265,9 +265,9 @@ export function Sidebar() {
 
                         return (
                           <div key={item.id}>
-                          <div className="flex items-center">
+                          <div className="flex flex-col items-stretch">
                           <Link href={item.href}>
-                            <a data-testid={item.testId} className={cn(linkClasses, item.id === "ecommerceGrowthEngine" && "min-w-0 flex-1")}>
+                            <a data-testid={item.testId} className={cn(linkClasses, item.id === "ecommerceGrowthEngine" && "w-full min-w-0")}>
                               <span className="relative inline-flex shrink-0">
                                 <item.icon className={iconClasses} />
                                 {item.href === "/app/inbox" ? (
@@ -290,8 +290,9 @@ export function Sidebar() {
                               aria-label={commerceExpanded ? "Collapse E-Commerce modules" : "Expand E-Commerce modules"}
                               aria-expanded={commerceExpanded}
                               onClick={() => setCommerceExpanded(v => !v)}
-                              className="shrink-0 rounded-md p-1 text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                              {commerceExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              className="ms-9 mt-0.5 mb-1 inline-flex w-fit items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                              {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              <span>{commerceExpanded ? (isRTL ? "הסתרה" : commerceLocale === "es" ? "Ocultar" : "Hide") : (isRTL ? "הצגה" : commerceLocale === "es" ? "Mostrar" : "Show")}</span>
                             </button>
                           )}
                           </div>
