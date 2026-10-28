@@ -568,12 +568,12 @@ export function GrowthEngineGalleryCard({
       <CardContent className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500" : isProspectAi ? "border-sky-200 bg-sky-50 text-sky-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
+            <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-500" : isProspectAi ? "border-sky-200 bg-sky-50 text-sky-700" : isEcommerce ? "border-blue-200 bg-blue-50 text-blue-700" : "border-emerald-200 bg-emerald-50 text-emerald-700")}>
               <EngineIcon className="h-5 w-5" aria-hidden />
             </span>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{engine.industry}</p>
           </div>
-          <Badge variant="outline" className={cn("shrink-0 px-2 py-0.5 text-[10px] font-medium", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-600" : "border-emerald-200 bg-emerald-50 text-emerald-800")}>
+          <Badge variant="outline" className={cn("shrink-0 px-2 py-0.5 text-[10px] font-medium", isComingSoon ? "border-slate-200 bg-slate-50 text-slate-600" : isEcommerce ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-800")}>
             {isComingSoon ? "Coming soon" : isProspectAi ? (prospectAiActivated ? "Active" : "Available") : statusLabel}
           </Badge>
         </div>
