@@ -263,7 +263,8 @@ export function Sidebar() {
                         }
 
                         return (
-                          <Link key={item.id} href={item.href}>
+                          <div key={item.id}>
+                          <Link href={item.href}>
                             <a data-testid={item.testId} className={linkClasses}>
                               <span className="relative inline-flex shrink-0">
                                 <item.icon className={iconClasses} />
