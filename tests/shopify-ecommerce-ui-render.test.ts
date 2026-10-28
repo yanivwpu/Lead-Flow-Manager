@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { build } from "esbuild";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import React from "react";
@@ -210,4 +210,14 @@ test("eligible merchant sees primary Activate action, with setup as secondary li
   assert.equal(setup?.getAttribute("href"), "/app/integrations?setup=shopify");
   assert.ok(!setup?.className.includes("bg-blue-600"));
   state.activation = { eligible: false, activated: false, connected: false, planEligible: false };
+});
+
+test("E-Commerce solutions page centers the benefits heading and keeps its intro one line on desktop", () => {
+  const src = readFileSync("client/src/components/marketing/SolutionPage.tsx", "utf8");
+  assert.ok(src.includes('content.path === "/solutions/ecommerce"'));
+  assert.ok(src.includes('data-testid="solution-help-section-header"'));
+  assert.ok(src.includes('isEcommerceSolution && "text-center"'));
+  assert.ok(src.includes('isEcommerceSolution && "mx-auto lg:max-w-none lg:whitespace-nowrap"'));
+  // Do not impose nowrap on narrow phones or alter the layout of other solutions.
+  assert.ok(!src.includes('isEcommerceSolution && "whitespace-nowrap"'));
 });
