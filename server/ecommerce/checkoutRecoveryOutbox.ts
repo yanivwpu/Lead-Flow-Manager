@@ -97,6 +97,26 @@ export function claimRecoveryDeliveryQuery(input:{accountId:string;shop:string})
      o.contact_id,o.template_id,o.claim_token::text AS claim_token
  `;
 }
+/** Commit on the root connection BEFORE entering the provider transaction.
+ * This fence intentionally survives a rolled-back send transaction. A lost
+ * acknowledgement or crash sacrifices delivery rather than risking a resend.
+ */
+export function fenceRecoveryProviderAttemptQuery(input:{
+ id:string;accountId:string;shop:string;claimToken:string;
+}){
+ if(!input.accountId?.trim() || !SHOP.test(input.shop) ||
+    !/^[1-9][0-9]{0,18}$/.test(input.id) ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.claimToken))
+   throw Error('invalid_recovery_attempt_claim');
+ return sql`
+   UPDATE ecommerce_checkout_recovery_outbox
+   SET provider_attempted_at=NOW(),updated_at=NOW()
+   WHERE id=CAST(${input.id} AS BIGINT) AND account_id=${input.accountId}
+     AND shop=${input.shop} AND claim_token=CAST(${input.claimToken} AS UUID)
+     AND state='claimed' AND provider_attempted_at IS NULL
+   RETURNING id::text AS id
+ `;
+}
 /** Terminal, no automatic provider retries. Ambiguous acceptance -> uncertain. */
 export function settleRecoveryDeliveryQuery(input:{
  id:string;accountId:string;shop:string;claimToken:string;
@@ -114,7 +134,9 @@ export function settleRecoveryDeliveryQuery(input:{
      updated_at=NOW()
    WHERE id=CAST(${input.id} AS BIGINT) AND account_id=${input.accountId}
      AND shop=${input.shop} AND claim_token=CAST(${input.claimToken} AS UUID)
-     AND state='claimed'
+     AND (state='claimed' OR
+       (state='accepted' AND ${input.outcome}='accepted'
+        AND provider_message_id=${input.providerMessageId ?? null}))
    RETURNING id::text AS id
  `;
 }
