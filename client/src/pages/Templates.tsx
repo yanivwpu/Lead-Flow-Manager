@@ -629,7 +629,7 @@ export function GrowthEngineGalleryCard({
             <button
               type="button"
               className="w-full rounded-md px-3 py-2 text-sm font-medium text-gray-500 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 sm:w-auto"
-              onClick={() => setLocation(engine.detailHref!)}
+              onClick={() => setLocation(isEcommerce && engine.marketingHref ? engine.marketingHref : engine.detailHref!)}
             >
               View details
             </button>
