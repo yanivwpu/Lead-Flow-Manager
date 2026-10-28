@@ -8,6 +8,8 @@ import { recheckShopifyCheckoutForRecovery } from './checkoutFreshRecheck';
 import { evaluateRecoveryMessagingEligibility, type RecoveryTemplateApproval } from './checkoutRecoveryMessagingEligibility';
 import { recoveryDeliveryExecutionEnabled, type ClaimedRecoveryDelivery } from './checkoutRecoveryDeliveryWorker';
 import { validateRecoveryMetaTemplate, recoveryTemplateBodyComponents, type RecoveryTemplateShape } from './checkoutRecoveryMetaTemplate';
+import { fenceRecoveryProviderAttemptQuery, settleRecoveryDeliveryQuery } from './checkoutRecoveryOutbox';
+import { CHECKOUT_OBSERVATION_DELAY_MINUTES } from './checkoutObservationQueries';
 
 const E164=/^\+[1-9]\d{7,14}$/;
 function plainObject(value:unknown):Record<string,unknown>{
@@ -57,6 +59,10 @@ export async function sendRecoveryViaMeta(
     !claim.templateId || !args.checkoutRecoveryUrl)
    throw Error('invalid_recovery_send_claim');
 
+ // Autocommit before any external request. Keeping this update inside the
+ // transaction below would lose the fence on an ambiguous provider failure.
+ const attempt=await db.execute(fenceRecoveryProviderAttemptQuery(claim));
+ if(attempt.rows.length!==1)throw Error('recovery_provider_attempt_already_fenced');
  return db.transaction(async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${claim.shop},0))`);
    // A forged or stale caller cannot turn this adapter into a direct send:
@@ -130,7 +136,9 @@ export async function sendRecoveryViaMeta(
    });
    if(fresh.status!=='eligible_for_review' ||
       fresh.shopifyCustomerId!==shopperId ||
-      fresh.recoveryUrl!==args.checkoutRecoveryUrl)
+      fresh.recoveryUrl!==args.checkoutRecoveryUrl ||
+      !Number.isFinite(Date.parse(fresh.lastActivityAt)) ||
+      Date.now()-Date.parse(fresh.lastActivityAt)<CHECKOUT_OBSERVATION_DELAY_MINUTES*60_000)
      throw Error('checkout_recovery_no_longer_valid');
 
    const live=await deps.templates(claim.accountId);
@@ -179,6 +187,12 @@ export async function sendRecoveryViaMeta(
      recoveryTemplateBodyComponents(approved,fresh.recoveryUrl));
    if(!response?.messageId || response.messageId.length>256)
      throw Error('meta_provider_acceptance_unknown');
+   // Commit the provider ID while still holding the shop lock. A fast signed
+   // receipt waits on this same lock and can then match the accepted outbox.
+   const settled=await tx.execute(settleRecoveryDeliveryQuery({
+     ...claim,outcome:'accepted',providerMessageId:response.messageId,
+   }));
+   if(settled.rows.length!==1)throw Error('meta_provider_settlement_unknown');
    return {messageId:response.messageId};
  });
 }
