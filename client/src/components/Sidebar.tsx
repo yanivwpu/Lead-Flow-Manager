@@ -43,6 +43,8 @@ export function Sidebar() {
   const isRTL = getDirection() === "rtl";
   const { categories, allItems } = useAppNavCategories();
   const [currentLocation] = useLocation();
+  const commerceViewParam = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("view");
+  const selectedCommerceView = ["products", "orders", "shopping", "recovery", "post", "settings"].includes(commerceViewParam || "") ? commerceViewParam : "overview";
   const commerceSubnav = [
     {id:"overview", en:"Overview", es:"Resumen", he:"סקירה", href:"/app/ecommerce-growth-engine"},
     {id:"products", en:"Products", es:"Productos", he:"מוצרים", href:"/app/ecommerce-growth-engine?view=products"},
@@ -223,7 +225,7 @@ export function Sidebar() {
                   {!isCategoryCollapsed && (
                     <div className="flex flex-col gap-1">
                       {category.items.map((item) => {
-                        const isActive = item.active;
+                        const isActive = item.active && item.id !== "ecommerceGrowthEngine";
                         const linkClasses = cn(
                           "flex items-center p-2 rounded-lg transition-colors group relative w-full border-s border-s-transparent",
                           isActive
@@ -279,21 +281,28 @@ export function Sidebar() {
                               </span>
                             </a>
                           </Link>
+                          {item.id === "ecommerceGrowthEngine" && (
+                            <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
+                              {commerceSubnav.map(module => {
+                                const isSelected = currentLocation.split("?")[0] === "/app/ecommerce-growth-engine" &&
+                                  (module.id === "overview" ? selectedCommerceView === "overview" : selectedCommerceView === module.id);
+                                return (
+                                  <Link key={module.id} href={module.href}>
+                                    <a data-testid={`ecommerce-sidebar-${module.id}`}
+                                      aria-current={isSelected ? "page" : undefined}
+                                      className={cn("block rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-blue-50 hover:text-blue-700",
+                                        isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600")}>
+                                      {isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}
+                                    </a>
+                                  </Link>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </>
                         );
                       })}
-                      {category.id === "growthEngines" && category.items.some(item => item.id === "ecommerceGrowthEngine") && !collapsed && (
-                        <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
-                          {commerceSubnav.map(module => (
-                            <Link key={module.id} href={module.href}>
-                              <a data-testid={`ecommerce-sidebar-${module.id}`} className={cn(
-                                "block rounded-md px-2 py-1.5 text-xs hover:bg-blue-50 hover:text-blue-700",
-                                currentLocation.includes("ecommerce-growth-engine") && (module.id === "overview" ? !window.location.search.includes("view=") : window.location.search.includes(`view=${module.id}`))
-                                  ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600"
-                              )}>{isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}</a>
-                            </Link>
-                          ))}
-                        </div>
-                      )}
+
                     </div>
                   )}
                 </div>
