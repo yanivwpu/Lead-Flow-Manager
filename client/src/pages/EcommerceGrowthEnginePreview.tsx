@@ -96,7 +96,7 @@ export function EcommerceGrowthEnginePreviewContent() {
                 {l[0]}
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
-                {locale === "he" ? "חברו את החנות, רכזו לקוחות והזמנות ונהלו משימות מעקב במקום אחד. גלו את הכלים הקיימים ואת האוטומציות שבפיתוח." : locale === "es" ? "Conecta tu tienda, reúne clientes y pedidos, y organiza las tareas de seguimiento. Descubre las funciones disponibles y las automatizaciones en desarrollo." : "Connect your Shopify store to manage customer conversations, AI product discovery, orders and follow-ups in one place."}
+                {locale === "he" ? "חברו את Shopify ונהלו שיחות לקוחות, גילוי מוצרים בעזרת AI, הזמנות ומעקב במקום אחד." : locale === "es" ? "Conecta Shopify y gestiona conversaciones, productos, pedidos y seguimientos en un solo lugar." : "Connect your Shopify store to manage customer conversations, AI product discovery, orders and follow-ups in one place."}
               </p>
               <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center" id="install-engine">
                 {user && !isActivated && activation.data?.eligible === true ? (
@@ -129,7 +129,7 @@ export function EcommerceGrowthEnginePreviewContent() {
               </div>
               {activate.isError && <p role="alert" className="mt-2 text-sm text-red-700">
                 {locale === "he" ? "ההפעלה נכשלה. בדקו את החיבור והמנוי." : locale === "es" ? "No se pudo activar. Revisa la conexión y el plan." : "Activation unavailable. Check your Shopify connection and Pro plan."}
-              </p>
+              </p>}
               <p className="mt-4 text-xs text-slate-500">{tr.notice}</p>
             </div>
             <div className="rounded-3xl border border-indigo-100 bg-white p-5 shadow-[0_24px_70px_-35px_rgba(79,70,229,0.18)] sm:p-7" aria-label={tr.workflow}>
