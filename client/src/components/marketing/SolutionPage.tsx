@@ -98,6 +98,7 @@ export function SolutionPage({ content: baseContent }: Props) {
   const hreflangLinks = getHreflangLinks(content.path, MARKETING_URL);
   const localeHref = (href: string) => localizedInternalHref(href, locale);
   const ogTitle = content.ogTitle ?? content.title;
+  const isEcommerceSolution = content.path === "/solutions/ecommerce";
 
   const breadcrumbs = [
     { label: chrome.home, href: localeHref("/") },
@@ -207,13 +208,18 @@ export function SolutionPage({ content: baseContent }: Props) {
 
         <section className="px-4 py-14 md:px-6 md:py-16">
           <div className="mx-auto max-w-7xl xl:max-w-[1440px]">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
-              {chrome.howWhachatHelps}
-            </p>
-            <h2 className="font-display mb-4 text-2xl font-bold text-gray-950 md:text-3xl">
-              {chrome.multipleProductsTogether}
-            </h2>
-            <p className="mb-8 max-w-3xl text-gray-600">{content.helpsIntro}</p>
+            <div className={cn(isEcommerceSolution && "text-center")} data-testid="solution-help-section-header">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-brand-green">
+                {chrome.howWhachatHelps}
+              </p>
+              <h2 className="font-display mb-4 text-2xl font-bold text-gray-950 md:text-3xl">
+                {chrome.multipleProductsTogether}
+              </h2>
+              <p className={cn(
+                "mb-8 max-w-3xl text-gray-600",
+                isEcommerceSolution && "mx-auto lg:max-w-none lg:whitespace-nowrap",
+              )}>{content.helpsIntro}</p>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               {content.helpsPoints.map((item) => (
                 <div key={item.title} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-5">
