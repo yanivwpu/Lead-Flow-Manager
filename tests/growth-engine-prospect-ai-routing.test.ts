@@ -108,3 +108,14 @@ test("Prospect AI plan allowance box is compact and scannable", async () => {
   assert.ok(templates.includes("catalogQuota.rows.map"));
   assert.ok(templates.includes('min-w-[3.75rem] font-semibold'));
 });
+
+test("Shopify card Install leads to authenticated activation page, View details has its own marketing route", () => {
+  const engine = getGrowthEngineBySlug("ecommerce-growth-engine");
+  assert.equal(engine?.ctaLabel, "Install Growth Engine");
+  assert.equal(engine?.detailHref, "/app/templates/ecommerce-growth-engine");
+  assert.equal(engine?.marketingHref, "/solutions/ecommerce");
+  const gallery = readFileSync(join(root, "client/src/pages/Templates.tsx"), "utf8");
+  assert.match(gallery, /isEcommerce && engine\.marketingHref \? engine\.marketingHref : engine\.detailHref!/);
+  const app = readFileSync(join(root, "client/src/pages/AppLayout.tsx"), "utf8");
+  assert.ok(app.includes('<Route path="/app/templates/ecommerce-growth-engine" component={EcommerceGrowthEnginePreview} />'));
+});
