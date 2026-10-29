@@ -1,5 +1,6 @@
 import {sql} from 'drizzle-orm';
 import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
+import {validRecoveryWamid} from './checkoutRecoveryInboundConsentGate';
 const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 const CUSTOMER=/^gid:\/\/shopify\/Customer\/[1-9][0-9]{0,19}$/;
 type Base={
@@ -8,7 +9,7 @@ type Base={
 function checked(x:Base){
  if(!x.accountId?.trim()||x.accountId.length>128||!SHOP.test(x.shop)||
     !(x.eventAt instanceof Date)||!Number.isFinite(x.eventAt.valueOf())||
-    !/^wamid\.[A-Za-z0-9._-]{8,250}$/.test(x.wamid))
+    !validRecoveryWamid(x.wamid))
    throw Error('invalid_recovery_inbound_consent_evidence');
  return recoveryPhoneDigest(x.secret,x.phone);
 }

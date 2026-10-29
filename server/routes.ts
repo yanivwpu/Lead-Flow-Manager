@@ -3311,7 +3311,8 @@ export async function registerRoutes(
           await import("./ecommerce/checkoutRecoveryInboundConsentCapture");
         try {
           const owner = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
-          if (owner) await captureRecoveryConsentFromVerifiedMeta({
+          if (owner) {
+            const consentOutcome = await captureRecoveryConsentFromVerifiedMeta({
             accountId: owner.id,
             inboxContactId: metaInboxContact?.id ?? null,
             candidate: {
@@ -3331,7 +3332,18 @@ export async function registerRoutes(
                 process.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED,
             },
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
-          });
+            });
+            // A tiny outcome-only audit for explicit commands, never message text,
+            // tokens, contact identifiers, or raw recipient evidence.
+            const normalizedConsentCommand = (incomingMessage.text || "")
+              .trim().replace(/\s+/g, " ").toUpperCase();
+            if (["YES WHATSAPP CHECKOUT REMINDERS", "STOP",
+                 "STOP CHECKOUT REMINDERS", "UNSUBSCRIBE"].includes(normalizedConsentCommand)) {
+              console.info("[EcommerceRecoveryConsent] verified_inbound_outcome", {
+                outcome: consentOutcome,
+              });
+            }
+          }
         } catch (consentErr) {
           console.error("[EcommerceRecoveryConsent] Signed opt-in processing failed",
             consentErr instanceof Error ? consentErr.message : "unknown_error");
