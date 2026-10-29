@@ -21,13 +21,20 @@ export function recoveryConsentCaptureEnabled(env:{
  * Generic YES, Shopify checkout marketing setting, and interactive buttons do
  * NOT count. A clear merchant-specific notice must be displayed separately.
  */
+/** Meta WAMIDs may include standard Base64 padding, + and /.
+ * Keep total length within the 256-character database column.
+ */
+export function validRecoveryWamid(v:unknown):v is string {
+ return typeof v==='string' &&
+   /^wamid\.(?=.{8,250}$)[A-Za-z0-9._+\/-]+={0,2}$/.test(v);
+}
 export function classifyRecoveryConsentInbound(
  event:VerifiedInboundConsentCandidate,now=Date.now()
 ):{action:RecoveryConsentAction;eventAt:Date}|null {
   if(!event.signatureValid||!event.hasRawBody||event.type!=='text' ||
     !/^[1-9][0-9]{5,24}$/.test(event.phoneNumberId) ||
     !/^[1-9][0-9]{7,14}$/.test(event.from) ||
-    !/^wamid\.[A-Za-z0-9._-]{8,250}$/.test(event.messageId) ||
+    !validRecoveryWamid(event.messageId) ||
     !/^[1-9][0-9]{8,11}$/.test(event.timestamp))
     return null;
   const seconds=Number(event.timestamp),when=seconds*1000;
