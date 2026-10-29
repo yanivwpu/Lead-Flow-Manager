@@ -5,6 +5,7 @@ import { dueCheckoutObservationsQuery } from "./ecommerce/checkoutObservationQue
 import { prepareCheckoutRecoveryIntentQuery, suppressCheckoutRecoveryIntentQuery, suppressCompletedCheckoutIntentQuery } from "./ecommerce/checkoutRecoveryIntents";
 import { checkoutRecoveryPreparationEnabled, parsePrepareRecoveryRequest } from "./ecommerce/checkoutRecoveryPreparationGate";
 import { fetchShopifyAbandonedCheckoutPage } from "./ecommerce/abandonedCheckoutSource";
+import { stagingRecoveryPreflightAllowed, recoveryAutomationFlags } from "./ecommerce/checkoutRecoveryPreflight";
 import { upsertCheckoutObservationQuery } from "./ecommerce/checkoutObservationQueries";
 import { checkoutObservationPreviewAvailable, parseCheckoutObservationSyncRequest } from "./ecommerce/checkoutObservationSyncGate";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
@@ -946,6 +947,103 @@ router.post('/ecommerce/order-support-task-schedule', async (req: Request, res: 
     return res.json({ok:true,messagingEnabled:false,checkoutEnabled:false});
   } catch {
     return res.status(503).json({error:'Task schedule unavailable'});
+  }
+});
+
+/** Read-only internal pilot preflight: authenticated merchant, one Shopify page,
+ * and tenant-scoped aggregate counts. No database mutation or Meta sending.
+ */
+router.get('/ecommerce/checkout-recovery-preflight', async (req: Request, res: Response) => {
+  res.set('Cache-Control','no-store');
+  if (!req.user) return res.status(401).json({error:'Unauthorized'});
+  try {
+    const accountId=(req.user as {id:string}).id;
+    const owner=await storage.getUserForSession(accountId);
+    const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
+    const environment={
+      RAILWAY_ENVIRONMENT_NAME:process.env.RAILWAY_ENVIRONMENT_NAME,
+      APP_URL:process.env.APP_URL,
+      ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:process.env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED,
+      ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:process.env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED,
+      ECOMMERCE_RECOVERY_AUTOPREP_ENABLED:process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED,
+      ECOMMERCE_RECOVERY_SEND_ENABLED:process.env.ECOMMERCE_RECOVERY_SEND_ENABLED,
+      ECOMMERCE_RECOVERY_WORKER_ENABLED:process.env.ECOMMERCE_RECOVERY_WORKER_ENABLED,
+    };
+    if (!shop || !stagingRecoveryPreflightAllowed(environment,shop))
+      return res.status(404).json({error:'Not available'});
+    if (!owner || !isShopifyContactInstallationActive(owner) || !owner.shopifyAccessToken)
+      return res.status(403).json({error:'Active pilot Shopify connection required'});
+    const matches=await db.select().from(integrations).where(and(
+      eq(integrations.userId,accountId),eq(integrations.type,'shopify'),
+      eq(integrations.isActive,true))).limit(2);
+    if(matches.length!==1)return res.status(409).json({error:'Unique active Shopify installation required'});
+    const config=(matches[0].config??{}) as Record<string,unknown>;
+    for(const key of ['shop','shopUrl'])if(config[key]!=null &&
+      (typeof config[key]!=='string'||normalizeShopifyShopDomain(config[key])!==shop))
+      return res.status(409).json({error:'Shopify installation mismatch'});
+    // Missing schemas are an unknown state, NOT a zero-count state.
+    const schema=await db.execute(sql`
+      SELECT to_regclass('public.ecommerce_whatsapp_recovery_consents') IS NOT NULL AS consent,
+        to_regclass('public.ecommerce_abandoned_checkout_observations') IS NOT NULL AS observations,
+        to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS intents,
+        to_regclass('public.ecommerce_checkout_recovery_outbox') IS NOT NULL AS outbox,
+        to_regclass('public.message_templates') IS NOT NULL AS templates`);
+    if(!schema.rows[0]||Object.values(schema.rows[0]).some(value=>value!==true))
+      return res.status(409).json({error:'Recovery staging schema incomplete'});
+    const counts=await db.execute(sql`
+      SELECT
+       (SELECT COUNT(*)::integer FROM ecommerce_whatsapp_recovery_consents
+        WHERE account_id=${accountId} AND shop=${shop} AND revoked_at IS NULL) AS active_consents,
+       (SELECT COUNT(*)::integer FROM ecommerce_whatsapp_recovery_consents
+        WHERE account_id=${accountId} AND shop=${shop} AND revoked_at IS NOT NULL) AS revoked_consents,
+       (SELECT COUNT(*)::integer FROM ecommerce_abandoned_checkout_observations
+        WHERE account_id=${accountId} AND shop=${shop} AND completed=FALSE) AS observed_open,
+       (SELECT COUNT(*)::integer FROM ecommerce_abandoned_checkout_observations
+        WHERE account_id=${accountId} AND shop=${shop} AND completed=FALSE
+         AND recovery_url_available=TRUE AND next_review_at<=NOW()) AS observations_due,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_intents
+        WHERE account_id=${accountId} AND shop=${shop} AND status='ready') AS ready_intents,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop} AND state='pending') AS pending_outbox,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop} AND state='suppressed') AS suppressed_outbox,
+       (SELECT COUNT(*)::integer FROM message_templates
+        WHERE user_id=${accountId} AND name='shopify_checkout_reminder'
+          AND lower(category)='marketing' AND lower(status)='approved') AS local_approved_templates`);
+    const row=counts.rows[0]||{};
+    const asCount=(value:unknown)=>Number(value??0);
+    let shopifySource:{status:'ok'|'unavailable';listed:number|null;open:number|null;
+      completed:number|null;hasMore:boolean|null}={
+        status:'unavailable',listed:null,open:null,completed:null,hasMore:null,
+      };
+    try{
+      const page=await fetchShopifyAbandonedCheckoutPage({shop,accessToken:owner.shopifyAccessToken});
+      shopifySource={status:'ok',listed:page.observations.length,
+        open:page.observations.filter(item=>!item.completed).length,
+        completed:page.observations.filter(item=>item.completed).length,
+        hasMore:page.hasNextPage};
+    }catch{/* Permission or network failure means unavailable, never zero. */}
+    return res.json({
+      ok:true,mode:'staging_read_only',shop,checkedAt:new Date().toISOString(),
+      shopify:shopifySource,
+      evidence:{
+        activeConsents:asCount(row.active_consents),
+        revokedConsents:asCount(row.revoked_consents),
+        observedOpen:asCount(row.observed_open),
+        observationsDue:asCount(row.observations_due),
+        readyIntents:asCount(row.ready_intents),
+        pendingOutbox:asCount(row.pending_outbox),
+        suppressedOutbox:asCount(row.suppressed_outbox),
+        locallyApprovedReminderTemplates:asCount(row.local_approved_templates),
+      },
+      flags:recoveryAutomationFlags(environment),
+      liveMetaTemplateApproval:'not_checked',
+      messagesSentByThisCheck:0,
+      checkoutsCreatedByThisCheck:0,
+      recoveryActivatedByThisCheck:false,
+    });
+  }catch{
+    return res.status(503).json({error:'Recovery preflight temporarily unavailable'});
   }
 });
 
