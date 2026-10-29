@@ -1856,6 +1856,48 @@ export async function repairMetaWabaWebhookSubscription(userId: string): Promise
     })}`
   );
 
+  // Checking an already-subscribed WABA must NEVER re-POST subscribed_apps:
+  // Meta can replace an existing per-WABA callback override when the POST omits
+  // override_callback_uri. This is critical for test WABAs routed to staging
+  // while the Meta app-level default remains production.
+  const currentSubscription = await verifyWabaAppSubscriptionDetailed(wabaId, token, "repair_precheck");
+  if (currentSubscription.verified) {
+    logWhatsAppWebhookSubscribe({
+      wabaId,
+      phoneNumberId,
+      userId,
+      graphVersion,
+      subscribeStatus: "already_subscribed_preserved",
+      verifyStatus: "ok",
+      errorCode: null,
+      errorMessage: null,
+    });
+    await storage.updateUser(userId, {
+      metaWebhookSubscribed: true,
+      metaWebhookLastCheckedAt: new Date(),
+      metaIntegrationStatus: "connected",
+      metaLastErrorCode: null,
+      metaLastErrorMessage: null,
+    });
+    return { success: true, verified: true };
+  }
+
+  // Fail closed when the read probe cannot establish membership. Missing
+  // membership (a successful GET without our app) is the only reason to POST.
+  if (currentSubscription.error) {
+    failLog(
+      "blocked_read_error",
+      "failed",
+      currentSubscription.error.code ?? null,
+      currentSubscription.error.message ?? "Could not read the WABA subscription."
+    );
+    return {
+      success: false,
+      verified: false,
+      errorMessage: "Could not verify the current WABA subscription; no changes made.",
+    };
+  }
+
   const post = await postWabaSubscribedAppsDetailed(wabaId, token);
   let subscribeStatus = post.httpOk && post.graphSuccess ? "ok" : "failed";
   let errorCode: number | string | null = post.error?.code ?? null;
