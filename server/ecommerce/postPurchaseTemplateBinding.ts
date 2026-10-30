@@ -66,9 +66,9 @@ export function savePostPurchaseTemplateBindingQuery(input: {
 }) {
   return sql`UPDATE integrations SET config=jsonb_set(
       COALESCE(config, '{}'::jsonb), '{ecommercePostPurchaseTemplates}',
-      (CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplates')='object'
+      ((CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplates')='object'
         THEN config->'ecommercePostPurchaseTemplates' ELSE '{}'::jsonb END)
-      - ${input.journey}::text
+      - ${input.journey}::text)
       || (CASE WHEN ${input.templateId}::text IS NULL THEN '{}'::jsonb
              ELSE jsonb_build_object(${input.journey}::text,${input.templateId}::text) END),
       true
