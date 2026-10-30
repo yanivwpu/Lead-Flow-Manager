@@ -1007,37 +1007,77 @@ router.get('/ecommerce/checkout-recovery-preflight', async (req: Request, res: R
         WHERE account_id=${accountId} AND shop=${shop} AND state='pending') AS pending_outbox,
        (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
         WHERE account_id=${accountId} AND shop=${shop} AND state='suppressed') AS suppressed_outbox,
-       -- Staging owner-only, aggregate lifecycle evidence: never expose checkout
-       -- links, Meta message IDs, phones, contact IDs or provider error text.
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop} AND state='claimed') AS claimed_outbox,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop} AND state='accepted') AS accepted_outbox,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop} AND state='uncertain') AS uncertain_outbox,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND provider_attempted_at IS NOT NULL) AS provider_attempts,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND provider_message_id IS NOT NULL) AS provider_accepted,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND meta_delivery_status='sent') AS meta_sent_receipts,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND meta_delivery_status='delivered') AS meta_delivered_receipts,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND meta_delivery_status='read') AS meta_read_receipts,
-       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
-        WHERE account_id=${accountId} AND shop=${shop}
-          AND meta_delivery_status='failed') AS meta_failed_receipts,
        (SELECT COUNT(*)::integer FROM message_templates
         WHERE user_id=${accountId} AND name='shopify_checkout_reminder'
           AND lower(category)='marketing' AND lower(status)='approved') AS local_approved_templates`);
     const row=counts.rows[0]||{};
     const asCount=(value:unknown)=>Number(value??0);
+    // Optional receipt/provider-attempt fields can lag behind the core recovery
+    // schema in a staging deployment. They must never take the existing
+    // read-only readiness endpoint down, or be reported as zero if unavailable.
+    type DeliveryEvidence={
+      status:'ok'|'schema_incomplete'|'unavailable';
+      claimed:number|null;accepted:number|null;uncertain:number|null;
+      providerAttempts:number|null;providerAccepted:number|null;
+      metaSentReceipts:number|null;metaDeliveredReceipts:number|null;
+      metaReadReceipts:number|null;metaFailedReceipts:number|null;
+    };
+    let delivery:DeliveryEvidence={
+      status:'unavailable',claimed:null,accepted:null,uncertain:null,
+      providerAttempts:null,providerAccepted:null,
+      metaSentReceipts:null,metaDeliveredReceipts:null,
+      metaReadReceipts:null,metaFailedReceipts:null,
+    };
+    try{
+      const capability=await db.execute(sql`
+        SELECT
+          EXISTS(SELECT 1 FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name='ecommerce_checkout_recovery_outbox'
+              AND column_name='provider_attempted_at') AS has_attempt,
+          EXISTS(SELECT 1 FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name='ecommerce_checkout_recovery_outbox'
+              AND column_name='meta_delivery_status') AS has_receipt,
+          EXISTS(SELECT 1 FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name='ecommerce_checkout_recovery_outbox'
+              AND column_name='provider_message_id') AS has_message_id
+      `);
+      const availability=capability.rows[0]||{};
+      const totals=await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE o.state='claimed')::integer AS claimed,
+          COUNT(*) FILTER (WHERE o.state='accepted')::integer AS accepted,
+          COUNT(*) FILTER (WHERE o.state='uncertain')::integer AS uncertain,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'provider_attempted_at' IS NOT NULL)::integer AS attempts,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'provider_message_id' IS NOT NULL)::integer AS provider_accepted,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'meta_delivery_status'='sent')::integer AS meta_sent,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'meta_delivery_status'='delivered')::integer AS meta_delivered,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'meta_delivery_status'='read')::integer AS meta_read,
+          COUNT(*) FILTER (WHERE to_jsonb(o)->>'meta_delivery_status'='failed')::integer AS meta_failed
+        FROM ecommerce_checkout_recovery_outbox AS o
+        WHERE o.account_id=${accountId} AND o.shop=${shop}
+      `);
+      const t=totals.rows[0];
+      if(t)delivery={
+        status:availability.has_attempt===true&&availability.has_receipt===true&&
+          availability.has_message_id===true?'ok':'schema_incomplete',
+        claimed:asCount(t.claimed),accepted:asCount(t.accepted),
+        uncertain:asCount(t.uncertain),
+        providerAttempts:availability.has_attempt===true?asCount(t.attempts):null,
+        providerAccepted:availability.has_message_id===true?asCount(t.provider_accepted):null,
+        metaSentReceipts:availability.has_receipt===true?asCount(t.meta_sent):null,
+        metaDeliveredReceipts:availability.has_receipt===true?asCount(t.meta_delivered):null,
+        metaReadReceipts:availability.has_receipt===true?asCount(t.meta_read):null,
+        metaFailedReceipts:availability.has_receipt===true?asCount(t.meta_failed):null,
+      };
+    }catch(e){
+      // Never expose tenant fields, checkout URLs or raw Postgres errors.
+      const code=(e as {code?:unknown})?.code;
+      console.warn('[EcommerceRecoveryPreflight] delivery_aggregate_unavailable',
+        {sqlState:typeof code==='string' && /^[0-9A-Z]{5}$/.test(code)?code:'unknown'});
+    }
     let shopifySource:{status:'ok'|'unavailable';listed:number|null;open:number|null;
       completed:number|null;hasMore:boolean|null}={
         status:'unavailable',listed:null,open:null,completed:null,hasMore:null,
@@ -1062,20 +1102,8 @@ router.get('/ecommerce/checkout-recovery-preflight', async (req: Request, res: R
         suppressedOutbox:asCount(row.suppressed_outbox),
         locallyApprovedReminderTemplates:asCount(row.local_approved_templates),
       },
-      // These are counts of existing rows and receipts, NOT messages sent by
-      // this read-only request. A provider attempt without an accepted ID or
-      // signed receipt is not evidence of delivery and must never be retried.
-      delivery:{
-        claimed:asCount(row.claimed_outbox),
-        accepted:asCount(row.accepted_outbox),
-        uncertain:asCount(row.uncertain_outbox),
-        providerAttempts:asCount(row.provider_attempts),
-        providerAccepted:asCount(row.provider_accepted),
-        metaSentReceipts:asCount(row.meta_sent_receipts),
-        metaDeliveredReceipts:asCount(row.meta_delivered_receipts),
-        metaReadReceipts:asCount(row.meta_read_receipts),
-        metaFailedReceipts:asCount(row.meta_failed_receipts),
-      },
+      // Existing stored evidence only; this GET never attempts a send.
+      delivery,
       flags:recoveryAutomationFlags(environment),
       liveMetaTemplateApproval:'not_checked',
       messagesSentByThisCheck:0,

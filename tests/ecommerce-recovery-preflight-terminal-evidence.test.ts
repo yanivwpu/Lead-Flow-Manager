@@ -26,33 +26,32 @@ test('recovery staging preflight remains authenticated, owner-scoped and read on
   assert.ok(route.includes("recoveryActivatedByThisCheck:false"));
 });
 
-test('recovery outcome reconciliation exposes terminal and receipt counts, not PII',()=>{
+test('original recovery readiness counts remain independent of optional receipt columns',()=>{
  const query=route.slice(route.indexOf('const counts=await db.execute(sql'),route.indexOf('const row=counts.rows[0]'));
- const expected=[
-  ["state='pending'","pending_outbox"],
-  ["state='suppressed'","suppressed_outbox"],
-  ["state='claimed'","claimed_outbox"],
-  ["state='accepted'","accepted_outbox"],
-  ["state='uncertain'","uncertain_outbox"],
-  ["provider_attempted_at IS NOT NULL","provider_attempts"],
-  ["provider_message_id IS NOT NULL","provider_accepted"],
-  ["meta_delivery_status='sent'","meta_sent_receipts"],
-  ["meta_delivery_status='delivered'","meta_delivered_receipts"],
-  ["meta_delivery_status='read'","meta_read_receipts"],
-  ["meta_delivery_status='failed'","meta_failed_receipts"]
- ];
- for(const [where,alias] of expected){
-  const pos=query.indexOf(where);
-  assert.ok(pos>=0,where);
-  const near=query.slice(Math.max(0,pos-125),pos+180);
-  assert.ok(near.includes('account_id=\${accountId} AND shop=\${shop}'),alias+' must be tenant scoped');
-  assert.ok(near.includes('AS '+alias),alias+' must alias the count');
- }
- const output=route.slice(route.indexOf('delivery:{'),route.indexOf('flags:recoveryAutomationFlags(environment)'));
- for(const name of ['claimed','accepted','uncertain','providerAttempts','providerAccepted',
-    'metaSentReceipts','metaDeliveredReceipts','metaReadReceipts','metaFailedReceipts'])
-  assert.ok(output.includes(name+':asCount('),name);
- assert.ok(!output.includes('provider_message_id:'));
- assert.ok(!output.includes('recipient'));
- assert.ok(!output.includes('checkout_gid'));
+ for(const marker of ["state='pending'","state='suppressed'","observations_due","ready_intents","active_consents"])
+   assert.ok(query.includes(marker),marker);
+ for(const optional of ["provider_attempted_at","meta_delivery_status"])
+   assert.equal(query.includes(optional),false,optional+' must not affect readiness');
+});
+
+test('delivery evidence reports unavailable rather than false zero for missing columns',()=>{
+ const capability=route.slice(route.indexOf('const capability=await'),route.indexOf('const totals=await'));
+ assert.ok(capability.includes('information_schema.columns'));
+ for(const column of ['provider_attempted_at','meta_delivery_status','provider_message_id'])
+   assert.ok(capability.includes("column_name='"+column+"'"));
+ const extra=route.slice(route.indexOf('const totals=await'),route.indexOf('if(t)delivery='));
+ assert.ok(extra.includes('FROM ecommerce_checkout_recovery_outbox AS o'));
+ assert.ok(extra.includes('WHERE o.account_id=${accountId} AND o.shop=${shop}'));
+ for(const state of ['claimed','accepted','uncertain'])
+   assert.ok(extra.includes("o.state='"+state+"'"));
+ for(const col of ['provider_attempted_at','meta_delivery_status','provider_message_id'])
+   assert.ok(extra.includes("to_jsonb(o)->>'"+col+"'"),col+' must not reference optional columns directly');
+ assert.ok(route.includes("status:'unavailable',claimed:null,accepted:null,uncertain:null"));
+ assert.ok(route.includes("providerAttempts:availability.has_attempt===true?asCount(t.attempts):null"));
+ assert.ok(route.includes("metaDeliveredReceipts:availability.has_receipt===true?asCount(t.meta_delivered):null"));
+ assert.ok(route.includes("status:availability.has_attempt===true&&availability.has_receipt===true&&"));
+ assert.ok(route.includes("console.warn('[EcommerceRecoveryPreflight] delivery_aggregate_unavailable'"));
+ assert.ok(!route.includes('console.warn(e)'));
+ assert.ok(route.includes('delivery,'));
+ assert.ok(!route.includes('delivery:{'));
 });
