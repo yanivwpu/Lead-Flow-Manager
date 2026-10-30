@@ -112,3 +112,26 @@ export function enqueuePostPurchaseDeliveryQuery(accountId:string,shop:string,in
     RETURNING id::text AS id
   `;
 }
+
+/** Internal signed-webhook reconciliation primitive. Caller MUST authenticate Meta's
+ * raw-body signature and bind the receiving WABA to the correct account first.
+ * Never call this from a public unauthenticated request, and never trigger sends.
+ */
+export function reconcilePostPurchaseReceiptQuery(input:{
+  accountId:string;providerMessageId:string;status:'sent'|'delivered'|'read'|'failed';
+}){
+  if(!input.accountId?.trim()||!input.providerMessageId||
+    input.providerMessageId.length>256||!/^(sent|delivered|read|failed)$/.test(input.status))
+    throw Error('invalid_delivery_receipt');
+  return sql`
+    UPDATE ecommerce_post_purchase_outbox
+    SET meta_delivery_status=${input.status},meta_delivery_at=NOW(),updated_at=NOW()
+    WHERE account_id=${input.accountId}
+      AND provider_message_id=${input.providerMessageId}
+      AND state='accepted'
+      AND (meta_delivery_status IS NULL
+        OR (meta_delivery_status='sent' AND ${input.status} IN ('delivered','read','failed'))
+        OR (meta_delivery_status='delivered' AND ${input.status}='read'))
+    RETURNING id::text AS id
+  `;
+}
