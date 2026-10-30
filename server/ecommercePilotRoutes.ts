@@ -1,5 +1,6 @@
 import { readPostPurchasePlans, parsePostPurchasePlanChange } from "../shared/postPurchase";
 import { savePostPurchasePlanQuery } from "./ecommerce/postPurchasePlans";
+import { postPurchaseTablesQuery, postPurchaseTables } from "./ecommerce/postPurchaseQueries";
 import { parsePostPurchaseTemplateBindingChange, readPostPurchaseTemplateBindings, eligiblePostPurchaseLibraryTemplate, eligiblePostPurchaseTemplateLookupQuery, savePostPurchaseTemplateBindingQuery } from "./ecommerce/postPurchaseTemplateBinding";
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
@@ -90,6 +91,14 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
         }))
       };
     }
+    // Existing additive post-purchase schema check: reads only metadata.
+    // Incomplete schema never authorizes sending or changes event preview semantics.
+    let postPurchaseSchemaReady: boolean | null = null;
+    try {
+      const checked = await db.execute(postPurchaseTablesQuery);
+      const tables = postPurchaseTables(checked.rows[0] as Record<string, unknown> | undefined);
+      postPurchaseSchemaReady = tables.intents && tables.orders && tables.consents;
+    } catch { postPurchaseSchemaReady = null; }
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     return res.json({ ok: true,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
@@ -100,6 +109,7 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       workflowDrafts: readWorkflowDraftSettings(cfg),
       postPurchasePlans: readPostPurchasePlans(cfg),
       postPurchaseTemplates: readPostPurchaseTemplateBindings(cfg),
+      postPurchaseSchemaReady,
       postPurchaseReadiness: { activationEligible: false, reason: "delivery_integration_pending", messagingEnabled: false },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
