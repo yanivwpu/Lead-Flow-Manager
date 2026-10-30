@@ -11,6 +11,7 @@ import {PgDialect} from 'drizzle-orm/pg-core';
 import {createPostPurchasePreparation,type PostPurchaseDatabase,type PostPurchaseTx} from '../server/ecommerce/postPurchasePreparation';
 import {POST_PURCHASE_JOURNEYS,JOURNEY_POLICY} from '../shared/postPurchase';
 import {POST_PURCHASE_CONSENT_PHRASES} from '../server/ecommerce/postPurchaseConsent';
+import {recoveryPhoneDigest} from '../server/ecommerce/checkoutRecoveryMessagingEligibility';
 import {postPurchasePrivacyQueries} from '../server/ecommerce/postPurchaseQueries';
 import {createShopifyOrderWebhookHandler,type ShopifyOrderTopic} from '../server/shopifyOrderWebhookHandler';
 import type {FreshPostPurchaseOrder} from '../server/ecommerce/postPurchaseOrder';
@@ -123,6 +124,10 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       clock+=2000;assert.equal(await grant('reviewRequest',clock),'granted');
       const grants=await execute(sql`SELECT purpose FROM ecommerce_post_purchase_consents WHERE revoked_at IS NULL`);
       assert.deepEqual(grants.rows.map(x=>x.purpose),['reviewRequest']);
+      for(const q of postPurchasePrivacyQueries({mode:'customer',accountId:account,shop,customerIds:['2'],
+        recipientDigests:[recoveryPhoneDigest(secret,'+'+phone)]},ready))await execute(q);
+      assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents`)).rows[0].n,0);
+
     });
     await t.test('scheduled delay survives restart; due-time fresh Shopify status and plan/template changes block readiness',async()=>{
       await seed();await grant('orderConfirmation');
