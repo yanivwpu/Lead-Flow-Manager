@@ -1,3 +1,5 @@
+import {savePostPurchaseActivationQuery} from '../server/ecommerce/postPurchaseActivation';
+import {deliveryMigrationPreflight,deliveryMigrationManifest} from '../scripts/ecommerce-delivery-migration-preflight';
 import {createPostPurchaseDelivery} from '../server/ecommerce/postPurchaseDelivery';
 import {createPostPurchaseReceipt} from '../server/ecommerce/postPurchaseReceipt';
 import {enqueuePostPurchaseDeliveryQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
@@ -209,6 +211,15 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents WHERE account_id=${other}`)).rows[0].n,1);
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_orders WHERE account_id=${other}`)).rows[0].n,1);
     });
+    await t.test('migration manifest covers six ordered files and native preflight is read-only',async()=>{
+      const manifest=await deliveryMigrationManifest();assert.equal(manifest.length,6);
+      assert.ok(manifest.every(x=>/^[a-f0-9]{64}$/.test(x.sha256)));
+      if(pool&&url){const target=new URL(url);target.searchParams.set('options','-c search_path='+schema);
+        const checked=await deliveryMigrationPreflight(target.toString());
+        assert.equal(checked.transactionReadOnly,true);assert.equal(checked.postPurchase.outbox,true);
+        assert.equal(checked.automaticApply,false);assert.equal(checked.messagingAuthorized,false);
+      }
+    });
     const sendEnv={...env,ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'true',
       ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID:account,ECOMMERCE_POST_PURCHASE_RECEIPTS_ENABLED:'true',
       ECOMMERCE_POST_PURCHASE_WEBHOOKS_VERIFIED:'true'};
@@ -292,6 +303,16 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
         service=makeService();assert.equal(await worker().tick(),'idle');assert.equal(sends,before+1);
       }
     });
+    await t.test('merchant activation uses the exact installation and preserves other plans, templates and consent',async()=>{
+      await seed();await grant('orderConfirmation');
+      assert.equal((await execute(savePostPurchaseActivationQuery(other,shop,'install',false))).rows.length,0);
+      assert.equal((await execute(savePostPurchaseActivationQuery(account,shop,'other-install',false))).rows.length,0);
+      assert.equal((await execute(savePostPurchaseActivationQuery(account,shop,'install',false))).rows.length,1);
+      const cfg=(await execute(sql`SELECT config FROM integrations WHERE id='install'`)).rows[0].config as Record<string,unknown>;
+      assert.equal(cfg.ecommercePostPurchaseDeliveryEnabled,false);
+      assert.ok(cfg.ecommercePostPurchasePlans);assert.ok(cfg.ecommercePostPurchaseTemplates);
+      assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents WHERE revoked_at IS NULL`)).rows[0].n,1);
+    });
     await t.test('outbox scope constraints and privacy cascades use the existing migration and erasure queries',async()=>{
       await seed();await grant('orderConfirmation');await webhook('orders/create','privacy-queue');await queue();
       await assert.rejects(()=>execute(sql`UPDATE ecommerce_post_purchase_outbox SET account_id=${other}`));
@@ -302,6 +323,18 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       await seed();await grant('orderConfirmation');await webhook('orders/create','concurrent-send');
       const before=sends;await Promise.all([worker().tick(),worker().tick(),worker().tick()]);
       assert.equal(sends,before+1);assert.equal(await worker().tick(),'idle');
+    });
+    if(pool)await t.test('native PostgreSQL: committed global DNC wins before contact locks without a nested-transaction deadlock',async()=>{
+      await seed();await grant('orderConfirmation');await webhook('orders/create','dnc-race');
+      let entered!:()=>void,finish!:()=>void;
+      const holding=new Promise<void>(r=>entered=r),release=new Promise<void>(r=>finish=r);
+      const suppress=database.transaction(async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'marketing:'+account},0))`);
+        entered();await release;
+        await tx.execute(sql`UPDATE contacts SET custom_fields=custom_fields||'{"doNotContact":true}'::jsonb WHERE id='contact'`);
+      });
+      await holding;const before=sends,sending=worker().tick();finish();await Promise.all([suppress,sending]);
+      assert.equal(sends,before);
     });
     if(pool)await t.test('native PostgreSQL: STOP serializes against send-time authorization and prevents subsequent attempts',async()=>{
       await seed();await grant('orderConfirmation');await webhook('orders/create','stop-race');

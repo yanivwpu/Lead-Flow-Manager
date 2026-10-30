@@ -3355,10 +3355,6 @@ export async function registerRoutes(
       if (signatureValid && rawBodyBuffer && statusUpdate) {
         const owner = await findUserByMetaPhoneNumberId(statusUpdate.phoneNumberId);
         if (owner) {
-          const { recordPostPurchaseReceiptFromVerifiedMeta } = await import("./ecommerce/postPurchaseReceiptRuntime");
-          await recordPostPurchaseReceiptFromVerifiedMeta(owner.id, {
-            ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer),
-          });
           const { recordRecoveryReceiptFromVerifiedMeta } = await import("./ecommerce/checkoutRecoveryMetaReceiptHandler");
           await recordRecoveryReceiptFromVerifiedMeta({
             accountId: owner.id,
@@ -3369,6 +3365,10 @@ export async function registerRoutes(
               ECOMMERCE_RECOVERY_RECEIPTS_ENABLED: process.env.ECOMMERCE_RECOVERY_RECEIPTS_ENABLED,
             },
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
+          });
+          const { recordPostPurchaseReceiptFromVerifiedMeta } = await import("./ecommerce/postPurchaseReceiptRuntime");
+          await recordPostPurchaseReceiptFromVerifiedMeta(owner.id, {
+            ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer),
           });
         }
       }

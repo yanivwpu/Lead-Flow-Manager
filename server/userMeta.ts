@@ -606,7 +606,7 @@ export async function sendMetaWhatsAppTemplate(
   templateName: string,
   languageCode: string = "en",
   components?: any[],
-  options?: { signal?: AbortSignal }
+  options?: { signal?: AbortSignal; suppressionExecutor?: import("./marketingCompliance/store").MarketingBoundaryExecutor }
 ): Promise<{ messageId: string; status: string; httpStatus: number }> {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
@@ -684,7 +684,7 @@ export async function sendMetaWhatsAppTemplate(
         type: "template",
         template: templatePayload,
       }),
-    }));
+    }), options?.suppressionExecutor);
   } catch (fetchErr: unknown) {
     if (fetchErr instanceof MarketingSuppressionError || fetchErr instanceof AmbiguousProviderDeliveryError) throw fetchErr;
     const kind = classifyGraphFetchFailure(fetchErr);

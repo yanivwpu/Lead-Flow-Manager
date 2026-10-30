@@ -127,6 +127,7 @@ test('six editable journey plans expose localized delays, examples and blocked a
     assert.equal(section.querySelectorAll('input[type="number"]').length,6);
     assert.equal(section.querySelectorAll('details').length,6);
     assert.equal(section.querySelectorAll('form').length,6);
+    assert.ok(section.querySelector('[data-testid="post-purchase-activation"]')?.hasAttribute('disabled'));
   }
   state.locale='en';
 });

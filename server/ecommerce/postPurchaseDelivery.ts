@@ -11,7 +11,7 @@ type Database=PostPurchaseDatabase&{execute:(q:SQL)=>Promise<{rows:Record<string
 export function createPostPurchaseDelivery(deps:{
   database:Database;env:Record<string,string|undefined>;secret:()=>string;
   authorize:ReturnType<typeof createPostPurchasePreparation>['authorizeDelivery'];
-  send:(accountId:string,phone:string,name:string,language:string,components:Record<string,unknown>[])=>Promise<{messageId:string}>;
+  send:(accountId:string,phone:string,name:string,language:string,components:Record<string,unknown>[],tx:PostPurchaseTx)=>Promise<{messageId:string}>;
 }){
   const enabled=(accountId:string)=>postPurchaseOperatorReady({...deps.env,
     ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY:deps.secret()},accountId);
@@ -29,6 +29,8 @@ export function createPostPurchaseDelivery(deps:{
     if(fence.rows.length!==1)return 'fenced';
     try{
       return await locked(claim.shop,async tx=>{
+        // Acquire DNC serialization before any contact row lock; provider reuses this transaction.
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"marketing:"+claim.accountId},0))`);
         const rows=await tx.execute(sql`SELECT intent_id::text,contact_id,template_id,order_gid,journey
           FROM ecommerce_post_purchase_outbox WHERE id=${claim.id}::bigint
             AND account_id=${claim.accountId} AND shop=${claim.shop} AND installation_id=${claim.installationId}
@@ -41,7 +43,7 @@ export function createPostPurchaseDelivery(deps:{
         }
         await tx.execute(sql`UPDATE ecommerce_post_purchase_outbox SET recipient_hmac=${recoveryPhoneDigest(deps.secret(),proof.phone)}
           WHERE id=${claim.id}::bigint AND account_id=${claim.accountId} AND shop=${claim.shop}`);
-        const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components);
+        const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx);
         if(!/^wamid\.[A-Za-z0-9._=-]{8,250}$/.test(response?.messageId??''))throw Error('provider_acceptance_unknown');
         const result=await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'accepted',response.messageId));
         if(result.rows.length!==1)throw Error('provider_settlement_unknown');
