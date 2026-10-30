@@ -34,7 +34,32 @@ export type DueRecoveryObservation={checkoutId:string;lastActivityAt:string};
 export type PreparedRecoveryIdentity={
  contactId:string;templateId:string;shopifyCustomerId:string;
 };
+/** Fixed, privacy-safe staging gate labels. No customer IDs, phone, checkout URL,
+ * token or raw provider errors must appear in the diagnostic stream.
+ */
+export type AutoPrepDiagnostic =
+  | 'merchant_not_eligible'
+  | 'checkout_completed'
+  | 'shopify_status_unavailable'
+  | 'shopify_query_unavailable'
+  | 'checkout_not_confirmed'
+  | 'checkout_status_unknown'
+  | 'new_order_or_order_status_unknown'
+  | 'shopify_customer_identity_unverified'
+  | 'checkout_timestamp_unverified'
+  | 'recovery_url_unverified'
+  | 'invalid_checkout_or_shop'
+  | 'other_fresh_checkout_block'
+  | 'contact_consent_template_unmatched'
+  | 'outbox_not_prepared';
+const knownFreshBlockCodes=new Set<string>([
+  'shopify_status_unavailable','shopify_query_unavailable','checkout_not_confirmed',
+  'checkout_status_unknown','new_order_or_order_status_unknown',
+  'shopify_customer_identity_unverified','checkout_timestamp_unverified',
+  'recovery_url_unverified','invalid_checkout_or_shop'
+]);
 export type AutoPrepDeps={
+ onDiagnostic?: (code:AutoPrepDiagnostic)=>void;
  merchant:(accountId:string)=>Promise<AutoPrepMerchant|null>;
  observePage:(merchant:AutoPrepMerchant)=>Promise<CheckoutSourcePage>;
  persistObservation:(merchant:AutoPrepMerchant,snapshot:AbandonedCheckoutSnapshot)=>Promise<boolean>;
@@ -57,7 +82,10 @@ export async function runAutoRecoveryPreparationTick(
  const merchant=await deps.merchant(accountId);
  if(!merchant||merchant.accountId!==accountId ||
    !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(merchant.shop) ||
-   !merchant.accessToken)return stats;
+   !merchant.accessToken){
+     deps.onDiagnostic?.('merchant_not_eligible');
+     return stats;
+   }
  const page=await deps.observePage(merchant);
  if(!Array.isArray(page.observations)||page.observations.length>25)
    throw Error('invalid_checkout_observation_page');
@@ -70,6 +98,9 @@ export async function runAutoRecoveryPreparationTick(
    const current=await deps.recheck(merchant,item.checkoutId);
    stats.checked++;
    if(current.status==='blocked'){
+     deps.onDiagnostic?.(current.completed?'checkout_completed':
+       knownFreshBlockCodes.has(current.reason)
+         ? current.reason as AutoPrepDiagnostic : 'other_fresh_checkout_block');
      if(current.completed){
        if(await deps.suppress(merchant,item.checkoutId))stats.suppressed++;
      }else stats.skipped++;
@@ -80,11 +111,16 @@ export async function runAutoRecoveryPreparationTick(
    const match=await deps.resolveIdentity(merchant,current.shopifyCustomerId,
      env.ECOMMERCE_RECOVERY_TEMPLATE_NAME!);
    if(!match || match.shopifyCustomerId!==current.shopifyCustomerId){
-     stats.skipped++;continue;
+     stats.skipped++;
+     deps.onDiagnostic?.('contact_consent_template_unmatched');
+     continue;
    }
    if(await deps.prepareAndEnqueue(merchant,item.checkoutId,current.lastActivityAt,match))
      stats.queued++;
-   else stats.skipped++;
+   else {
+     stats.skipped++;
+     deps.onDiagnostic?.('outbox_not_prepared');
+   }
  }
  return stats;
 }

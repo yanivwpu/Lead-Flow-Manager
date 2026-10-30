@@ -85,3 +85,39 @@ test('disabled mode never accesses Shopify/DB and no account-wide loop exists',a
  assert.equal(code.includes('sendMetaWhatsAppTemplate('),false);
  assert.equal(code.includes('sendRecoveryViaMeta('),false);
 });
+
+test('staging diagnostic exposes only fixed non-PII preparation gate names',async()=>{
+ const found:string[]=[];
+ const h=harness({match:false});
+ h.deps.onDiagnostic=code=>{ found.push(code); };
+ await runAutoRecoveryPreparationTick(env,h.deps);
+ assert.deepEqual(found,['contact_consent_template_unmatched']);
+ assert.ok(!JSON.stringify(found).includes(checkoutId));
+ const blocked=harness();
+ blocked.deps.recheck=async()=>({
+   status:'blocked',reason:'shopify_status_unavailable',completed:false
+ });
+ blocked.deps.onDiagnostic=code=>found.push(code);
+ await runAutoRecoveryPreparationTick(env,blocked.deps);
+ assert.equal(found.at(-1),'shopify_status_unavailable');
+ const hostile=harness();
+ hostile.deps.recheck=async()=>({
+   status:'blocked',reason:'customer phone +19999999999 token=value',completed:false
+ });
+ hostile.deps.onDiagnostic=code=>found.push(code);
+ await runAutoRecoveryPreparationTick(env,hostile.deps);
+ assert.equal(found.at(-1),'other_fresh_checkout_block');
+ const completed=harness({done:true});
+ completed.deps.onDiagnostic=code=>found.push(code);
+ await runAutoRecoveryPreparationTick(env,completed.deps);
+ assert.equal(found.at(-1),'checkout_completed');
+ assert.equal(found.some(value=>value.includes('token=value') || value.includes('+19999999999')),false);
+});
+test('automatic preparation runtime logs only known sanitized gate codes and does not enable send',()=>{
+ const src=readFileSync('server/ecommerce/checkoutRecoveryAutoPreparationRuntime.ts','utf8');
+ assert.ok(src.includes("onDiagnostic:code=>"));
+ assert.ok(src.includes("seenDiagnosticGates.has(code)"));
+ assert.ok(src.includes("[EcommerceRecoveryAutoPrep] safe_gate"));
+ assert.doesNotMatch(src,/console\.(?:log|info)\([^\n]*(?:contactId|shopifyCustomerId|checkoutId|recoveryUrl)/);
+ assert.equal(src.includes('sendMetaWhatsAppTemplate('),false);
+});

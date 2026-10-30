@@ -165,6 +165,9 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
  const configuration=env();
  if(!recoveryAutoPrepEnabled(configuration))return null;
  let busy=false,stopped=false;
+ // Report each stable gate only once per process: no customer/checkout identifiers,
+ // provider text, tokens, recipient fields or recovery URLs are ever logged.
+ const seenDiagnosticGates=new Set<string>();
  const tick=async()=>{
    if(busy||stopped)return;busy=true;
    try{
@@ -187,6 +190,11 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
          shop:merchant.shop,accessToken:merchant.accessToken,checkoutId
        }),
        suppress,resolveIdentity:resolve,prepareAndEnqueue:prepare,
+       onDiagnostic:code=>{
+         if(seenDiagnosticGates.has(code))return;
+         seenDiagnosticGates.add(code);
+         console.info('[EcommerceRecoveryAutoPrep] safe_gate', {code});
+       },
      });
    }catch(error){
      console.error('[EcommerceRecoveryAutoPrep] paused tick:',
