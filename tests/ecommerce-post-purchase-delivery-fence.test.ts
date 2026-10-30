@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PgDialect} from 'drizzle-orm/pg-core';
+import {postPurchaseDeliveryEnabled} from '../server/ecommerce/postPurchaseDeliveryGate';
 import {postPurchaseDeliveryReadinessQuery,claimPostPurchaseDeliveryQuery,enqueuePostPurchaseDeliveryQuery,
   recordPostPurchaseAttemptQuery,settlePostPurchaseAttemptQuery,
   suppressPendingPostPurchaseQuery,reconcilePostPurchaseReceiptQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
@@ -71,4 +72,16 @@ test('signed-only receipt primitive scopes account and only advances terminal pr
  assert.throws(()=>reconcilePostPurchaseReceiptQuery({
    accountId:'',providerMessageId:'wamid.test',status:'sent'
  }));
+});
+
+test('delivery remains off except exact owner-pinned staging environment',()=>{
+ const env={RAILWAY_ENVIRONMENT_NAME:'staging',
+   APP_URL:'https://whachatcrm-staging-app-staging.up.railway.app',
+   ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'true',
+   ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID:'123e4567-e89b-42d3-a456-426614174000'};
+ assert.equal(postPurchaseDeliveryEnabled(env,env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID),true);
+ assert.equal(postPurchaseDeliveryEnabled({...env,RAILWAY_ENVIRONMENT_NAME:'production'},env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID),false);
+ assert.equal(postPurchaseDeliveryEnabled({...env,ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'false'},env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID),false);
+ assert.equal(postPurchaseDeliveryEnabled(env,'other'),false);
+ assert.equal(postPurchaseDeliveryEnabled({...env,APP_URL:'https://app.whachatcrm.com'},env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID),false);
 });
