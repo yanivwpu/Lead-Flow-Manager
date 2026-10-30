@@ -9,8 +9,8 @@ const activation=readFileSync("server/ecommerceMerchantActivationRoutes.ts","utf
 test("merchant dashboard reuses existing authenticated catalog and shopping components, without new sending",()=>{
  assert.match(dashboard,/import \{ ShopifyCatalog \} from "@\/components\/ShopifyCatalog"/);
  assert.match(dashboard,/import \{ ShoppingSettings \} from "@\/components\/ShoppingSettings"/);
- assert.match(dashboard,/view==="products"[\s\S]*?<ShopifyCatalog showShoppingSettings=\{false\}/);
- assert.match(dashboard,/view==="shopping"[\s\S]*?<ShoppingSettings\/>/);
+ assert.match(dashboard,/view==="products"[\s\S]*?<ShopifyCatalog showShoppingSettings=\{!privatePilot\}/);
+ assert.match(dashboard,/view==="shopping"[\s\S]*?privatePilot && <ShoppingSettings\/>/);
  assert.match(catalog,/showShoppingSettings = true/);
  assert.match(catalog,/showShoppingSettings && <ShoppingSettings\s*\/>/);
  assert.doesNotMatch(dashboard,/fetch\([^\n]*method:\s*["']POST["']/);
@@ -19,7 +19,7 @@ test("merchant dashboard reuses existing authenticated catalog and shopping comp
 
 test("overview only shows authenticated catalog-source metrics, never fabricated sales or inferred purchase eligibility",()=>{
  assert.match(dashboard,/withUserQueryScope\(\["\/api\/sales-catalog\/commerce\/status"\],user\?\.id\)/);
- assert.match(dashboard,/enabled:!!user\?\.id && sessionAligned && data\?\.connected===true && view==="overview"/);
+ assert.match(dashboard,/enabled:privatePilot && !!user\?\.id && sessionAligned && data\?\.connected===true && view==="overview"/);
  assert.match(dashboard,/data-testid="ecommerce-catalog-summary"/);
  assert.match(dashboard,/publishedProductCount/);
  assert.match(dashboard,/eligibleProductCount/);
@@ -49,4 +49,13 @@ test("recovery readiness reuses the existing strict runtime schema guard without
  assert.match(dashboard,/activation\.data\.recoverySchemaReady === true/);
  for(const label of ["Infrastructure ready. Customer delivery remains off.","Falta completar la configuración.","משלוח הודעות מושבת."])assert.ok(dashboard.includes(label));
  assert.doesNotMatch(activation,/\bstartCheckoutRecoveryRuntime\b|\bsendRecoveryViaMeta\b/);
+});
+
+test("private owner pilot has new features; other merchants keep their previous UI",()=>{
+ assert.match(dashboard,/useEcommercePilot\(\)/);
+ assert.match(dashboard,/\{available:privatePilot\}/);
+ assert.match(dashboard,/showShoppingSettings=\{!privatePilot\}/);
+ assert.match(dashboard,/\{privatePilot && <ShoppingSettings\/>\}/);
+ assert.match(dashboard,/\{privatePilot && <p data-testid="ecommerce-recovery-readiness"/);
+ assert.match(dashboard,/\{privatePilot && data\?\.connected===true && commerceStatus\.data/);
 });
