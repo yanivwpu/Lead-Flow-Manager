@@ -35,10 +35,14 @@ test('activation input cannot inject owner, release gates, consent or arbitrary 
 test('private production needs separate approval and existing owner grant; no public activation path',()=>{
   const production={...env,RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
     ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true',
-    ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid'};
+    ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid',
+    ECOMMERCE_POST_PURCHASE_DELIVERY_MODE:'controlled-one-intent',ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:'1',
+    ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:'a'.repeat(64),
+    ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString()};
   assert.equal(postPurchaseActivationReadiness(production,account,config,true).canActivate,true);
   for(const key of ['ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED','ECOMMERCE_PILOT_ENABLED',
-    'ECOMMERCE_PILOT_WORKSPACE_ID','ECOMMERCE_PILOT_OWNER_EMAIL'])
+    'ECOMMERCE_PILOT_WORKSPACE_ID','ECOMMERCE_PILOT_OWNER_EMAIL','ECOMMERCE_POST_PURCHASE_DELIVERY_MODE',
+    'ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID','ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC','ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT'])
     assert.equal(postPurchaseActivationReadiness({...production,[key]:undefined},account,config,true).canActivate,false,key);
   assert.equal(postPurchaseActivationReadiness(production,'public-merchant',config,true).canActivate,false);
 });

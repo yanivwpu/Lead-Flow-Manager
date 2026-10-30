@@ -606,7 +606,7 @@ export async function sendMetaWhatsAppTemplate(
   templateName: string,
   languageCode: string = "en",
   components?: any[],
-  options?: { signal?: AbortSignal; suppressionExecutor?: import("./marketingCompliance/store").MarketingBoundaryExecutor }
+  options?: { signal?: AbortSignal; suppressionExecutor?: import("./marketingCompliance/store").MarketingBoundaryExecutor; authorizeDispatch?: () => boolean }
 ): Promise<{ messageId: string; status: string; httpStatus: number }> {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
@@ -669,7 +669,9 @@ export async function sendMetaWhatsAppTemplate(
 
   let response: Response;
   try {
-    response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(graphPath, {
+    response = await withGlobalDncPhoneBoundary(userId, toPhone, () => {
+      if (options?.authorizeDispatch && !options.authorizeDispatch()) throw new Error("provider_dispatch_authorization_expired");
+      return fetch(graphPath, {
       method: "POST",
       redirect: "error",
       signal: options?.signal,
@@ -684,7 +686,8 @@ export async function sendMetaWhatsAppTemplate(
         type: "template",
         template: templatePayload,
       }),
-    }), options?.suppressionExecutor);
+    });
+    }, options?.suppressionExecutor);
   } catch (fetchErr: unknown) {
     if (fetchErr instanceof MarketingSuppressionError || fetchErr instanceof AmbiguousProviderDeliveryError) throw fetchErr;
     const kind = classifyGraphFetchFailure(fetchErr);

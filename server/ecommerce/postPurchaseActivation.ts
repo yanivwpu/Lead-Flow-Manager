@@ -3,9 +3,10 @@ import {readPostPurchasePlans} from '../../shared/postPurchase';
 import {readPostPurchaseTemplateBindings} from './postPurchaseTemplateBinding';
 import {postPurchaseDeliveryEnabled} from './postPurchaseDeliveryGate';
 import {postPurchasePreparationEnabled} from './postPurchaseGate';
+import {postPurchaseControlledScopeReady} from './postPurchaseControlledScope';
 
 export function postPurchaseOperatorReady(env:Record<string,string|undefined>,accountId:string){
-  return postPurchaseDeliveryEnabled(env,accountId)&&postPurchasePreparationEnabled(env,accountId)&&
+  return postPurchaseDeliveryEnabled(env,accountId)&&postPurchasePreparationEnabled(env,accountId)&&postPurchaseControlledScopeReady(env)&&
     env.ECOMMERCE_POST_PURCHASE_RECEIPTS_ENABLED==='true'&&
     env.ECOMMERCE_POST_PURCHASE_WEBHOOKS_VERIFIED==='true'&&
     (env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY?.length??0)>=32;

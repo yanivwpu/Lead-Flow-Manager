@@ -15,8 +15,9 @@ export const postPurchaseDeliveryReadinessQuery = sql`SELECT
   to_regclass('ecommerce_post_purchase_consents') IS NOT NULL AS consents`;
 
 const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
-export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,installationId:string){
-  if(!accountId?.trim()||!SHOP.test(shop)||!installationId?.trim())
+export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,installationId:string,intentId?:string){
+  if(!accountId?.trim()||!SHOP.test(shop)||!installationId?.trim()||
+    (intentId!==undefined&&!/^[1-9][0-9]{0,18}$/.test(intentId)))
     throw Error('invalid_delivery_scope');
   return sql`
     WITH candidate AS (
@@ -27,6 +28,7 @@ export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,inst
       WHERE o.account_id=${accountId} AND o.shop=${shop}
         AND o.installation_id=${installationId} AND o.state='pending'
         AND i.state='preview_ready' AND i.due_at<=NOW()
+        AND ${intentId===undefined?sql`TRUE`:sql`i.id=${intentId}::bigint`}
       ORDER BY o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED
     )
     UPDATE ecommerce_post_purchase_outbox o
@@ -37,15 +39,17 @@ export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,inst
 }
 
 /** Commit before requesting delivery. Missing or repeated claims affect zero rows. */
-export function recordPostPurchaseAttemptQuery(id:string,accountId:string,shop:string,token:string){
+export function recordPostPurchaseAttemptQuery(id:string,accountId:string,shop:string,token:string,intentId?:string){
   if(!/^[1-9][0-9]{0,18}$/.test(id)||!accountId?.trim()||!SHOP.test(shop)||
-    !/^[0-9a-f-]{36}$/i.test(token))throw Error('invalid_delivery_attempt');
+    !/^[0-9a-f-]{36}$/i.test(token)||
+    (intentId!==undefined&&!/^[1-9][0-9]{0,18}$/.test(intentId)))throw Error('invalid_delivery_attempt');
   return sql`
     UPDATE ecommerce_post_purchase_outbox
     SET provider_attempted_at=NOW(),updated_at=NOW()
     WHERE id=CAST(${id} AS BIGINT) AND account_id=${accountId}
       AND shop=${shop} AND claim_token=CAST(${token} AS UUID)
       AND state='claimed' AND provider_attempted_at IS NULL
+      AND ${intentId===undefined?sql`TRUE`:sql`intent_id=${intentId}::bigint`}
     RETURNING id::text AS id
   `;
 }
