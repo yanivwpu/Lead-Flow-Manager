@@ -95,7 +95,7 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
     await route(topic)(req as any,res as any);return res.code;
   }
   try{
-    await ddl(`CREATE TABLE users(id varchar(128) PRIMARY KEY,shopify_shop text,shopify_access_token text,
+    await ddl(`CREATE TABLE users(id varchar(128) PRIMARY KEY,email text,shopify_shop text,shopify_access_token text,
       shopify_subscription_status text,deletion_requested_at timestamptz,shopify_installed_at timestamptz,meta_connected boolean,meta_phone_number_id text);
       CREATE TABLE integrations(id varchar PRIMARY KEY,user_id text,type text,is_active boolean,config jsonb);
       CREATE TABLE contacts(id varchar PRIMARY KEY,user_id text,phone text,whatsapp_id text,custom_fields jsonb,source_details jsonb,
@@ -301,6 +301,34 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
         await assert.rejects(()=>execute(sql`UPDATE ecommerce_post_purchase_outbox SET provider_attempted_at=NULL`));
         assert.equal(await worker().processClaim({id:String(attempted.id),token:String(attempted.claim_token),accountId:account,shop,installationId:'install'}),'fenced');
         service=makeService();assert.equal(await worker().tick(),'idle');assert.equal(sends,before+1);
+      }
+    });
+    await t.test('private production delivery requires operator release and a freshly matching owner; fixtures only',async()=>{
+      const production={RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
+        ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true',
+        ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid'};
+      const restore={...env},restoreSend={...sendEnv};
+      try{
+        for(const validOwner of [false,true]){
+          Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
+          await seed();await grant('orderConfirmation');await webhook('orders/create','production-fixture');
+          await execute(sql`UPDATE users SET email=${validOwner?'fixture@example.invalid':'another@example.invalid'} WHERE id=${account}`);
+          Object.assign(env,production);Object.assign(sendEnv,production);
+          const before=sends;
+          assert.equal(await worker().tick(),validOwner?'accepted':'blocked');
+          assert.equal(sends,before+(validOwner?1:0));
+        }
+        Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
+        await seed();await grant('orderConfirmation');await webhook('orders/create','production-stop-while-off');
+        await execute(sql`UPDATE users SET email='fixture@example.invalid' WHERE id=${account}`);
+        Object.assign(env,production,{ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'false',ECOMMERCE_PILOT_ENABLED:'false'});
+        Object.assign(sendEnv,production,{ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'false'});
+        assert.equal(await service.captureConsent(account,null,candidate('STOP',clock)),'revoked');
+        assert.equal(await worker().tick(),'disabled');
+        assert.ok((await rows()).every(x=>x.state==='suppressed'));
+      }finally{
+        for(const key of Object.keys(production)){delete (env as Record<string,unknown>)[key];delete (sendEnv as Record<string,unknown>)[key];}
+        Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
       }
     });
     await t.test('merchant activation uses the exact installation and preserves other plans, templates and consent',async()=>{

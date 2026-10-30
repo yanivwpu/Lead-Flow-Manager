@@ -64,6 +64,7 @@ test('purpose consent uses existing signed evidence validation; checkout/generic
   const candidate={signatureValid:true,hasRawBody:true,type:'text',phoneNumberId:'1234567890123',from:'15551234567',
     messageId:'wamid.fixture_signed_message',timestamp:String(now/1000),text:POST_PURCHASE_CONSENT_PHRASES.reviewRequest};
   assert.equal(classifyPostPurchaseConsent(candidate,now)?.action,'grant');
+  assert.equal(classifyPostPurchaseConsent({...candidate,messageId:candidate.messageId+'+/=='},now)?.action,'grant');
   for(const patch of [{text:'YES'},{text:'YES WHATSAPP CHECKOUT REMINDERS'},{signatureValid:false},{hasRawBody:false},
     {timestamp:String((now-16*60000)/1000)}])assert.equal(classifyPostPurchaseConsent({...candidate,...patch},now),null);
   assert.equal(classifyPostPurchaseConsent({...candidate,text:'STOP'},now)?.action,'revoke');

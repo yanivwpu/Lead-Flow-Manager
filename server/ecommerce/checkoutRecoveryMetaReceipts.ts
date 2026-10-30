@@ -1,3 +1,4 @@
+import {validRecoveryWamid} from './checkoutRecoveryInboundConsentGate';
 import { sql } from 'drizzle-orm';
 import { recoveryPhoneDigest } from './checkoutRecoveryMessagingEligibility';
 
@@ -17,7 +18,7 @@ export function parseSignedRecoveryReceipt(
 ):VerifiedRecoveryReceipt|null {
   if(!input.signatureValid||!input.hasRawBody||secret.length<32 ||
      !/^[1-9][0-9]{5,24}$/.test(input.phoneNumberId)||
-     !/^wamid\.[A-Za-z0-9._-]{8,248}={0,2}$/.test(input.messageId)||
+     !validRecoveryWamid(input.messageId)||
      !/^[1-9][0-9]{7,14}$/.test(input.recipientId)||
      !statuses.includes(input.status)||
      !/^[1-9][0-9]{8,11}$/.test(input.timestamp))return null;

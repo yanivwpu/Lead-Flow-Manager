@@ -25,3 +25,14 @@ test('activation input cannot inject owner, release gates, consent or arbitrary 
     {action:'set_post_purchase_delivery',enabled:true,accountId:account},
     {action:'set_post_purchase_delivery',enabled:true,consent:true}])assert.equal(parsePostPurchaseActivation(value),null);
 });
+
+test('private production needs separate approval and existing owner grant; no public activation path',()=>{
+  const production={...env,RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
+    ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true',
+    ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid'};
+  assert.equal(postPurchaseActivationReadiness(production,account,config,true).canActivate,true);
+  for(const key of ['ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED','ECOMMERCE_PILOT_ENABLED',
+    'ECOMMERCE_PILOT_WORKSPACE_ID','ECOMMERCE_PILOT_OWNER_EMAIL'])
+    assert.equal(postPurchaseActivationReadiness({...production,[key]:undefined},account,config,true).canActivate,false,key);
+  assert.equal(postPurchaseActivationReadiness(production,'public-merchant',config,true).canActivate,false);
+});

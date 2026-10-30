@@ -1,3 +1,4 @@
+import {validRecoveryWamid} from './checkoutRecoveryInboundConsentGate';
 import {sql,type SQL} from 'drizzle-orm';
 import type {PostPurchaseDatabase,PostPurchaseTx,createPostPurchasePreparation} from './postPurchasePreparation';
 import {postPurchaseOperatorReady} from './postPurchaseActivation';
@@ -44,7 +45,7 @@ export function createPostPurchaseDelivery(deps:{
         await tx.execute(sql`UPDATE ecommerce_post_purchase_outbox SET recipient_hmac=${recoveryPhoneDigest(deps.secret(),proof.phone)}
           WHERE id=${claim.id}::bigint AND account_id=${claim.accountId} AND shop=${claim.shop}`);
         const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx);
-        if(!/^wamid\.[A-Za-z0-9._=-]{8,250}$/.test(response?.messageId??''))throw Error('provider_acceptance_unknown');
+        if(!validRecoveryWamid(response?.messageId))throw Error('provider_acceptance_unknown');
         const result=await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'accepted',response.messageId));
         if(result.rows.length!==1)throw Error('provider_settlement_unknown');
         return 'accepted';

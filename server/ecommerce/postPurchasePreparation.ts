@@ -1,4 +1,5 @@
 import {eligiblePostPurchaseLibraryTemplate} from './postPurchaseTemplateBinding';
+import {isEcommercePilotOwner} from './pilotAccess';
 import {sql,type SQL} from 'drizzle-orm';
 import {isShopifyContactInstallationActive} from '../../shared/shopifyContactPrivacy';
 import {normalizeShopifyShopDomain} from '../../shared/shopifyBilling';
@@ -28,10 +29,12 @@ export function createPostPurchasePreparation(deps:{
 }){
   const now=deps.now??Date.now;
   async function merchant(tx:PostPurchaseTx,shop:string,stopOnly=false):Promise<Merchant|null>{
-    const rows=await tx.execute(sql`SELECT id,shopify_shop,shopify_access_token,shopify_subscription_status,
+    const rows=await tx.execute(sql`SELECT id,email,shopify_shop,shopify_access_token,shopify_subscription_status,
       deletion_requested_at,shopify_installed_at,meta_connected,meta_phone_number_id FROM users WHERE shopify_shop=${shop} LIMIT 2 FOR SHARE`);
     if(rows.rows.length!==1)return null;const user=rows.rows[0],accountId=String(user.id);
-    if(!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true'}:{})},accountId))return null;
+    if(!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return null;
+    if(deps.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
+      !isEcommercePilotOwner({id:accountId,email:typeof user.email==='string'?user.email:null},stopOnly?{...deps.env,ECOMMERCE_PILOT_ENABLED:'true'}:deps.env))return null;
     if(!stopOnly&&!isShopifyContactInstallationActive({shopifyShop:shop,shopifyAccessToken:user.shopify_access_token as string|null,
       shopifySubscriptionStatus:user.shopify_subscription_status as string|null,deletionRequestedAt:user.deletion_requested_at as Date|null}))return null;
     if(user.deletion_requested_at)return null;
@@ -189,7 +192,7 @@ export function createPostPurchasePreparation(deps:{
   async function captureConsent(accountId:string,contactId:string|null,candidate:VerifiedInboundConsentCandidate){
     const proof=classifyPostPurchaseConsent(candidate,now());if(!proof)return 'ignored';
     const stop=proof.action==='revoke';
-    if(!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true'}:{})},accountId))return 'disabled';
+    if(!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return 'disabled';
     const owner=await deps.database.transaction(tx=>tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`));
     const shop=owner.rows[0]?.shopify_shop;if(typeof shop!=='string'||deps.secret().length<32)return 'ignored';
     return locked(shop,async tx=>{
