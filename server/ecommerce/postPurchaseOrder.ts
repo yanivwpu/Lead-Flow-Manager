@@ -17,8 +17,8 @@ export function parsePostPurchaseOrderEvent(topic:ShopifyOrderTopic,deliveryId:s
     (customer.admin_graphql_api_id!=null&&customer.admin_graphql_api_id!==customerId))return null;
   return {topic,deliveryId,orderId,customerId,occurredAt};
 }
-export type FreshPostPurchaseOrder={orderId:string;customerId:string;status:'open'|'fulfilled'|'cancelled';updatedAt:number;latestPurchaseAt:number|null};
-const QUERY=`query PostPurchaseOrder($id:ID!){order(id:$id){id updatedAt cancelledAt displayFulfillmentStatus customer{id orders(first:1,sortKey:PROCESSED_AT,reverse:true){nodes{id createdAt}}}}}`;
+export type FreshPostPurchaseOrder={orderId:string;customerId:string;status:'open'|'fulfilled'|'cancelled';updatedAt:number;purchasedAt:number;latestPurchaseAt:number|null};
+const QUERY=`query PostPurchaseOrder($id:ID!){order(id:$id){id createdAt updatedAt cancelledAt displayFulfillmentStatus customer{id orders(first:1,sortKey:CREATED_AT,reverse:true){nodes{id createdAt}}}}}`;
 /** Bounded, read-only Admin query. Null/partial/error/guest/mismatched evidence fails closed. */
 export async function recheckPostPurchaseOrder(input:{shop:string;accessToken:string;orderId:string;customerId:string;now?:number;fetchImpl?:typeof fetch}):Promise<FreshPostPurchaseOrder|null>{
   if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(input.shop)||!input.accessToken||
@@ -35,6 +35,8 @@ export async function recheckPostPurchaseOrder(input:{shop:string;accessToken:st
     const now=input.now??Date.now(),updatedAt=typeof row.updatedAt==='string'?Date.parse(row.updatedAt):NaN;
     if(row.id!==input.orderId||customer.id!==input.customerId||!Number.isSafeInteger(updatedAt)||updatedAt>now||
       !(row.cancelledAt===null||(typeof row.cancelledAt==='string'&&Number.isFinite(Date.parse(row.cancelledAt))&&Date.parse(row.cancelledAt)<=now)))return null;
+    const purchasedAt=typeof row.createdAt==='string'?Date.parse(row.createdAt):NaN;
+    if(!Number.isSafeInteger(purchasedAt)||purchasedAt>updatedAt)return null;
     const fulfillment=row.displayFulfillmentStatus;
     if(!['UNFULFILLED','PARTIALLY_FULFILLED','FULFILLED','IN_PROGRESS','ON_HOLD','SCHEDULED','RESTOCKED','PENDING_FULFILLMENT','OPEN','REQUEST_DECLINED'].includes(String(fulfillment)))return null;
     const nodes=obj(customer.orders).nodes;
@@ -43,7 +45,7 @@ export async function recheckPostPurchaseOrder(input:{shop:string;accessToken:st
       const date=typeof latest.createdAt==='string'?Date.parse(latest.createdAt):NaN;
       if(/^gid:\/\/shopify\/Order\/[1-9][0-9]{0,19}$/.test(String(latest.id))&&Number.isSafeInteger(date)&&date<=now)latestPurchaseAt=date;
     }
-    return {orderId:input.orderId,customerId:input.customerId,updatedAt,latestPurchaseAt,
+    return {orderId:input.orderId,customerId:input.customerId,updatedAt,purchasedAt,latestPurchaseAt,
       status:row.cancelledAt!==null?'cancelled':fulfillment==='FULFILLED'?'fulfilled':'open'};
   }catch{return null;}
 }

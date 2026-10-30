@@ -7,7 +7,7 @@ import {classifyPostPurchaseConsent,POST_PURCHASE_CONSENT_PHRASES} from '../serv
 import {matchPostPurchaseTemplate} from '../server/ecommerce/postPurchaseEligibility';
 import {createShopifyOrderWebhookHandler} from '../server/shopifyOrderWebhookHandler';
 const now=Date.parse('2026-10-30T12:00:00Z'),orderId='gid://shopify/Order/1',customerId='gid://shopify/Customer/2';
-const fixture=()=>({data:{order:{id:orderId,updatedAt:new Date(now-1000).toISOString(),cancelledAt:null as null|string,displayFulfillmentStatus:'FULFILLED',
+const fixture=()=>({data:{order:{id:orderId,createdAt:new Date(now-86400000).toISOString(),updatedAt:new Date(now-1000).toISOString(),cancelledAt:null as null|string,displayFulfillmentStatus:'FULFILLED',
   customer:{id:customerId,orders:{nodes:[{id:orderId,createdAt:new Date(now-86400000).toISOString()}]}}}}});
 
 test('fresh Shopify read uses exact shop/order/customer, read-only query, timeout and fail-closed evidence',async()=>{
@@ -64,6 +64,7 @@ test('purpose consent uses existing signed evidence validation; checkout/generic
   const candidate={signatureValid:true,hasRawBody:true,type:'text',phoneNumberId:'1234567890123',from:'15551234567',
     messageId:'wamid.fixture_signed_message',timestamp:String(now/1000),text:POST_PURCHASE_CONSENT_PHRASES.reviewRequest};
   assert.equal(classifyPostPurchaseConsent(candidate,now)?.action,'grant');
+  assert.equal(classifyPostPurchaseConsent({...candidate,messageId:candidate.messageId+'+/=='},now)?.action,'grant');
   for(const patch of [{text:'YES'},{text:'YES WHATSAPP CHECKOUT REMINDERS'},{signatureValid:false},{hasRawBody:false},
     {timestamp:String((now-16*60000)/1000)}])assert.equal(classifyPostPurchaseConsent({...candidate,...patch},now),null);
   assert.equal(classifyPostPurchaseConsent({...candidate,text:'STOP'},now)?.action,'revoke');

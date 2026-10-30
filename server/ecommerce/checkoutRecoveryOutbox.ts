@@ -74,8 +74,13 @@ export function enqueueRecoveryDeliveryQuery(input:{
  * Only one worker obtains the same pending outbox row.
  * Claims do not constitute permission to send; MUST recheck all gates.
  */
-export function claimRecoveryDeliveryQuery(input:{accountId:string;shop:string}){
- if(!input.accountId?.trim()||!SHOP.test(input.shop)) throw Error('invalid_claim_scope');
+export function claimRecoveryDeliveryQuery(input:{accountId:string;shop:string;checkoutId?:string}){
+ if(!input.accountId?.trim()||!SHOP.test(input.shop)||
+    (input.checkoutId !== undefined && !GID.test(input.checkoutId)))
+   throw Error('invalid_claim_scope');
+ const checkoutScope=input.checkoutId
+   ? sql` AND o.checkout_gid=${input.checkoutId} `
+   : sql``;
  return sql`
    WITH candidate AS (
      SELECT o.id FROM ecommerce_checkout_recovery_outbox o
@@ -86,6 +91,7 @@ export function claimRecoveryDeliveryQuery(input:{accountId:string;shop:string})
        ON consent.account_id=o.account_id AND consent.shop=o.shop
        AND consent.contact_id=o.contact_id
      WHERE o.account_id=${input.accountId} AND o.shop=${input.shop} AND o.state='pending'
+       ${checkoutScope}
        AND i.status='ready' AND obs.completed=FALSE AND obs.next_review_at<=NOW()
        AND consent.revoked_at IS NULL
      ORDER BY o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED

@@ -3366,6 +3366,10 @@ export async function registerRoutes(
             },
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
           });
+          const { recordPostPurchaseReceiptFromVerifiedMeta } = await import("./ecommerce/postPurchaseReceiptRuntime");
+          await recordPostPurchaseReceiptFromVerifiedMeta(owner.id, {
+            ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer),
+          });
         }
       }
 

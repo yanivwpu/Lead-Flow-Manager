@@ -1,9 +1,10 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone } from "./policy";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-export async function lockMarketingWorkspace(tx: Tx, workspace: string) {
+export type MarketingBoundaryExecutor={execute:(query:SQL)=>Promise<{rows:Record<string,unknown>[]}>};
+export async function lockMarketingWorkspace(tx: MarketingBoundaryExecutor, workspace: string) {
   // Same lock is held through the provider call. A committed opt-out wins over
   // all later send attempts, across workers and duplicate contact IDs.
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`marketing:${workspace}`}, 0))`);
@@ -78,7 +79,7 @@ export async function suppressMarketingIdentity(input: { workspace: string; emai
   });
 }
 
-export async function isContactDurablySuppressed(contact: { userId: string; email?: string | null; phone?: string | null }, channel: string, executor: Pick<Tx, "execute"> = db): Promise<boolean> {
+export async function isContactDurablySuppressed(contact: { userId: string; email?: string | null; phone?: string | null }, channel: string, executor: MarketingBoundaryExecutor = db): Promise<boolean> {
   const keys: string[] = [];
   try { if (contact.email) keys.push(normalizeMarketingEmail(contact.email)); } catch {}
   try { if (contact.phone) keys.push(`phone:${normalizeStoredMarketingPhone(contact.phone)}`); } catch {}
@@ -119,11 +120,11 @@ export async function readProviderDeliveryJson(response: Response): Promise<any>
   }
 }
 
-async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: (onDispatch: () => void) => Promise<T>, email = false): Promise<T> {
+async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: (onDispatch: () => void) => Promise<T>, email = false, executor?:MarketingBoundaryExecutor): Promise<T> {
   let accepted = false;
   let dispatched = false;
   try {
-    return await db.transaction(async tx => {
+    const run=async (tx:MarketingBoundaryExecutor) => {
       await lockMarketingWorkspace(tx, workspace);
       for (const identity of identities) {
         if (identity.userId !== workspace) throw new Error("Contact not found");
@@ -135,7 +136,8 @@ async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{us
       const result = await send(() => { dispatched = true; });
       accepted = !(result instanceof Response ? !result.ok : result && typeof result === "object" && "success" in result && result.success === false);
       return result;
-    });
+    };
+    return await (executor?run(executor):db.transaction(run));
   } catch (error) {
     const status = Number((error as {status?: number})?.status);
     const definiteRejection = Number.isInteger(status) && status >= 400 && status <= 599;
@@ -150,8 +152,8 @@ export function withGlobalDncEmailBoundary<T>(workspace: string, recipients: str
 }
 
 /** Caller prepares credentials and local payload validation before entering this lock. */
-export function withGlobalDncPhoneBoundary<T>(workspace: string, phone: string, send: () => Promise<T>): Promise<T> {
-  return withGlobalDncBoundary(workspace,[{userId:workspace,phone:normalizeStoredMarketingPhone(phone)}],send);
+export function withGlobalDncPhoneBoundary<T>(workspace: string, phone: string, send: () => Promise<T>, executor?:MarketingBoundaryExecutor): Promise<T> {
+  return withGlobalDncBoundary(workspace,[{userId:workspace,phone:normalizeStoredMarketingPhone(phone)}],send,false,executor);
 }
 
 export function withGlobalDncContactBoundary<T>(workspace: string, contact: {userId: string; email?: string | null; phone?: string | null}, send: () => Promise<T>): Promise<T> {

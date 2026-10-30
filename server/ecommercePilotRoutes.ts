@@ -16,6 +16,8 @@ import { Router, type Request, type Response } from "express";
 import { storage } from "./storage";
 import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
 import { requireEcommercePilot } from "./ecommerce/pilotMiddleware";
+import {postPurchaseActivationReadiness,parsePostPurchaseActivation,savePostPurchaseActivationQuery} from './ecommerce/postPurchaseActivation';
+import {postPurchaseDeliveryReadinessQuery} from './ecommerce/postPurchaseDeliveryReadiness';
 
 const router = Router();
 router.use(requireEcommercePilot);
@@ -100,7 +102,12 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       postPurchaseSchemaReady = tables.intents && tables.orders && tables.consents;
     } catch { postPurchaseSchemaReady = null; }
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
+    const deliverySchema=await db.execute(postPurchaseDeliveryReadinessQuery);
+    const deliveryReady=deliverySchema.rows[0]?.outbox===true&&postPurchaseSchemaReady===true;
+    postPurchaseSchemaReady=postPurchaseSchemaReady===null?null:deliveryReady;
+    const deliveryActivation=postPurchaseActivationReadiness(process.env,accountId,cfg,deliveryReady);
     return res.json({ ok: true,
+      deliveryActivation,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
       total: Number(stats?.total ?? 0), pending: Number(stats?.pending ?? 0),
       journeys: { orderSupport: Number(stats?.order_support ?? 0), fulfillmentSupport: Number(stats?.fulfillment_support ?? 0), orderCancelled: Number(stats?.order_cancelled ?? 0) },
@@ -110,7 +117,7 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       postPurchasePlans: readPostPurchasePlans(cfg),
       postPurchaseTemplates: readPostPurchaseTemplateBindings(cfg),
       postPurchaseSchemaReady,
-      postPurchaseReadiness: { activationEligible: false, reason: "delivery_integration_pending", messagingEnabled: false },
+      postPurchaseReadiness: { activationEligible: deliveryActivation.canActivate, reason: deliveryActivation.blockers[0]??"merchant_activation_required", messagingEnabled: deliveryActivation.deliveryEnabled },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
@@ -142,6 +149,34 @@ router.post('/event-review', async (req: Request, res: Response) => {
   } catch {
     return res.status(503).json({ error: 'E-commerce event review unavailable' });
   }
+});
+
+/** Existing owner-only, same-origin pilot boundary applies to activation as well. */
+router.post('/post-purchase-activation', async (req:Request,res:Response)=>{
+  const enabled=parsePostPurchaseActivation(req.body);
+  if(enabled===null)return res.status(400).json({error:'Invalid activation request'});
+  if(!req.user)return res.status(401).json({error:'Unauthorized'});
+  const accountId=(req.user as {id:string}).id;
+  try{
+    const owner=await storage.getUserForSession(accountId);
+    const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
+    if(!shop)return res.status(409).json({error:'Active Shopify connection required'});
+    const outcome=await db.transaction(async tx=>{
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop},0))`);
+      const [live]=await tx.select().from(users).where(and(eq(users.id,accountId),eq(users.shopifyShop,shop))).for('share').limit(1);
+      if(!live||!isShopifyContactInstallationActive(live))return false;
+      const installs=await tx.select().from(integrations).where(and(eq(integrations.userId,accountId),eq(integrations.type,'shopify'),eq(integrations.isActive,true))).for('share').limit(2);
+      if(installs.length!==1)return false;
+      const installation=installs[0],config=(installation.config??{}) as Record<string,unknown>;
+      const schema=(await tx.execute(postPurchaseDeliveryReadinessQuery)).rows[0];
+      if(enabled&&!postPurchaseActivationReadiness(process.env,accountId,config,
+        schema?.outbox===true&&schema?.intents===true&&schema?.consents===true).canActivate)return false;
+      const saved=await tx.execute(savePostPurchaseActivationQuery(accountId,shop,installation.id,enabled));
+      return saved.rows.length===1;
+    });
+    if(!outcome)return res.status(409).json({error:'Activation prerequisites are incomplete'});
+    return res.json({ok:true,merchantEnabled:enabled});
+  }catch{return res.status(503).json({error:'Activation unavailable'});}
 });
 
 /** Merchant-owned pilot workflow DRAFTS only. An explicit flag does not activate a

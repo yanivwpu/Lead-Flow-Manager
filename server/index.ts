@@ -610,6 +610,8 @@ app.use((req, res, next) => {
   if (process.env.ECOMMERCE_POST_PURCHASE_PREP_ENABLED === 'true') {
     const { startPostPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
     startPostPurchasePreparation();
+    const { startPostPurchaseDelivery } = await import("./ecommerce/postPurchaseDeliveryRuntime");
+    startPostPurchaseDelivery();
   }
   if (process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED === 'true') {
     const { startCheckoutRecoveryAutoPreparation } = await import("./ecommerce/checkoutRecoveryAutoPreparationRuntime");

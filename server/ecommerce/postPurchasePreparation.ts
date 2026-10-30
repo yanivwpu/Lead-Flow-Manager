@@ -1,3 +1,5 @@
+import {eligiblePostPurchaseLibraryTemplate} from './postPurchaseTemplateBinding';
+import {isEcommercePilotOwner} from './pilotAccess';
 import {sql,type SQL} from 'drizzle-orm';
 import {isShopifyContactInstallationActive} from '../../shared/shopifyContactPrivacy';
 import {normalizeShopifyShopDomain} from '../../shared/shopifyBilling';
@@ -27,10 +29,12 @@ export function createPostPurchasePreparation(deps:{
 }){
   const now=deps.now??Date.now;
   async function merchant(tx:PostPurchaseTx,shop:string,stopOnly=false):Promise<Merchant|null>{
-    const rows=await tx.execute(sql`SELECT id,shopify_shop,shopify_access_token,shopify_subscription_status,
+    const rows=await tx.execute(sql`SELECT id,email,shopify_shop,shopify_access_token,shopify_subscription_status,
       deletion_requested_at,shopify_installed_at,meta_connected,meta_phone_number_id FROM users WHERE shopify_shop=${shop} LIMIT 2 FOR SHARE`);
     if(rows.rows.length!==1)return null;const user=rows.rows[0],accountId=String(user.id);
-    if(!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true'}:{})},accountId))return null;
+    if(!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return null;
+    if(deps.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
+      !isEcommercePilotOwner({id:accountId,email:typeof user.email==='string'?user.email:null},stopOnly?{...deps.env,ECOMMERCE_PILOT_ENABLED:'true'}:deps.env))return null;
     if(!stopOnly&&!isShopifyContactInstallationActive({shopifyShop:shop,shopifyAccessToken:user.shopify_access_token as string|null,
       shopifySubscriptionStatus:user.shopify_subscription_status as string|null,deletionRequestedAt:user.deletion_requested_at as Date|null}))return null;
     if(user.deletion_requested_at)return null;
@@ -75,10 +79,10 @@ export function createPostPurchasePreparation(deps:{
     rowId:string,live:unknown[]){
     const plans=readPostPurchasePlans(m.config),c=await contact(tx,m,event.customerId);
     const binding=object(m.config.ecommercePostPurchaseTemplates)[journey];
-    const templates=typeof binding==='string'?await tx.execute(sql`SELECT id,name,language,category,status,body_text,header_type,template_type,buttons,carousel_cards
+    const templates=typeof binding==='string'?await tx.execute(sql`SELECT id,twilio_sid,name,language,category,status,body_text,header_type,template_type,buttons,carousel_cards
       FROM message_templates WHERE id=${binding} AND user_id=${m.accountId} FOR SHARE`):{rows:[]};
     const t=templates.rows[0];
-    const template=t?{name:String(t.name),language:String(t.language),category:String(t.category),status:String(t.status),
+    const template=t&&eligiblePostPurchaseLibraryTemplate(t,journey)?{name:String(t.name),language:String(t.language),category:String(t.category),status:String(t.status),
       bodyText:typeof t.body_text==='string'?t.body_text:null,headerType:t.header_type as string|null,
       templateType:t.template_type as string|null,buttons:t.buttons,carouselCards:t.carousel_cards}:null;
     const matches=template?live.filter(value=>{const v=object(value);return v.name===template.name&&v.language===template.language;}):[];
@@ -103,7 +107,7 @@ export function createPostPurchasePreparation(deps:{
       event:{verified:true,accountId:m.accountId,shop:m.shop,topic:event.topic,deliveryId:event.deliveryId,
         orderId:event.orderId,customerId:event.customerId,occurredAt:event.occurredAt},
       order:{accountId:m.accountId,shop:m.shop,id:fresh.orderId,customerId:fresh.customerId,status:fresh.status,
-        updatedAt:fresh.updatedAt,checkedAt:now(),latestPurchaseAt:fresh.latestPurchaseAt},
+        updatedAt:fresh.updatedAt,checkedAt:now(),purchasedAt:fresh.purchasedAt,latestPurchaseAt:fresh.latestPurchaseAt},
       recipient:{accountId:m.accountId,customerId:c?.shopifyCustomerId??'',identityVerified:!!c&&!!c.whatsappId&&'+'+c.whatsappId===c.phone,
         channel:'whatsapp',stopped:consent?.revokedAt!=null,erased:false,paused:c?.automationsPaused??true,
         consentPurposes:eligible.ok?[journey]:[]},
@@ -112,13 +116,19 @@ export function createPostPurchasePreparation(deps:{
     }).find(x=>x.journey===journey)!;
     const reasons=[...new Set([...timeline.reasons,...(!eligible.ok?[eligible.reason]:[])])];
     const terminal=reasons.includes('order_status_changed') || consent?.revokedAt!=null ||
-      (reasons.includes('purchase_recheck_required_or_new_purchase')&&fresh.latestPurchaseAt!==null&&fresh.latestPurchaseAt>event.occurredAt);
+      (reasons.includes('purchase_recheck_required_or_new_purchase')&&fresh.latestPurchaseAt!==null&&fresh.latestPurchaseAt>fresh.purchasedAt);
     const state=terminal?'suppressed':reasons.length===0?'preview_ready':reasons.every(x=>x==='waiting_for_timing')?'scheduled':'blocked';
     const dueAt=timeline.dueAt??now();
     await tx.execute(sql`UPDATE ecommerce_post_purchase_intents SET state=${state},reasons=${JSON.stringify(reasons)}::jsonb,
       contact_id=${c?.id??null},template_id=${template?t!.id:null},due_at=${new Date(dueAt)},checked_at=${new Date(now())},
       next_review_at=${new Date(Math.max(now()+90_000,dueAt))}
       WHERE id=${rowId}::bigint AND account_id=${m.accountId} AND shop=${m.shop} AND installation_id=${m.installationId} AND state<>'suppressed'`);
+    return state==='preview_ready'&&eligible.ok&&c&&template ? {
+      contactId:c.id,templateId:String(t!.id),phone:eligible.recipientPhone,
+      templateName:eligible.templateName,language:eligible.templateLanguage,
+      components:template.bodyText?.includes('{{1}}')
+        ? [{type:'body',parameters:[{type:'text',text:event.orderId.slice('gid://shopify/Order/'.length)}]}] : [],
+    } : null;
   }
   /** Called ONLY from existing raw-body HMAC verifier. No request route accepts trusted snapshots. */
   async function ingest(shop:string,topic:ShopifyOrderTopic,deliveryId:string,body:unknown){
@@ -182,7 +192,7 @@ export function createPostPurchasePreparation(deps:{
   async function captureConsent(accountId:string,contactId:string|null,candidate:VerifiedInboundConsentCandidate){
     const proof=classifyPostPurchaseConsent(candidate,now());if(!proof)return 'ignored';
     const stop=proof.action==='revoke';
-    if(!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true'}:{})},accountId))return 'disabled';
+    if(!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return 'disabled';
     const owner=await deps.database.transaction(tx=>tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`));
     const shop=owner.rows[0]?.shopify_shop;if(typeof shop!=='string'||deps.secret().length<32)return 'ignored';
     return locked(shop,async tx=>{
@@ -209,5 +219,29 @@ export function createPostPurchasePreparation(deps:{
       return saved.rows.length?'granted':'ignored';
     });
   }
-  return {ingest,tick,captureConsent};
+  /** Internal sender authorization; caller holds the same shop privacy lock and outbox lock.
+   * All facts are reloaded from server state. No queued snapshot authorizes a send.
+   */
+  async function authorizeDelivery(tx:PostPurchaseTx,scope:{accountId:string;shop:string;installationId:string},intentId:string){
+    const m=await merchant(tx,scope.shop);
+    if(!m||m.accountId!==scope.accountId||m.installationId!==scope.installationId||
+      m.config.ecommercePostPurchaseDeliveryEnabled!==true)return null;
+    await schema(tx);
+    const found=await tx.execute(sql`SELECT i.*,e.delivery_id FROM ecommerce_post_purchase_intents i
+      JOIN ecommerce_growth_event_inbox e ON e.id=i.event_id AND e.account_id=i.account_id AND e.shop=i.shop
+      WHERE i.id=${intentId}::bigint AND i.account_id=${m.accountId} AND i.shop=${m.shop}
+        AND i.installation_id=${m.installationId} AND i.state='preview_ready' FOR UPDATE OF i`);
+    const row=found.rows[0];if(!row)return null;
+    const event={topic:row.topic as ShopifyOrderTopic,deliveryId:String(row.delivery_id),orderId:String(row.order_gid),
+      customerId:String(row.customer_gid),occurredAt:date(row.occurred_at)};
+    if(event.occurredAt<m.installedAt||await deps.privacyLocked(tx,m.shop,event.customerId))return null;
+    const checkedAt=now();
+    const fresh=await (deps.recheck??recheckPostPurchaseOrder)({shop:m.shop,accessToken:m.accessToken,
+      orderId:event.orderId,customerId:event.customerId,now:now()});
+    if(!fresh||fresh.orderId!==event.orderId||fresh.customerId!==event.customerId||fresh.updatedAt<event.occurredAt)return null;
+    const live=await liveTemplates(m);
+    if(now()-checkedAt>60_000)return null;
+    return evaluate(tx,m,event,fresh,row.journey as PostPurchaseJourney,String(row.id),live);
+  }
+  return {ingest,tick,captureConsent,authorizeDelivery};
 }

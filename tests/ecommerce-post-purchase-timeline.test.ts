@@ -11,7 +11,7 @@ function fixture(topic = 'orders/create'): PostPurchaseSnapshot {
       orderId:'gid://shopify/Order/1',customerId:'gid://shopify/Customer/2',occurredAt:now - 180*86400000},
     order:{accountId:'a',shop:'one.myshopify.com',id:'gid://shopify/Order/1',customerId:'gid://shopify/Customer/2',
       status:topic==='orders/create'?'open':topic==='orders/cancelled'?'cancelled':'fulfilled',
-      updatedAt:now - 180*86400000,checkedAt:now,latestPurchaseAt:now - 180*86400000},
+      updatedAt:now - 180*86400000,checkedAt:now,purchasedAt:now - 180*86400000,latestPurchaseAt:now - 180*86400000},
     recipient:{accountId:'a',customerId:'gid://shopify/Customer/2',identityVerified:true,channel:'whatsapp',
       stopped:false,erased:false,paused:false,consentPurposes:POST_PURCHASE_JOURNEYS},
     templates:Object.fromEntries(POST_PURCHASE_JOURNEYS.map(journey=>[journey,{
@@ -88,4 +88,14 @@ test('configuration defaults are off; reject activation injection and malformed 
   assert.equal(parsePostPurchasePlanChange({action:'activate',journey:'winBack',plan:{selected:true,delayMinutes:5}}),null);
   assert.equal(parsePostPurchasePlanChange({action:'save_post_purchase_plan',journey:'winBack',plan:{selected:true,delayMinutes:5,send:true}}),null);
   assert.deepEqual(parsePostPurchasePlanChange({action:'save_post_purchase_plan',journey:'winBack',plan:{selected:true,delayMinutes:5}}),{journey:'winBack',plan:{selected:true,delayMinutes:5}});
+});
+
+// Regression for #234: fulfillment can occur after a second order was purchased.
+test('newer purchase before fulfillment still suppresses all older-order marketing',()=>{
+  const input=fixture('orders/fulfilled');
+  input.event.occurredAt=input.order.updatedAt=now-1000;
+  input.order.latestPurchaseAt=now-86400000;
+  for(const journey of ['reviewRequest','repeatPurchase','winBack'])
+    assert.ok(result(input,journey).reasons.includes('purchase_recheck_required_or_new_purchase'));
+  assert.equal(result(input,'fulfillmentUpdate').status,'preview_ready');
 });
