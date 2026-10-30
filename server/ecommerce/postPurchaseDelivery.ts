@@ -5,6 +5,7 @@ import {postPurchaseOperatorReady} from './postPurchaseActivation';
 import {claimPostPurchaseDeliveryQuery,enqueuePostPurchaseDeliveryQuery,recordPostPurchaseAttemptQuery,
   settlePostPurchaseAttemptQuery,postPurchaseDeliveryReadinessQuery} from './postPurchaseDeliveryReadiness';
 import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
+import {readControlledPostPurchaseScope,controlledPostPurchaseRecipientMatches,sameControlledPostPurchaseScope} from './postPurchaseControlledScope';
 
 type Claim={id:string;token:string;accountId:string;shop:string;installationId:string};
 type Database=PostPurchaseDatabase&{execute:(q:SQL)=>Promise<{rows:Record<string,unknown>[]}>};
@@ -24,9 +25,10 @@ export function createPostPurchaseDelivery(deps:{
   }
   async function processClaim(claim:Claim){
     if(!enabled(claim.accountId))return 'disabled';
+    const controlled=readControlledPostPurchaseScope(deps.env);
     // AUTOCOMMIT before authorization/provider IO: a crash or rolled-back send transaction
     // must never erase evidence that this claim has consumed its only provider opportunity.
-    const fence=await deps.database.execute(recordPostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token));
+    const fence=await deps.database.execute(recordPostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,controlled?.intentId));
     if(fence.rows.length!==1)return 'fenced';
     try{
       return await locked(claim.shop,async tx=>{
@@ -38,11 +40,14 @@ export function createPostPurchaseDelivery(deps:{
             AND claim_token=${claim.token}::uuid AND state='claimed' AND provider_attempted_at IS NOT NULL FOR UPDATE`);
         const row=rows.rows[0];if(!row)throw Error('claim_unavailable');
         const proof=await deps.authorize(tx,claim,String(row.intent_id));
-        if(!proof||proof.contactId!==row.contact_id||proof.templateId!==row.template_id||!enabled(claim.accountId)){
+        const digest=proof?recoveryPhoneDigest(deps.secret(),proof.phone):null;
+        if(!proof||!digest||proof.contactId!==row.contact_id||proof.templateId!==row.template_id||!enabled(claim.accountId)||
+          !sameControlledPostPurchaseScope(controlled,readControlledPostPurchaseScope(deps.env))||
+          (controlled&&(String(row.intent_id)!==controlled.intentId||!controlledPostPurchaseRecipientMatches(controlled,digest)))){
           await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'uncertain'));
           return 'blocked';
         }
-        await tx.execute(sql`UPDATE ecommerce_post_purchase_outbox SET recipient_hmac=${recoveryPhoneDigest(deps.secret(),proof.phone)}
+        await tx.execute(sql`UPDATE ecommerce_post_purchase_outbox SET recipient_hmac=${digest}
           WHERE id=${claim.id}::bigint AND account_id=${claim.accountId} AND shop=${claim.shop}`);
         const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx);
         if(!validRecoveryWamid(response?.messageId))throw Error('provider_acceptance_unknown');
@@ -58,6 +63,7 @@ export function createPostPurchaseDelivery(deps:{
   async function tick(){
     const accountId=deps.env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID??'';
     if(!enabled(accountId))return 'disabled';
+    const controlled=readControlledPostPurchaseScope(deps.env);
     const schema=await deps.database.execute(postPurchaseDeliveryReadinessQuery);
     if(!schema.rows[0]?.outbox||!schema.rows[0]?.intents||!schema.rows[0]?.consents)return 'schema_missing';
     const owner=await deps.database.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`);
@@ -73,9 +79,10 @@ export function createPostPurchaseDelivery(deps:{
       const due=await tx.execute(sql`SELECT i.id::text FROM ecommerce_post_purchase_intents i WHERE i.account_id=${accountId}
         AND i.shop=${shop} AND i.installation_id=${installationId} AND i.state='preview_ready' AND i.due_at<=NOW()
         AND NOT EXISTS(SELECT 1 FROM ecommerce_post_purchase_outbox o WHERE o.intent_id=i.id)
+        AND ${controlled?sql`i.id=${controlled.intentId}::bigint`:sql`TRUE`}
         ORDER BY i.id LIMIT 3`);
       for(const row of due.rows)await tx.execute(enqueuePostPurchaseDeliveryQuery(accountId,shop,installationId,String(row.id)));
-      const picked=await tx.execute(claimPostPurchaseDeliveryQuery(accountId,shop,installationId));
+      const picked=await tx.execute(claimPostPurchaseDeliveryQuery(accountId,shop,installationId,controlled?.intentId));
       return picked.rows.length===1?{id:String(picked.rows[0].id),token:String(picked.rows[0].claim_token),accountId,shop,installationId}:null;
     });
     return claim?processClaim(claim):'idle';

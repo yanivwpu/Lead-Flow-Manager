@@ -2,7 +2,7 @@ import {postPurchaseActivationReadiness,savePostPurchaseActivationQuery} from '.
 import {deliveryMigrationPreflight,deliveryMigrationManifest} from '../scripts/ecommerce-delivery-migration-preflight';
 import {createPostPurchaseDelivery} from '../server/ecommerce/postPurchaseDelivery';
 import {createPostPurchaseReceipt} from '../server/ecommerce/postPurchaseReceipt';
-import {enqueuePostPurchaseDeliveryQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
+import {enqueuePostPurchaseDeliveryQuery,claimPostPurchaseDeliveryQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -306,13 +306,17 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
     await t.test('private production delivery requires operator release and a freshly matching owner; fixtures only',async()=>{
       const production={RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
         ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true',
-        ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid'};
+        ECOMMERCE_PILOT_WORKSPACE_ID:account,ECOMMERCE_PILOT_OWNER_EMAIL:'fixture@example.invalid',
+        ECOMMERCE_POST_PURCHASE_DELIVERY_MODE:'controlled-one-intent',ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:'1',
+        ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:recoveryPhoneDigest(secret,'+'+phone),
+        ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString()};
       const restore={...env},restoreSend={...sendEnv};
       try{
         for(const validOwner of [false,true]){
           Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
           await seed();await grant('orderConfirmation');await webhook('orders/create','production-fixture');
           await execute(sql`UPDATE users SET email=${validOwner?'fixture@example.invalid':'another@example.invalid'} WHERE id=${account}`);
+          production.ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID=String((await execute(sql`SELECT id::text FROM ecommerce_post_purchase_intents WHERE journey='orderConfirmation'`)).rows[0].id);
           Object.assign(env,production);Object.assign(sendEnv,production);
           const before=sends;
           assert.equal(await worker().tick(),validOwner?'accepted':'blocked');
@@ -330,6 +334,40 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
         for(const key of Object.keys(production)){delete (env as Record<string,unknown>)[key];delete (sendEnv as Record<string,unknown>)[key];}
         Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
       }
+    });
+    await t.test('controlled acceptance only sends the approved intent/recipient once and never drains other queued work',async()=>{
+      const saved={...sendEnv};
+      const clear=()=>{for(const key of ['ECOMMERCE_POST_PURCHASE_DELIVERY_MODE','ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID','ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC','ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT'])delete (sendEnv as Record<string,unknown>)[key];Object.assign(sendEnv,saved);};
+      try{
+        await seed();await grant('orderConfirmation');await webhook('orders/create','controlled-target');
+        await service.ingest(shop,'orders/create','unrelated-existing-order',body('3'));
+        const intents=(await execute(sql`SELECT id::text,order_gid FROM ecommerce_post_purchase_intents ORDER BY id`)).rows;
+        const target=String(intents.find(x=>x.order_gid==='gid://shopify/Order/1')!.id);
+        Object.assign(sendEnv,{ECOMMERCE_POST_PURCHASE_DELIVERY_MODE:'controlled-one-intent',
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:target,
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString(),
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:recoveryPhoneDigest(secret,'+'+phone)});
+        const before=sends;
+        if(pool)await Promise.all([worker().tick(),worker().tick()]);else assert.equal(await worker().tick(),'accepted');
+        assert.equal(sends,before+1);
+        assert.equal(await worker().tick(),'idle');assert.equal(sends,before+1);
+        assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_outbox`)).rows[0].n,1);
+        // A restart is still pinned to the consumed intent, never the other ready order.
+        service=makeService();assert.equal(await worker().tick(),'idle');assert.equal(sends,before+1);
+        const foreignId=String(intents.find(x=>x.order_gid==='gid://shopify/Order/3')!.id);
+        await execute(enqueuePostPurchaseDeliveryQuery(account,shop,'install',foreignId));
+        const foreign=(await execute(claimPostPurchaseDeliveryQuery(account,shop,'install',foreignId))).rows[0];
+        assert.equal(await worker().processClaim({id:String(foreign.id),token:String(foreign.claim_token),
+          accountId:account,shop,installationId:'install'}),'fenced');
+        assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_outbox WHERE provider_attempted_at IS NOT NULL`)).rows[0].n,1);
+        assert.equal(sends,before+1);
+        clear();await seed();await grant('orderConfirmation');await webhook('orders/create','wrong-controlled-recipient');
+        const id=String((await execute(sql`SELECT id::text FROM ecommerce_post_purchase_intents`)).rows[0].id);
+        Object.assign(sendEnv,{ECOMMERCE_POST_PURCHASE_DELIVERY_MODE:'controlled-one-intent',
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:id,ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString(),ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:'0'.repeat(64)});
+        const previous=sends;assert.equal(await worker().tick(),'blocked');assert.equal(sends,previous);
+        assert.equal(await worker().tick(),'idle');assert.equal(sends,previous);
+      }finally{clear();}
     });
     await t.test('partially configured plans do not hide delivery that remains enabled for qualified journeys',async()=>{
       await seed();await grant('orderConfirmation');await webhook('orders/create','partial-plan');

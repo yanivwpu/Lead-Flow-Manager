@@ -28,3 +28,21 @@ Turn off delivery/preparation gates and pause merchant journeys, then roll back 
 ## Current operational limits
 
 The production-only pilot UI cannot activate sends until separate private operator release, schema, signed-receipt and verified-subscription gates are satisfied. General merchant rollout, production DDL, live subscription verification, migration restore acceptance and provider receipt acceptance remain separate release gates. A green source PR or isolated provider fixture is not production delivery acceptance.
+
+
+## Private controlled acceptance scope
+
+Production delivery requires an explicit `controlled-one-intent` mode in addition to the existing private owner, operator, merchant, schema, subscription, consent and template gates. It has no unrestricted production fallback. This adds no schema or new messaging path.
+
+Operator-only bindings (never merchant request JSON):
+
+- `ECOMMERCE_POST_PURCHASE_DELIVERY_MODE=controlled-one-intent`
+- `ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID`: one already eligible, unattempted intent, privately recorded in the approval.
+- `ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC`: the approved recipient digest under the existing consent key, privately recorded and never logged.
+- `ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT`: an explicit UTC ISO deadline; use a 15-minute acceptance window in the owner approval.
+
+The approved intent restricts enqueue, claim and the autocommitted attempt fence. The fresh verified phone must match the approved recipient HMAC immediately before dispatch. Expired, malformed or changed scope fails closed. Restarts and concurrent workers cannot advance to another ready intent: the existing durable unique outbox and consumed attempt retain the budget. A blocked/uncertain claim is never reset to manufacture a retry. Receipt reconciliation remains independent of sending and expiry.
+
+Acceptance specification, preparation only: identify one existing legitimate pilot order/intent and the already authorized internal recipient in a private approval record; require that purpose's existing valid signed consent and an approved exact utility template. Do not infer post-purchase consent from checkout consent or copy staging grants. Pause other journey plans for the test, verify the exact intent has no prior claim/attempt, record the scope and expiry, and obtain separate authorization for one provider attempt. No checkout/order creation, old uncertain checkout replay, event fabrication or direct consent/intent insertion is permitted. If no such eligible existing intent/consent exists, acceptance stays NO-GO.
+
+After explicit authorization only, enable the existing private release and receipt prerequisites, set the controlled bindings, then enable merchant/delivery activation last. Success requires one Meta acceptance and an authentic matching receipt; acceptance alone is not delivery. Disable delivery/preparation and merchant activation after the bounded attempt/window, retaining receipt capture and all fences. Keep every independent checkout-recovery staging restriction unchanged. Broader private operation or public rollout needs another separately reviewed release scope.
