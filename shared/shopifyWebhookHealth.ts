@@ -40,6 +40,16 @@ export const SHOPIFY_GRAPHQL_WEBHOOK_SPECS: ShopifyGraphqlWebhookSpec[] = [
 /** App-level update and compliance webhooks configured in shopify.app.whachatcrm.toml (not per-shop GraphQL). */
 export const SHOPIFY_APP_CONFIG_WEBHOOK_SPECS = [
   {
+    topic: "orders/fulfilled",
+    pathSuffix: "/api/shopify/webhooks/orders-fulfilled",
+    label: "Order fulfilled (app config)",
+  },
+  {
+    topic: "orders/cancelled",
+    pathSuffix: "/api/shopify/webhooks/orders-cancelled",
+    label: "Order cancelled (app config)",
+  },
+  {
     topic: "customers/update",
     pathSuffix: "/api/shopify/webhooks/customers-update",
     label: "Customer updated (app config)",
@@ -63,6 +73,16 @@ export const SHOPIFY_APP_CONFIG_WEBHOOK_SPECS = [
 
 /** Commerce webhooks declared in shopify.app.whachatcrm.toml (app-level + per-shop GraphQL on install). */
 export const SHOPIFY_APP_TOML_COMMERCE_WEBHOOK_SPECS = [
+  {
+    topic: "orders/fulfilled",
+    pathSuffix: "/api/shopify/webhooks/orders-fulfilled",
+    label: "Order fulfilled (app config)",
+  },
+  {
+    topic: "orders/cancelled",
+    pathSuffix: "/api/shopify/webhooks/orders-cancelled",
+    label: "Order cancelled (app config)",
+  },
   {
     topic: "customers/update",
     pathSuffix: "/api/shopify/webhooks/customers-update",

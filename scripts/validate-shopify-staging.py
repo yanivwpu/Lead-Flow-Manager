@@ -15,6 +15,8 @@ TOPICS = {
     'customers/create': '/api/shopify/webhooks/customers-create',
     'customers/update': '/api/shopify/webhooks/customers-update',
     'orders/create': '/api/shopify/webhooks/orders-create',
+    'orders/fulfilled': '/api/shopify/webhooks/orders-fulfilled',
+    'orders/cancelled': '/api/shopify/webhooks/orders-cancelled',
 }
 PRIVACY = {'customers/data_request', 'customers/redact', 'shop/redact'}
 ROOT = Path(__file__).resolve().parents[1]

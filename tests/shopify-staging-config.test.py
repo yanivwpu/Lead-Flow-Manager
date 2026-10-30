@@ -17,7 +17,7 @@ class StagingConfiguration(unittest.TestCase):
     def test_checked_in_identity(self):
         self.assertEqual(CONFIG['client_id'], EXPECTED_ID)
         self.assertTrue(v.validate(CONFIG, EXPECTED_ID))
-        self.assertEqual(len(CONFIG['webhooks']['subscriptions']), 6)
+        self.assertEqual(len(CONFIG['webhooks']['subscriptions']), 8)
         self.assertIn('customers/update', v.TOPICS)
 
     def test_verified_identity_required_and_wrong_apps_rejected(self):
@@ -69,7 +69,10 @@ class StagingConfiguration(unittest.TestCase):
 
     def test_callback_routes_and_signature_wiring_exist(self):
         routes = (ROOT / 'server/shopifyRoutes.ts').read_text()
-        for callback in v.TOPICS.values():
+        for topic, callback in v.TOPICS.items():
+            if topic in ('orders/fulfilled', 'orders/cancelled'):
+                self.assertIn('["' + callback.rsplit('/',1)[-1] + '","' + topic + '"]', routes)
+                continue
             self.assertIn("router.post('" + callback.removeprefix('/api/shopify'), routes)
         self.assertIn('verify: verifyWebhookHmac', routes)
         self.assertIn(".createHmac('sha256', SHOPIFY_API_SECRET)", routes)
