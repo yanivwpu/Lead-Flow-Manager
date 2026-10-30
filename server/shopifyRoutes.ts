@@ -1007,6 +1007,32 @@ router.get('/ecommerce/checkout-recovery-preflight', async (req: Request, res: R
         WHERE account_id=${accountId} AND shop=${shop} AND state='pending') AS pending_outbox,
        (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
         WHERE account_id=${accountId} AND shop=${shop} AND state='suppressed') AS suppressed_outbox,
+       -- Staging owner-only, aggregate lifecycle evidence: never expose checkout
+       -- links, Meta message IDs, phones, contact IDs or provider error text.
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop} AND state='claimed') AS claimed_outbox,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop} AND state='accepted') AS accepted_outbox,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop} AND state='uncertain') AS uncertain_outbox,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND provider_attempted_at IS NOT NULL) AS provider_attempts,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND provider_message_id IS NOT NULL) AS provider_accepted,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND meta_delivery_status='sent') AS meta_sent_receipts,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND meta_delivery_status='delivered') AS meta_delivered_receipts,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND meta_delivery_status='read') AS meta_read_receipts,
+       (SELECT COUNT(*)::integer FROM ecommerce_checkout_recovery_outbox
+        WHERE account_id=${accountId} AND shop=${shop}
+          AND meta_delivery_status='failed') AS meta_failed_receipts,
        (SELECT COUNT(*)::integer FROM message_templates
         WHERE user_id=${accountId} AND name='shopify_checkout_reminder'
           AND lower(category)='marketing' AND lower(status)='approved') AS local_approved_templates`);
@@ -1035,6 +1061,20 @@ router.get('/ecommerce/checkout-recovery-preflight', async (req: Request, res: R
         pendingOutbox:asCount(row.pending_outbox),
         suppressedOutbox:asCount(row.suppressed_outbox),
         locallyApprovedReminderTemplates:asCount(row.local_approved_templates),
+      },
+      // These are counts of existing rows and receipts, NOT messages sent by
+      // this read-only request. A provider attempt without an accepted ID or
+      // signed receipt is not evidence of delivery and must never be retried.
+      delivery:{
+        claimed:asCount(row.claimed_outbox),
+        accepted:asCount(row.accepted_outbox),
+        uncertain:asCount(row.uncertain_outbox),
+        providerAttempts:asCount(row.provider_attempts),
+        providerAccepted:asCount(row.provider_accepted),
+        metaSentReceipts:asCount(row.meta_sent_receipts),
+        metaDeliveredReceipts:asCount(row.meta_delivered_receipts),
+        metaReadReceipts:asCount(row.meta_read_receipts),
+        metaFailedReceipts:asCount(row.meta_failed_receipts),
       },
       flags:recoveryAutomationFlags(environment),
       liveMetaTemplateApproval:'not_checked',
