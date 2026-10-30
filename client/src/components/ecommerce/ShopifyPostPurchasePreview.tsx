@@ -28,6 +28,7 @@ type PostPurchaseStatus = {
     abandonedCart: boolean;
   };
   postPurchasePlans?: PostPurchasePlans;
+  postPurchaseTemplates?: Partial<Record<import('@shared/postPurchase').PostPurchaseJourney, string>>;
   messagingEnabled: false;
 };
 
@@ -168,7 +169,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
           <p className="mt-2 text-sm text-slate-600">{item.description}</p>
         </div>)}
     </div>
-    <ShopifyPostPurchasePlans key={user.id} plans={data.postPurchasePlans} locale={locale}
+    <ShopifyPostPurchasePlans key={user.id} plans={data.postPurchasePlans} bindings={data.postPurchaseTemplates} locale={locale}
       onSaved={() => client.invalidateQueries({ queryKey })}/>
     <p role="note" className="text-xs text-slate-600">{t.notice}</p>
   </section>;
