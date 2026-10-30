@@ -47,8 +47,14 @@ test('Postgres: consent-scoped recovery is unique, claimed once and never automa
   await admin.query("UPDATE "+schema+".message_templates SET status='pending'");
   const pendingTemplate=await a.execute(enqueueRecoveryDeliveryQuery({...enqueue,checkoutId:'gid://shopify/AbandonedCheckout/999'}));
   assert.equal(pendingTemplate.rows.length,0);
-  const claims=await Promise.all([a.execute(claimRecoveryDeliveryQuery({accountId:tenant,shop})),
-    b.execute(claimRecoveryDeliveryQuery({accountId:tenant,shop}))]);
+  const wrongScope=await a.execute(claimRecoveryDeliveryQuery({accountId:tenant,shop,
+    checkoutId:'gid://shopify/AbandonedCheckout/987'}));
+  assert.equal(wrongScope.rows.length,0,'wrong checkout must not be claimed');
+  assert.throws(()=>claimRecoveryDeliveryQuery({accountId:tenant,shop,
+    checkoutId:'gid://shopify/Order/123'}),'invalid checkout scope must be rejected');
+  const claims=await Promise.all([a.execute(claimRecoveryDeliveryQuery({accountId:tenant,shop,
+    checkoutId})),
+    b.execute(claimRecoveryDeliveryQuery({accountId:tenant,shop,checkoutId}))]);
   assert.deepEqual(claims.map(x=>x.rows.length).sort(),[0,1]);
   const claim=claims.flatMap(x=>x.rows)[0];
   assert.ok(claim.claim_token);
