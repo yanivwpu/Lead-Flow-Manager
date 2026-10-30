@@ -7,7 +7,7 @@ import {postPurchaseOperatorReady} from './postPurchaseActivation';
 const delivery=createPostPurchaseDelivery({database:db,env:process.env,
   secret:()=>process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'',
   authorize:postPurchasePreparation.authorizeDelivery,
-  send:(account,phone,name,language,components,tx)=>sendMetaWhatsAppTemplate(account,phone,name,language,components,{signal:AbortSignal.timeout(10_000),suppressionExecutor:tx}),
+  send:(account,phone,name,language,components,tx,authorizeDispatch)=>sendMetaWhatsAppTemplate(account,phone,name,language,components,{signal:AbortSignal.timeout(10_000),suppressionExecutor:tx,authorizeDispatch}),
 });
 export function startPostPurchaseDelivery():null|(()=>void){
   const account=process.env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID||'';

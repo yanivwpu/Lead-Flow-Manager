@@ -223,7 +223,7 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
     const sendEnv={...env,ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'true',
       ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID:account,ECOMMERCE_POST_PURCHASE_RECEIPTS_ENABLED:'true',
       ECOMMERCE_POST_PURCHASE_WEBHOOKS_VERIFIED:'true'};
-    let sends=0,providerThrows=false,settlementFails=false;
+    let sends=0,providerThrows=false,settlementFails=false,beforeDispatch:(()=>void)|undefined;
     const deliveryDb={...faultDatabase,execute,
       transaction:<T>(fn:(tx:PostPurchaseTx)=>Promise<T>)=>database.transaction(tx=>fn({execute:async q=>{
         const rendered=new PgDialect().sqlToQuery(q);
@@ -235,7 +235,9 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
     };
     const worker=()=>createPostPurchaseDelivery({database:deliveryDb,env:sendEnv,secret:()=>secret,
       authorize:(...args)=>service.authorizeDelivery(...args),
-      send:async()=>{sends++;if(providerThrows)throw Error('ambiguous_provider_timeout');return {messageId:'wamid.fixture_delivery_'+sends};},
+      send:async(_account,_phone,_name,_language,_components,_tx,authorizeDispatch)=>{
+        beforeDispatch?.();if(!authorizeDispatch())throw Error('provider_dispatch_authorization_expired');
+        sends++;if(providerThrows)throw Error('ambiguous_provider_timeout');return {messageId:'wamid.fixture_delivery_'+sends};},
     });
     const receipt=createPostPurchaseReceipt({database,env:sendEnv,secret:()=>secret});
     async function queue(){
@@ -367,7 +369,19 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
           ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:id,ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString(),ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:'0'.repeat(64)});
         const previous=sends;assert.equal(await worker().tick(),'blocked');assert.equal(sends,previous);
         assert.equal(await worker().tick(),'idle');assert.equal(sends,previous);
-      }finally{clear();}
+        clear();await seed();await grant('orderConfirmation');await webhook('orders/create','dispatch-deadline');
+        const deadlineId=String((await execute(sql`SELECT id::text FROM ecommerce_post_purchase_intents`)).rows[0].id);
+        Object.assign(sendEnv,{ECOMMERCE_POST_PURCHASE_DELIVERY_MODE:'controlled-one-intent',
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_INTENT_ID:deadlineId,
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString(),
+          ECOMMERCE_POST_PURCHASE_CONTROLLED_RECIPIENT_HMAC:recoveryPhoneDigest(secret,'+'+phone)});
+        beforeDispatch=()=>{sendEnv.ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT=new Date(Date.now()-1).toISOString();};
+        assert.equal(await worker().tick(),'uncertain');assert.equal(sends,previous);
+        assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_outbox WHERE provider_attempted_at IS NOT NULL`)).rows[0].n,1);
+        beforeDispatch=undefined;
+        sendEnv.ECOMMERCE_POST_PURCHASE_CONTROLLED_EXPIRES_AT=new Date(Date.now()+10*60_000).toISOString();
+        assert.equal(await worker().tick(),'idle');assert.equal(sends,previous);
+      }finally{beforeDispatch=undefined;clear();}
     });
     await t.test('partially configured plans do not hide delivery that remains enabled for qualified journeys',async()=>{
       await seed();await grant('orderConfirmation');await webhook('orders/create','partial-plan');

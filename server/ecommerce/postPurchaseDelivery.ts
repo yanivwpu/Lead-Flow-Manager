@@ -13,7 +13,7 @@ type Database=PostPurchaseDatabase&{execute:(q:SQL)=>Promise<{rows:Record<string
 export function createPostPurchaseDelivery(deps:{
   database:Database;env:Record<string,string|undefined>;secret:()=>string;
   authorize:ReturnType<typeof createPostPurchasePreparation>['authorizeDelivery'];
-  send:(accountId:string,phone:string,name:string,language:string,components:Record<string,unknown>[],tx:PostPurchaseTx)=>Promise<{messageId:string}>;
+  send:(accountId:string,phone:string,name:string,language:string,components:Record<string,unknown>[],tx:PostPurchaseTx,authorizeDispatch:()=>boolean)=>Promise<{messageId:string}>;
 }){
   const enabled=(accountId:string)=>postPurchaseOperatorReady({...deps.env,
     ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY:deps.secret()},accountId);
@@ -49,7 +49,10 @@ export function createPostPurchaseDelivery(deps:{
         }
         await tx.execute(sql`UPDATE ecommerce_post_purchase_outbox SET recipient_hmac=${digest}
           WHERE id=${claim.id}::bigint AND account_id=${claim.accountId} AND shop=${claim.shop}`);
-        const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx);
+        // The adapter checks this synchronously at fetch, after its awaited credential/DNC reads.
+        const authorizeDispatch=()=>Date.now()<proof.freshUntil&&enabled(claim.accountId)&&
+          sameControlledPostPurchaseScope(controlled,readControlledPostPurchaseScope(deps.env));
+        const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx,authorizeDispatch);
         if(!validRecoveryWamid(response?.messageId))throw Error('provider_acceptance_unknown');
         const result=await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'accepted',response.messageId));
         if(result.rows.length!==1)throw Error('provider_settlement_unknown');

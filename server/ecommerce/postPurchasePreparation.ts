@@ -241,7 +241,8 @@ export function createPostPurchasePreparation(deps:{
     if(!fresh||fresh.orderId!==event.orderId||fresh.customerId!==event.customerId||fresh.updatedAt<event.occurredAt)return null;
     const live=await liveTemplates(m);
     if(now()-checkedAt>60_000)return null;
-    return evaluate(tx,m,event,fresh,row.journey as PostPurchaseJourney,String(row.id),live);
+    const proof=await evaluate(tx,m,event,fresh,row.journey as PostPurchaseJourney,String(row.id),live);
+    return proof?{...proof,freshUntil:checkedAt+60_000}:null;
   }
   return {ingest,tick,captureConsent,authorizeDelivery};
 }
