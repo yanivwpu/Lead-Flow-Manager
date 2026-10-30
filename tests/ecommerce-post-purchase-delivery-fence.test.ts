@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PgDialect} from 'drizzle-orm/pg-core';
-import {postPurchaseDeliveryReadinessQuery,claimPostPurchaseDeliveryQuery,
+import {postPurchaseDeliveryReadinessQuery,claimPostPurchaseDeliveryQuery,enqueuePostPurchaseDeliveryQuery,
   recordPostPurchaseAttemptQuery,settlePostPurchaseAttemptQuery,
   suppressPendingPostPurchaseQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
 
@@ -50,4 +50,12 @@ test('reject malformed shop, claims and order IDs',()=>{
  assert.throws(()=>claimPostPurchaseDeliveryQuery('owner','bad.com','installation'));
  assert.throws(()=>recordPostPurchaseAttemptQuery('0',...scope,claim));
  assert.throws(()=>suppressPendingPostPurchaseQuery(...scope,'invalid'));
+});
+
+test('enqueue uses existing purpose-specific grant and active installation only',()=>{
+ const q=show(enqueuePostPurchaseDeliveryQuery('owner-1','pilot.myshopify.com','install-1','1'));
+ for(const fragment of ['ecommerce_post_purchase_consents','verified_whatsapp_explicit_opt_in',
+   'consent.revoked_at IS NULL','i.state=\'preview_ready\'','inst.is_active IS TRUE',
+   'ON CONFLICT (intent_id) DO NOTHING']) assert.ok(q.sql.includes(fragment),fragment);
+ assert.throws(()=>enqueuePostPurchaseDeliveryQuery('owner-1','pilot.myshopify.com','install-1','0'));
 });
