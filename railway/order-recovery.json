@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "railway/order-recovery.Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "node --import tsx scripts/verify-shopify-order-recovery.ts",
+    "restartPolicyType": "NEVER",
+    "numReplicas": 1
+  }
+}
