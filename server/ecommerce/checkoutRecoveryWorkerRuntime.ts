@@ -25,6 +25,7 @@ const env=():RecoveryWorkerEnvironment=>({
  ECOMMERCE_RECOVERY_WORKER_ENABLED:process.env.ECOMMERCE_RECOVERY_WORKER_ENABLED,
  ECOMMERCE_RECOVERY_WORKER_MODE:process.env.ECOMMERCE_RECOVERY_WORKER_MODE,
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:process.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID,
+ ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:process.env.ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID,
 });
 async function installation(accountId:string,shop:string):Promise<boolean>{
  const [user]=await db.select().from(users).where(and(eq(users.id,accountId),
@@ -32,7 +33,9 @@ async function installation(accountId:string,shop:string):Promise<boolean>{
  return !!user&&isShopifyContactInstallationActive(user)&&
    !!user.shopifyAccessToken&&user.metaConnected===true;
 }
-async function claimOne(accountId:string):Promise<ClaimedRecoveryDelivery|null>{
+async function claimOne(accountId:string,checkoutId:string):Promise<ClaimedRecoveryDelivery|null>{
+ if(!/^gid:\/\/shopify\/AbandonedCheckout\/[1-9][0-9]{0,19}$/.test(checkoutId))
+   return null;
  const secret=process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'';
  if(secret.length<32)return null;
  const [owner]=await db.select().from(users).where(eq(users.id,accountId)).limit(1);
@@ -46,9 +49,10 @@ async function claimOne(accountId:string):Promise<ClaimedRecoveryDelivery|null>{
     to_regclass('public.ecommerce_checkout_recovery_intents') IS NOT NULL AS intents`);
  if(!schema.rows[0]||Object.values(schema.rows[0]).some(v=>v!==true))
    return null;
- const res=await db.execute(claimRecoveryDeliveryQuery({accountId,shop}));
+ const res=await db.execute(claimRecoveryDeliveryQuery({accountId,shop,checkoutId}));
  if(res.rows.length!==1)return null;
  const row=res.rows[0];
+ if(String(row.checkout_gid)!==checkoutId)return null;
  return {
    id:String(row.id),accountId:String(row.account_id),shop:String(row.shop),
    checkoutId:String(row.checkout_gid),contactId:String(row.contact_id),

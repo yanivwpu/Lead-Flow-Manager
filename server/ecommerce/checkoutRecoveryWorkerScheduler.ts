@@ -13,17 +13,21 @@ export type RecoveryWorkerEnvironment={
  ECOMMERCE_RECOVERY_WORKER_ENABLED?:string;
  ECOMMERCE_RECOVERY_WORKER_MODE?:string;
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID?:string;
+ ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID?:string;
 };
 const ACCOUNT=/^[a-zA-Z0-9][a-zA-Z0-9_-]{5,127}$/;
+const CHECKOUT=/^gid:\/\/shopify\/AbandonedCheckout\/[1-9][0-9]{0,19}$/;
 export function recoveryWorkerEnabled(env:RecoveryWorkerEnvironment):boolean{
  return recoveryDeliveryExecutionEnabled(env) &&
    env.ECOMMERCE_RECOVERY_WORKER_ENABLED==='true' &&
    env.ECOMMERCE_RECOVERY_WORKER_MODE==='staging-test-only' &&
    !!env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID &&
-   ACCOUNT.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID);
+   ACCOUNT.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID) &&
+   !!env.ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID &&
+   CHECKOUT.test(env.ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID);
 }
 type WorkerDeps={
- claim:(accountId:string)=>Promise<ClaimedRecoveryDelivery|null>;
+ claim:(accountId:string,checkoutId:string)=>Promise<ClaimedRecoveryDelivery|null>;
  process:(claim:ClaimedRecoveryDelivery,env:RecoveryWorkerEnvironment)=>Promise<'accepted'|'suppressed'|'uncertain'>;
 };
 /** One shot, caller handles interval and global in-process mutex.
@@ -34,9 +38,11 @@ export async function runRecoveryWorkerTick(
 ):Promise<'disabled'|'empty'|'accepted'|'suppressed'|'uncertain'>{
  if(!recoveryWorkerEnabled(env))return 'disabled';
  const accountId=env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID!;
- const claimed=await deps.claim(accountId);
+ const checkoutId=env.ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID!;
+ const claimed=await deps.claim(accountId,checkoutId);
  if(!claimed)return 'empty';
- if(claimed.accountId!==accountId)return 'uncertain';
+ if(claimed.accountId!==accountId || claimed.checkoutId!==checkoutId)
+   return 'uncertain';
  return deps.process(claimed,env);
 }
 /** Reserved for explicit reviewed server bootstrap. No worker starts from an
@@ -51,7 +57,15 @@ export function startStagingRecoveryWorkerScheduler(
  const tick=async()=>{
    if(busy||closed)return;
    busy=true;
-   try{await runRecoveryWorkerTick(env,deps);}catch(e){onError(e);}finally{busy=false;}
+   try{
+     const result=await runRecoveryWorkerTick(env,deps);
+     // Operator approved one exact checkout. Stop the scheduler after
+     // a single claim/attempt, irrespective of the outcome.
+     if(result!=='empty' && result!=='disabled'){
+       closed=true;
+       clearInterval(timer);
+     }
+   }catch(e){onError(e);}finally{busy=false;}
  };
  const timer=setInterval(()=>{void tick()},90_000);
  timer.unref?.();
