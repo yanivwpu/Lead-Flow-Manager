@@ -1,4 +1,4 @@
-import { EcommerceWorkspaceBoundary } from "@/lib/ecommercePilot";
+import { EcommerceWorkspaceBoundary, useEcommercePilot } from "@/lib/ecommercePilot";
 import { useTranslation } from "react-i18next";
 import { Link, useSearch } from "wouter";
 import { ShoppingBag, Package, ShoppingCart, Brain, RefreshCw, Repeat2, Settings, CheckCircle2, ArrowRight, ListTodo } from "lucide-react";
@@ -25,6 +25,8 @@ export function EcommerceGrowthEngineDashboardContent() {
  const selected=new URLSearchParams(search).get("view");
  const view:View=(["overview","products","orders","shopping","recovery","post","settings"] as string[]).includes(selected || "") ? selected as View : "overview";
  const {user,sessionAligned}=useAuth();
+ // Only the already-authorized private pilot sees in-development merchant controls.
+ const {available:privatePilot}=useEcommercePilot();
  const {data,isLoading,isError}=useQuery<{connected:boolean;shop:string|null;syncEnabled:boolean}>({
    queryKey:withUserQueryScope(["/api/shopify/connection-status"],user?.id),
    queryFn:async()=>{const response=await fetch("/api/shopify/connection-status",{credentials:"include"});if(!response.ok)throw new Error("Connection unavailable");return response.json();},
@@ -33,7 +35,7 @@ export function EcommerceGrowthEngineDashboardContent() {
  const activation = useEcommerceMerchantActivationStatus();
  const commerceStatus = useQuery<{publishedProductCount?:number;eligibleProductCount?:number}>({
    queryKey:withUserQueryScope(["/api/sales-catalog/commerce/status"],user?.id),
-   enabled:!!user?.id && sessionAligned && data?.connected===true && view==="overview",
+   enabled:privatePilot && !!user?.id && sessionAligned && data?.connected===true && view==="overview",
    retry:false,
    queryFn:async()=>{
      const response=await fetch("/api/sales-catalog/commerce/status",{credentials:"include",cache:"no-store"});
@@ -66,7 +68,7 @@ export function EcommerceGrowthEngineDashboardContent() {
    <section aria-label={heading} className="space-y-4">
      <h2 className="text-xl font-semibold text-slate-950">{heading}</h2>
      {view==="overview" && <>
-       {data?.connected===true && commerceStatus.data && !commerceStatus.isError &&
+       {privatePilot && data?.connected===true && commerceStatus.data && !commerceStatus.isError &&
          <p data-testid="ecommerce-catalog-summary" className="text-sm text-slate-600">
            {t.published}: {Number.isFinite(commerceStatus.data.publishedProductCount) ? commerceStatus.data.publishedProductCount : "—"}
            <span className="mx-2" aria-hidden="true">·</span>
@@ -77,20 +79,20 @@ export function EcommerceGrowthEngineDashboardContent() {
        </div>
        <div className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-semibold">{t.recent}</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{links.map(l=><Link key={l.href} href={l.href} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">{l.label}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>)}</div></div>
      </>}
-     {view==="products" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.productDetail}</p><ShopifyCatalog showShoppingSettings={false}/><p className="mt-4 text-xs text-slate-500">{t.noDuplicate}</p></div>}
+     {view==="products" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.productDetail}</p><ShopifyCatalog showShoppingSettings={!privatePilot}/><p className="mt-4 text-xs text-slate-500">{t.noDuplicate}</p></div>}
      {view==="orders" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.ordersDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/contacts" className="font-semibold text-blue-700">{t.seeContacts} →</Link><Link href="/app/followups" className="font-semibold text-blue-700">{t.seeTasks} →</Link></div></div>}
      {view==="shopping" && <div className="rounded-xl border bg-white p-6 space-y-4">
        <p className="text-sm text-slate-600">{t.shoppingDetail}</p>
-       <ShoppingSettings/>
+       {privatePilot && <ShoppingSettings/>}
        <div className="flex flex-wrap gap-5"><Link href="/app/ai-brain" className="font-semibold text-blue-700">{t.seeBrain} →</Link><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link></div>
      </div>}
      {view==="recovery" && <div className="rounded-xl border bg-white p-6 space-y-3 text-sm text-slate-600">
        <p>{t.recoveryDetail}</p>
-       <p data-testid="ecommerce-recovery-readiness" role="status" className="font-medium text-slate-700">
+       {privatePilot && <p data-testid="ecommerce-recovery-readiness" role="status" className="font-medium text-slate-700">
          {activation.isLoading || activation.isError || !activation.data || activation.data.recoverySchemaReady == null
            ? t.recoveryUnknown
            : activation.data.recoverySchemaReady === true ? t.recoveryReady : t.recoveryMissing}
-       </p>
+       </p>}
      </div>}
      {view==="post" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.postDetail}</p><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
      {view==="settings" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.settingsDetail}</p>{data?.connected ? <ShopifySimpleSetup syncEnabled={data.syncEnabled === true}/> : <Link href="/app/integrations?setup=shopify" className="font-semibold text-blue-700">{t.setup} →</Link>}</div>}
