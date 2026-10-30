@@ -69,3 +69,84 @@ test('permission errors and transport outages never authorize recovery',async()=
     fetchImpl:source(data())
   });assert.equal(badId.status,'blocked');
 });
+
+
+/** Shopify may omit an otherwise visible checkout from an exact ID-filtered
+ * search; the fallback may only accept one identical global ID on a bounded
+ * read-only page, with a fresh no-new-order verification.
+ */
+function pairedSource(filtered:unknown, fallback:unknown, onCall:(n:number,payload:Record<string,any>)=>void){
+ let called=0;
+ const fetchImpl=(async(_url:string|URL|Request,init?:RequestInit)=>{
+   called++;
+   const payload=JSON.parse(String(init?.body));
+   onCall(called,payload);
+   assert.equal(init?.method,'POST');
+   return new Response(JSON.stringify(called===1?filtered:fallback),{status:200});
+ }) as typeof fetch;
+ return {fetchImpl,count:()=>called};
+}
+test('bounded recent-list fallback confirms exact checkout when indexed ID search misses it',async()=>{
+ const c=pairedSource(data({abandonedCheckouts:{nodes:[]}}),data({
+   abandonedCheckouts:{nodes:[{...node,id:'gid://shopify/AbandonedCheckout/987'},node]}
+ }), (n,payload)=>{
+   if(n===1){assert.equal(payload.variables.search,'id:123');assert.ok(payload.query.includes('first: 2'));}
+   if(n===2){
+     assert.deepEqual(payload.variables,{checkoutId:ID});
+     assert.ok(payload.query.includes('first: 25'));
+     assert.ok(payload.query.includes('sortKey: CREATED_AT'));
+     assert.ok(!payload.query.includes('query: $search'));
+     assert.ok(payload.query.includes('\n'));
+     assert.ok(payload.query.includes('abandonmentByAbandonedCheckoutId'));
+   }
+ });
+ const decision=await recheckShopifyCheckoutForRecovery({
+   shop:'demo.myshopify.com',accessToken:'test-token',checkoutId:ID,
+   now:Date.parse('2026-10-20T12:00:00Z'),fetchImpl:c.fetchImpl
+ });
+ assert.equal(decision.status,'eligible_for_review');
+ assert.equal(c.count(),2);
+ if(decision.status==='eligible_for_review')assert.equal(decision.checkoutId,ID);
+});
+test('no fallback is necessary when filtered search confirms an exact ID',async()=>{
+ const c=pairedSource(data(),data(),(n)=>assert.equal(n,1));
+ const decision=await recheckShopifyCheckoutForRecovery({
+   shop:'demo.myshopify.com',accessToken:'test-token',checkoutId:ID,
+   now:Date.parse('2026-10-20T12:00:00Z'),fetchImpl:c.fetchImpl
+ });
+ assert.equal(decision.status,'eligible_for_review');
+ assert.equal(c.count(),1);
+});
+test('bounded fallback never substitutes another checkout or trusts incomplete results',async()=>{
+ for(const fallback of [
+   data({abandonedCheckouts:{nodes:[]}}),
+   data({abandonedCheckouts:{nodes:[{...node,id:'gid://shopify/AbandonedCheckout/987'}]}}),
+   data({abandonedCheckouts:{nodes:[node,node]}}),
+   {data:{abandonedCheckouts:{nodes:[node]}}},
+   {errors:[{message:'unauthorized'}]}
+ ]){
+   const c=pairedSource(data({abandonedCheckouts:{nodes:[]}}),fallback,()=>{});
+   const decision=await recheckShopifyCheckoutForRecovery({
+     shop:'demo.myshopify.com',accessToken:'test-token',checkoutId:ID,
+     now:Date.parse('2026-10-20T12:00:00Z'),fetchImpl:c.fetchImpl
+   });
+   assert.equal(decision.status,'blocked');
+   assert.equal(c.count(),2);
+ }
+});
+test('even after fallback finds the exact checkout, purchase and identity safety checks remain mandatory',async()=>{
+ for(const fallback of [
+   data({abandonedCheckouts:{nodes:[{...node,completedAt:'2026-10-20T11:00:00Z'}]}}),
+   data({abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:false,customer:{id:'gid://shopify/Customer/456'}}}),
+   data({abandonmentByAbandonedCheckoutId:{customerHasNoOrderSinceAbandonment:true,customer:{id:'gid://shopify/Customer/999'}}}),
+   data({abandonedCheckouts:{nodes:[{...node,abandonedCheckoutUrl:'https://attacker.invalid/checkouts/a/recover'}]}})
+ ]){
+   const c=pairedSource(data({abandonedCheckouts:{nodes:[]}}),fallback,()=>{});
+   const decision=await recheckShopifyCheckoutForRecovery({
+     shop:'demo.myshopify.com',accessToken:'test-token',checkoutId:ID,
+     now:Date.parse('2026-10-20T12:00:00Z'),fetchImpl:c.fetchImpl
+   });
+   assert.equal(decision.status,'blocked');
+   assert.equal(c.count(),2);
+ }
+});
