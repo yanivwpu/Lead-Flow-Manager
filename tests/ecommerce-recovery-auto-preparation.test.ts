@@ -111,13 +111,13 @@ test('staging diagnostic exposes only fixed non-PII preparation gate names',asyn
  completed.deps.onDiagnostic=code=>found.push(code);
  await runAutoRecoveryPreparationTick(env,completed.deps);
  assert.equal(found.at(-1),'checkout_completed');
- assert.equal(found.some(value=>/\\+19999999999|token=value/.test(value)),false);
+ assert.equal(found.some(value=>value.includes('token=value') || value.includes('+19999999999')),false);
 });
 test('automatic preparation runtime logs only known sanitized gate codes and does not enable send',()=>{
  const src=readFileSync('server/ecommerce/checkoutRecoveryAutoPreparationRuntime.ts','utf8');
  assert.ok(src.includes("onDiagnostic:code=>"));
  assert.ok(src.includes("seenDiagnosticGates.has(code)"));
  assert.ok(src.includes("[EcommerceRecoveryAutoPrep] safe_gate"));
- assert.doesNotMatch(src,/console\\.(?:log|info)\\([^\\n]*(?:contactId|shopifyCustomerId|checkoutId|recoveryUrl)/);
+ assert.doesNotMatch(src,/console\.(?:log|info)\([^\n]*(?:contactId|shopifyCustomerId|checkoutId|recoveryUrl)/);
  assert.equal(src.includes('sendMetaWhatsAppTemplate('),false);
 });
