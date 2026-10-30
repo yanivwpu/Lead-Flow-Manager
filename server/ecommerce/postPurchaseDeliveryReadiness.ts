@@ -6,7 +6,7 @@ export const postPurchaseDeliveryReadinessQuery = sql`SELECT
   to_regclass('ecommerce_post_purchase_intents') IS NOT NULL AS intents,
   to_regclass('ecommerce_post_purchase_consents') IS NOT NULL AS consents`;
 
-const SHOP=/^[a-z0-9][a-z0-9-]*\\.myshopify\\.com$/;
+const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,installationId:string){
   if(!accountId?.trim()||!SHOP.test(shop)||!installationId?.trim())
     throw Error('invalid_delivery_scope');
