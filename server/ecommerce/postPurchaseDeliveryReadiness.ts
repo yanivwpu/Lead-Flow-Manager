@@ -74,3 +74,36 @@ export function suppressPendingPostPurchaseQuery(accountId:string,shop:string,or
     RETURNING id::text AS id
   `;
 }
+
+/** Internal only: queue already-qualified intent, not permission to contact customer.
+ * Runs under the existing per-shop privacy transaction lock. An active sender must
+ * recheck all customer-specific gates immediately before attempting Meta delivery.
+ */
+export function enqueuePostPurchaseDeliveryQuery(accountId:string,shop:string,installationId:string,intentId:string){
+  if(!accountId?.trim()||!SHOP.test(shop)||!installationId?.trim()||
+    !/^[1-9][0-9]{0,18}$/.test(intentId))throw Error('invalid_delivery_enqueue');
+  return sql`
+    INSERT INTO ecommerce_post_purchase_outbox
+      (intent_id,account_id,installation_id,shop,order_gid,journey,contact_id,template_id,state)
+    SELECT i.id,i.account_id,i.installation_id,i.shop,i.order_gid,i.journey,c.id,t.id,'pending'
+    FROM ecommerce_post_purchase_intents i
+    JOIN contacts c ON c.id=i.contact_id AND c.user_id=i.account_id
+      AND c.automations_paused=FALSE
+    JOIN ecommerce_post_purchase_consents consent
+      ON consent.account_id=i.account_id AND consent.shop=i.shop
+      AND consent.contact_id=c.id AND consent.customer_gid=i.customer_gid
+      AND consent.purpose=i.journey AND consent.channel='whatsapp'
+      AND consent.evidence_source='verified_whatsapp_explicit_opt_in'
+      AND consent.granted_at IS NOT NULL AND consent.granted_at<=NOW()
+      AND consent.revoked_at IS NULL
+    JOIN message_templates t ON t.id=i.template_id AND t.user_id=i.account_id
+      AND lower(t.status)='approved'
+    JOIN integrations inst ON inst.id=i.installation_id
+      AND inst.user_id=i.account_id AND inst.type='shopify' AND inst.is_active IS TRUE
+    WHERE i.id=CAST(${intentId} AS BIGINT) AND i.account_id=${accountId}
+      AND i.shop=${shop} AND i.installation_id=${installationId}
+      AND i.state='preview_ready' AND i.due_at<=NOW()
+    ON CONFLICT (intent_id) DO NOTHING
+    RETURNING id::text AS id
+  `;
+}
