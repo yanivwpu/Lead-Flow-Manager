@@ -55,7 +55,7 @@ test('reject malformed shop, claims and order IDs',()=>{
 test('enqueue uses existing purpose-specific grant and active installation only',()=>{
  const q=show(enqueuePostPurchaseDeliveryQuery('owner-1','pilot.myshopify.com','install-1','1'));
  for(const fragment of ['ecommerce_post_purchase_consents','verified_whatsapp_explicit_opt_in',
-   'consent.revoked_at IS NULL','i.state=\'preview_ready\'','inst.is_active IS TRUE',"consent.granted_at>NOW()-INTERVAL '365 days'", 'c.whatsapp_id', 'lower(t.category)=CASE',
+   'consent.revoked_at IS NULL','i.state=\'preview_ready\'','inst.is_active IS TRUE',"consent.granted_at>NOW()-INTERVAL '365 days'", "c.phone=('+' || c.whatsapp_id)", 'lower(t.category)=CASE',
    'ON CONFLICT (intent_id) DO NOTHING']) assert.ok(q.sql.includes(fragment),fragment);
  assert.throws(()=>enqueuePostPurchaseDeliveryQuery('owner-1','pilot.myshopify.com','install-1','0'));
 });
