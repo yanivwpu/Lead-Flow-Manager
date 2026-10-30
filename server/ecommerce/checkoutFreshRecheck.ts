@@ -23,7 +23,7 @@ const QUERY = [
   '  }',
   '  shop { primaryDomain { url } }',
   '}',
-].join('\\n');
+].join('\n');
 /** Bounded verification fallback when Shopify's documented ID search returns no
  * exact match despite the checkout appearing in its normal recent-checkout
  * listing. Fail closed if the exact global ID is absent from this one page.
@@ -39,7 +39,7 @@ const BOUNDED_QUERY = [
   '  }',
   '  shop { primaryDomain { url } }',
   '}',
-].join('\\n');
+].join('\n');
 
 function safeShopifyRecoveryUrl(raw: unknown, shopDomain: string, primaryUrl: unknown): string | null {
   if (typeof raw !== 'string' || raw.length > 8192 || typeof primaryUrl !== 'string') return null;
