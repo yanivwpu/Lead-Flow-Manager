@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { ShopifySimpleSetup } from "@/components/integrations/ShopifySimpleSetup";
+import { ShopifyPostPurchasePreview } from "@/components/ecommerce/ShopifyPostPurchasePreview";
 import { ShopifyCatalog } from "@/components/ShopifyCatalog";
 
 const translations = {
@@ -59,7 +60,7 @@ export function EcommerceGrowthEngineDashboardContent() {
      {view==="orders" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.ordersDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/contacts" className="font-semibold text-blue-700">{t.seeContacts} →</Link><Link href="/app/followups" className="font-semibold text-blue-700">{t.seeTasks} →</Link></div></div>}
      {view==="shopping" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.shoppingDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/ai-brain" className="font-semibold text-blue-700">{t.seeBrain} →</Link><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link></div></div>}
      {view==="recovery" && <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">{t.recoveryDetail}</div>}
-     {view==="post" && <div className="rounded-xl border bg-white p-6 text-sm text-slate-600">{t.postDetail}</div>}
+     {view==="post" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.postDetail}</p><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
      {view==="settings" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.settingsDetail}</p>{data?.connected ? <ShopifySimpleSetup syncEnabled={data.syncEnabled === true}/> : <Link href="/app/integrations?setup=shopify" className="font-semibold text-blue-700">{t.setup} →</Link>}</div>}
    </section>
  </main>;
