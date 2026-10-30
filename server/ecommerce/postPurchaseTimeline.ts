@@ -13,7 +13,7 @@ export type PostPurchaseSnapshot = {
     orderId: string; customerId: string; occurredAt: number };
   order: { accountId: string; shop: string; id: string; customerId: string;
     status: "open" | "fulfilled" | "cancelled"; updatedAt: number; checkedAt: number;
-    latestPurchaseAt: number | null };
+    purchasedAt: number; latestPurchaseAt: number | null };
   recipient: { accountId: string; customerId: string; identityVerified: boolean;
     channel: "whatsapp"; stopped: boolean; erased: boolean; paused: boolean;
     consentPurposes: readonly string[] };
@@ -60,7 +60,8 @@ export function planPostPurchaseTimeline(plans: PostPurchasePlans, input: PostPu
     if (order.status !== expectedStatus) reasons.push("order_status_changed");
     if (policy.category === "MARKETING" &&
         (order.latestPurchaseAt === null || !Number.isFinite(order.latestPurchaseAt) ||
-          order.latestPurchaseAt > input.event.occurredAt)) reasons.push("purchase_recheck_required_or_new_purchase");
+          !Number.isFinite(order.purchasedAt) || order.purchasedAt > order.updatedAt ||
+          order.latestPurchaseAt > order.purchasedAt)) reasons.push("purchase_recheck_required_or_new_purchase");
     const template = input.templates[journey];
     // Conservative: require approved exact matching template even within 24h.
     if (!template || template.localApproved !== true || template.liveApproved !== true ||

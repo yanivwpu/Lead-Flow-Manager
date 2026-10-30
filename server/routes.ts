@@ -3355,6 +3355,10 @@ export async function registerRoutes(
       if (signatureValid && rawBodyBuffer && statusUpdate) {
         const owner = await findUserByMetaPhoneNumberId(statusUpdate.phoneNumberId);
         if (owner) {
+          const { recordPostPurchaseReceiptFromVerifiedMeta } = await import("./ecommerce/postPurchaseReceiptRuntime");
+          await recordPostPurchaseReceiptFromVerifiedMeta(owner.id, {
+            ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer),
+          });
           const { recordRecoveryReceiptFromVerifiedMeta } = await import("./ecommerce/checkoutRecoveryMetaReceiptHandler");
           await recordRecoveryReceiptFromVerifiedMeta({
             accountId: owner.id,

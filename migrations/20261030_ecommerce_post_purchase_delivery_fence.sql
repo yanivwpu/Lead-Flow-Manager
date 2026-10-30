@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS ecommerce_post_purchase_outbox (
   claimed_at TIMESTAMPTZ,
   provider_attempted_at TIMESTAMPTZ,
   provider_message_id VARCHAR(256),
+  recipient_hmac VARCHAR(64) CHECK (recipient_hmac ~ '^[a-f0-9]{64}$'),
   meta_delivery_status VARCHAR(16)
     CHECK (meta_delivery_status IN ('sent','delivered','read','failed')),
   meta_delivery_at TIMESTAMPTZ,
@@ -40,7 +41,8 @@ CREATE TABLE IF NOT EXISTS ecommerce_post_purchase_outbox (
     (provider_attempted_at IS NULL OR
       (state IN ('claimed','accepted','uncertain') AND claim_token IS NOT NULL)),
   CONSTRAINT ecommerce_postpurchase_outbox_accept_consistency CHECK
-    (provider_message_id IS NULL OR state='accepted'),
+    ((state='accepted' AND provider_message_id IS NOT NULL AND provider_attempted_at IS NOT NULL AND recipient_hmac IS NOT NULL)
+      OR (state<>'accepted' AND provider_message_id IS NULL)),
   CONSTRAINT ecommerce_postpurchase_outbox_receipt_consistency CHECK
     (meta_delivery_status IS NULL OR provider_message_id IS NOT NULL)
 );
@@ -49,6 +51,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS ecommerce_postpurchase_provider_message_unique
   WHERE provider_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ecommerce_postpurchase_outbox_pending_idx
   ON ecommerce_post_purchase_outbox(account_id,shop,id) WHERE state='pending';
+
+-- Defense in depth: no application update can recycle a claimed provider opportunity.
+-- Privacy erasure still deletes via the existing parent/contact cascades.
+CREATE OR REPLACE FUNCTION ecommerce_postpurchase_preserve_attempt() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF ROW(NEW.intent_id,NEW.account_id,NEW.installation_id,NEW.shop,NEW.order_gid,NEW.journey,NEW.contact_id,NEW.template_id)
+      IS DISTINCT FROM ROW(OLD.intent_id,OLD.account_id,OLD.installation_id,OLD.shop,OLD.order_gid,OLD.journey,OLD.contact_id,OLD.template_id)
+    OR (OLD.claim_token IS NOT NULL AND ROW(NEW.claim_token,NEW.claimed_at) IS DISTINCT FROM ROW(OLD.claim_token,OLD.claimed_at))
+    OR (OLD.provider_attempted_at IS NOT NULL AND NEW.provider_attempted_at IS DISTINCT FROM OLD.provider_attempted_at)
+    OR (OLD.recipient_hmac IS NOT NULL AND NEW.recipient_hmac IS DISTINCT FROM OLD.recipient_hmac)
+    OR (OLD.state IN ('accepted','uncertain','suppressed') AND NEW.state IS DISTINCT FROM OLD.state)
+    OR (OLD.state='claimed' AND NEW.state NOT IN ('claimed','accepted','uncertain'))
+    OR (OLD.provider_message_id IS NOT NULL AND NEW.provider_message_id IS DISTINCT FROM OLD.provider_message_id)
+  THEN RAISE EXCEPTION 'post_purchase_attempt_immutable'; END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE OR REPLACE TRIGGER ecommerce_postpurchase_preserve_attempt
+  BEFORE UPDATE ON ecommerce_post_purchase_outbox
+  FOR EACH ROW EXECUTE FUNCTION ecommerce_postpurchase_preserve_attempt();
 
 -- The application must ensure before insertion that intent/account/shop/order/journey,
 -- installation, contact and template are all current and tenant-scoped. No send is safe

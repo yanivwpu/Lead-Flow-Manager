@@ -1,3 +1,6 @@
+import {createPostPurchaseDelivery} from '../server/ecommerce/postPurchaseDelivery';
+import {createPostPurchaseReceipt} from '../server/ecommerce/postPurchaseReceipt';
+import {enqueuePostPurchaseDeliveryQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -49,7 +52,7 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
   const makeService=()=>createPostPurchasePreparation({database:faultDatabase,env,secret:()=>secret,now:()=>clock,
     privacyLocked:async()=>erased,templates:async()=>{templateFetches++;return templates;},
     recheck:async input=>{if(waitFresh)await waitFresh();return failFresh?null:{orderId:input.orderId,customerId:input.customerId,
-      status:liveStatus,updatedAt:clock,latestPurchaseAt:latestPurchase===undefined?eventAt-1000:latestPurchase} satisfies FreshPostPurchaseOrder;},
+      status:liveStatus,updatedAt:clock,purchasedAt:eventAt-1000,latestPurchaseAt:latestPurchase===undefined?eventAt-1000:latestPurchase} satisfies FreshPostPurchaseOrder;},
   });
   let service=makeService();
   const body=(id='1',customer='2')=>({id,admin_graphql_api_id:'gid://shopify/Order/'+id,
@@ -68,13 +71,13 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       VALUES(${account},${shop},'fixture-token','active',${new Date(clock-86400000)},true,${phoneId}),
       (${other},'other.myshopify.com','other-token','active',${new Date(clock-86400000)},true,'9876543210123')`);
     await execute(sql`INSERT INTO integrations(id,user_id,type,is_active,config) VALUES('install',${account},'shopify',true,
-      ${JSON.stringify({shop,ecommercePostPurchasePlans:plans,ecommercePostPurchaseTemplates:bindings})}::jsonb),
+      ${JSON.stringify({shop,ecommercePostPurchasePlans:plans,ecommercePostPurchaseTemplates:bindings,ecommercePostPurchaseDeliveryEnabled:true})}::jsonb),
       ('other-install',${other},'shopify',true,'{"shop":"other.myshopify.com"}')`);
     await execute(sql`INSERT INTO contacts(id,user_id,phone,whatsapp_id,custom_fields,source_details,automations_paused)
       VALUES('contact',${account},${'+'+phone},${phone},${JSON.stringify({shopifyCustomerId:'2',shopifyShop:shop})}::jsonb,'{}',false)`);
     for(const [i,j] of POST_PURCHASE_JOURNEYS.entries())await execute(sql`INSERT INTO message_templates
-      (id,user_id,name,language,category,status,body_text,header_type,template_type,buttons,carousel_cards)
-      VALUES(${'tpl-'+j},${account},${templates[i].name},'en',${templates[i].category},'approved',${templates[i].components[0].text},'none','text','[]','[]')`);
+      (id,user_id,twilio_sid,name,language,category,status,body_text,header_type,template_type,buttons,carousel_cards)
+      VALUES(${'tpl-'+j},${account},'meta_fixture',${templates[i].name},'en',${templates[i].category},'approved',${templates[i].components[0].text},'none','text','[]','[]')`);
   }
   async function rows(){return (await execute(sql`SELECT journey,state,reasons,contact_id FROM ecommerce_post_purchase_intents ORDER BY journey`)).rows;}
   async function due(){await execute(sql`UPDATE ecommerce_post_purchase_intents SET next_review_at=NOW()-INTERVAL '1 second'`);await service.tick();}
@@ -95,9 +98,9 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       CREATE TABLE integrations(id varchar PRIMARY KEY,user_id text,type text,is_active boolean,config jsonb);
       CREATE TABLE contacts(id varchar PRIMARY KEY,user_id text,phone text,whatsapp_id text,custom_fields jsonb,source_details jsonb,
         automations_paused boolean,tag text,pipeline_stage text);
-      CREATE TABLE message_templates(id varchar PRIMARY KEY,user_id text,name text,language text,category text,status text,
+      CREATE TABLE message_templates(id varchar PRIMARY KEY,user_id text,name text,language text,category text,status text,twilio_sid text,
         body_text text,header_type text,template_type text,buttons jsonb,carousel_cards jsonb);`);
-    for(const migration of ['migrations/20261019_ecommerce_growth_event_inbox.sql','migrations/20261030_ecommerce_post_purchase_intents.sql'])
+    for(const migration of ['migrations/20261019_ecommerce_growth_event_inbox.sql','migrations/20261030_ecommerce_post_purchase_intents.sql','migrations/20261030_ecommerce_post_purchase_delivery_fence.sql'])
       await ddl(await readFile(migration,'utf8'));
     await t.test('verified creation, fulfillment and cancellation produce exactly six unique intents; no other tenant receives work',async()=>{
       await seed();for(const j of POST_PURCHASE_JOURNEYS)assert.equal(await grant(j),'granted');
@@ -205,6 +208,111 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents WHERE account_id=${account}`)).rows[0].n,0);
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents WHERE account_id=${other}`)).rows[0].n,1);
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_orders WHERE account_id=${other}`)).rows[0].n,1);
+    });
+    const sendEnv={...env,ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'true',
+      ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID:account,ECOMMERCE_POST_PURCHASE_RECEIPTS_ENABLED:'true',
+      ECOMMERCE_POST_PURCHASE_WEBHOOKS_VERIFIED:'true'};
+    let sends=0,providerThrows=false,settlementFails=false;
+    const deliveryDb={...faultDatabase,execute,
+      transaction:<T>(fn:(tx:PostPurchaseTx)=>Promise<T>)=>database.transaction(tx=>fn({execute:async q=>{
+        const rendered=new PgDialect().sqlToQuery(q);
+        if(settlementFails&&rendered.sql.includes('UPDATE ecommerce_post_purchase_outbox')&&rendered.params.includes('accepted')){
+          settlementFails=false;throw Error('crash_after_provider_acceptance');
+        }
+        return tx.execute(q);
+      }})),
+    };
+    const worker=()=>createPostPurchaseDelivery({database:deliveryDb,env:sendEnv,secret:()=>secret,
+      authorize:(...args)=>service.authorizeDelivery(...args),
+      send:async()=>{sends++;if(providerThrows)throw Error('ambiguous_provider_timeout');return {messageId:'wamid.fixture_delivery_'+sends};},
+    });
+    const receipt=createPostPurchaseReceipt({database,env:sendEnv,secret:()=>secret});
+    async function queue(){
+      const intents=await execute(sql`SELECT id::text FROM ecommerce_post_purchase_intents WHERE state='preview_ready'`);
+      for(const row of intents.rows)await execute(enqueuePostPurchaseDeliveryQuery(account,shop,'install',String(row.id)));
+    }
+    await t.test('isolated delivery: six journeys reuse eligibility and provider adapter; receipt reconciliation never dispatches',async()=>{
+      await seed();sends=0;for(const j of POST_PURCHASE_JOURNEYS)await grant(j);
+      await webhook('orders/create','send-create');assert.equal(await worker().tick(),'accepted');
+      assert.equal(await worker().tick(),'idle');
+      liveStatus='fulfilled';await webhook('orders/fulfilled','send-fulfilled');
+      for(let i=0;i<4;i++)assert.equal(await worker().tick(),'accepted');
+      liveStatus='cancelled';await webhook('orders/cancelled','send-cancelled');assert.equal(await worker().tick(),'accepted');
+      assert.equal(sends,6);
+      assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_outbox WHERE state='accepted' AND provider_attempted_at IS NOT NULL`)).rows[0].n,6);
+      const c={signatureValid:true,hasRawBody:true,phoneNumberId:phoneId,messageId:'wamid.fixture_delivery_1',recipientId:phone,
+        status:'delivered',timestamp:String(Math.floor(Date.now()/1000))};
+      sendEnv.ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED='false';
+      assert.equal(await receipt(account,{...c,signatureValid:false}),'ignored');
+      assert.equal(await receipt(other,c),'ignored');
+      assert.equal(await receipt(account,{...c,recipientId:'15550009999'}),'ignored');
+      assert.equal(await receipt(account,{...c,phoneNumberId:'9999999999999'}),'ignored');
+      assert.equal(await receipt(account,c),'recorded');
+      assert.equal(await receipt(account,{...c,status:'sent'}),'ignored');
+      assert.equal(await receipt(account,{...c,status:'read'}),'recorded');
+      assert.equal(await receipt(account,{...c,status:'failed'}),'ignored');
+      assert.equal(await worker().tick(),'disabled');assert.equal(sends,6);
+      sendEnv.ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED='true';
+    });
+    await t.test('send-time changes to consent, HMAC, phone, local/live template, plan, installation, Shopify and erasure never send',async()=>{
+      const cases=[
+        async()=>{await service.captureConsent(account,null,candidate('STOP',clock));},
+        async()=>{await execute(sql`UPDATE ecommerce_post_purchase_consents SET recipient_hmac=${'0'.repeat(64)}`);},
+        async()=>{await execute(sql`UPDATE contacts SET whatsapp_id='15550009999'`);},
+        async()=>{await execute(sql`UPDATE message_templates SET status='pending'`);},
+        async()=>{await execute(sql`UPDATE message_templates SET twilio_sid='unverified'`);},
+        async()=>{await execute(sql`UPDATE integrations SET config=jsonb_set(config,'{ecommercePostPurchaseDeliveryEnabled}','false') WHERE id='install'`);},
+        async()=>{templates[0].status='PENDING';},
+        async()=>{await execute(sql`UPDATE integrations SET config=jsonb_set(config,'{ecommercePostPurchasePlans,orderConfirmation,selected}','false') WHERE id='install'`);},
+        async()=>{await execute(sql`UPDATE integrations SET config=jsonb_set(config,'{ecommercePostPurchasePaused}','true') WHERE id='install'`);},
+        async()=>{await execute(sql`UPDATE integrations SET is_active=false WHERE id='install'`);},
+        async()=>{liveStatus='cancelled';},
+        async()=>{failFresh=true;},
+        async()=>{erased=true;},
+      ];
+      for(const change of cases){
+        templates[0].status='APPROVED';await seed();await grant('orderConfirmation');
+        await webhook('orders/create','queued-before-change');await queue();
+        const before=sends;await change();
+        assert.notEqual(await worker().tick(),'accepted');assert.equal(sends,before);
+      }
+      templates[0].status='APPROVED';
+    });
+    await t.test('durable attempt survives provider timeout, failed settlement and restart without retry',async()=>{
+      for(const failure of ['timeout','settlement']){
+        await seed();await grant('orderConfirmation');await webhook('orders/create','uncertain-'+failure);
+        providerThrows=failure==='timeout';settlementFails=failure==='settlement';
+        const before=sends;assert.equal(await worker().tick(),'uncertain');assert.equal(sends,before+1);
+        providerThrows=false;
+        const attempted=(await execute(sql`SELECT id::text,claim_token::text,provider_attempted_at,state FROM ecommerce_post_purchase_outbox`)).rows[0];
+        assert.ok(attempted.provider_attempted_at);assert.equal(attempted.state,'uncertain');
+        await assert.rejects(()=>execute(sql`UPDATE ecommerce_post_purchase_outbox SET state='pending',claim_token=NULL,claimed_at=NULL,provider_attempted_at=NULL`));
+        await assert.rejects(()=>execute(sql`UPDATE ecommerce_post_purchase_outbox SET provider_attempted_at=NULL`));
+        assert.equal(await worker().processClaim({id:String(attempted.id),token:String(attempted.claim_token),accountId:account,shop,installationId:'install'}),'fenced');
+        service=makeService();assert.equal(await worker().tick(),'idle');assert.equal(sends,before+1);
+      }
+    });
+    await t.test('outbox scope constraints and privacy cascades use the existing migration and erasure queries',async()=>{
+      await seed();await grant('orderConfirmation');await webhook('orders/create','privacy-queue');await queue();
+      await assert.rejects(()=>execute(sql`UPDATE ecommerce_post_purchase_outbox SET account_id=${other}`));
+      for(const q of postPurchasePrivacyQueries({mode:'customer',shop,accountId:account,customerIds:['2']},ready))await execute(q);
+      assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_outbox`)).rows[0].n,0);
+    });
+    if(pool)await t.test('native PostgreSQL: concurrent workers claim once across process restarts',async()=>{
+      await seed();await grant('orderConfirmation');await webhook('orders/create','concurrent-send');
+      const before=sends;await Promise.all([worker().tick(),worker().tick(),worker().tick()]);
+      assert.equal(sends,before+1);assert.equal(await worker().tick(),'idle');
+    });
+    if(pool)await t.test('native PostgreSQL: STOP serializes against send-time authorization and prevents subsequent attempts',async()=>{
+      await seed();await grant('orderConfirmation');await webhook('orders/create','stop-race');
+      let entered!:()=>void,finish!:()=>void;
+      const reading=new Promise<void>(r=>entered=r),release=new Promise<void>(r=>finish=r);
+      waitFresh=async()=>{entered();await release;};
+      const before=sends,sending=worker().tick();await reading;
+      const stopping=service.captureConsent(account,null,candidate('STOP',clock));
+      finish();await Promise.all([sending,stopping]);waitFresh=undefined;
+      assert.equal(sends,before+1);assert.equal(await worker().tick(),'idle');
+      assert.ok((await rows()).every(x=>x.state==='suppressed'));
     });
     if(pool)await t.test('native PostgreSQL: uninstall races an in-flight review under the same advisory lock',async()=>{
       await seed();await grant('orderConfirmation');

@@ -1,4 +1,4 @@
-/** An independent, default-off delivery gate. This has no runtime caller yet. */
+/** Independent default-off owner-pinned staging gate. Production remains source-disabled. */
 export function postPurchaseDeliveryEnabled(
   env:Record<string,string|undefined>, accountId:string
 ):boolean{

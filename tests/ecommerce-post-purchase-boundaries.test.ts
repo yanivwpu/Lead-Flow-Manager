@@ -7,7 +7,7 @@ import {classifyPostPurchaseConsent,POST_PURCHASE_CONSENT_PHRASES} from '../serv
 import {matchPostPurchaseTemplate} from '../server/ecommerce/postPurchaseEligibility';
 import {createShopifyOrderWebhookHandler} from '../server/shopifyOrderWebhookHandler';
 const now=Date.parse('2026-10-30T12:00:00Z'),orderId='gid://shopify/Order/1',customerId='gid://shopify/Customer/2';
-const fixture=()=>({data:{order:{id:orderId,updatedAt:new Date(now-1000).toISOString(),cancelledAt:null as null|string,displayFulfillmentStatus:'FULFILLED',
+const fixture=()=>({data:{order:{id:orderId,createdAt:new Date(now-86400000).toISOString(),updatedAt:new Date(now-1000).toISOString(),cancelledAt:null as null|string,displayFulfillmentStatus:'FULFILLED',
   customer:{id:customerId,orders:{nodes:[{id:orderId,createdAt:new Date(now-86400000).toISOString()}]}}}}});
 
 test('fresh Shopify read uses exact shop/order/customer, read-only query, timeout and fail-closed evidence',async()=>{

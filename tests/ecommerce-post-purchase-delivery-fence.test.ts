@@ -63,14 +63,14 @@ test('enqueue uses existing purpose-specific grant and active installation only'
 
 test('signed-only receipt primitive scopes account and only advances terminal provider state',()=>{
  const q=show(reconcilePostPurchaseReceiptQuery({
-   accountId:'owner-1',providerMessageId:'wamid.test',status:'delivered'
+   accountId:'owner-1',shop:'pilot.myshopify.com',recipientDigest:'a'.repeat(64),eventAt:new Date(),providerMessageId:'wamid.test',status:'delivered'
  }));
  for(const x of ["state='accepted'","provider_message_id=","meta_delivery_status='sent'",
    "meta_delivery_status='delivered'"]) assert.ok(q.sql.includes(x),x);
  assert.equal(q.params.includes('owner-1'),true);
  assert.equal(q.params.includes('wamid.test'),true);
  assert.throws(()=>reconcilePostPurchaseReceiptQuery({
-   accountId:'',providerMessageId:'wamid.test',status:'sent'
+   accountId:'',shop:'pilot.myshopify.com',recipientDigest:'a'.repeat(64),eventAt:new Date(),providerMessageId:'wamid.test',status:'sent'
  }));
 });
 

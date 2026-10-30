@@ -605,7 +605,8 @@ export async function sendMetaWhatsAppTemplate(
   toPhone: string,
   templateName: string,
   languageCode: string = "en",
-  components?: any[]
+  components?: any[],
+  options?: { signal?: AbortSignal }
 ): Promise<{ messageId: string; status: string; httpStatus: number }> {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
@@ -670,6 +671,8 @@ export async function sendMetaWhatsAppTemplate(
   try {
     response = await withGlobalDncPhoneBoundary(userId, toPhone, () => fetch(graphPath, {
       method: "POST",
+      redirect: "error",
+      signal: options?.signal,
       headers: {
         "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json",

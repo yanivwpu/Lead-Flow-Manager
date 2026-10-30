@@ -7,8 +7,11 @@ import { JOURNEY_POLICY, POST_PURCHASE_JOURNEYS, readPostPurchasePlans, type Pos
 type MessageTemplate = { id: string; name: string; language: string | null; status: string; category: string; twilioSid: string; templateType: string | null; headerType: string | null; bodyText: string | null; buttons: unknown; carouselCards: unknown };
 type TemplateBindings = Partial<Record<PostPurchaseJourney, string>>;
 
+export type PostPurchaseActivationState={canActivate:boolean;merchantEnabled:boolean;blockers:string[]};
+
 const copy = {
   en: {
+    activate: "Enable journeys", pauseDelivery: "Pause journeys", activationSaved: "Journey preference saved",
     title: "Choose customer journeys", delay: "Delay (minutes)", choose: "Include in plan", save: "Save plan",
     saved: "Plan saved", error: "Could not save. Refresh and retry.", preview: "Message example",
     notice: "Examples only; these are not approved templates. Automatic sending is disabled.",
@@ -21,6 +24,7 @@ const copy = {
     examples: ["We received your order.", "Your order has been fulfilled.", "Your order was cancelled.", "Would you like to review your purchase?", "Ready for another purchase?", "We would love to welcome you back."],
   },
   es: {
+    activate: "Activar recorridos", pauseDelivery: "Pausar recorridos", activationSaved: "Preferencia guardada",
     title: "Elige recorridos para clientes", delay: "Espera (minutos)", choose: "Incluir en el plan", save: "Guardar plan",
     saved: "Plan guardado", error: "No se pudo guardar. Actualiza y reintenta.", preview: "Ejemplo de mensaje",
     notice: "Solo ejemplos; no son plantillas aprobadas. El envío automático está desactivado.",
@@ -33,6 +37,7 @@ const copy = {
     examples: ["Recibimos tu pedido.", "Tu pedido ha sido preparado.", "Tu pedido fue cancelado.", "¿Quieres dejar una reseña de tu compra?", "¿Listo para otra compra?", "Nos encantaría volver a recibirte."],
   },
   he: {
+    activate: "הפעלת מסעות", pauseDelivery: "השהיית מסעות", activationSaved: "ההעדפה נשמרה",
     title: "בחירת מסעות לקוח", delay: "השהיה (דקות)", choose: "כלול בתוכנית", save: "שמירת תוכנית",
     saved: "התוכנית נשמרה", error: "השמירה נכשלה. יש לרענן ולנסות שוב.", preview: "דוגמת הודעה",
     notice: "דוגמאות בלבד; אלו אינן תבניות מאושרות. שליחה אוטומטית מושבתת.",
@@ -47,12 +52,25 @@ const copy = {
 } as const;
 
 /** Mounted only inside the existing authenticated, connected pilot preview. */
-export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved }: {
-  plans: PostPurchasePlans | undefined; bindings?: TemplateBindings; locale: string; onSaved: () => Promise<unknown>;
+export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved, activation }: {
+  activation?:PostPurchaseActivationState; plans: PostPurchasePlans | undefined; bindings?: TemplateBindings; locale: string; onSaved: () => Promise<unknown>;
 }) {
   const lang = locale.split("-")[0];
   const t = copy[lang as keyof typeof copy] ?? copy.en;
   const { user, sessionAligned } = useAuth();
+  const [activationState,setActivationState]=useState<'idle'|'saving'|'saved'|'error'>('idle');
+  async function updateActivation(){
+    if(!activation?.merchantEnabled&&!activation?.canActivate)return;
+    setActivationState('saving');
+    try{
+      const response=await fetch('/api/shopify/ecommerce/post-purchase-activation',{
+        method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'set_post_purchase_delivery',enabled:!activation.merchantEnabled}),
+      });
+      if(!response.ok)throw Error('activation_unavailable');
+      await onSaved();setActivationState('saved');
+    }catch{setActivationState('error');}
+  }
   // Reuse the existing account-owned message library; no new Meta sync or template creation.
   const library = useQuery<MessageTemplate[]>({
     queryKey: withUserQueryScope(["/api/templates"], user?.id),
@@ -77,7 +95,12 @@ export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved }: {
         templates={templates} initialTemplateId={bindings?.[journey] ?? ""}/>)}
     </div>
     <p className="text-sm text-slate-600">{t.readiness}</p>
-    <p role="status" className="text-sm text-amber-800">{t.blocked}</p>
+    {!activation?.canActivate&&<p role="status" className="text-sm text-amber-800">{t.blocked}</p>}
+    <button type="button" data-testid="post-purchase-activation" className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+      disabled={!sessionAligned||activationState==='saving'||(!activation?.merchantEnabled&&!activation?.canActivate)}
+      onClick={()=>void updateActivation()}>{activation?.merchantEnabled?t.pauseDelivery:t.activate}</button>
+    {activationState==='saved'&&<p role="status" className="text-xs">{t.activationSaved}</p>}
+    {activationState==='error'&&<p role="alert" className="text-xs text-red-700">{t.error}</p>}
     <p className="text-xs text-slate-600">{t.notice}</p>
   </section>;
 }

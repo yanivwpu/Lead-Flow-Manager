@@ -2,7 +2,15 @@ import {sql} from 'drizzle-orm';
 
 /** Read-only schema presence; never grants permission to send. */
 export const postPurchaseDeliveryReadinessQuery = sql`SELECT
-  to_regclass('ecommerce_post_purchase_outbox') IS NOT NULL AS outbox,
+  (to_regclass('ecommerce_post_purchase_outbox') IS NOT NULL
+    AND NOT EXISTS(SELECT 1 FROM unnest(ARRAY['id','intent_id','account_id','installation_id','shop','order_gid',
+      'journey','contact_id','template_id','state','claim_token','claimed_at','provider_attempted_at',
+      'provider_message_id','recipient_hmac','meta_delivery_status','meta_delivery_at']) required(name)
+      WHERE NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=to_regclass('ecommerce_post_purchase_outbox')
+        AND a.attname=required.name AND a.attnum>0 AND NOT a.attisdropped))
+    AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid=to_regclass('ecommerce_post_purchase_outbox')
+      AND tgname='ecommerce_postpurchase_preserve_attempt' AND tgenabled IN ('O','A'))
+  ) AS outbox,
   to_regclass('ecommerce_post_purchase_intents') IS NOT NULL AS intents,
   to_regclass('ecommerce_post_purchase_consents') IS NOT NULL AS consents`;
 
@@ -19,8 +27,6 @@ export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,inst
       WHERE o.account_id=${accountId} AND o.shop=${shop}
         AND o.installation_id=${installationId} AND o.state='pending'
         AND i.state='preview_ready' AND i.due_at<=NOW()
-      AND c.phone IS NOT NULL AND c.whatsapp_id IS NOT NULL
-      AND c.phone='+' || c.whatsapp_id
       ORDER BY o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED
     )
     UPDATE ecommerce_post_purchase_outbox o
@@ -120,15 +126,18 @@ export function enqueuePostPurchaseDeliveryQuery(accountId:string,shop:string,in
  * Never call this from a public unauthenticated request, and never trigger sends.
  */
 export function reconcilePostPurchaseReceiptQuery(input:{
-  accountId:string;providerMessageId:string;status:'sent'|'delivered'|'read'|'failed';
+  accountId:string;shop:string;recipientDigest:string;eventAt:Date;providerMessageId:string;status:'sent'|'delivered'|'read'|'failed';
 }){
-  if(!input.accountId?.trim()||!input.providerMessageId||
+  if(!input.accountId?.trim()||!SHOP.test(input.shop)||!/^([a-f0-9]{64})$/.test(input.recipientDigest)||
+    !Number.isFinite(input.eventAt?.valueOf())||!input.providerMessageId||
     input.providerMessageId.length>256||!/^(sent|delivered|read|failed)$/.test(input.status))
     throw Error('invalid_delivery_receipt');
   return sql`
     UPDATE ecommerce_post_purchase_outbox
-    SET meta_delivery_status=${input.status},meta_delivery_at=NOW(),updated_at=NOW()
+    SET meta_delivery_status=${input.status},meta_delivery_at=${input.eventAt},updated_at=NOW()
     WHERE account_id=${input.accountId}
+      AND shop=${input.shop} AND recipient_hmac=${input.recipientDigest}
+      AND ${input.eventAt}>=claimed_at-INTERVAL '5 minutes'
       AND provider_message_id=${input.providerMessageId}
       AND state='accepted'
       AND (meta_delivery_status IS NULL
