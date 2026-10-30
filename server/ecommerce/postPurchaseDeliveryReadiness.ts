@@ -41,3 +41,36 @@ export function recordPostPurchaseAttemptQuery(id:string,accountId:string,shop:s
     RETURNING id::text AS id
   `;
 }
+
+/** Terminal outcome: never makes the claimed record pending again. */
+export function settlePostPurchaseAttemptQuery(
+  id:string,accountId:string,shop:string,token:string,
+  outcome:'accepted'|'uncertain',providerMessageId?:string
+){
+  if(!/^[1-9][0-9]{0,18}$/.test(id)||!accountId?.trim()||!SHOP.test(shop)||
+    !/^[0-9a-f-]{36}$/i.test(token)||
+    (outcome==='accepted'?!providerMessageId||providerMessageId.length>256:providerMessageId!==undefined))
+    throw Error('invalid_delivery_settlement');
+  return sql`
+    UPDATE ecommerce_post_purchase_outbox
+    SET state=${outcome},provider_message_id=${outcome==='accepted'?providerMessageId:null},
+      updated_at=NOW()
+    WHERE id=CAST(${id} AS BIGINT) AND account_id=${accountId}
+      AND shop=${shop} AND claim_token=CAST(${token} AS UUID)
+      AND state='claimed' AND provider_attempted_at IS NOT NULL
+    RETURNING id::text AS id
+  `;
+}
+/** Only unsent, unclaimed work may be suppressed. */
+export function suppressPendingPostPurchaseQuery(accountId:string,shop:string,orderGid:string){
+  if(!accountId?.trim()||!SHOP.test(shop)||
+    !/^gid:\/\/shopify\/Order\/[1-9][0-9]{0,19}$/.test(orderGid))
+    throw Error('invalid_delivery_suppression');
+  return sql`
+    UPDATE ecommerce_post_purchase_outbox
+    SET state='suppressed',updated_at=NOW()
+    WHERE account_id=${accountId} AND shop=${shop}
+      AND order_gid=${orderGid} AND state='pending'
+    RETURNING id::text AS id
+  `;
+}
