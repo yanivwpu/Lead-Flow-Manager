@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -158,7 +157,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       </label>
       {currentTemplate && <p className="whitespace-pre-wrap text-xs text-slate-700">{currentTemplate.bodyText}</p>}
       {approved.length === 0 && <p className="text-xs text-slate-600">{t.noApproved}</p>}
-      <Link href="/app/templates" className="text-xs text-blue-700 underline">{t.editMessage}</Link>
+      <a href="/app/templates" className="inline-block text-xs text-blue-700 underline">{t.editMessage}</a>
       <p className="text-xs text-slate-500">{t.messageHint}</p>
       <button type="button" onClick={() => void saveTemplate()} disabled={messageStatus === "saving"}
         className="rounded border bg-white px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.saveMessage}</button>
