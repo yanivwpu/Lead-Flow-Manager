@@ -7,6 +7,7 @@ import { isEcommercePilotOwner } from "./ecommerce/pilotAccess";
 import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivacy";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { getEffectivePlanForUser } from "@shared/trialEntitlements";
+import { recoveryRuntimeSchemaReadyQuery } from "./ecommerce/checkoutRecoverySchema";
 import {
   canActivateMerchantWorkspace,
   merchantWorkspaceActivated,
@@ -74,10 +75,20 @@ router.get("/status", async (req: Request, res: Response) => {
   try {
     const state = await currentForAccount(accountId);
     if (!state) return res.status(404).json({ error: "Account unavailable" });
+    // Read-only infrastructure readiness. Missing reviewed migrations never
+    // become active sends; an unavailable check is UNKNOWN, not ready.
+    let recoverySchemaReady: boolean | null = null;
+    if (state.connected) {
+      try {
+        const schema = await db.execute(recoveryRuntimeSchemaReadyQuery());
+        recoverySchemaReady = schema.rows[0]?.ready === true;
+      } catch { recoverySchemaReady = null; }
+    }
     return res.json({
       activated: state.activated, eligible: state.eligible,
       connected: state.connected, planEligible: state.planEligible,
       cartExecutionEnabled: false, outboundMessagingEnabled: false,
+      recoverySchemaReady,
     });
   } catch {
     return res.status(503).json({ error: "E-Commerce activation status unavailable" });

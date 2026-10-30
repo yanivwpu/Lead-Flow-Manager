@@ -1,3 +1,5 @@
+import { readPostPurchasePlans, parsePostPurchasePlanChange } from "../shared/postPurchase";
+import { savePostPurchasePlanQuery } from "./ecommerce/postPurchasePlans";
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
 import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
@@ -95,6 +97,8 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       lastEventAt: stats?.last_event_at ? new Date(stats.last_event_at).toISOString() : null,
       reviewQueue,
       workflowDrafts: readWorkflowDraftSettings(cfg),
+      postPurchasePlans: readPostPurchasePlans(cfg),
+      postPurchaseReadiness: { activationEligible: false, reason: "delivery_integration_pending", messagingEnabled: false },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
@@ -135,7 +139,8 @@ router.post('/workflow-draft', async (req: Request, res: Response) => {
   res.set('Cache-Control','no-store');
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   const change = parseWorkflowDraftChange(req.body);
-  if (!change) return res.status(400).json({ error: 'Invalid draft request' });
+  const planChange = parsePostPurchasePlanChange(req.body);
+  if (!change && !planChange) return res.status(400).json({ error: 'Invalid draft request' });
   try {
     const accountId = (req.user as { id: string }).id;
     const sessionOwner = await storage.getUserForSession(accountId);
@@ -158,15 +163,16 @@ router.post('/workflow-draft', async (req: Request, res: Response) => {
       const cfg = (installation.config || {}) as Record<string, unknown>;
       if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
           normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
-      const updated = await tx.execute(saveWorkflowDraftQuery({
-        integrationId: installation.id, accountId, shop, ...change
-      }));
-      return updated.rows.length === 1 ? updated.rows[0].drafts : null;
+      const updated = await tx.execute(planChange
+        ? savePostPurchasePlanQuery({ integrationId: installation.id, accountId, shop, ...planChange })
+        : saveWorkflowDraftQuery({ integrationId: installation.id, accountId, shop, ...change! }));
+      return updated.rows.length === 1 ? updated.rows[0] : null;
     });
     if (!saved) return res.status(409).json({ error: 'Shopify installation changed; refresh' });
-    return res.json({ ok: true, workflowDrafts: readWorkflowDraftSettings({
-      ecommerceGrowthEngineDrafts: saved
-    }), workflowActive: false, messagingEnabled: false });
+    return res.json({ ok: true, ...(planChange ? { postPurchasePlans: readPostPurchasePlans({
+      ecommercePostPurchasePlans: saved.plans
+    }) } : { workflowDrafts: readWorkflowDraftSettings({ ecommerceGrowthEngineDrafts: saved.drafts }) }),
+      activationEligible: false, workflowActive: false, messagingEnabled: false });
   } catch {
     return res.status(503).json({ error: 'Workflow draft unavailable' });
   }

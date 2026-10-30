@@ -1,3 +1,5 @@
+import {postPurchaseTablesQuery,postPurchaseTables,postPurchasePrivacyQueries} from "./ecommerce/postPurchaseQueries";
+import {recoveryPhoneDigest} from "./ecommerce/checkoutRecoveryMessagingEligibility";
 import { createHmac, randomBytes, createCipheriv } from "node:crypto";
 import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryCustomerErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -112,6 +114,26 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
     for(const statement of recoveryCustomerErasureQueries({
       accountId:user.id,shop,contactIds:ids,shopifyCustomerIds:exactShopifyIds
     },parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+
+    const ppTables=await tx.execute(postPurchaseTablesQuery);
+    const ppAvailable=postPurchaseTables(ppTables.rows[0]);
+    const ppSecret=process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'';
+    if(ppAvailable.consents && ppSecret.length<32){
+      const unbound=await tx.execute(sql`SELECT 1 FROM ecommerce_post_purchase_consents
+        WHERE account_id=${user.id} AND shop=${shop} AND contact_id IS NULL AND customer_gid IS NULL LIMIT 1`);
+      if(unbound.rows.length)throw Error('post_purchase_privacy_hmac_key_missing');
+    }
+    const recipientDigests:string[]=[];
+    // A signed erasure can identify an unmerged STOP sender by phone even before a CRM grant exists.
+    const privacyPhones=[...found.map(c=>c.phone),...tokens.filter(t=>t.startsWith('phone:')).map(t=>'+'+t.slice(6))];
+    for(const phone of privacyPhones)try{if(phone)recipientDigests.push(recoveryPhoneDigest(ppSecret,phone));}catch{/* invalid phones cannot have a WhatsApp grant */}
+    const ppCustomerIds=[...exactShopifyIds,...found.flatMap(c=>{
+      const custom=c.customFields as Record<string,unknown>|null,source=c.sourceDetails as Record<string,unknown>|null;
+      const id=custom?.shopifyCustomerId??source?.shopifyCustomerId;
+      return typeof id==='string'&&/^[1-9][0-9]{0,19}$/.test(id)?[id]:[];
+    })];
+    for(const statement of postPurchasePrivacyQueries({mode:'customer',accountId:user.id,shop,contactIds:ids,
+      customerIds:ppCustomerIds,recipientDigests},ppAvailable))await tx.execute(statement);
 
     // Purge internal order-support tasks for redacted contacts even when the
     // CRM contact is retained and anonymized. The migration is optional.

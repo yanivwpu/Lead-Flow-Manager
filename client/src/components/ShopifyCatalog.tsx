@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { CommerceProduct, CommerceVariant } from "@shared/commerceCatalog";
 import { ShopifyCatalogView } from "./ShopifyCatalogView";
-export function ShopifyCatalog() {
+export function ShopifyCatalog({ showShoppingSettings = true }: { showShoppingSettings?: boolean } = {}) {
   const { user, sessionAligned } = useAuth();
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
@@ -152,7 +152,7 @@ export function ShopifyCatalog() {
   }, [user?.id]);
   return (
     <div className="space-y-4">
-      <ShoppingSettings />
+      {showShoppingSettings && <ShoppingSettings />}
       <ShopifyCatalogView
         status={status.data}
         items={products.data?.items ?? []}

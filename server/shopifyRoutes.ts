@@ -636,8 +636,22 @@ router.post('/webhooks/orders-create', createShopifyOrderWebhookHandler("orders/
   process: async ({ shop, eventId, body }) => {
     await processShopifyOrderCreate({ headers: { "x-shopify-event-id": eventId } },
       shop, body as Parameters<typeof processShopifyOrderCreate>[2]);
+    const { postPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
+    await postPurchasePreparation.ingest(shop,"orders/create",eventId,body);
   },
 }));
+
+// Full-order fulfillment/cancellation use the same verified raw-body boundary.
+// Subscription registration is a separate reviewed operator action; never performed here.
+for (const [path,topic] of [["orders-fulfilled","orders/fulfilled"],["orders-cancelled","orders/cancelled"]] as const) {
+  router.post('/webhooks/'+path,createShopifyOrderWebhookHandler(topic,{
+    verify:verifyWebhookHmac,
+    process:async({shop,eventId,body})=>{
+      const {postPurchasePreparation}=await import("./ecommerce/postPurchaseRuntime");
+      return postPurchasePreparation.ingest(shop,topic,eventId,body);
+    },
+  }));
+}
 
 router.post('/webhooks/customers-create', createShopifyCustomerWebhookHandler("customers/create", {
   verify: verifyWebhookHmac, process: syncShopifyCustomer,

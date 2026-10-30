@@ -34,6 +34,7 @@ const stubs: Record<string, string> = {
   "@/lib/auth-context": "export const useAuth=()=>({user:globalThis.__ecommerceRender.user,sessionAligned:globalThis.__ecommerceRender.aligned})",
   "@/lib/accountQueryScope": "export const withUserQueryScope=(key)=>key",
   "@/components/ShopifyCatalog": "export const ShopifyCatalog=()=>null",
+  "@/components/ShoppingSettings": "export const ShoppingSettings=()=>null",
   "@/components/integrations/ShopifySimpleSetup": "export const ShopifySimpleSetup=()=>null",
   "react-helmet": "export const Helmet=({children})=>children",
   "@/components/marketing/MarketingHeader": "export const MarketingHeader=()=>null",
@@ -113,7 +114,7 @@ test("dashboard keeps Shopify setup out of overview and links to existing settin
   assert.ok(html.includes("/app/ecommerce-growth-engine?view=orders"));
   const source=readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.tsx","utf8");
   assert.ok(source.includes('view==="products"'));
-  assert.ok(source.includes("<ShopifyCatalog/>"));
+  assert.ok(source.includes("<ShopifyCatalog showShoppingSettings={!privatePilot}/>"));
   assert.ok(source.includes('view==="settings"'));
   assert.ok(source.includes("<ShopifySimpleSetup"));
   assert.ok(source.includes('view==="recovery"'));

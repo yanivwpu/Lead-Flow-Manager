@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import type { ShopifyCustomerSnapshot } from "./shopifyCustomerSync";
 
-type Topic = "orders/create";
+export type ShopifyOrderTopic = "orders/create" | "orders/fulfilled" | "orders/cancelled";
+type Topic = ShopifyOrderTopic;
 /** Raw bytes are mandatory. Parse those same verified bytes, never a separately supplied body. */
 export function createShopifyOrderWebhookHandler(topic: Topic, deps: {
   verify: (raw: Buffer, hmac: string) => boolean;

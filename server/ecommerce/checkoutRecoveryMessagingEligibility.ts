@@ -12,7 +12,7 @@ export type RecoveryContact = {
 };
 export type WhatsAppRecoveryConsent = {
   accountId:string; shop:string; contactId:string; shopifyCustomerId:string;
-  purpose:'checkout_recovery'; channel:'whatsapp';
+  purpose:string; channel:'whatsapp';
   source:'verified_whatsapp_explicit_opt_in';
   phoneDigest:string; grantedAt:string; revokedAt:string|null;
 };
@@ -32,7 +32,8 @@ export function recoveryPhoneDigest(secret:string,phone:string):string{
  return createHmac('sha256',secret).update('whachat/ecommerce/whatsapp-recovery/phone/v1:')
    .update(phone).digest('hex');
 }
-export function evaluateRecoveryMessagingEligibility(input:{
+export function evaluateCommerceMessagingEligibility(input:{
+ purpose:string;category:'UTILITY'|'MARKETING';
  accountId:string;shop:string;shopifyCustomerId:string;
  contact:RecoveryContact|null;consent:WhatsAppRecoveryConsent|null;
  localTemplate:RecoveryTemplateApproval|null;liveMetaTemplate:RecoveryTemplateApproval|null;
@@ -57,7 +58,7 @@ export function evaluateRecoveryMessagingEligibility(input:{
    return denied('contact_suppressed');
  if(!consent||consent.accountId!==accountId||consent.shop!==shop ||
     consent.contactId!==contact.id||consent.shopifyCustomerId!==shopifyCustomerId ||
-    consent.purpose!=='checkout_recovery'||consent.channel!=='whatsapp'||
+    consent.purpose!==input.purpose||consent.channel!=='whatsapp'||
     consent.source!=='verified_whatsapp_explicit_opt_in'||consent.revokedAt!==null)
    return denied('whatsapp_consent_unverified');
  const now=input.now??Date.now(),when=Date.parse(consent.grantedAt);
@@ -73,11 +74,16 @@ export function evaluateRecoveryMessagingEligibility(input:{
     localTemplate.name!==liveMetaTemplate.name||
     localTemplate.language!==liveMetaTemplate.language ||
     !/^[a-z]{2}(?:_[A-Z]{2})?$/.test(localTemplate.language)||
-    localTemplate.category.toLowerCase()!=='marketing'||
-    liveMetaTemplate.category.toLowerCase()!=='marketing'||
+    localTemplate.category.toUpperCase()!==input.category||
+    liveMetaTemplate.category.toUpperCase()!==input.category||
     localTemplate.status.toLowerCase()!=='approved'||
     liveMetaTemplate.status.toUpperCase()!=='APPROVED')
    return denied('meta_marketing_template_unapproved');
  return {ok:true,recipientPhone:contact.phone!,templateName:localTemplate.name,
    templateLanguage:localTemplate.language};
+}
+
+/** Compatibility boundary: checkout consent never authorizes another purpose. */
+export function evaluateRecoveryMessagingEligibility(input:Omit<Parameters<typeof evaluateCommerceMessagingEligibility>[0],"purpose"|"category">):RecoveryMessagingDecision {
+ return evaluateCommerceMessagingEligibility({...input,purpose:"checkout_recovery",category:"MARKETING"});
 }
