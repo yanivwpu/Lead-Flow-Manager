@@ -34,6 +34,16 @@ uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhook
 topics = ["customers/update"]
 uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/customers-update"
 
+
+# Post-purchase lifecycle topics use the existing signed handlers. App-managed only.
+[[webhooks.subscriptions]]
+topics = ["orders/fulfilled"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/orders-fulfilled"
+
+[[webhooks.subscriptions]]
+topics = ["orders/cancelled"]
+uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/orders-cancelled"
+
 [access_scopes]
 scopes = "read_customers,read_orders"
 optional_scopes = []

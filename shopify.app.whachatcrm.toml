@@ -39,6 +39,16 @@ api_version = "2026-01"
   topics = [ "app/scopes_update" ]
   uri = "https://app.whachatcrm.com/api/shopify/catalog-webhooks/app-scopes_update"
 
+
+# Post-purchase lifecycle topics use the existing signed handlers. App-managed only.
+[[webhooks.subscriptions]]
+topics = ["orders/fulfilled"]
+uri = "https://app.whachatcrm.com/api/shopify/webhooks/orders-fulfilled"
+
+[[webhooks.subscriptions]]
+topics = ["orders/cancelled"]
+uri = "https://app.whachatcrm.com/api/shopify/webhooks/orders-cancelled"
+
 [access_scopes]
 # Required install scopes stay in sync with server/shopify.ts.
 # Catalog access is approved explicitly through the existing optional-scope flow.
