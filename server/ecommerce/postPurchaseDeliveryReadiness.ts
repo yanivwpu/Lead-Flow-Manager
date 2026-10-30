@@ -91,6 +91,8 @@ export function enqueuePostPurchaseDeliveryQuery(accountId:string,shop:string,in
     FROM ecommerce_post_purchase_intents i
     JOIN contacts c ON c.id=i.contact_id AND c.user_id=i.account_id
       AND c.automations_paused=FALSE
+      AND c.phone IS NOT NULL AND c.whatsapp_id IS NOT NULL
+      AND c.phone=('+' || c.whatsapp_id)
     JOIN ecommerce_post_purchase_consents consent
       ON consent.account_id=i.account_id AND consent.shop=i.shop
       AND consent.contact_id=c.id AND consent.customer_gid=i.customer_gid
