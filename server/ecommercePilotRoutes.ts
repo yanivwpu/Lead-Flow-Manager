@@ -1,5 +1,7 @@
 import { readPostPurchasePlans, parsePostPurchasePlanChange } from "../shared/postPurchase";
 import { savePostPurchasePlanQuery } from "./ecommerce/postPurchasePlans";
+import { postPurchaseTablesQuery, postPurchaseTables } from "./ecommerce/postPurchaseQueries";
+import { parsePostPurchaseTemplateBindingChange, readPostPurchaseTemplateBindings, eligiblePostPurchaseLibraryTemplate, eligiblePostPurchaseTemplateLookupQuery, savePostPurchaseTemplateBindingQuery } from "./ecommerce/postPurchaseTemplateBinding";
 import { pendingEventReviewQuery, markEventReviewedQuery } from "./ecommerce/reviewQueue";
 import { readWorkflowDraftSettings, parseWorkflowDraftChange, saveWorkflowDraftQuery } from "./ecommerce/workflowDraftSettings";
 import { parseSupportTaskChange, parseSupportTaskComplete, orderSupportTablesReadyQuery, orderSupportTablesReady, saveOrderTaskMerchantOptInQuery, readOrderTaskMerchantSettingsQuery, readOrderSupportTaskListQuery, markOrderSupportTaskCompleteQuery } from "./ecommerce/orderSupportMerchantControls";
@@ -89,6 +91,14 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
         }))
       };
     }
+    // Existing additive post-purchase schema check: reads only metadata.
+    // Incomplete schema never authorizes sending or changes event preview semantics.
+    let postPurchaseSchemaReady: boolean | null = null;
+    try {
+      const checked = await db.execute(postPurchaseTablesQuery);
+      const tables = postPurchaseTables(checked.rows[0] as Record<string, unknown> | undefined);
+      postPurchaseSchemaReady = tables.intents && tables.orders && tables.consents;
+    } catch { postPurchaseSchemaReady = null; }
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     return res.json({ ok: true,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
@@ -98,6 +108,8 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       reviewQueue,
       workflowDrafts: readWorkflowDraftSettings(cfg),
       postPurchasePlans: readPostPurchasePlans(cfg),
+      postPurchaseTemplates: readPostPurchaseTemplateBindings(cfg),
+      postPurchaseSchemaReady,
       postPurchaseReadiness: { activationEligible: false, reason: "delivery_integration_pending", messagingEnabled: false },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
@@ -140,7 +152,8 @@ router.post('/workflow-draft', async (req: Request, res: Response) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   const change = parseWorkflowDraftChange(req.body);
   const planChange = parsePostPurchasePlanChange(req.body);
-  if (!change && !planChange) return res.status(400).json({ error: 'Invalid draft request' });
+  const templateChange = parsePostPurchaseTemplateBindingChange(req.body);
+  if (!change && !planChange && !templateChange) return res.status(400).json({ error: 'Invalid draft request' });
   try {
     const accountId = (req.user as { id: string }).id;
     const sessionOwner = await storage.getUserForSession(accountId);
@@ -163,13 +176,26 @@ router.post('/workflow-draft', async (req: Request, res: Response) => {
       const cfg = (installation.config || {}) as Record<string, unknown>;
       if (cfg.shop != null && (typeof cfg.shop !== 'string' ||
           normalizeShopifyShopDomain(cfg.shop) !== shop)) return null;
-      const updated = await tx.execute(planChange
-        ? savePostPurchasePlanQuery({ integrationId: installation.id, accountId, shop, ...planChange })
-        : saveWorkflowDraftQuery({ integrationId: installation.id, accountId, shop, ...change! }));
+      // Template selections cannot reference another account, unsynced messages,
+      // or unsupported Meta formats. Selection is still NOT live approval.
+      if (templateChange?.templateId) {
+        const owned = await tx.execute(eligiblePostPurchaseTemplateLookupQuery(accountId, templateChange.templateId));
+        if (owned.rows.length !== 1 || !eligiblePostPurchaseLibraryTemplate(
+          owned.rows[0] as Record<string, unknown>, templateChange.journey,
+        )) return 'template_unavailable';
+      }
+      const updated = await tx.execute(templateChange
+        ? savePostPurchaseTemplateBindingQuery({ integrationId: installation.id, accountId, shop, ...templateChange })
+        : planChange
+          ? savePostPurchasePlanQuery({ integrationId: installation.id, accountId, shop, ...planChange })
+          : saveWorkflowDraftQuery({ integrationId: installation.id, accountId, shop, ...change! }));
       return updated.rows.length === 1 ? updated.rows[0] : null;
     });
+    if (saved === 'template_unavailable') return res.status(409).json({ error: 'Choose an approved matching template from your library' });
     if (!saved) return res.status(409).json({ error: 'Shopify installation changed; refresh' });
-    return res.json({ ok: true, ...(planChange ? { postPurchasePlans: readPostPurchasePlans({
+    return res.json({ ok: true, ...(templateChange ? { postPurchaseTemplates: readPostPurchaseTemplateBindings({
+      ecommercePostPurchaseTemplates: saved.bindings
+    }) } : planChange ? { postPurchasePlans: readPostPurchasePlans({
       ecommercePostPurchasePlans: saved.plans
     }) } : { workflowDrafts: readWorkflowDraftSettings({ ecommerceGrowthEngineDrafts: saved.drafts }) }),
       activationEligible: false, workflowActive: false, messagingEnabled: false });
