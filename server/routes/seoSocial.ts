@@ -15,6 +15,8 @@ function nextDate(offset: number): string {
 
 /** Creates one initial editorial inventory, idempotently. Future AI-generated campaigns must use distinct keys. */
 export async function seedSeoSocialDrafts(): Promise<void> {
+  const existing = await db.execute(sql`SELECT COUNT(*)::int AS count FROM seo_social_drafts WHERE campaign_key=${CAMPAIGN_KEY}`);
+  if (Number(existing.rows[0]?.count ?? 0) >= SEO_SOCIAL_STARTERS.length) return;
   for (const item of SEO_SOCIAL_STARTERS) {
     if (!validateSeoSocialStarter(item) || findForbiddenPublicClaims(item.body).length) {
       throw new Error("A social starter failed public-claim validation");
