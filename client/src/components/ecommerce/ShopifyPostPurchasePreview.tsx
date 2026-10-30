@@ -1,3 +1,5 @@
+import { ShopifyPostPurchasePlans } from "./ShopifyPostPurchasePlans";
+import type { PostPurchasePlans } from "@shared/postPurchase";
 import { useEcommercePilot } from "@/lib/ecommercePilot";
 import { useEcommerceTaskCopy } from "@/lib/ecommerceTaskCopy";
 import { useAuth } from "@/lib/auth-context";
@@ -25,6 +27,7 @@ type PostPurchaseStatus = {
     orderCancelled: boolean;
     abandonedCart: boolean;
   };
+  postPurchasePlans?: PostPurchasePlans;
   messagingEnabled: false;
 };
 
@@ -165,6 +168,8 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
           <p className="mt-2 text-sm text-slate-600">{item.description}</p>
         </div>)}
     </div>
+    <ShopifyPostPurchasePlans key={user.id} plans={data.postPurchasePlans} locale={locale}
+      onSaved={() => client.invalidateQueries({ queryKey })}/>
     <p role="note" className="text-xs text-slate-600">{t.notice}</p>
   </section>;
 }

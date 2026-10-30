@@ -111,3 +111,22 @@ test("source uses existing private routes and never introduces a sender",()=>{
   assert.ok(!src.includes("send-template"));
   assert.ok(!src.includes("cartCreate("));
 });
+
+test('six editable journey plans expose localized delays, examples and blocked activation',()=>{
+  for(const [locale,title,blocked] of [
+    ['en','Choose customer journeys','Activation unavailable'],
+    ['es','Elige recorridos para clientes','Activación no disponible'],
+    ['he','בחירת מסעות לקוח','הפעלה אינה זמינה'],
+  ]){
+    state.locale=locale;state.available=true;state.user={id:'fixture'};state.aligned=true;state.error=false;
+    const {document}=parseHTML(render());const section=document.querySelector('[data-testid="post-purchase-plans"]')!;
+    assert.ok(section.textContent.includes(title));assert.ok(section.textContent.includes(blocked));
+    assert.equal(section.getAttribute('dir'),locale==='he'?'rtl':'ltr');
+    assert.equal(section.querySelectorAll('input[type="checkbox"]').length,6);
+    assert.equal(section.querySelectorAll('input[type="checkbox"][checked]').length,0);
+    assert.equal(section.querySelectorAll('input[type="number"]').length,6);
+    assert.equal(section.querySelectorAll('details').length,6);
+    assert.equal(section.querySelectorAll('form').length,6);
+  }
+  state.locale='en';
+});
