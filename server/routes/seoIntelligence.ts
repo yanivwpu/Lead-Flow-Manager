@@ -15,6 +15,27 @@ import { analyzeSeoOpportunities, listSeoActions, refreshSeoAction, startSeoActi
 export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: RequestHandler) {
   registerSeoBacklinkRoutes(app, requireAdmin);
   registerSeoSocialRoutes(app, requireAdmin);
+  app.get("/api/admin/seo-intelligence/delivery-health", requireAdmin, async (_req, res) => {
+    try {
+      const [analysis, published] = await Promise.all([
+        db.execute(sql`SELECT started_at AS "startedAt",status,
+          COALESCE((diagnostics->>'opportunitiesEvaluated')::int,0) AS evaluated,
+          COALESCE((diagnostics->>'recommendationsCreated')::int,0) AS created,
+          COALESCE((diagnostics->>'aiCalls')::int,0) AS "aiCalls",
+          COALESCE((diagnostics->>'existingOpenActionsExcluded')::int,0) AS "existingExcluded"
+          FROM seo_analysis_runs ORDER BY started_at DESC LIMIT 1`),
+        db.execute(sql`SELECT MAX(live_at) AS "lastLiveAt",
+          COUNT(*) FILTER (WHERE status='live')::int AS "liveExecutions",
+          COUNT(*) FILTER (WHERE status='failed')::int AS "failedExecutions",
+          COUNT(*) FILTER (WHERE status='publication_blocked')::int AS "blockedExecutions"
+          FROM seo_github_executions`)
+      ]);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ latestAnalysis: analysis.rows[0] ?? null, published: published.rows[0] ?? {} });
+    } catch {
+      res.status(503).json({ error: "SEO delivery status unavailable" });
+    }
+  });
   app.get("/api/admin/seo-intelligence", requireAdmin, async (_req, res) => {
     try { res.json(await getSeoDashboard()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load SEO intelligence" }); }
   });
