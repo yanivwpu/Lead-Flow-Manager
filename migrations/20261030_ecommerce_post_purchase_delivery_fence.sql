@@ -2,6 +2,9 @@
 -- Requires migrations/20261030_ecommerce_post_purchase_intents.sql.
 -- Does not enable delivery, schedule work, or grant consent. No customer payload or tokens stored.
 -- This schema is intentionally separate from checkout recovery's existing outbox.
+-- Bind the outbox to the exact persisted tenant/shop/order/journey intent, not just its numeric ID.
+CREATE UNIQUE INDEX IF NOT EXISTS ecommerce_postpurchase_intent_outbox_reference
+  ON ecommerce_post_purchase_intents(id,account_id,shop,order_gid,journey,installation_id);
 CREATE TABLE IF NOT EXISTS ecommerce_post_purchase_outbox (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   intent_id BIGINT NOT NULL REFERENCES ecommerce_post_purchase_intents(id) ON DELETE CASCADE,
@@ -25,6 +28,10 @@ CREATE TABLE IF NOT EXISTS ecommerce_post_purchase_outbox (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT ecommerce_postpurchase_outbox_one_intent UNIQUE(intent_id),
+  CONSTRAINT ecommerce_postpurchase_outbox_intent_scope FOREIGN KEY
+    (intent_id,account_id,shop,order_gid,journey,installation_id)
+    REFERENCES ecommerce_post_purchase_intents(id,account_id,shop,order_gid,journey,installation_id)
+    ON DELETE CASCADE,
   CONSTRAINT ecommerce_postpurchase_outbox_one_journey UNIQUE(account_id,shop,order_gid,journey),
   CONSTRAINT ecommerce_postpurchase_outbox_claim_consistency CHECK
     ((state IN ('claimed','accepted','uncertain') AND claim_token IS NOT NULL AND claimed_at IS NOT NULL)
