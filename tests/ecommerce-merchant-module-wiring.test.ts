@@ -11,7 +11,7 @@ test("merchant dashboard reuses existing authenticated catalog and shopping comp
  assert.match(dashboard,/view==="products"[\s\S]*?<ShopifyCatalog showShoppingSettings=\{false\}/);
  assert.match(dashboard,/view==="shopping"[\s\S]*?<ShoppingSettings\/>/);
  assert.match(catalog,/showShoppingSettings = true/);
- assert.match(catalog,/showShoppingSettings && <ShoppingSettings\/>/);
+ assert.match(catalog,/showShoppingSettings && <ShoppingSettings\s*\/>/);
  assert.doesNotMatch(dashboard,/fetch\([^\n]*method:\s*["']POST["']/);
  assert.doesNotMatch(dashboard,/ECOMMERCE_RECOVERY_SEND_ENABLED|ECOMMERCE_POST_PURCHASE_SEND_ENABLED|sendRecoveryViaMeta/);
 });
