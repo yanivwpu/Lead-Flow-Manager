@@ -27,3 +27,17 @@ export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,inst
     RETURNING o.id::text AS id,o.claim_token::text AS claim_token
   `;
 }
+
+/** Commit before requesting delivery. Missing or repeated claims affect zero rows. */
+export function recordPostPurchaseAttemptQuery(id:string,accountId:string,shop:string,token:string){
+  if(!/^[1-9][0-9]{0,18}$/.test(id)||!accountId?.trim()||!SHOP.test(shop)||
+    !/^[0-9a-f-]{36}$/i.test(token))throw Error('invalid_delivery_attempt');
+  return sql`
+    UPDATE ecommerce_post_purchase_outbox
+    SET provider_attempted_at=NOW(),updated_at=NOW()
+    WHERE id=CAST(${id} AS BIGINT) AND account_id=${accountId}
+      AND shop=${shop} AND claim_token=CAST(${token} AS UUID)
+      AND state='claimed' AND provider_attempted_at IS NULL
+    RETURNING id::text AS id
+  `;
+}
