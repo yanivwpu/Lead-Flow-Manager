@@ -12,6 +12,8 @@ EXISTING = {
     'customers/create': 'customers-create',
     'customers/update': 'customers-update',
     'orders/create': 'orders-create',
+    'orders/fulfilled': 'orders-fulfilled',
+    'orders/cancelled': 'orders-cancelled',
     'customers/data_request': 'customers/data_request',
     'customers/redact': 'customers/redact',
     'shop/redact': 'shop/redact',
