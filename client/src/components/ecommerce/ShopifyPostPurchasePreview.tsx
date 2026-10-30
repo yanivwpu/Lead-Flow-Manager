@@ -29,6 +29,7 @@ type PostPurchaseStatus = {
   };
   postPurchasePlans?: PostPurchasePlans;
   postPurchaseTemplates?: Partial<Record<import('@shared/postPurchase').PostPurchaseJourney, string>>;
+  postPurchaseSchemaReady?: boolean | null;
   messagingEnabled: false;
 };
 
@@ -46,7 +47,8 @@ const copy = {
     repeatDescription: "Win-back and upsell journeys need separate segmentation, consent and suppression checks.",
     notice: "Preview only. Saving a draft never enables order messages, Shopify operations, or WhatsApp sends.",
     saveError: "Couldn't save draft. Refresh and retry.",
-    paused: "Event recording is paused; historical counts may still appear."
+    paused: "Event recording is paused; historical counts may still appear.",
+    schemaMissing: "Setup incomplete: post-purchase delivery tables are not installed. All sending is off.", schemaReady: "Delivery tables ready; sending remains off.", schemaUnknown: "Could not verify delivery database setup. Sending remains off."
   },
   es: {
     title: "Recorridos poscompra", intro: "Consulta eventos de Shopify y prepara borradores. No se envían mensajes a clientes.",
@@ -61,7 +63,8 @@ const copy = {
     repeatDescription: "Las campañas de regreso y ventas adicionales necesitan segmentación, consentimiento y exclusiones.",
     notice: "Solo vista previa. Guardar borradores no activa mensajes, operaciones de Shopify ni envíos de WhatsApp.",
     saveError: "No se pudo guardar. Actualiza y reintenta.",
-    paused: "El registro de eventos está pausado; pueden aparecer cifras anteriores."
+    paused: "El registro de eventos está pausado; pueden aparecer cifras anteriores.",
+    schemaMissing: "Configuración incompleta: faltan las tablas de entrega poscompra. No hay envíos.",schemaReady: "Tablas de entrega listas; los envíos siguen desactivados.",schemaUnknown: "No se pudo verificar la base de datos de entrega. Los envíos siguen desactivados."
   },
   he: {
     title: "מסעות לאחר רכישה", intro: "סקירת אירועי Shopify והכנת טיוטות. לא נשלחות הודעות ללקוחות.",
@@ -76,7 +79,8 @@ const copy = {
     repeatDescription: "מסעות חזרה ומכירה נוספת דורשים פילוח, הסכמה ומניעת שליחה.",
     notice: "תצוגה בלבד. שמירת טיוטה אינה מפעילה הודעות, פעולות Shopify או שליחת WhatsApp.",
     saveError: "לא ניתן לשמור. רענן ונסה שוב.",
-    paused: "רישום האירועים מושהה; ייתכן שיוצגו נתונים קודמים."
+    paused: "רישום האירועים מושהה; ייתכן שיוצגו נתונים קודמים.",
+    schemaMissing: "ההגדרה אינה מלאה: טבלאות שליחת הודעות טרם הותקנו. השליחה מושבתת.",schemaReady: "טבלאות המשלוח מוכנות; השליחה עדיין מושבתת.",schemaUnknown: "לא ניתן לאמת את מוכנות מסד הנתונים. השליחה מושבתת."
   }
 } as const;
 
@@ -136,6 +140,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
     <div className="rounded-xl border border-blue-100 bg-white p-4 sm:p-5">
       <h3 className="font-semibold text-slate-900">{t.title}</h3>
       <p className="mt-1 text-sm text-slate-600">{t.intro}</p>
+      <p data-testid="post-purchase-schema-readiness" role="status" className="mt-2 text-xs text-slate-600">{data.postPurchaseSchemaReady === true ? t.schemaReady : data.postPurchaseSchemaReady === false ? t.schemaMissing : t.schemaUnknown}</p>
       {data.mode === "paused" && <p className="mt-2 text-xs text-amber-800">{t.paused}</p>}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {rows.map(({ title, count, journey }) => {
