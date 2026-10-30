@@ -23,7 +23,23 @@ const QUERY = [
   '  }',
   '  shop { primaryDomain { url } }',
   '}',
-].join('\n');
+].join('\\n');
+/** Bounded verification fallback when Shopify's documented ID search returns no
+ * exact match despite the checkout appearing in its normal recent-checkout
+ * listing. Fail closed if the exact global ID is absent from this one page.
+ * No pagination, no customer inference, no additional shop mutation.
+ */
+const BOUNDED_QUERY = [
+  'query BoundedCheckoutRecoveryRecheck($checkoutId: ID!) {',
+  '  abandonedCheckouts(first: 25, sortKey: CREATED_AT, reverse: true) {',
+  '    nodes { id updatedAt completedAt abandonedCheckoutUrl customer { id } }',
+  '  }',
+  '  abandonmentByAbandonedCheckoutId(abandonedCheckoutId: $checkoutId) {',
+  '    customerHasNoOrderSinceAbandonment customer { id }',
+  '  }',
+  '  shop { primaryDomain { url } }',
+  '}',
+].join('\\n');
 
 function safeShopifyRecoveryUrl(raw: unknown, shopDomain: string, primaryUrl: unknown): string | null {
   if (typeof raw !== 'string' || raw.length > 8192 || typeof primaryUrl !== 'string') return null;
@@ -65,14 +81,39 @@ export async function recheckShopifyCheckoutForRecovery(input: {
       return blocked('shopify_status_unavailable');
     const root=payload as Record<string,unknown>;
     if (Array.isArray(root.errors) && root.errors.length) return blocked('shopify_query_unavailable');
-    const data=root.data as Record<string,unknown> | undefined;
-    const connection=data?.abandonedCheckouts as Record<string,unknown> | undefined;
-    const nodes=connection?.nodes;
+    let data=root.data as Record<string,unknown> | undefined;
+    let connection=data?.abandonedCheckouts as Record<string,unknown> | undefined;
+    let nodes=connection?.nodes;
     if (!Array.isArray(nodes) || nodes.length > 2) return blocked('checkout_not_confirmed');
-    // Never accept another checkout merely because search terms returned it.
-    const exact=nodes.filter(n => n && typeof n === 'object' &&
+    // Never accept a different checkout. Only if the filtered response missed
+    // the exact ID, attempt the same bounded recent-list source used in discovery.
+    let exact=nodes.filter(n => n && typeof n === 'object' &&
       (n as Record<string,unknown>).id === input.checkoutId);
-    if (exact.length !== 1) return blocked('checkout_not_confirmed');
+    if (exact.length !== 1) {
+      const fallbackResponse=await (input.fetchImpl || fetch)(
+        'https://' + input.shop + '/admin/api/2026-10/graphql.json', {
+          method:'POST',
+          headers:{'Content-Type':'application/json', 'X-Shopify-Access-Token':input.accessToken},
+          body:JSON.stringify({query:BOUNDED_QUERY,variables:{checkoutId:input.checkoutId}}),
+          signal:AbortSignal.timeout(8000),
+        },
+      );
+      if (!fallbackResponse.ok) return blocked('shopify_status_unavailable');
+      const fallbackPayload:unknown=await fallbackResponse.json();
+      if (!fallbackPayload || typeof fallbackPayload !== 'object' ||
+          Array.isArray(fallbackPayload)) return blocked('shopify_query_unavailable');
+      const fallbackRoot=fallbackPayload as Record<string,unknown>;
+      if (Array.isArray(fallbackRoot.errors) && fallbackRoot.errors.length)
+        return blocked('shopify_query_unavailable');
+      data=fallbackRoot.data as Record<string,unknown> | undefined;
+      connection=data?.abandonedCheckouts as Record<string,unknown> | undefined;
+      nodes=connection?.nodes;
+      if (!Array.isArray(nodes) || nodes.length > 25)
+        return blocked('checkout_not_confirmed');
+      exact=nodes.filter(n => n && typeof n === 'object' &&
+        (n as Record<string,unknown>).id === input.checkoutId);
+      if (exact.length !== 1) return blocked('checkout_not_confirmed');
+    }
     const row=exact[0] as Record<string,unknown>;
     if (!Object.prototype.hasOwnProperty.call(row,'completedAt') ||
         !(row.completedAt === null ||
