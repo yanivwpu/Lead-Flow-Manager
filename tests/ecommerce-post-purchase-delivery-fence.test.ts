@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {PgDialect} from 'drizzle-orm/pg-core';
 import {postPurchaseDeliveryReadinessQuery,claimPostPurchaseDeliveryQuery,enqueuePostPurchaseDeliveryQuery,
   recordPostPurchaseAttemptQuery,settlePostPurchaseAttemptQuery,
-  suppressPendingPostPurchaseQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
+  suppressPendingPostPurchaseQuery,reconcilePostPurchaseReceiptQuery} from '../server/ecommerce/postPurchaseDeliveryReadiness';
 
 const dialect=new PgDialect();
 const claim='123e4567-e89b-42d3-a456-426614174000';
@@ -58,4 +58,17 @@ test('enqueue uses existing purpose-specific grant and active installation only'
    'consent.revoked_at IS NULL','i.state=\'preview_ready\'','inst.is_active IS TRUE',"consent.granted_at>NOW()-INTERVAL '365 days'", 'c.whatsapp_id', 'lower(t.category)=CASE',
    'ON CONFLICT (intent_id) DO NOTHING']) assert.ok(q.sql.includes(fragment),fragment);
  assert.throws(()=>enqueuePostPurchaseDeliveryQuery('owner-1','pilot.myshopify.com','install-1','0'));
+});
+
+test('signed-only receipt primitive scopes account and only advances terminal provider state',()=>{
+ const q=show(reconcilePostPurchaseReceiptQuery({
+   accountId:'owner-1',providerMessageId:'wamid.test',status:'delivered'
+ }));
+ for(const x of ["state='accepted'","provider_message_id=","meta_delivery_status='sent'",
+   "meta_delivery_status='delivered'"]) assert.ok(q.sql.includes(x),x);
+ assert.equal(q.params.includes('owner-1'),true);
+ assert.equal(q.params.includes('wamid.test'),true);
+ assert.throws(()=>reconcilePostPurchaseReceiptQuery({
+   accountId:'',providerMessageId:'wamid.test',status:'sent'
+ }));
 });
