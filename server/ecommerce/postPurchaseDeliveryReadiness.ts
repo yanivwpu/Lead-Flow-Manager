@@ -19,6 +19,8 @@ export function claimPostPurchaseDeliveryQuery(accountId:string,shop:string,inst
       WHERE o.account_id=${accountId} AND o.shop=${shop}
         AND o.installation_id=${installationId} AND o.state='pending'
         AND i.state='preview_ready' AND i.due_at<=NOW()
+      AND c.phone IS NOT NULL AND c.whatsapp_id IS NOT NULL
+      AND c.phone='+' || c.whatsapp_id
       ORDER BY o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED
     )
     UPDATE ecommerce_post_purchase_outbox o
@@ -95,9 +97,12 @@ export function enqueuePostPurchaseDeliveryQuery(accountId:string,shop:string,in
       AND consent.purpose=i.journey AND consent.channel='whatsapp'
       AND consent.evidence_source='verified_whatsapp_explicit_opt_in'
       AND consent.granted_at IS NOT NULL AND consent.granted_at<=NOW()
+      AND consent.granted_at>NOW()-INTERVAL '365 days'
       AND consent.revoked_at IS NULL
     JOIN message_templates t ON t.id=i.template_id AND t.user_id=i.account_id
       AND lower(t.status)='approved'
+      AND lower(t.category)=CASE WHEN i.journey IN
+        ('orderConfirmation','fulfillmentUpdate','cancellation') THEN 'utility' ELSE 'marketing' END
     JOIN integrations inst ON inst.id=i.installation_id
       AND inst.user_id=i.account_id AND inst.type='shopify' AND inst.is_active IS TRUE
     WHERE i.id=CAST(${intentId} AS BIGINT) AND i.account_id=${accountId}
