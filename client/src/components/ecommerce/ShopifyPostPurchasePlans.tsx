@@ -97,7 +97,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
     template.status?.toLowerCase() === "approved" &&
     template.category?.toUpperCase() === JOURNEY_POLICY[journey].category &&
     template.bodyText && template.bodyText.length <= 4096 &&
-    !/\\{\\{(?!1\\}\\})/.test(template.bodyText) &&
+    !/\{\{(?!1\}\})/.test(template.bodyText) &&
     (!template.templateType || template.templateType.toLowerCase() === "text") &&
     (!template.headerType || template.headerType.toLowerCase() === "none") &&
     (!template.buttons || (Array.isArray(template.buttons) && template.buttons.length === 0)) &&
