@@ -117,7 +117,7 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       postPurchasePlans: readPostPurchasePlans(cfg),
       postPurchaseTemplates: readPostPurchaseTemplateBindings(cfg),
       postPurchaseSchemaReady,
-      postPurchaseReadiness: { activationEligible: deliveryActivation.canActivate, reason: deliveryActivation.blockers[0]??"merchant_activation_required", messagingEnabled: false },
+      postPurchaseReadiness: { activationEligible: deliveryActivation.canActivate, reason: deliveryActivation.blockers[0]??"merchant_activation_required", messagingEnabled: deliveryActivation.deliveryEnabled },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {

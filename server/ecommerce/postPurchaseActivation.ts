@@ -18,6 +18,7 @@ export function postPurchaseActivationReadiness(env:Record<string,string|undefin
   const operatorReady=postPurchaseOperatorReady(env,accountId);
   return {canActivate:operatorReady&&schemaReady&&configured,
     merchantEnabled:config.ecommercePostPurchaseDeliveryEnabled===true,
+    deliveryEnabled:operatorReady&&schemaReady&&configured&&config.ecommercePostPurchaseDeliveryEnabled===true,
     blockers:[...(!operatorReady?['operator_release_required']:[]),...(!schemaReady?['schema_required']:[]),
       ...(!configured?['journeys_and_templates_required']:[])],
   };

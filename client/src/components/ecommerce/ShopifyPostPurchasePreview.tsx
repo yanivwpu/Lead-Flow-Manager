@@ -36,6 +36,7 @@ type PostPurchaseStatus = {
 
 const copy = {
   en: {
+    activeIntro: "Review Shopify events and manage enabled customer journeys.", activeNotice: "Journey delivery is enabled. Saving a draft does not grant consent or change Shopify orders.", activeSchema: "Delivery tables ready; journey delivery is enabled.",
     title: "Post-purchase journeys", intro: "Review Shopify events and prepare a journey draft. Nothing sends to customers.",
     notAvailable: "Post-purchase previews are not available for this workspace yet.",
     disconnected: "Connect Shopify to see post-purchase events.",
@@ -49,9 +50,10 @@ const copy = {
     notice: "Preview only. Saving a draft never enables order messages, Shopify operations, or WhatsApp sends.",
     saveError: "Couldn't save draft. Refresh and retry.",
     paused: "Event recording is paused; historical counts may still appear.",
-    schemaMissing: "Setup incomplete: post-purchase delivery tables are not installed. All sending is off.", schemaReady: "Delivery tables ready; sending remains off.", schemaUnknown: "Could not verify delivery database setup. Sending remains off."
+    schemaMissing: "Setup incomplete: post-purchase delivery tables are not installed. All sending is off.", schemaReady: "Delivery tables ready; sending remains off.", schemaUnknown: "Could not verify delivery database setup. Check delivery status before activation."
   },
   es: {
+    activeIntro: "Consulta eventos de Shopify y administra los recorridos activos.", activeNotice: "El envío está activado. Guardar borradores no concede consentimiento ni modifica pedidos de Shopify.", activeSchema: "Tablas de entrega listas; los recorridos están activados.",
     title: "Recorridos poscompra", intro: "Consulta eventos de Shopify y prepara borradores. No se envían mensajes a clientes.",
     notAvailable: "La vista previa poscompra aún no está disponible en este espacio.",
     disconnected: "Conecta Shopify para ver los eventos poscompra.",
@@ -65,9 +67,10 @@ const copy = {
     notice: "Solo vista previa. Guardar borradores no activa mensajes, operaciones de Shopify ni envíos de WhatsApp.",
     saveError: "No se pudo guardar. Actualiza y reintenta.",
     paused: "El registro de eventos está pausado; pueden aparecer cifras anteriores.",
-    schemaMissing: "Configuración incompleta: faltan las tablas de entrega poscompra. No hay envíos.",schemaReady: "Tablas de entrega listas; los envíos siguen desactivados.",schemaUnknown: "No se pudo verificar la base de datos de entrega. Los envíos siguen desactivados."
+    schemaMissing: "Configuración incompleta: faltan las tablas de entrega poscompra. No hay envíos.",schemaReady: "Tablas de entrega listas; los envíos siguen desactivados.",schemaUnknown: "No se pudo verificar la base de datos de entrega. Revisa el estado antes de activar."
   },
   he: {
+    activeIntro: "סקירת אירועי Shopify וניהול מסעות לקוח פעילים.", activeNotice: "שליחת המסעות פעילה. שמירת טיוטה אינה מעניקה הסכמה ואינה משנה הזמנות Shopify.", activeSchema: "טבלאות המשלוח מוכנות; שליחת המסעות פעילה.",
     title: "מסעות לאחר רכישה", intro: "סקירת אירועי Shopify והכנת טיוטות. לא נשלחות הודעות ללקוחות.",
     notAvailable: "תצוגת מסעות לאחר רכישה אינה זמינה כרגע בסביבת עבודה זו.",
     disconnected: "יש לחבר Shopify להצגת אירועי רכישה.",
@@ -81,7 +84,7 @@ const copy = {
     notice: "תצוגה בלבד. שמירת טיוטה אינה מפעילה הודעות, פעולות Shopify או שליחת WhatsApp.",
     saveError: "לא ניתן לשמור. רענן ונסה שוב.",
     paused: "רישום האירועים מושהה; ייתכן שיוצגו נתונים קודמים.",
-    schemaMissing: "ההגדרה אינה מלאה: טבלאות שליחת הודעות טרם הותקנו. השליחה מושבתת.",schemaReady: "טבלאות המשלוח מוכנות; השליחה עדיין מושבתת.",schemaUnknown: "לא ניתן לאמת את מוכנות מסד הנתונים. השליחה מושבתת."
+    schemaMissing: "ההגדרה אינה מלאה: טבלאות שליחת הודעות טרם הותקנו. השליחה מושבתת.",schemaReady: "טבלאות המשלוח מוכנות; השליחה עדיין מושבתת.",schemaUnknown: "לא ניתן לאמת את מוכנות מסד הנתונים. יש לבדוק את מצב השליחה לפני הפעלה."
   }
 } as const;
 
@@ -132,6 +135,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
       <button type="button" onClick={() => void refetch()} className="rounded-lg border px-3 py-1.5 text-sm text-blue-700">{t.retry}</button>
     </div>;
 
+  const deliveryEnabled=data.deliveryActivation?.deliveryEnabled===true;
   const rows: Array<{ title: string; count: number; journey?: DraftJourney }> = [
     { title: t.order, count: data.journeys?.orderSupport ?? 0 },
     { title: t.fulfillment, count: data.journeys?.fulfillmentSupport ?? 0, journey: "fulfillmentSupport" },
@@ -140,8 +144,8 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
   return <section data-testid="shopify-post-purchase-preview" dir={dir} lang={locale} className="space-y-4">
     <div className="rounded-xl border border-blue-100 bg-white p-4 sm:p-5">
       <h3 className="font-semibold text-slate-900">{t.title}</h3>
-      <p className="mt-1 text-sm text-slate-600">{t.intro}</p>
-      <p data-testid="post-purchase-schema-readiness" role="status" className="mt-2 text-xs text-slate-600">{data.postPurchaseSchemaReady === true ? t.schemaReady : data.postPurchaseSchemaReady === false ? t.schemaMissing : t.schemaUnknown}</p>
+      <p className="mt-1 text-sm text-slate-600">{deliveryEnabled?t.activeIntro:t.intro}</p>
+      <p data-testid="post-purchase-schema-readiness" role="status" className="mt-2 text-xs text-slate-600">{data.postPurchaseSchemaReady === true ? (deliveryEnabled?t.activeSchema:t.schemaReady) : data.postPurchaseSchemaReady === false ? t.schemaMissing : t.schemaUnknown}</p>
       {data.mode === "paused" && <p className="mt-2 text-xs text-amber-800">{t.paused}</p>}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {rows.map(({ title, count, journey }) => {
@@ -177,6 +181,6 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
     </div>
     <ShopifyPostPurchasePlans key={user.id} plans={data.postPurchasePlans} bindings={data.postPurchaseTemplates} activation={data.deliveryActivation} locale={locale}
       onSaved={() => client.invalidateQueries({ queryKey })}/>
-    <p role="note" className="text-xs text-slate-600">{t.notice}</p>
+    <p role="note" className="text-xs text-slate-600">{deliveryEnabled?t.activeNotice:t.notice}</p>
   </section>;
 }

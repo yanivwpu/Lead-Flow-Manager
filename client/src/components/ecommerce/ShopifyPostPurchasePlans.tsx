@@ -7,14 +7,15 @@ import { JOURNEY_POLICY, POST_PURCHASE_JOURNEYS, readPostPurchasePlans, type Pos
 type MessageTemplate = { id: string; name: string; language: string | null; status: string; category: string; twilioSid: string; templateType: string | null; headerType: string | null; bodyText: string | null; buttons: unknown; carouselCards: unknown };
 type TemplateBindings = Partial<Record<PostPurchaseJourney, string>>;
 
-export type PostPurchaseActivationState={canActivate:boolean;merchantEnabled:boolean;blockers:string[]};
+export type PostPurchaseActivationState={canActivate:boolean;merchantEnabled:boolean;deliveryEnabled?:boolean;blockers:string[]};
 
 const copy = {
   en: {
+    sendingOff: "Automatic sending is disabled.", sendingOn: "Journey delivery is enabled for eligible customers with consent.",
     activate: "Enable journeys", pauseDelivery: "Pause journeys", activationSaved: "Journey preference saved",
     title: "Choose customer journeys", delay: "Delay (minutes)", choose: "Include in plan", save: "Save plan",
     saved: "Plan saved", error: "Could not save. Refresh and retry.", preview: "Message example",
-    notice: "Examples only; these are not approved templates. Automatic sending is disabled.",
+    notice: "Examples only; these are not approved templates.",
     readiness: "Before activation: verified Shopify customer and WhatsApp identity, separate consent for each journey, no STOP or deletion, current order status, approved matching templates and duplicate protection.",
     blocked: "Activation unavailable: setup and operator release are required.",
     pause: "Uncheck a journey and save to pause its plan.", utility: "Approved utility template required",
@@ -24,10 +25,11 @@ const copy = {
     examples: ["We received your order.", "Your order has been fulfilled.", "Your order was cancelled.", "Would you like to review your purchase?", "Ready for another purchase?", "We would love to welcome you back."],
   },
   es: {
+    sendingOff: "El envío automático está desactivado.", sendingOn: "El envío está activado para clientes elegibles con consentimiento.",
     activate: "Activar recorridos", pauseDelivery: "Pausar recorridos", activationSaved: "Preferencia guardada",
     title: "Elige recorridos para clientes", delay: "Espera (minutos)", choose: "Incluir en el plan", save: "Guardar plan",
     saved: "Plan guardado", error: "No se pudo guardar. Actualiza y reintenta.", preview: "Ejemplo de mensaje",
-    notice: "Solo ejemplos; no son plantillas aprobadas. El envío automático está desactivado.",
+    notice: "Solo ejemplos; no son plantillas aprobadas.",
     readiness: "Antes de activar: identidad Shopify y WhatsApp verificada, consentimiento por recorrido, sin STOP ni eliminación, estado actual del pedido, plantillas aprobadas y protección contra duplicados.",
     blocked: "Activación no disponible: se requieren configuración y autorización del operador.",
     pause: "Desmarca un recorrido y guarda para pausar su plan.", utility: "Requiere plantilla de utilidad aprobada",
@@ -37,10 +39,11 @@ const copy = {
     examples: ["Recibimos tu pedido.", "Tu pedido ha sido preparado.", "Tu pedido fue cancelado.", "¿Quieres dejar una reseña de tu compra?", "¿Listo para otra compra?", "Nos encantaría volver a recibirte."],
   },
   he: {
+    sendingOff: "שליחה אוטומטית מושבתת.", sendingOn: "שליחת המסעות פעילה ללקוחות זכאים שנתנו הסכמה.",
     activate: "הפעלת מסעות", pauseDelivery: "השהיית מסעות", activationSaved: "ההעדפה נשמרה",
     title: "בחירת מסעות לקוח", delay: "השהיה (דקות)", choose: "כלול בתוכנית", save: "שמירת תוכנית",
     saved: "התוכנית נשמרה", error: "השמירה נכשלה. יש לרענן ולנסות שוב.", preview: "דוגמת הודעה",
-    notice: "דוגמאות בלבד; אלו אינן תבניות מאושרות. שליחה אוטומטית מושבתת.",
+    notice: "דוגמאות בלבד; אלו אינן תבניות מאושרות.",
     readiness: "לפני הפעלה: אימות זהות לקוח Shopify ו־WhatsApp, הסכמה נפרדת לכל מסע, ללא STOP או מחיקה, מצב הזמנה עדכני, תבניות מאושרות ומניעת כפילויות.",
     blocked: "הפעלה אינה זמינה: נדרשים השלמת ההגדרה ואישור מפעיל.",
     pause: "להשהיית תוכנית מסע, יש לבטל את הסימון ולשמור.", utility: "נדרשת תבנית שירות מאושרת",
@@ -101,6 +104,7 @@ export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved, act
       onClick={()=>void updateActivation()}>{activation?.merchantEnabled?t.pauseDelivery:t.activate}</button>
     {activationState==='saved'&&<p role="status" className="text-xs">{t.activationSaved}</p>}
     {activationState==='error'&&<p role="alert" className="text-xs text-red-700">{t.error}</p>}
+    <p role="status" data-testid="post-purchase-delivery-status" className="text-sm text-slate-600">{activation?.deliveryEnabled===true?t.sendingOn:t.sendingOff}</p>
     <p className="text-xs text-slate-600">{t.notice}</p>
   </section>;
 }

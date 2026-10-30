@@ -17,7 +17,9 @@ const state = {
     ok: true, mode: "recording",
     journeys: { orderSupport: 2, fulfillmentSupport: 1, orderCancelled: 0 },
     workflowDrafts: { orderSupport: true, fulfillmentSupport: true, orderCancelled: false, abandonedCart: false },
-    messagingEnabled: false
+    messagingEnabled: false,
+    postPurchaseSchemaReady:undefined as boolean|undefined,
+    deliveryActivation:undefined as import("../client/src/components/ecommerce/ShopifyPostPurchasePlans").PostPurchaseActivationState|undefined
   }
 };
 (globalThis as any).__postPurchaseRender = state;
@@ -130,4 +132,24 @@ test('six editable journey plans expose localized delays, examples and blocked a
     assert.ok(section.querySelector('[data-testid="post-purchase-activation"]')?.hasAttribute('disabled'));
   }
   state.locale='en';
+});
+
+test('actual enabled and paused delivery state controls all localized notices and pause action',()=>{
+  state.available=true;state.user={id:'fixture'};state.aligned=true;state.error=false;state.loading=false;
+  state.response.postPurchaseSchemaReady=true;
+  for(const [locale,label,off] of [
+    ['en','Journey delivery is enabled','Automatic sending is disabled'],
+    ['es','El envío está activado','El envío automático está desactivado'],
+    ['he','שליחת המסעות פעילה','שליחה אוטומטית מושבתת'],
+  ]){
+    state.locale=locale;
+    state.response.deliveryActivation={canActivate:true,merchantEnabled:true,deliveryEnabled:true,blockers:[]};
+    let page=render();assert.ok(page.includes(label));assert.ok(!page.includes(off));
+    if(locale==='en'){assert.ok(!page.includes('Nothing sends to customers'));assert.ok(!page.includes('sending remains off'));}
+    const {document}=parseHTML(page);
+    assert.ok(!document.querySelector('[data-testid="post-purchase-activation"]')?.hasAttribute('disabled'));
+    state.response.deliveryActivation={canActivate:false,merchantEnabled:true,deliveryEnabled:false,blockers:['operator_release_required']};
+    page=render();assert.ok(page.includes(off));assert.ok(!page.includes(label));
+  }
+  state.locale='en';state.response.deliveryActivation=undefined;state.response.postPurchaseSchemaReady=undefined;
 });

@@ -27,7 +27,7 @@ test('no scheduling without a single test-tenant allowlist and every independent
   {ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:'*'},
   {ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:undefined},
   {ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:'gid://shopify/AbandonedCheckout/999; DROP TABLE'},
-  {ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:'gid://shopify/Order/123'}, 
+  {ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:'gid://shopify/Order/123'},
   {ECOMMERCE_RECOVERY_WORKER_ENABLED:'false'},
   {ECOMMERCE_RECOVERY_SEND_ENABLED:undefined},
   {ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:'false'},
