@@ -1,5 +1,6 @@
 import { SeoBacklinksPanel } from "./SeoBacklinksPanel";
 import { SeoSocialContentPanel } from "./SeoSocialContentPanel";
+import { SeoDeliveryHealthPanel } from "./SeoDeliveryHealthPanel";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw, Search } from "lucide-react";
@@ -66,6 +67,7 @@ export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
         {visibleOpportunities.map((o,i)=><div className="border-t py-2.5" key={`${o.type}-${o.query}-${i}`}><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{o.type.replaceAll("_"," ")}</Badge><strong className="min-w-0 flex-1 truncate text-sm">{o.query}</strong><span className="whitespace-nowrap text-xs text-gray-600">Priority {o.priority}</span></div>{o.page && <p className="mt-1 truncate text-xs text-gray-500">{o.page}</p>}<p className="mt-1 text-xs text-gray-600">{Object.entries(o.evidence).map(([k,v])=>`${k}: ${typeof v === "number" ? Number(v.toFixed(3)) : v}`).join(" · ")}</p></div>)}
       </div>
     </section>
+    <SeoDeliveryHealthPanel />
     <SeoSocialContentPanel />
     <SeoBacklinksPanel />
     <SeoActionsPanel configured={d.config.configured} />
