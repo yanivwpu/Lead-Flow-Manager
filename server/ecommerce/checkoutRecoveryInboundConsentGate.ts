@@ -21,9 +21,9 @@ export function recoveryConsentCaptureEnabled(env:{
  * Generic YES, Shopify checkout marketing setting, and interactive buttons do
  * NOT count. A clear merchant-specific notice must be displayed separately.
  */
-export function classifyRecoveryConsentInbound(
+export function verifiedCommerceConsentText(
  event:VerifiedInboundConsentCandidate,now=Date.now()
-):{action:RecoveryConsentAction;eventAt:Date}|null {
+):{normalized:string;eventAt:Date}|null {
   if(!event.signatureValid||!event.hasRawBody||event.type!=='text' ||
     !/^[1-9][0-9]{5,24}$/.test(event.phoneNumberId) ||
     !/^[1-9][0-9]{7,14}$/.test(event.from) ||
@@ -35,8 +35,14 @@ export function classifyRecoveryConsentInbound(
     return null;
   if(typeof event.text!=='string'||event.text.length>128)return null;
   const normalized=event.text.trim().replace(/\s+/g,' ').toUpperCase();
+  return {normalized,eventAt:new Date(when)};
+}
+export function classifyRecoveryConsentInbound(event:VerifiedInboundConsentCandidate,now=Date.now()):{action:RecoveryConsentAction;eventAt:Date}|null {
+  const verified=verifiedCommerceConsentText(event,now);
+  if(!verified)return null;
+  const {normalized,eventAt}=verified;
   const action:RecoveryConsentAction|null=
     normalized==='YES WHATSAPP CHECKOUT REMINDERS'?'grant':
     ['STOP','STOP CHECKOUT REMINDERS','UNSUBSCRIBE'].includes(normalized)?'revoke':null;
-  return action?{action,eventAt:new Date(when)}:null;
+  return action?{action,eventAt}:null;
 }

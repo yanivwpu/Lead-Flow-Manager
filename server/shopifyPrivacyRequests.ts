@@ -1,3 +1,5 @@
+import {postPurchaseTablesQuery,postPurchaseTables,postPurchasePrivacyQueries} from "./ecommerce/postPurchaseQueries";
+import {recoveryPhoneDigest} from "./ecommerce/checkoutRecoveryMessagingEligibility";
 import { createHmac, randomBytes, createCipheriv } from "node:crypto";
 import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryCustomerErasureQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -112,6 +114,17 @@ export async function handleShopifyCustomerPrivacy(kind: "customer_erasure" | "a
     for(const statement of recoveryCustomerErasureQueries({
       accountId:user.id,shop,contactIds:ids,shopifyCustomerIds:exactShopifyIds
     },parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+
+    const ppTables=await tx.execute(postPurchaseTablesQuery);
+    const recipientDigests:string[]=[];
+    for(const c of found)try{if(c.phone)recipientDigests.push(recoveryPhoneDigest(process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'',c.phone));}catch{/* matching customer/contact identifiers still erase their evidence */}
+    const ppCustomerIds=[...exactShopifyIds,...found.flatMap(c=>{
+      const custom=c.customFields as Record<string,unknown>|null,source=c.sourceDetails as Record<string,unknown>|null;
+      const id=custom?.shopifyCustomerId??source?.shopifyCustomerId;
+      return typeof id==='string'&&/^[1-9][0-9]{0,19}$/.test(id)?[id]:[];
+    })];
+    for(const statement of postPurchasePrivacyQueries({mode:'customer',accountId:user.id,shop,contactIds:ids,
+      customerIds:ppCustomerIds,recipientDigests},postPurchaseTables(ppTables.rows[0])))await tx.execute(statement);
 
     // Purge internal order-support tasks for redacted contacts even when the
     // CRM contact is retained and anonymized. The migration is optional.

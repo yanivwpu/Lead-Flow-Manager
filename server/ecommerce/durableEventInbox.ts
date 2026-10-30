@@ -1,7 +1,8 @@
+import { sql } from "drizzle-orm";
 /**
  * Durable, payload-free Shopify event inbox. This service never sends messages.
  * Call only AFTER authenticating Shopify HMAC, resolving a unique active tenant
- * installation, and classifying the event. Not wired into production routes.
+ * installation, and classifying the event. Preparation remains gated/off by default.
  */
 import type { CommerceEventDecision } from './eventIntake';
 
@@ -18,6 +19,20 @@ export async function recordCommerceEvent(
   event:CommerceEventDecision,
 ):Promise<EventInboxResult> {
   if(event.status!=='candidate') return {status:'ignored'};
+  const {account,shop,topic,delivery,expectedJourney}=validatedInboxIdentity(event);
+  const row=await db.query(
+    `INSERT INTO ecommerce_growth_event_inbox
+       (account_id,shop,topic,delivery_id,journey,state)
+     VALUES ($1,$2,$3,$4,$5,'pending')
+     ON CONFLICT (account_id,shop,topic,delivery_id) DO NOTHING
+     RETURNING id::text AS id, state`,
+     [account,shop,topic,delivery,expectedJourney]);
+  if(row.rows.length===0) return {status:'duplicate'};
+  if(row.rows.length!==1 || typeof row.rows[0].id!=='string') throw Error('invalid_inbox_insert_result');
+  return {status:'inserted',id:row.rows[0].id};
+}
+
+function validatedInboxIdentity(event:Extract<CommerceEventDecision,{status:"candidate"}>){
   const tuple: unknown=JSON.parse(event.dedupeKey);
   if(!Array.isArray(tuple) || tuple.length!==4 ||
       tuple.some(x=>typeof x!=='string' || !x.trim()))
@@ -33,14 +48,13 @@ export async function recordCommerceEvent(
     'orders/cancelled':'order_cancelled',
   }[topic]!;
   if(event.journey!==expectedJourney) throw Error('invalid_delivery_journey');
-  const row=await db.query(
-    `INSERT INTO ecommerce_growth_event_inbox
-       (account_id,shop,topic,delivery_id,journey,state)
-     VALUES ($1,$2,$3,$4,$5,'pending')
-     ON CONFLICT (account_id,shop,topic,delivery_id) DO NOTHING
-     RETURNING id::text AS id, state`,
-     [account,shop,topic,delivery,expectedJourney]);
-  if(row.rows.length===0) return {status:'duplicate'};
-  if(row.rows.length!==1 || typeof row.rows[0].id!=='string') throw Error('invalid_inbox_insert_result');
-  return {status:'inserted',id:row.rows[0].id};
+  return {account,shop,topic,delivery,expectedJourney};
+}
+
+/** Existing inbox identity validation, shared by the no-send intent transaction. */
+export function commerceEventInboxUpsertQuery(event:Extract<CommerceEventDecision,{status:"candidate"}>){
+  const {account,shop,topic,delivery,expectedJourney}=validatedInboxIdentity(event);
+  return sql`INSERT INTO ecommerce_growth_event_inbox(account_id,shop,topic,delivery_id,journey,state)
+    VALUES (${account},${shop},${topic},${delivery},${expectedJourney},'pending')
+    ON CONFLICT(account_id,shop,topic,delivery_id) DO UPDATE SET delivery_id=EXCLUDED.delivery_id RETURNING id`;
 }

@@ -3346,6 +3346,10 @@ export async function registerRoutes(
             },
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
           });
+          const { postPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
+          await postPurchasePreparation.captureConsent(owner.id,metaInboxContact?.id??null,{
+            ...incomingMessage,text:incomingMessage.text,signatureValid,hasRawBody:Buffer.isBuffer(rawBodyBuffer),
+          });
         }
       }
       if (signatureValid && rawBodyBuffer && statusUpdate) {

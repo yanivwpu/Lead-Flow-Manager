@@ -1,3 +1,4 @@
+import {postPurchaseTablesQuery,postPurchaseTables,postPurchasePrivacyQueries} from "./ecommerce/postPurchaseQueries";
 import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { isEarlyShopifyUninstall } from "@shared/shopifyOnboarding";
 import { checkoutRecoveryPrivacyTablesQuery,parseRecoveryTableAvailability,recoveryUninstallQueries } from "./ecommerce/checkoutRecoveryPrivacyQueries";
@@ -123,6 +124,8 @@ export async function uninstallShopifyStore(rawShop: string): Promise<void> {
     const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
     for(const statement of recoveryUninstallQueries(user.id,shop,
       parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+    const ppTables=await tx.execute(postPurchaseTablesQuery);
+    for(const statement of postPurchasePrivacyQueries({mode:'uninstall',accountId:user.id,shop},postPurchaseTables(ppTables.rows[0])))await tx.execute(statement);
     await tx.update(users).set({
       shopifyAccessToken: null, shopifyChargeId: null, shopifySubscriptionStatus: "uninstalled",
       shopifyAIBrainEnabled: false, billingPlan: "free", subscriptionPlan: "free", subscriptionStatus: "canceled",

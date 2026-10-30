@@ -607,6 +607,10 @@ app.use((req, res, next) => {
 
   // Independent staging-only gates remain off by default. Neither bootstrap
   // can activate production merchants or bypass the outbound approval flags.
+  if (process.env.ECOMMERCE_POST_PURCHASE_PREP_ENABLED === 'true') {
+    const { startPostPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
+    startPostPurchasePreparation();
+  }
   if (process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED === 'true') {
     const { startCheckoutRecoveryAutoPreparation } = await import("./ecommerce/checkoutRecoveryAutoPreparationRuntime");
     startCheckoutRecoveryAutoPreparation();

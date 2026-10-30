@@ -1,3 +1,4 @@
+import {postPurchaseTablesQuery,postPurchaseTables,postPurchasePrivacyQueries} from "./ecommerce/postPurchaseQueries";
 import { cleanupShopifyCatalog } from "./salesCatalog/shopify/webhooks";
 import { enqueuePrivacyRequest } from "./shopifyPrivacyRequests";
 import { assignmentPrivacyTablesQuery, assignmentPrivacyQueries } from "./shopifyAssignmentPrivacy";
@@ -28,6 +29,8 @@ export async function redactShopifyStore(rawShop: string, dedupeKey?: string) {
     const recoveryTables=await tx.execute(checkoutRecoveryPrivacyTablesQuery);
     for(const statement of recoveryStoreErasureQueries(shop,
       parseRecoveryTableAvailability(recoveryTables.rows[0]))) await tx.execute(statement);
+    const ppTables=await tx.execute(postPurchaseTablesQuery);
+    for(const statement of postPurchasePrivacyQueries({mode:'store',shop},postPurchaseTables(ppTables.rows[0])))await tx.execute(statement);
     // Lock active mappings so capture/support updates and fenced ingestion cannot recreate erased data.
     const merchantRows = await tx.select().from(users).where(or(eq(users.shopifyShop, shop), eq(users.email, shopifySyntheticMerchantEmail(shop)!))).for("update");
     const integrationRows = await tx.select().from(integrations).where(and(eq(integrations.type, "shopify"),

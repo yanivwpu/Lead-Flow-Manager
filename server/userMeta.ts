@@ -855,7 +855,7 @@ export async function markMessageAsRead(
 }
 
 export async function getMetaMessageTemplates(
-  userId: string
+  userId: string, options?: {signal?: AbortSignal}
 ): Promise<any[]> {
   const accessToken = await getMetaAccessToken(userId);
   const user = await storage.getUserForSession(userId);
@@ -865,7 +865,8 @@ export async function getMetaMessageTemplates(
   }
 
   const response = await fetch(
-    `${getMetaGraphApiBase()}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`
+    `${getMetaGraphApiBase()}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`,
+    { signal: options?.signal }
   );
 
   if (!response.ok) {
