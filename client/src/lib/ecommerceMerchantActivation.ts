@@ -9,6 +9,8 @@ export type EcommerceMerchantActivationStatus = {
   planEligible: boolean;
   cartExecutionEnabled: false;
   outboundMessagingEnabled: false;
+  /** Read-only infrastructure schema check. Not permission to send. */
+  recoverySchemaReady?: boolean | null;
 };
 
 const endpoint = "/api/shopify/merchant-engine/status";
