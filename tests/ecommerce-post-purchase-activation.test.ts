@@ -14,6 +14,9 @@ test('activation requires independent release, exact owner, schema and configure
   assert.equal(postPurchaseActivationReadiness(env,account,config,true).merchantEnabled,false);
   const active={...config,ecommercePostPurchaseDeliveryEnabled:true};
   assert.equal(postPurchaseActivationReadiness(env,account,active,true).deliveryEnabled,true);
+  const partial={...active,ecommercePostPurchaseTemplates:{}};
+  assert.equal(postPurchaseActivationReadiness(env,account,partial,true).canActivate,false);
+  assert.equal(postPurchaseActivationReadiness(env,account,partial,true).deliveryEnabled,true);
   assert.equal(postPurchaseActivationReadiness({...env,ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'false'},account,active,true).deliveryEnabled,false);
   for(const key of Object.keys(env))assert.equal(postPurchaseActivationReadiness({...env,[key]:undefined},account,config,true).canActivate,false,key);
   assert.equal(postPurchaseActivationReadiness({...env,RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com'},account,config,true).canActivate,false);

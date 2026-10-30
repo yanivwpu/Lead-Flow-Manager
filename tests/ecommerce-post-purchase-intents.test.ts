@@ -1,4 +1,4 @@
-import {savePostPurchaseActivationQuery} from '../server/ecommerce/postPurchaseActivation';
+import {postPurchaseActivationReadiness,savePostPurchaseActivationQuery} from '../server/ecommerce/postPurchaseActivation';
 import {deliveryMigrationPreflight,deliveryMigrationManifest} from '../scripts/ecommerce-delivery-migration-preflight';
 import {createPostPurchaseDelivery} from '../server/ecommerce/postPurchaseDelivery';
 import {createPostPurchaseReceipt} from '../server/ecommerce/postPurchaseReceipt';
@@ -60,7 +60,7 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
   const body=(id='1',customer='2')=>({id,admin_graphql_api_id:'gid://shopify/Order/'+id,
     customer:{id:customer,admin_graphql_api_id:'gid://shopify/Customer/'+customer},updated_at:new Date(eventAt).toISOString()});
   const candidate=(text:string,at=clock-10000)=>({signatureValid:true,hasRawBody:true,type:'text',phoneNumberId:phoneId,
-    from:phone,messageId:'wamid.fixture_'+at+'_'+text.replaceAll(' ','_'),timestamp:String(at/1000),text});
+    from:phone,messageId:'wamid.fixture_'+at+'_'+text.replaceAll(' ','_')+'+/==',timestamp:String(at/1000),text});
   async function grant(journey:typeof POST_PURCHASE_JOURNEYS[number],at=clock-10000){
     return service.captureConsent(account,'contact',candidate(POST_PURCHASE_CONSENT_PHRASES[journey],at));
   }
@@ -330,6 +330,15 @@ test('post-purchase real event → durable no-send intents, consent, fresh statu
         for(const key of Object.keys(production)){delete (env as Record<string,unknown>)[key];delete (sendEnv as Record<string,unknown>)[key];}
         Object.assign(env,restore);Object.assign(sendEnv,restoreSend);
       }
+    });
+    await t.test('partially configured plans do not hide delivery that remains enabled for qualified journeys',async()=>{
+      await seed();await grant('orderConfirmation');await webhook('orders/create','partial-plan');
+      await execute(sql`UPDATE integrations SET config=config-'ecommercePostPurchaseTemplates'||
+        '{"ecommercePostPurchaseTemplates":{"orderConfirmation":"tpl-orderConfirmation"}}'::jsonb WHERE id='install'`);
+      const cfg=(await execute(sql`SELECT config FROM integrations WHERE id='install'`)).rows[0].config as Record<string,unknown>;
+      const status=postPurchaseActivationReadiness({...sendEnv,ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY:secret},account,cfg,true);
+      assert.equal(status.canActivate,false);assert.equal(status.deliveryEnabled,true);
+      assert.equal(await worker().tick(),'accepted');
     });
     await t.test('merchant activation uses the exact installation and preserves other plans, templates and consent',async()=>{
       await seed();await grant('orderConfirmation');

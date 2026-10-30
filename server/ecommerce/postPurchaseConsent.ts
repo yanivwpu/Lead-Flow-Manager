@@ -1,6 +1,6 @@
 import {sql} from 'drizzle-orm';
 import {POST_PURCHASE_JOURNEYS,type PostPurchaseJourney} from '../../shared/postPurchase';
-import {verifiedCommerceConsentText,type VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
+import {verifiedCommerceConsentText,validRecoveryWamid,type VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
 import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
 export const POST_PURCHASE_CONSENT_PHRASES:Record<PostPurchaseJourney,string>={
   orderConfirmation:'YES WHATSAPP ORDER CONFIRMATIONS',fulfillmentUpdate:'YES WHATSAPP SHIPPING UPDATES',
@@ -16,7 +16,7 @@ export function classifyPostPurchaseConsent(candidate:VerifiedInboundConsentCand
 export type SignedPostPurchaseConsent={accountId:string;shop:string;phone:string;secret:string;at:Date;wamid:string};
 function digest(input:SignedPostPurchaseConsent){
   if(!input.accountId||!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(input.shop)||
-    !Number.isFinite(input.at.valueOf())||!/^wamid\.[A-Za-z0-9._-]{8,250}$/.test(input.wamid))throw Error('invalid_post_purchase_consent');
+    !Number.isFinite(input.at.valueOf())||!validRecoveryWamid(input.wamid))throw Error('invalid_post_purchase_consent');
   return recoveryPhoneDigest(input.secret,input.phone);
 }
 export function grantPostPurchaseConsentQuery(input:SignedPostPurchaseConsent&{journey:PostPurchaseJourney;contactId:string;customerId:string}){

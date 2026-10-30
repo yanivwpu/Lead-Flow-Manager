@@ -8,7 +8,7 @@ import {grantSignedRecoveryConsentQuery,revokeSignedRecoveryConsentQuery,
 const SECRET='H'.repeat(40),SHOP='store.myshopify.com',PHONE='+15551234567';
 const base={
  accountId:'tenant-a',shop:SHOP,phone:PHONE,secret:SECRET,
- eventAt:new Date('2026-10-20T12:00:00Z'),wamid:'wamid.HBgLMjI0MzQ1Njc4OTAA',
+ eventAt:new Date('2026-10-20T12:00:00Z'),wamid:'wamid.HBgLMjI0MzQ1Njc4OTAA+/==',
 };
 const grant={...base,contactId:'contact-a',
  shopifyCustomerId:'gid://shopify/Customer/456',whatsappId:'15551234567'};
@@ -55,7 +55,7 @@ test('native PostgreSQL: signed opt-in evidence is ordered, scoped, replay safe 
   await a.query("INSERT INTO ecommerce_checkout_recovery_outbox(intent_id,account_id,shop,checkout_gid,contact_id,template_id,state) VALUES($1,$2,$3,'gid://shopify/AbandonedCheckout/123','contact-a','tpl','pending')",[intent.rows[0].id,'tenant-a',SHOP]);
 
   const stop=await db.execute(revokeSignedRecoveryConsentQuery({
-    ...base,eventAt:new Date('2026-10-20T12:00:20Z'),wamid:'wamid.StopMessage123456'
+    ...base,eventAt:new Date('2026-10-20T12:00:20Z'),wamid:'wamid.StopMessage123456+/=='
   }));
   assert.deepEqual(stop.rows.map(r=>r.contact_id),['contact-a']);
   const stopQuery=suppressRecoveryOutboxByContactQuery({
@@ -63,13 +63,13 @@ test('native PostgreSQL: signed opt-in evidence is ordered, scoped, replay safe 
   assert.ok(stopQuery);
   if(stopQuery)assert.equal((await db.execute(stopQuery)).rows.length,1);
   assert.equal((await db.execute(revokeSignedRecoveryConsentQuery({
-    ...base,eventAt:new Date('2026-10-20T12:00:20Z'),wamid:'wamid.StopMessage123456'
+    ...base,eventAt:new Date('2026-10-20T12:00:20Z'),wamid:'wamid.StopMessage123456+/=='
   }))).rows.length,0,'STOP webhook replay does not reapply');
   const lateGrant=await db.execute(grantSignedRecoveryConsentQuery(grant));
   assert.equal(lateGrant.rows.length,0,'old YES cannot override STOP');
   const rows=await a.query("SELECT revoked_at, last_verified_wamid FROM ecommerce_whatsapp_recovery_consents WHERE account_id='tenant-a'");
   assert.ok(rows.rows[0].revoked_at);
-  assert.equal(rows.rows[0].last_verified_wamid,'wamid.StopMessage123456');
+  assert.equal(rows.rows[0].last_verified_wamid,'wamid.StopMessage123456+/==');
   assert.equal((await a.query("SELECT state FROM ecommerce_checkout_recovery_outbox")).rows[0].state,'suppressed');
 
   const reOptIn=await db.execute(grantSignedRecoveryConsentQuery({...grant,

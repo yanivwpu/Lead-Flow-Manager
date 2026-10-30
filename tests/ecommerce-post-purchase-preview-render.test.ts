@@ -148,6 +148,8 @@ test('actual enabled and paused delivery state controls all localized notices an
     if(locale==='en'){assert.ok(!page.includes('Nothing sends to customers'));assert.ok(!page.includes('sending remains off'));}
     const {document}=parseHTML(page);
     assert.ok(!document.querySelector('[data-testid="post-purchase-activation"]')?.hasAttribute('disabled'));
+    state.response.deliveryActivation={canActivate:false,merchantEnabled:true,deliveryEnabled:true,blockers:['journeys_and_templates_required']};
+    page=render();assert.ok(page.includes(label));assert.ok(!page.includes(off));
     state.response.deliveryActivation={canActivate:false,merchantEnabled:true,deliveryEnabled:false,blockers:['operator_release_required']};
     page=render();assert.ok(page.includes(off));assert.ok(!page.includes(label));
   }
