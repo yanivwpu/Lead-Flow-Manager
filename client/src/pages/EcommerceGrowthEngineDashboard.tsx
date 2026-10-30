@@ -41,7 +41,7 @@ export function EcommerceGrowthEngineDashboardContent() {
      return response.json();
    }
  });
- const hasJourneyStatus=!activation.isLoading&&!activation.isError&&!!activation.data;
+ const hasJourneyStatus=!activation.isLoading&&!activation.isError && typeof (activation.data as {outboundMessagingEnabled?:boolean}|undefined)?.outboundMessagingEnabled === "boolean";
  const journeyLabel=hasJourneyStatus ? ((activation.data as {outboundMessagingEnabled?:boolean}).outboundMessagingEnabled === true ? t.enabledStatus : t.status) : t.unknownStatus;
  const labels:{id:View;label:string;icon:typeof ShoppingBag}[]=[
   {id:"overview",label:t.overview,icon:ShoppingBag},{id:"products",label:t.products,icon:Package},{id:"orders",label:t.orders,icon:ShoppingCart},
