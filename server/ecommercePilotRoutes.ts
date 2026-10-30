@@ -104,6 +104,7 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
     const stats = result.rows[0] as { total?: number; pending?: number; order_support?: number; fulfillment_support?: number; order_cancelled?: number; last_event_at?: Date | string | null } | undefined;
     const deliverySchema=await db.execute(postPurchaseDeliveryReadinessQuery);
     const deliveryReady=deliverySchema.rows[0]?.outbox===true&&postPurchaseSchemaReady===true;
+    postPurchaseSchemaReady=postPurchaseSchemaReady===null?null:deliveryReady;
     const deliveryActivation=postPurchaseActivationReadiness(process.env,accountId,cfg,deliveryReady);
     return res.json({ ok: true,
       deliveryActivation,
@@ -116,7 +117,7 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
       postPurchasePlans: readPostPurchasePlans(cfg),
       postPurchaseTemplates: readPostPurchaseTemplateBindings(cfg),
       postPurchaseSchemaReady,
-      postPurchaseReadiness: { activationEligible: false, reason: "delivery_integration_pending", messagingEnabled: false },
+      postPurchaseReadiness: { activationEligible: deliveryActivation.canActivate, reason: deliveryActivation.blockers[0]??"merchant_activation_required", messagingEnabled: false },
       internalTasks,
       messagingEnabled: false, checkoutEnabled: false });
   } catch {
