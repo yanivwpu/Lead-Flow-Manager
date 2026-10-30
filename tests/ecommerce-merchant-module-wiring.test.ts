@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 const dashboard=readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.tsx","utf8");
 const catalog=readFileSync("client/src/components/ShopifyCatalog.tsx","utf8");
+const activation=readFileSync("server/ecommerceMerchantActivationRoutes.ts","utf8");
 
 test("merchant dashboard reuses existing authenticated catalog and shopping components, without new sending",()=>{
  assert.match(dashboard,/import \{ ShopifyCatalog \} from "@\/components\/ShopifyCatalog"/);
@@ -36,4 +37,16 @@ test("automation status distinguishes actual API readiness from merchant workspa
  assert.ok(dashboard.includes('status:"מסעות לקוח מושבתים"'));
  assert.ok(dashboard.includes('unknownStatus:"Status unavailable"'));
  assert.ok(!dashboard.includes('status:"Workspace active"'));
+});
+
+test("recovery readiness reuses the existing strict runtime schema guard without any writes or sending",()=>{
+ assert.match(activation,/import \{ recoveryRuntimeSchemaReadyQuery \} from/);
+ assert.match(activation,/await db\.execute\(recoveryRuntimeSchemaReadyQuery\(\)\)/);
+ assert.match(activation,/recoverySchemaReady = schema\.rows\[0\]\?\.ready === true/);
+ assert.match(activation,/catch \{ recoverySchemaReady = null; \}/);
+ assert.match(activation,/cartExecutionEnabled: false, outboundMessagingEnabled: false/);
+ assert.match(dashboard,/data-testid="ecommerce-recovery-readiness"/);
+ assert.match(dashboard,/activation\.data\.recoverySchemaReady === true/);
+ for(const label of ["Infrastructure ready. Customer delivery remains off.","Falta completar la configuración.","משלוח הודעות מושבת."])assert.ok(dashboard.includes(label));
+ assert.doesNotMatch(activation,/\bstartCheckoutRecoveryRuntime\b|\bsendRecoveryViaMeta\b/);
 });
