@@ -76,7 +76,7 @@ class ProductionConfig(unittest.TestCase):
         expected['app/scopes_update'] = ORIGIN + '/api/shopify/catalog-webhooks/app-scopes_update'
         self.assertEqual(found, expected)
         # Existing uninstall remains per-shop. No checkout/payment/marketing topics added.
-        self.assertEqual(len(found), 7)
+        self.assertEqual(len(found), 9)
         self.assertTrue((CATALOG - {'app/scopes_update'}).isdisjoint(found))
         self.assertNotIn('app/uninstalled', found)
 
