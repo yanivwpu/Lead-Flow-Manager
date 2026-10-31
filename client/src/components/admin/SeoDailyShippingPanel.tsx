@@ -81,7 +81,7 @@ export function SeoDailyShippingPanel() {
           {canPublish && <div className="mt-3">
             <Button size="sm" disabled={submit.isPending} onClick={() => {
               if (window.confirm("Have you reviewed the exact copy and verified all product and competitor claims? Approval requests automatic merge and production publication once every safety check passes."))
-                submit.mutate(day);
+                submit.mutate(date);
             }}>{submit.isPending ? "Submitting…" : "Approve & request publishing"}</Button>
             <p className="mt-1 text-xs text-gray-500">Requires your explicit approval. No auto-publishing of unreviewed content.</p>
           </div>}
