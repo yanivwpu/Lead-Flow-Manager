@@ -11,7 +11,7 @@ import { createShoppingSuggestion } from "../shopping/suggestion";
 import type { ShoppingSettings } from "@shared/shoppingAssistant";
 import type { aiService } from "../aiService";
 import { privateTestShoppingSettings } from "./shoppingAllowance";
-import { shoppingCopy, shoppingLocale } from "@shared/shoppingAssistant";
+import { shoppingLocale } from "@shared/shoppingAssistant";
 /**
  * Explicit product requests in private Test Chat must not fall through to a
  * merchant's unrelated site/plan knowledge when shopping is disabled or offline.
