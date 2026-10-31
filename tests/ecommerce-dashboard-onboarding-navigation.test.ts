@@ -34,7 +34,10 @@ test("Shopify connects before merchant activation, preserving explicit user inte
   assert.ok(activation.includes('"/api/shopify/merchant-engine/activate"'));
   assert.ok(!onboarding.includes("ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED"));
   assert.ok(!onboarding.includes("sendRecoveryViaMeta"));
-  assert.ok(onboarding.includes("Installing this engine does not enable automatic WhatsApp messages"));
+  assert.ok(onboarding.includes("After activating your engine, choose and configure the customer journeys you want"));
+  assert.ok(onboarding.includes("approved templates and delivery approval"));
+  assert.ok(onboarding.includes('mode === "setup" && <p'));
+  assert.ok(onboarding.includes('data-testid="ecommerce-setup-delivery-guidance"'));
   for (const lang of ["en:", "es:", "he:"]) assert.ok(onboarding.includes(lang));
 });
 
@@ -71,4 +74,16 @@ test("the sales pitch leads with abandoned cart recovery and accurately represen
     assert.ok(engineDetails.includes(localized), localized);
   assert.ok(!engineDetails.includes("sendRecoveryViaMeta"));
   assert.ok(!engineDetails.includes("activate.mutate"));
+});
+
+
+test("details page explains how to enable journeys without repeating a negative warning", () => {
+  assert.ok(engineDetails.includes('data-testid="ecommerce-details-activation-explainer"'));
+  assert.ok(engineDetails.includes("connect Shopify, activate your engine, and customize journeys"));
+  assert.ok(engineDetails.includes("WhatsApp follow-ups can be enabled after"));
+  assert.ok(engineDetails.includes("conecta Shopify, activa el motor"));
+  assert.ok(engineDetails.includes("מחברים Shopify, מפעילים את המנוע"));
+  assert.ok(!engineDetails.includes("Installing this engine does not enable automatic WhatsApp messages"));
+  assert.ok(!onboarding.includes("Installing this engine does not enable automatic WhatsApp messages"));
+  assert.ok(!onboarding.includes("Instalar el motor no habilita mensajes automáticos"));
 });
