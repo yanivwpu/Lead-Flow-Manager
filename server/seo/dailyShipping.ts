@@ -21,6 +21,11 @@ type RawCandidate = {
 export type ReviewableCandidate = RawCandidate & { targetQuery: string; proposedContent: string };
 export const SEO_DAILY_SHIPPING_MIN_IMPRESSIONS = 50;
 
+/** Numerical time/revenue/CTR outcome claims require evidence not carried by older drafts. */
+export function hasUnsupportedNumericBenefitClaim(copy: string): boolean {
+  return /\b(?:save|saves|saved|saving|cut|cuts|reduce|reduces|increase|increases|boost|boosts|grow|grows|improve|improves)\b[^\n.!?]{0,90}?\b\d+(?:\s*(?:-|–|to)\s*\d+)?\s*(?:%|percent|hours?|minutes?|days?|weeks?|months?|x)\b/i.test(copy);
+}
+
 /** Validate the same finished-draft contract as the existing SEO GitHub publisher. */
 export function selectDailySeoReviewCandidate(rows: RawCandidate[]): ReviewableCandidate | null {
   for (const row of rows) {
@@ -33,7 +38,7 @@ export function selectDailySeoReviewCandidate(rows: RawCandidate[]): ReviewableC
       if (p.actionType !== "content_expansion" || p.risk === "high" ||
           p.factValidationStatus !== "passed" || !p.generatedAt ||
           !p.proposedContent || p.proposedContent.trim().length < 120 ||
-          findForbiddenPublicClaims(p.proposedContent).length) continue;
+          (findForbiddenPublicClaims(p.proposedContent).length || hasUnsupportedNumericBenefitClaim(p.proposedContent))) continue;
       return { ...row, targetQuery: p.targetQuery || "", proposedContent: p.proposedContent };
     } catch {
       // Invalid, incomplete, or unsafe copy cannot enter the publishing lane.
