@@ -71,7 +71,7 @@ const copy = {
     ],
     footerTitle: "More conversations. More opportunities to convert.",
     footerDescription: "Bring Shopify and customer messaging together, then configure the journeys that fit your business.",
-    requirements: "Requires a connected Shopify store and eligible Pro plan or trial. WhatsApp delivery requires a connected account, valid consent, approved templates and separate enablement.",
+    requirements: "Start in three steps: connect Shopify, activate your engine, and customize journeys. WhatsApp follow-ups can be enabled after the required channel, consent and template checks.",
   },
   es: {
     eyebrow: "MOTOR DE CRECIMIENTO PARA COMERCIO ELECTRÓNICO",
@@ -134,7 +134,7 @@ const copy = {
     ],
     footerTitle: "Más conversaciones. Más oportunidades de convertir.",
     footerDescription: "Conecta Shopify con tus canales y prepara los recorridos adecuados.",
-    requirements: "Requiere Shopify y Pro o prueba elegible. El envío WhatsApp necesita cuenta conectada, consentimiento, plantillas aprobadas y habilitación independiente.",
+    requirements: "Empieza en tres pasos: conecta Shopify, activa el motor y personaliza tus recorridos. Los mensajes de WhatsApp pueden habilitarse después de verificar el canal, consentimiento y plantillas.",
   },
   he: {
     eyebrow: "מנוע הצמיחה למסחר אלקטרוני",
@@ -197,7 +197,7 @@ const copy = {
     ],
     footerTitle: "יותר שיחות. יותר הזדמנויות מכירה.",
     footerDescription: "מחברים Shopify והודעות לקוחות ומגדירים את התהליכים המתאימים לעסק.",
-    requirements: "נדרשים חיבור Shopify ומנוי Pro או ניסיון מתאים. שליחת WhatsApp מחייבת חשבון מחובר, הסכמה, תבניות מאושרות והפעלה נפרדת.",
+    requirements: "מתחילים בשלושה שלבים: מחברים Shopify, מפעילים את המנוע ומתאימים את מסעות הלקוח. הודעות WhatsApp ניתנות להפעלה לאחר בדיקות חיבור הערוץ, ההסכמה והתבניות.",
   },
 } as const;
 
@@ -354,7 +354,7 @@ export function EcommerceGrowthEngineDetails({ locale, activated }: { locale: "e
         <h2 className="text-2xl font-bold text-slate-950 sm:text-3xl">{c.footerTitle}</h2>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{c.footerDescription}</p>
         <div className="mt-5"><Action testId="ecommerce-details-install-bottom"/></div>
-        <p className="mt-4 text-xs leading-relaxed text-slate-500"><ShieldCheck className="me-1 inline h-4 w-4"/>{c.requirements}</p>
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-600" data-testid="ecommerce-details-activation-explainer"><CheckCircle2 className="me-2 inline h-4 w-4 text-blue-600"/>{c.requirements}</p>
       </section>
     </div>
   );
