@@ -8,12 +8,21 @@ import { createShoppingService } from "./service";
 import { createShoppingSessions } from "./sessions";
 import { createShoppingSuggestion } from "./suggestion";
 import { CHECKOUT_ROLLOUT_APPROVED } from "./checkout/authorization";
+import { guardedProductFallback } from "@shared/shopperProductGuard";
 import { createCheckoutHandoff } from "./checkout/handoff";
 import { checkoutReceiptCodec } from "./checkout/attempts";
 import { CheckoutError } from "./checkout/contract";
 export async function shoppingEntitled(userId:string) {
  const limits=await subscriptionService.getUserLimits(userId);
  return !!limits?.growthEngineEligible && !!limits?.effectiveHasAIBrain;
+}
+/**
+ * No merchant opt-in is inferred here. When the Shopping action returns no
+ * verified response, never invent prices or fall back to unrelated company plans.
+ * Used for customer-facing AI suggestions as well as internal previews.
+ */
+export function unverifiedLiveShoppingProductReply(userId:string,text:string,locale?:string) {
+  return guardedProductFallback(text,locale,async()=>!!(await salesCatalog.commerce.source(userId)));
 }
 export async function readShoppingSettings(userId:string) {
  const [row]=await db.select({config:aiSettings.shoppingAssistant}).from(aiSettings).where(eq(aiSettings.userId,userId)).limit(1);
