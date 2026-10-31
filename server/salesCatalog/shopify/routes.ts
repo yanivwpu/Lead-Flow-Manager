@@ -17,7 +17,6 @@ import {
   createCatalogAuthorizationIntent,
   catalogAuthorizationIntentMatches,
   catalogAuthorizationInstallationMatches,
-  CATALOG_PAGE_PATH,
   CATALOG_RETURN_PATH,
   catalogAuthorizationDestination,
   type CatalogAuthorizationSession,
