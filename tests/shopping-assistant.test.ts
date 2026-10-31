@@ -255,3 +255,10 @@ test("policy clauses cannot suppress supported stop and restart actions",async()
   assert.equal(result.state.checkout,undefined);
  }
 });
+
+test("a policy clause cannot discard an explicit offered variant selection",async()=>{
+ const f=fixture();await f.turn("show snowboard");await f.turn("Ice");
+ const selected=(await f.turn("I'll take the Fire version and what is your return policy?"))!;
+ assert.equal(selected.state.selected?.variantId,"v2");
+ assert.equal(selected.state.step,"confirming");
+});

@@ -85,3 +85,6 @@ The fourth review found clause-wide offer exemption, discarded supported quantit
 
 
 The fifth review identified shipping-policy availability overclassification and suppressed stop/restart actions. Explicit availability predicates referring to shipping/delivery now delegate to merchant knowledge while independent merchandise predicates remain guarded. Business-only delegation now respects the existing Shopping cancellation, restart and handoff classifier. Added direct shipping availability and active-session cancellation/reset regressions.
+
+
+The sixth review identified a supported named-variant selection discarded by early policy delegation. Delegation now checks an explicit selection against the owned session's saved choices before returning to AI Brain; pure business turns still make no catalog lookup and preserve exact state. A direct Ice → Fire plus policy regression verifies the correction. Hosted native CI also exposed a pre-existing 10ms retry-assertion race in shopify-catalog.test.ts: it now asserts the scheduled minimum delay from attempt start rather than requiring the deadline to remain in the future after unrelated DB/read scheduling. No production retry behavior changed.

@@ -30,8 +30,11 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   if(!config.enabled || !config.allowedChannels.includes(turn.channel as any) || !await deps.entitled(turn.userId)) return null;
   // Delegate before the state machine can consume a policy question or mistake
   // Hebrew shipping/returns for an order handoff. Preserve the saved selection.
-  if(shoppingBusinessQuestion(turn.text)) return null;
+  const businessQuestion=shoppingBusinessQuestion(turn.text);
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
+   // A supported explicit named selection must still be resolved against this
+   // owned conversation's choices before a policy clause can delegate the turn.
+   if(businessQuestion && !(shoppingIntent(turn.text)==="select" && matchShoppingChoice(turn.text,stored?.choices??[]))) return null;
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
    const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
