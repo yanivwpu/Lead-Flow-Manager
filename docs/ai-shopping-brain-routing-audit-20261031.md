@@ -11,7 +11,9 @@
 - AI Brain already reads merchant business knowledge by workspace. Published-fact storage and the retrieval cache are workspace scoped (`websiteKnowledge/factStore.ts`, `factContext.ts`). Canonical WhachatCRM pricing is restricted by trusted page context in `aiService.ts`; it is not a universal merchant knowledge source.
 - Historical private Liquid acceptance, including reload persistence and live verification, is recorded in `docs/ecommerce-shopping-checkout-acceptance-20261025.md`. This is historical evidence, not today's stock or a new live acceptance.
 
-**Revision caveat:** the connector reports #250 merged, but the inspected `main` commit `31745a9` still has the #249 versions of `shopperProductGuard.ts` and private interception. The #250 merge/test ref `cf8c2ac` contains its final fixes. Do not assume deployment/integration from PR metadata. Verify the actual release SHA includes #250. The local checkout began at `ad18ce7`; reviewed #248/#249/#251 patches reconstructed the inspected main baseline. All six modified existing source/test blobs were checked against pinned `31745a9`. Command-line Git fetch failed at the environment proxy; the GitHub connector supplied evidence and source.
+**Integration follow-up:** PR #250 is open at `ae593e7235ebca3cccf1b620d2b6fc24abcf81f1`; its earlier merged metadata was incorrect. #252 now integrates that exact head as a second parent, preserving #250's non-Shopify private delegation and detailed product guard, plus #252's business-only delegation and merchant knowledge routing. Mixed named-product facts plus policy now explicitly retain catalog verification even without a generic “product” noun. Disabled/failed Shopping returns an unverified response rather than allowing general AI to invent facts. This is safe fallback, not complete mixed-answer composition.
+
+The local checkout began at `ad18ce7`; reviewed #248/#249/#251 patches reconstructed the inspected main baseline. Modified existing source/test blobs were checked against pinned `31745a9`. The combined regression uses a disposable native PostgreSQL 16 database in addition to isolated PGlite fixtures.
 
 ## 2. Confirmed flows and scenario results
 
@@ -47,13 +49,13 @@ The new helper is deliberately bounded and deterministic. It is not a semantic i
 
 Both paths reuse `createShoppingService`, catalog verification and `AIService.suggestReply`. Private Test Chat substitutes owned private history/state and may enable no-send preview independently of saved live settings. It additionally supports exact bare-title discovery; live runtime does not opt into that flag. Live sessions require actual current CRM inbound, channel eligibility, leases and pause/handoff checks. Preview therefore represents verified Shopping actions, not live activation readiness.
 
-Pure business questions now reach the existing merchant knowledge route in both paths. The #250 non-Shopify/checkout fixes must be present in the actual release revision. No tenant leak was reproduced in the inspected ownership paths or affected isolation tests; this is not a proof covering every channel.
+Pure business questions now reach the existing merchant knowledge route in both paths. The #250 non-Shopify/checkout fixes are preserved in the integrated revision; both changes still require merge/release approval. No tenant leak was reproduced in the inspected ownership paths or affected isolation tests; this is not a proof covering every channel.
 
 Read-only Railway inspection: staging app deployment `afb62392-b35d-4e21-b520-7362da9597bf` is SUCCESS at commit `21a47c5`, older than these routing PRs. Production deployment SHA and current merchant configuration were not established. No runtime configuration or deployment was changed.
 
 ## 6. Launch blockers, priorities and validation
 
-1. Review the focused policy-routing correction and require affected CI/review to pass. Confirm the release includes #250 as well as #249/#251.
+1. Review the focused policy-routing correction and require affected CI/review to pass. The integrated #252 includes the exact #250 head as an ancestor; merge ordering must preserve that ancestry.
 2. Extend the existing Shopping decision layer with context-aware, evidence-constrained handling of comparisons, cheaper alternatives, colors and ordinal questions. Reuse catalog facts and saved choices; models must not invent IDs, inventory or prices.
 3. Compose actual mixed product/business answers using the same workspace's merchant grounding while preserving fresh product proof and saved state.
 4. Validate missing-policy fallback and natural EN/ES/HE conversations using isolated fixtures, then private deployed no-send acceptance. Establish actual production release/eligibility evidence before launch approval.
@@ -61,3 +63,10 @@ Read-only Railway inspection: staging app deployment `afb62392-b35d-4e21-b520-73
 Local validation: **99 Node tests plus 49 legacy grounding checks passed** across affected Shopping, Test Chat, UI, catalog retrieval/provider/AI, Live Business Data, checkout and entitlement suites. Production client/server/worker build passed using `node --import tsx script/build.ts` (the npm `tsx` CLI entry hit sandbox IPC restrictions). TypeScript reports **97 baseline and 97 candidate diagnostics, zero added**, with location/path normalization; repository-wide typecheck is not clean. That comparison used the reconstructed #249/#251 baseline before the unrelated #248 onboarding patch was added. Changed source/test blobs were independently matched to pinned main. Full native PostgreSQL and hosted CI remain release gates.
 
 No merge, deployment, customer send, Shopify cart/order creation, consent/settings change or production mutation occurred. Tests use isolated fixtures and fake provider mutations only.
+
+
+### Combined #250 / #252 verification
+
+The combined private Test Chat regression runs against native PostgreSQL, selects Liquid from the real fixture catalog, answers a product-referencing return-policy question using the same workspace knowledge object, verifies the persisted Shopping state is byte-for-byte unchanged, then resumes exact-variant price verification. EN/ES/HE mixed requests with Shopping disabled cannot invoke the general AI boundary. Existing #250 setup exemptions, plural price/availability and non-Shopify regressions remain intact. This exercises routing and grounding boundaries with fake providers; it does not establish unrestricted model answer quality.
+
+The complete 39-file Sales Catalog workflow suite is being rerun on the combined revision, using native PostgreSQL where configured and PGlite for the three admin/private-checkout suites as required by CI. The combined production build passed; TypeScript has 97 baseline/combined diagnostics with zero added. Final hosted CI and automated review results will be reported on #252. No launch-readiness claim is added.

@@ -74,12 +74,23 @@ export function createTestChatGenerator(deps: {
     // Private transport only: enforce catalog-first, never generic-company-pricing
     // fallback for an explicit shopper product question (including when AI mode is off).
     if (explicitStoreProductQuestion(latest.content)) {
-      const product = await suggestion({
-        userId: input.userId, conversationId: input.sessionId,
-        text: latest.content, channel: "webchat", locale,
-      });
-      if (product) return product.reply;
-      return privateProductFallback[shoppingLocale(locale)];
+      // AI Brain Test Chat is shared by non-Shopify businesses: intercept only
+      // when this workspace actually has its own Shopify catalog source.
+      // A failed source check is UNKNOWN, never permission to invent stock.
+      let hasShopifyCatalog: boolean;
+      try {
+        hasShopifyCatalog = !!(await deps.commerce.source(input.userId));
+      } catch {
+        return privateProductFallback[shoppingLocale(locale)];
+      }
+      if (hasShopifyCatalog) {
+        const product = await suggestion({
+          userId: input.userId, conversationId: input.sessionId,
+          text: latest.content, channel: "webchat", locale,
+        });
+        if (product) return product.reply;
+        return privateProductFallback[shoppingLocale(locale)];
+      }
     }
     const routing = resolveChatbotCompletionRouting({
       inbound: latest.content,
