@@ -523,7 +523,7 @@ export function GrowthEngineGalleryCard({
     ? getRgeHubPath(rgeEntitlementStatus, rgeEntitlement)
     : isProspectAi
       ? PROSPECT_AI_PATH
-      : isEcommerce && ecommerceActivated ? "/app/ecommerce-growth-engine" : engine.detailHref;
+      : isEcommerce ? (ecommerceActivated ? "/app/ecommerce-growth-engine" : "/app/ecommerce-growth-engine?view=setup") : engine.detailHref;
   const rgeState = isRge
     ? resolveRgeGalleryState({
         catalogStatus: engine.status,
@@ -540,7 +540,7 @@ export function GrowthEngineGalleryCard({
     : isProspectAi && prospectAiActivated
       ? "Open"
       : isEcommerce && ecommerceActivated ? "Open Engine" : engine.ctaLabel;
-  const statusLabel = isRge ? rgeState!.statusLabel : isEcommerce ? (ecommerceActivated ? "Active" : "Preview") : null;
+  const statusLabel = isRge ? rgeState!.statusLabel : isEcommerce ? (ecommerceActivated ? "Active" : "Available") : null;
   const EngineIcon = isProspectAi
     ? Bot
     : isRge
@@ -629,7 +629,7 @@ export function GrowthEngineGalleryCard({
             <button
               type="button"
               className="w-full rounded-md px-3 py-2 text-sm font-medium text-gray-500 underline-offset-4 hover:text-gray-900 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 sm:w-auto"
-              onClick={() => setLocation(isEcommerce && engine.marketingHref ? engine.marketingHref : engine.detailHref!)}
+              onClick={() => setLocation(isEcommerce ? "/app/ecommerce-growth-engine?view=about" : engine.detailHref!)}
             >
               View details
             </button>

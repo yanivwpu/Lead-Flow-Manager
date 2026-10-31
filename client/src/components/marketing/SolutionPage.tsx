@@ -102,8 +102,8 @@ export function SolutionPage({ content: baseContent }: Props) {
   const isEcommerceSolution = content.path === "/solutions/ecommerce";
   const ecommerceActivation = useEcommerceMerchantActivationStatus();
   const ecommerceActive = ecommerceActivation.data?.activated === true && ecommerceActivation.data?.eligible === true;
-  const ecommerceCtaHref = ecommerceActive ? "/app/ecommerce-growth-engine" : "/ecommerce-growth-engine";
-  const ecommerceCtaText = ecommerceActive ? (locale === "he" ? "פתיחת המנוע" : locale === "es" ? "Abrir motor" : "Open Engine") : ecommerceActivation.data?.eligible ? (locale === "he" ? "הפעלת המנוע" : locale === "es" ? "Activar motor" : "Activate Engine") : (locale === "he" ? "חיבור Shopify" : locale === "es" ? "Conectar Shopify" : "Connect Shopify");
+  const ecommerceCtaHref = ecommerceActive ? "/app/ecommerce-growth-engine" : "/app/ecommerce-growth-engine?view=setup";
+  const ecommerceCtaText = ecommerceActive ? (locale === "he" ? "פתיחת המנוע" : locale === "es" ? "Abrir motor" : "Open Engine") : ecommerceActivation.data?.eligible ? (locale === "he" ? "הפעלת המנוע" : locale === "es" ? "Activar motor" : "Activate Engine") : (locale === "he" ? "תחילת ההתקנה" : locale === "es" ? "Iniciar configuración" : "Start setup");
 
   const breadcrumbs = [
     { label: chrome.home, href: localeHref("/") },

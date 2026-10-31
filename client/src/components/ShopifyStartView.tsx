@@ -35,7 +35,11 @@ export function ShopifyStartView({ locale = "en", snapshot, loading, busy, faile
           {usable ? <>
             <p>{copy.connectDescription}</p>
             {state === "trial_active" ? <p role="status">{copy.trialDescription}</p> : null}
-            <a className="block rounded-lg bg-emerald-700 px-4 py-3 text-white text-center font-medium"
+            <a className="block rounded-lg bg-blue-600 px-4 py-3 text-white text-center font-medium hover:bg-blue-700"
+              href="/app/ecommerce-growth-engine?view=setup" data-testid="shopify-return-to-engine-setup">
+              {locale.startsWith("he") ? "המשך הגדרת מנוע הצמיחה" : locale.startsWith("es") ? "Continuar configuración del motor" : "Continue E-Commerce Growth Engine setup"}
+            </a>
+            <a className="block text-center font-medium text-emerald-700 underline"
               href={settingsChannelsHref({ provider: "whatsapp" })}>{copy.connect}</a>
             <a className="block text-center underline" href="/app/inbox">{copy.inbox}</a>
             <a className="block text-center text-sm underline" href="/pricing">{copy.plansAnytime}</a>
