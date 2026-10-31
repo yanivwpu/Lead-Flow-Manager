@@ -8,6 +8,7 @@ const dashboard = readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.
 const onboarding = readFileSync("client/src/pages/EcommerceGrowthEngineOnboarding.tsx", "utf8");
 const marketing = readFileSync("client/src/components/marketing/SolutionPage.tsx", "utf8");
 const activation = readFileSync("client/src/lib/ecommerceMerchantActivation.ts", "utf8");
+const shopifyStart = readFileSync("client/src/components/ShopifyStartView.tsx", "utf8");
 
 test("catalog actions stay in the authenticated application", () => {
   assert.ok(gallery.includes('"/app/ecommerce-growth-engine?view=setup"'));
@@ -15,6 +16,7 @@ test("catalog actions stay in the authenticated application", () => {
   assert.ok(!gallery.includes("isEcommerce && engine.marketingHref ? engine.marketingHref"));
   assert.ok(app.includes('<Redirect to="/app/ecommerce-growth-engine?view=about" />'));
   assert.ok(marketing.includes('"/app/ecommerce-growth-engine?view=setup"'));
+  assert.ok(shopifyStart.includes('href="/app/ecommerce-growth-engine?view=setup"'));
 });
 
 test("pre-install steps and details are available while operational pages remain restricted", () => {
