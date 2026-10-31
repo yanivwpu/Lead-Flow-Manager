@@ -1,4 +1,7 @@
 import { Link, useLocation } from "wouter";
+import { useEffect } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { rememberEcommerceShopifyInstallReturn, clearEcommerceShopifyInstallReturn } from "@/lib/ecommerceShopifyInstallReturn";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, CheckCircle2, LockKeyhole, ShoppingBag } from "lucide-react";
 import { EcommerceGrowthEngineDetails } from "./EcommerceGrowthEngineDetails";
@@ -90,9 +93,13 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
   const locale = language === "he" || language === "es" ? language : "en";
   const t = copy[locale];
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const status = useEcommerceMerchantActivationStatus();
   const activate = useActivateEcommerceMerchant();
   const connected = status.data?.connected === true;
+  useEffect(() => {
+    if (connected && user?.id) clearEcommerceShopifyInstallReturn(user.id);
+  }, [connected, user?.id]);
   const activated = status.data?.activated === true;
   const eligible = status.data?.eligible === true;
   const planEligible = status.data?.planEligible === true;
@@ -127,7 +134,7 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
                   <p className="mt-1 text-sm leading-relaxed text-slate-600">{detail}</p>
                   {index === 0 && !loading && !unavailable && (
                     connected ? <p className="mt-3 text-sm font-semibold text-emerald-700" role="status">{t.connected}</p> :
-                      <Link href="/app/integrations?setup=shopify" data-testid="ecommerce-install-connect-shopify" className={"mt-4 "+actionClass}>{t.connect}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>
+                      <Link href="/app/integrations?setup=shopify" onClick={() => { if (user?.id) rememberEcommerceShopifyInstallReturn(user.id); }} data-testid="ecommerce-install-connect-shopify" className={"mt-4 "+actionClass}>{t.connect}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>
                   )}
                   {index === 1 && !loading && !unavailable && (
                     activated ? <p className="mt-3 text-sm font-semibold text-emerald-700" role="status">{t.ready}</p> :
