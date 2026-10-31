@@ -159,7 +159,7 @@ export const GROWTH_ENGINE_CARDS: GrowthEngineCardModel[] = [
     galleryPricingMode: "coming_soon",
   },
   {
-    sortOrder: 40,
+    sortOrder: 15,
     slug: "ecommerce-growth-engine",
     title: "E-commerce Growth Engine",
     industry: "E-commerce",
