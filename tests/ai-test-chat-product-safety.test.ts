@@ -51,6 +51,9 @@ test("product guard leaves Shopify setup, checkout policy and ordinary knowledge
   for (const q of [
     question,
     "What is the price of product SKU ABC?",
+    "What are the prices of your products?",
+    "¿Cuáles son los precios de los productos?",
+    "Can I add product SKU ABC to my cart, and is it in stock?",
     "Is SKU ABC in stock?",
     "Do you have item ABC available?",
     "¿Está disponible el producto ABC?",
