@@ -16,11 +16,11 @@ const active = { ...base, trialStatus: "active", trialPlan: "pro_ai",
   trialEndsAt: new Date(Date.now() + 86400000).toISOString() };
 const ready = { ledgerReady: true, ledgerStatus: null, userEligible: true };
 
-test("first install with valid trial reaches guided start without a paid plan gate", () => {
+test("first Shopify install with valid trial resumes E-Commerce activation without a paid plan gate", () => {
   assert.equal(shopifyMerchantNeedsPlanSelection(active, { isFreshInstallRedirect: true }), false);
   const snapshot = resolveShopifyOnboardingState(active, ready);
   assert.equal(snapshot.state, "trial_active");
-  assert.equal(shopifyInstallDestination(snapshot.state, true), "/shopify/start");
+  assert.equal(shopifyInstallDestination(snapshot.state, true), "/app/ecommerce-growth-engine?view=setup");
   assert.equal(shopifyInstallDestination(snapshot.state, false), "/app/inbox");
 });
 
@@ -29,11 +29,22 @@ test("existing and paid installs keep app access; used trial requires a plan", (
     const paid = { ...base, billingPlan: plan, shopifySubscriptionStatus: "active" };
     assert.equal(resolveShopifyOnboardingState(paid, ready).state, "app_ready");
     assert.equal(shopifyMerchantNeedsPlanSelection(paid, { isFreshInstallRedirect: true }), false);
-    assert.equal(shopifyInstallDestination("app_ready", true), "/app/inbox");
+    assert.equal(shopifyInstallDestination("app_ready", true), "/app/ecommerce-growth-engine?view=setup");
+    assert.equal(shopifyInstallDestination("app_ready", false), "/app/inbox");
   }
   const expired = { ...active, trialStatus: "expired", trialEndsAt: "2020-01-01T00:00:00Z" };
   assert.equal(resolveShopifyOnboardingState(expired, { ...ready, ledgerStatus: "granted", userEligible: false }).state, "plan_required");
   assert.equal(shopifyInstallDestination("plan_required", true), "/pricing");
+  assert.equal(shopifyInstallDestination("plan_required", false), "/pricing");
+});
+
+test("fresh installs never bypass billing, recovery, support or reconnect gates", () => {
+  for (const state of ["recovery_required", "support_required", "reconnect_required"] as const) {
+    assert.equal(shopifyInstallDestination(state, true), "/shopify/start");
+    assert.equal(shopifyInstallDestination(state, false), "/shopify/start");
+  }
+  assert.equal(shopifyInstallDestination("plan_required", true), "/pricing");
+  assert.equal(shopifyInstallDestination("trial_active", false), "/app/inbox");
 });
 
 test("provisioning failures never masquerade as an active trial", () => {
