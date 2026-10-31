@@ -1,4 +1,5 @@
 import { catalogSearchTerms } from "@shared/commerceCatalog";
+import { shoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
 import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup } from "@shared/shoppingAssistant";
@@ -27,6 +28,9 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
  return { async turn(turn:ShoppingTurn):Promise<ShoppingResult|null> {
   const config=await deps.settings(turn.userId);
   if(!config.enabled || !config.allowedChannels.includes(turn.channel as any) || !await deps.entitled(turn.userId)) return null;
+  // Delegate before the state machine can consume a policy question or mistake
+  // Hebrew shipping/returns for an order handoff. Preserve the saved selection.
+  if(shoppingBusinessQuestion(turn.text)) return null;
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);

@@ -14,8 +14,42 @@ import { catalogFixture } from "./shopify-catalog-fixture";
 import { ensureCatalogSource } from "../server/salesCatalog/shopify/installation";
 import { AI_TEST_CHAT_SCHEMA_SQL } from "../server/aiTestChat/schemaSql";
 import { readFileSync } from "node:fs";
+import { shoppingBusinessQuestion } from "../shared/shoppingBusinessRouting";
 
 const question = "I'm looking for The Collection Snowboard: Liquid. Do you have it available, how much does it cost, and what is the inventory?";
+
+test("business-only product policies delegate but mixed product facts and human requests stay guarded",async()=>{
+ for(const text of ["What is your return policy for this product?", "¿Cuál es la política de devoluciones de este producto?", "מה מדיניות ההחזרות של המוצר?"]) {
+  assert.equal(shoppingBusinessQuestion(text),true,text);
+  assert.equal(explicitStoreProductQuestion(text),false,text);
+  assert.equal(await guardedProductFallback(text,"en",async()=>{throw Error("business questions must not query Shopify")}),null);
+ }
+ for(const text of ["What is this product's price and return policy?", "Is this product in stock and how long does shipping take?", "¿Está disponible este producto y cuánto tarda el envío?", "מה מחיר המוצר ומה מדיניות ההחזרות?", "Cancel my order and refund it", "Can a human explain your return policy?"]) {
+  assert.equal(shoppingBusinessQuestion(text),false,text);
+ }
+});
+
+test("private policy delegation retains the exact workspace knowledge and conversation history",async()=>{
+ const rows={"tenant-a":{userId:"tenant-a",businessName:"Merchant A",customInstructions:"Returns require merchant A approval"},"tenant-b":{userId:"tenant-b",businessName:"Merchant B",customInstructions:"Returns require merchant B approval"}};
+ let calls=0;
+ const generator=createTestChatGenerator({
+  ai:{suggestReply:async(userId:string,_session:string,history:any,knowledge:any)=>{
+   calls++;
+   assert.equal(knowledge,rows[userId as keyof typeof rows]);
+   assert.equal(history.at(-1).content,"What is your return policy for this product?");
+   return {suggestion:knowledge.customInstructions,modelGenerationSucceeded:false};
+  }} as any,
+  commerce:{source:async()=>{throw Error("policy delegation must not probe catalog")}} as any,
+  settings:async()=>shoppingSettings({enabled:true}),entitled:async()=>true,
+  knowledge:async id=>rows[id as keyof typeof rows] as any,
+  aiSettings:async()=>undefined,meter:async()=>{throw Error("stub did not generate a model reply")},
+ });
+ for(const userId of ["tenant-a","tenant-b"]) {
+  const reply=await generator({userId,sessionId:randomUUID(),history:[{id:randomUUID(),role:"user",content:"What is your return policy for this product?",at:new Date().toISOString()}],sessions:{withTurn:async()=>{throw Error("must not enter Shopping")}} as any});
+  assert.equal(reply,rows[userId as keyof typeof rows].customInstructions);
+ }
+ assert.equal(calls,2);
+});
 
 test("activated Shopify catalog is eligible for private shopping preview only with verified readiness", () => {
   const eligible = { activated:true, eligible:true, connected:true, planEligible:true };

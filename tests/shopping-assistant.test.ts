@@ -36,6 +36,36 @@ function fixture(options:{catalogTitleDiscovery?:boolean}={}) {
  let event=0;
  return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number|null)=>quantity=n,tracked:(value:boolean)=>tracked=value,config,entitled:(b:boolean)=>entitled=b};
 }
+test("merchant business questions delegate without changing shopping state, then shopping resumes",async()=>{
+ for(const question of ["What is your return policy?", "Do you ship internationally?", "How long does delivery take, and can I return my order?", "Can I use discount codes?", "Do you offer warranties?", "Where is your store located?", "¿Cuál es su política de devoluciones?", "¿Cuánto tarda el envío?", "¿Puedo usar códigos de descuento?", "מה מדיניות ההחזרות שלכם?", "כמה זמן לוקח המשלוח?", "האם יש אחריות?"]) {
+  const f=fixture();
+  await f.turn("show snowboard under 750");
+  await f.turn("option 2");
+  const before=structuredClone(f.state()), calls=f.calls();
+  assert.equal(await f.turn(question),null,question);
+  assert.deepEqual(f.state(),before,question);
+  assert.equal(f.calls(),calls,question);
+  const resumed=(await f.turn("What is its current price?"))!;
+  assert.equal(resumed.state.selected?.variantId,"v2",question);
+ }
+});
+test("ten-turn shopping conversation preserves selection across merchant knowledge detours",async()=>{
+ const f=fixture();
+ await f.turn("show snowboard under 750");
+ await f.turn("I'll take the second option");
+ const selected=structuredClone(f.state());
+ for(const text of ["What is your return policy?","Do you ship internationally?","Do you offer warranties?","Can I use discount codes?"]) {
+  assert.equal(await f.turn(text),null);
+  assert.deepEqual(f.state(),selected);
+ }
+ assert.equal((await f.turn("What is its current price?"))!.state.selected?.variantId,"v2");
+ assert.equal((await f.turn("quantity 2"))!.state.quantity,2);
+ assert.equal((await f.turn("option 1"))!.state.selected?.variantId,"v1");
+ const confirmed=(await f.turn("confirm"))!;
+ assert.equal(confirmed.state.step,"confirmed");
+ assert.equal(confirmed.state.quantity,2);
+ assert.doesNotMatch(confirmed.reply,/https?:/);
+});
 test("multilingual shopping intent, budget and exact currency/decimal handling",()=>{
  for(const s of ["Show snowboard options","Muéstrame las opciones","אפשרויות של סנובורד"])assert.equal(shoppingIntent(s),"variants");
  for(const s of ["available now?","¿Están disponibles?","האם זמין?"])assert.equal(shoppingIntent(s),"availability");

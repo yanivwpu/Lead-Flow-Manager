@@ -1,4 +1,5 @@
 import type { CatalogReadiness } from "./salesCatalog";
+import { shoppingBusinessQuestion } from "./shoppingBusinessRouting";
 /**
  * AI Brain Live Business Data — Phase 1 registry + decision model.
  *
@@ -120,6 +121,12 @@ export function resolveLiveBusinessDataDecision(input: {
   subIntents?: string[] | null;
 }): LiveBusinessDataDecision {
   const message = String(input.message || "").trim();
+  // A reference to a product in a policy question must not disable the
+  // merchant knowledge layer or strip its website knowledge from the prompt.
+  if (shoppingBusinessQuestion(message)) return {
+    needsKnowledge: true, needsLiveBusinessData: false,
+    providerIds: [], reason: "knowledge_only",
+  };
   const sub = new Set((input.subIntents || []).map((s) => String(s).toLowerCase()));
   const providerIds: LiveBusinessDataProviderId[] = [];
 

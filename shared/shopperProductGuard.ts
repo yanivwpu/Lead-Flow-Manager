@@ -1,7 +1,9 @@
 import { shoppingLocale } from "./shoppingAssistant";
+import { shoppingBusinessQuestion } from "./shoppingBusinessRouting";
 
 /** Conservative, multilingual intent guard. General CRM/plan enquiries stay with AI Brain. */
 export function explicitStoreProductQuestion(raw: string): boolean {
+  if (shoppingBusinessQuestion(raw)) return false;
   const t = raw.normalize("NFKC").toLowerCase();
   if (/\b(?:free|pro|enterprise)\s+(?:plan|subscription|tier|pricing)\b|\bwhachatcrm\s+(?:price|plan|subscription)\b/.test(t)) return false;
   if (/\b(?:shopify|product|sku|inventory|stock|shopping\s+cart|checkout|item\s+(?:available|in stock)|productos?|inventario|disponibilidad)\b|במלאי|מלאי|מוצר/u.test(t)) return true;
