@@ -30,8 +30,13 @@ export function shopifyInstallDestination(
   state: ShopifyOnboardingState,
   firstTokenInstall: boolean,
 ): string {
-  if (state === "trial_active") return firstTokenInstall ? "/shopify/start" : "/app/inbox";
-  if (state === "app_ready") return "/app/inbox";
+  // After a verified first Shopify OAuth install, resume the merchant's in-app
+  // E-Commerce Growth Engine checklist at Step 2 (activation). Never apply this
+  // to returning installations or to billing/recovery states.
+  if (firstTokenInstall && (state === "trial_active" || state === "app_ready")) {
+    return "/app/ecommerce-growth-engine?view=setup";
+  }
+  if (state === "trial_active" || state === "app_ready") return "/app/inbox";
   if (state === "plan_required") return "/pricing";
   return "/shopify/start";
 }
