@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { isEcommerceOnboardingDocumentRequest } from "./ecommerce/onboardingDocumentAccess";
 import { and, eq, sql } from "drizzle-orm";
 import { users, integrations } from "@shared/schema";
 import { db } from "../drizzle/db";
@@ -164,7 +165,16 @@ export async function requireEcommerceWorkspace(req: Request, res: Response, nex
   if (!accountId) { res.status(401).end(); return; }
   try {
     const owner = await storage.getUserForSession(accountId);
-    if (owner && isEcommercePilotOwner(owner, process.env)) { next(); return; }
+    if (!owner || owner.id !== accountId || owner.deletionRequestedAt) {
+      res.status(404).end(); return;
+    }
+    // The first Shopify install redirects to Setup before merchant activation.
+    // Only GET/HEAD for the root document at these two fixed onboarding views
+    // may pass without activation; all operational views remain gated below.
+    if (isEcommerceOnboardingDocumentRequest(req.method, req.path, req.query.view)) {
+      next(); return;
+    }
+    if (isEcommercePilotOwner(owner, process.env)) { next(); return; }
     const state = await currentForAccount(accountId);
     if (state?.activated) { next(); return; }
     res.status(404).end();
