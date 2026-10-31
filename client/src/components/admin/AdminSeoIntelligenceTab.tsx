@@ -1,6 +1,7 @@
 import { SeoBacklinksPanel } from "./SeoBacklinksPanel";
 import { SeoSocialContentPanel } from "./SeoSocialContentPanel";
 import { SeoDeliveryHealthPanel } from "./SeoDeliveryHealthPanel";
+import { SeoDailyShippingPanel } from "./SeoDailyShippingPanel";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw, Search } from "lucide-react";
@@ -68,6 +69,7 @@ export function AdminSeoIntelligenceTab({ enabled }: { enabled: boolean }) {
       </div>
     </section>
     <SeoDeliveryHealthPanel />
+    <SeoDailyShippingPanel />
     <SeoSocialContentPanel />
     <SeoBacklinksPanel />
     <SeoActionsPanel configured={d.config.configured} />
