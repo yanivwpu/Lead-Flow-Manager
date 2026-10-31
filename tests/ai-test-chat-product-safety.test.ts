@@ -37,6 +37,55 @@ test("product parsing strips conversational follow-up but keeps exact Shopify ti
   assert.equal(shoppingFilters(question,"USD").query.toLowerCase(),"collection snowboard liquid");
 });
 
+
+test("product guard leaves Shopify setup, checkout policy and ordinary knowledge with AI Brain", () => {
+  for (const q of [
+    "How do I connect Shopify to my CRM?",
+    "Can I use discount codes at checkout?",
+    "Does Shopify support checkout links?",
+    "How do I add products to Shopify?",
+    "How can I manage inventory in Shopify?",
+    "What is the WhachatCRM Pro plan price?",
+    "I'm looking for a rental apartment in Miami",
+  ]) assert.equal(explicitStoreProductQuestion(q),false,q);
+  for (const q of [
+    question,
+    "What is the price of product SKU ABC?",
+    "What are the prices of your products?",
+    "¿Cuáles son los precios de los productos?",
+    "¿Qué productos están disponibles?",
+    "Can I add product SKU ABC to my cart, and is it in stock?",
+    "Can I add product SKU ABC to my cart?",
+    "Is SKU ABC in stock?",
+    "Do you have item ABC available?",
+    "¿Está disponible el producto ABC?",
+    "מה המחיר של מוצר ABC?",
+  ]) assert.equal(explicitStoreProductQuestion(q),true,q);
+});
+
+test("private Test Chat delegates non-Shopify product questions and Shopify setup to AI Brain", async () => {
+  let modelCalls=0, sourceChecks=0;
+  const generator=createTestChatGenerator({
+    ai:{suggestReply:async()=>{modelCalls++;return {suggestion:"Use your configured business knowledge",modelGenerationSucceeded:false};}} as any,
+    commerce:{source:async()=>{sourceChecks++;return null;}} as any,
+    settings:async()=>shoppingSettings({enabled:false}),
+    privateShoppingAllowed:async()=>false,entitled:async()=>true,
+    knowledge:async()=>undefined,aiSettings:async()=>undefined,meter:async()=>{},
+  });
+  const sessions={withTurn:async()=>null} as any;
+  const respond=async(content:string)=>generator({
+    userId:"non-shopify-tenant",sessionId:randomUUID(),
+    history:[{id:randomUUID(),role:"user",content,at:new Date().toISOString()}],
+    sessions,
+  });
+  assert.equal(await respond("What is the price of product SKU ABC?"),"Use your configured business knowledge");
+  assert.equal(modelCalls,1);
+  assert.equal(sourceChecks,1);
+  assert.equal(await respond("How do I connect Shopify to my CRM?"),"Use your configured business knowledge");
+  assert.equal(modelCalls,2);
+  assert.equal(sourceChecks,1,"setup questions must not probe the catalog");
+});
+
 test("customer-facing Shopify product guard never fabricates product facts or routes to business plans", async () => {
   assert.match((await guardedProductFallback(question,"en",async()=>true))!,/can't verify this product/i);
   assert.equal(await guardedProductFallback("What is the WhachatCRM Pro plan price?","en",async()=>true),null);
