@@ -30,7 +30,7 @@ type Current = {
   planEligible: boolean;
 };
 
-async function currentForAccount(accountId: string): Promise<Current | null> {
+export async function currentForAccount(accountId: string): Promise<Current | null> {
   const owner = await storage.getUserForSession(accountId);
   if (!owner || owner.id !== accountId || owner.deletionRequestedAt) return null;
   const shop = normalizeShopifyShopDomain(owner.shopifyShop);
