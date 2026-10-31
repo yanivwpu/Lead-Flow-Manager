@@ -22,6 +22,7 @@ import {
 } from "@/lib/activationStatus";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
+import { hasEcommerceShopifyInstallReturn, clearEcommerceShopifyInstallReturn } from "@/lib/ecommerceShopifyInstallReturn";
 import { SubscriptionProvider, useSubscription } from "@/lib/subscription-context";
 import { getUpgradeProvider } from "@/lib/upgradeRouting";
 import { consumeUpgradedQueryParam } from "@/lib/upgradeSuccess";
@@ -62,7 +63,7 @@ const PageLoader = () => (
 );
 
 function AppContent() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user, sessionAligned } = useAuth();
   const { data: subscription, isLoading } = useSubscription();
   const [trialModalOpen, setTrialModalOpen] = useState(false);
@@ -72,6 +73,24 @@ function AppContent() {
   const { toast } = useToast();
   const upgradedToastHandledRef = useRef(false);
   useInboxNewActivityRealtime();
+
+  useEffect(() => {
+    // Shopify may return through the app URL (Inbox/Settings), not the OAuth callback.
+    // Resume only a recent setup started by this exact user, after server verification.
+    if (!user?.id || !sessionAligned ||
+        (location !== "/app/settings" && location !== "/app/inbox") ||
+        !hasEcommerceShopifyInstallReturn(user.id)) return;
+    let cancelled = false;
+    void fetch("/api/shopify/merchant-engine/status", { credentials: "include", cache: "no-store" })
+      .then(async response => response.ok ? response.json() as Promise<{ connected?: boolean; activated?: boolean }> : null)
+      .then(status => {
+        if (cancelled || !status?.connected || !hasEcommerceShopifyInstallReturn(user.id)) return;
+        clearEcommerceShopifyInstallReturn(user.id);
+        if (!status.activated) setLocation("/app/ecommerce-growth-engine?view=setup");
+      })
+      .catch(() => { /* Keep the bounded hint for a later verified return. */ });
+    return () => { cancelled = true; };
+  }, [location, sessionAligned, user?.id, setLocation]);
 
   const activationDayKey = activationSetupModalStorageKey(user?.id);
   const shownActivationModalToday =
