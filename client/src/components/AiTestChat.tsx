@@ -19,6 +19,8 @@ import type { TestChatView, PrivateCheckoutPreflight, SecondCartReview } from "@
 type Diagnostics = {
   aiMode: string;
   shoppingEnabled: boolean;
+  shoppingTestOnly?: boolean;
+  liveShoppingEnabled?: boolean;
   catalogConnected: boolean;
   catalogStatus: string;
   inventoryStatus: string;
@@ -391,6 +393,7 @@ function Console() {
                 {new Date(diagnostics.retryAt).toLocaleTimeString()}
               </p>
             )}
+            {diagnostics.shoppingTestOnly && <p>{t("testChat.privateShoppingPreview")}</p>}
             {!diagnostics.shoppingEnabled && <p>{t("testChat.shoppingOff")}</p>}
             <p>{t("shopping.checkoutDisabled")}</p>
           </aside>

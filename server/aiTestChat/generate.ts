@@ -11,6 +11,14 @@ import { createShoppingSuggestion } from "../shopping/suggestion";
 import type { ShoppingSettings } from "@shared/shoppingAssistant";
 import type { aiService } from "../aiService";
 import { privateTestShoppingSettings } from "./shoppingAllowance";
+import { shoppingLocale } from "@shared/shoppingAssistant";
+import { explicitStoreProductQuestion } from "@shared/shopperProductGuard";
+/** Product queries must never inherit unrelated business-plan answers in private Test Chat. */
+const privateProductFallback = {
+  en: "I couldn't verify a Shopify product match and its current price and availability. Check the catalog and try another product search. I won't provide unverified prices or stock.",
+  es: "No pude verificar un producto de Shopify con su precio y disponibilidad actuales. Comprueba el catálogo y vuelve a buscar. No daré precios ni existencias sin verificar.",
+  he: "לא הצלחתי לאמת מוצר ב-Shopify ואת המחיר והזמינות העדכניים. בדקו את הקטלוג ונסו חיפוש נוסף. לא אציג מחיר או מלאי שלא אומתו.",
+} as const;
 /** Same AI Brain method, router and shopping action; only the inbound/state adapter differs. */
 export function createTestChatGenerator(deps: {
   ai: Pick<typeof aiService, "suggestReply">;
@@ -63,6 +71,16 @@ export function createTestChatGenerator(deps: {
           : undefined,
       turn: (turn) => shopping.turn(turn),
     });
+    // Private transport only: enforce catalog-first, never generic-company-pricing
+    // fallback for an explicit shopper product question (including when AI mode is off).
+    if (explicitStoreProductQuestion(latest.content)) {
+      const product = await suggestion({
+        userId: input.userId, conversationId: input.sessionId,
+        text: latest.content, channel: "webchat", locale,
+      });
+      if (product) return product.reply;
+      return privateProductFallback[shoppingLocale(locale)];
+    }
     const routing = resolveChatbotCompletionRouting({
       inbound: latest.content,
       history: input.history,

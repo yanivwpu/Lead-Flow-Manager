@@ -1530,6 +1530,7 @@
     "connected": "Catálogo Shopify conectado",
     "disconnected": "Sin catálogo Shopify conectado",
     "retryAt": "Reintentar después de",
+    "privateShoppingPreview": "La prueba privada de compras Shopify está lista. Los canales de clientes y la función de pago siguen desactivados.",
     "shoppingOff": "Compras no está activado o disponible para Web Chat. No se cambió la configuración.",
     "message": "Escribe una pregunta de cliente",
     "send": "Enviar",

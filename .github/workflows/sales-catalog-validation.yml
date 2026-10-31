@@ -109,6 +109,7 @@ jobs:
           node --import tsx tests/shopping-assistant.test.ts
           node --import tsx tests/shopping-assistant-postgres.test.ts
           node --import tsx tests/ai-test-chat.test.ts
+          node --import tsx --test tests/ai-test-chat-product-safety.test.ts
           node --import tsx --test tests/ai-test-chat-ui.test.tsx tests/ai-test-chat-cart-ui.test.ts
       - name: Catalog integration and offer, AI, navigation compatibility
         run: |

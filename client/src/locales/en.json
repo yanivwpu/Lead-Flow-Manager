@@ -1600,6 +1600,7 @@
     "connected": "Shopify catalog connected",
     "disconnected": "No connected Shopify catalog",
     "retryAt": "Retry after",
+    "privateShoppingPreview": "Private Shopify Shopping preview is ready for this test. Live customer channels and checkout remain off.",
     "shoppingOff": "Shopping is not enabled or eligible for Web Chat. Existing settings are unchanged.",
     "message": "Type a customer question",
     "send": "Send",
