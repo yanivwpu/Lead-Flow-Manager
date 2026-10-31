@@ -41,13 +41,6 @@ export function SeoDailyShippingPanel() {
     },
   });
   const days = history.data?.days ?? [];
-  const latest = days[0];
-  const dayString = latest ? String(latest.runDay).slice(0, 10) : "";
-  const canPublish = latest?.status === "needs_review" && !!latest.actionId &&
-    Number(latest.actionVersion) === Number(latest.currentVersion) &&
-    !latest.staleAt && ["proposed", "approved"].includes(latest.actionStatus || "") &&
-    Boolean(latest.proposedContent) && !latest.liveAt &&
-    !["pending", "running", "pr_created", "awaiting_checks", "deploying", "live"].includes(latest.publicationStatus || "");
 
   return <section className="rounded-xl border bg-white p-4" aria-label="Daily SEO publishing review">
     <div className="flex flex-wrap justify-between gap-2">
@@ -67,6 +60,11 @@ export function SeoDailyShippingPanel() {
       {days.slice(0, 7).map((d, index) => {
         const isCurrent = index === 0;
         const date = String(d.runDay).slice(0, 10);
+        const canPublish = d.status === "needs_review" && !!d.actionId &&
+          Number(d.actionVersion) === Number(d.currentVersion) && !d.staleAt &&
+          ["proposed", "approved"].includes(d.actionStatus || "") &&
+          Boolean(d.proposedContent) && !d.liveAt &&
+          !["pending", "running", "pr_created", "awaiting_checks", "deploying", "live"].includes(d.publicationStatus || "");
         return <article key={date} className="rounded-lg border p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">{date} · {d.liveAt ? "Verified live" : d.publicationStatus || d.status.replaceAll("_", " ")}</span>
@@ -75,19 +73,19 @@ export function SeoDailyShippingPanel() {
           {d.targetPage && <a className="mt-1 block break-all text-xs text-blue-700 underline" href={d.targetPage} target="_blank" rel="noreferrer">{d.targetPage}</a>}
           {d.targetQuery && <p className="text-xs text-gray-600">Target query: {d.targetQuery}</p>}
           <p className="mt-1 text-xs text-gray-500">{d.reason}</p>
-          {isCurrent && d.proposedContent && <details className="mt-3" open>
+          {d.proposedContent && <details className="mt-3" open={isCurrent}>
             <summary className="cursor-pointer text-sm font-medium">Review exact proposed website copy</summary>
             <div className="mt-2 whitespace-pre-wrap rounded-md border bg-gray-50 p-3 text-sm text-gray-700">{d.proposedContent}</div>
           </details>}
           {d.prUrl && <a className="mt-2 inline-block text-xs text-blue-700 underline" href={d.prUrl} target="_blank" rel="noreferrer">View GitHub PR</a>}
-          {isCurrent && canPublish && <div className="mt-3">
+          {canPublish && <div className="mt-3">
             <Button size="sm" disabled={submit.isPending} onClick={() => {
               if (window.confirm("Have you reviewed the exact copy and verified all product and competitor claims? Approval requests automatic merge and production publication once every safety check passes."))
                 submit.mutate(day);
             }}>{submit.isPending ? "Submitting…" : "Approve & request publishing"}</Button>
             <p className="mt-1 text-xs text-gray-500">Requires your explicit approval. No auto-publishing of unreviewed content.</p>
           </div>}
-          {isCurrent && d.status === "needs_review" && !canPublish && !d.liveAt &&
+          {d.status === "needs_review" && !canPublish && !d.liveAt &&
             <p className="mt-2 text-xs text-gray-600">This selection is already in the publishing process or its saved version is no longer reviewable. Check the SEO Actions panel below.</p>}
         </article>;
       })}
