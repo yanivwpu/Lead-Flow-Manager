@@ -75,8 +75,8 @@ export async function runDailySeoShippingSelection() {
     WHERE status='success' ORDER BY completed_at DESC LIMIT 1`);
   const syncedAt = recentSync.rows[0]?.completed_at;
   const stale = !syncedAt || Date.now() - new Date(String(syncedAt)).getTime() > 7 * 86400000;
-  const candidates = stale ? [] : await db.execute(sql.raw(CANDIDATE_SQL));
-  const selected = selectDailySeoReviewCandidate(stale ? [] : candidates.rows as unknown as RawCandidate[]);
+  const candidates = stale ? [] : (await db.execute(sql.raw(CANDIDATE_SQL))).rows;
+  const selected = selectDailySeoReviewCandidate(candidates as unknown as RawCandidate[]);
   const reason = stale ? "Search Console sync is missing or older than seven days"
     : selected ? "Highest-impression supported content proposal; owner review and publication checks required"
     : "No supported, fresh, low-risk finished draft with 50+ impressions; no content released";
