@@ -1,5 +1,6 @@
 import { AI_TEST_CHAT_SCHEMA_SQL } from "./aiTestChat/schemaSql";
 import { SEO_SOCIAL_DRAFT_SCHEMA } from "./seo/socialDraftSchema";
+import { SEO_DAILY_SHIPPING_SCHEMA } from "./seo/dailyShipping";
 import { SHOPPING_SCHEMA_SQL } from "./shopping/schemaSql";
 import { COMMERCE_CATALOG_SCHEMA_SQL } from "./salesCatalog/schemaSql";
 import { sql } from "drizzle-orm";
@@ -27,6 +28,7 @@ const BACKLINK_SCHEMA = `CREATE TABLE IF NOT EXISTS seo_backlink_opportunities (
 const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
   { tag: "0110_seo_backlink_opportunities", sql: BACKLINK_SCHEMA },
   { tag: "0111_seo_social_draft_review", sql: SEO_SOCIAL_DRAFT_SCHEMA },
+  { tag: "0112_seo_daily_shipping", sql: SEO_DAILY_SHIPPING_SCHEMA },
   {
     tag: "0056_salesperson_calendly_connections",
     sql: "CREATE TABLE IF NOT EXISTS salesperson_calendly_connections (salesperson_id varchar PRIMARY KEY REFERENCES salespeople(id) ON DELETE CASCADE, encrypted_access_token text NOT NULL, calendly_user_uri text, calendly_scheduling_url text, enabled boolean NOT NULL DEFAULT true, last_poll_at timestamp, last_error text, updated_at timestamp NOT NULL DEFAULT NOW());",

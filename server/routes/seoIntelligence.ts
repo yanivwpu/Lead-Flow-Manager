@@ -1,5 +1,6 @@
 import { registerSeoBacklinkRoutes } from "./seoBacklinks";
 import { registerSeoSocialRoutes } from "./seoSocial";
+import { registerSeoShippingRoutes } from "./seoShipping";
 import { db } from "../../drizzle/db";
 import { sql } from "drizzle-orm";
 import { requestSeoPublication } from "../seo/publicationService";
@@ -15,6 +16,7 @@ import { analyzeSeoOpportunities, listSeoActions, refreshSeoAction, startSeoActi
 export function registerSeoIntelligenceRoutes(app: Express, requireAdmin: RequestHandler) {
   registerSeoBacklinkRoutes(app, requireAdmin);
   registerSeoSocialRoutes(app, requireAdmin);
+  registerSeoShippingRoutes(app, requireAdmin);
   app.get("/api/admin/seo-intelligence/delivery-health", requireAdmin, async (_req, res) => {
     try {
       const [analysis, published] = await Promise.all([
