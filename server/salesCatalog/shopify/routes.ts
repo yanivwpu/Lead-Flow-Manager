@@ -19,6 +19,7 @@ import {
   catalogAuthorizationInstallationMatches,
   CATALOG_PAGE_PATH,
   CATALOG_RETURN_PATH,
+  catalogAuthorizationDestination,
   type CatalogAuthorizationSession,
 } from "./authorization";
 import { verifyCatalogAccess, refreshCatalogAccess } from "./access";
@@ -181,6 +182,9 @@ export function registerShopifyCatalogRoutes(
   app.get("/api/shopify/catalog/authorize", async (req, res) => {
     const auth = await authorize(req, res);
     if (!auth) return;
+    // Product access is shared; only the post-approval landing page differs.
+    const origin = req.query.origin === "ecommerce" ? "ecommerce" : undefined;
+    const destination = catalogAuthorizationDestination(origin);
     res.set("Cache-Control", "private, no-store");
     if (process.env.SHOPIFY_CATALOG_AUTH_ENABLED !== "true")
       return res
@@ -200,7 +204,7 @@ export function registerShopifyCatalogRoutes(
       await refreshCatalogAccess(database, install, scopes);
       // Repair stale recorded grants without another merchant approval or token exchange.
       if (SHOPIFY_CATALOG_SCOPES.every((s) => scopes.includes(s)))
-        return res.redirect(CATALOG_PAGE_PATH);
+        return res.redirect(destination);
       const url = catalogAuthorizationUrl(
         install.shop,
         process.env.SHOPIFY_API_KEY ?? "",
@@ -208,7 +212,7 @@ export function registerShopifyCatalogRoutes(
       if (!url || !req.session)
         return res.status(503).json({ error: "Authorization unavailable" });
       (req.session as CatalogAuthorizationSession).catalogAuthorization =
-        createCatalogAuthorizationIntent(install, auth.actorUserId);
+        createCatalogAuthorizationIntent(install, auth.actorUserId, origin);
       await new Promise<void>((resolve, reject) =>
         req.session.save((error) => (error ? reject(error) : resolve())),
       );
@@ -250,8 +254,8 @@ export function registerShopifyCatalogRoutes(
       await new Promise<void>((resolve, reject) =>
         req.session.save((error) => (error ? reject(error) : resolve())),
       );
-      // Declining optional permissions returns to the same catalog with verified missing-scope state.
-      return res.redirect(CATALOG_PAGE_PATH);
+      // Both approval and decline return to the verified initiating catalog view.
+      return res.redirect(catalogAuthorizationDestination(intent.origin));
     } catch {
       return res
         .status(503)
