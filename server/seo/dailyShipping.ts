@@ -57,6 +57,8 @@ const CANDIDATE_SQL = [
   ') m ON TRUE',
   "WHERE a.status='proposed' AND a.action_type='content_expansion'",
   "AND a.risk<>'high' AND a.stale_at IS NULL",
+  'AND NOT EXISTS (SELECT 1 FROM seo_daily_shipping_runs previous',
+  " WHERE previous.action_id=a.id::text AND previous.run_day >= ((NOW() AT TIME ZONE 'UTC')::date - 28))",
   'AND NOT EXISTS (',
   ' SELECT 1 FROM seo_github_executions g',
   ' JOIN seo_actions other ON other.id=g.action_id',
