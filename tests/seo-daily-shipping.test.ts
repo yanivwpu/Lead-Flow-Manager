@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/seo_test";
 async function main() {
-const { SEO_DAILY_SHIPPING_SCHEMA, selectDailySeoReviewCandidate } = await import("../server/seo/dailyShipping");
+const { SEO_DAILY_SHIPPING_SCHEMA, selectDailySeoReviewCandidate, hasUnsupportedNumericBenefitClaim } = await import("../server/seo/dailyShipping");
 
 const content = "### How to evaluate a WhatsApp CRM\n\n" +
   "Review how shared inbox assignments, customer records, and follow-up workflows operate before selecting a CRM. " +
@@ -21,6 +21,9 @@ const candidate = (values: Record<string,unknown> = {}) => ({
   actionId: "c1", version: 1, targetPage: "https://www.whachatcrm.com/zoko-alternative",
   confidence: .79, impressions: 975, clicks: 0, proposal, ...values
 });
+assert.equal(hasUnsupportedNumericBenefitClaim("Automation can save you 5-10 hours weekly."), true);
+assert.equal(hasUnsupportedNumericBenefitClaim("Use a shared inbox to organize messages."), false);
+assert.equal(selectDailySeoReviewCandidate([candidate({ proposal: { ...proposal, proposedContent: content + " Automation can save you 5-10 hours weekly." } })]), null);
 assert.equal(selectDailySeoReviewCandidate([]), null);
 assert.equal(selectDailySeoReviewCandidate([candidate({ impressions: 49 })]), null);
 assert.equal(selectDailySeoReviewCandidate([candidate({ targetPage: "https://unknown.example/zoko-alternative" })]), null);
