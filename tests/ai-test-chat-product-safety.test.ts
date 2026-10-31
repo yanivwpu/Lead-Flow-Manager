@@ -35,7 +35,7 @@ test("mixed named-product facts and policy never fall through to general AI when
 });
 
 test("business-only product policies delegate but mixed product facts and human requests stay guarded",async()=>{
- for(const text of ["What is your return policy for this product?", "¿Cuál es la política de devoluciones de este producto?", "מה מדיניות ההחזרות של המוצר?", "How much does shipping cost?", "What is the price of delivery?", "What are your shipping costs?", "Do you have warranties?", "¿Cuánto cuesta el envío?", "כמה עולה המשלוח?", "What is the price of your Featured Business package and your return policy?", "What is the WhachatCRM Pro plan price and your return policy?", "How can I manage inventory in Shopify and configure shipping?"]) {
+ for(const text of ["What is your return policy for this product?", "¿Cuál es la política de devoluciones de este producto?", "מה מדיניות ההחזרות של המוצר?", "How much does shipping cost?", "What is the price of delivery?", "What are your shipping costs?", "Do you have warranties?", "¿Cuánto cuesta el envío?", "כמה עולה המשלוח?", "What is the price of your Featured Business package and your return policy?", "What is the WhachatCRM Pro plan price and your return policy?", "How can I manage inventory in Shopify and configure shipping?", "Do you have free shipping?", "Is international shipping available?"]) {
   assert.equal(shoppingBusinessQuestion(text),true,text);
   assert.equal(explicitStoreProductQuestion(text),false,text);
   assert.equal(await guardedProductFallback(text,"en",async()=>{throw Error("business questions must not query Shopify")}),null);

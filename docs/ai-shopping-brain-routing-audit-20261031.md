@@ -82,3 +82,6 @@ The third review identified Spanish `cuánto vale` pricing drift and non-product
 
 
 The fourth review found clause-wide offer exemption, discarded supported quantity mutation and additional-predicate setup override. These are corrected: offer exemptions apply per conjunction-delimited clause, explicit quantity/selection cues prevent business-only delegation, and the shared intent function exposes setup/plan reasons so conservative fallback cannot override those exemptions. Direct regressions include a named snowboard price plus warranty-plan question, quantity two plus policy, and Shopify inventory setup plus shipping configuration. Final exact-head CI and automated review remain required.
+
+
+The fifth review identified shipping-policy availability overclassification and suppressed stop/restart actions. Explicit availability predicates referring to shipping/delivery now delegate to merchant knowledge while independent merchandise predicates remain guarded. Business-only delegation now respects the existing Shopping cancellation, restart and handoff classifier. Added direct shipping availability and active-session cancellation/reset regressions.

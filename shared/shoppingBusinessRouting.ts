@@ -1,4 +1,4 @@
-import { shoppingChoiceNumber } from "./shoppingAssistant";
+import { shoppingChoiceNumber, shoppingIntent } from "./shoppingAssistant";
 import { catalogProductIntent } from "./shopperProductIntent";
 
 /** Business-only questions belong to the workspace's existing AI Brain retrieval.
@@ -12,6 +12,8 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
   // Remove only explicit business-charge questions before inspecting product
   // predicates. Other price clauses (including named products) remain guarded.
   const factText = text
+    .replace(/\bdo\s+you\s+have\s+(?:(?:free|international|express|overnight|standard)\s+)*(?:shipping|delivery)\b/gu," ")
+    .replace(/\bis\s+(?:(?:free|international|express|overnight|standard)\s+)*(?:shipping|delivery)\s+available\b/gu," ")
     .replace(/\b(?:cu[aá]nto\s+(?:cuesta|vale)(?:\s+el)?\s+env[ií]o|(?:precio|costo|coste)\s+del\s+env[ií]o)\b|מה\s+(?:מחיר|עלות)\s+ה?משלוח|כמה\s+עולה\s+ה?משלוח/gu," ")
     .replace(/\bhow\s+much(?:\s+does)?\s+(?:shipping|delivery)(?:\s+cost)?\b/gu," ")
     .replace(/\b(?:prices?|costs?)\s+(?:of|for)\s+(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:prices?|costs?|fees?|charges?)\b/gu," ")
@@ -32,7 +34,8 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
   const orderAction = /\b(?:track|tracking|cancel|cancelar|seguimiento)\b|בטל|מעקב/u.test(text);
   const human = /\b(?:human|agent|person|representative|humano|agente|persona)\b|נציג|אדם/u.test(text);
   if (productFacts) return "mixed";
-  return !orderAction && !human ? "business" : null;
+  const action = shoppingIntent(text);
+  return !orderAction && !human && !["cancel","restart","handoff"].includes(action) ? "business" : null;
 }
 
 export function shoppingBusinessQuestion(raw: string): boolean {

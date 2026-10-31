@@ -246,3 +246,12 @@ test("bare-title discovery is private opt-in, exact catalog-grounded and never r
  assert.equal(result.state.quantity,2);assert.equal(result.state.selected?.variantId,"v1");
  assert.equal(result.state.step,"confirming");
  });
+
+test("policy clauses cannot suppress supported stop and restart actions",async()=>{
+ for(const [text,step] of [["Stop shopping and what is your return policy?","cancelled"],["Restart and explain your return policy","discovering"]]) {
+  const f=fixture();await f.turn("show snowboard");await f.turn("option 1");
+  const result=(await f.turn(text))!;
+  assert.equal(result.state.step,step);assert.equal(result.state.selected,undefined);
+  assert.equal(result.state.checkout,undefined);
+ }
+});
