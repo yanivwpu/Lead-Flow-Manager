@@ -28,7 +28,7 @@ const copy = {
     waiting: "Connect Shopify first.", pro: "An eligible Pro plan or trial is required.", plan: "Review plan",
     unavailable: "Couldn't verify setup status. No changes were made.", retry: "Try again",
     failed: "Activation didn't complete. Verify Shopify connection and Pro access.",
-    safe: "Installing this engine does not enable automatic WhatsApp messages, cart recovery or customer delivery.",
+    safe: "After activating your engine, choose and configure the customer journeys you want. WhatsApp follow-ups require a connected account, customer consent, approved templates and delivery approval before messages begin.",
   },
   es: {
     back: "Volver a motores de crecimiento", engine: "Motor de comercio electrónico",
@@ -52,7 +52,7 @@ const copy = {
     waiting: "Primero conecta Shopify.", pro: "Se requiere Pro o prueba elegible.", plan: "Revisar plan",
     unavailable: "No se pudo verificar el estado. No hubo cambios.", retry: "Reintentar",
     failed: "La activación no se completó. Verifica Shopify y Pro.",
-    safe: "Instalar el motor no habilita mensajes automáticos, recuperación de carritos ni envíos.",
+    safe: "Después de activar el motor, elige y configura tus recorridos. Los mensajes de WhatsApp requieren una cuenta conectada, consentimiento, plantillas aprobadas y autorización de envío.",
   },
   he: {
     back: "חזרה למנועי הצמיחה", engine: "מנוע צמיחה למסחר אלקטרוני",
@@ -76,7 +76,7 @@ const copy = {
     waiting: "תחילה יש לחבר את Shopify.", pro: "נדרש מנוי Pro או ניסיון מתאים.", plan: "בדיקת מנוי",
     unavailable: "לא ניתן לאמת את מצב ההגדרה. לא בוצעו שינויים.", retry: "לנסות שוב",
     failed: "ההפעלה נכשלה. יש לבדוק חיבור Shopify ומנוי Pro.",
-    safe: "התקנת המנוע אינה מפעילה הודעות WhatsApp אוטומטיות או שחזור עגלות.",
+    safe: "לאחר הפעלת המנוע בוחרים ומגדירים את מסעות הלקוח. הודעות WhatsApp יישלחו רק לאחר חיבור החשבון, קבלת הסכמה, אישור התבניות ואישור הפעלת המשלוח.",
   },
 } as const;
 
@@ -149,9 +149,9 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
           </p>}
         </section>
       )}
-      <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      {mode === "setup" && <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600" data-testid="ecommerce-setup-delivery-guidance">
         <LockKeyhole className="me-2 inline h-4 w-4"/>{t.safe}
-      </p>
+      </p>}
       {mode === "setup" && <Link href={aboutPath} className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:underline">{t.details}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>}
     </main>
   );
