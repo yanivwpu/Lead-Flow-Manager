@@ -1,4 +1,3 @@
-import { useEcommercePilot } from "./ecommercePilot";
 import { useEcommerceMerchantActivationStatus } from "./ecommerceMerchantActivation";
 import {
   ShoppingBag,
@@ -102,7 +101,6 @@ export function useAppNavCategories(): {
   mobileMoreCategories: AppNavCategory[];
 } {
   const { t, i18n } = useTranslation();
-  const { available: ecommercePilotEnabled } = useEcommercePilot();
   const activation = useEcommerceMerchantActivationStatus();
   const ecommerceGrowthEngineActivated = activation.data?.activated === true && activation.data?.eligible === true;
   const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
@@ -138,7 +136,6 @@ export function useAppNavCategories(): {
 
   return useMemo(() => {
     const sections = resolveAppNavSections({
-      ecommercePilotEnabled,
       ecommerceGrowthEngineActivated,
       hasPresetCampaigns,
       prospectAiActivated,
@@ -183,7 +180,6 @@ export function useAppNavCategories(): {
   }, [
     t,
     location,
-    ecommercePilotEnabled,
     ecommerceGrowthEngineActivated,
     ecommerceLabel,
     hasPresetCampaigns,

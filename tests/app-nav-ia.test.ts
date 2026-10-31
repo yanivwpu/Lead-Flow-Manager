@@ -308,13 +308,14 @@ test("Inbox channel name Web Chat and widget page title are preserved", () => {
 });
 
 
-test("E-Commerce nav distinguishes persistent activation from pilot and other Growth Engines", () => {
+test("E-Commerce sidebar is hidden until a merchant explicitly activates its workspace", () => {
   const flags = { hasPresetCampaigns: false, prospectAiActivated: false, realtorGrowthEngineActivated: false };
-  const absent = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false, ecommercePilotEnabled: false });
+  const absent = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false });
   assert.equal(flattenAppNavItemIds(absent).includes("ecommerceGrowthEngine"), false);
-  const activated = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: true, ecommercePilotEnabled: false });
-  assert.equal(flattenAppNavItemIds(activated).includes("ecommerceGrowthEngine"), true);
+  const activated = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: true });
+  assert.equal(flattenAppNavItemIds(activated).filter(id => id === "ecommerceGrowthEngine").length, 1);
   assert.equal(flattenAppNavItemIds(activated).includes("prospectAi"), false);
-  const pilot = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false, ecommercePilotEnabled: true });
-  assert.equal(flattenAppNavItemIds(pilot).includes("ecommerceGrowthEngine"), true);
+  const navHook = read("client/src/lib/useAppNav.ts");
+  assert.match(navHook, /activation\.data\?\.activated === true && activation\.data\?\.eligible === true/);
+  assert.doesNotMatch(navHook, /useEcommercePilot|ecommercePilotEnabled/);
 });
