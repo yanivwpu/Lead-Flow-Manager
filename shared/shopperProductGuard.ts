@@ -4,9 +4,16 @@ import { shoppingLocale } from "./shoppingAssistant";
 export function explicitStoreProductQuestion(raw: string): boolean {
   const t = raw.normalize("NFKC").toLowerCase();
   if (/\b(?:free|pro|enterprise)\s+(?:plan|subscription|tier|pricing)\b|\bwhachatcrm\s+(?:price|plan|subscription)\b/.test(t)) return false;
-  if (/\b(?:shopify|product|sku|inventory|stock|shopping\s+cart|checkout|item\s+(?:available|in stock)|productos?|inventario|disponibilidad)\b|במלאי|מלאי|מוצר/u.test(t)) return true;
-  return /\b(?:looking\s+for|search\s+for|find\s+me|busco|buscar|מחפש(?:ת)?)\b|מחפשת?/u.test(t) &&
-    /\b(?:available|availability|price|cost|how\s+much|buy|purchase|disponible|precio|comprar)\b|זמין|מחיר|לקנות/u.test(t);
+  // Shopify setup, app integration and generic checkout policy are not product
+  // verification requests. Do not suppress ordinary business-knowledge answers.
+  if (/\b(?:how\s+(?:do|can)\s+i|how\s+to|can\s+i|does\s+shopify)\s+(?:connect|configure|integrate|enable|set\s*up|add|use|manage|edit|sync|import|track|support)\b|\b(?:connect|configure|integrate|set\s*up|enable)\s+shopify\b|\bdiscount\s+codes?\s+at\s+checkout\b/.test(t)) return false;
+  const productReference = /\b(?:products?|items?|sku|productos?|art[ií]culos?)\b|מוצר(?:ים)?/u.test(t);
+  const stockQuestion = /\b(?:inventory|stock|availability|in\s+stock|out\s+of\s+stock|inventario|disponibilidad)\b|במלאי|מלאי/u.test(t);
+  const buyingQuestion = /\b(?:price|cost|how\s+much|available|buy|purchase|sell|carry|do\s+you\s+have|show\s+me|find\s+me|recommend\w*|precio|comprar|disponible|cu[aá]nto)\b|מחיר|לקנות|זמין/u.test(t);
+  if (stockQuestion) return true;
+  if (productReference && buyingQuestion) return true;
+  const productSearch = /\b(?:looking\s+for|search\s+for|find\s+me|busco|buscar|מחפש(?:ת)?)\b|מחפשת?/u.test(t);
+  return productSearch && buyingQuestion;
 }
 
 export function unverifiedProductReply(locale?: string): string {
