@@ -72,7 +72,7 @@ export function shoppingFilters(text: string, defaultCurrency: string): {currenc
   // into the product name and returns no candidates before live verification.
   // Require a sentence boundary + a generic question; preserve decimal prices,
   // dotted product names, variant descriptors and all full-message budget filters.
-  const productRequest = text.replace(/[.!?]\s+(?=(?:(?:is|are)\s+(?:it|this|that|they|these|those)\b|what(?:['’]s|\s+is)\s+(?:its|their|the)\b|how\s+(?:many|much)\b|please\s+(?:verify|check)\b))[\s\S]*$/iu, "");
+  const productRequest = text.replace(/[.!?]\s+(?=(?:(?:is|are|do|does|can)\s+(?:you\s+(?:have|check|confirm)\s+)?(?:it|this|that|they|these|those|you)\b|what(?:['’]s|\s+is)\s+(?:its|their|the)\b|how\s+(?:many|much)\b|please\s+(?:verify|check)\b))[\s\S]*$/iu, "");
   const query = productRequest.replace(/(?:under|below|less than|hasta|menos de|מתחת ל?|עד)\s*[$€£₪]?\s*\d+(?:\.\d+)?/giu," ")
     .replace(/(?:between|entre|בין)\s*[$€£₪]?\s*\d+(?:\.\d+)?\s*(?:and|y|ל|ו|-)\s*[$€£₪]?\s*\d+(?:\.\d+)?/giu," ")
     .replace(/\b(?:i'm|im|looking|look|search|find|show|recommend\w*|options|variants|compare|comparison|with|some|different|busco|buscar|muestra|recomiend\w*|opciones|variantes|comparar|por|favor|USD|EUR|GBP|ILS|CAD|AUD)\b|מחפשת?|אפשרויות|המלצה|ממליצים|בבקשה/giu," ")
