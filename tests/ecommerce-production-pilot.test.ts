@@ -72,13 +72,15 @@ test("real HTTP guard rejects forged identity, nonpilot/admin, cross-origin and 
   } finally { await new Promise<void>((resolve, reject) => server.close(err => err ? reject(err) : resolve())); }
 });
 
-test("other merchants retain navigation; only an explicit pilot grant reveals the engine", () => {
+test("pilot access never implies merchant engine activation in navigation", () => {
   const flags = { hasPresetCampaigns: true, prospectAiActivated: true, realtorGrowthEngineActivated: true };
   const before = resolveAppNavSections(flags);
-  assert.deepEqual(resolveAppNavSections({ ...flags, ecommercePilotEnabled: false }), before);
-  const after = resolveAppNavSections({ ...flags, ecommercePilotEnabled: true });
-  assert.equal(after.flatMap(x => x.itemIds).filter(x => x === "ecommerceGrowthEngine").length, 1);
-  assert.deepEqual(after.map(x => ({ ...x, itemIds: x.itemIds.filter(id => id !== "ecommerceGrowthEngine") })), before);
+  assert.equal(before.flatMap(x => x.itemIds).includes("ecommerceGrowthEngine"), false);
+  const activated = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: true });
+  assert.equal(activated.flatMap(x => x.itemIds).filter(id => id === "ecommerceGrowthEngine").length, 1);
+  assert.deepEqual(activated.map(x => ({
+    ...x, itemIds: x.itemIds.filter(id => id !== "ecommerceGrowthEngine")
+  })), before);
 });
 
 test("authorized private preview has a production SPA shell without joining public marketing routes", () => {
