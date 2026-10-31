@@ -12,16 +12,8 @@ import type { ShoppingSettings } from "@shared/shoppingAssistant";
 import type { aiService } from "../aiService";
 import { privateTestShoppingSettings } from "./shoppingAllowance";
 import { shoppingLocale } from "@shared/shoppingAssistant";
-/**
- * Explicit product requests in private Test Chat must not fall through to a
- * merchant's unrelated site/plan knowledge when shopping is disabled or offline.
- * General company-plan questions stay on the regular AI Brain route.
- */
-export function explicitStoreProductQuestion(raw: string): boolean {
-  const text = raw.normalize("NFKC").toLowerCase();
-  if (/\b(?:free|pro|enterprise)\s+(?:plan|subscription|tier|pricing)\b|\bwhachatcrm\s+(?:price|plan|subscription)\b/.test(text)) return false;
-  return /\b(?:looking\s+for|find\s+(?:me\s+)?a|shopify\s+(?:product|item|catalog)|product\s+(?:price|availability|stock|inventory)|inventory|in\s+stock|do\s+you\s+have\s+it|busco|producto|inventario|disponibilidad)\b|במלאי|מחפש(?:ת)?|מלאי|מוצר/u.test(text);
-}
+import { explicitStoreProductQuestion } from "@shared/shopperProductGuard";
+/** Product queries must never inherit unrelated business-plan answers in private Test Chat. */
 const privateProductFallback = {
   en: "I couldn't verify a Shopify product match and its current price and availability. Check the catalog and try another product search. I won't provide unverified prices or stock.",
   es: "No pude verificar un producto de Shopify con su precio y disponibilidad actuales. Comprueba el catálogo y vuelve a buscar. No daré precios ni existencias sin verificar.",
