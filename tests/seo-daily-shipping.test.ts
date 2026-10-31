@@ -1,6 +1,8 @@
 /** Run: npx tsx tests/seo-daily-shipping.test.ts */
 import assert from "node:assert/strict";
-import { SEO_DAILY_SHIPPING_SCHEMA, selectDailySeoReviewCandidate } from "../server/seo/dailyShipping";
+process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/seo_test";
+async function main() {
+const { SEO_DAILY_SHIPPING_SCHEMA, selectDailySeoReviewCandidate } = await import("../server/seo/dailyShipping");
 
 const content = "### How to evaluate a WhatsApp CRM\n\n" +
   "Review how shared inbox assignments, customer records, and follow-up workflows operate before selecting a CRM. " +
@@ -32,3 +34,5 @@ assert.match(SEO_DAILY_SHIPPING_SCHEMA, /run_day date PRIMARY KEY/);
 assert.match(SEO_DAILY_SHIPPING_SCHEMA, /needs_review/);
 assert.doesNotMatch(SEO_DAILY_SHIPPING_SCHEMA, /auto.publish|social.credentials/i);
 console.log("SEO daily shipping safety and deterministic review selection passed");
+}
+void main().catch(error => { console.error(error); process.exitCode = 1; });
