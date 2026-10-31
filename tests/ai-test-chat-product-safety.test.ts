@@ -5,7 +5,8 @@ import { eq } from "drizzle-orm";
 import * as schema from "../shared/schema";
 import { shoppingSettings, shoppingFilters } from "../shared/shoppingAssistant";
 import { privateMerchantCatalogPreviewAllowed } from "../server/aiTestChat/previewEligibility";
-import { explicitStoreProductQuestion, createTestChatGenerator } from "../server/aiTestChat/generate";
+import { createTestChatGenerator } from "../server/aiTestChat/generate";
+import { explicitStoreProductQuestion, guardedProductFallback } from "../shared/shopperProductGuard";
 import { createTestChatSessions } from "../server/aiTestChat/sessions";
 import { createCommerceStore } from "../server/salesCatalog/commerceStore";
 import { fixtureInventoryRequest, inventoryDue } from "./shopify-inventory-fixture";
@@ -32,7 +33,16 @@ test("activated Shopify catalog is eligible for private shopping preview only wi
 test("product parsing strips conversational follow-up but keeps exact Shopify title", () => {
   assert.equal(explicitStoreProductQuestion(question),true);
   assert.equal(explicitStoreProductQuestion("What is the WhachatCRM Pro plan price?"),false);
+  assert.equal(explicitStoreProductQuestion("I am looking for a rental property in Miami"),false);
   assert.equal(shoppingFilters(question,"USD").query.toLowerCase(),"collection snowboard liquid");
+});
+
+test("customer-facing Shopify product guard never fabricates product facts or routes to business plans", async () => {
+  assert.match((await guardedProductFallback(question,"en",async()=>true))!,/can't verify this product/i);
+  assert.equal(await guardedProductFallback("What is the WhachatCRM Pro plan price?","en",async()=>true),null);
+  assert.equal(await guardedProductFallback("I'm looking for an apartment in Miami","en",async()=>true),null);
+  assert.equal(await guardedProductFallback(question,"en",async()=>false),null);
+  assert.match((await guardedProductFallback(question,"es",async()=>{throw Error("provider offline")}))!,/No puedo verificar/i);
 });
 
 test("private activated merchant can verify catalog prices and inventory with live shopping channels OFF", async () => {
