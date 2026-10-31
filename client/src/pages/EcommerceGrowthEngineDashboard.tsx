@@ -10,6 +10,7 @@ import { ShopifyPostPurchasePreview } from "@/components/ecommerce/ShopifyPostPu
 import { ShopifyCatalog } from "@/components/ShopifyCatalog";
 import { ShoppingSettings } from "@/components/ShoppingSettings";
 import { useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
+import { EcommerceGrowthEngineOnboarding } from "./EcommerceGrowthEngineOnboarding";
 
 const translations = {
  en: {title:"E-Commerce Growth Engine", subtitle:"Products, orders and customer journeys in one place.", connected:"Shopify connected", disconnected:"Shopify not connected", unavailable:"Connection status unavailable", overview:"Overview", products:"Products", orders:"Orders", shopping:"AI Shopping", recovery:"Cart Recovery", post:"Post-Purchase", settings:"Settings", orderTasks:"Order support tasks", shop:"Store", manage:"Manage", start:"Connect Shopify", productDetail:"View your synced Shopify catalog, variants, prices and inventory.", ordersDetail:"Shopify customer purchases are recorded with contacts. Order-support tasks live in Follow-ups.", shoppingDetail:"Test your shopping assistant and configure recommendations here.", recoveryDetail:"Recovery reminders are not active. Setup and approved consent are required.", recoveryReady:"Infrastructure ready. Customer delivery remains off.", recoveryMissing:"Recovery setup is not complete. Customer delivery remains off.", recoveryUnknown:"Recovery readiness unavailable. Customer delivery remains off.", postDetail:"Post-purchase customer messaging is not active.", settingsDetail:"Manage your Shopify connection and sync preferences.", noStats:"Live metrics will appear when their sources are available.", recent:"Quick access", seeCatalog:"Open Shopify products", seeContacts:"Customer purchase records", seeTasks:"Follow-ups", seeBrain:"AI Brain", synced:"Connected store", status:"Customer journeys off", enabledStatus:"Customer journeys active", unknownStatus:"Status unavailable", published:"Published", available:"Verified available now", setup:"Shopify setup", noDuplicate:"The catalog and customer records are shared with WhachatCRM; no separate data is created."},
@@ -99,4 +100,11 @@ export function EcommerceGrowthEngineDashboardContent() {
    </section>
  </main>;
 }
-export function EcommerceGrowthEngineDashboard(){return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent/></EcommerceWorkspaceBoundary>;}
+export function EcommerceGrowthEngineDashboard(){
+ const requestedView = new URLSearchParams(useSearch()).get("view");
+ // Pre-install setup and details are available to signed-in merchants.
+ // All operational pages still require the existing pilot/activation boundary.
+ if(requestedView === "setup" || requestedView === "about")
+   return <EcommerceGrowthEngineOnboarding mode={requestedView}/>;
+ return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent/></EcommerceWorkspaceBoundary>;
+}
