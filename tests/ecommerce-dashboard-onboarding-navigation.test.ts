@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isEcommerceOnboardingDocumentRequest } from "../server/ecommerce/onboardingDocumentAccess";
 
 const gallery = readFileSync("client/src/pages/Templates.tsx", "utf8");
 const app = readFileSync("client/src/pages/AppLayout.tsx", "utf8");
@@ -86,4 +87,27 @@ test("details page explains how to enable journeys without repeating a negative 
   assert.ok(!engineDetails.includes("Installing this engine does not enable automatic WhatsApp messages"));
   assert.ok(!onboarding.includes("Installing this engine does not enable automatic WhatsApp messages"));
   assert.ok(!onboarding.includes("Instalar el motor no habilita mensajes automáticos"));
+});
+
+test("first-install setup and details load as authenticated documents before activation, never operational pages", () => {
+  const server = readFileSync("server/ecommerceMerchantActivationRoutes.ts", "utf8");
+  const router = readFileSync("server/routes.ts", "utf8");
+  assert.ok(router.includes("app.use('/app/ecommerce-growth-engine', requireEcommerceWorkspace)"));
+  assert.ok(server.includes("isEcommerceOnboardingDocumentRequest(req.method, req.path, req.query.view)"));
+  assert.ok(server.includes("if (!owner || owner.id !== accountId || owner.deletionRequestedAt)"));
+  assert.ok(server.includes("if (state?.activated) { next(); return; }"));
+  for (const view of ["setup","about"]) {
+    assert.equal(isEcommerceOnboardingDocumentRequest("GET","/",view),true);
+    assert.equal(isEcommerceOnboardingDocumentRequest("HEAD","/",view),true);
+    assert.equal(isEcommerceOnboardingDocumentRequest("GET","",view),true);
+  }
+  for (const view of ["overview","products","shopping","recovery","post","orders","settings","activate",undefined,null,["setup","orders"],"setup/products"]) {
+    assert.equal(isEcommerceOnboardingDocumentRequest("GET","/",view),false,String(view));
+  }
+  for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
+    assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","setup"),false,method);
+    assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","about"),false,method);
+  }
+  assert.equal(isEcommerceOnboardingDocumentRequest("GET","/internal","setup"),false);
+  assert.equal(isEcommerceOnboardingDocumentRequest("GET","/products","about"),false);
 });
