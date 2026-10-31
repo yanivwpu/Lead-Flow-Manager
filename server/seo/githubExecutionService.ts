@@ -83,7 +83,12 @@ export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActi
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
-  const runAutopilot=()=>{void import("./autopilotService").then(m=>m.runSeoAutopilot()).catch(error=>console.error("[SEO Autopilot] background cycle failed",{message:safeGithubExecutionError(error)}));};
+  const runAutopilot=()=>{
+    void import("./autopilotService").then(m=>m.runSeoAutopilot())
+      .catch(error=>console.error("[SEO Autopilot] background cycle failed",{message:safeGithubExecutionError(error)}));
+    void import("./dailyShipping").then(m=>m.runDailySeoShippingSelection())
+      .catch(error=>console.error("[SEO Shipping] daily selection failed",{message:safeGithubExecutionError(error)}));
+  };
   const startupAutopilot=setTimeout(runAutopilot,45_000);startupAutopilot.unref?.();
   autopilotTimer=setInterval(runAutopilot,SEO_AUTOPILOT_BACKGROUND_INTERVAL_MS);autopilotTimer.unref?.();
   workerTimer=setInterval(wakeSeoGithubExecutionWorker,SEO_GITHUB_WORKER_INTERVAL_MS);workerTimer.unref?.();
