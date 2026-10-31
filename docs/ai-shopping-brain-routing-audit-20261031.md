@@ -76,3 +76,6 @@ Automated review of combined head `080bdd8` found two further defects: an availa
 
 
 A second automated review identified two additional integration defects: Spanish `disponibilidad` bypassed mixed detection, and the business-only Live Business Data early return suppressed unrelated requested package/calendar/property providers. Both are corrected with regressions. Business-only questions now suppress only irrelevant Shopify selection and keep merchant knowledge enabled while preserving independently requested live providers. Mixed availability/search predicates remain product guarded. The complete affected suite, native checks, production build and exact-head automated review are rerun for this revision; prior-head success is not final-head approval.
+
+
+The third review identified Spanish `cuánto vale` pricing drift and non-product plan/package price interception. The fix moves PR #250's original product-intent predicates unchanged into `shared/shopperProductIntent.ts`, reused by both the safety guard and business-policy classification. Existing setup/plan exemptions and multilingual predicates now have one source of truth; conservative unnamed-merchandise cues apply only outside explicit non-product offers. New regressions preserve Spanish product-price verification and merchant plan/package knowledge routing. All earlier review cases remain covered.

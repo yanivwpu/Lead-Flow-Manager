@@ -1,3 +1,5 @@
+import { catalogProductQuestion } from "./shopperProductIntent";
+
 /** Business-only questions belong to the workspace's existing AI Brain retrieval.
  * Mixed requests for product facts stay catalog guarded; this is not permission
  * for a general model to quote stock/prices or to execute an order operation.
@@ -13,7 +15,12 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
     .replace(/\bhow\s+much(?:\s+does)?\s+(?:shipping|delivery)(?:\s+cost)?\b/gu," ")
     .replace(/\b(?:prices?|costs?)\s+(?:of|for)\s+(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:prices?|costs?|fees?|charges?)\b/gu," ")
     .replace(/\bdo\s+you\s+have\s+(?:(?:a|an|any)\s+)?(?:warrant(?:y|ies)|discount\s+codes?|(?:a\s+)?return\s+policy)\b/gu," ");
-  const productFacts = /\b(?:prices?|costs?|how\s+much|stock|inventory|availability|disponibilidad|available|buy|purchase|sell|carry|do\s+you\s+have|show\s+me|find\s+me|recommend\w*|add\b.{0,60}\bto\b.{0,20}\bcart|precios?|cu[aá]nto\s+cuesta|inventario|disponibles?|comprar)\b|מחיר|מלאי|זמין|לקנות|לרכוש/u.test(factText);
+  const nonProductOffer = /\b(?:packages?|plans?|subscriptions?|tiers?)\b/u.test(factText) &&
+    !/\b(?:products?|items?|sku|stock|inventory|availability|productos?|inventario|disponibilidad)\b|מוצר|מלאי/u.test(factText);
+  // Reuse the complete existing guard (including Spanish cuánto and setup/plan
+  // exemptions); only unnamed merchandise monetary clauses need extra guarding.
+  const productFacts = catalogProductQuestion(factText) || (!nonProductOffer &&
+    /\b(?:prices?|costs?|how\s+much|stock|inventory|availability|available|buy|purchase|sell|carry|do\s+you\s+have|disponibles?|precios?|cu[aá]nto\s+(?:cuesta|vale))\b|מחיר/u.test(factText));
   const orderAction = /\b(?:track|tracking|cancel|cancelar|seguimiento)\b|בטל|מעקב/u.test(text);
   const human = /\b(?:human|agent|person|representative|humano|agente|persona)\b|נציג|אדם/u.test(text);
   if (productFacts) return "mixed";
