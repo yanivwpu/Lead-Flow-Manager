@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import {
-  ArrowRight, Bot, CheckCircle2, Clock3, Inbox, MessageCircle,
+  ArrowRight, Bot, CheckCircle2, Inbox, MessageCircle,
   PackageCheck, Repeat2, ShieldCheck, ShoppingBag, ShoppingCart,
   Sparkles, Workflow, type LucideIcon,
 } from "lucide-react";
