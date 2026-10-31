@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, CheckCircle2, LockKeyhole, ShoppingBag } from "lucide-react";
+import { EcommerceGrowthEngineDetails } from "./EcommerceGrowthEngineDetails";
 import { useActivateEcommerceMerchant, useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
 
 type Mode = "setup" | "about";
@@ -99,33 +100,20 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
   const unavailable = status.isError || (!loading && !status.data);
   return (
     <main dir={locale === "he" ? "rtl" : "ltr"} lang={locale}
-      className="mx-auto w-full max-w-5xl space-y-6 p-4 pb-16 sm:p-8"
+      className={"mx-auto w-full space-y-6 p-4 pb-16 sm:p-8 " + (mode === "about" ? "max-w-6xl" : "max-w-5xl")}
       data-testid="ecommerce-growth-engine-onboarding">
       <Link href="/app/templates?tab=growth-engines" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-blue-700">
         <ArrowLeft className="h-4 w-4 rtl:rotate-180"/>{t.back}
       </Link>
-      <header className="rounded-2xl border border-blue-100 bg-white p-6 sm:p-8">
+      {mode === "setup" && <header className="rounded-2xl border border-blue-100 bg-white p-6 sm:p-8">
         <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
           <ShoppingBag className="h-4 w-4"/>{t.engine}
         </p>
         <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{mode === "about" ? t.aboutTitle : t.title}</h1>
         <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">{mode === "about" ? t.aboutDescription : t.description}</p>
-      </header>
+      </header>}
       {mode === "about" ? (
-        <section data-testid="ecommerce-engine-in-app-details" className="space-y-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {t.features.map(([title, description]) => (
-              <article key={title} className="rounded-xl border border-slate-200 bg-white p-5">
-                <CheckCircle2 className="mb-3 h-5 w-5 text-blue-600"/>
-                <h2 className="font-semibold text-slate-950">{title}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-slate-600">{description}</p>
-              </article>
-            ))}
-          </div>
-          <Link href={activated ? "/app/ecommerce-growth-engine" : setupPath} data-testid="ecommerce-details-install" className={actionClass}>
-            {activated ? t.open : t.install}<ArrowRight className="h-4 w-4 rtl:rotate-180"/>
-          </Link>
-        </section>
+        <EcommerceGrowthEngineDetails locale={locale} activated={activated}/>
       ) : (
         <section className="space-y-4" data-testid="ecommerce-engine-install-steps">
           {t.steps.map(([title, detail], index) => (
