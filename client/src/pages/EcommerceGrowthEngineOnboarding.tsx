@@ -109,8 +109,8 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
         <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
           <ShoppingBag className="h-4 w-4"/>{t.engine}
         </p>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{mode === "about" ? t.aboutTitle : t.title}</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">{mode === "about" ? t.aboutDescription : t.description}</p>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{t.title}</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">{t.description}</p>
       </header>}
       {mode === "about" ? (
         <EcommerceGrowthEngineDetails locale={locale} activated={activated}/>
