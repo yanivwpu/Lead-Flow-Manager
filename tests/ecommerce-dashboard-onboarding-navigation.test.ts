@@ -9,6 +9,7 @@ const onboarding = readFileSync("client/src/pages/EcommerceGrowthEngineOnboardin
 const marketing = readFileSync("client/src/components/marketing/SolutionPage.tsx", "utf8");
 const activation = readFileSync("client/src/lib/ecommerceMerchantActivation.ts", "utf8");
 const shopifyStart = readFileSync("client/src/components/ShopifyStartView.tsx", "utf8");
+const engineDetails = readFileSync("client/src/pages/EcommerceGrowthEngineDetails.tsx", "utf8");
 
 test("catalog actions stay in the authenticated application", () => {
   assert.ok(gallery.includes('"/app/ecommerce-growth-engine?view=setup"'));
@@ -35,4 +36,39 @@ test("Shopify connects before merchant activation, preserving explicit user inte
   assert.ok(!onboarding.includes("sendRecoveryViaMeta"));
   assert.ok(onboarding.includes("Installing this engine does not enable automatic WhatsApp messages"));
   for (const lang of ["en:", "es:", "he:"]) assert.ok(onboarding.includes(lang));
+});
+
+
+test("View details is a complete sales presentation inside the dashboard, not a second landing-page hop", () => {
+  assert.ok(onboarding.includes('<EcommerceGrowthEngineDetails locale={locale} activated={activated}/>'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-engine-in-app-details"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-engine-sales-hero"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-engine-capabilities"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-sales-customer-journey"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-sales-scenarios"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-sales-activation-guide"'));
+  assert.ok(engineDetails.includes('data-testid="ecommerce-sales-final-cta"'));
+  assert.ok(engineDetails.includes('ecommerce-details-install'));
+  assert.ok(engineDetails.includes('ecommerce-details-install-bottom'));
+  assert.match(engineDetails, /const installHref = "\/app\/ecommerce-growth-engine\?view=setup"/);
+  assert.ok(!engineDetails.includes('href="/solutions/ecommerce"'));
+});
+
+test("the sales pitch leads with abandoned cart recovery and accurately represents all other engine capabilities", () => {
+  for (const essential of [
+    "Abandoned Cart Recovery",
+    "AI Shopping Assistant",
+    "Unified Customer Inbox",
+    "Shopify Orders & Support",
+    "Post-Purchase Journeys",
+    "Customizable Automations",
+  ]) assert.ok(engineDetails.includes(essential), essential);
+  assert.ok(engineDetails.includes('data-testid={index === 0 ? "ecommerce-abandoned-cart-feature" : undefined}'));
+  assert.ok(engineDetails.includes("Consent & template check"));
+  assert.ok(engineDetails.includes("Illustrative sequence"));
+  assert.ok(engineDetails.includes("separate delivery enablement"));
+  for (const localized of ["en:", "es:", "he:", "Recuperación de carritos abandonados", "שחזור עגלות נטושות"])
+    assert.ok(engineDetails.includes(localized), localized);
+  assert.ok(!engineDetails.includes("sendRecoveryViaMeta"));
+  assert.ok(!engineDetails.includes("activate.mutate"));
 });
