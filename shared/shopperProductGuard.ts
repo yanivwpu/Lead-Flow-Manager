@@ -6,7 +6,7 @@ export function explicitStoreProductQuestion(raw: string): boolean {
   if (/\b(?:free|pro|enterprise)\s+(?:plan|subscription|tier|pricing)\b|\bwhachatcrm\s+(?:price|plan|subscription)\b/.test(t)) return false;
   const productReference = /\b(?:products?|items?|sku|productos?|art[ií]culos?)\b|מוצר(?:ים)?/u.test(t);
   const stockQuestion = /\b(?:inventory|stock|availability|in\s+stock|out\s+of\s+stock|inventario|disponibilidad)\b|במלאי|מלאי/u.test(t);
-  const buyingQuestion = /\b(?:prices?|costs?|how\s+much|available|buy|purchase|sell|carry|do\s+you\s+have|show\s+me|find\s+me|recommend\w*|add\b.{0,60}?\bto\s+(?:my\s+|the\s+)?cart|precios?|comprar|disponible|cu[aá]nto)\b|מחיר(?:ים)?|לקנות|זמין/u.test(t);
+  const buyingQuestion = /\b(?:prices?|costs?|how\s+much|available|buy|purchase|sell|carry|do\s+you\s+have|show\s+me|find\s+me|recommend\w*|add\b.{0,60}?\bto\s+(?:my\s+|the\s+)?cart|precios?|comprar|disponibles?|cu[aá]nto)\b|מחיר(?:ים)?|לקנות|זמין/u.test(t);
   // Explicit facts about an item/SKU take priority over general setup wording.
   // "Can I add SKU X to my cart; is it in stock?" must not bypass verification.
   const itemFactQuestion = productReference && (stockQuestion || buyingQuestion);
