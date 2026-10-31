@@ -9,6 +9,7 @@ import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
 import { readShoppingSettings } from "./shopping/runtime";
 import { privateTestShoppingAllowed, privateTestShoppingSettings } from "./aiTestChat/shoppingAllowance";
+import { privateMerchantCatalogPreviewAllowed } from "./aiTestChat/previewEligibility";
 import { inventoryState } from "./salesCatalog/shopify/inventory";
 import { registerShoppingRoutes } from "./shopping/routes";
 import { shoppingEntitled } from "./shopping/runtime";
@@ -232,7 +233,7 @@ import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
 import ecommercePilotRoutes from "./ecommercePilotRoutes";
-import ecommerceMerchantActivationRoutes, { requireEcommerceWorkspace } from "./ecommerceMerchantActivationRoutes";
+import ecommerceMerchantActivationRoutes, { requireEcommerceWorkspace, currentForAccount } from "./ecommerceMerchantActivationRoutes";
 import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
 import { listGhlInstallationsForAdmin, importGhlInstallsFromCsv } from "./ghlMarketplaceService";
 import { getActivationSummary, getActivationAccounts } from "./adminActivationService";
@@ -11209,8 +11210,18 @@ export async function registerRoutes(
   registerShopifyCatalogRoutes(app, db, salesCatalog.commerce);
   registerShoppingRoutes(app, db, shoppingEntitled);
   // Private transport only: never passed to the live Shopping runtime or saved settings.
-  const privateShoppingAllowed = async (userId: string) =>
+  const checkoutPilotAllowed = async (userId: string) =>
     privateTestShoppingAllowed(await storage.getUser(userId), process.env);
+  const privateShoppingAllowed = async (userId: string) => {
+    if (await checkoutPilotAllowed(userId)) return true;
+    // Private Test Chat only: never changes merchant settings, live replies or sending gates.
+    try {
+      const [state, source] = await Promise.all([
+        currentForAccount(userId), salesCatalog.commerce.source(userId),
+      ]);
+      return privateMerchantCatalogPreviewAllowed(state, source);
+    } catch { return false; }
+  };
   const privateCartHandoff = createPrivateCartHandoff({db,entitled:shoppingEntitled});
   registerTestChatRoutes(app, {
     db,
@@ -11221,7 +11232,7 @@ export async function registerRoutes(
     checkoutHandoffInspect: privateCartHandoff.inspect,
     checkoutHandoffExecute: privateCartHandoff.execute,
     onTurnSaved: async event => {
-      if (await privateShoppingAllowed(event.workspaceUserId))
+      if (await checkoutPilotAllowed(event.workspaceUserId))
         console.info("[PrivateShoppingTurn]", JSON.stringify(event));
     },
     access: async (userId, generating) => {
@@ -11246,13 +11257,14 @@ export async function registerRoutes(
       const settings = await storage.getAiSettings(userId);
       const savedShopping = await readShoppingSettings(userId);
       const testOnlyShopping = await privateShoppingAllowed(userId);
+      const checkoutPilot = await checkoutPilotAllowed(userId);
       const shopping = privateTestShoppingSettings(savedShopping, testOnlyShopping);
       const entitled = await shoppingEntitled(userId);
       // Deliberately whitelist safe operational facts; no installation/provider payloads.
       return { aiMode: settings?.aiMode ?? "suggest_only", channel: "webchat", checkoutEnabled: false,
-        checkoutPreflightAvailable: testOnlyShopping && entitled,
-        checkoutCartTestAvailable: testOnlyShopping && entitled && actorId===userId,
-        checkoutCartExecutionEnabled: testOnlyShopping && entitled && actorId===userId && (PRIVATE_CART_EXECUTION_ENABLED || PRIVATE_CART_SECOND_EXECUTION_ENABLED),
+        checkoutPreflightAvailable: checkoutPilot && entitled,
+        checkoutCartTestAvailable: checkoutPilot && entitled && actorId===userId,
+        checkoutCartExecutionEnabled: checkoutPilot && entitled && actorId===userId && (PRIVATE_CART_EXECUTION_ENABLED || PRIVATE_CART_SECOND_EXECUTION_ENABLED),
         shoppingEnabled: shopping.enabled && shopping.allowedChannels.includes("webchat") && entitled,
         shoppingTestOnly: testOnlyShopping && entitled,
         liveShoppingEnabled: savedShopping.enabled && savedShopping.allowedChannels.includes("webchat") && entitled,
