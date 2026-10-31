@@ -17,6 +17,7 @@ export function ShopifyCatalogView(props: {
     sourceId: string | null;
   };
   items: CommerceProduct[];
+  authorizationOrigin?: "ecommerce";
   loading: boolean;
   error?: string;
   query: string;
@@ -50,7 +51,7 @@ export function ShopifyCatalogView(props: {
             <p>{t("salesCatalog.commerce.accessRequired")}</p>
             {s.authorizationEnabled ? (
               <a
-                href="/api/shopify/catalog/authorize"
+                href={props.authorizationOrigin === "ecommerce" ? "/api/shopify/catalog/authorize?origin=ecommerce" : "/api/shopify/catalog/authorize"}
                 className="mt-2 inline-block font-semibold underline"
               >
                 {t("salesCatalog.commerce.approve")}

@@ -18,6 +18,11 @@ export function catalogAuthorizationUrl(
 
 export const CATALOG_RETURN_PATH = "/api/shopify/catalog/return";
 export const CATALOG_PAGE_PATH = "/app/sales-catalog?source=shopify";
+export const ECOMMERCE_CATALOG_PAGE_PATH = "/app/ecommerce-growth-engine?view=products";
+/** Only these server-defined destinations are allowed; never redirect to a supplied URL. */
+export function catalogAuthorizationDestination(origin: unknown): string {
+  return origin === "ecommerce" ? ECOMMERCE_CATALOG_PAGE_PATH : CATALOG_PAGE_PATH;
+}
 const INTENT_LIFETIME_MS = 15 * 60_000;
 export type CatalogAuthorizationIntent = {
   actorUserId: string;
@@ -26,6 +31,7 @@ export type CatalogAuthorizationIntent = {
   integrationId: string;
   tokenHash: string;
   expiresAt: number;
+  origin?: "ecommerce";
 };
 export type CatalogAuthorizationSession = {
   catalogAuthorization?: CatalogAuthorizationIntent;
@@ -38,6 +44,7 @@ export function createCatalogAuthorizationIntent(
     token: string;
   },
   actorUserId: string,
+  origin?: "ecommerce",
 ): CatalogAuthorizationIntent {
   return {
     actorUserId,
@@ -46,6 +53,7 @@ export function createCatalogAuthorizationIntent(
     integrationId: install.integrationId,
     tokenHash: tokenHash(install.token),
     expiresAt: Date.now() + INTENT_LIFETIME_MS,
+    ...(origin === "ecommerce" ? { origin } : {}),
   };
 }
 export function catalogAuthorizationIntentMatches(

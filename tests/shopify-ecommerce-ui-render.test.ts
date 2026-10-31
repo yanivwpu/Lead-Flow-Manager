@@ -114,7 +114,7 @@ test("dashboard keeps Shopify setup out of overview and links to existing settin
   assert.ok(html.includes("/app/ecommerce-growth-engine?view=orders"));
   const source=readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.tsx","utf8");
   assert.ok(source.includes('view==="products"'));
-  assert.ok(source.includes("<ShopifyCatalog showShoppingSettings={!privatePilot}/>"));
+  assert.ok(source.includes('<ShopifyCatalog showShoppingSettings={!privatePilot} authorizationOrigin="ecommerce"/>'));
   assert.ok(source.includes('view==="settings"'));
   assert.ok(source.includes("<ShopifySimpleSetup"));
   assert.ok(source.includes('view==="recovery"'));

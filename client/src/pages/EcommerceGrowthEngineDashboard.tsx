@@ -80,7 +80,7 @@ export function EcommerceGrowthEngineDashboardContent() {
        </div>
        <div className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="font-semibold">{t.recent}</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{links.map(l=><Link key={l.href} href={l.href} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50">{l.label}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>)}</div></div>
      </>}
-     {view==="products" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.productDetail}</p><ShopifyCatalog showShoppingSettings={!privatePilot}/><p className="mt-4 text-xs text-slate-500">{t.noDuplicate}</p></div>}
+     {view==="products" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.productDetail}</p><ShopifyCatalog showShoppingSettings={!privatePilot} authorizationOrigin="ecommerce"/><p className="mt-4 text-xs text-slate-500">{t.noDuplicate}</p></div>}
      {view==="orders" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.ordersDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/contacts" className="font-semibold text-blue-700">{t.seeContacts} →</Link><Link href="/app/followups" className="font-semibold text-blue-700">{t.seeTasks} →</Link></div></div>}
      {view==="shopping" && <div className="rounded-xl border bg-white p-6 space-y-4">
        <p className="text-sm text-slate-600">{t.shoppingDetail}</p>
