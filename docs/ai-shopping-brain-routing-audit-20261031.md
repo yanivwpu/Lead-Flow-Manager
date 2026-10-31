@@ -79,3 +79,6 @@ A second automated review identified two additional integration defects: Spanish
 
 
 The third review identified Spanish `cuánto vale` pricing drift and non-product plan/package price interception. The fix moves PR #250's original product-intent predicates unchanged into `shared/shopperProductIntent.ts`, reused by both the safety guard and business-policy classification. Existing setup/plan exemptions and multilingual predicates now have one source of truth; conservative unnamed-merchandise cues apply only outside explicit non-product offers. New regressions preserve Spanish product-price verification and merchant plan/package knowledge routing. All earlier review cases remain covered.
+
+
+The fourth review found clause-wide offer exemption, discarded supported quantity mutation and additional-predicate setup override. These are corrected: offer exemptions apply per conjunction-delimited clause, explicit quantity/selection cues prevent business-only delegation, and the shared intent function exposes setup/plan reasons so conservative fallback cannot override those exemptions. Direct regressions include a named snowboard price plus warranty-plan question, quantity two plus policy, and Shopify inventory setup plus shipping configuration. Final exact-head CI and automated review remain required.

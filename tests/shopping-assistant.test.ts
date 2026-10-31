@@ -239,3 +239,10 @@ test("bare-title discovery is private opt-in, exact catalog-grounded and never r
  }
  const denied=fixture({catalogTitleDiscovery:true});assert.equal(await denied.turn("Snowboard",{userId:"tenant-b"}),null);assert.equal(denied.calls(),0);
 });
+
+ test("a policy clause cannot discard an explicit supported quantity mutation",async()=>{
+ const f=fixture();await f.turn("show snowboard");await f.turn("option 1");
+ const result=(await f.turn("quantity 2 and what is your return policy?"))!;
+ assert.equal(result.state.quantity,2);assert.equal(result.state.selected?.variantId,"v1");
+ assert.equal(result.state.step,"confirming");
+ });
