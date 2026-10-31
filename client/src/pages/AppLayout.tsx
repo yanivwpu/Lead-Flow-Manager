@@ -36,7 +36,7 @@ import { useInboxNewActivityRealtime } from "@/lib/useInboxNewActivityBadge";
 const ContactDetails = lazy(() => import("./ContactDetails").then(m => ({ default: m.ContactDetails })));
 
 const EcommerceGrowthEngineDashboard = lazy(() => import("./EcommerceGrowthEngineDashboard").then(m => ({default:m.EcommerceGrowthEngineDashboard})));
-const EcommerceGrowthEnginePreview = lazy(() => import("./EcommerceGrowthEnginePreview").then(m => ({default:m.EcommerceGrowthEnginePreview})));
+
 const FollowUps = lazy(() => import("./FollowUps").then(m => ({ default: m.FollowUps })));
 
 const Search = lazy(() => import("./Search").then(m => ({ default: m.Search })));
@@ -224,7 +224,7 @@ function AppContent() {
                   <RealtorGrowthEngine />
                 </ShopifyGrowthEngineRedirect>
               </Route>
-              <Route path="/app/templates/ecommerce-growth-engine" component={EcommerceGrowthEnginePreview} />
+              <Route path="/app/templates/ecommerce-growth-engine"><Redirect to="/app/ecommerce-growth-engine?view=about" /></Route>
               <Route path="/app/templates" component={Templates} />
               <Route path="/app/campaigns/:id?" component={Campaigns} />
               <Route path="/app/website-widget">
