@@ -51,6 +51,15 @@ test("product return policies retain merchant knowledge instead of becoming SKU 
  assert.equal(product.needsKnowledge,false);
 });
 
+test("policy delegation preserves independently requested non-Shopify live providers",()=>{
+ for(const message of ["Tell me about your Featured Business package and your return policy", "Find a waterfront property and explain your return policy", "Book an appointment and explain your return policy"]) {
+  const decision=resolveLiveBusinessDataDecision({message});
+  assert.equal(decision.needsKnowledge,true,message);
+  assert.ok(decision.providerIds.length,message);
+ }
+ assert.ok(resolveLiveBusinessDataDecision({message:"Tell me about your Featured Business package and your return policy"}).providerIds.includes("businessPackages"));
+});
+
 test("featured business package → knowledge + businessPackages", () => {
   const d = resolveLiveBusinessDataDecision({
     message: "Tell me about your Featured Business package.",

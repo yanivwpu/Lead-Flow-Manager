@@ -13,7 +13,7 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
     .replace(/\bhow\s+much(?:\s+does)?\s+(?:shipping|delivery)(?:\s+cost)?\b/gu," ")
     .replace(/\b(?:prices?|costs?)\s+(?:of|for)\s+(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:prices?|costs?|fees?|charges?)\b/gu," ")
     .replace(/\bdo\s+you\s+have\s+(?:(?:a|an|any)\s+)?(?:warrant(?:y|ies)|discount\s+codes?|(?:a\s+)?return\s+policy)\b/gu," ");
-  const productFacts = /\b(?:prices?|costs?|how\s+much|stock|inventory|availability|available|buy|purchase|sell|carry|do\s+you\s+have|add\b.{0,60}\bto\b.{0,20}\bcart|precios?|cu[aá]nto\s+cuesta|inventario|disponibles?|comprar)\b|מחיר|מלאי|זמין|לקנות|לרכוש/u.test(factText);
+  const productFacts = /\b(?:prices?|costs?|how\s+much|stock|inventory|availability|disponibilidad|available|buy|purchase|sell|carry|do\s+you\s+have|show\s+me|find\s+me|recommend\w*|add\b.{0,60}\bto\b.{0,20}\bcart|precios?|cu[aá]nto\s+cuesta|inventario|disponibles?|comprar)\b|מחיר|מלאי|זמין|לקנות|לרכוש/u.test(factText);
   const orderAction = /\b(?:track|tracking|cancel|cancelar|seguimiento)\b|בטל|מעקב/u.test(text);
   const human = /\b(?:human|agent|person|representative|humano|agente|persona)\b|נציג|אדם/u.test(text);
   if (productFacts) return "mixed";

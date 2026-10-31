@@ -25,7 +25,7 @@ test("mixed named-product facts and policy never fall through to general AI when
   settings:async()=>shoppingSettings({enabled:false}),entitled:async()=>true,
   knowledge:async()=>undefined,aiSettings:async()=>undefined,meter:async()=>{},
  });
- for(const text of ["What is the Liquid snowboard price and your return policy?", "¿Cuál es el precio de Liquid y la política de devoluciones?", "מה מחיר הסנובורד ומה מדיניות ההחזרות?", "Is product SKU ABC in stock and how long does shipping take?", "Do you have product SKU ABC, and what is your return policy?", "Do you sell Liquid snowboards, and what is your return policy?", "Do you carry Liquid and offer warranties?"]) {
+ for(const text of ["What is the Liquid snowboard price and your return policy?", "¿Cuál es el precio de Liquid y la política de devoluciones?", "מה מחיר הסנובורד ומה מדיניות ההחזרות?", "Is product SKU ABC in stock and how long does shipping take?", "Do you have product SKU ABC, and what is your return policy?", "Do you sell Liquid snowboards, and what is your return policy?", "Do you carry Liquid and offer warranties?", "¿Cuál es la disponibilidad del producto ABC y la política de devoluciones?", "Show me products and explain your return policy", "Recommend products and explain your return policy"]) {
   assert.equal(explicitStoreProductQuestion(text),true,text);
   assert.ok(await guardedProductFallback(text,"en",async()=>true),text);
   const reply=await generator({userId:"tenant-a",sessionId:randomUUID(),history:[{id:randomUUID(),role:"user",content:text,at:new Date().toISOString()}],sessions:{withTurn:async()=>{throw Error("disabled Shopping cannot run")}} as any});
