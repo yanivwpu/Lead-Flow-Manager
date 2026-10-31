@@ -99,8 +99,8 @@ test("private activated merchant can verify catalog prices and inventory with li
       privateShoppingAllowed:async()=>false,entitled:async()=>true,
       knowledge:async()=>undefined,aiSettings:async()=>undefined,meter:async()=>{},
     });
-    const chatOff=await sessions.create({workspaceUserId:"tenant-a",actorUserId:"other-admin"});
-    const skipped=await sessions.turn({workspaceUserId:"tenant-a",actorUserId:"other-admin"},chatOff.id,randomUUID(),question,
+    const chatOff=await sessions.create({workspaceUserId:"tenant-a",actorUserId:"tenant-b"});
+    const skipped=await sessions.turn({workspaceUserId:"tenant-a",actorUserId:"tenant-b"},chatOff.id,randomUUID(),question,
       ({history,sessions:adapter})=>unavailable({userId:"tenant-a",sessionId:chatOff.id,history,sessions:adapter}));
     assert.match(skipped.transcript.at(-1)!.content,/couldn't verify a Shopify product match/i);
     assert.doesNotMatch(skipped.transcript.at(-1)!.content,/Free and Pro plans/i);
