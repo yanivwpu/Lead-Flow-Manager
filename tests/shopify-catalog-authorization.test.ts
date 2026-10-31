@@ -19,6 +19,7 @@ import { registerShopifyWebhookBodyParser } from "../server/shopifyWebhookBodyPa
 import {
   createCatalogAuthorizationIntent,
   catalogAuthorizationReturnPath,
+  catalogAuthorizationDestination,
 } from "../server/salesCatalog/shopify/authorization";
 process.env.DATABASE_URL ||=
   "postgres://fixture:fixture@127.0.0.1:1/catalog_fixture";
@@ -305,6 +306,50 @@ test("optional return fails closed for missing session, another tenant, changed 
     await f.cleanup();
     delete process.env.SHOPIFY_CATALOG_AUTH_ENABLED;
   }
+});
+
+test("E-Commerce product permissions return to Products while Sales Catalog stays unchanged", async () => {
+  process.env.SHOPIFY_CATALOG_AUTH_ENABLED = "true";
+  const f = await fixture();
+  try {
+    assert.equal(catalogAuthorizationDestination("ecommerce"), "/app/ecommerce-growth-engine?view=products");
+    assert.equal(catalogAuthorizationDestination("sales"), "/app/sales-catalog?source=shopify");
+    assert.equal(catalogAuthorizationDestination("https://evil.invalid"), "/app/sales-catalog?source=shopify");
+    const first = await f.call("/api/shopify/catalog/authorize?origin=ecommerce");
+    assert.equal(first.status, 302);
+    assert.equal(new URL(first.headers.get("location")!).origin, "https://admin.shopify.com");
+    f.grant();
+    const launch = await f.call("/api/shopify/install?shop=fixture-a.myshopify.com");
+    assert.equal(launch.status, 200);
+    assert.match(await launch.text(), /\/api\/shopify\/catalog\/return/);
+    // The callback ignores forged query parameters; only our scoped session intent selects return.
+    const returned = await f.call("/api/shopify/catalog/return?origin=sales&redirect=https://evil.invalid");
+    assert.equal(returned.status, 302);
+    assert.equal(returned.headers.get("location"), "/app/ecommerce-growth-engine?view=products");
+    assert.equal((await f.row()).status, "syncing");
+    assert.equal((await f.call("/api/shopify/catalog/return")).status, 409, "one-time intent");
+    // Already-granted permissions should also return to the initiating product page.
+    const again = await f.call("/api/shopify/catalog/authorize?origin=ecommerce");
+    assert.equal(again.status, 302);
+    assert.equal(again.headers.get("location"), "/app/ecommerce-growth-engine?view=products");
+    // Unknown origin values cannot produce redirects to arbitrary URLs.
+    const unknown = await f.call("/api/shopify/catalog/authorize?origin=https%3A%2F%2Fevil.invalid");
+    assert.equal(unknown.status, 302);
+    assert.equal(unknown.headers.get("location"), "/app/sales-catalog?source=shopify");
+  } finally {
+    await f.cleanup();
+    delete process.env.SHOPIFY_CATALOG_AUTH_ENABLED;
+  }
+});
+
+test("only the E-Commerce Products view opts into the in-engine Shopify permissions return", () => {
+  const dashboard = readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.tsx", "utf8");
+  const catalog = readFileSync("client/src/components/ShopifyCatalog.tsx", "utf8");
+  const catalogView = readFileSync("client/src/components/ShopifyCatalogView.tsx", "utf8");
+  assert.ok(dashboard.includes('<ShopifyCatalog showShoppingSettings={!privatePilot} authorizationOrigin="ecommerce"/>'));
+  assert.ok(catalog.includes("authorizationOrigin={authorizationOrigin}"));
+  assert.ok(catalogView.includes('"/api/shopify/catalog/authorize?origin=ecommerce"'));
+  assert.ok(catalogView.includes('"/api/shopify/catalog/authorize"'));
 });
 
 test("catalog return intent has a fixed destination, actor/shop binding and finite lifetime", () => {
