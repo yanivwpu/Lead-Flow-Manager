@@ -162,7 +162,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(verificationFollowup && !previous) return finish(copy.repeatSearch,"discovering");
    if(numberedSelection!==undefined && !state.choices[numberedSelection-1]) return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(!source.currency) return pending(state.selected?"select":"discover");
-   if((cheaper || state.cheaperThan || state.dearerThan || plan && previous) && state.currency!==source.currency) {
+   if((cheaper || state.cheaperThan || state.dearerThan || plan && previous || previous && state.currency) && state.currency!==source.currency) {
     state={...state,choices:[],selected:undefined,checkout:undefined,query:undefined,maxPrice:undefined,minPrice:undefined,cheaperThan:undefined,dearerThan:undefined,quantity:1,currency:source.currency};
     return finish(`${copy.currency}\n${copy.repeatSearch}`,"discovering");
    }
@@ -242,7 +242,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
       !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS ||
       (v.variant.tracked && v.variant.inventoryPolicy!=="CONTINUE" && (v.variant.quantity===null || v.variant.quantity<state.quantity))) return unavailable();
     const current:ShoppingChoice={productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)};
-    const changed=compareMoney(current.price,selection.price)!==0 || JSON.stringify(current.options)!==JSON.stringify(selection.options) || current.variantTitle!==selection.variantTitle;
+    const changed=current.currency!==selection.currency || compareMoney(current.price,selection.price)!==0 || JSON.stringify(current.options)!==JSON.stringify(selection.options) || current.variantTitle!==selection.variantTitle;
     state.selected=current;state.choices=state.choices.map(c=>c.variantId===current.variantId?current:c);state.currency=current.currency;
     if(changed) {state.checkout=undefined;return finish(`${copy.changed}\n${line(current)} × ${state.quantity}${stockNote(current,copy.verifiedStock)}`,"confirming");}
     if((intent==="confirm" && ["confirming","confirmed"].includes(previous?.step??"") || retryTurn && previous?.step==="confirmed" && !!state.checkout) && !chosen && !quantity) return checkout(v);

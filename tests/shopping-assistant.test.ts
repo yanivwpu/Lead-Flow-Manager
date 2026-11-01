@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup } from "../shared/shoppingAssistant";
-import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
+import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore, type ShoppingCheckout } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
 import { detectConversationLanguage } from "../shared/conversationLanguage";
 
@@ -24,7 +24,7 @@ test("product discovery excludes generic trailing questions without broadening p
  assert.equal(catalogSearchTerms(shoppingFilters("show Liquid blue medium snowboard","USD").query),"liquid blue medium snowboard");
  assert.equal(catalogSearchTerms(shoppingFilters("show Oxygen snowboard. Compare Liquid snowboard","USD").query),"oxygen snowboard liquid snowboard");
 });
-function fixture(options:{catalogTitleDiscovery?:boolean}={}) {
+function fixture(options:{catalogTitleDiscovery?:boolean;checkout?:ShoppingCheckout}={}) {
  let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
  let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5 as number|null, tracked=true, entitled=true, sourceCurrency="USD";
  const config=shoppingSettings({enabled:true,handoffOnFailure:true});
@@ -302,3 +302,15 @@ test("contextual cheaper discovery reuses the merchant query and strictly lowers
  const result=(await f.turn("show helmet"))!;
  assert.equal(result.state.cheaperThan,undefined);assert.equal(result.state.maxPrice,"750");
  });
+
+test("a store-currency change cannot turn an old selection confirmation into another currency",async()=>{
+ let checkouts=0;
+ const f=fixture({checkout:async()=>{checkouts++;return {status:"ready"};}});
+ f.config.checkoutEnabled=true;
+ await f.turn("show snowboard under 750");await f.turn("option 1");
+ f.sourceCurrency("EUR");f.currency("EUR");
+ const result=(await f.turn("yes"))!;
+ assert.equal(checkouts,0);assert.equal(result.state.selected,undefined);
+ assert.equal(result.state.maxPrice,undefined);assert.equal(result.state.currency,"EUR");
+ assert.match(result.reply,/repeat your product search/);
+});
