@@ -1,12 +1,12 @@
+import { catalogProductQuestion } from "./shopperProductIntent";
 import { shoppingLocale } from "./shoppingAssistant";
+import { shoppingBusinessQuestion, mixedShoppingBusinessQuestion } from "./shoppingBusinessRouting";
 
 /** Conservative, multilingual intent guard. General CRM/plan enquiries stay with AI Brain. */
 export function explicitStoreProductQuestion(raw: string): boolean {
-  const t = raw.normalize("NFKC").toLowerCase();
-  if (/\b(?:free|pro|enterprise)\s+(?:plan|subscription|tier|pricing)\b|\bwhachatcrm\s+(?:price|plan|subscription)\b/.test(t)) return false;
-  if (/\b(?:shopify|product|sku|inventory|stock|shopping\s+cart|checkout|item\s+(?:available|in stock)|productos?|inventario|disponibilidad)\b|במלאי|מלאי|מוצר/u.test(t)) return true;
-  return /\b(?:looking\s+for|search\s+for|find\s+me|busco|buscar|מחפש(?:ת)?)\b|מחפשת?/u.test(t) &&
-    /\b(?:available|availability|price|cost|how\s+much|buy|purchase|disponible|precio|comprar)\b|זמין|מחיר|לקנות/u.test(t);
+  if (shoppingBusinessQuestion(raw)) return false;
+  if (mixedShoppingBusinessQuestion(raw)) return true;
+  return catalogProductQuestion(raw);
 }
 
 export function unverifiedProductReply(locale?: string): string {

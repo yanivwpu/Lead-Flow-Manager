@@ -1,4 +1,5 @@
 import type { CatalogReadiness } from "./salesCatalog";
+import { shoppingBusinessQuestion } from "./shoppingBusinessRouting";
 /**
  * AI Brain Live Business Data — Phase 1 registry + decision model.
  *
@@ -120,11 +121,14 @@ export function resolveLiveBusinessDataDecision(input: {
   subIntents?: string[] | null;
 }): LiveBusinessDataDecision {
   const message = String(input.message || "").trim();
+  // A reference to a product in a policy question must not disable the
+  // merchant knowledge layer or strip its website knowledge from the prompt.
+  const businessOnly = shoppingBusinessQuestion(message);
   const sub = new Set((input.subIntents || []).map((s) => String(s).toLowerCase()));
   const providerIds: LiveBusinessDataProviderId[] = [];
 
   const explicitPackage = /\b(?:packages?|plans?|business\s+listing|featured\s+business|directory)\b/i.test(message);
-  const wantsShopify = SHOPIFY_PRODUCT_RE.test(message) && !explicitPackage;
+  const wantsShopify = SHOPIFY_PRODUCT_RE.test(message) && !explicitPackage && !businessOnly;
   const wantsPackages = !wantsShopify && (
     sub.has("pricing_question") ||
     sub.has("benefits_question") ||
@@ -167,6 +171,9 @@ export function resolveLiveBusinessDataDecision(input: {
   if (wantsPackages) {
     needsKnowledge = true;
   }
+  // Policy delegation suppresses irrelevant Shopify lookup, not independently
+  // requested packages, calendar or property providers used by other businesses.
+  if (businessOnly) needsKnowledge = true;
 
   const unique = [...new Set(providerIds)];
   return {

@@ -39,6 +39,27 @@ test("business hours → knowledge only", () => {
   assert.deepEqual(d.providerIds, []);
 });
 
+test("product return policies retain merchant knowledge instead of becoming SKU hunts",()=>{
+ for(const message of ["What is your return policy for this product?", "I'm interested in this snowboard, but what's your return policy if it doesn't fit my needs?", "¿Cuál es la política de devoluciones de este producto?", "מה מדיניות ההחזרות של המוצר?"]) {
+  const decision=resolveLiveBusinessDataDecision({message});
+  assert.equal(decision.needsKnowledge,true,message);
+  assert.equal(decision.needsLiveBusinessData,false,message);
+  assert.deepEqual(decision.providerIds,[],message);
+ }
+ const product=resolveLiveBusinessDataDecision({message:"Is product SKU ABC in stock?"});
+ assert.deepEqual(product.providerIds,["shopify"]);
+ assert.equal(product.needsKnowledge,false);
+});
+
+test("policy delegation preserves independently requested non-Shopify live providers",()=>{
+ for(const message of ["What is the price of your Featured Business package and your return policy", "Tell me about your Featured Business package and your return policy", "Find a waterfront property and explain your return policy", "Book an appointment and explain your return policy"]) {
+  const decision=resolveLiveBusinessDataDecision({message});
+  assert.equal(decision.needsKnowledge,true,message);
+  assert.ok(decision.providerIds.length,message);
+ }
+ assert.ok(resolveLiveBusinessDataDecision({message:"Tell me about your Featured Business package and your return policy"}).providerIds.includes("businessPackages"));
+});
+
 test("featured business package → knowledge + businessPackages", () => {
   const d = resolveLiveBusinessDataDecision({
     message: "Tell me about your Featured Business package.",

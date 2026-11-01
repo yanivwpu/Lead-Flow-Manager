@@ -280,9 +280,12 @@ test("durable initial sync, independent child pagination, incremental refresh, a
       .update(tables.catalogSources)
       .set({ requestedAt: new Date(Date.now() + 1000) })
       .where(eq(tables.catalogSources.id, source.id));
+    const failureStarted=Date.now();
     await run();
     assert.equal(source.status, "error");
-    assert.ok((source.nextAttemptAt > Date.now()) as any);
+    // The fixture requests a 10ms throttle delay. Parallel CI can spend longer
+    // than that returning the DB row; assert the scheduled delay, not read speed.
+    assert.ok(source.nextAttemptAt.getTime() >= failureStarted + 10);
     assert.equal(
       (await db.select().from(tables.catalogProducts))[0].deletedAt,
       null,
