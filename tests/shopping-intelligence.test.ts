@@ -83,6 +83,9 @@ test("context guards preserve variants despite a mistaken search plan; budgets a
   const turn={userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"What about a smaller size?"};
   const guarded=await badPlan.plan(turn,c.state());
   assert.equal(guarded?.action,"variant");assert.equal(guarded?.query,"Snowboard");assert.equal(guarded?.relativeSize,"smaller");
+  const current=c.state()!.selected!;
+  assert.equal(allowedVariantChange(current,{options:[{name:"Color",value:"Blue"}]} as any,["Blue"],null),false,"a color request must not lose the saved size");
+  assert.equal(allowedVariantChange(current,{options:[{name:"Color",value:"Red"},{name:"Size",value:"30"}]} as any,[],"larger"),false,"letter and numeric sizing systems are not comparable");
   const expensive=(await c.turn("Anything a little more expensive but better?"))!;
   assert.equal(expensive.state.maxPrice,"750");assert.equal(expensive.state.dearerThan,"500");
   assert.ok(expensive.state.choices.every(choice=>compareMoney(choice.price,"500")>0));
@@ -93,6 +96,39 @@ test("context guards preserve variants despite a mistaken search plan; budgets a
   await f.database.update(schema.catalogVariants).set({quantity:0,availableForSale:false}).where(eq(schema.catalogVariants.id,selected.variantId));
   const soldOut=(await c.turn("What is its current price?"))!;
   assert.equal(soldOut.state.selected,undefined);assert.equal(soldOut.state.checkout,undefined);
+ }finally{await f.cleanup();}
+});
+
+test("source-language vocabulary and malformed advisory hints cannot change tenant or purchase authority",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  const hints=await f.commerce.recommendationVocabulary("tenant-a",f.sources["tenant-a"]);
+  assert.deepEqual(await f.commerce.recommendationVocabulary("tenant-b",f.sources["tenant-a"]),[]);
+  let calls=0;
+  const intelligence=createShoppingIntelligence({model:async(system)=>{
+   calls++;
+   if(system.includes("shopping interpreter"))return {action:"search",query:"סנובורד",optionValues:[{name:"Color",value:"Blue"}],checkout:true,price:"0"};
+   assert.match(system,/JSON/);return {hint:1};
+  },knowledge:async()=>({instructions:"",evidence:[]})});
+  const plan=await intelligence.plan({userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",locale:"he",text:"מחפש סנובורד"},null,hints);
+  assert.equal(plan?.query,"Snowboard");assert.deepEqual(plan?.optionValues,[]);assert.equal((plan as any).checkout,undefined);assert.equal(calls,2);
+ }finally{await f.cleanup();}
+});
+
+test("multi-attribute variants satisfy every requested value, including explicit color plus relative size",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  for(const [locale,text,relative] of [
+   ["en","Do you have the first one in blue size S?","Do you have the first one in blue and a smaller size?"],
+   ["es","Tienes el primero en azul talla S?","Tienes el primero en azul y una talla mas pequena?"],
+   ["he","יש את הראשון בכחול במידה S?","יש את הראשון בכחול במידה קטנה יותר?"],
+  ])for(const request of [text,relative]){
+   const c=f.conversation("tenant-a",locale);await c.turn(journeys.en[0]);
+   const variants=(await c.turn(request))!;
+   assert.deepEqual(variants.state.choices.map(v=>v.variantId),["tenant-a-p1-v3"],variants.reply);
+   const chosen=(await c.turn("option 1"))!;
+   assert.equal(chosen.state.selected?.variantId,"tenant-a-p1-v3");
+  }
  }finally{await f.cleanup();}
 });
 

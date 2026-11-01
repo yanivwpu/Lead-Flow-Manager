@@ -5,6 +5,7 @@ import { createShoppingIntelligence, type ShoppingKnowledge, type ShoppingModel 
 import type { AiBusinessKnowledge } from "@shared/schema";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
 import { extractWebsiteKnowledgeSummaryText } from "../websiteKnowledgeSummaryNormalize";
+import { formatFactValue } from "@shared/businessKnowledgeFacts";
 
 export const shoppingModel: ShoppingModel = async (system, input) => {
   const serialized=JSON.stringify(input);
@@ -30,7 +31,7 @@ export async function shoppingKnowledge(userId: string, text: string, row?: AiBu
     for (const entry of grounded.retrieved) {
       if (entry.fact.userId !== userId || entry.freshness.tier !== "fresh" || grounded.conflictingKeys.includes(entry.fact.factKey)) continue;
       if(!["policy","faq","business_hours","location","service_area","contact_method"].includes(entry.fact.factType))continue;
-      evidence.push({ id: `fact:${entry.fact.id}`, text: JSON.stringify(entry.fact.data) });
+      evidence.push({ id: `fact:${entry.fact.id}`, text: formatFactValue(entry.fact) });
     }
   } else {
     // Existing explicit merchant FAQ answers and website knowledge are V1's
