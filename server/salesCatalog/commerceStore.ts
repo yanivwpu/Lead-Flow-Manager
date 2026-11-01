@@ -63,6 +63,7 @@ export function createCommerceStore(
     return sql`
       ${f.minPrice ? sql`AND ${v}.price >= ${f.minPrice}::numeric` : sql``}
       ${f.maxPrice ? sql`AND ${v}.price <= ${f.maxPrice}::numeric` : sql``}
+      ${f.priceBelow ? sql`AND ${v}.price < ${f.priceBelow}::numeric` : sql``}
       ${f.currency ? sql`AND ${v}.currency = ${f.currency}` : sql``}
       ${f.variantId ? sql`AND (${v}.id = ${f.variantId} OR ${v}.external_id = ${f.variantId})` : sql``}
       ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))` : sql``}

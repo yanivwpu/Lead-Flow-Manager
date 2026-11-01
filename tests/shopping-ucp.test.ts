@@ -18,7 +18,7 @@ const pid=(id:number)=>`gid://shopify/Product/${id}`;
 const vid=(id:number)=>`gid://shopify/ProductVariant/${id}`;
 const binding:UcpBinding={userId:"tenant-a",sourceId:"source-a",integrationId:"integration-a",shop:"fixture-a.myshopify.com",currency:"USD"};
 const profile="https://agent.example.com/ucp/catalog.json";
-const refs=(id=1)=>[{id:pid(id),variants:[{id:vid(id*10),price:{amount:999999,currency:"USD"},availability:{available:true}}]}];
+const refs=(id=1)=>[{id:pid(id),selected:[{name:"Color",label:"Blue"}],variants:[{id:vid(id*10),options:[{name:"Color",label:"Blue"}],price:{amount:999999,currency:"USD"},availability:{available:true}}]}];
 function fakeClient(options:{binding?:UcpBinding;products?:any[];enabled?:boolean;authorized?:boolean;revokeAfter?:number;status?:number;location?:string;version?:string;extra?:object;wrongId?:boolean;onCall?:()=>void}={}) {
  const calls:any[]=[];let authorizations=0;
  const bound=options.binding??binding;
@@ -72,6 +72,8 @@ test("password, denied access, throttles, unknown schema/version and unrequested
   if("status" in options)assert.equal(f.calls.length,1);
  }
  const lookup=fakeClient({enabled:true,products:refs(2)});await assert.rejects(lookup.client.lookup([pid(1)]),/unrequested_identity/);
+ const wrongOptions=fakeClient({enabled:true});await assert.rejects(wrongOptions.client.getProduct(pid(1),[{name:"Color",label:"Red"}]),/selection_unverified/);
+ const extraVariant=fakeClient({enabled:true,products:[{id:pid(1),variants:[{id:vid(10)},{id:vid(11)}]}]});await assert.rejects(extraVariant.client.lookup([vid(10)]),/unrequested_identity/);
  const huge=fakeClient({enabled:true,extra:{privatePadding:"x".repeat(260_000)}});await assert.rejects(huge.client.search("snowboard"),/response_too_large/);
 });
 
@@ -88,10 +90,10 @@ test("two catalog-backed merchants use UCP identities but only owned catalog and
   }
   const inventory=fixtureInventoryRequest(f.database);
   const commerce=createCommerceStore(f.database,(shop,token)=>inventory(shop,token));
-  let mode:"owned"|"foreign"|"error"="owned",ucpCalls=0;const diagnostics:string[]=[];
+  let mode:"owned"|"foreign"|"variant"|"error"="owned",ucpCalls=0;const diagnostics:string[]=[];
   const hybrid=createUcpShoppingProvider({database:f.database,commerce,enabled:()=>true,diagnostic:r=>diagnostics.push(r),client:b=>{
    ucpCalls++;const index=b.userId==="tenant-a"?1:2;
-   return fakeClient({binding:b,enabled:true,products:refs(mode==="foreign"?3-index:index),...(mode==="error"?{status:403}:{})}).client;
+   return fakeClient({binding:b,enabled:true,products:mode==="variant"?[{id:pid(index),variants:[{id:vid((3-index)*10)}]}]:refs(mode==="foreign"?3-index:index),...(mode==="error"?{status:403}:{})}).client;
   }});
   const knowledge={"tenant-a":{userId:"tenant-a",businessName:"Snow Merchant",customInstructions:"Returns require merchant A approval"},"tenant-b":{userId:"tenant-b",businessName:"Helmet Merchant",customInstructions:"Merchant B offers a warranty only when configured"}};
   for(const [index,userId,query] of [[1,"tenant-a","Snowboard"],[2,"tenant-b","Helmet"]] as const) {
@@ -123,13 +125,27 @@ test("two catalog-backed merchants use UCP identities but only owned catalog and
    const standard=await commerce.purchaseCandidates(userId,{sourceId:sources[index-1].id,query,limit:8,filters:{currency:"USD"}});
    const combined=await hybrid.purchaseCandidates(userId,{sourceId:sources[index-1].id,query,limit:8,filters:{currency:"USD"}});
    assert.deepEqual(combined.map(p=>p.id),standard.map(p=>p.id));
-   for(const failure of ["foreign","error"] as const) {
+   for(const failure of ["foreign","variant","error"] as const) {
     mode=failure;const fallback=await hybrid.purchaseCandidates(userId,{sourceId:sources[index-1].id,query,limit:8,filters:{currency:"USD"}});
     assert.deepEqual(fallback.map(p=>p.id),[`p${index}`]);
    }
    mode="owned";
   }
   assert.ok(diagnostics.includes("identity_not_in_owned_catalog"));assert.ok(diagnostics.includes("store_access_required"));
+  assert.ok(diagnostics.includes("variant_not_in_owned_product"));
+  // Equal-price variants must not occupy the verification cap and hide a later
+  // cheaper match. Exercise the real SQL bound, not a permissive in-memory fake.
+  for(let i=100;i<=108;i++) await f.database.insert(schema.catalogVariants).values({id:`v${i}`,userId:"tenant-a",sourceId:sources[0].id,productId:"p1",externalId:vid(i),inventoryItemId:`gid://shopify/InventoryItem/${i}`,title:`Option ${i}`,options:[],price:i===108?"80.00":"100.00",currency:"USD",tracked:true,quantity:7,inventoryPolicy:"DENY",availableForSale:true,requiresComponents:false,verifiedAt:new Date(),providerUpdatedAt:new Date(),generation:"fixture"});
+  await f.database.update(schema.catalogProducts).set({variantCount:10}).where(eq(schema.catalogProducts.id,"p1"));
+  let state:ShoppingState|null=null;
+  const sessions:ShoppingSessionStore={withTurn:async(_t,run)=>run(state,async next=>{state=next;})};
+  const service=createShoppingService({commerce:hybrid,sessions,settings:async()=>shoppingSettings({enabled:true}),entitled:async()=>true});
+  let event=0;const turn=async(text:string)=>{await inventoryDue(f.database,sources[0].id);return service.turn({userId:"tenant-a",conversationId:"bounded-cheaper",eventId:`cheaper-${++event}`,text,channel:"webchat"});};
+  await turn("show Snowboard under 150");await turn("option 1");
+  const cheaper=(await turn("Show me something cheaper"))!;
+  assert.deepEqual(cheaper.state.choices.map(c=>c.variantId),["v108"]);
+  assert.equal(cheaper.state.choices[0].price,"80.00");assert.equal(cheaper.state.maxPrice,"150");
+  const reset=(await turn("show Snowboard"))!;assert.equal(reset.state.cheaperThan,undefined);assert.equal(reset.state.maxPrice,"150");
   const disabled=createUcpShoppingProvider({database:f.database,commerce,client:()=>{throw Error("disabled source must not create a client")}});
   const before=ucpCalls;assert.equal((await disabled.purchaseCandidates("tenant-a",{sourceId:sources[0].id,query:"Snowboard",limit:8})).length,1);assert.equal(ucpCalls,before);
  } finally {await f.cleanup();}

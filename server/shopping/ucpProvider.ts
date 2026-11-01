@@ -1,5 +1,5 @@
 import { and,eq,inArray } from "drizzle-orm";
-import { catalogProducts } from "@shared/schema";
+import { catalogProducts,catalogVariants } from "@shared/schema";
 import { createConnectedCommerceSearch } from "../salesCatalog/connectedCommerceSearch";
 import type { CatalogDb,createCommerceStore } from "../salesCatalog/commerceStore";
 import type { CommerceShoppingProvider } from "./service";
@@ -31,12 +31,14 @@ export function createUcpShoppingProvider(deps:{
       if(rows.length!==refs.length) throw new UcpReadError("identity_not_in_owned_catalog");
       const ids=refs.map(r=>rows.find(p=>p.externalId===r.id)!.id);
       const products=await commerce.products(ctx.userId,source.id,ids,ctx.filters,true);
+      const variants=await deps.database.select({productId:catalogVariants.productId,externalId:catalogVariants.externalId}).from(catalogVariants).where(and(eq(catalogVariants.userId,ctx.userId),eq(catalogVariants.sourceId,source.id),inArray(catalogVariants.externalId,refs.flatMap(p=>p.variants.map(v=>v.id)))));
+      const owned=new Set(variants.map(v=>JSON.stringify([v.productId,v.externalId])));
       const mapped=[];
       for(const ref of refs) {
         const row=rows.find(p=>p.externalId===ref.id)!;
         // Every advertised pair must belong to this merchant/product even when
         // filtering excludes it. Unknown pairs never become model-chosen IDs.
-        for(const v of ref.variants) if(!await commerce.lookupVariant(ctx.userId,source.id,row.id,v.id)) throw new UcpReadError("variant_not_in_owned_product");
+        for(const v of ref.variants) if(!owned.has(JSON.stringify([row.id,v.id]))) throw new UcpReadError("variant_not_in_owned_product");
         const p=products.find(p=>p.id===row.id);
         if(p) mapped.push({...p,variants:p.variants.filter(v=>ref.variants.some(r=>r.id===v.externalId))});
       }

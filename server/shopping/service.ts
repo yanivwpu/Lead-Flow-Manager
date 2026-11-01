@@ -121,6 +121,10 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(verificationFollowup && !previous) return finish(copy.repeatSearch,"discovering");
    if(numberedSelection!==undefined && !state.choices[numberedSelection-1]) return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(!source.currency) return pending(state.selected?"select":"discover");
+   if((cheaper || state.cheaperThan) && state.currency!==source.currency) {
+    state={...state,choices:[],selected:undefined,checkout:undefined,query:undefined,maxPrice:undefined,minPrice:undefined,cheaperThan:undefined,quantity:1,currency:source.currency};
+    return finish(`${copy.currency}\n${copy.repeatSearch}`,"discovering");
+   }
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
    // A request to verify "that exact variant" is not permission to pick one.
    // Preserve the offered list until the customer explicitly chooses an option.
@@ -167,16 +171,14 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(!query || !catalogSearchTerms(query)) return clarify(copy.repeatSearch);
    if(!retryTurn && (filters.maxPrice || filters.minPrice)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
    if(cheaper) {
-    if(state.currency!==source.currency) return clarify(copy.currency);
     const reference=state.selected?.price ?? state.choices.reduce<string|undefined>((best,c)=>best===undefined||compareMoney(c.price,best)<0?c.price:best,undefined) ?? state.cheaperThan;
     if(!reference || !state.query) return clarify(copy.repeatSearch);
     state.cheaperThan=reference;
-    state.maxPrice=state.maxPrice && compareMoney(state.maxPrice,reference)<0?state.maxPrice:reference;
    } else if(intent==="search" && !retryTurn) state.cheaperThan=undefined;
    if(intent==="search" && !retryTurn) {state.checkout=undefined;state.choices=[];state.selected=undefined;state.quantity=1;}
    state.query=query;state.currency=source.currency;
    let products;
-   try { products=titleProducts??await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
+   try { products=titleProducts??await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{}),...(state.cheaperThan?{priceBelow:state.cheaperThan}:{})}}); } catch {return pending("discover");}
    const candidates=products.flatMap(p=>p.variants.map(v=>({p,v}))).slice(0,8);
    if(!candidates.length) return unavailable();
    const live=await verify(candidates.map(c=>c.v.id));

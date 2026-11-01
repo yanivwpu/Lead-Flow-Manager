@@ -9,12 +9,14 @@ const productId = z.string().regex(/^gid:\/\/shopify\/Product\/[1-9]\d*$/);
 const variantId = z.string().regex(/^gid:\/\/shopify\/ProductVariant\/[1-9]\d*$/);
 const identifier = z.union([productId, variantId]);
 const money = z.object({amount:z.number().int().nonnegative().safe(),currency:z.string().regex(/^[A-Z]{3}$/)});
+const option=z.object({name:z.string().min(1).max(100),label:z.string().min(1).max(100)});
 const variant = z.object({
   id:variantId, price:money.optional(), availability:z.object({available:z.boolean()}).optional(),
+  options:z.array(option).max(10).optional(),
   quantity_unit:z.object({unit:z.literal("each")}).optional(),
   requires:z.object({selling_plan:z.literal(false).optional()}).optional(),
 });
-const product = z.object({id:productId,variants:z.array(variant).min(1).max(100)});
+const product = z.object({id:productId,variants:z.array(variant).min(1).max(100),selected:z.array(option).max(10).optional()});
 const ucp = z.object({version:z.literal(UCP_CATALOG_VERSION),status:z.literal("success").optional(),capabilities:z.record(z.array(z.object({version:z.literal(UCP_CATALOG_VERSION)})))});
 export type UcpIdentity = {id:string;variants:Array<{id:string}>};
 export type UcpBinding = Readonly<{userId:string;sourceId:string;integrationId:string;shop:string;currency:string}>;
@@ -96,10 +98,12 @@ export function createUcpCatalogClient(deps:{
       const capability=tool==="search_catalog"?"dev.ucp.shopping.catalog.search":lookupCapability;
       if(!data.ucp.capabilities[capability]?.length || Object.keys(data.ucp.capabilities).some(c=>c.includes("catalog.global"))) throw new UcpReadError("negotiated_capability_mismatch");
       const products="products" in data?data.products:[data.product];
+      const selected=tool==="get_product"?z.array(option).parse(catalog.selected):[];
       const seen=new Set<string>();
       return products.map(p=>{
         if(seen.has(p.id)) throw new UcpReadError("duplicate_identity");seen.add(p.id);
-        if(requested && !requested.includes(p.id) && !p.variants.some(v=>requested.includes(v.id))) throw new UcpReadError("unrequested_identity");
+        if(requested && !requested.includes(p.id) && !p.variants.every(v=>requested.includes(v.id))) throw new UcpReadError("unrequested_identity");
+        if(selected.length && (!selected.every(o=>p.selected?.some(s=>s.name===o.name&&s.label===o.label)) || !p.variants.every(v=>selected.every(o=>v.options?.some(s=>s.name===o.name&&s.label===o.label))))) throw new UcpReadError("selection_unverified");
         return {id:p.id,variants:p.variants.map(v=>{if(seen.has(v.id))throw new UcpReadError("duplicate_identity");seen.add(v.id);return {id:v.id};})};
       });
     } catch(error) {throw error instanceof UcpReadError?error:new UcpReadError("provider_or_schema_unavailable");}
