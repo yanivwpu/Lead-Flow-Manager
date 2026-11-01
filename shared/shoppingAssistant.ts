@@ -25,6 +25,8 @@ export type ShoppingState = {
   pending?: { action: "discover" | "select" | "confirm"; resumeStep: Exclude<ShoppingState["step"], "pending"> };
   intent: ShoppingIntent; choices: ShoppingChoice[]; selected?: ShoppingChoice;
   quantity: number; query?: string; maxPrice?: string; minPrice?: string; currency?: string;
+  // Exclusive preference threshold for a contextual cheaper-alternative search.
+  cheaperThan?: string;
   updatedAt: string; lastEventId: string; reply: string;
   // Bounded event IDs prevent a delayed retry from reverting a newer selection.
   consumedEventIds: string[];
@@ -44,6 +46,13 @@ export function shoppingIntent(text: string): ShoppingIntent {
   if (/\b(?:take|choose|select|buy|purchase|quiero|comprar|elijo|llevo)\b|אבחר|אקח|לקנות|לרכוש/.test(t)) return "select";
   if (/\b(?:looking|search|find|show|recommend\w*|under|below|between|busco|buscar|muestra|recomiend\w*|menos|hasta)\b|מחפש|מחפשת|המלצ|ממליצ|מתחת|עד\s*\d/.test(t)) return "search";
   return "other";
+}
+
+/** Bounded contextual preference change; never turn an unknown phrase into an ID. */
+export function shoppingCheaperFollowup(text:string):boolean {
+  const normalized=text.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase().replace(/[.!?¿¡]/g,"").trim();
+  return /^(?:show me (?:something|a cheaper one|cheaper options)(?: cheaper)?|what about a cheaper one|something cheaper|cheaper|muestrame algo mas barato|algo mas barato|una opcion mas barata|יש משהו זול יותר|משהו זול יותר|אפשר משהו זול יותר)$/u.test(normalized) &&
+    /cheaper|barat|זול/u.test(normalized);
 }
 /** Generic price/stock follow-up only. Unknown product words must never bind a
  * new request to the saved selection or silently choose an offered variant. */

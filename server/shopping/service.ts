@@ -2,7 +2,7 @@ import { catalogSearchTerms } from "@shared/commerceCatalog";
 import { shoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
-import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup } from "@shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup, shoppingCheaperFollowup } from "@shared/shoppingAssistant";
 export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant">;
 export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
 export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean};
@@ -38,7 +38,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
    const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
-   const requestedIntent=verificationFollowup?"availability":shoppingIntent(turn.text);
+   const cheaper=shoppingCheaperFollowup(turn.text);
+   const requestedIntent=cheaper?"search":verificationFollowup?"availability":shoppingIntent(turn.text);
    const retryTurn=!!stored && (requestedIntent==="retry" || (!!stored.pending && stored.lastEventId===turn.eventId));
    let intent=retryTurn ? stored?.pending?.action==="confirm"?"confirm":stored?.pending?.action==="select"||(!stored?.pending&&stored?.selected)?"select":"search" : requestedIntent;
    const expired=stored && (stamp-new Date(stored.updatedAt).getTime()>SESSION_MS || !Number.isFinite(new Date(stored.updatedAt).getTime()));
@@ -106,7 +107,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     state.checkout=undefined;state.selected=undefined; state.choices=[];
     return finish(copy.unavailable,config.handoffOnFailure?"handoff":"discovering");
    }
-   if(intent==="cancel"||intent==="restart") {state.checkout=undefined;state.choices=[];state.selected=undefined;state.quantity=1;state.query=undefined;state.maxPrice=undefined;state.minPrice=undefined;return finish(intent==="cancel"?copy.cancel:copy.clarify,intent==="cancel"?"cancelled":"discovering");}
+   if(intent==="cancel"||intent==="restart") {state.checkout=undefined;state.choices=[];state.selected=undefined;state.quantity=1;state.query=undefined;state.maxPrice=undefined;state.minPrice=undefined;state.cheaperThan=undefined;return finish(intent==="cancel"?copy.cancel:copy.clarify,intent==="cancel"?"cancelled":"discovering");}
    if(intent==="handoff"||intent==="order") {state.checkout=undefined;state.selected=undefined;state.choices=[];return finish(intent==="order"?copy.order:copy.handoff,"handoff");}
    // A handoff is sticky until a human resumes shopping or the customer restarts.
    if(previous?.step==="handoff") return finish(copy.handoff,"handoff");
@@ -115,11 +116,15 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(expired && stored?.lastEventId===turn.eventId) return finish(copy.repeatSearch,"discovering");
    // Follow-ups need the offered list from this source and an unexpired session.
    // Never turn an orphaned list reference (including a bare number) into a catalog query.
-   const needsPriorSearch=["confirm","retry"].includes(requestedIntent) || (["variants","availability","compare"].includes(requestedIntent) && !hasProductQuery);
+   const needsPriorSearch=cheaper || ["confirm","retry"].includes(requestedIntent) || (["variants","availability","compare"].includes(requestedIntent) && !hasProductQuery);
    if(!previous && (numberedSelection!==undefined || needsPriorSearch)) return finish(copy.repeatSearch,"discovering");
    if(verificationFollowup && !previous) return finish(copy.repeatSearch,"discovering");
    if(numberedSelection!==undefined && !state.choices[numberedSelection-1]) return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(!source.currency) return pending(state.selected?"select":"discover");
+   if((cheaper || state.cheaperThan) && state.currency!==source.currency) {
+    state={...state,choices:[],selected:undefined,checkout:undefined,query:undefined,maxPrice:undefined,minPrice:undefined,cheaperThan:undefined,quantity:1,currency:source.currency};
+    return finish(`${copy.currency}\n${copy.repeatSearch}`,"discovering");
+   }
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
    // A request to verify "that exact variant" is not permission to pick one.
    // Preserve the offered list until the customer explicitly chooses an option.
@@ -162,13 +167,18 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if((intent==="select" && !!previous?.choices.length) || intent==="other") return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(["variants","availability","compare"].includes(intent) && !state.query && !hasProductQuery) return clarify(copy.repeatSearch);
    // Variant/availability follow-ups reuse the last discovery query; never use a model ID.
-   const query=(retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query || state.query;
+   const query=(cheaper || retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query || state.query;
    if(!query || !catalogSearchTerms(query)) return clarify(copy.repeatSearch);
    if(!retryTurn && (filters.maxPrice || filters.minPrice)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
+   if(cheaper) {
+    const reference=state.selected?.price ?? state.choices.reduce<string|undefined>((best,c)=>best===undefined||compareMoney(c.price,best)<0?c.price:best,undefined) ?? state.cheaperThan;
+    if(!reference || !state.query) return clarify(copy.repeatSearch);
+    state.cheaperThan=reference;
+   } else if(intent==="search" && !retryTurn) state.cheaperThan=undefined;
    if(intent==="search" && !retryTurn) {state.checkout=undefined;state.choices=[];state.selected=undefined;state.quantity=1;}
    state.query=query;state.currency=source.currency;
    let products;
-   try { products=titleProducts??await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{})}}); } catch {return pending("discover");}
+   try { products=titleProducts??await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query,limit:8,filters:{currency:source.currency,...(state.maxPrice?{maxPrice:state.maxPrice}:{}),...(state.minPrice?{minPrice:state.minPrice}:{}),...(state.cheaperThan?{priceBelow:state.cheaperThan}:{})}}); } catch {return pending("discover");}
    const candidates=products.flatMap(p=>p.variants.map(v=>({p,v}))).slice(0,8);
    if(!candidates.length) return unavailable();
    const live=await verify(candidates.map(c=>c.v.id));
@@ -177,6 +187,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      ["available","not_tracked"].includes(v.availability) && v.product.published && v.product.status==="ACTIVE" &&
      v.variant.currency===source.currency && v.variant.price!==null && Number.isFinite(new Date(v.variant.verifiedAt).getTime()) &&
      stamp-new Date(v.variant.verifiedAt).getTime()<=REPLAY_MS &&
+     (!state.cheaperThan || compareMoney(v.variant.price,state.cheaperThan)<0) &&
      (!state.maxPrice || compareMoney(v.variant.price,state.maxPrice)<=0) && (!state.minPrice || compareMoney(v.variant.price,state.minPrice)>=0))
     .slice(0,config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)}));
    if(!choices.length) {

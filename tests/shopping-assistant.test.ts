@@ -3,6 +3,7 @@ import test from "node:test";
 import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
+import { detectConversationLanguage } from "../shared/conversationLanguage";
 
 test("selected product nouns resolve only from the persisted selection",()=>{
  const selected={productTitle:"The Collection Snowboard: Liquid"};
@@ -25,16 +26,16 @@ test("product discovery excludes generic trailing questions without broadening p
 });
 function fixture(options:{catalogTitleDiscovery?:boolean}={}) {
  let mode:"live"|"empty"|"throw"|"stale"="live", clock=Date.now();
- let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5 as number|null, tracked=true, entitled=true;
+ let state:ShoppingState|null=null, calls=0, price="699.95", available=true, currency="USD", quantity=5 as number|null, tracked=true, entitled=true, sourceCurrency="USD";
  const config=shoppingSettings({enabled:true,handoffOnFailure:true});
  const product={id:"p1",title:"Snowboard",published:true,status:"ACTIVE",userId:"tenant-a"};
  const variants=[{id:"v1",title:"Ice",options:[{name:"Color",value:"Ice"}]},{id:"v2",title:"Fire",options:[{name:"Color",value:"Fire"}]}];
- const commerce={source:async(id:string)=>id==="tenant-a"?{id:"s1",currency:"USD"}:null,purchaseCandidates:async(_id:string,request:any)=>{assert.equal(request.filters.currency,"USD");return [{...product,variants}];},lookupVariant:async()=>null,
+ const commerce={source:async(id:string)=>id==="tenant-a"?{id:"s1",currency:sourceCurrency}:null,purchaseCandidates:async(_id:string,request:any)=>{assert.equal(request.filters.currency,sourceCurrency);return [{...product,variants}];},lookupVariant:async()=>null,
  verifyForPurchase:async(_u:string,_s:string,ids:string[])=>{calls++;if(mode==="empty")return [];if(mode==="throw")throw Error("provider_unavailable");return variants.filter(v=>ids.includes(v.id)).map(v=>({product,variant:{...v,price,currency,quantity,tracked,inventoryPolicy:"DENY",verifiedAt:new Date(mode==="stale"?clock-120_000:clock)},availability:available?"available":"out_of_stock"}));}} as unknown as CommerceShoppingProvider;
  const sessions:ShoppingSessionStore={async withTurn(turn,run){if(turn.userId!=="tenant-a")return null;return run(state,async s=>{state=s;});}};
  const service=createShoppingService({commerce,sessions,settings:async()=>config,entitled:async()=>entitled,now:()=>clock,...options});
  let event=0;
- return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,quantity:(n:number|null)=>quantity=n,tracked:(value:boolean)=>tracked=value,config,entitled:(b:boolean)=>entitled=b};
+ return {mode:(m:typeof mode)=>mode=m,advance:(ms:number)=>clock+=ms,service,turn:(text:string,extra={})=>service.turn({userId:"tenant-a",conversationId:"c1",eventId:`e${++event}`,text,channel:"webchat",...extra}),state:()=>state,calls:()=>calls,price:(p:string)=>price=p,available:(a:boolean)=>available=a,currency:(c:string)=>currency=c,sourceCurrency:(c:string)=>sourceCurrency=c,quantity:(n:number|null)=>quantity=n,tracked:(value:boolean)=>tracked=value,config,entitled:(b:boolean)=>entitled=b};
 }
 test("merchant business questions delegate without changing shopping state, then shopping resumes",async()=>{
  for(const question of ["What is your return policy?", "Do you ship internationally?", "How long does delivery take, and can I return my order?", "Can I use discount codes?", "Do you offer warranties?", "Where is your store located?", "¿Cuál es su política de devoluciones?", "¿Cuánto tarda el envío?", "¿Puedo usar códigos de descuento?", "מה מדיניות ההחזרות שלכם?", "כמה זמן לוקח המשלוח?", "האם יש אחריות?"]) {
@@ -262,3 +263,42 @@ test("a policy clause cannot discard an explicit offered variant selection",asyn
  assert.equal(selected.state.selected?.variantId,"v2");
  assert.equal(selected.state.step,"confirming");
 });
+
+test("contextual cheaper discovery reuses the merchant query and strictly lowers fresh price in EN/ES/HE",async()=>{
+ for(const text of ["Show me something cheaper.","What about a cheaper one?","Muestrame algo mas barato","יש משהו זול יותר"]) {
+  const f=fixture();await f.turn("show snowboard under 750");await f.turn("option 1");
+  f.price("600.00");const cheaper=(await f.turn(text))!;
+  assert.equal(cheaper.state.query,"snowboard",text);
+  assert.equal(cheaper.state.cheaperThan,"699.95",text);
+  assert.equal(cheaper.state.maxPrice,"750",text);
+  assert.equal(cheaper.state.selected,undefined,"an explicit new discovery requires a new selection");
+  assert.ok(cheaper.state.choices.every(c=>compareMoney(c.price,"699.95")<0));
+ }
+ const equal=fixture();await equal.turn("show snowboard");
+ const none=(await equal.turn("Show me something cheaper"))!;
+ assert.equal(none.state.choices.length,0,"equal prices must not be described as cheaper");
+ const orphan=fixture();assert.match((await orphan.turn("Show me something cheaper"))!.reply,/repeat your product search/);assert.equal(orphan.calls(),0);
+ const retry=fixture();await retry.turn("show snowboard under 750");retry.mode("empty");
+ assert.equal((await retry.turn("Show me something cheaper"))!.state.step,"pending");
+ retry.mode("live");retry.price("600");const resumed=(await retry.turn("retry"))!;
+ assert.equal(resumed.state.query,"snowboard");assert.equal(resumed.state.cheaperThan,"699.95");
+ const language=detectConversationLanguage("Busco una tabla de snowboard");assert.equal(language.code,"es");
+ assert.equal(detectConversationLanguage("Muestrame algo mas barato").code,"es");
+ for(const text of ["Algo mas barato","Una opcion mas barata"]) assert.equal(detectConversationLanguage(text).code,"es");
+});
+
+ test("cheaper retry cannot convert an old threshold or budget into a new currency",async()=>{
+ const f=fixture();await f.turn("show snowboard under 750");f.mode("empty");
+ await f.turn("Show me something cheaper");const calls=f.calls();
+ f.sourceCurrency("EUR");f.currency("EUR");f.mode("live");
+ const result=(await f.turn("retry"))!;
+ assert.equal(f.calls(),calls);assert.equal(result.state.cheaperThan,undefined);
+ assert.equal(result.state.maxPrice,undefined);assert.equal(result.state.selected,undefined);
+ assert.match(result.reply,/repeat your product search/);
+ });
+ test("a new explicit search clears the cheaper threshold but retains the original budget",async()=>{
+ const f=fixture();await f.turn("show snowboard under 750");f.price("600");
+ await f.turn("Show me something cheaper");
+ const result=(await f.turn("show helmet"))!;
+ assert.equal(result.state.cheaperThan,undefined);assert.equal(result.state.maxPrice,"750");
+ });
