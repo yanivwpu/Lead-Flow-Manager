@@ -31,16 +31,32 @@ export function shoppingText(raw: string, max = 1500): string {
     .replace(/\s+/g, " ").trim().slice(0, max);
 }
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+const colorGroups=[["blue","azul","כחול"],["black","negro","negra","שחור"],["red","rojo","roja","אדום"],["white","blanco","blanca","לבן"],["green","verde","ירוק"],["yellow","amarillo","amarilla","צהוב"],["pink","rosa","ורוד"],["purple","morado","morada","violeta","סגול"],["orange","naranja","כתום"],["brown","marron","חום"],["gray","grey","gris","אפור"]];
 const optionKey = (value: string) => {
-  const v=norm(value);
+  const v=norm(value).replace(/([\p{L}])['’](?=[\p{L}])/gu,"$1");
   // Language equivalents only; no product taxonomy or suitability assumptions.
-  const groups=[["blue","azul","כחול"],["black","negro","negra","שחור"],["red","rojo","roja","אדום"],["white","blanco","blanca","לבן"],["green","verde","ירוק"]];
-  return groups.find(g=>g.includes(v))?.[0]??v;
+  return colorGroups.find(g=>g.includes(v))?.[0]??v;
 };
-export function requestedShoppingOptions(text:string, values:string[]):string[] {
-  const tokens=new Set(norm(text).split(/[^\p{L}\p{N}-]+/u).filter(Boolean).flatMap(word=>[optionKey(word),...(/^[בה][\u0590-\u05ff]+$/u.test(word)?[optionKey(word.slice(1))]:[])]));
-  const normalized=` ${norm(text).replace(/[^\p{L}\p{N}-]+/gu," ")} `;
-  return [...new Set(values.filter(value=>tokens.has(optionKey(value)) || normalized.includes(` ${norm(value)} `)))];
+export function requestedShoppingOptions(text:string, values:string[], relative:ShoppingPlan["relativeSize"]=null):string[] {
+  const raw=norm(text);
+  const words=raw.replace(/([\p{L}])['’](?=[\p{L}])/gu,"$1").split(/[^\p{L}\p{N}-]+/u).filter(Boolean);
+  const keys=words.flatMap(word=>[optionKey(word),...(/^[בה][\u0590-\u05ff]+$/u.test(word)?[optionKey(word.slice(1))]:[])]);
+  const tokens=new Set(keys);
+  const normalized=` ${words.join(" ")} `;
+  const resolved=values.filter(value=>tokens.has(optionKey(value)) || normalized.includes(` ${optionKey(value)} `));
+  // Keep explicit unknown values as constraints too. Otherwise "blue size XL"
+  // can become just "blue" when XL is absent from the bounded variant page.
+  const requested=words.filter(word=>colorGroups.some(group=>group.includes(word)) || /^(?:xxxs|xxs|xs|s|m|l|xl|xxl|xxxl|[2-9]xl)$/u.test(word));
+  for(const match of raw.matchAll(/(?:\b(?:size|talla|tamano|colou?r)|(?:^|\s)(?:ב?מידה|ב?צבע))\s*[:=]?\s+([\p{L}\p{N}-]+)/gu)) {
+    const value=match[1];
+    if(relative && /^(?:mas|smaller|larger|bigger|pequen[oa]|grande|קטנ[ה]?|גדול[ה]?)$/u.test(value))continue;
+    requested.push(value);
+  }
+  for(const match of raw.matchAll(/\b(?:in|en)\s+(?:a\s+|the\s+|un\s+|una\s+|el\s+|la\s+)?([\p{L}\p{N}-]+)/gu))
+    if(!/^(?:stock|inventory|size|talla|color|colour|it|this|that|one|these|those|este|esta|ese|esa)$/u.test(match[1])&&!shoppingEmbeddedChoiceNumbers(match[1]).length)requested.push(match[1]);
+  for(const match of raw.matchAll(/(?:^|\s)ב([\u0590-\u05ff]+)/gu))
+    if(!/^(?:מלאי|בקשה|מידה|צבע|אפשרות|מוצר|מוצרים)$/u.test(match[1])&&!shoppingEmbeddedChoiceNumbers(match[1]).length)requested.push(match[1]);
+  return [...new Map([...resolved,...requested.filter(value=>!resolved.some(r=>norm(r).startsWith(`${norm(value)} `)))].map(value=>[optionKey(value),value])).values()];
 }
 export const intelligenceCopy = {
   en: { evidence: "Based on the merchant's documented information:", best: "My strongest match for your request is", compare: "Here is the documented comparison; your selection is saved.", missing: "The catalog does not establish that comparison or suitability. Which feature matters most? A team member can confirm missing specifications.", policy: "The merchant's policy information:", noPolicy: "I couldn't establish that policy from this merchant's knowledge. A team member can confirm before you buy.", variant: "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.", noVariant: "I couldn't verify that exact option. Please name the product and an option from the catalog; your selection is saved.", clarify: "Which product or saved option do you mean, and which attributes matter to you?", cheaper: "The lower verified price is", original: "Merchant source", value: "Price alone does not establish quality or value.", medical: "Product descriptions are not medical advice; a qualified professional can advise on health concerns." },
@@ -225,7 +241,7 @@ export function allowedVariantChange(current: ShoppingChoice, variant: CommerceP
     current.options.some(c=>!options.some(o=>norm(o.name)===norm(c.name))))return false;
   if(values.some(value=>!options.some(o=>optionKey(o.value)===optionKey(value))))return false;
   const changes = options.filter(o => !current.options.some(c => norm(c.name) === norm(o.name) && norm(c.value) === norm(o.value)));
-  if (!changes.length) return !relative && values.length > 0;
+  if (!changes.length) return !relative;
   if (changes.length > values.length+(relative ? 1 : 0)) return false;
   if (relative) {
     const sizeChanges=changes.filter(o=>/^(?:size|talla|מידה)$/iu.test(o.name));

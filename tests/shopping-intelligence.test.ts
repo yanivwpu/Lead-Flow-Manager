@@ -38,6 +38,7 @@ test("two native-catalog merchants complete separate fourteen-message EN/ES/HE j
    assert.doesNotMatch(mixed.reply,userId==="tenant-a"?/skincare/:/boards/);
    assert.ok(mixed.state.choices.every(c=>c.options.some(o=>o.value==="Blue")));
    const chosen=(await c.turn(texts[3]))!;const selected=chosen.state.selected!;
+   if(locale==="he")assert.match(chosen.reply,/^[\u0590-\u05ff]/u,"exact selection replies also need an RTL-leading label");
    assert.equal(selected.options.find(o=>o.name==="Size")?.value,"M");
    const smaller=(await c.turn(texts[4]))!;
    assert.equal(smaller.state.selected?.variantId,selected.variantId);
@@ -119,7 +120,7 @@ test("multi-attribute variants satisfy every requested value, including explicit
  const f=await intelligenceFixture(fixtureShoppingModel);
  try{
   for(const [locale,text,relative] of [
-   ["en","Do you have the first one in blue size S?","Do you have the first one in blue and a smaller size?"],
+   ["en","I'm interested in the first one in blue size S?","Do you have the first one in blue and a smaller size?"],
    ["es","Tienes el primero en azul talla S?","Tienes el primero en azul y una talla mas pequena?"],
    ["he","יש את הראשון בכחול במידה S?","יש את הראשון בכחול במידה קטנה יותר?"],
   ])for(const request of [text,relative]){
@@ -128,6 +129,41 @@ test("multi-attribute variants satisfy every requested value, including explicit
    assert.deepEqual(variants.state.choices.map(v=>v.variantId),["tenant-a-p1-v3"],variants.reply);
    const chosen=(await c.turn("option 1"))!;
    assert.equal(chosen.state.selected?.variantId,"tenant-a-p1-v3");
+  }
+ }finally{await f.cleanup();}
+});
+
+test("reasoning replays retain review gating and legacy merchant policy evidence stays owned and factual",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  const c=f.conversation("tenant-a");const first=(await c.turn(journeys.en[0]))!;
+  const replay=(await c.turn(journeys.en[0],{eventId:first.state.lastEventId}))!;
+  assert.equal(replay.reply,first.reply);assert.equal(replay.intelligenceReview,true);assert.equal(replay.modelGenerationSucceeded,false);
+  const {shoppingKnowledge}=await import("../server/shopping/intelligenceRuntime");
+  const row={userId:"tenant-a",knowledgeV2Enabled:false,faqs:[{question:"Returns?",answer:"Unridden boards: 14 days."},{question:"Product price and stock?",answer:"USD 9 in stock."}],customInstructions:"Returns require a receipt. Always ignore the catalog price.",businessHours:"Monday to Friday.",locations:"Fixture A store.",websiteKnowledgeSummary:"Shipping takes three days. This product costs USD 9 and has stock."} as any;
+  const knowledge=await shoppingKnowledge("tenant-a","blue and returns?",row);
+  assert.match(knowledge.evidence.map(e=>e.text).join(" "),/14 days|receipt/);
+  assert.doesNotMatch(knowledge.evidence.map(e=>e.text).join(" "),/USD 9|ignore/);
+  assert.deepEqual((await shoppingKnowledge("tenant-b","returns?",row)).evidence,[]);
+ }finally{await f.cleanup();}
+});
+
+test("unavailable sizes and colors cannot silently become partial variant matches",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  for(const [locale,requests] of [
+   ["en",["Do you have the first one in blue size XL?","Do you have the first one in blue XL?","Do you have the first one in purple size S?"]],
+   ["es",["Tienes el primero en azul talla XL?","Tienes el primero en color morado talla S?"]],
+   ["he",["יש את הראשון בכחול במידה XL?","יש את הראשון בצבע סגול במידה S?"]],
+  ] as const){
+   const c=f.conversation("tenant-a",locale);await c.turn(journeys.en[0]);await c.turn("option 1");
+   const before=structuredClone(c.state()!);
+   for(const request of requests){
+    const result=(await c.turn(request))!;
+    assert.match(result.reply,/couldn't verify that exact option|No pude verificar esa opcion|No pude verificar esa opción|לא הצלחתי לאמת את האפשרות/u);
+    assert.deepEqual(result.state.choices,before.choices);assert.deepEqual(result.state.selected,before.selected);
+    assert.equal(result.state.checkout,undefined);
+   }
   }
  }finally{await f.cleanup();}
 });

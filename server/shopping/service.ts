@@ -110,7 +110,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     if(explanation)reply+=`\n${explanation}`;
     // Existing bubbles use dir=auto. Lead Hebrew reasoning with Hebrew so an
     // English catalog title cannot force the entire answer into LTR layout.
-    if(modelUsed && shoppingLocale(turn.locale)==="he")reply=`${intelligenceCopy.he.evidence}\n${reply}`;
+    if(shoppingLocale(turn.locale)==="he" && !/^[\u0590-\u05ff]/u.test(reply.trim()))reply=`${intelligenceCopy.he.evidence}\n${reply}`;
     state={...state,intelligenceReview:modelUsed,pending:preservePending?state.pending:undefined,step,intent:state.checkout&&step==="confirmed"?"confirm":intent,reply,lastEventId:turn.eventId,updatedAt:new Date(stamp).toISOString(),consumedEventIds:[...(stored?.consumedEventIds??[]),turn.eventId].slice(-50)};
     await save(state); return {reply,state,handoff:step==="handoff",modelGenerationSucceeded:modelUsed,intelligenceReview:modelUsed};
    }
@@ -201,7 +201,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
       if(page)product.variants=page.items;
      } catch {return clarify(smartCopy.noVariant);}
     }
-    plan.optionValues=requestedShoppingOptions(turn.text,product.variants.flatMap(v=>options(v.options).map(o=>o.value)));
+    plan.optionValues=requestedShoppingOptions(turn.text,product.variants.flatMap(v=>options(v.options).map(o=>o.value)),plan.relativeSize);
     // Exact saved options and comparable relative sizes resolve deterministically.
     // A model nomination cannot substitute a different color or discard size.
     const result=plan.policy?await deps.intelligence.answer({turn,state,plan,products:[product],choices:references}):{text:""};
