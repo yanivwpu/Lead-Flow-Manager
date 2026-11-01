@@ -8,6 +8,7 @@ import { createPrivateCheckoutPreflight } from "./aiTestChat/checkoutPreflight";
 import { createTestChatGenerator } from "./aiTestChat/generate";
 import { requireWorkspaceOffersAdmin } from "./workspaceOffers/offerAccess";
 import { readShoppingSettings } from "./shopping/runtime";
+import { shoppingIntelligence } from "./shopping/intelligenceRuntime";
 import { privateTestShoppingAllowed, privateTestShoppingSettings } from "./aiTestChat/shoppingAllowance";
 import { privateMerchantCatalogPreviewAllowed } from "./aiTestChat/previewEligibility";
 import { inventoryState } from "./salesCatalog/shopify/inventory";
@@ -11247,6 +11248,7 @@ export async function registerRoutes(
     generate: createTestChatGenerator({
       ai: aiService, commerce: salesCatalog.commerce, settings: readShoppingSettings, entitled: shoppingEntitled,
       privateShoppingAllowed,
+      intelligence: shoppingIntelligence,
       knowledge: async id => (await storage.getAiBusinessKnowledge(id)) || undefined,
       aiSettings: async id => (await storage.getAiSettings(id)) || undefined,
       meter: async id => { await storage.incrementAiUsage(id, "repliesSuggested"); },

@@ -13,6 +13,8 @@ import type { aiService } from "../aiService";
 import { privateTestShoppingSettings } from "./shoppingAllowance";
 import { shoppingLocale } from "@shared/shoppingAssistant";
 import { explicitStoreProductQuestion } from "@shared/shopperProductGuard";
+import type { ShoppingIntelligence } from "../shopping/intelligence";
+import { routingShouldTriggerHandoff } from "@shared/aiRouting";
 /** Product queries must never inherit unrelated business-plan answers in private Test Chat. */
 const privateProductFallback = {
   en: "I couldn't verify a Shopify product match and its current price and availability. Check the catalog and try another product search. I won't provide unverified prices or stock.",
@@ -29,6 +31,7 @@ export function createTestChatGenerator(deps: {
   knowledge: (id: string) => Promise<AiBusinessKnowledge | undefined>;
   aiSettings: (id: string) => Promise<AiSettings | undefined>;
   meter: (id: string) => Promise<void>;
+  intelligence?: ShoppingIntelligence;
 }) {
   return async (input: {
     userId: string;
@@ -57,6 +60,8 @@ export function createTestChatGenerator(deps: {
       settings: async id => ({...await settings(id),checkoutEnabled:!privateShopping}),
       entitled: deps.entitled,
       catalogTitleDiscovery: privateShopping,
+      intelligence: deps.intelligence,
+      handoffRequested: async id => id===input.userId && routingShouldTriggerHandoff(resolveChatbotCompletionRouting({inbound:latest.content,history:input.history,handoffKeywords:config?.handoffKeywords??undefined,industry:knowledge?.industry??undefined})),
       // Pure preview: this generator has no provider/cart capability or customer-message sender.
       ...(privateShopping ? {} : {
         checkout: async () => ({status:"ready" as const}),
@@ -88,7 +93,10 @@ export function createTestChatGenerator(deps: {
           userId: input.userId, conversationId: input.sessionId,
           text: latest.content, channel: "webchat", locale,
         });
-        if (product) return product.reply;
+        if (product) {
+          if(product.modelGenerationSucceeded)await deps.meter(input.userId);
+          return product.reply;
+        }
         return privateProductFallback[shoppingLocale(locale)];
       }
     }

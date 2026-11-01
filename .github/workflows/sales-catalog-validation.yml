@@ -17,6 +17,7 @@ on:
       - "shared/shoppingAssistant.ts"
       - "tests/shopping-assistant*.test.ts"
       - "tests/shopping-ucp.test.ts"
+      - "tests/shopping-intelligence*.ts"
       - "shared/conversationLanguage.ts"
       - "tests/shopping-checkout*.test.ts"
       - "tests/shopify-checkout-admin-test.test.ts"
@@ -110,6 +111,8 @@ jobs:
           node --import tsx tests/shopping-checkout-postgres.test.ts
           node --import tsx tests/shopping-assistant.test.ts
           node --import tsx tests/shopping-ucp.test.ts
+          node --import tsx tests/shopping-intelligence.test.ts
+          node --import tsx tests/shopping-intelligence-model.test.ts
           node --import tsx tests/shopping-assistant-postgres.test.ts
           node --import tsx tests/ai-test-chat.test.ts
           node --import tsx --test tests/ai-test-chat-product-safety.test.ts
