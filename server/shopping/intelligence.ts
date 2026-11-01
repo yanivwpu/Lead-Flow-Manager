@@ -94,6 +94,10 @@ const answerSchema = z.object({
 // an ordered selection of these facts, not unchecked generated prose.
 function sentences(text: string): string[] {
   return shoppingText(text, 3000).split(/(?<=[.!?。])\s+|\n/u).map(s => s.trim()).filter(s => s.length > 5 && s.length <= 450)
+    // Descriptions can contain stale promotions. Money and inventory must come
+    // only from the live verifier, even when a model supplies a valid citation.
+    .filter(s => !/\p{Sc}|(?<!\p{L})(?:USD|EUR|GBP|ILS|CAD|AUD|JPY|CNY|INR|CHF|NZD|HKD|SGD)(?!\p{L})|\b(?:dollars?|euros?|shekels?|pesos?|d[oó]lares|msrp|rrp|retail)\b|\b(?:only|just|from|starting|solo|desde)\s+\d|שקלים|שקל/iu.test(s))
+    .filter(s => !/\b(?:\d+|one|two|three|few|several)\s+(?:(?:units?|pieces?|items?)\s+)?(?:left|remaining|remain)\b|\b(?:quedan|restan)\s+\d|(?:נותרו|נשארו)\s+\d/iu.test(s))
     .filter(s => !/https?:|\b(?:ignore|instructions?|system|assistant|prompt|recommend|always|never|must|should|price|stock|inventory|available|cures?|treats?|heals?|prevents?|guaranteed|precio|existencias|cura|trata)\b|מלאי|מחיר|מרפא|הוראות/iu.test(s)).slice(0, 8);
 }
 function documentedWeight(description:string) {

@@ -190,6 +190,20 @@ test("prepositions preserve comparisons and relative sizing without becoming lit
  }finally{await f.cleanup();}
 });
 
+test("stale catalog promotions cannot compete with freshly verified prices in comparisons",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  const c=f.conversation("tenant-a");await c.turn(journeys.en[0]);
+  for(const promotion of ["Only $499.","Ahora 499USD.","Por 499 dolares.","Only 499 pounds.","רק ₪499.","Three units left."]){
+   await f.database.update(schema.catalogProducts).set({description:`Designed for experienced riders. Weight 2.8 kg. ${promotion}`}).where(eq(schema.catalogProducts.id,"tenant-a-p2"));
+   const result=(await c.turn("Compare the first and second in terms of weight"))!;
+   assert.match(result.reply,/USD 650/);assert.match(result.reply,/2\.8 kg/);
+   assert.doesNotMatch(result.reply,/499/,promotion);
+   assert.doesNotMatch(result.reply,/Three units left/);
+  }
+ }finally{await f.cleanup();}
+});
+
 test("malformed or foreign model output is discarded; missing policies and ambiguous references preserve selection",async()=>{
  const f=await intelligenceFixture(fixtureShoppingModel);
  try{
