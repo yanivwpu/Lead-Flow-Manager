@@ -16,6 +16,8 @@ on:
       - "migrations/0109_private_ai_test_chat.sql"
       - "shared/shoppingAssistant.ts"
       - "tests/shopping-assistant*.test.ts"
+      - "tests/shopping-ucp.test.ts"
+      - "shared/conversationLanguage.ts"
       - "tests/shopping-checkout*.test.ts"
       - "tests/shopify-checkout-admin-test.test.ts"
       - "client/src/components/ShopifyCheckoutTest.tsx"
@@ -107,6 +109,7 @@ jobs:
           node --import tsx tests/shopping-checkout.test.ts
           node --import tsx tests/shopping-checkout-postgres.test.ts
           node --import tsx tests/shopping-assistant.test.ts
+          node --import tsx tests/shopping-ucp.test.ts
           node --import tsx tests/shopping-assistant-postgres.test.ts
           node --import tsx tests/ai-test-chat.test.ts
           node --import tsx --test tests/ai-test-chat-product-safety.test.ts

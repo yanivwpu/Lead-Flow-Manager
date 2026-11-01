@@ -3,6 +3,7 @@ import test from "node:test";
 import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
+import { detectConversationLanguage } from "../shared/conversationLanguage";
 
 test("selected product nouns resolve only from the persisted selection",()=>{
  const selected={productTitle:"The Collection Snowboard: Liquid"};
@@ -261,4 +262,27 @@ test("a policy clause cannot discard an explicit offered variant selection",asyn
  const selected=(await f.turn("I'll take the Fire version and what is your return policy?"))!;
  assert.equal(selected.state.selected?.variantId,"v2");
  assert.equal(selected.state.step,"confirming");
+});
+
+test("contextual cheaper discovery reuses the merchant query and strictly lowers fresh price in EN/ES/HE",async()=>{
+ for(const text of ["Show me something cheaper.","What about a cheaper one?","Muestrame algo mas barato","יש משהו זול יותר"]) {
+  const f=fixture();await f.turn("show snowboard under 750");await f.turn("option 1");
+  f.price("600.00");const cheaper=(await f.turn(text))!;
+  assert.equal(cheaper.state.query,"snowboard",text);
+  assert.equal(cheaper.state.cheaperThan,"699.95",text);
+  assert.equal(cheaper.state.maxPrice,"699.95",text);
+  assert.equal(cheaper.state.selected,undefined,"an explicit new discovery requires a new selection");
+  assert.ok(cheaper.state.choices.every(c=>compareMoney(c.price,"699.95")<0));
+ }
+ const equal=fixture();await equal.turn("show snowboard");
+ const none=(await equal.turn("Show me something cheaper"))!;
+ assert.equal(none.state.choices.length,0,"equal prices must not be described as cheaper");
+ const orphan=fixture();assert.match((await orphan.turn("Show me something cheaper"))!.reply,/repeat your product search/);assert.equal(orphan.calls(),0);
+ const retry=fixture();await retry.turn("show snowboard under 750");retry.mode("empty");
+ assert.equal((await retry.turn("Show me something cheaper"))!.state.step,"pending");
+ retry.mode("live");retry.price("600");const resumed=(await retry.turn("retry"))!;
+ assert.equal(resumed.state.query,"snowboard");assert.equal(resumed.state.cheaperThan,"699.95");
+ const language=detectConversationLanguage("Busco una tabla de snowboard");assert.equal(language.code,"es");
+ assert.equal(detectConversationLanguage("Muestrame algo mas barato").code,"es");
+ for(const text of ["Algo mas barato","Una opcion mas barata"]) assert.equal(detectConversationLanguage(text).code,"es");
 });

@@ -12,7 +12,7 @@ const HIRAGANA_KATAKANA_RE = /[\u3040-\u30FF]/;
 const HANGUL_RE = /[\uAC00-\uD7AF]/;
 const CYRILLIC_RE = /[\u0400-\u04FF]/;
 const SPANISH_HINT_RE =
-  /[áéíóúüñ¿¡]|\b(?:hola|gracias|precio|precios|características|quiero|ayuda|información|información)\b/i;
+  /[áéíóúüñ¿¡]|\b(?:hola|gracias|precio|precios|características|quiero|ayuda|información|busco|muestrame|barat[oa]|opcion|tienes|recomiendas|devoluciones|envios?)\b/i;
 const FRENCH_HINT_RE = /[àâçéèêëîïôùûüÿœæ]|\b(?:bonjour|merci|prix|fonctionnalités|aide)\b/i;
 const GERMAN_HINT_RE = /[äöüß]|\b(?:hallo|danke|preis|funktionen|hilfe)\b/i;
 const PORTUGUESE_HINT_RE = /[ãõç]|\b(?:olá|obrigad[oa]|preço|ajuda)\b/i;
