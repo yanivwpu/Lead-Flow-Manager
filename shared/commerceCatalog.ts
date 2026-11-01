@@ -6,6 +6,7 @@ export const SHOPIFY_CATALOG_SCOPES = [
 ] as const;
 export const commerceFiltersSchema = z
   .object({
+    priceAbove: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/).optional(),
     priceBelow: z.string().regex(/^\d{1,12}(\.\d{1,6})?$/).optional(),
     minPrice: z
       .string()

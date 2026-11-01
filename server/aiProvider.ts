@@ -75,6 +75,7 @@ export class AIProvider {
       jsonMode?: boolean;
       maxTokens?: number;
       returnUsage?: boolean;
+      timeoutMs?: number;
     }
   ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     const config = this.getModelConfig(capability);
@@ -90,7 +91,7 @@ export class AIProvider {
   private async openaiComplete(
     config: AIProviderConfig,
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-    options?: { jsonMode?: boolean; maxTokens?: number; returnUsage?: boolean }
+    options?: { jsonMode?: boolean; maxTokens?: number; returnUsage?: boolean; timeoutMs?: number }
   ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     try {
       const response = await this.openaiClient.chat.completions.create({
@@ -98,7 +99,7 @@ export class AIProvider {
         messages,
         max_completion_tokens: options?.maxTokens || config.maxTokens || 500,
         ...(options?.jsonMode ? { response_format: { type: "json_object" as const } } : {}),
-      });
+      }, options?.timeoutMs ? { timeout: options.timeoutMs, maxRetries: 0 } : undefined);
 
       const content = response.choices[0]?.message?.content || "";
       if (options?.returnUsage) {

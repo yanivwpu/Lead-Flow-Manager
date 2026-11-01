@@ -48,7 +48,8 @@
       "ACTIVE": "Active",
       "DRAFT": "Draft",
       "ARCHIVED": "Archived",
-      "tags": "Merchant tags (comma separated)"
+      "tags": "Merchant tags (comma separated)",
+      "shoppingRulesHint": "Use shopping:exclude to prevent recommendations and purchase handoff. Use shopping:prefer as a soft ranking preference. Other tags remain descriptive."
     },
     "approval": "Payment links require human approval before send.",
     "intro": "Manage the offers and packages your team and AI Brain use in customer conversations.",

@@ -48,7 +48,8 @@
       "ACTIVE": "Activo",
       "DRAFT": "Borrador",
       "ARCHIVED": "Archivado",
-      "tags": "Etiquetas del comercio (separadas por comas)"
+      "tags": "Etiquetas del comercio (separadas por comas)",
+      "shoppingRulesHint": "Usa shopping:exclude para impedir recomendaciones y el paso a compra. Usa shopping:prefer como preferencia de orden. Las demás etiquetas siguen siendo descriptivas."
     },
     "approval": "Los enlaces de pago requieren aprobación humana antes del envío.",
     "intro": "Gestiona las ofertas y los paquetes que tu equipo y AI Brain usan en las conversaciones.",

@@ -64,6 +64,7 @@ export function createCommerceStore(
       ${f.minPrice ? sql`AND ${v}.price >= ${f.minPrice}::numeric` : sql``}
       ${f.maxPrice ? sql`AND ${v}.price <= ${f.maxPrice}::numeric` : sql``}
       ${f.priceBelow ? sql`AND ${v}.price < ${f.priceBelow}::numeric` : sql``}
+      ${f.priceAbove ? sql`AND ${v}.price > ${f.priceAbove}::numeric` : sql``}
       ${f.currency ? sql`AND ${v}.currency = ${f.currency}` : sql``}
       ${f.variantId ? sql`AND (${v}.id = ${f.variantId} OR ${v}.external_id = ${f.variantId})` : sql``}
       ${f.availability === "available" ? sql`AND ${fresh} AND ${v}.available_for_sale = true AND ${v}.requires_components = false AND (${v}.tracked = false OR (${v}.tracked = true AND (${v}.inventory_policy = 'CONTINUE' OR (${v}.inventory_policy = 'DENY' AND ${v}.quantity > 0))))` : sql``}
@@ -228,6 +229,7 @@ export function createCommerceStore(
       eq(catalogProducts.status, "ACTIVE"),
       eq(catalogProducts.published, true),
       eq(catalogProducts.complete, true),
+      sql`NOT (${catalogProducts.merchantTags} @> '["shopping:exclude"]'::jsonb)`,
       isNull(catalogProducts.deletedAt),
       variant,
       terms
@@ -245,6 +247,7 @@ export function createCommerceStore(
       .from(catalogProducts)
       .where(where)
       .orderBy(
+        sql`CASE WHEN ${catalogProducts.merchantTags} @> '["shopping:prefer"]'::jsonb THEN 0 ELSE 1 END`,
         terms
           ? sql`ts_rank(to_tsvector('simple',${catalogProducts.searchText}),plainto_tsquery('simple',${terms})) DESC`
           : asc(catalogProducts.title),
@@ -310,8 +313,18 @@ export function createCommerceStore(
   return {
     markInventoryActivity: (userId: string, sourceId: string) =>
       markInventoryActivity(database, userId, sourceId),
-    verifyForPurchase: (userId: string, sourceId: string, ids: string[]) =>
-      verifyInventoryForPurchase(database, userId, sourceId, ids, requestFor),
+    async verifyForPurchase(userId: string, sourceId: string, ids: string[]) {
+      // Hard exclusions apply to saved choices and checkout, not only discovery.
+      // Re-read after provider IO as a merchant may exclude an item mid-request.
+      const live = await verifyInventoryForPurchase(database, userId, sourceId, ids, requestFor);
+      if (!live.length) return live;
+      const permitted = await database.select({ id: catalogProducts.id }).from(catalogProducts).where(and(
+        eq(catalogProducts.userId, userId), eq(catalogProducts.sourceId, sourceId),
+        sql`NOT (${catalogProducts.merchantTags} @> '["shopping:exclude"]'::jsonb)`,
+        sql`${catalogProducts.id} IN (${sql.join(live.map(v => sql`${v.product.id}`), sql`,`)})`,
+      ));
+      return live.filter(v => permitted.some(p => p.id === v.product.id));
+    },
     async inventorySummary(userId: string, sourceId: string) {
       const currentSource = await source(userId, sourceId);
       if (!currentSource)
@@ -355,6 +368,14 @@ export function createCommerceStore(
       searchCandidates: (ctx) => searchCandidates(ctx, true),
     }).searchCandidates,
     source,
+    async recommendationVocabulary(userId:string,sourceId:string) {
+      if(!await source(userId,sourceId))return [];
+      const rows=await database.select({title:catalogProducts.title,category:catalogProducts.productType}).from(catalogProducts).where(and(
+        eq(catalogProducts.userId,userId),eq(catalogProducts.sourceId,sourceId),eq(catalogProducts.status,"ACTIVE"),eq(catalogProducts.published,true),eq(catalogProducts.complete,true),isNull(catalogProducts.deletedAt),
+        sql`NOT (${catalogProducts.merchantTags} @> '["shopping:exclude"]'::jsonb)`,
+      )).orderBy(asc(catalogProducts.id)).limit(60);
+      return [...new Set(rows.flatMap(p=>[p.category,p.title].filter((t):t is string=>!!t).map(t=>t.slice(0,120))))].slice(0,60);
+    },
     products,
     browse,
     searchCandidates: connected.searchCandidates,

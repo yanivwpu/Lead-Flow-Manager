@@ -27,6 +27,10 @@ export type ShoppingState = {
   quantity: number; query?: string; maxPrice?: string; minPrice?: string; currency?: string;
   // Exclusive preference threshold for a contextual cheaper-alternative search.
   cheaperThan?: string;
+  // Customer needs are bounded context, never a catalog fact or authorization.
+  preference?: string;
+  dearerThan?: string;
+  intelligenceReview?: boolean;
   updatedAt: string; lastEventId: string; reply: string;
   // Bounded event IDs prevent a delayed retry from reverting a newer selection.
   consumedEventIds: string[];
@@ -128,6 +132,13 @@ export function matchShoppingChoice(text: string, choices: ShoppingChoice[]): Sh
   const matches=choices.filter(c=>[`${c.productTitle} ${c.variantTitle}`,c.variantTitle,...c.options.map(o=>o.value)]
     .some(label=> {const l=label.toLocaleLowerCase().replace(/[^\p{L}\p{N}\s]/gu," ").replace(/\s+/g," ").trim(); return l && l!=="default title" && (` ${t} `).includes(` ${l} `);}));
   return matches.length===1?matches[0]:undefined;
+}
+/** Embedded ordinals are references only, never permission to select/confirm. */
+export function shoppingEmbeddedChoiceNumbers(text:string):number[] {
+  return [...new Set(text.split(/[^\p{L}]+/u).flatMap(word=>{
+    const n=shoppingChoiceNumber(word)??shoppingChoiceNumber(word.replace(/^ו(?=ה)/u,""));
+    return n===undefined?[]:[n];
+  }))];
 }
 export type ShoppingLocale = "en"|"es"|"he";
 export function shoppingLocale(locale?: string): ShoppingLocale {return locale?.startsWith("he")?"he":locale?.startsWith("es")?"es":"en";}

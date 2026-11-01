@@ -370,6 +370,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
             <span className="text-sm font-medium">
               {t("salesCatalog.commerce.tags")}
             </span>
+            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.shoppingRulesHint")}</span>
             <Input
               value={tags}
               maxLength={800}

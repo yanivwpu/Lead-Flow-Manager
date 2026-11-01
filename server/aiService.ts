@@ -213,12 +213,12 @@ export class AIService {
     const shopping = await (execution?.shoppingSuggestion ?? shoppingSuggestion)({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
     if (shopping) return {
       suggestion: shopping.reply,
-      confidence: shopping.handoff ? 0 : 1,
+      confidence: shopping.handoff || shopping.intelligenceReview ? 0 : 1,
       confidenceProvided: true,
-      knowledgeGrounded: !shopping.handoff,
-      groundingViolations: shopping.handoff ? ["shopping_handoff"] : [],
+      knowledgeGrounded: !shopping.handoff && !shopping.intelligenceReview,
+      groundingViolations: shopping.handoff ? ["shopping_handoff"] : shopping.intelligenceReview ? ["shopping_intelligence_review"] : [],
       retrievalIntent: "shopping_assistant",
-      modelGenerationSucceeded: false,
+      modelGenerationSucceeded: shopping.modelGenerationSucceeded ?? false,
     };
     // This safeguard runs only on the real customer-facing suggestion path.
     // Private Test Chat supplies its own fully isolated Shopping suggestion.

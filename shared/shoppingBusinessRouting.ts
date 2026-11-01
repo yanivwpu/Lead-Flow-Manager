@@ -1,4 +1,4 @@
-import { shoppingChoiceNumber, shoppingIntent } from "./shoppingAssistant";
+import { shoppingChoiceNumber, shoppingEmbeddedChoiceNumbers, shoppingIntent } from "./shoppingAssistant";
 import { catalogProductIntent } from "./shopperProductIntent";
 
 /** Business-only questions belong to the workspace's existing AI Brain retrieval.
@@ -20,6 +20,7 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
     .replace(/\bdo\s+you\s+have\s+(?:(?:a|an|any)\s+)?(?:warrant(?:y|ies)|discount\s+codes?|(?:a\s+)?return\s+policy)\b/gu," ");
   const clauses = factText.split(/[,;!?]|\b(?:and|but|y|pero)\b/u);
   const mutation = /(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/u.test(text) ||
+    clauses.some(clause => shoppingEmbeddedChoiceNumbers(clause).length>0 && /\b(?:in|comes?|colou?rs?|sizes?|interested|talla|color|azul|negro)\b|יש|בצבע|בכחול|בשחור|מידה/u.test(clause)) ||
     clauses.some(clause => shoppingChoiceNumber(clause.trim()) !== undefined);
   const productFacts = mutation || clauses.some(clause => {
     const intent = catalogProductIntent(clause);

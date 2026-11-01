@@ -12,6 +12,7 @@ import { guardedProductFallback } from "@shared/shopperProductGuard";
 import { createCheckoutHandoff } from "./checkout/handoff";
 import { checkoutReceiptCodec } from "./checkout/attempts";
 import { CheckoutError } from "./checkout/contract";
+import { shoppingIntelligence, shoppingHandoffRequested } from "./intelligenceRuntime";
 export async function shoppingEntitled(userId:string) {
  const limits=await subscriptionService.getUserLimits(userId);
  return !!limits?.growthEngineEligible && !!limits?.effectiveHasAIBrain;
@@ -33,7 +34,7 @@ const checkout=createCheckoutHandoff({database:db,commerce:salesCatalog.commerce
  if(!/^[A-Za-z0-9+/]{43}=$/.test(encoded))throw new CheckoutError("setup_required");
  return checkoutReceiptCodec(Buffer.from(encoded,"base64"));
 }});
-export const shoppingAssistant=createShoppingService({commerce:salesCatalog.commerce,sessions:createShoppingSessions(db),settings:readShoppingSettings,entitled:shoppingEntitled,checkout});
+export const shoppingAssistant=createShoppingService({commerce:salesCatalog.commerce,sessions:createShoppingSessions(db),settings:readShoppingSettings,entitled:shoppingEntitled,checkout,intelligence:shoppingIntelligence,handoffRequested:shoppingHandoffRequested});
 export const shoppingSuggestion=createShoppingSuggestion({
  settings:readShoppingSettings,
  latestInbound:async(userId,conversationId)=>{

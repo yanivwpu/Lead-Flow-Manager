@@ -13,7 +13,7 @@ export function createShoppingSuggestion(deps:{settings:(id:string)=>Promise<Sho
    return await deps.turn({...input,channel:input.channel,eventId:inbound.id});
   } catch {
    // Lease contention/outages must not imply missing stock or force a handoff.
-   return {reply:shoppingCopy[shoppingLocale(input.locale)].busy,handoff:false};
+   return {reply:shoppingCopy[shoppingLocale(input.locale)].busy,handoff:false,modelGenerationSucceeded:false,intelligenceReview:false};
   }
  };
 }
