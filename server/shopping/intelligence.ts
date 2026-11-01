@@ -56,7 +56,8 @@ export function requestedShoppingOptions(text:string, values:string[], relative:
     if(!/^(?:stock|inventory|size|talla|color|colour|it|this|that|one|these|those|este|esta|ese|esa)$/u.test(match[1])&&!shoppingEmbeddedChoiceNumbers(match[1]).length)requested.push(match[1]);
   for(const match of raw.matchAll(/(?:^|\s)ב([\u0590-\u05ff]+)/gu))
     if(!/^(?:מלאי|בקשה|מידה|צבע|אפשרות|מוצר|מוצרים)$/u.test(match[1])&&!shoppingEmbeddedChoiceNumbers(match[1]).length)requested.push(match[1]);
-  return [...new Map([...resolved,...requested.filter(value=>!resolved.some(r=>norm(r).startsWith(`${norm(value)} `)))].map(value=>[optionKey(value),value])).values()];
+  return [...new Map([...resolved,...requested.filter(value=>!resolved.some(r=>norm(r).startsWith(`${norm(value)} `)))].filter(value=>
+    !relative || !/^(?:mas|smaller|larger|bigger|pequen[oa]|grande|קטנ[ה]?|גדול[ה]?)$/u.test(norm(value))).map(value=>[optionKey(value),value])).values()];
 }
 export const intelligenceCopy = {
   en: { evidence: "Based on the merchant's documented information:", best: "My strongest match for your request is", compare: "Here is the documented comparison; your selection is saved.", missing: "The catalog does not establish that comparison or suitability. Which feature matters most? A team member can confirm missing specifications.", policy: "The merchant's policy information:", noPolicy: "I couldn't establish that policy from this merchant's knowledge. A team member can confirm before you buy.", variant: "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.", noVariant: "I couldn't verify that exact option. Please name the product and an option from the catalog; your selection is saved.", clarify: "Which product or saved option do you mean, and which attributes matter to you?", cheaper: "The lower verified price is", original: "Merchant source", value: "Price alone does not establish quality or value.", medical: "Product descriptions are not medical advice; a qualified professional can advise on health concerns." },
@@ -125,7 +126,11 @@ export function createShoppingIntelligence(deps: {
         parsed.moreExpensive=/\b(?:more expensive|mas car[oa])\b|יקר(?:ה)?\s+יותר|יותר\s+יקר/u.test(text);
         const relative=/\b(?:smaller|mas pequen[oa])\b|קטנ(?:ה|ים|ות)?\s+יותר/u.test(text)?"smaller":/\b(?:larger|bigger|mas grande)\b|גדול(?:ה|ים|ות)?\s+יותר/u.test(text)?"larger":null;
         const selectedReference=!!state?.selected && /\b(?:it|this|that|one|selected|lo|ese|esa|este|esta)\b|אותו|הזה|הזו/u.test(text);
-        const variantContext=!!relative || (mentioned.length>0 || selectedReference) && /\b(?:in|comes?|colou?rs?|sizes?|talla|color|azul|negro)\b|בצבע|בכחול|בשחור|מידה/u.test(text);
+        const explicitOption=/\b(?:colou?rs?|sizes?|talla|color)\b|בצבע|מידה/u.test(text) || colorGroups.some(group=>group.some(value=>text.split(/[^\p{L}]+/u).includes(value)));
+        if(state && mentioned.length>1 && !explicitOption && !relative && /\b(?:compare|comparison|compara|comparar)\b|השוו|השווא/u.test(text)) {
+          parsed.action="compare";parsed.references=mentioned;parsed.query=state.query??null;
+        }
+        const variantContext=!!relative || (mentioned.length>0 || selectedReference) && (explicitOption || parsed.action!=="compare" && /\b(?:in|comes?)\b|בכחול|בשחור/u.test(text));
         if(state && variantContext) {
           parsed.action="variant";parsed.query=state.query??null;
           parsed.relativeSize=relative??parsed.relativeSize;

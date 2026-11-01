@@ -84,6 +84,7 @@ test("context guards preserve variants despite a mistaken search plan; budgets a
   const turn={userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"What about a smaller size?"};
   const guarded=await badPlan.plan(turn,c.state());
   assert.equal(guarded?.action,"variant");assert.equal(guarded?.query,"Snowboard");assert.equal(guarded?.relativeSize,"smaller");
+  assert.equal((await badPlan.plan({...turn,text:"Compare the first and third in terms of weight"},c.state()))?.action,"compare");
   const current=c.state()!.selected!;
   assert.equal(allowedVariantChange(current,{options:[{name:"Color",value:"Blue"}]} as any,["Blue"],null),false,"a color request must not lose the saved size");
   assert.equal(allowedVariantChange(current,{options:[{name:"Color",value:"Red"},{name:"Size",value:"30"}]} as any,[],"larger"),false,"letter and numeric sizing systems are not comparable");
@@ -164,6 +165,27 @@ test("unavailable sizes and colors cannot silently become partial variant matche
     assert.deepEqual(result.state.choices,before.choices);assert.deepEqual(result.state.selected,before.selected);
     assert.equal(result.state.checkout,undefined);
    }
+  }
+ }finally{await f.cleanup();}
+});
+
+test("prepositions preserve comparisons and relative sizing without becoming literal constraints",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  for(const [locale,compare,smaller,larger] of [
+   ["en","Compare the first and third in terms of weight","Do you have it in a smaller size?","Do you have it in a larger size?"],
+   ["es","Compara el primero y el tercero en terminos de peso","Lo tienes en una talla mas pequena?","Lo tienes en una talla mas grande?"],
+   ["he","השוו בין הראשון והשלישי מבחינת משקל","יש אותו במידה קטנה יותר?","יש אותו במידה גדולה יותר?"],
+  ]){
+   const c=f.conversation("tenant-a",locale);await c.turn(journeys.en[0]);const order=c.state()!.choices.map(c=>c.variantId);
+   const comparison=(await c.turn(compare))!;
+   assert.deepEqual(comparison.state.choices.map(c=>c.variantId),order);assert.match(comparison.reply,/2\.4 kg/);
+   await c.turn("option 1");const selected=c.state()!.selected!;
+   await f.database.insert(schema.catalogVariants).values({id:`relative-${locale}`,userId:"tenant-a",sourceId:f.sources["tenant-a"],productId:selected.productId,externalId:`gid://shopify/ProductVariant/${9000+["en","es","he"].indexOf(locale)}`,inventoryItemId:`gid://shopify/InventoryItem/${9000+["en","es","he"].indexOf(locale)}`,title:"Red / S",options:[{name:"Color",value:"Red"},{name:"Size",value:"S"}],price:"500",currency:"USD",tracked:true,quantity:7,inventoryPolicy:"DENY",availableForSale:true,requiresComponents:false,verifiedAt:new Date(),providerUpdatedAt:new Date(),generation:"fixture"});
+   const small=(await c.turn(smaller))!;
+   assert.ok(small.state.choices.every(v=>v.options.some(o=>o.value==="S")),small.reply);
+   await c.turn("option 1");const large=(await c.turn(larger))!;
+   assert.ok(large.state.choices.every(v=>v.options.some(o=>o.value==="M")),large.reply);
   }
  }finally{await f.cleanup();}
 });
