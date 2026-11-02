@@ -142,7 +142,11 @@ export function shoppingEmbeddedChoiceNumbers(text:string):number[] {
   });
   // Only labeled digits are references; budgets, quantities and rider weights
   // are not option numbers. Preserve explicit out-of-range labels to clarify.
-  const numbered=[...text.matchAll(/(?:\b(?:option(?: number)?|opci[oó]n(?: n[uú]mero)?)|(?:^|\s)ו?(?:אפשרות|האפשרות|באפשרות)(?: מספר)?)\s+(\d+)(?!\d|\.\d)/giu)].map(m=>Number(m[1]));
+  const numbered=[...text.matchAll(/(?:\b(?:options?(?: number)?|opci[oó]n(?:es)?(?: n[uú]mero)?)|(?:^|\s)ו?(?:אפשרות|האפשרות|באפשרות|אפשרויות|האפשרויות)(?: מספר)?)\s+(\d+)(?!\d|\.\d)/giu)].flatMap(m=>{
+    const following=text.slice(m.index!+m[0].length);
+    const coordinated=following.match(/^\s*(?:(?:and|y)\s+|ו[\s-]*)(\d+)(?!\d|\.\d)(?!\s*(?:pounds?|lbs?|kg|dollars?|USD|EUR|ILS)\b)/iu);
+    return [Number(m[1]),...(coordinated?[Number(coordinated[1])]:[])];
+  });
   return [...new Set([...ordinals,...numbered])];
 }
 export type ShoppingLocale = "en"|"es"|"he";

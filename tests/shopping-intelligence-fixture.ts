@@ -45,7 +45,7 @@ export const fixtureShoppingModel:ShoppingModel=async(system,input:any)=>{
   const optionValues=/blue|azul|כחול/u.test(text)?["Blue"]:/black|negro|שחור/u.test(text)?["Black"]:[];
   const relativeSize=/smaller|peque|קטנה|קטן/u.test(text)?"smaller":null;
   const action=optionValues.length||relativeSize?"variant":/compar|difference|lighter|better|why|השו|קל יותר|מתחיל/u.test(text)&&previous?"compare":previous&&/under|hasta|מתחת|lightweight|ligero|קל משקל|expensive|caro|יקר/u.test(text)?"refine":"search";
-  return {action,query:previous?.query??(/snowboard|tabla|סנובורד/u.test(text)?"Snowboard":"Moisturizer"),references,optionValues,relativeSize,preference:previous?.preference??input.text,moreExpensive:/expensive|caro|יקר/u.test(text),policy};
+  return {action,query:previous?.query??(/snowboard|tabla|סנובורד/u.test(text)?"Snowboard":"Moisturizer"),references,optionValues,relativeSize,preference:previous?.preference??(!previous&&/what options|qué opciones|אילו אפשרויות/iu.test(input.text)?null:input.text),moreExpensive:/expensive|caro|יקר/u.test(text),policy};
  }
  const ranked=input.choices.map((_:unknown,i:number)=>i+1).sort((a:number,b:number)=>Number(!input.choices[a-1].productTitle.endsWith(" 1"))-Number(!input.choices[b-1].productTitle.endsWith(" 1")));
  const variantIds=input.variants.filter((v:any)=>v.productId===(input.choices[input.plan.references.length?0:0]?.productId)&&Array.isArray(v.options)&&v.options.some((o:any)=>input.plan.relativeSize?o.name==="Size"&&o.value==="S":o.name==="Color"&&o.value===input.plan.optionValues[0])).map((v:any)=>v.id);

@@ -45,7 +45,7 @@ test("provider, JSON, schema, evidence, render and knowledge diagnostics are dis
   const products=await f.commerce.products!("tenant-a",f.sources["tenant-a"],state.choices.map(c=>c.productId),{},true);
   const events:ShoppingAnswerDiagnostic[]=[];
   const valid={ranked:[1,2],reasons:[],policyIds:[],missing:true,variantIds:[]};
-  const base={turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"Compare materials private customer"},state,plan:{action:"compare" as const,query:null,references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false},products,choices:state.choices.slice(0,2)};
+  const base={turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"Compare these products private customer"},state,plan:{action:"compare" as const,query:null,references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false},products,choices:state.choices.slice(0,2)};
   for(const stage of ["provider","json","schema","evidence","render"] as const) {
    const smart=createShoppingIntelligence({knowledge:async()=>({instructions:"private merchant knowledge",evidence:[]}),diagnostic:e=>events.push(e),model:async()=>{
     if(stage==="provider")throw Error("private provider credential");
@@ -92,7 +92,7 @@ test("Shopping runtime classifies malformed JSON and limits, and suppresses prov
 test("labeled numeric references preserve comparisons and policies without treating budgets as selections",async()=>{
  const { shoppingEmbeddedChoiceNumbers }=await import("../shared/shoppingAssistant");
  const { shoppingBusinessQuestion }=await import("../shared/shoppingBusinessRouting");
- for(const text of ["Compare option 1 and option 3. Can I return it?","Compara la opción 1 y la opción 3. ¿Cuál es la política de devoluciones?","השוו בין אפשרות 1 ואפשרות 3. מה מדיניות ההחזרות?"]){
+ for(const text of ["Compare option 1 and option 3. Can I return it?","Compare option 1 and 3. Can I return it?","Compara la opción 1 y 3. ¿Cuál es la política de devoluciones?","השוו בין אפשרות 1 ו-3. מה מדיניות ההחזרות?","Compara la opción 1 y la opción 3. ¿Cuál es la política de devoluciones?","השוו בין אפשרות 1 ואפשרות 3. מה מדיניות ההחזרות?"]){
   assert.deepEqual(shoppingEmbeddedChoiceNumbers(text),[1,3]);assert.equal(shoppingBusinessQuestion(text),false);
  }
  assert.deepEqual(shoppingEmbeddedChoiceNumbers("I weigh 180 pounds and want a snowboard under $750"),[]);
@@ -107,5 +107,21 @@ test("labeled numeric references preserve comparisons and policies without treat
   await c.turn(liveMessages.en[1]);
   const changed=(await c.turn("Actually I am an experienced rider. Show me snowboard options."))!;
   assert.equal(beginnerQualification(changed.state.preference??""),false);
+ }finally{await f.cleanup();}
+});
+
+
+test("Codex review: feature refinements rank evidence and negated experience retains beginner qualification",async()=>{
+ for(const text of ["I'm a beginner, not an experienced rider","Soy principiante, no experto","אני מתחיל ולא מנוסה"])assert.equal(beginnerQualification(text),true,text);
+ assert.equal(beginnerQualification("Not suitable for beginners."),false);
+ const f=await liveReasoningFixture(fixtureShoppingModel);
+ try {
+  const c=f.conversation("tenant-a");await c.turn(liveMessages.en[0]);
+  const state={...c.state()!,preference:"fragrance free"};
+  const products=(await f.commerce.products!("tenant-a",f.sources["tenant-a"],state.choices.slice(0,2).map(c=>c.productId),{},true)).map((p,i)=>({...p,description:i===0?"Fragranced.":"Fragrance free."}));
+  let called=false;
+  const smart=createShoppingIntelligence({knowledge:async()=>({instructions:"",evidence:[]}),model:async()=>{called=true;return {ranked:[2,1],reasons:[{choice:2,evidenceIds:["c2f0"]}],policyIds:[],missing:false,variantIds:[]};}});
+  const result=await smart.answer({turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"I need fragrance free moisturizer"},state,plan:{action:"refine",query:null,references:[],optionValues:[],relativeSize:null,preference:"fragrance free",moreExpensive:false,policy:false},products,choices:state.choices.slice(0,2)});
+  assert.equal(called,true);assert.deepEqual(result.ranked,[2,1]);assert.match(result.text,/Fragrance free/);
  }finally{await f.cleanup();}
 });
