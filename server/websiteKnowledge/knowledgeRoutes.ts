@@ -6,6 +6,11 @@
  */
 
 import type { Express, Request, Response } from "express";
+import { db } from "../../drizzle/db";
+import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
+import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation";
+import { shopifyCatalogRequest, SHOPIFY_CATALOG_META_QUERY } from "../salesCatalog/shopify/api";
+import { suggestShopifyKnowledgePages } from "./shopifyPageSuggestions";
 import { parseKnowledgeFreshnessPolicy } from "@shared/businessKnowledgeFacts";
 import { buildKnowledgeReviewPayload } from "@shared/knowledgeReview";
 import { assertSafePublicHttpUrl, WebsiteKnowledgeScrapeError } from "../websiteKnowledgeScraper";
@@ -53,6 +58,28 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
     }
     return deps.requireAiBrainPremium(req, res);
   };
+
+  // Reuse the existing knowledge-source review flow. Shopify pages are only
+  // proposed here: no source writes, scans, approvals or customer sends.
+  app.get("/api/ai/knowledge/shopify-page-suggestions", async (req, res) => {
+    res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
+    if (!(await guard(req, res))) return;
+    try {
+      const userId = req.user!.id;
+      const install = await resolveCatalogInstallation(db, userId);
+      if (!install) return res.json({ connected: false, suggestions: [] });
+      const metadata = await shopifyCatalogRequest(install.shop, install.token)(SHOPIFY_CATALOG_META_QUERY);
+      if (normalizeShopifyShopDomain(metadata?.shop?.myshopifyDomain) !== install.shop) {
+        return res.status(503).json({ error: "Shopify store identity unavailable" });
+      }
+      const primaryHost = metadata?.shop?.primaryDomain?.host;
+      const suggestions = await suggestShopifyKnowledgePages(primaryHost);
+      return res.json({ connected: true, suggestions });
+    } catch {
+      // No arbitrary provider URLs, tokens or response bodies in errors.
+      return res.status(503).json({ error: "Could not check public Shopify pages" });
+    }
+  });
 
   app.get("/api/ai/knowledge/sources", async (req, res) => {
     try {
