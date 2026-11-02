@@ -24,6 +24,7 @@ import {
 } from "@shared/schema";
 import { verifiedProductUrl } from "@shared/commerceCatalog";
 import { readShopifyPublicEvidence } from "./publicEvidence";
+import { shopifyPublicEvidencePilotEnabled } from "./publicEvidenceGate";
 import type { CatalogDb } from "../commerceStore";
 import {
   resolveCatalogInstallation,
@@ -916,9 +917,16 @@ export function createShopifyCatalogSync(
         // Optional bounded enrichment never blocks the authoritative product, price or inventory sync.
         // OFF until the additive shopify_evidence migration and GraphQL compatibility are verified.
         let shopifyEvidence: Awaited<ReturnType<typeof readShopifyPublicEvidence>> | undefined;
-        if (process.env.ECOMMERCE_SHOPIFY_PUBLIC_EVIDENCE_ENABLED === "true") {
+        if (shopifyPublicEvidencePilotEnabled(install.userId)) {
           try { shopifyEvidence = await readShopifyPublicEvidence(request, id); }
-          catch { shopifyEvidence = []; /* Fail closed, no stale facts, no provider payload in logs. */ }
+          catch (error) {
+            // Log only a bounded error category, never the provider request,
+            // token, raw response, metafields, or customer information.
+            const category = error instanceof CatalogApiError
+              ? error.code : "invalid_response";
+            console.warn("[ShopifyEvidencePilot] read_failed", { category });
+            shopifyEvidence = []; // Fail closed without breaking base sync.
+          }
         }
         const generation = current?.generation ?? crypto.randomUUID();
         const url = verifiedProductUrl(product.onlineStoreUrl, hosts);
