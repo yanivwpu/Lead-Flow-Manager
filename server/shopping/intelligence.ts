@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ShoppingModelFailure, type ShoppingAnswerDiagnostic, type ShoppingFailureStage } from "./diagnostics";
 import type { CommerceProduct } from "@shared/commerceCatalog";
+import { shopifyPublicEvidencePilotEnabled } from "../salesCatalog/shopify/publicEvidenceGate";
 import { compareMoney, shoppingEmbeddedChoiceNumbers, shoppingLocale, type ShoppingChoice, type ShoppingState } from "@shared/shoppingAssistant";
 import type { ShoppingTurn } from "./service";
 import { shoppingBusinessQuestion, mixedShoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
@@ -221,7 +222,7 @@ export function createShoppingIntelligence(deps: {
       const products = input.products.filter(p => p.userId === turn.userId && p.sourceId === state.sourceId && !excludedShoppingProduct(p));
       const facts = input.choices.flatMap((c, index) => {
         const product = products.find(p => p.id === c.productId);
-        return product ? [...sentences(product.description).slice(0, 6), ...sentences(product.aiGuidance ?? "").slice(0, 4), ...(process.env.ECOMMERCE_SHOPIFY_PUBLIC_EVIDENCE_ENABLED === "true" ? (product.shopifyEvidence ?? []).slice(0,8).flatMap(e => sentences(e.text).slice(0,1)) : [])].slice(0,18).map((text, i) => ({ id: `c${index + 1}f${i}`, choice: index + 1, text })) : [];
+        return product ? [...sentences(product.description).slice(0, 6), ...sentences(product.aiGuidance ?? "").slice(0, 4), ...(shopifyPublicEvidencePilotEnabled(product.userId) ? (product.shopifyEvidence ?? []).slice(0,8).flatMap(e => sentences(e.text).slice(0,1)) : [])].slice(0,18).map((text, i) => ({ id: `c${index + 1}f${i}`, choice: index + 1, text })) : [];
       });
       let stage: ShoppingFailureStage = "render";
       const diagnostic = (outcome: ShoppingAnswerDiagnostic["outcome"], failureStage?: ShoppingAnswerDiagnostic["stage"]) => {
