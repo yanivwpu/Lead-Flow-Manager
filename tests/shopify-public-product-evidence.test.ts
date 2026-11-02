@@ -12,7 +12,7 @@ test("Shopify evidence imports only storefront-public facts and ignores private/
     return {product:{id:"gid://shopify/Product/42",
       category:{fullName:"Snowboards > All mountain"}, seo:{description:"Designed for beginner riders"},
       metafields:{nodes:[
-        publicValue("flex_rating","3.5"),
+        {...publicValue("flex_rating","3.5"),type:"number_decimal"},
         publicValue("material","Wood core"),
         publicValue("secret","internal-access-key","NONE"),
         publicValue("cost","Sensitive wholesale amount"),
@@ -33,7 +33,7 @@ test("Shopify evidence paginates with a strict ceiling and verified product iden
   const request=async (_q:string, vars?:Record<string,unknown>)=>{
     seen.push(vars?.after);
     return {product:{id:"gid://shopify/Product/42",category:null,seo:null,
-       metafields:{nodes:[publicValue("width","152")],pageInfo:{hasNextPage:true,endCursor:"cursor"+seen.length}}}};
+       metafields:{nodes:[{...publicValue("width","152"),type:"number_integer"}],pageInfo:{hasNextPage:true,endCursor:"cursor"+seen.length}}}};
   };
   const facts=await readShopifyPublicEvidence(request,"gid://shopify/Product/42");
   assert.equal(seen.length,3);
