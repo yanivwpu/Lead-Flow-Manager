@@ -1,3 +1,4 @@
+import { productInformationGaps } from "@shared/commerceCatalog";
 import { useTranslation } from "react-i18next";
 import type { CommerceProduct } from "@shared/commerceCatalog";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,11 @@ export function ShopifyCatalogView(props: {
                   </p>
                 </div>
               </div>
+              {productInformationGaps(p).length > 0 && (
+                <p className="mt-2 text-xs text-amber-800">
+                  {productInformationGaps(p).map(gap => t(`salesCatalog.commerce.missing${gap === "description" ? "Description" : "Guidance"}`)).join(" · ")}
+                </p>
+              )}
               <p className="mt-3 text-sm" dir="ltr">
                 {p.minPrice ?? "—"}
                 {p.maxPrice && p.maxPrice !== p.minPrice

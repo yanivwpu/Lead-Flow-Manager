@@ -21,6 +21,7 @@ test("two native-catalog merchants complete separate fourteen-message EN/ES/HE j
    if(userId==="tenant-b"){
     texts[0]=locale==="en"?"I have dry skin. Which moisturizer would you recommend under $50?":locale==="es"?"Tengo piel seca. Busco una crema moisturizer hasta $50. Que recomiendas?":"יש לי עור יבש. מחפש moisturizer מתחת $50. מה מומלץ?";
     texts[8]=texts[8].replace("750","50");
+    texts[1]=locale==="en"?"Compare the first and second. What are the ingredient differences?":locale==="es"?"Compara el primero y el segundo. Que ingredientes tienen?":"השוו בין הראשון והשני. מה ההבדל במרכיבים?";
    }
    const initial=(await c.turn(texts[0]))!;
    assert.ok(initial.state.choices.length>=3,initial.reply);
@@ -219,5 +220,72 @@ test("malformed or foreign model output is discarded; missing policies and ambig
   assert.equal(await modelFailure.plan(turn,c.state()),null);
   const current=c.state()!.selected!;
   assert.equal(allowedVariantChange(current,{options:[{name:"Color",value:"Blue"},{name:"Size",value:"S"}]} as any,["Blue"],null),false,"color request cannot also change size");
+ }finally{await f.cleanup();}
+});
+
+
+test("sparse real-store shape compares verified facts without inventing beginner suitability", async () => {
+ const sparseModel: import("../server/shopping/intelligence").ShoppingModel = async (system,input:any) => {
+  const result:any = await fixtureShoppingModel(system,input);
+  if (!system.includes("shopping interpreter")) return {...result,missing:true,missingAttributes:["suitability"],question:"use"};
+  return result;
+ };
+ const f=await intelligenceFixture(sparseModel,true);
+ try {
+  const c=f.conversation("tenant-a");
+  await c.turn("I am a beginner looking for a snowboard under $750");
+  const before=c.state()!.choices.map(c=>c.variantId);
+  const compared=(await c.turn("Compare the first and second"))!;
+  assert.match(compared.reply,/Hydrogen/); assert.match(compared.reply,/Multi-location/);
+  assert.match(compared.reply,/USD 500/); assert.match(compared.reply,/USD 650/);
+  assert.match(compared.reply,/suitability for your needs/);
+  assert.doesNotMatch(compared.reply,/strongest match|Designed for beginners|lighter|better quality/);
+  assert.equal((compared.reply.match(/\?/g)??[]).length,0,"do not repeat the previous question");
+  assert.deepEqual(compared.state.choices.map(c=>c.variantId),before);
+  const mixed=(await c.turn("Which is lighter, and can I return it?"))!;
+  assert.ok(mixed);assert.match(mixed.reply,/product weight/);assert.match(mixed.reply,/14 days/);
+ } finally {await f.cleanup();}
+});
+
+test("comparison selects relevant line-separated evidence and rejects cross-choice citations", async () => {
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try {
+  const c=f.conversation("tenant-a");await c.turn(journeys.en[0]);
+  await f.database.update(schema.catalogProducts).set({description:"Weight 2.4 kg\nMaterials: wood core\nFinish: matte",aiGuidance:"Suitable for beginners."}).where(eq(schema.catalogProducts.id,"tenant-a-p1"));
+  let wrong=false;
+  const smart=createShoppingIntelligence({model:async(_system,input:any)=>({ranked:[1,2],reasons:[{choice:1,evidenceIds:[wrong?"c2f0":"c1f0"]}],policyIds:[],missing:false,variantIds:[]}),knowledge:async()=>({instructions:"",evidence:[]})});
+  const state=c.state()!;
+  const products=await f.commerce.products!("tenant-a",f.sources["tenant-a"],state.choices.map(c=>c.productId),{},true);
+  const input={turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"Compare the weights"},state,plan:{action:"compare" as const,query:null,references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false},products,choices:state.choices.slice(0,2)};
+  const answer=await smart.answer(input);
+  assert.match(answer.text,/2\.4 kg/);assert.doesNotMatch(answer.text,/matte|wood core|does not establish/);
+  wrong=true;assert.match((await smart.answer(input)).text,/does not establish/);
+ } finally {await f.cleanup();}
+});
+
+
+test("model failure retains product diversity and guidance survives long descriptions",async()=>{
+ let fail=false;
+ const f=await intelligenceFixture(async(system,input:any)=>{
+  if(!system.includes("shopping interpreter")&&fail)throw Error("provider unavailable");
+  return fixtureShoppingModel(system,input);
+ });
+ try {
+  const c=f.conversation("tenant-a");fail=true;
+  const fallback=(await c.turn(journeys.en[0]))!;
+  assert.equal(new Set(fallback.state.choices.map(c=>c.productId)).size,3);
+  const mixed=(await c.turn("Compare the first and second, and can I return it?"))!;
+  assert.match(mixed.reply,/14 days/);assert.doesNotMatch(mixed.reply,/couldn't establish that policy/);
+  fail=false;
+  await f.database.update(schema.catalogProducts).set({description:"Long descriptive sentence. ".repeat(500),aiGuidance:"Suitable for beginners."}).where(eq(schema.catalogProducts.id,"tenant-a-p1"));
+  const state=c.state()!;
+  const products=await f.commerce.products!("tenant-a",f.sources["tenant-a"],["tenant-a-p1"],{},true);
+  const smart=createShoppingIntelligence({model:async(_system,input:any)=>{
+   const fact=input.facts.find((f:any)=>f.text==="Suitable for beginners.");
+   assert.ok(fact,"AI Guidance must not be crowded out by description facts");
+   return {ranked:[1],reasons:[{choice:1,evidenceIds:[fact.id]}],policyIds:[],missing:false,variantIds:[]};
+  },knowledge:async()=>({instructions:"",evidence:[]})});
+  const answer=await smart.answer({turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"Which is for beginners?"},state,plan:{action:"search",query:null,references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false},products,choices:[state.choices.find(c=>c.productId==="tenant-a-p1")!]});
+  assert.match(answer.text,/Suitable for beginners/);
  }finally{await f.cleanup();}
 });

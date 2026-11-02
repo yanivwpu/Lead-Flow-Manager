@@ -29,6 +29,7 @@ export type ShoppingState = {
   cheaperThan?: string;
   // Customer needs are bounded context, never a catalog fact or authorization.
   preference?: string;
+  informationQuestionsAsked?: Array<"budget" | "use" | "priority">;
   dearerThan?: string;
   intelligenceReview?: boolean;
   updatedAt: string; lastEventId: string; reply: string;

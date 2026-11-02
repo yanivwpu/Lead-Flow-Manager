@@ -40,7 +40,7 @@ test("business-only product policies delegate but mixed product facts and human 
   assert.equal(explicitStoreProductQuestion(text),false,text);
   assert.equal(await guardedProductFallback(text,"en",async()=>{throw Error("business questions must not query Shopify")}),null);
  }
- for(const text of ["What is this product's price and return policy?", "Is this product in stock and how long does shipping take?", "¿Está disponible este producto y cuánto tarda el envío?", "מה מחיר המוצר ומה מדיניות ההחזרות?", "Cancel my order and refund it", "Can a human explain your return policy?"]) {
+ for(const text of ["Which is lighter, and can I return it?", "¿Cuál pesa menos y puedo devolverlo?", "מי קל יותר ומה מדיניות ההחזרות?", "What is this product's price and return policy?", "Is this product in stock and how long does shipping take?", "¿Está disponible este producto y cuánto tarda el envío?", "מה מחיר המוצר ומה מדיניות ההחזרות?", "Cancel my order and refund it", "Can a human explain your return policy?"]) {
   assert.equal(shoppingBusinessQuestion(text),false,text);
  }
 });

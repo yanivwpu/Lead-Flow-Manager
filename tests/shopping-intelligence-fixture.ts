@@ -8,7 +8,7 @@ import { createShoppingIntelligence, type ShoppingModel } from "../server/shoppi
 import { createShoppingService, type ShoppingSessionStore } from "../server/shopping/service";
 import { shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
 
-export async function intelligenceFixture(model:ShoppingModel) {
+export async function intelligenceFixture(model:ShoppingModel, sparse = false) {
  const f=await catalogFixture();const sources:Record<string,string>={};
  const merchant = {
   "tenant-a": {category:"Snowboard",prices:["500","650","50","350"],policy:"Unridden boards can be returned within 14 days.",descriptions:["Designed for beginners. Weight 2.4 kg. Rider weight range 160–200 pounds.","Designed for experienced riders. Weight 2.8 kg.","Excluded display board.","Designed for beginners. Weight 3.1 kg. Rider weight range 160–200 pounds."]},
@@ -19,7 +19,7 @@ export async function intelligenceFixture(model:ShoppingModel) {
   await f.database.update(schema.catalogSources).set({status:"ready",currency:"USD",initialSyncCompletedAt:new Date(),grantedScopes:["read_products","read_inventory"]}).where(eq(schema.catalogSources.id,source.id));
   for(let i=1;i<=4;i++){
    const id=`${userId}-p${i}`,external=(m+1)*100+i;
-   await f.database.insert(schema.catalogProducts).values({id,userId,sourceId:source.id,externalId:`gid://shopify/Product/${external}`,title:`${info.category} ${i}`,description:info.descriptions[i-1],aiGuidance:i===1?"Recommend only when the documented customer requirements match.":null,merchantTags:i===3?["shopping:exclude"]:i===2?["shopping:prefer"]:[],searchText:info.category.toLowerCase(),status:"ACTIVE",published:true,complete:true,variantCount:4,providerUpdatedAt:new Date()});
+   await f.database.insert(schema.catalogProducts).values({id,userId,sourceId:source.id,externalId:`gid://shopify/Product/${external}`,title:sparse&&userId==="tenant-a"?(["Hydrogen","Multi-location","Display","Budget Snowboard"][i-1]):`${info.category} ${i}`,productType:info.category,description:sparse&&userId==="tenant-a"?"":info.descriptions[i-1],aiGuidance:!sparse&&i===1?"Recommend only when the documented customer requirements match.":null,merchantTags:i===3||sparse&&userId==="tenant-a"&&i===4?["shopping:exclude"]:i===2?["shopping:prefer"]:[],searchText:info.category.toLowerCase(),status:"ACTIVE",published:true,complete:true,variantCount:4,providerUpdatedAt:new Date()});
    for(const [j,[color,size]] of [["Red","M"],["Blue","M"],["Blue","S"],["Black","M"]].entries()) await f.database.insert(schema.catalogVariants).values({id:`${id}-v${j+1}`,userId,sourceId:source.id,productId:id,externalId:`gid://shopify/ProductVariant/${external*10+j}`,inventoryItemId:`gid://shopify/InventoryItem/${external*10+j}`,title:`${color} / ${size}`,options:[{name:"Color",value:color},{name:"Size",value:size}],price:info.prices[i-1],currency:"USD",tracked:true,quantity:userId==="tenant-a"?7:4,inventoryPolicy:"DENY",availableForSale:true,requiresComponents:false,verifiedAt:new Date(),providerUpdatedAt:new Date(),generation:"fixture"});
   }
  }
