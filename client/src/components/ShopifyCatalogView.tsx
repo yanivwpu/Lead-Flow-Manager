@@ -125,8 +125,8 @@ export function ShopifyCatalogView(props: {
               type="button"
               onClick={() => props.onSelect(p)}
               aria-label={`${p.title} — ${t("salesCatalog.commerce.editGuidance")}`}
+              aria-haspopup="dialog"
               aria-expanded={props.selectedProductId === p.id}
-              aria-controls="shopify-product-details"
               className={`flex flex-col rounded-xl border bg-white p-4 text-start shadow-sm hover:border-brand-green focus-visible:outline focus-visible:outline-brand-green ${props.selectedProductId === p.id ? "border-brand-green ring-1 ring-brand-green" : ""}`}
             >
               <div className="flex w-full gap-3">
