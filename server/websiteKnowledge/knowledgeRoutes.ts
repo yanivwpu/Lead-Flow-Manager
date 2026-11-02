@@ -10,7 +10,7 @@ import { db } from "../../drizzle/db";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation";
 import { shopifyCatalogRequest, SHOPIFY_CATALOG_META_QUERY } from "../salesCatalog/shopify/api";
-import { suggestShopifyKnowledgePages } from "./shopifyPageSuggestions";
+import { confirmedShopifyPolicies, SHOPIFY_POLICIES_QUERY, suggestShopifyKnowledgePages } from "./shopifyPageSuggestions";
 import { consumeRateLimit, setRetryAfterHeader } from "../rateLimitMiddleware";
 import { rateLimit } from "express-rate-limit";
 import { parseKnowledgeFreshnessPolicy } from "@shared/businessKnowledgeFacts";
@@ -93,7 +93,23 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
         return res.status(503).json({ error: "Shopify store identity unavailable" });
       }
       const primaryHost = metadata?.shop?.primaryDomain?.host;
-      const suggestions = await suggestShopifyKnowledgePages(primaryHost);
+      let suggestions = suggestShopifyKnowledgePages(primaryHost);
+      // Optional Shopify permission: prefer actual Shopify-configured policy URLs.
+      // Never request new access scopes or treat guessed URLs as verified.
+      const scopeHandles = (metadata?.currentAppInstallation?.accessScopes ?? [])
+        .map((s: any) => s?.handle).filter((h: unknown) => typeof h === "string");
+      if (scopeHandles.includes("read_legal_policies")) {
+        try {
+          const policies = await shopifyCatalogRequest(install.shop, install.token)(SHOPIFY_POLICIES_QUERY);
+          const confirmed = confirmedShopifyPolicies(primaryHost, policies?.shop?.shopPolicies);
+          const verifiedLabels = new Set(confirmed.map(p => p.label));
+          // Omit guessed return/shipping policy paths when configured real URLs exist.
+          suggestions = [...confirmed, ...suggestions.filter(s => !verifiedLabels.has(s.label))].slice(0, 12);
+        } catch {
+          // Failing an optional policies query must never block Shopify onboarding.
+          // Retain explicitly *unverified* paths; no provider payloads in logs.
+        }
+      }
       return res.json({ connected: true, suggestions });
     } catch {
       // No arbitrary provider URLs, tokens or response bodies in errors.

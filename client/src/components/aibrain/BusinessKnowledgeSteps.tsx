@@ -541,7 +541,8 @@ export function BusinessKnowledgeSteps({
 }) {
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState("");
-  const [shopifySuggestions, setShopifySuggestions] = useState<Array<{url:string;label:string}>>([]);
+  const [shopifySuggestions, setShopifySuggestions] = useState<Array<{url:string;label:string;status:"shopify_confirmed"|"unverified"}>>([]);
+  const [selectedShopifyUrls, setSelectedShopifyUrls] = useState<string[]>([]);
   const [addingShopifyPages, setAddingShopifyPages] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [removingFactId, setRemovingFactId] = useState<string | null>(null);
@@ -649,10 +650,11 @@ export function BusinessKnowledgeSteps({
   const suggestShopifyPages = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("GET", "/api/ai/knowledge/shopify-page-suggestions");
-      return res.json() as Promise<{ connected: boolean; suggestions: Array<{url:string;label:string}> }>;
+      return res.json() as Promise<{ connected: boolean; suggestions: Array<{url:string;label:string;status:"shopify_confirmed"|"unverified"}> }>;
     },
     onSuccess: (data) => {
       setShopifySuggestions(data.suggestions);
+      setSelectedShopifyUrls([]); // Do not automatically select unverified sources.
       if (!data.connected) toast({ title: "Connect Shopify first", description: "Link your store to discover public pages." });
       else if (!data.suggestions.length) toast({ title: "Could not suggest store pages", description: "You can still enter policy or FAQ page links manually." });
     },
@@ -660,16 +662,18 @@ export function BusinessKnowledgeSteps({
   });
   const alreadyPresent = new Set((sourcesQuery.data?.sources ?? []).map(source => source.url));
   const pendingShopifySuggestions = shopifySuggestions.filter(item => !alreadyPresent.has(item.url));
+  const selectedShopifySuggestions = pendingShopifySuggestions.filter(item => selectedShopifyUrls.includes(item.url));
   const addShopifySuggestedPages = async () => {
-    if (addingShopifyPages || !pendingShopifySuggestions.length) return;
+    if (addingShopifyPages || !selectedShopifySuggestions.length) return;
     setAddingShopifyPages(true);
     try {
       // Use the existing tenant-guarded knowledge source API. Do not scan or publish.
-      for (const item of pendingShopifySuggestions.slice(0, 5)) {
+      for (const item of selectedShopifySuggestions.slice(0, 12)) {
         await addSourceMutation.mutateAsync(item.url);
       }
       setShopifySuggestions([]);
-      toast({ title: "Store pages added", description: "Next, select Analyze pages, review the facts, and publish approved knowledge." });
+      setSelectedShopifyUrls([]);
+      toast({ title: "Selected pages added", description: "Analyze the selected sources, review the facts, then publish only approved knowledge." });
     } catch {
       // The existing mutation already shows the underlying safe error.
       void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
@@ -930,17 +934,38 @@ export function BusinessKnowledgeSteps({
                 </div>
                 {shopifySuggestions.length > 0 && (
                   <div className="space-y-2">
-                    <ul className="space-y-1 text-xs text-slate-700">
+                    <ul className="space-y-2 text-xs text-slate-700">
                       {shopifySuggestions.map(item => (
-                        <li key={item.url}><span className="font-semibold">{item.label}:</span> <span className="break-all">{item.url}</span></li>
+                        <li key={item.url} className="flex items-start gap-2">
+                          <input type="checkbox" className="mt-1 h-4 w-4"
+                            aria-label={"Select " + item.label + " Shopify page"}
+                            data-testid="shopify-suggested-page-checkbox"
+                            disabled={alreadyPresent.has(item.url) || addingShopifyPages}
+                            checked={selectedShopifyUrls.includes(item.url) && !alreadyPresent.has(item.url)}
+                            onChange={e => setSelectedShopifyUrls(current => e.target.checked
+                              ? [...current.filter(url => url !== item.url), item.url]
+                              : current.filter(url => url !== item.url))}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold">{item.label}
+                              <span className="ms-2 font-normal text-slate-500">
+                                {alreadyPresent.has(item.url) ? "Already added" : item.status === "shopify_confirmed" ? "Configured in Shopify" : "Unverified URL"}
+                              </span>
+                            </div>
+                            <a href={item.url} target="_blank" rel="noopener noreferrer"
+                              className="break-all text-blue-700 underline underline-offset-2">{item.url}</a>
+                          </div>
+                        </li>
                       ))}
                     </ul>
                     {pendingShopifySuggestions.length > 0 ?
-                      <Button type="button" size="sm" disabled={addingShopifyPages || addSourceMutation.isPending}
+                      <Button type="button" size="sm"
+                        disabled={addingShopifyPages || addSourceMutation.isPending || selectedShopifySuggestions.length === 0}
                         onClick={() => void addShopifySuggestedPages()} data-testid="button-add-shopify-knowledge-pages">
-                        {addingShopifyPages ? "Adding pages…" : `Add ${pendingShopifySuggestions.length} pages to AI Brain`}
-                      </Button> : <p className="text-xs text-slate-500">All detected pages are already listed.</p>}
-                    <p className="text-xs text-slate-600">Check that the links belong to your store. Adding does not publish facts; Analyze will check them, then you review and approve.</p>
+                        {addingShopifyPages ? "Adding pages…" : "Add " + selectedShopifySuggestions.length + " selected pages"}
+                      </Button> : <p className="text-xs text-slate-500">All suggested URLs are already listed.</p>}
+                    <p className="text-xs text-amber-800">Business knowledge belongs to this workspace. If you also use it for another business, do not publish unrelated Shopify policies here. Use a dedicated merchant workspace.</p>
+                    <p className="text-xs text-slate-600">Unverified URLs may be missing or password-protected. Adding selected pages does not publish facts; Analyze, review, then approve.</p>
                   </div>
                 )}
               </div>
