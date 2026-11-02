@@ -18,6 +18,7 @@ export function ShopifyCatalogView(props: {
     sourceId: string | null;
   };
   items: CommerceProduct[];
+  selectedProductId?: string | null;
   authorizationOrigin?: "ecommerce";
   loading: boolean;
   error?: string;
@@ -121,8 +122,12 @@ export function ShopifyCatalogView(props: {
           {props.items.map((p) => (
             <button
               key={p.id}
+              type="button"
               onClick={() => props.onSelect(p)}
-              className="flex flex-col rounded-xl border bg-white p-4 text-start shadow-sm hover:border-brand-green focus-visible:outline focus-visible:outline-brand-green"
+              aria-label={`${p.title} — ${t("salesCatalog.commerce.editGuidance")}`}
+              aria-expanded={props.selectedProductId === p.id}
+              aria-controls="shopify-product-details"
+              className={`flex flex-col rounded-xl border bg-white p-4 text-start shadow-sm hover:border-brand-green focus-visible:outline focus-visible:outline-brand-green ${props.selectedProductId === p.id ? "border-brand-green ring-1 ring-brand-green" : ""}`}
             >
               <div className="flex w-full gap-3">
                 {p.images[0] ? (
@@ -168,6 +173,7 @@ export function ShopifyCatalogView(props: {
                   <> · {t("salesCatalog.commerce.stale")}</>
                 )}
               </p>
+              <span className="mt-3 text-xs font-semibold text-blue-700 underline underline-offset-2">{t("salesCatalog.commerce.editGuidance")}</span>
             </button>
           ))}
         </div>
