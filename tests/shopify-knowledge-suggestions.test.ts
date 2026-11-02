@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { findRateLimitRule } from "../server/rateLimitMiddleware";
 import {
-  suggestShopifyKnowledgePages, trustedShopifyKnowledgeOrigin,
+  confirmedShopifyPolicies, suggestShopifyKnowledgePages, trustedShopifyKnowledgeOrigin,
 } from "../server/websiteKnowledge/shopifyPageSuggestions";
 
 test("trusted Shopify domain cannot be turned into private host or arbitrary port",()=>{
@@ -23,6 +23,36 @@ test("Shopify suggestions are pure, finite candidates on exactly the verified pr
   assert.ok(!code.includes("fetchSingleKnowledgePage"));
   assert.ok(!code.includes("scrapeGuidedWebsiteKnowledgePages"));
   assert.ok(!code.includes("fetch("));
+});
+
+test("Shopify policy records are confirmed only with safe same-store URLs",()=>{
+  const configured = confirmedShopifyPolicies("shop.example", [
+    {type:"REFUND_POLICY",url:"https://shop.example/policies/refund-policy"},
+    {type:"SHIPPING_POLICY",url:"https://evil.example/policies/shipping-policy"},
+    {type:"PRIVACY_POLICY",url:"http://shop.example/policies/privacy-policy"},
+    {type:"TERMS_OF_SERVICE",url:"https://shop.example/policies/terms-of-service?tracking=1"},
+    {type:"SUBSCRIPTION_POLICY",url:"https://shop.example/policies/subscription-policy"},
+    {type:"SHIPPING_POLICY",url:"https://shop.example/pages/about-us"},
+    {type:"NOT_AN_ACTUAL_POLICY",url:"https://shop.example/policies/unknown"},
+  ]);
+  assert.deepEqual(configured.map(x=>x.label),["Returns and refunds","Subscription policy"]);
+  assert.ok(configured.every(x=>x.status==="shopify_confirmed"));
+  assert.equal(confirmedShopifyPolicies("localhost",[]).length,0);
+});
+
+test("Merchant chooses individual sources; unverified suggestions aren't added by default",()=>{
+  const ui=readFileSync("client/src/components/aibrain/BusinessKnowledgeSteps.tsx","utf8");
+  const route=readFileSync("server/websiteKnowledge/knowledgeRoutes.ts","utf8");
+  assert.match(ui,/shopify-suggested-page-checkbox/);
+  assert.match(ui,/setSelectedShopifyUrls\(\[\]\)/);
+  assert.match(ui,/selectedShopifySuggestions\.slice\(0, 12\)/);
+  assert.match(ui,/selectedShopifySuggestions\.length === 0/);
+  assert.match(ui,/Unverified URL/);
+  assert.match(ui,/Configured in Shopify/);
+  assert.match(route,/scopeHandles\.includes\("read_legal_policies"\)/);
+  assert.match(route,/SHOPIFY_POLICIES_QUERY/);
+  assert.match(route,/normalizeShopifyShopDomain\(metadata\?\.shop\?\.myshopifyDomain\)/);
+  assert.doesNotMatch(route,/shopify-page-suggestions[\s\S]{0,400}publishKnowledgeFacts\(/);
 });
 
 test("Shopify source discovery reuses AI Brain's existing read, add, analyze and review/publish routes",()=>{
