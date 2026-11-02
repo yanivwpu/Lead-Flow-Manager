@@ -30,15 +30,15 @@ const UNITS = new Set(["G","KG","LB","OZ","MM","CM","M","IN","FT","ML","L","GAL"
 const SENSITIVE_KEY = /(?:^|_)(?:pin|code|cost|margin|wholesale|supplier|password|token|secret|private|internal|staff|employee|customer|discount|api|credential)(?:_|$)/i;
 const LABEL_KEY = /^[a-z0-9_]{1,80}$/i;
 const sanitize = (raw: unknown, max = 160): string => typeof raw === "string" ?
-  raw.replace(/<[^>]*>/g," ").replace(/[\\u0000-\\u001f\\u007f\\u202a-\\u202e\\u2066-\\u2069]/g," ")
-    .replace(/\\s+/g," ").trim().slice(0,max) : "";
+  raw.replace(/<[^>]*>/g," ").replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g," ")
+    .replace(/\s+/g," ").trim().slice(0,max) : "";
 function publicMetafield(raw: any): PublicProductEvidence | null {
   if (!raw || raw.definition?.access?.storefront !== "PUBLIC_READ" ||
       !LABEL_KEY.test(raw.namespace) || /^(?:app|private|internal|admin|wholesale)/i.test(raw.namespace) ||
       !LABEL_KEY.test(raw.key) || !NUMERIC_KEYS.test(raw.key) || SENSITIVE_KEY.test(raw.key)) return null;
   let display = "";
   if (raw.type === "number_integer" || raw.type === "number_decimal") {
-    if(typeof raw.value !== "string" || !/^(?:0|[1-9]\\d{0,6})(?:\\.\\d{1,4})?$/.test(raw.value))return null;
+    if(typeof raw.value !== "string" || !/^(?:0|[1-9]\d{0,6})(?:\.\d{1,4})?$/.test(raw.value))return null;
     display = raw.value;
   } else if (MEASURE_TYPES.has(raw.type)) {
     let measurement:any;
