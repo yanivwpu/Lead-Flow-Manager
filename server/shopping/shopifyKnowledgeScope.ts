@@ -41,17 +41,42 @@ export function filterOwnedShopifyKnowledgeSources(
   return ids;
 }
 
-export async function verifiedShopifyKnowledgeSourceIds(userId: string): Promise<Set<string>> {
+export type VerifiedShopifyKnowledgeScope = {
+  allowedSourceIds: ReadonlySet<string>;
+  allowedHosts: ReadonlySet<string>;
+};
+
+const emptyScope = (): VerifiedShopifyKnowledgeScope => ({
+  allowedSourceIds: new Set<string>(),
+  allowedHosts: new Set<string>(),
+});
+
+function trustedHost(candidate: unknown): string | null {
+  if (typeof candidate !== "string" || candidate.length > 253 ||
+    !/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/i.test(candidate) || candidate.includes("..")) return null;
+  try {
+    const parsed = assertSafePublicHttpUrl("https://" + candidate);
+    return parsed.hostname.toLowerCase();
+  } catch { return null; }
+}
+
+export async function verifiedShopifyKnowledgeScope(userId: string): Promise<VerifiedShopifyKnowledgeScope> {
   try {
     const install = await resolveCatalogInstallation(db, userId);
-    if (!install) return new Set();
+    if (!install) return emptyScope();
     const meta = await shopifyCatalogRequest(install.shop, install.token)(SHOPIFY_CATALOG_META_QUERY);
-    if (normalizeShopifyShopDomain(meta?.shop?.myshopifyDomain) !== install.shop) return new Set();
+    if (normalizeShopifyShopDomain(meta?.shop?.myshopifyDomain) !== install.shop) return emptyScope();
     const primary = meta?.shop?.primaryDomain?.host;
-    if (typeof primary !== "string" || !primary.trim()) return new Set();
+    const primaryHost = trustedHost(primary);
+    const shopHost = trustedHost(install.shop);
+    if (!primaryHost || !shopHost) return emptyScope();
+    const allowedHosts = new Set([primaryHost, shopHost]);
     const sources = await listKnowledgeSources(userId, { enabledOnly: true });
-    return filterOwnedShopifyKnowledgeSources(sources, [primary, install.shop]);
+    return {
+      allowedHosts,
+      allowedSourceIds: filterOwnedShopifyKnowledgeSources(sources, [...allowedHosts]),
+    };
   } catch {
-    return new Set(); // No policies is safer than cross-business policy leakage.
+    return emptyScope(); // No policies is safer than cross-business policy leakage.
   }
 }
