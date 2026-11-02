@@ -2,6 +2,7 @@ import { ShoppingModelFailure } from "./diagnostics";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
 import { buildTurnGrounding } from "../websiteKnowledge/factContext";
+import { merchantScopedShoppingKnowledgeEnabled, verifiedShopifyKnowledgeSourceIds } from "./shopifyKnowledgeScope";
 import { createShoppingIntelligence, type ShoppingKnowledge, type ShoppingModel } from "./intelligence";
 import type { AiBusinessKnowledge } from "@shared/schema";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
@@ -27,14 +28,16 @@ export async function shoppingKnowledge(userId: string, text: string, row?: AiBu
   const knowledge = row ?? await storage.getAiBusinessKnowledge(userId);
   if (!knowledge || knowledge.userId !== userId) return { instructions: "", evidence: [] };
   const evidence: ShoppingKnowledge["evidence"] = [];
+  const scoped = merchantScopedShoppingKnowledgeEnabled(userId);
+  const allowedSourceIds = scoped ? await verifiedShopifyKnowledgeSourceIds(userId) : undefined;
   if (knowledge.knowledgeV2Enabled) {
-    const grounded = await buildTurnGrounding({ userId, message: text, knowledgeRow: knowledge, freshnessPolicyRaw: knowledge.knowledgeFreshnessPolicy });
+    const grounded = await buildTurnGrounding({ userId, message: text, knowledgeRow: knowledge, freshnessPolicyRaw: knowledge.knowledgeFreshnessPolicy, allowedSourceIds });
     for (const entry of grounded.retrieved) {
       if (entry.fact.userId !== userId || entry.freshness.tier !== "fresh" || grounded.conflictingKeys.includes(entry.fact.factKey)) continue;
       if(!["policy","faq","business_hours","location","service_area","contact_method"].includes(entry.fact.factType))continue;
       evidence.push({ id: `fact:${entry.fact.id}`, text: formatFactValue(entry.fact) });
     }
-  } else {
+  } else if (!scoped) {
     // Existing explicit merchant FAQ answers and website knowledge are V1's
     // factual sources. Never fall back to platform facts or other workspaces.
     if (Array.isArray(knowledge.faqs)) for (const [i, faq] of knowledge.faqs.slice(0, 15).entries()) {
@@ -54,7 +57,7 @@ export async function shoppingKnowledge(userId: string, text: string, row?: AiBu
       !/\b(?:always|never|ignore|instructions?|assistant|prompt|system|must|should)\b|תמיד|לעולם|הוראות/iu.test(s));
     policySentences.slice(0,4).forEach((text,i)=>evidence.push({id:`merchant-policy:${i}`,text}));
   }
-  return { instructions: [knowledge.customInstructions, knowledge.salesGoals].filter(Boolean).join("\n"), evidence:evidence.filter(e=>
+  return { instructions: scoped ? "" : [knowledge.customInstructions, knowledge.salesGoals].filter(Boolean).join("\n"), evidence:evidence.filter(e=>
     !/\b(?:stock|inventory|sku|product price|precio del producto|inventario)\b|מלאי|מחיר המוצר/iu.test(e.text) &&
     (!/[$€£₪]|\b(?:USD|EUR|ILS|GBP)\b/iu.test(e.text)||/\b(?:shipping|delivery|env[ií]os?)\b|משלוח/iu.test(e.text))) };
 }
