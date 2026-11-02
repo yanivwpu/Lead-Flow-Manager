@@ -1,0 +1,986 @@
+{
+  "records": [
+    {
+      "phase": "plan",
+      "text": "I'm looking for a snowboard under $750. What options do you have?",
+      "output": {
+        "action": "search",
+        "query": "snowboard",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "en",
+      "text": "I'm looking for a snowboard under $750. What options do you have?",
+      "reply": "1. Multi-location / Red / M — USD 729.95\nTracked stock checked: 7 units; not reserved.\n2. Multi-managed / Red / M — USD 700\nTracked stock checked: 7 units; not reserved.\n3. Hydrogen / Red / M — USD 600\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMulti-managed: “A snowboard from the merchant's current collection.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compare option 1 and option 3. What are the main differences, and which would you recommend for a beginner?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "beginner",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "en",
+      "text": "Compare option 1 and option 3. What are the main differences, and which would you recommend for a beginner?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nThe lower verified price is Hydrogen (USD 600).\nI can compare their verified prices and options. The merchant information I have does not establish beginner suitability.\nAsk the store team to confirm beginner suitability for these options before you choose."
+    },
+    {
+      "phase": "plan",
+      "text": "Compare option 1 and option 3 again. Which would you recommend for me?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "beginner",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "en",
+      "text": "Compare option 1 and option 3 again. Which would you recommend for me?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nThe lower verified price is Hydrogen (USD 600).\nAsk the store team to confirm beginner suitability for these options before you choose."
+    },
+    {
+      "phase": "plan",
+      "text": "Compare option 1 and option 3. Can I return it?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "beginner",
+        "moreExpensive": false,
+        "policy": true
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "en",
+      "text": "Compare option 1 and option 3. Can I return it?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nThe lower verified price is Hydrogen (USD 600).\nAsk the store team to confirm beginner suitability for these options before you choose.\nThe merchant's policy information:\n“Unridden boards can be returned within 14 days.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Busco un snowboard hasta $750. ¿Qué opciones tienes?",
+      "output": {
+        "action": "search",
+        "query": "snowboard",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "es",
+      "text": "Busco un snowboard hasta $750. ¿Qué opciones tienes?",
+      "reply": "1. Multi-location / Red / M — USD 729.95\nExistencias verificadas: 7 unidades; no están reservadas.\n2. Multi-managed / Red / M — USD 700\nExistencias verificadas: 7 unidades; no están reservadas.\n3. Hydrogen / Red / M — USD 600\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nMulti-managed: “A snowboard from the merchant's current collection.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compara la opción 1 y la opción 3. ¿Cuáles son las diferencias y cuál recomiendas para un principiante?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "principiante",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "es",
+      "text": "Compara la opción 1 y la opción 3. ¿Cuáles son las diferencias y cuál recomiendas para un principiante?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nEl menor precio verificado es Hydrogen (USD 600).\nPuedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar idoneidad para principiantes.\nPide al equipo de la tienda que confirme idoneidad para principiantes para estas opciones antes de elegir."
+    },
+    {
+      "phase": "plan",
+      "text": "Compara la opción 1 y la opción 3 otra vez. ¿Cuál me recomiendas?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "principiante",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "es",
+      "text": "Compara la opción 1 y la opción 3 otra vez. ¿Cuál me recomiendas?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nEl menor precio verificado es Hydrogen (USD 600).\nPide al equipo de la tienda que confirme idoneidad para principiantes para estas opciones antes de elegir."
+    },
+    {
+      "phase": "plan",
+      "text": "Compara la opción 1 y la opción 3. ¿Puedo devolverlo?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "principiante",
+        "moreExpensive": false,
+        "policy": true
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "es",
+      "text": "Compara la opción 1 y la opción 3. ¿Puedo devolverlo?",
+      "reply": "Multi-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nEl menor precio verificado es Hydrogen (USD 600).\nPide al equipo de la tienda que confirme idoneidad para principiantes para estas opciones antes de elegir.\nInformación de la política de esta tienda:\n“Unridden boards can be returned within 14 days.”"
+    },
+    {
+      "phase": "plan",
+      "text": "אני מחפש סנובורד מתחת $750. אילו אפשרויות יש?",
+      "output": {
+        "action": "search",
+        "query": "סנובורד",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "output": {
+        "hint": 1
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "he",
+      "text": "אני מחפש סנובורד מתחת $750. אילו אפשרויות יש?",
+      "reply": "לפי המידע המתועד של החנות:\n1. Multi-location / Red / M — USD 729.95\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n2. Multi-managed / Red / M — USD 700\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n3. Hydrogen / Red / M — USD 600\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nMulti-managed: “A snowboard from the merchant's current collection.”"
+    },
+    {
+      "phase": "plan",
+      "text": "השוו בין אפשרות 1 ואפשרות 3. מה ההבדלים ומה מומלץ למתחיל?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "מתחיל",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "he",
+      "text": "השוו בין אפשרות 1 ואפשרות 3. מה ההבדלים ומה מומלץ למתחיל?",
+      "reply": "לפי המידע המתועד של החנות:\nMulti-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nהמחיר המאומת הנמוך יותר הוא Hydrogen (USD 600).\nאפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס התאמה למתחילים.\nבקשו מצוות החנות לאשר התאמה למתחילים עבור האפשרויות האלה לפני הבחירה."
+    },
+    {
+      "phase": "plan",
+      "text": "השוו שוב בין אפשרות 1 ואפשרות 3. מה מומלץ לי?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "מתחיל",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "he",
+      "text": "השוו שוב בין אפשרות 1 ואפשרות 3. מה מומלץ לי?",
+      "reply": "לפי המידע המתועד של החנות:\nMulti-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nהמחיר המאומת הנמוך יותר הוא Hydrogen (USD 600).\nבקשו מצוות החנות לאשר התאמה למתחילים עבור האפשרויות האלה לפני הבחירה."
+    },
+    {
+      "phase": "plan",
+      "text": "השוו בין אפשרות 1 ואפשרות 3. מה מדיניות ההחזרות?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          3
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "מתחיל",
+        "moreExpensive": false,
+        "policy": true
+      }
+    },
+    {
+      "kind": "sparse",
+      "locale": "he",
+      "text": "השוו בין אפשרות 1 ואפשרות 3. מה מדיניות ההחזרות?",
+      "reply": "לפי המידע המתועד של החנות:\nMulti-location / Red / M — USD 729.95\nHydrogen / Red / M — USD 600\nהמחיר המאומת הנמוך יותר הוא Hydrogen (USD 600).\nבקשו מצוות החנות לאשר התאמה למתחילים עבור האפשרויות האלה לפני הבחירה.\nמידע המדיניות של החנות:\n“Unridden boards can be returned within 14 days.”"
+    },
+    {
+      "phase": "plan",
+      "text": "I'm looking for a snowboard under $750. What options do you have?",
+      "output": {
+        "action": "search",
+        "query": "snowboard",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "en",
+      "text": "I'm looking for a snowboard under $750. What options do you have?",
+      "reply": "1. Multi-location / Red / M — USD 729.95\nTracked stock checked: 7 units; not reserved.\n2. Multi-managed / Red / M — USD 700\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMulti-location: “Designed for beginners.” “Weight 2.4 kg.”\nMulti-managed: “Designed for experienced riders.” “Weight 2.8 kg.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compare option 1 and option 2. Which is lighter, and which would you recommend for a beginner?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          2
+        ],
+        "relativeSize": null,
+        "preference": "beginner",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "Compare option 1 and option 2. Which is lighter, and which would you recommend for a beginner?",
+      "output": {
+        "ranked": [
+          1
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0",
+              "c1f1",
+              "c1f3"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "en",
+      "text": "Compare option 1 and option 2. Which is lighter, and which would you recommend for a beginner?",
+      "reply": "Multi-location / Red / M — USD 729.95\nMulti-managed / Red / M — USD 700\nMy strongest match for your request is Multi-location.\nMulti-location: “Weight 2.4 kg.”\nMulti-managed: “Weight 2.8 kg.”\nThe lower verified price is Multi-managed (USD 700).\nThe lowest documented weight is Multi-location (2.4 kg)."
+    },
+    {
+      "phase": "plan",
+      "text": "Busco un snowboard hasta $750. ¿Qué opciones tienes?",
+      "output": {
+        "action": "search",
+        "query": "snowboard",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "es",
+      "text": "Busco un snowboard hasta $750. ¿Qué opciones tienes?",
+      "reply": "1. Multi-location / Red / M — USD 729.95\nExistencias verificadas: 7 unidades; no están reservadas.\n2. Multi-managed / Red / M — USD 700\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nMulti-location: “Designed for beginners.” “Weight 2.4 kg.”\nMulti-managed: “Designed for experienced riders.” “Weight 2.8 kg.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compara la opción 1 y la opción 2. ¿Cuál pesa menos y cuál recomiendas para un principiante?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          2
+        ],
+        "relativeSize": null,
+        "preference": "principiante",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "Compara la opción 1 y la opción 2. ¿Cuál pesa menos y cuál recomiendas para un principiante?",
+      "output": {
+        "ranked": [
+          1,
+          2
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0",
+              "c1f1",
+              "c1f3"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "es",
+      "text": "Compara la opción 1 y la opción 2. ¿Cuál pesa menos y cuál recomiendas para un principiante?",
+      "reply": "Multi-location / Red / M — USD 729.95\nMulti-managed / Red / M — USD 700\nLa mejor coincidencia para tu solicitud es Multi-location.\nMulti-location: “Weight 2.4 kg.”\nMulti-managed: “Weight 2.8 kg.”\nEl menor precio verificado es Multi-managed (USD 700).\nEl menor peso documentado es Multi-location (2.4 kg)."
+    },
+    {
+      "phase": "plan",
+      "text": "אני מחפש סנובורד מתחת $750. אילו אפשרויות יש?",
+      "output": {
+        "action": "search",
+        "query": "סנובורד",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": null,
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "output": {
+        "hint": 1
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "he",
+      "text": "אני מחפש סנובורד מתחת $750. אילו אפשרויות יש?",
+      "reply": "לפי המידע המתועד של החנות:\n1. Multi-location / Red / M — USD 729.95\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n2. Multi-managed / Red / M — USD 700\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nMulti-location: “Designed for beginners.” “Weight 2.4 kg.”\nMulti-managed: “Designed for experienced riders.” “Weight 2.8 kg.”"
+    },
+    {
+      "phase": "plan",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מי קל יותר ומה מומלץ למתחיל?",
+      "output": {
+        "action": "compare",
+        "query": "Snowboard",
+        "references": [
+          1,
+          2
+        ],
+        "relativeSize": null,
+        "preference": "beginner",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מי קל יותר ומה מומלץ למתחיל?",
+      "output": {
+        "ranked": [
+          1
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0",
+              "c1f1",
+              "c1f3"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-a",
+      "locale": "he",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מי קל יותר ומה מומלץ למתחיל?",
+      "reply": "לפי המידע המתועד של החנות:\nMulti-location / Red / M — USD 729.95\nMulti-managed / Red / M — USD 700\nההתאמה המובילה לבקשה שלכם היא Multi-location.\nMulti-location: “Weight 2.4 kg.”\nMulti-managed: “Weight 2.8 kg.”\nהמחיר המאומת הנמוך יותר הוא Multi-managed (USD 700).\nהמשקל המתועד הנמוך ביותר הוא Multi-location (2.4 kg)."
+    },
+    {
+      "phase": "plan",
+      "text": "I have dry skin and want a moisturizer under $50. What would you recommend?",
+      "output": {
+        "action": "search",
+        "query": "Moisturizer",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "dry skin",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "I have dry skin and want a moisturizer under $50. What would you recommend?",
+      "output": {
+        "ranked": [
+          1,
+          7,
+          4
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "en",
+      "text": "I have dry skin and want a moisturizer under $50. What would you recommend?",
+      "reply": "1. Moisturizer 1 / Red / M — USD 20\nTracked stock checked: 4 units; not reserved.\n2. Moisturizer 4 / Red / M — USD 12\nTracked stock checked: 4 units; not reserved.\n3. Moisturizer 2 / Red / M — USD 30\nTracked stock checked: 4 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMy strongest match for your request is Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compare option 1 and option 2. What are the ingredient differences, and can I return it?",
+      "output": {
+        "action": "compare",
+        "query": "Moisturizer",
+        "references": [
+          1,
+          2
+        ],
+        "preference": "dry skin",
+        "policy": true
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "Compare option 1 and option 2. What are the ingredient differences, and can I return it?",
+      "output": {
+        "ranked": [
+          1,
+          2
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0",
+              "c1f1"
+            ]
+          },
+          {
+            "choice": 2,
+            "evidenceIds": [
+              "c2f0",
+              "c2f1"
+            ]
+          }
+        ],
+        "policyIds": [
+          "returns"
+        ],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "en",
+      "text": "Compare option 1 and option 2. What are the ingredient differences, and can I return it?",
+      "reply": "Moisturizer 1 / Red / M — USD 20\nMoisturizer 4 / Red / M — USD 12\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 4: “Contains glycerin.”\nThe lower verified price is Moisturizer 4 (USD 12).\nThe merchant's policy information:\n“Unopened skincare can be returned within 7 days.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Tengo piel seca y busco moisturizer hasta $50. ¿Qué recomiendas?",
+      "output": {
+        "action": "search",
+        "query": "moisturizer",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "piel seca",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "Tengo piel seca y busco moisturizer hasta $50. ¿Qué recomiendas?",
+      "output": {
+        "ranked": [
+          1
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "es",
+      "text": "Tengo piel seca y busco moisturizer hasta $50. ¿Qué recomiendas?",
+      "reply": "1. Moisturizer 1 / Red / M — USD 20\nExistencias verificadas: 4 unidades; no están reservadas.\n2. Moisturizer 2 / Red / M — USD 30\nExistencias verificadas: 4 unidades; no están reservadas.\n3. Moisturizer 4 / Red / M — USD 12\nExistencias verificadas: 4 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nLa mejor coincidencia para tu solicitud es Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”"
+    },
+    {
+      "phase": "plan",
+      "text": "Compara la opción 1 y la opción 2. ¿Qué ingredientes tienen y puedo devolverlo?",
+      "output": {
+        "action": "compare",
+        "query": "Moisturizer",
+        "references": [
+          1,
+          2
+        ],
+        "policy": true
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "Compara la opción 1 y la opción 2. ¿Qué ingredientes tienen y puedo devolverlo?",
+      "output": {
+        "ranked": [
+          1,
+          2
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0",
+              "c1f1"
+            ]
+          }
+        ],
+        "policyIds": [
+          "returns"
+        ],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "es",
+      "text": "Compara la opción 1 y la opción 2. ¿Qué ingredientes tienen y puedo devolverlo?",
+      "reply": "Moisturizer 1 / Red / M — USD 20\nMoisturizer 2 / Red / M — USD 30\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 2: “Contains glycerin and shea butter.”\nEl menor precio verificado es Moisturizer 1 (USD 20).\nInformación de la política de esta tienda:\n“Unopened skincare can be returned within 7 days.”"
+    },
+    {
+      "phase": "plan",
+      "text": "יש לי עור יבש ומחפש moisturizer מתחת $50. מה מומלץ?",
+      "output": {
+        "action": "search",
+        "query": "moisturizer",
+        "references": [],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "dry skin",
+        "moreExpensive": false,
+        "policy": false
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "יש לי עור יבש ומחפש moisturizer מתחת $50. מה מומלץ?",
+      "output": {
+        "ranked": [
+          1
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0"
+            ]
+          }
+        ],
+        "policyIds": [],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "he",
+      "text": "יש לי עור יבש ומחפש moisturizer מתחת $50. מה מומלץ?",
+      "reply": "לפי המידע המתועד של החנות:\n1. Moisturizer 1 / Red / M — USD 20\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\n2. Moisturizer 2 / Red / M — USD 30\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\n3. Moisturizer 4 / Red / M — USD 12\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nההתאמה המובילה לבקשה שלכם היא Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”"
+    },
+    {
+      "phase": "plan",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מה ההבדל במרכיבים ומה מדיניות ההחזרות?",
+      "output": {
+        "action": "compare",
+        "query": "Moisturizer",
+        "references": [
+          1,
+          2
+        ],
+        "optionValues": [],
+        "relativeSize": null,
+        "preference": "dry skin",
+        "moreExpensive": false,
+        "policy": true
+      }
+    },
+    {
+      "phase": "answer",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מה ההבדל במרכיבים ומה מדיניות ההחזרות?",
+      "output": {
+        "ranked": [
+          1,
+          2
+        ],
+        "reasons": [
+          {
+            "choice": 1,
+            "evidenceIds": [
+              "c1f0"
+            ]
+          }
+        ],
+        "policyIds": [
+          "returns"
+        ],
+        "missing": false,
+        "variantIds": [],
+        "missingAttributes": [],
+        "question": null
+      }
+    },
+    {
+      "kind": "documented",
+      "userId": "tenant-b",
+      "locale": "he",
+      "text": "השוו בין אפשרות 1 ואפשרות 2. מה ההבדל במרכיבים ומה מדיניות ההחזרות?",
+      "reply": "לפי המידע המתועד של החנות:\nMoisturizer 1 / Red / M — USD 20\nMoisturizer 2 / Red / M — USD 30\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 2: “Contains glycerin and shea butter.”\nהמחיר המאומת הנמוך יותר הוא Moisturizer 1 (USD 20).\nמידע המדיניות של החנות:\n“Unopened skincare can be returned within 7 days.”"
+    }
+  ],
+  "diagnostics": [
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "en",
+      "choices": 8,
+      "facts": 3,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "en",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "en",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "en",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "es",
+      "choices": 8,
+      "facts": 3,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "es",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "es",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "es",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "he",
+      "choices": 8,
+      "facts": 3,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "he",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "he",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "insufficient_evidence",
+      "action": "compare",
+      "locale": "he",
+      "choices": 2,
+      "facts": 0,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "en",
+      "choices": 8,
+      "facts": 32,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "en",
+      "choices": 2,
+      "facts": 8,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "es",
+      "choices": 8,
+      "facts": 32,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "es",
+      "choices": 2,
+      "facts": 8,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "catalog_only",
+      "action": "search",
+      "locale": "he",
+      "choices": 8,
+      "facts": 32,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "he",
+      "choices": 2,
+      "facts": 8,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "search",
+      "locale": "en",
+      "choices": 8,
+      "facts": 21,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "en",
+      "choices": 2,
+      "facts": 6,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "search",
+      "locale": "es",
+      "choices": 8,
+      "facts": 21,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "es",
+      "choices": 2,
+      "facts": 5,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "search",
+      "locale": "he",
+      "choices": 8,
+      "facts": 21,
+      "policyFacts": 1
+    },
+    {
+      "event": "shopping_answer",
+      "outcome": "grounded",
+      "action": "compare",
+      "locale": "he",
+      "choices": 2,
+      "facts": 5,
+      "policyFacts": 1
+    }
+  ]
+}

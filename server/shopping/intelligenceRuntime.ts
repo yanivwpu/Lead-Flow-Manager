@@ -1,3 +1,4 @@
+import { ShoppingModelFailure } from "./diagnostics";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
 import { buildTurnGrounding } from "../websiteKnowledge/factContext";
@@ -9,14 +10,14 @@ import { formatFactValue } from "@shared/businessKnowledgeFacts";
 
 export const shoppingModel: ShoppingModel = async (system, input) => {
   const serialized=JSON.stringify(input);
-  if(serialized.length>64_000)throw Error("shopping_model_input_limit");
+  if(serialized.length>64_000)throw new ShoppingModelFailure("input_limit");
   const response = await aiProvider.complete(system.includes("shopping interpreter") ? "extraction" : "reply", [
     { role: "system", content: system },
     { role: "user", content: serialized },
-  ], { jsonMode: true, maxTokens: 1600, timeoutMs: 10_000 });
+  ], { jsonMode: true, maxTokens: 1600, timeoutMs: 10_000, logErrors:false }).catch(()=>{throw new ShoppingModelFailure("provider");});
   const content = typeof response === "string" ? response : response.content;
-  if (content.length > 16_000) throw Error("shopping_model_output_limit");
-  return JSON.parse(content);
+  if (content.length > 16_000) throw new ShoppingModelFailure("output_limit");
+  try { return JSON.parse(content); } catch { throw new ShoppingModelFailure("json"); }
 };
 
 /** Reuse AI Brain's owned row and published-fact retrieval. Published V2 facts
@@ -58,7 +59,7 @@ export async function shoppingKnowledge(userId: string, text: string, row?: AiBu
     (!/[$€£₪]|\b(?:USD|EUR|ILS|GBP)\b/iu.test(e.text)||/\b(?:shipping|delivery|env[ií]os?)\b|משלוח/iu.test(e.text))) };
 }
 
-export const shoppingIntelligence = createShoppingIntelligence({ model: shoppingModel, knowledge: shoppingKnowledge });
+export const shoppingIntelligence = createShoppingIntelligence({ model: shoppingModel, knowledge: shoppingKnowledge, diagnostic:event=>(event.outcome==="failure"?console.warn:console.info)("[ShoppingAnswer]",JSON.stringify(event)) });
 export async function shoppingHandoffRequested(userId:string,text:string) {
   const config=await storage.getAiSettings(userId);
   return routingShouldTriggerHandoff(resolveAiRouting({inbound:text,handoffKeywords:config?.handoffKeywords??undefined}));

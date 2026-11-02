@@ -76,6 +76,7 @@ export class AIProvider {
       maxTokens?: number;
       returnUsage?: boolean;
       timeoutMs?: number;
+      logErrors?: boolean;
     }
   ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     const config = this.getModelConfig(capability);
@@ -91,7 +92,7 @@ export class AIProvider {
   private async openaiComplete(
     config: AIProviderConfig,
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-    options?: { jsonMode?: boolean; maxTokens?: number; returnUsage?: boolean; timeoutMs?: number }
+    options?: { jsonMode?: boolean; maxTokens?: number; returnUsage?: boolean; timeoutMs?: number; logErrors?: boolean }
   ): Promise<string | { content: string; usage?: { promptTokens: number; completionTokens: number } }> {
     try {
       const response = await this.openaiClient.chat.completions.create({
@@ -115,7 +116,7 @@ export class AIProvider {
     } catch (error) {
       // Do not log prompt/response bodies (may include Gmail-derived conversation text).
       const errMsg = error instanceof Error ? error.message : String(error);
-      console.error(
+      if(options?.logErrors!==false)console.error(
         `[AIProvider] Error with ${config.provider}/${config.model}:`,
         errMsg.slice(0, 240),
       );

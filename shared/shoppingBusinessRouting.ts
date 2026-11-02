@@ -19,7 +19,8 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
     .replace(/\b(?:prices?|costs?)\s+(?:of|for)\s+(?:shipping|delivery)\b|\b(?:shipping|delivery)\s+(?:prices?|costs?|fees?|charges?)\b/gu," ")
     .replace(/\bdo\s+you\s+have\s+(?:(?:a|an|any)\s+)?(?:warrant(?:y|ies)|discount\s+codes?|(?:a\s+)?return\s+policy)\b/gu," ");
   const clauses = factText.split(/[,;!?]|\b(?:and|but|y|pero)\b/u);
-  const mutation = /(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/u.test(text) ||
+  const comparison = shoppingEmbeddedChoiceNumbers(factText).length>1 && /\b(?:compare|compara|comparar)\b|השוו|השווא/u.test(factText);
+  const mutation = comparison || /(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/u.test(text) ||
     clauses.some(clause => shoppingEmbeddedChoiceNumbers(clause).length>0 && /\b(?:in|comes?|colou?rs?|sizes?|interested|talla|color|azul|negro)\b|יש|בצבע|בכחול|בשחור|מידה/u.test(clause)) ||
     clauses.some(clause => shoppingChoiceNumber(clause.trim()) !== undefined);
   const productFacts = mutation || clauses.some(clause => {

@@ -1,3 +1,4 @@
+import type { ShoppingAnswerDiagnostic } from "../server/shopping/diagnostics";
 import { eq } from "drizzle-orm";
 import * as schema from "../shared/schema";
 import { catalogFixture } from "./shopify-catalog-fixture";
@@ -8,7 +9,7 @@ import { createShoppingIntelligence, type ShoppingModel } from "../server/shoppi
 import { createShoppingService, type ShoppingSessionStore } from "../server/shopping/service";
 import { shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
 
-export async function intelligenceFixture(model:ShoppingModel, sparse = false) {
+export async function intelligenceFixture(model:ShoppingModel, sparse = false, diagnostic?: (event:ShoppingAnswerDiagnostic)=>void) {
  const f=await catalogFixture();const sources:Record<string,string>={};
  const merchant = {
   "tenant-a": {category:"Snowboard",prices:["500","650","50","350"],policy:"Unridden boards can be returned within 14 days.",descriptions:["Designed for beginners. Weight 2.4 kg. Rider weight range 160–200 pounds.","Designed for experienced riders. Weight 2.8 kg.","Excluded display board.","Designed for beginners. Weight 3.1 kg. Rider weight range 160–200 pounds."]},
@@ -25,7 +26,7 @@ export async function intelligenceFixture(model:ShoppingModel, sparse = false) {
  }
  const commerce=createCommerceStore(f.database,fixtureInventoryRequest(f.database));
  let missingPolicy=false;
- const intelligence=createShoppingIntelligence({model,knowledge:async id=>({instructions:"Prefer supported customer suitability over soft preferred tags. Never claim higher price proves quality.",evidence:missingPolicy?[]:[{id:"returns",text:merchant[id as keyof typeof merchant].policy}]})});
+ const intelligence=createShoppingIntelligence({model,diagnostic,knowledge:async id=>({instructions:"Prefer supported customer suitability over soft preferred tags. Never claim higher price proves quality.",evidence:missingPolicy?[]:[{id:"returns",text:merchant[id as keyof typeof merchant].policy}]})});
  function conversation(userId:"tenant-a"|"tenant-b",locale="en"){
   let state:ShoppingState|null=null,event=0;
   const sessions:ShoppingSessionStore={withTurn:async(_turn,run)=>run(state,async next=>{state=next;})};

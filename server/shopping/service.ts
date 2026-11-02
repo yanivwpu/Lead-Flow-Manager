@@ -1,6 +1,6 @@
 import { catalogSearchTerms } from "@shared/commerceCatalog";
 import { shoppingBusinessQuestion, mixedShoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
-import { allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
+import { beginnerQualification, allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
 import type { CommerceProduct } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
@@ -91,7 +91,12 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     ? {...stored,step:stored.step==="pending"?(stored.pending?.resumeStep??"discovering"):stored.step}:null;
    let state:ShoppingState=previous?{...previous,choices:[...previous.choices]}:{version:1,sourceId:source.id,step:"discovering",intent,choices:[],quantity:1,updatedAt:new Date(stamp).toISOString(),lastEventId:turn.eventId,reply:"",consumedEventIds:[]};
    if(plan?.action==="search" && plan.query?.toLowerCase()!==state.query?.toLowerCase()) {state.preference=undefined;state.informationQuestionsAsked=undefined;}
-   if(plan?.preference) state.preference=plan.preference;
+   if(plan?.preference) {
+    const retainBeginner=beginnerQualification(state.preference??"")===true && beginnerQualification(turn.text)!==false && beginnerQualification(plan.preference)===null;
+    state.preference=[...(retainBeginner?["beginner"]:[]),plan.preference].join(" ").slice(0,300);
+   }
+   if(beginnerQualification(turn.text)===true && beginnerQualification(state.preference??"")!==true)state.preference=["beginner",state.preference].filter(Boolean).join(" ").slice(0,300);
+   if(beginnerQualification(turn.text)===false && beginnerQualification(state.preference??"")===true)state.preference=turn.text.slice(0,300);
    let explanation:string|undefined;
    let modelUsed=!!plan;
    const verifiedThisTurn=new Set<string>();
