@@ -11,6 +11,7 @@ import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation";
 import { shopifyCatalogRequest, SHOPIFY_CATALOG_META_QUERY } from "../salesCatalog/shopify/api";
 import { suggestShopifyKnowledgePages } from "./shopifyPageSuggestions";
+import { consumeRateLimit, setRetryAfterHeader } from "../rateLimitMiddleware";
 import { parseKnowledgeFreshnessPolicy } from "@shared/businessKnowledgeFacts";
 import { buildKnowledgeReviewPayload } from "@shared/knowledgeReview";
 import { assertSafePublicHttpUrl, WebsiteKnowledgeScrapeError } from "../websiteKnowledgeScraper";
@@ -66,6 +67,15 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
     if (!(await guard(req, res))) return;
     try {
       const userId = req.user!.id;
+      // Explicit per-workspace budget before touching Shopify APIs.
+      // The global /api/ai bucket protects all AI routes; this guard
+      // separately limits expensive Shopify source lookups.
+      const windowMs = 15 * 60 * 1000;
+      const attempt = await consumeRateLimit(`shopify:knowledge-page-suggestions:user:${userId}`, 4, windowMs);
+      if (!attempt.allowed) {
+        setRetryAfterHeader(res, Math.ceil(windowMs / 1000));
+        return res.status(429).json({ error: "Too many Shopify knowledge requests. Try again later." });
+      }
       const install = await resolveCatalogInstallation(db, userId);
       if (!install) return res.json({ connected: false, suggestions: [] });
       const metadata = await shopifyCatalogRequest(install.shop, install.token)(SHOPIFY_CATALOG_META_QUERY);
