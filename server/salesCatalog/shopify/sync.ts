@@ -918,7 +918,11 @@ export function createShopifyCatalogSync(
         // OFF until the additive shopify_evidence migration and GraphQL compatibility are verified.
         let shopifyEvidence: Awaited<ReturnType<typeof readShopifyPublicEvidence>> | undefined;
         if (shopifyPublicEvidencePilotEnabled(install.userId)) {
-          try { shopifyEvidence = await readShopifyPublicEvidence(request, id); }
+          try {
+            shopifyEvidence = await readShopifyPublicEvidence(request, id);
+            // Aggregate only; no product IDs, raw values, or metadata in logs.
+            console.info("[ShopifyEvidencePilot] read_ok", { factCount: shopifyEvidence.length });
+          }
           catch (error) {
             // Log only a bounded error category, never the provider request,
             // token, raw response, metafields, or customer information.
