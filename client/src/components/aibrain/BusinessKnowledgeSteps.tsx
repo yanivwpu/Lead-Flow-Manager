@@ -552,6 +552,8 @@ export function BusinessKnowledgeSteps({
   } | null>(null);
 
   const sourcesQuery = useQuery<SourcesResponse>({ queryKey: SOURCES_KEY });
+  // Installation connectivity is distinct from optional product permission/catalog readiness.
+  const shopifyConnectionQuery = useQuery<{ connected:boolean }>({ queryKey: ["/api/shopify/merchant-engine/status"] });
   const factsQuery = useQuery<FactsResponse>({ queryKey: FACTS_KEY });
   const liveBusinessDataQuery = useQuery<{
     providers: Array<{
@@ -652,7 +654,7 @@ export function BusinessKnowledgeSteps({
     onSuccess: (data) => {
       setShopifySuggestions(data.suggestions);
       if (!data.connected) toast({ title: "Connect Shopify first", description: "Link your store to discover public pages." });
-      else if (!data.suggestions.length) toast({ title: "No accessible store pages found", description: "You can still enter policy or FAQ page links manually." });
+      else if (!data.suggestions.length) toast({ title: "Could not suggest store pages", description: "You can still enter policy or FAQ page links manually." });
     },
     onError: () => toast({ title: "Could not check store pages", description: "Please try again or add a page manually.", variant: "destructive" }),
   });
@@ -914,7 +916,7 @@ export function BusinessKnowledgeSteps({
               </Button>
             </div>
 
-            {liveBusinessDataQuery.data?.providers.some(p => p.id === "shopify" && p.status === "connected") && (
+            {shopifyConnectionQuery.data?.connected === true && (
               <div className="rounded-lg border border-violet-200/80 bg-violet-50/40 px-3 py-3 space-y-2" data-testid="shopify-knowledge-suggestions">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" variant="outline" size="sm"
@@ -922,9 +924,9 @@ export function BusinessKnowledgeSteps({
                     onClick={() => suggestShopifyPages.mutate()}
                     data-testid="button-find-shopify-knowledge-pages">
                     {suggestShopifyPages.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="mr-1.5 h-3.5 w-3.5"/>}
-                    Find Shopify store pages
+                    Suggest Shopify store pages
                   </Button>
-                  <span className="text-xs text-slate-600">Find public FAQs and policies; you decide what AI learns.</span>
+                  <span className="text-xs text-slate-600">Suggested common policy/FAQ links (not yet verified). You decide what AI learns.</span>
                 </div>
                 {shopifySuggestions.length > 0 && (
                   <div className="space-y-2">
@@ -938,7 +940,7 @@ export function BusinessKnowledgeSteps({
                         onClick={() => void addShopifySuggestedPages()} data-testid="button-add-shopify-knowledge-pages">
                         {addingShopifyPages ? "Adding pages…" : `Add ${pendingShopifySuggestions.length} pages to AI Brain`}
                       </Button> : <p className="text-xs text-slate-500">All detected pages are already listed.</p>}
-                    <p className="text-xs text-slate-600">Adding pages does not publish anything. Analyze, review and approve the facts before they can be used.</p>
+                    <p className="text-xs text-slate-600">Check that the links belong to your store. Adding does not publish facts; Analyze will check them, then you review and approve.</p>
                   </div>
                 )}
               </div>
