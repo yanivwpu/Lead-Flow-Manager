@@ -33,7 +33,7 @@ const sanitize = (raw: unknown, max = 360): string => typeof raw === "string" ?
     .replace(/\s+/g, " ").trim().slice(0, max) : "";
 function publicMetafield(raw: any): PublicProductEvidence | null {
   if (!raw || raw.definition?.access?.storefront !== "PUBLIC_READ" ||
-    raw.namespace !== "custom" || !LABEL_KEY.test(raw.key) ||
+    !LABEL_KEY.test(raw.namespace) || /^(?:app|private|internal|admin|wholesale)/i.test(raw.namespace) || !LABEL_KEY.test(raw.key) ||
     SENSITIVE_KEY.test(raw.key) || !ALLOWED_TYPES.has(raw.type)) return null;
   let value: unknown = raw.value;
   if (raw.type === "list.single_line_text_field") {
