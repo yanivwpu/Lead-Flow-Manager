@@ -111,3 +111,20 @@ test("first-install setup and details load as authenticated documents before act
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/internal","setup"),false);
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/products","about"),false);
 });
+
+
+test("Shopify onboarding links to the existing AI Brain business knowledge as a distinct fourth-step checklist", () => {
+  assert.ok(onboarding.includes('data-testid="ecommerce-install-ai-brain"'));
+  assert.ok(onboarding.includes('href="/app/ai-brain"'));
+  assert.ok(onboarding.includes('index === 3 && activated'));
+  assert.ok(onboarding.includes('(index === 1 && activated)'));
+  assert.ok(!onboarding.includes('index > 0 && activated'));
+  assert.ok(onboarding.includes('onSuccess: () => navigate("/app/ecommerce-growth-engine?view=setup")'));
+  assert.ok(engineDetails.includes('xl:grid-cols-4'));
+  for (const text of ["Complete AI Brain business knowledge", "Completa los conocimientos comerciales", "השלמת הידע העסקי"]) {
+    assert.ok(onboarding.includes(text));
+    assert.ok(engineDetails.includes(text));
+  }
+  // The knowledge step is guidance, never a fabricated "completed" gate.
+  assert.ok(!onboarding.includes('knowledgeReady === true'));
+});

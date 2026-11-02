@@ -23,8 +23,10 @@ const copy = {
     steps: [
       ["Connect Shopify", "Link a store that is not already owned by another WhachatCRM workspace."],
       ["Activate the engine", "Once Shopify and your plan are verified, activate the workspace."],
+      ["Complete AI Brain business knowledge", "Your assistant already reads Shopify products. Add or review your store's policies, FAQs and business information so it can answer customer questions accurately."],
       ["Configure journeys", "Review catalog, order tasks, AI Shopping and approved message templates."],
     ],
+    knowledgeAction: "Open AI Brain knowledge",
     install: "Install Growth Engine", connect: "Connect Shopify", activate: "Activate Engine",
     activating: "Activating…", connected: "Shopify connected", ready: "Engine activated",
     configure: "Configure journeys", open: "Open Engine", details: "View features",
@@ -47,8 +49,10 @@ const copy = {
     steps: [
       ["Conectar Shopify", "Conecta una tienda que no pertenezca a otro espacio WhachatCRM."],
       ["Activar el motor", "Activa después de verificar Shopify y el plan."],
+      ["Completa los conocimientos comerciales de AI Brain", "Tu asistente ya utiliza los productos de Shopify. Añade o revisa políticas, preguntas frecuentes e información de tu tienda para responder correctamente."],
       ["Configurar recorridos", "Revisa catálogo, pedidos, IA y plantillas aprobadas."],
     ],
+    knowledgeAction: "Abrir conocimientos de AI Brain",
     install: "Instalar motor", connect: "Conectar Shopify", activate: "Activar motor",
     activating: "Activando…", connected: "Shopify conectado", ready: "Motor activado",
     configure: "Configurar recorridos", open: "Abrir motor", details: "Ver funciones",
@@ -71,8 +75,10 @@ const copy = {
     steps: [
       ["חיבור Shopify", "חיבור חנות שאינה משויכת לסביבת עבודה אחרת."],
       ["הפעלת המנוע", "הפעלה לאחר אימות Shopify וזכאות המנוי."],
+      ["השלמת הידע העסקי ב-AI Brain", "העוזר כבר משתמש במוצרי Shopify. הוסיפו או בדקו מדיניות חנות, שאלות נפוצות ופרטי העסק כדי לענות ללקוחות באופן מדויק."],
       ["הגדרת מסעות", "סקירת מוצרים, משימות, AI ותבניות מאושרות."],
     ],
+    knowledgeAction: "פתיחת הידע העסקי ב-AI Brain",
     install: "התקנת מנוע הצמיחה", connect: "חיבור Shopify", activate: "הפעלת המנוע",
     activating: "מפעילים…", connected: "Shopify מחובר", ready: "המנוע הופעל",
     configure: "הגדרת מסעות", open: "פתיחת המנוע", details: "הצגת יכולות",
@@ -126,7 +132,7 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
           {t.steps.map(([title, detail], index) => (
             <article key={title} className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
               <div className="flex items-start gap-3">
-                {(index === 0 && connected) || (index > 0 && activated) ?
+                {(index === 0 && connected) || (index === 1 && activated) ?
                   <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600"/> :
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-700">{index+1}</span>}
                 <div className="min-w-0 flex-1">
@@ -141,12 +147,13 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
                       !connected ? <p className="mt-3 text-sm text-slate-500"><LockKeyhole className="me-1 inline h-4 w-4"/>{t.waiting}</p> :
                       !planEligible ? <p className="mt-3 text-sm text-amber-800">{t.pro} <Link href="/app/settings?tab=billing" className="font-semibold underline">{t.plan}</Link></p> :
                       <button type="button" data-testid="ecommerce-install-activate" className={"mt-4 "+actionClass}
-                        disabled={!eligible || activate.isPending} onClick={() => activate.mutate(undefined, {onSuccess: () => navigate("/app/ecommerce-growth-engine")})}>
+                        disabled={!eligible || activate.isPending} onClick={() => activate.mutate(undefined, {onSuccess: () => navigate("/app/ecommerce-growth-engine?view=setup")})}>
                         {activate.isPending ? t.activating : t.activate}
                       </button>
                   )}
                   {index === 1 && activate.isError && <p role="alert" className="mt-2 text-sm text-red-700">{t.failed}</p>}
-                  {index === 2 && activated && <Link href="/app/ecommerce-growth-engine?view=post" className={"mt-4 "+actionClass}>{t.configure}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>}
+                  {index === 2 && activated && <Link href="/app/ai-brain" data-testid="ecommerce-install-ai-brain" className={"mt-4 "+actionClass}>{t.knowledgeAction}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>}
+                  {index === 3 && activated && <Link href="/app/ecommerce-growth-engine?view=post" className={"mt-4 "+actionClass}>{t.configure}<ArrowRight className="h-4 w-4 rtl:rotate-180"/></Link>}
                 </div>
               </div>
             </article>

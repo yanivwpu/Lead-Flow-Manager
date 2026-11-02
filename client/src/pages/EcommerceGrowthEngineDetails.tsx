@@ -63,15 +63,16 @@ const copy = {
     ],
     activationEyebrow: "GET STARTED",
     activationTitle: "From install to a connected sales workspace.",
-    activationDescription: "Start from your WhachatCRM dashboard. Connect your store, activate the engine and customize the customer journeys you want to use.",
+    activationDescription: "Start from your WhachatCRM dashboard. Connect your store, activate the engine, complete AI Brain business knowledge and customize your journeys.",
     activationSteps: [
       ["Connect your Shopify store", "Securely link the store to this WhachatCRM workspace."],
       ["Activate Growth Engine", "Confirm your connected store and eligible Pro access."],
+      ["Complete AI Brain business knowledge", "Your assistant already reads Shopify products. Add or review your store's policies, FAQs and business information so it can answer customer questions accurately."],
       ["Choose & customize journeys", "Review products, tasks, AI Shopping and message plans. Enable outbound delivery separately when ready."],
     ],
     footerTitle: "More conversations. More opportunities to convert.",
     footerDescription: "Bring Shopify and customer messaging together, then configure the journeys that fit your business.",
-    requirements: "Start in three steps: connect Shopify, activate your engine, and customize journeys. WhatsApp follow-ups can be enabled after the required channel, consent and template checks.",
+    requirements: "Get started: connect Shopify, activate your engine, and customize journeys. Complete AI Brain business knowledge to improve product and policy answers. WhatsApp follow-ups can be enabled after the required channel, consent and template checks.",
   },
   es: {
     eyebrow: "MOTOR DE CRECIMIENTO PARA COMERCIO ELECTRÓNICO",
@@ -126,15 +127,16 @@ const copy = {
     ],
     activationEyebrow: "EMPEZAR",
     activationTitle: "De la instalación a un espacio de ventas conectado.",
-    activationDescription: "Conecta Shopify, activa el motor y personaliza los recorridos desde tu dashboard.",
+    activationDescription: "Conecta Shopify, activa el motor, completa AI Brain y configura tus recorridos desde tu dashboard.",
     activationSteps: [
       ["Conecta Shopify", "Vincula tu tienda a este espacio WhachatCRM."],
       ["Activa el motor", "Confirma la tienda y tu acceso Pro elegible."],
+      ["Completa los conocimientos comerciales de AI Brain", "Tu asistente ya utiliza los productos de Shopify. Añade o revisa políticas, preguntas frecuentes e información de tu tienda para responder correctamente."],
       ["Personaliza los recorridos", "Revisa productos, IA y tareas. Habilita el envío por separado."],
     ],
     footerTitle: "Más conversaciones. Más oportunidades de convertir.",
     footerDescription: "Conecta Shopify con tus canales y prepara los recorridos adecuados.",
-    requirements: "Empieza en tres pasos: conecta Shopify, activa el motor y personaliza tus recorridos. Los mensajes de WhatsApp pueden habilitarse después de verificar el canal, consentimiento y plantillas.",
+    requirements: "Empieza en cuatro pasos: conecta Shopify, activa el motor, completa el conocimiento comercial de AI Brain y personaliza tus recorridos. Los mensajes de WhatsApp pueden habilitarse después de verificar el canal, consentimiento y plantillas.",
   },
   he: {
     eyebrow: "מנוע הצמיחה למסחר אלקטרוני",
@@ -189,15 +191,16 @@ const copy = {
     ],
     activationEyebrow: "מתחילים כאן",
     activationTitle: "מהתקנה לסביבת מכירות מחוברת.",
-    activationDescription: "מחברים Shopify, מפעילים את המנוע ומתאימים את מסעות הלקוח מתוך המערכת.",
+    activationDescription: "מחברים Shopify, מפעילים את המנוע, משלימים ידע עסקי ב-AI Brain ומתאימים את מסעות הלקוח.",
     activationSteps: [
       ["חיבור Shopify", "מקשרים את החנות לסביבת העבודה."],
       ["הפעלת המנוע", "מאמתים חיבור ומנוי Pro מתאים."],
+      ["השלמת הידע העסקי ב-AI Brain", "העוזר כבר משתמש במוצרי Shopify. הוסיפו או בדקו מדיניות חנות, שאלות נפוצות ופרטי העסק כדי לענות ללקוחות באופן מדויק."],
       ["התאמת התהליכים", "בודקים מוצרים, AI ומשימות. שליחת הודעות מופעלת בנפרד."],
     ],
     footerTitle: "יותר שיחות. יותר הזדמנויות מכירה.",
     footerDescription: "מחברים Shopify והודעות לקוחות ומגדירים את התהליכים המתאימים לעסק.",
-    requirements: "מתחילים בשלושה שלבים: מחברים Shopify, מפעילים את המנוע ומתאימים את מסעות הלקוח. הודעות WhatsApp ניתנות להפעלה לאחר בדיקות חיבור הערוץ, ההסכמה והתבניות.",
+    requirements: "מתחילים בארבעה שלבים: מחברים Shopify, מפעילים את המנוע, משלימים ידע עסקי ב-AI Brain ומתאימים את מסעות הלקוח. הודעות WhatsApp ניתנות להפעלה לאחר בדיקות חיבור הערוץ, ההסכמה והתבניות.",
   },
 } as const;
 
@@ -321,7 +324,7 @@ export function EcommerceGrowthEngineDetails({ locale, activated }: { locale: "e
           <p className="text-xs font-bold uppercase tracking-widest text-blue-700">{c.scenarioEyebrow}</p>
           <h2 className="mt-2 text-2xl font-bold text-slate-950 sm:text-3xl">{c.scenarioTitle}</h2>
         </div>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {c.scenarios.map(([title, description], index) => {
             const Icon = scenarioIcons[index];
             return <article key={title} className="rounded-xl border border-slate-200 bg-white p-5">
