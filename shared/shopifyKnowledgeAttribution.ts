@@ -18,7 +18,7 @@ export function factBelongsToShopifyStore(
   fact: {
     sourceId: string | null;
     sourceUrl: string | null;
-    provenance?: readonly { sourceId: string | null; url: string | null }[];
+    provenance?: readonly { sourceId: string | null; url?: string | null }[];
   },
   allowedSourceIds: ReadonlySet<string>,
   allowedHosts: ReadonlySet<string>,
