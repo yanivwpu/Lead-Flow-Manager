@@ -113,6 +113,8 @@ jobs:
           node --import tsx tests/shopping-ucp.test.ts
           node --import tsx tests/shopping-intelligence.test.ts
           node --import tsx tests/shopping-intelligence-model.test.ts
+          node --import tsx tests/shopping-live-reasoning.test.ts
+          node --import tsx tests/shopping-live-reasoning-model.test.ts
           node --import tsx tests/shopping-assistant-postgres.test.ts
           node --import tsx tests/ai-test-chat.test.ts
           node --import tsx --test tests/ai-test-chat-product-safety.test.ts

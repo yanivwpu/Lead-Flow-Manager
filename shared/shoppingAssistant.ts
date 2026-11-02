@@ -136,10 +136,18 @@ export function matchShoppingChoice(text: string, choices: ShoppingChoice[]): Sh
 }
 /** Embedded ordinals are references only, never permission to select/confirm. */
 export function shoppingEmbeddedChoiceNumbers(text:string):number[] {
-  return [...new Set(text.split(/[^\p{L}]+/u).flatMap(word=>{
+  const ordinals=text.split(/[^\p{L}]+/u).flatMap(word=>{
     const n=shoppingChoiceNumber(word)??shoppingChoiceNumber(word.replace(/^ו(?=ה)/u,""));
     return n===undefined?[]:[n];
-  }))];
+  });
+  // Only labeled digits are references; budgets, quantities and rider weights
+  // are not option numbers. Preserve explicit out-of-range labels to clarify.
+  const numbered=[...text.matchAll(/(?:\b(?:options?(?: number)?|opci[oó]n(?:es)?(?: n[uú]mero)?)|(?:^|\s)ו?(?:אפשרות|האפשרות|באפשרות|אפשרויות|האפשרויות)(?: מספר)?)\s+(\d+)(?!\d|\.\d)/giu)].flatMap(m=>{
+    const following=text.slice(m.index!+m[0].length);
+    const coordinated=following.match(/^\s*(?:(?:and|y)\s+|ו[\s-]*)(\d+)(?!\d|\.\d)(?!\s*(?:pounds?|lbs?|kg|dollars?|USD|EUR|ILS)\b)/iu);
+    return [Number(m[1]),...(coordinated?[Number(coordinated[1])]:[])];
+  });
+  return [...new Set([...ordinals,...numbered])];
 }
 export type ShoppingLocale = "en"|"es"|"he";
 export function shoppingLocale(locale?: string): ShoppingLocale {return locale?.startsWith("he")?"he":locale?.startsWith("es")?"es":"en";}

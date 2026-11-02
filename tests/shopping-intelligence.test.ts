@@ -238,7 +238,7 @@ test("sparse real-store shape compares verified facts without inventing beginner
   const compared=(await c.turn("Compare the first and second"))!;
   assert.match(compared.reply,/Hydrogen/); assert.match(compared.reply,/Multi-location/);
   assert.match(compared.reply,/USD 500/); assert.match(compared.reply,/USD 650/);
-  assert.match(compared.reply,/suitability for your needs/);
+  assert.match(compared.reply,/beginner suitability/);
   assert.doesNotMatch(compared.reply,/strongest match|Designed for beginners|lighter|better quality/);
   assert.equal((compared.reply.match(/\?/g)??[]).length,0,"do not repeat the previous question");
   assert.deepEqual(compared.state.choices.map(c=>c.variantId),before);
@@ -248,7 +248,7 @@ test("sparse real-store shape compares verified facts without inventing beginner
   assert.doesNotMatch(prices.reply,/does not establish/);
   const combined=(await c.turn("Compare the first and second prices and ingredients"))!;
   assert.match(combined.reply,/does not establish ingredients/);
-  assert.equal(combined.state.informationQuestionsAsked?.length,1,"do not repeat an information question after intervening turns");
+  assert.equal(combined.state.informationQuestionsAsked?.length??0,0,"do not repeat an information question after intervening turns");
  } finally {await f.cleanup();}
 });
 

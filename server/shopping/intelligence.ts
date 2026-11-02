@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ShoppingModelFailure, type ShoppingAnswerDiagnostic, type ShoppingFailureStage } from "./diagnostics";
 import type { CommerceProduct } from "@shared/commerceCatalog";
 import { compareMoney, shoppingEmbeddedChoiceNumbers, shoppingLocale, type ShoppingChoice, type ShoppingState } from "@shared/shoppingAssistant";
 import type { ShoppingTurn } from "./service";
@@ -31,6 +32,12 @@ export function shoppingText(raw: string, max = 1500): string {
     .replace(/\s+/g, " ").trim().slice(0, max);
 }
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+export function beginnerQualification(text: string): boolean | null {
+  const value=norm(text).replace(/\b(?:not|no) (?:an? )?(?:experienced|expert|advanced|experto|avanzado)\b|ו?לא (?:מנוסה|מתקדם)/gu, " ");
+  if(/\b(?:not (?:a |for |suitable for )?beginners?|no soy principiante|no (?:apto|adecuado) para principiantes)\b|לא (?:משתמש )?מתחיל/u.test(value))return false;
+  if(/^(?:experienced|expert|advanced|experto|avanzado)\b|\b(?:i am|i'm|soy) (?:an? )?(?:experienced|expert|advanced|experto|avanzado)\b|^(?:מנוסה|מתקדם)|אני (?:מנוסה|מתקדם)/u.test(value))return false;
+  return /\b(?:beginners?|principiantes?)\b|מתחיל/u.test(value) ? true : null;
+}
 const colorGroups=[["blue","azul","כחול"],["black","negro","negra","שחור"],["red","rojo","roja","אדום"],["white","blanco","blanca","לבן"],["green","verde","ירוק"],["yellow","amarillo","amarilla","צהוב"],["pink","rosa","ורוד"],["purple","morado","morada","violeta","סגול"],["orange","naranja","כתום"],["brown","marron","חום"],["gray","grey","gris","אפור"]];
 const optionKey = (value: string) => {
   const v=norm(value).replace(/([\p{L}])['’](?=[\p{L}])/gu,"$1");
@@ -76,6 +83,7 @@ references are 1-based saved offered positions only; compare first and third mea
 variant requests need a referenced saved product or current selection. optionValues are the requested actual labels (blue/azul/כחול can mean Blue); leave translation resolution to the evidence step. relativeSize only for explicit smaller/larger size.
 refine means change saved preferences or budget, including lightweight/cheaper/more expensive but better. Retain all relevant needs. Never call a higher price better. search means explicit NEW product request.
 If saved is null, an initial product recommendation with needs and budget is search, NEVER refine. Qualification is not a change to an absent session.
+For a plain catalog listing with no requested product attributes or customer qualifications, preference must be null. Do not repeat the query or budget in preference.
 preference preserves relevant customer qualification such as beginner/180 pounds/dry skin. Do not infer suitability from industry knowledge.
 policy true if ANY merchant policy question is included, even when mixed with product intent. No price/currency/checkout/confirmation/selection fields are allowed.`;
 const ANSWER_PROMPT = `Reason over the owned evidence to answer this customer's shopping request. Return JSON ONLY in this shape:
@@ -125,22 +133,18 @@ const policyTopics=[
   /\b(?:location|address|hours|located|horario\w*|direccion\w*)\b|כתובת|שעות/u,
 ];
 type MissingAttribute = z.infer<typeof answerSchema>["missingAttributes"][number];
-function missingDetails(locale: ReturnType<typeof shoppingLocale>, state: ShoppingState, gaps: MissingAttribute[], question: "budget"|"use"|"priority"|null): string[] {
+function missingDetails(locale: ReturnType<typeof shoppingLocale>, state: ShoppingState, gaps: MissingAttribute[], _question: "budget"|"use"|"priority"|null): string[] {
   const lines: string[] = [];
   const labels={
     en:{weight:"product weight",dimensions:"dimensions",materials:"materials",suitability:"suitability for your needs",ingredients:"ingredients",ratings:"customer ratings",specifications:"comparison specifications"},
     es:{weight:"peso del producto",dimensions:"dimensiones",materials:"materiales",suitability:"idoneidad para tus necesidades",ingredients:"ingredientes",ratings:"valoraciones",specifications:"especificaciones para comparar"},
     he:{weight:"משקל המוצר",dimensions:"מידות",materials:"חומרים",suitability:"התאמה לצרכים שלכם",ingredients:"מרכיבים",ratings:"דירוגי לקוחות",specifications:"מפרטים להשוואה"},
   }[locale];
-  const names=gaps.map(g=>labels[g]).join(", ");
-  lines.push({en:`I can compare their verified prices and options. The merchant information I have does not establish ${names}.`,es:`Puedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar ${names}.`,he:`אפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס ${names}.`}[locale]);
-  const questions={en:{budget:"What budget would you like to stay within?",use:"How do you plan to use it?",priority:"What matters most to you when choosing?"},es:{budget:"¿Qué presupuesto tienes?",use:"¿Cómo piensas usarlo?",priority:"¿Qué es lo más importante para ti al elegir?"},he:{budget:"מה התקציב שלכם?",use:"איך אתם מתכננים להשתמש בו?",priority:"מה הכי חשוב לכם בבחירה?"}}[locale];
-
-  if(question && !(question==="budget" && state.maxPrice) && !state.informationQuestionsAsked?.includes(question) && !state.reply?.includes(questions[question])) {
-    lines.push(questions[question]);
-    state.informationQuestionsAsked=[...new Set([...(state.informationQuestionsAsked??[]),question])].slice(-3);
-  }
-  else lines.push({en:"The store team can confirm those details before you decide.",es:"El equipo de la tienda puede confirmar esos datos antes de que decidas.",he:"צוות החנות יכול לאשר את הפרטים לפני שתחליטו."}[locale]);
+  const beginner=beginnerQualification(state.preference??"")===true;
+  const names=gaps.map(g=>g==="suitability" && beginner ? {en:"beginner suitability",es:"idoneidad para principiantes",he:"התאמה למתחילים"}[locale] : labels[g]).join(", ");
+  if(!state.reply?.includes(names))lines.push({en:`I can compare their verified prices and options. The merchant information I have does not establish ${names}.`,es:`Puedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar ${names}.`,he:`אפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס ${names}.`}[locale]);
+  // Merchant specifications cannot be supplied by further customer qualification.
+  lines.push({en:`Ask the store team to confirm ${names} for these options before you choose.`,es:`Pide al equipo de la tienda que confirme ${names} para estas opciones antes de elegir.`,he:`בקשו מצוות החנות לאשר ${names} עבור האפשרויות האלה לפני הבחירה.`}[locale]);
   return lines;
 }
 function boundedRanking(ranked: number[], choices: ShoppingChoice[], plan: ShoppingPlan, limit = 8): number[] {
@@ -153,6 +157,7 @@ function boundedRanking(ranked: number[], choices: ShoppingChoice[], plan: Shopp
 export function createShoppingIntelligence(deps: {
   model: ShoppingModel;
   knowledge: (userId: string, text: string) => Promise<ShoppingKnowledge>;
+  diagnostic?: (event: ShoppingAnswerDiagnostic) => void;
 }) {
   return {
     async plan(turn: ShoppingTurn, state: ShoppingState | null, catalogHints:string[]=[]): Promise<ShoppingPlan | null> {
@@ -218,8 +223,12 @@ export function createShoppingIntelligence(deps: {
         const product = products.find(p => p.id === c.productId);
         return product ? [...sentences(product.description).slice(0, 6), ...sentences(product.aiGuidance ?? "").slice(0, 4)].map((text, i) => ({ id: `c${index + 1}f${i}`, choice: index + 1, text })) : [];
       });
+      let stage: ShoppingFailureStage = "render";
+      const diagnostic = (outcome: ShoppingAnswerDiagnostic["outcome"], failureStage?: ShoppingAnswerDiagnostic["stage"]) => {
+        try { deps.diagnostic?.({event:"shopping_answer",outcome,...(failureStage?{stage:failureStage}:{}),action:plan.action,locale:shoppingLocale(turn.locale),choices:input.choices.length,facts:facts.length,policyFacts:knowledge.evidence.length}); } catch { /* telemetry cannot fail the turn */ }
+      };
       let knowledge: ShoppingKnowledge = { instructions: "", evidence: [] };
-      try { knowledge = await deps.knowledge(turn.userId, turn.text); } catch { /* missing is explicit below */ }
+      try { knowledge = await deps.knowledge(turn.userId, turn.text); } catch { diagnostic("failure","knowledge"); }
       const business = knowledge.evidence.slice(0, 20).map(e => ({ id: e.id, text: shoppingText(e.text, 1200) }));
       const policyReply = (ids: string[]): string[] => {
         if(!plan.policy)return [];
@@ -233,22 +242,33 @@ export function createShoppingIntelligence(deps: {
         // No product evidence means there is nothing for a model to cite or
         // rank for suitability. Still answer verified price/option comparisons
         // and merchant policies; model interpretation already retained context.
-        const result = facts.length === 0 && plan.action !== "variant" ? {
-          ranked: input.choices.map((_,i)=>i+1), reasons: [], policyIds: business.map(e=>e.id),
-          missing: true, variantIds: [], missingAttributes: ["suitability" as const],
-          question: state.maxPrice ? "use" as const : "budget" as const,
-        } : answerSchema.parse(await deps.model(ANSWER_PROMPT, {
+        const requestedBeginner=(beginnerQualification(turn.text)??beginnerQualification(state.preference??""))===true;
+        const recommendation=/\b(?:recommend\w*|suggest\w*|best|better|suitab\w*|beginners?|recom\w*|mejor|conviene|principiante\w*)\b|מומל|ממלי|מתאים|מתחיל/u.test(norm(turn.text));
+        const catalogOnly=plan.action === "search" && !recommendation && !state.preference && !plan.preference;
+        const requestedAttributes=plan.action === "compare" ? comparisonAttributes.filter(a=>a.ask.test(norm(turn.text))) : [];
+        const incompleteAttributes=requestedAttributes.filter(a=>input.choices.some((_,i)=>!facts.some(f=>f.choice===i+1 && a.fact.test(f.text))));
+        const insufficient = facts.length === 0 || incompleteAttributes.length > 0;
+        stage="provider";
+        const bypassModel = (catalogOnly || insufficient) && plan.action !== "variant";
+        const raw = bypassModel ? undefined : await deps.model(ANSWER_PROMPT, {
           text: turn.text.slice(0, 2000), plan, preference: state.preference, locale: shoppingLocale(turn.locale),
           choices: input.choices.map((c,i)=>({choice:i+1,...c})), selected: state.selected, facts, business,
           instructions: shoppingText(knowledge.instructions, 2500),
           preferred: products.filter(preferred).map(p => p.id),
           productContext: products.map(p=>({id:p.id,collections:p.collections,merchantTags:p.merchantTags,guidance:p.aiGuidance})),
           variants: plan.action === "variant" ? variants.slice(0, 100) : [],
-        }));
+        });
+        stage="schema";
+        const result = bypassModel ? {
+          ranked: input.choices.map((_,i)=>i+1), reasons: [], policyIds: business.map(e=>e.id),
+          missing: !catalogOnly, variantIds: [], missingAttributes: recommendation || requestedBeginner ? ["suitability" as const] : ["specifications" as const],question:null,
+        } : answerSchema.parse(raw);
+        stage="evidence";
         if (new Set(result.ranked).size !== result.ranked.length || result.ranked.some(n => !input.choices[n - 1]) ||
             result.reasons.some(r => !input.choices[r.choice - 1] || r.evidenceIds.some(id=>!facts.some(f=>f.id===id && f.choice===r.choice))) ||
             result.policyIds.some(id => !business.some(e => e.id === id)) ||
             result.variantIds.some(id => !variants.some(v => v.id === id))) throw Error("invalid_owned_evidence");
+        stage="render";
         const lines: string[] = [];
 
         // A model may recommend just one item. Keep other verified choices
@@ -258,9 +278,8 @@ export function createShoppingIntelligence(deps: {
         const weights=input.choices.map((c,i)=>({choice:i+1,weight:documentedWeight(products.find(p=>p.id===c.productId)?.description??"")}));
         const completeWeights=weightRequest && weights.length>1 && weights.every(w=>w.weight);
         const lightest=completeWeights?[...weights].sort((a,b)=>a.weight!.grams-b.weight!.grams)[0]:null;
-        const supportedBest = ["search","refine"].includes(plan.action) && !weightRequest && !result.missing && result.reasons.some(r => r.choice === ranked[0] && r.evidenceIds.some(id=>facts.some(f=>f.id===id&&f.choice===r.choice)));
+        const supportedBest = ["search","refine","compare"].includes(plan.action) && recommendation && !result.missing && (!requestedBeginner || result.reasons.some(r=>r.choice===ranked[0] && r.evidenceIds.some(id=>facts.some(f=>f.id===id && beginnerQualification(f.text)===true)))) && result.reasons.some(r => r.choice === ranked[0] && r.evidenceIds.some(id=>facts.some(f=>f.id===id&&f.choice===r.choice)));
         if (supportedBest && plan.action !== "variant") lines.push(`${copy.best} ${shoppingText(input.choices[ranked[0] - 1].productTitle, 180)}.`);
-        const requestedAttributes=plan.action === "compare" ? comparisonAttributes.filter(a=>a.ask.test(norm(turn.text))) : [];
         for (const n of ranked) {
           const reason = result.reasons.find(r => r.choice === n);
           const choiceFacts=facts.filter(f=>f.choice===n);
@@ -280,11 +299,10 @@ export function createShoppingIntelligence(deps: {
           lines.push(`${label} ${shoppingText(input.choices[lightest.choice-1].productTitle,180)} (${lightest.weight!.label}).`);
         }
         const hasFacts = facts.length > 0;
-        const incompleteAttributes=requestedAttributes.filter(a=>input.choices.some((_,i)=>!facts.some(f=>f.choice===i+1 && a.fact.test(f.text))));
         // Comparing documented facts is useful without endorsing suitability.
         // Empty evidence cannot become a recommendation, regardless of model output.
         const priceOnly = plan.action === "compare" && requestedAttributes.length === 0 && /\b(?:prices?|costs?|precios?|costos?)\b|מחירים|מחיר/u.test(norm(turn.text)) && !/\b(?:better|suitab|beginner|weight|lighter|material|ingredient|mejor|principiante|peso)\b|מתאים|מתחיל|משקל|קל יותר/u.test(norm(turn.text));
-        const needsDetail = input.choices.length > 0 && !priceOnly && (incompleteAttributes.length > 0 || (!requestedAttributes.length && result.missing && (!plan.policy || result.missingAttributes.length > 0)) || (!hasFacts && plan.action !== "variant"));
+        const needsDetail = !catalogOnly && input.choices.length > 0 && !priceOnly && (incompleteAttributes.length > 0 || (!requestedAttributes.length && result.missing && (!plan.policy || result.missingAttributes.length > 0)) || (!hasFacts && plan.action !== "variant"));
         if (needsDetail) {
           const locale=shoppingLocale(turn.locale);
           const gaps=[...new Set(incompleteAttributes.length ? incompleteAttributes.map(a=>a.key) : result.missingAttributes.length ? result.missingAttributes : ["specifications" as const])];
@@ -293,8 +311,10 @@ export function createShoppingIntelligence(deps: {
         // Known policy evidence survives a model omission; missing policies
         // produce one notice, including when several policy topics were asked.
         lines.push(...policyReply(result.policyIds));
+        diagnostic(catalogOnly ? "catalog_only" : needsDetail ? "insufficient_evidence" : "grounded");
         return { text: lines.join("\n"), variantIds: result.variantIds, missing: result.missing, ranked };
-      } catch {
+      } catch (error) {
+        diagnostic("failure", error instanceof ShoppingModelFailure ? error.stage : stage);
         const ranked=boundedRanking([],input.choices,plan,input.limit);
         const details=ranked.flatMap(n=>{
           const source=facts.filter(f=>f.choice===n).slice(0,2);

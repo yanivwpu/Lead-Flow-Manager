@@ -1,3 +1,4 @@
+import type { ShoppingAnswerDiagnostic } from "../server/shopping/diagnostics";
 import { eq } from "drizzle-orm";
 import * as schema from "../shared/schema";
 import { catalogFixture } from "./shopify-catalog-fixture";
@@ -8,7 +9,7 @@ import { createShoppingIntelligence, type ShoppingModel } from "../server/shoppi
 import { createShoppingService, type ShoppingSessionStore } from "../server/shopping/service";
 import { shoppingSettings, type ShoppingState } from "../shared/shoppingAssistant";
 
-export async function intelligenceFixture(model:ShoppingModel, sparse = false) {
+export async function intelligenceFixture(model:ShoppingModel, sparse = false, diagnostic?: (event:ShoppingAnswerDiagnostic)=>void) {
  const f=await catalogFixture();const sources:Record<string,string>={};
  const merchant = {
   "tenant-a": {category:"Snowboard",prices:["500","650","50","350"],policy:"Unridden boards can be returned within 14 days.",descriptions:["Designed for beginners. Weight 2.4 kg. Rider weight range 160–200 pounds.","Designed for experienced riders. Weight 2.8 kg.","Excluded display board.","Designed for beginners. Weight 3.1 kg. Rider weight range 160–200 pounds."]},
@@ -25,7 +26,7 @@ export async function intelligenceFixture(model:ShoppingModel, sparse = false) {
  }
  const commerce=createCommerceStore(f.database,fixtureInventoryRequest(f.database));
  let missingPolicy=false;
- const intelligence=createShoppingIntelligence({model,knowledge:async id=>({instructions:"Prefer supported customer suitability over soft preferred tags. Never claim higher price proves quality.",evidence:missingPolicy?[]:[{id:"returns",text:merchant[id as keyof typeof merchant].policy}]})});
+ const intelligence=createShoppingIntelligence({model,diagnostic,knowledge:async id=>({instructions:"Prefer supported customer suitability over soft preferred tags. Never claim higher price proves quality.",evidence:missingPolicy?[]:[{id:"returns",text:merchant[id as keyof typeof merchant].policy}]})});
  function conversation(userId:"tenant-a"|"tenant-b",locale="en"){
   let state:ShoppingState|null=null,event=0;
   const sessions:ShoppingSessionStore={withTurn:async(_turn,run)=>run(state,async next=>{state=next;})};
@@ -44,7 +45,7 @@ export const fixtureShoppingModel:ShoppingModel=async(system,input:any)=>{
   const optionValues=/blue|azul|כחול/u.test(text)?["Blue"]:/black|negro|שחור/u.test(text)?["Black"]:[];
   const relativeSize=/smaller|peque|קטנה|קטן/u.test(text)?"smaller":null;
   const action=optionValues.length||relativeSize?"variant":/compar|difference|lighter|better|why|השו|קל יותר|מתחיל/u.test(text)&&previous?"compare":previous&&/under|hasta|מתחת|lightweight|ligero|קל משקל|expensive|caro|יקר/u.test(text)?"refine":"search";
-  return {action,query:previous?.query??(/snowboard|tabla|סנובורד/u.test(text)?"Snowboard":"Moisturizer"),references,optionValues,relativeSize,preference:previous?.preference??input.text,moreExpensive:/expensive|caro|יקר/u.test(text),policy};
+  return {action,query:previous?.query??(/snowboard|tabla|סנובורד/u.test(text)?"Snowboard":"Moisturizer"),references,optionValues,relativeSize,preference:previous?.preference??(!previous&&/what options|qué opciones|אילו אפשרויות/iu.test(input.text)?null:input.text),moreExpensive:/expensive|caro|יקר/u.test(text),policy};
  }
  const ranked=input.choices.map((_:unknown,i:number)=>i+1).sort((a:number,b:number)=>Number(!input.choices[a-1].productTitle.endsWith(" 1"))-Number(!input.choices[b-1].productTitle.endsWith(" 1")));
  const variantIds=input.variants.filter((v:any)=>v.productId===(input.choices[input.plan.references.length?0:0]?.productId)&&Array.isArray(v.options)&&v.options.some((o:any)=>input.plan.relativeSize?o.name==="Size"&&o.value==="S":o.name==="Color"&&o.value===input.plan.optionValues[0])).map((v:any)=>v.id);
