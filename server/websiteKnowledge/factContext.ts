@@ -23,6 +23,7 @@ import { detectFactConflicts } from "@shared/businessKnowledgeFacts";
 import { replaceRetrievedBookingWithVerifiedUrl } from "@shared/verifiedBookingUrl";
 import { listPublishedFacts } from "./factStore";
 import { knowledgeFactsActiveForWorkspace } from "./knowledgeFlags";
+import { factBelongsToShopifyStore } from "@shared/shopifyKnowledgeAttribution";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -77,6 +78,8 @@ export async function buildTurnGrounding(params: {
   limit?: number;
   /** Optional strict source allowlist for store-scoped commerce, applied BEFORE retrieval and conflict detection. */
   allowedSourceIds?: ReadonlySet<string>;
+  /** Source URLs AND recorded final fact/provenance URLs must match these verified Shopify hosts. */
+  allowedSourceHosts?: ReadonlySet<string>;
 }): Promise<TurnGrounding> {
   if (!knowledgeFactsActiveForWorkspace(params.knowledgeRow)) {
     return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
@@ -84,7 +87,11 @@ export async function buildTurnGrounding(params: {
 
   const published = await getPublishedFactsCached(params.userId, params.freshnessPolicyRaw);
   const facts = params.allowedSourceIds
-    ? published.facts.filter(f => !!f.sourceId && params.allowedSourceIds!.has(f.sourceId))
+    ? (params.allowedSourceHosts
+      ? published.facts.filter(f => factBelongsToShopifyStore(
+          f, params.allowedSourceIds!, params.allowedSourceHosts!,
+        ))
+      : []) // Missing verified final-origin host allowlist fails closed.
     : published.facts;
   const policy = published.policy;
   if (facts.length === 0) {
