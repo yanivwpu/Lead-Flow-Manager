@@ -112,6 +112,7 @@ jobs:
           node --import tsx tests/shopping-assistant.test.ts
           node --import tsx tests/shopping-ucp.test.ts
           node --import tsx tests/shopping-intelligence.test.ts
+          node --import tsx --test tests/shopify-merchant-knowledge-source-isolation.test.ts
           node --import tsx tests/shopping-intelligence-model.test.ts
           node --import tsx tests/shopping-live-reasoning.test.ts
           node --import tsx tests/shopping-live-reasoning-model.test.ts
