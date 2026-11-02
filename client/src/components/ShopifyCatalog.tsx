@@ -1,5 +1,5 @@
 import { ShoppingSettings } from "./ShoppingSettings";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
@@ -26,6 +26,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
   const [variantHistory, setVariantHistory] = useState<
     Array<string | undefined>
   >([]);
+  const detailsRef = useRef<HTMLElement>(null);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCategory, setSearchCategory] = useState("");
@@ -150,6 +151,11 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
     setHistory([]);
     setError("");
   }, [user?.id]);
+  // The editor is below the paginated grid. Selecting a product must reveal
+  // it immediately instead of leaving the user at the clicked card.
+  useEffect(() => {
+    if (selected) detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selected?.id]);
   return (
     <div className="space-y-4">
       {showShoppingSettings && <ShoppingSettings />}
@@ -157,6 +163,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
         authorizationOrigin={authorizationOrigin}
         status={status.data}
         items={products.data?.items ?? []}
+        selectedProductId={selected?.id}
         loading={status.isLoading || products.isLoading}
         error={error || status.error?.message || products.error?.message}
         query={query}
@@ -239,7 +246,9 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
       </div>
       {currentProduct && (
         <section
-          className="rounded-xl border bg-white p-4 space-y-4"
+          id="shopify-product-details"
+          ref={detailsRef}
+          className="scroll-mt-24 rounded-xl border bg-white p-4 space-y-4"
           aria-label={t("salesCatalog.commerce.details")}
         >
           <div className="flex justify-between gap-3">
