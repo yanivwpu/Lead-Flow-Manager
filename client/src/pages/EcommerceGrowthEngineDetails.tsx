@@ -72,7 +72,7 @@ const copy = {
     ],
     footerTitle: "More conversations. More opportunities to convert.",
     footerDescription: "Bring Shopify and customer messaging together, then configure the journeys that fit your business.",
-    requirements: "Get started: connect Shopify, activate your engine, complete AI Brain business knowledge, and customize journeys. WhatsApp follow-ups can be enabled after the required channel, consent and template checks.",
+    requirements: "Get started: connect Shopify, activate your engine, and customize journeys. Complete AI Brain business knowledge to improve product and policy answers. WhatsApp follow-ups can be enabled after the required channel, consent and template checks.",
   },
   es: {
     eyebrow: "MOTOR DE CRECIMIENTO PARA COMERCIO ELECTRÓNICO",
@@ -136,7 +136,7 @@ const copy = {
     ],
     footerTitle: "Más conversaciones. Más oportunidades de convertir.",
     footerDescription: "Conecta Shopify con tus canales y prepara los recorridos adecuados.",
-    requirements: "Empieza conectando Shopify, activando el motor, completando el conocimiento de AI Brain y configurando tus recorridos. Los mensajes de WhatsApp pueden habilitarse después de verificar el canal, consentimiento y plantillas.",
+    requirements: "Empieza en cuatro pasos: conecta Shopify, activa el motor, completa el conocimiento comercial de AI Brain y personaliza tus recorridos. Los mensajes de WhatsApp pueden habilitarse después de verificar el canal, consentimiento y plantillas.",
   },
   he: {
     eyebrow: "מנוע הצמיחה למסחר אלקטרוני",
@@ -200,7 +200,7 @@ const copy = {
     ],
     footerTitle: "יותר שיחות. יותר הזדמנויות מכירה.",
     footerDescription: "מחברים Shopify והודעות לקוחות ומגדירים את התהליכים המתאימים לעסק.",
-    requirements: "מתחילים בחיבור Shopify, בהפעלת המנוע, בהשלמת הידע העסקי ב-AI Brain ובהתאמת מסעות הלקוח. הודעות WhatsApp ניתנות להפעלה לאחר בדיקות חיבור הערוץ, ההסכמה והתבניות.",
+    requirements: "מתחילים בארבעה שלבים: מחברים Shopify, מפעילים את המנוע, משלימים ידע עסקי ב-AI Brain ומתאימים את מסעות הלקוח. הודעות WhatsApp ניתנות להפעלה לאחר בדיקות חיבור הערוץ, ההסכמה והתבניות.",
   },
 } as const;
 
