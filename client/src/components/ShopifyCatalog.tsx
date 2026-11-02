@@ -244,14 +244,14 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
           <DialogContent
             id="shopify-product-details"
             data-testid="shopify-product-editor-dialog"
-            className="max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto"
+            className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl flex-col overflow-hidden"
             dir={i18n.language.startsWith("he") ? "rtl" : "ltr"}
           >
             <DialogHeader>
               <DialogTitle>{currentProduct.title}</DialogTitle>
               <DialogDescription>{t("salesCatalog.commerce.readOnly")}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pe-2">
               {currentProduct.description && <p className="text-sm text-gray-600">{currentProduct.description}</p>}
           <p className="text-sm">
             {currentProduct.collections.map((c) => c.title).join(" · ")}
@@ -267,6 +267,38 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
               />
             ))}
           </div>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.guidance")}
+            </span>
+            <Textarea
+              value={guidance}
+              maxLength={1500}
+              onChange={(e) => setGuidance(e.target.value)}
+            />
+            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.informationHelp")}</span>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.notes")}
+            </span>
+            <Textarea
+              value={notes}
+              maxLength={2000}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.tags")}
+            </span>
+            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.shoppingRulesHint")}</span>
+            <Input
+              value={tags}
+              maxLength={800}
+              onChange={(e) => setTags(e.target.value)}
+            />
+          </label>
           <div className="overflow-x-auto">
             <table className="w-full text-start text-sm">
               <thead>
@@ -347,47 +379,17 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
               {t("salesCatalog.commerce.openShopify")}
             </a>
           )}
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.guidance")}
-            </span>
-            <Textarea
-              value={guidance}
-              maxLength={1500}
-              onChange={(e) => setGuidance(e.target.value)}
-            />
-            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.informationHelp")}</span>
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.notes")}
-            </span>
-            <Textarea
-              value={notes}
-              maxLength={2000}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.tags")}
-            </span>
-            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.shoppingRulesHint")}</span>
-            <Input
-              value={tags}
-              maxLength={800}
-              onChange={(e) => setTags(e.target.value)}
-            />
-          </label>
-          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" disabled={save.isPending} onClick={() => setSelected(null)}>
-              {t("salesCatalog.commerce.close")}
-            </Button>
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
-              {t("salesCatalog.commerce.save")}
-            </Button>
-          </div>
+            </div>
+            <div className="shrink-0 border-t pt-3">
+              {error && <p role="alert" className="mb-2 text-sm text-red-700">{error}</p>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" disabled={save.isPending} onClick={() => setSelected(null)}>
+                  {t("salesCatalog.commerce.close")}
+                </Button>
+                <Button disabled={save.isPending} onClick={() => save.mutate()}>
+                  {t("salesCatalog.commerce.save")}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
