@@ -41,9 +41,14 @@ test("Shopify source discovery reuses AI Brain's existing read, add, analyze and
 });
 
 
-test("Store-page discovery has a dedicated rate bucket before the broad AI route",()=>{
-  const rule=findRateLimitRule("/api/ai/knowledge/shopify-page-suggestions","GET");
-  assert.equal(rule?.id,"shopify-knowledge-discovery");
-  assert.equal(rule?.limit,4);
+test("Shopify knowledge suggestions enforce an explicit user-scoped limit before provider access",()=>{
+  const route=readFileSync("server/websiteKnowledge/knowledgeRoutes.ts","utf8");
+  const start=route.indexOf('app.get("/api/ai/knowledge/shopify-page-suggestions"');
+  assert.ok(start>=0);
+  const handler=route.slice(start, start+1900);
+  assert.ok(handler.includes('consumeRateLimit(`shopify:knowledge-page-suggestions:user:${userId}`, 4, windowMs)'));
+  assert.ok(handler.includes('res.status(429)'));
+  assert.ok(handler.indexOf("consumeRateLimit(")<handler.indexOf("resolveCatalogInstallation(db, userId)"));
+  assert.equal(findRateLimitRule("/api/ai/knowledge/shopify-page-suggestions","GET")?.id,"ai");
   assert.equal(findRateLimitRule("/api/ai/knowledge/sources","GET")?.id,"ai");
 });
