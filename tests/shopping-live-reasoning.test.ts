@@ -125,3 +125,17 @@ test("Codex review: feature refinements rank evidence and negated experience ret
   assert.equal(called,true);assert.deepEqual(result.ranked,[2,1]);assert.match(result.text,/Fragrance free/);
  }finally{await f.cleanup();}
 });
+
+
+test("Codex review: non-keyword suitability descriptions reach semantic ranking before truncation",async()=>{
+ const f=await liveReasoningFixture(fixtureShoppingModel);
+ try{
+  const c=f.conversation("tenant-a");await c.turn(liveMessages.en[0]);
+  const state={...c.state()!,preference:"beginner"};
+  const products=(await f.commerce.products!("tenant-a",f.sources["tenant-a"],state.choices.slice(0,2).map(c=>c.productId),{},true)).map((p,i)=>({...p,description:i===0?"Designed for experienced riders.":"An entry-level board for first-time riders."}));
+  let calls=0;
+  const smart=createShoppingIntelligence({knowledge:async()=>({instructions:"",evidence:[]}),model:async()=>{calls++;return {ranked:[2,1],reasons:[{choice:2,evidenceIds:["c2f0"]}],policyIds:[],missing:false,variantIds:[]};}});
+  const result=await smart.answer({turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"What would you recommend for a beginner?"},state,plan:{action:"search",query:null,references:[],optionValues:[],relativeSize:null,preference:"beginner",moreExpensive:false,policy:false},products,choices:state.choices.slice(0,2),limit:1});
+  assert.equal(calls,1);assert.deepEqual(result.ranked,[2]);assert.match(result.text,/entry-level board for first-time riders/);
+ }finally{await f.cleanup();}
+});

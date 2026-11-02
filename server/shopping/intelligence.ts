@@ -245,10 +245,9 @@ export function createShoppingIntelligence(deps: {
         const requestedBeginner=(beginnerQualification(turn.text)??beginnerQualification(state.preference??""))===true;
         const recommendation=/\b(?:recommend\w*|suggest\w*|best|better|suitab\w*|beginners?|recom\w*|mejor|conviene|principiante\w*)\b|מומל|ממלי|מתאים|מתחיל/u.test(norm(turn.text));
         const catalogOnly=plan.action === "search" && !recommendation && !state.preference && !plan.preference;
-        const missingBeginner=recommendation && requestedBeginner && input.choices.some((_,i)=>!facts.some(f=>f.choice===i+1 && /\b(?:beginners?|experienced|suitable|designed for|principiantes?|experimentados?)\b|מתחיל|מנוסה|מתאים/iu.test(f.text)));
         const requestedAttributes=plan.action === "compare" ? comparisonAttributes.filter(a=>a.ask.test(norm(turn.text))) : [];
         const incompleteAttributes=requestedAttributes.filter(a=>input.choices.some((_,i)=>!facts.some(f=>f.choice===i+1 && a.fact.test(f.text))));
-        const insufficient = facts.length === 0 || missingBeginner || incompleteAttributes.length > 0;
+        const insufficient = facts.length === 0 || incompleteAttributes.length > 0;
         stage="provider";
         const bypassModel = (catalogOnly || insufficient) && plan.action !== "variant";
         const raw = bypassModel ? undefined : await deps.model(ANSWER_PROMPT, {
