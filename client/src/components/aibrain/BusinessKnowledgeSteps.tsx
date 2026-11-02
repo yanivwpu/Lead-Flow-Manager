@@ -541,6 +541,8 @@ export function BusinessKnowledgeSteps({
 }) {
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState("");
+  const [shopifySuggestions, setShopifySuggestions] = useState<Array<{url:string;label:string}>>([]);
+  const [addingShopifyPages, setAddingShopifyPages] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [removingFactId, setRemovingFactId] = useState<string | null>(null);
   const [liveDataOpen, setLiveDataOpen] = useState(false);
@@ -639,6 +641,40 @@ export function BusinessKnowledgeSteps({
       toast({ title: "Could not add page", description: err.message, variant: "destructive" });
     },
   });
+
+  // Suggestions are read-only and not AI knowledge until a merchant adds,
+  // analyzes, reviews, and explicitly publishes them through this same workflow.
+  const suggestShopifyPages = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/ai/knowledge/shopify-page-suggestions");
+      return res.json() as Promise<{ connected: boolean; suggestions: Array<{url:string;label:string}> }>;
+    },
+    onSuccess: (data) => {
+      setShopifySuggestions(data.suggestions);
+      if (!data.connected) toast({ title: "Connect Shopify first", description: "Link your store to discover public pages." });
+      else if (!data.suggestions.length) toast({ title: "No accessible store pages found", description: "You can still enter policy or FAQ page links manually." });
+    },
+    onError: () => toast({ title: "Could not check store pages", description: "Please try again or add a page manually.", variant: "destructive" }),
+  });
+  const alreadyPresent = new Set((sourcesQuery.data?.sources ?? []).map(source => source.url));
+  const pendingShopifySuggestions = shopifySuggestions.filter(item => !alreadyPresent.has(item.url));
+  const addShopifySuggestedPages = async () => {
+    if (addingShopifyPages || !pendingShopifySuggestions.length) return;
+    setAddingShopifyPages(true);
+    try {
+      // Use the existing tenant-guarded knowledge source API. Do not scan or publish.
+      for (const item of pendingShopifySuggestions.slice(0, 5)) {
+        await addSourceMutation.mutateAsync(item.url);
+      }
+      setShopifySuggestions([]);
+      toast({ title: "Store pages added", description: "Next, select Analyze pages, review the facts, and publish approved knowledge." });
+    } catch {
+      // The existing mutation already shows the underlying safe error.
+      void queryClient.invalidateQueries({ queryKey: SOURCES_KEY });
+    } finally {
+      setAddingShopifyPages(false);
+    }
+  };
 
   const removeSourceMutation = useMutation({
     mutationFn: async (sourceId: string) => {
@@ -877,6 +913,36 @@ export function BusinessKnowledgeSteps({
                 Add page
               </Button>
             </div>
+
+            {liveBusinessDataQuery.data?.providers.some(p => p.id === "shopify" && p.status === "connected") && (
+              <div className="rounded-lg border border-violet-200/80 bg-violet-50/40 px-3 py-3 space-y-2" data-testid="shopify-knowledge-suggestions">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm"
+                    disabled={suggestShopifyPages.isPending || addingShopifyPages}
+                    onClick={() => suggestShopifyPages.mutate()}
+                    data-testid="button-find-shopify-knowledge-pages">
+                    {suggestShopifyPages.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <ShoppingBag className="mr-1.5 h-3.5 w-3.5"/>}
+                    Find Shopify store pages
+                  </Button>
+                  <span className="text-xs text-slate-600">Find public FAQs and policies; you decide what AI learns.</span>
+                </div>
+                {shopifySuggestions.length > 0 && (
+                  <div className="space-y-2">
+                    <ul className="space-y-1 text-xs text-slate-700">
+                      {shopifySuggestions.map(item => (
+                        <li key={item.url}><span className="font-semibold">{item.label}:</span> <span className="break-all">{item.url}</span></li>
+                      ))}
+                    </ul>
+                    {pendingShopifySuggestions.length > 0 ?
+                      <Button type="button" size="sm" disabled={addingShopifyPages || addSourceMutation.isPending}
+                        onClick={() => void addShopifySuggestedPages()} data-testid="button-add-shopify-knowledge-pages">
+                        {addingShopifyPages ? "Adding pages…" : `Add ${pendingShopifySuggestions.length} pages to AI Brain`}
+                      </Button> : <p className="text-xs text-slate-500">All detected pages are already listed.</p>}
+                    <p className="text-xs text-slate-600">Adding pages does not publish anything. Analyze, review and approve the facts before they can be used.</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {sources.length > 0 ? (
               /* Bounded: a workspace with dozens of pages must not push the rest of the
