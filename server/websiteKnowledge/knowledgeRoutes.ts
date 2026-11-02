@@ -12,6 +12,7 @@ import { resolveCatalogInstallation } from "../salesCatalog/shopify/installation
 import { shopifyCatalogRequest, SHOPIFY_CATALOG_META_QUERY } from "../salesCatalog/shopify/api";
 import { suggestShopifyKnowledgePages } from "./shopifyPageSuggestions";
 import { consumeRateLimit, setRetryAfterHeader } from "../rateLimitMiddleware";
+import { rateLimit } from "express-rate-limit";
 import { parseKnowledgeFreshnessPolicy } from "@shared/businessKnowledgeFacts";
 import { buildKnowledgeReviewPayload } from "@shared/knowledgeReview";
 import { assertSafePublicHttpUrl, WebsiteKnowledgeScrapeError } from "../websiteKnowledgeScraper";
@@ -47,6 +48,15 @@ async function loadFreshnessPolicy(userId: string) {
   };
 }
 
+// Recognized Express middleware runs before authentication and the Shopify API.
+// Our distributed, authenticated user-scoped limiter below remains the stricter gate.
+const shopifyKnowledgeIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
 export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps): void {
   const guard = async (req: Request, res: Response): Promise<boolean> => {
     if (!req.user) {
@@ -62,7 +72,7 @@ export function registerKnowledgeV2Routes(app: Express, deps: KnowledgeRouteDeps
 
   // Reuse the existing knowledge-source review flow. Shopify pages are only
   // proposed here: no source writes, scans, approvals or customer sends.
-  app.get("/api/ai/knowledge/shopify-page-suggestions", async (req, res) => {
+  app.get("/api/ai/knowledge/shopify-page-suggestions", shopifyKnowledgeIpLimiter, async (req, res) => {
     res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
     if (!(await guard(req, res))) return;
     try {
