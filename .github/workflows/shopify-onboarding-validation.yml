@@ -70,6 +70,7 @@ jobs:
           python3 tests/shopify-staging-config.test.py
           python3 tests/shopify-production-config.test.py
           npx tsx --test tests/shopify-webhook-registration.test.ts
+          npx tsx --test tests/shopify-knowledge-suggestions.test.ts
       - name: Fail-closed scope and webhook verification regressions
         run: npx tsx --test tests/shopify-webhook-health.test.ts tests/shopify-webhook-health-ui.test.tsx
       - name: Durable order delivery and interrupted-write recovery
