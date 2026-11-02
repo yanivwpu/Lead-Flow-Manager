@@ -46,7 +46,7 @@ export async function suggestShopifyKnowledgePages(
     // A Shopify storefront may redirect missing pages to its home or login page.
     // Never mislabel those fallbacks as a detected policy or FAQ.
     const candidate=slots.find(slot=>slot.key===result.key);
-    if(!candidate || url.pathname.replace(/\\/$/,"") !== new URL(candidate.urlRaw).pathname.replace(/\\/$/,""))continue;
+    if(!candidate || url.pathname.replace(/\/$/,"") !== new URL(candidate.urlRaw).pathname.replace(/\/$/,""))continue;
     // A Shopify storefront may redirect to a different website.
     // Do not silently claim that third-party or login pages belong to this shop.
     if(url.hostname.toLowerCase()!==expected || url.protocol!=="https:" ||
