@@ -33,7 +33,7 @@ test("Shopify source discovery reuses AI Brain's existing read, add, analyze and
   assert.match(route,/resolveCatalogInstallation\(db, userId\)/);
   assert.match(route,/normalizeShopifyShopDomain\(metadata\?\.shop\?\.myshopifyDomain\)/);
   assert.match(ui,/button-find-shopify-knowledge-pages/);
-  assert.match(ui,/shopifyConnectionQuery.data\\?\\.connected === true/);
+  assert.ok(ui.includes("shopifyConnectionQuery.data?.connected === true"));
   assert.match(ui,/button-add-shopify-knowledge-pages/);
   assert.match(ui,/addSourceMutation\.mutateAsync\(item\.url\)/);
   assert.match(ui,/review the facts/i);
