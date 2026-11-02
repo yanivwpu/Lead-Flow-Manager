@@ -91,6 +91,7 @@
     "embla-carousel-react": "^8.6.0",
     "emoji-picker-react": "^4.16.1",
     "express": "^4.22.1",
+    "express-rate-limit": "^8.5.2",
     "express-session": "^1.18.1",
     "ffmpeg-static": "^5.2.0",
     "form-data": "^2.5.5",
