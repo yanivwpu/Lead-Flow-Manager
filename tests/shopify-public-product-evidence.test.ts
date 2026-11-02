@@ -51,10 +51,10 @@ test("Refuses instruction-shaped metafields even when marked public",async()=>{
 
 test("merchant-approved AI Guidance retains four evidence slots ahead of auto-imports",()=>{
  const src=readFileSync("server/shopping/intelligence.ts","utf8");
- const start=src.indexOf("return product ? [...sentences(product.aiGuidance");
+ const start=src.indexOf("return product ? [...sentences(product.description");
  assert.ok(start >= 0);
  const chunk=src.slice(start,start+520);
- assert.ok(chunk.indexOf("sentences(product.aiGuidance") < chunk.indexOf("sentences(product.description)"));
- assert.ok(chunk.indexOf("sentences(product.description)") < chunk.indexOf("product.shopifyEvidence"));
+ assert.ok(chunk.indexOf("sentences(product.description)") < chunk.indexOf("sentences(product.aiGuidance"));
+ assert.ok(chunk.indexOf("sentences(product.aiGuidance") < chunk.indexOf("product.shopifyEvidence"));
  assert.ok(chunk.includes(".slice(0,18)"));
 });
