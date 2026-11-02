@@ -1,5 +1,6 @@
 import React from "react";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nextProvider } from "react-i18next";
@@ -179,4 +180,16 @@ test("cards show independent localized publication and product-wide availability
         assert.ok(!html.includes(resource.salesCatalog.commerce.not_published));
     }
   }
+});
+
+test("catalog product editing stays in a modal with AI Guidance and Save visible, not below the product grid", () => {
+  const source = readFileSync("client/src/components/ShopifyCatalog.tsx", "utf8");
+  assert.match(source, /<Dialog open=\{!!selected\}/);
+  assert.match(source, /data-testid="shopify-product-editor-dialog"/);
+  assert.match(source, /<DialogTitle>\{currentProduct.title\}<\/DialogTitle>/);
+  assert.match(source, /min-h-0 flex-1 space-y-4 overflow-y-auto/);
+  assert.match(source, /shrink-0 border-t pt-3/);
+  assert.match(source, /salesCatalog\.commerce\.guidance/);
+  assert.match(source, /onClick=\{\(\) => save\.mutate\(\)\}/);
+  assert.doesNotMatch(source, /scrollIntoView/);
 });
