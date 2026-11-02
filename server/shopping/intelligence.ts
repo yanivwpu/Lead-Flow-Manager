@@ -283,7 +283,7 @@ export function createShoppingIntelligence(deps: {
         const incompleteAttributes=requestedAttributes.filter(a=>input.choices.some((_,i)=>!facts.some(f=>f.choice===i+1 && a.fact.test(f.text))));
         // Comparing documented facts is useful without endorsing suitability.
         // Empty evidence cannot become a recommendation, regardless of model output.
-        const priceOnly = plan.action === "compare" && /\b(?:prices?|costs?|precios?|costos?)\b|מחירים|מחיר/u.test(norm(turn.text)) && !/\b(?:better|suitab|beginner|weight|lighter|material|ingredient|mejor|principiante|peso)\b|מתאים|מתחיל|משקל|קל יותר/u.test(norm(turn.text));
+        const priceOnly = plan.action === "compare" && requestedAttributes.length === 0 && /\b(?:prices?|costs?|precios?|costos?)\b|מחירים|מחיר/u.test(norm(turn.text)) && !/\b(?:better|suitab|beginner|weight|lighter|material|ingredient|mejor|principiante|peso)\b|מתאים|מתחיל|משקל|קל יותר/u.test(norm(turn.text));
         const needsDetail = input.choices.length > 0 && !priceOnly && (incompleteAttributes.length > 0 || (!requestedAttributes.length && result.missing && (!plan.policy || result.missingAttributes.length > 0)) || (!hasFacts && plan.action !== "variant"));
         if (needsDetail) {
           const locale=shoppingLocale(turn.locale);

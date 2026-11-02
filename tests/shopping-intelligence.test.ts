@@ -244,6 +244,11 @@ test("sparse real-store shape compares verified facts without inventing beginner
   assert.deepEqual(compared.state.choices.map(c=>c.variantId),before);
   const mixed=(await c.turn("Which is lighter, and can I return it?"))!;
   assert.ok(mixed);assert.match(mixed.reply,/product weight/);assert.match(mixed.reply,/14 days/);
+  const prices=(await c.turn("Compare the first and second prices"))!;
+  assert.doesNotMatch(prices.reply,/does not establish/);
+  const combined=(await c.turn("Compare the first and second prices and ingredients"))!;
+  assert.match(combined.reply,/does not establish ingredients/);
+  assert.equal(combined.state.informationQuestionsAsked?.length,1,"do not repeat an information question after intervening turns");
  } finally {await f.cleanup();}
 });
 

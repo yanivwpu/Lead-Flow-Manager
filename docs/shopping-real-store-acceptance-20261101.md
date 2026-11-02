@@ -44,4 +44,10 @@ Deterministic coverage includes saved references, preferences, explicit/relative
 
 Actual model acceptance uses the existing extraction/reply model registry with the isolated native database. The expanded sparse EN/ES/HE conversations include qualification/budget, comparison, contextual weight and merchant-policy follow-ups. Provider failures and failed acceptance iterations were used to identify and fix the issues above; final results and transcripts are recorded separately.
 
-Validation status will be finalized on the draft PR after the final local checks and hosted CI/CodeQL complete.
+Local validation passed: 86 broad catalog/channel checks; 72 checkout-safety regressions; 57 focused native/catalog/channel checks, including 13 Shopping intelligence tests. After final review tightened mixed price/attribute handling, all 13 intelligence tests passed again. The production build passed. TypeScript comparison against the exact base has 97 baseline and 97 candidate diagnostics, zero added.
+
+Actual provider acceptance passed 39 customer turns (30 documented + 9 sparse) in EN/ES/HE, with 53 successful provider calls through the existing model registry (43 documented + 10 sparse). See `shopping-real-store-model-acceptance-20261101.json` and `shopping-real-store-model-acceptance-sparse-20261101.json` for the final transcripts. Sparse turns avoid an unnecessary evidence-selection call when no facts exist.
+
+Final review also fixed price-plus-attribute requests so missing attributes are not suppressed by the price-only shortcut. Regression coverage confirms distinct fallback products, known merchant policies surviving model failure, no repeated clarification after intervening turns, and price-only replies without suitability boilerplate.
+
+Draft PR: https://github.com/yanivwpu/Lead-Flow-Manager/pull/255. Final-head hosted CI and security-extended CodeQL results are recorded in the PR description after completion. Production catalog completeness remains a merchant-data task; this change does not manufacture the missing specifications.
