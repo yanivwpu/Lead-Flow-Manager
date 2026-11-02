@@ -5,7 +5,6 @@ import { findRateLimitRule } from "../server/rateLimitMiddleware";
 import {
   suggestShopifyKnowledgePages, trustedShopifyKnowledgeOrigin,
 } from "../server/websiteKnowledge/shopifyPageSuggestions";
-import type { GuidedKnowledgeSlot, ScrapedPage, GuidedPageResult } from "../server/websiteKnowledgeScraper";
 
 test("trusted Shopify domain cannot be turned into private host or arbitrary port",()=>{
   assert.equal(trustedShopifyKnowledgeOrigin("my-store.myshopify.com"),"https://my-store.myshopify.com");
@@ -13,26 +12,17 @@ test("trusted Shopify domain cannot be turned into private host or arbitrary por
     assert.equal(trustedShopifyKnowledgeOrigin(host),null,host);
 });
 
-test("Shopify suggestions require an accessible same-store public page and never publish knowledge",async()=>{
-  let seen:GuidedKnowledgeSlot[]=[];
-  const check=async(slots:GuidedKnowledgeSlot[])=>{
-    seen=slots;
-    const pages:ScrapedPage[]=slots.map((p,i)=>({
-      key:p.key,url:p.urlRaw,text:"Confirmed public policy text. ".repeat(10),
-    }));
-    const results:GuidedPageResult[]=slots.map((p,i)=>({
-      key:p.key,label:p.label,url:p.urlRaw,status:"scanned",finalUrl:
-        i===1?"https://unrelated.example/policies/shipping-policy" :
-        i===2?"https://store.example/":p.urlRaw,
-    }));
-    return {pages,results};
-  };
-  const suggestions=await suggestShopifyKnowledgePages("store.example",check);
-  assert.equal(seen.length,5);
+test("Shopify suggestions are pure, finite candidates on exactly the verified primary domain",()=>{
+  const suggestions=suggestShopifyKnowledgePages("store.example");
+  assert.equal(suggestions.length,5);
   assert.ok(suggestions.some(s=>s.url==="https://store.example/policies/refund-policy"));
-  assert.ok(!suggestions.some(s=>s.label==="Shipping and delivery"));
-  assert.ok(!suggestions.some(s=>s.label==="Frequently asked questions"));
+  assert.ok(suggestions.some(s=>s.url==="https://store.example/policies/shipping-policy"));
   assert.ok(suggestions.every(s=>s.url.startsWith("https://store.example/")));
+  assert.deepEqual(suggestShopifyKnowledgePages("localhost"),[]);
+  const code=readFileSync("server/websiteKnowledge/shopifyPageSuggestions.ts","utf8");
+  assert.ok(!code.includes("fetchSingleKnowledgePage"));
+  assert.ok(!code.includes("scrapeGuidedWebsiteKnowledgePages"));
+  assert.ok(!code.includes("fetch("));
 });
 
 test("Shopify source discovery reuses AI Brain's existing read, add, analyze and review/publish routes",()=>{
@@ -43,6 +33,7 @@ test("Shopify source discovery reuses AI Brain's existing read, add, analyze and
   assert.match(route,/resolveCatalogInstallation\(db, userId\)/);
   assert.match(route,/normalizeShopifyShopDomain\(metadata\?\.shop\?\.myshopifyDomain\)/);
   assert.match(ui,/button-find-shopify-knowledge-pages/);
+  assert.match(ui,/shopifyConnectionQuery.data\\?\\.connected === true/);
   assert.match(ui,/button-add-shopify-knowledge-pages/);
   assert.match(ui,/addSourceMutation\.mutateAsync\(item\.url\)/);
   assert.match(ui,/review the facts/i);
