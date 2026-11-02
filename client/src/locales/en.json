@@ -3,6 +3,7 @@
     "commerce": {
       "missingDescription": "Missing product description",
       "editGuidance": "View details & edit AI guidance",
+      "optionalGuidanceNote": "AI guidance is optional. Shopify product information is used automatically.",
       "missingGuidance": "No AI selling guidance",
       "informationHelp": "For useful recommendations, add specifications and intended use to the Shopify description, then sync. Use AI Guidance below for approved selling points and suitability limits. Private notes are not customer evidence. A description alone does not guarantee enough information for every question.",
 

@@ -3375,6 +3375,8 @@ export const catalogProducts = pgTable(
     productUrl: text("product_url"),
     options: jsonb("options").notNull().default([]),
     providerTags: jsonb("provider_tags").notNull().default([]),
+    /** Storefront-public Shopify product evidence. Never retain private Admin metafields. */
+    shopifyEvidence: jsonb("shopify_evidence").notNull().default([]),
     variantCount: integer("variant_count").notNull().default(0),
     searchText: text("search_text").notNull().default(""),
     complete: boolean("complete").notNull().default(false),

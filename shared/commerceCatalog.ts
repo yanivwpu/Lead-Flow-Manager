@@ -67,6 +67,8 @@ export type CommerceProduct = {
   /** Summary across all variants, independent of the bounded variant preview. */
   availability?: "available" | "out_of_stock" | "unavailable";
   productUrl: string | null;
+  /** Bounded, publicly visible Shopify attributes, sourced from the connected shop. */
+  shopifyEvidence?: Array<{source:string;key:string;text:string}>;
   aiGuidance: string | null;
   notes: string | null;
   merchantTags: unknown;

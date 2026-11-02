@@ -45,6 +45,9 @@ export async function catalogFixture() {
   await pg.exec(
     readFileSync("migrations/0107_shared_commerce_catalog.sql", "utf8"),
   );
+  await pg.exec(
+    readFileSync("migrations/20261102_shopify_public_product_evidence.sql", "utf8"),
+  );
   await database.insert(schema.users).values([
     {
       id: "tenant-a",

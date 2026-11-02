@@ -23,6 +23,7 @@ import {
   catalogEvents,
 } from "@shared/schema";
 import { verifiedProductUrl } from "@shared/commerceCatalog";
+import { readShopifyPublicEvidence } from "./publicEvidence";
 import type { CatalogDb } from "../commerceStore";
 import {
   resolveCatalogInstallation,
@@ -912,6 +913,13 @@ export function createShopifyCatalogSync(
           (collections.cursor && collections.cursor === current?.collections)
         )
           throw new CatalogApiError("invalid_response");
+        // Optional bounded enrichment never blocks the authoritative product, price or inventory sync.
+        // OFF until the additive shopify_evidence migration and GraphQL compatibility are verified.
+        let shopifyEvidence: Awaited<ReturnType<typeof readShopifyPublicEvidence>> | undefined;
+        if (process.env.ECOMMERCE_SHOPIFY_PUBLIC_EVIDENCE_ENABLED === "true") {
+          try { shopifyEvidence = await readShopifyPublicEvidence(request, id); }
+          catch { shopifyEvidence = []; /* Fail closed, no stale facts, no provider payload in logs. */ }
+        }
         const generation = current?.generation ?? crypto.randomUUID();
         const url = verifiedProductUrl(product.onlineStoreUrl, hosts);
         await persist(async (tx) => {
@@ -955,6 +963,7 @@ export function createShopifyCatalogSync(
               : 0,
             options: product.options,
             providerTags: product.tags,
+            ...(shopifyEvidence ? { shopifyEvidence } : {}),
             providerUpdatedAt: version,
             syncedAt: new Date(),
             complete: false,
@@ -1106,7 +1115,7 @@ export function createShopifyCatalogSync(
               .update(catalogProducts)
               .set({
                 complete: true,
-                searchText: sql`${record.title} || ' ' || ${record.description} || ' ' || ${record.productType ?? ""} || ' ' || COALESCE((SELECT string_agg(COALESCE(sku,'') || ' ' || title || ' ' || options::text,' ') FROM catalog_variants WHERE product_id=${record.id}),'') || ' ' || COALESCE((SELECT string_agg(c.title,' ') FROM catalog_memberships m JOIN catalog_collections c ON c.id=m.collection_id WHERE m.product_id=${record.id}),'')`,
+                searchText: sql`${record.title} || ' ' || ${record.description} || ' ' || ${record.productType ?? ""} || ' ' || COALESCE((SELECT string_agg(COALESCE(sku,'') || ' ' || title || ' ' || options::text,' ') FROM catalog_variants WHERE product_id=${record.id}),'') || ' ' || COALESCE((SELECT string_agg(c.title,' ') FROM catalog_memberships m JOIN catalog_collections c ON c.id=m.collection_id WHERE m.product_id=${record.id}),'') || ' ' || ${shopifyEvidence?.map(f => f.text).join(" ") ?? ""}`,
               })
               .where(eq(catalogProducts.id, record.id));
             checkpoint.inventory = {
