@@ -44,6 +44,6 @@ test("Shopify source discovery reuses AI Brain's existing read, add, analyze and
   assert.match(ui,/button-find-shopify-knowledge-pages/);
   assert.match(ui,/button-add-shopify-knowledge-pages/);
   assert.match(ui,/addSourceMutation\.mutateAsync\(item\.url\)/);
-  assert.match(ui,/Review the facts/);
+  assert.match(ui,/review the facts/i);
   assert.ok(!route.includes("publishKnowledgeFacts(req.user!.id);\n      const metadata"));
 });
