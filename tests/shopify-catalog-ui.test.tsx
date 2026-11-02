@@ -93,6 +93,7 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
               onSync={() => {}}
               syncing={false}
               onSelect={() => {}}
+              selectedProductId="fixture-product"
             />
           </SalesCatalogView>
         </I18nextProvider>,
@@ -107,6 +108,9 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
     );
     assert.ok(html.includes(lng === "he" ? 'dir="rtl"' : 'dir="ltr"'));
     assert.match(html, /sm:grid-cols-2 lg:grid-cols-3/);
+    assert.ok(html.includes(resource.salesCatalog.commerce.editGuidance));
+    assert.match(html, /aria-controls="shopify-product-details"/);
+    assert.match(html, /aria-expanded="true"/);
     const blocked = render({
       ...uiStatus,
       status: "permission_required",
