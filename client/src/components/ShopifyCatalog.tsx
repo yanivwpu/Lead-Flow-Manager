@@ -1,5 +1,5 @@
 import { ShoppingSettings } from "./ShoppingSettings";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +27,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
   const [variantHistory, setVariantHistory] = useState<
     Array<string | undefined>
   >([]);
+  const guidanceRef = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCategory, setSearchCategory] = useState("");
@@ -244,6 +245,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
           <DialogContent
             id="shopify-product-details"
             data-testid="shopify-product-editor-dialog"
+            onOpenAutoFocus={(event) => { event.preventDefault(); guidanceRef.current?.focus(); }}
             className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl flex-col overflow-hidden"
             dir={i18n.language.startsWith("he") ? "rtl" : "ltr"}
           >
@@ -272,6 +274,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
               {t("salesCatalog.commerce.guidance")}
             </span>
             <Textarea
+              ref={guidanceRef}
               value={guidance}
               maxLength={1500}
               onChange={(e) => setGuidance(e.target.value)}
