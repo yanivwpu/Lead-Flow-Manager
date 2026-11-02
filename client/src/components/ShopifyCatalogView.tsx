@@ -147,9 +147,9 @@ export function ShopifyCatalogView(props: {
                   </p>
                 </div>
               </div>
-              {productInformationGaps(p).length > 0 && (
+              {productInformationGaps(p).includes("description") && (
                 <p className="mt-2 text-xs text-amber-800">
-                  {productInformationGaps(p).map(gap => t(`salesCatalog.commerce.missing${gap === "description" ? "Description" : "Guidance"}`)).join(" · ")}
+                  {t("salesCatalog.commerce.missingDescription")}
                 </p>
               )}
               <p className="mt-3 text-sm" dir="ltr">
