@@ -47,6 +47,8 @@ test("Shopify knowledge suggestions enforce an explicit user-scoped limit before
   assert.ok(start>=0);
   const handler=route.slice(start, start+1900);
   assert.ok(handler.includes('consumeRateLimit(`shopify:knowledge-page-suggestions:user:${userId}`, 4, windowMs)'));
+  assert.ok(route.includes('const shopifyKnowledgeIpLimiter = rateLimit('));
+  assert.ok(route.includes('app.get("/api/ai/knowledge/shopify-page-suggestions", shopifyKnowledgeIpLimiter, async'));
   assert.ok(handler.includes('res.status(429)'));
   assert.ok(handler.indexOf("consumeRateLimit(")<handler.indexOf("resolveCatalogInstallation(db, userId)"));
   assert.equal(findRateLimitRule("/api/ai/knowledge/shopify-page-suggestions","GET")?.id,"ai");
