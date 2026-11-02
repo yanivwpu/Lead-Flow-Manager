@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { findRateLimitRule } from "../server/rateLimitMiddleware";
 import {
   suggestShopifyKnowledgePages, trustedShopifyKnowledgeOrigin,
 } from "../server/websiteKnowledge/shopifyPageSuggestions";
@@ -46,4 +47,12 @@ test("Shopify source discovery reuses AI Brain's existing read, add, analyze and
   assert.match(ui,/addSourceMutation\.mutateAsync\(item\.url\)/);
   assert.match(ui,/review the facts/i);
   assert.ok(!route.includes("publishKnowledgeFacts(req.user!.id);\n      const metadata"));
+});
+
+
+test("Store-page discovery has a dedicated rate bucket before the broad AI route",()=>{
+  const rule=findRateLimitRule("/api/ai/knowledge/shopify-page-suggestions","GET");
+  assert.equal(rule?.id,"shopify-knowledge-discovery");
+  assert.equal(rule?.limit,4);
+  assert.equal(findRateLimitRule("/api/ai/knowledge/sources","GET")?.id,"ai");
 });
