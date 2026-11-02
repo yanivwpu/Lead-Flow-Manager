@@ -1,10 +1,11 @@
 import { ShoppingSettings } from "./ShoppingSettings";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { CommerceProduct, CommerceVariant } from "@shared/commerceCatalog";
@@ -26,6 +27,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
   const [variantHistory, setVariantHistory] = useState<
     Array<string | undefined>
   >([]);
+  const guidanceRef = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchCategory, setSearchCategory] = useState("");
@@ -157,6 +159,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
         authorizationOrigin={authorizationOrigin}
         status={status.data}
         items={products.data?.items ?? []}
+        selectedProductId={selected?.id}
         loading={status.isLoading || products.isLoading}
         error={error || status.error?.message || products.error?.message}
         query={query}
@@ -238,18 +241,20 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
         </Button>
       </div>
       {currentProduct && (
-        <section
-          className="rounded-xl border bg-white p-4 space-y-4"
-          aria-label={t("salesCatalog.commerce.details")}
-        >
-          <div className="flex justify-between gap-3">
-            <h2 className="font-semibold">{currentProduct.title}</h2>
-            <Button variant="ghost" onClick={() => setSelected(null)}>
-              {t("salesCatalog.commerce.close")}
-            </Button>
-          </div>
-          <p className="text-sm text-gray-600">{currentProduct.description}</p>
-          <p className="text-sm text-amber-800">{t("salesCatalog.commerce.informationHelp")}</p>
+        <Dialog open={!!selected} onOpenChange={(open) => { if (!open && !save.isPending) { setSelected(null); setError(""); } }}>
+          <DialogContent
+            id="shopify-product-details"
+            data-testid="shopify-product-editor-dialog"
+            onOpenAutoFocus={(event) => { event.preventDefault(); guidanceRef.current?.focus(); }}
+            className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl flex-col overflow-hidden"
+            dir={i18n.language.startsWith("he") ? "rtl" : "ltr"}
+          >
+            <DialogHeader>
+              <DialogTitle>{currentProduct.title}</DialogTitle>
+              <DialogDescription>{t("salesCatalog.commerce.readOnly")}</DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pe-2">
+              {currentProduct.description && <p className="text-sm text-gray-600">{currentProduct.description}</p>}
           <p className="text-sm">
             {currentProduct.collections.map((c) => c.title).join(" · ")}
           </p>
@@ -264,9 +269,39 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
               />
             ))}
           </div>
-          <p className="text-xs text-gray-500">
-            {t("salesCatalog.commerce.readOnly")}
-          </p>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.guidance")}
+            </span>
+            <Textarea
+              ref={guidanceRef}
+              value={guidance}
+              maxLength={1500}
+              onChange={(e) => setGuidance(e.target.value)}
+            />
+            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.informationHelp")}</span>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.notes")}
+            </span>
+            <Textarea
+              value={notes}
+              maxLength={2000}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">
+              {t("salesCatalog.commerce.tags")}
+            </span>
+            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.shoppingRulesHint")}</span>
+            <Input
+              value={tags}
+              maxLength={800}
+              onChange={(e) => setTags(e.target.value)}
+            />
+          </label>
           <div className="overflow-x-auto">
             <table className="w-full text-start text-sm">
               <thead>
@@ -347,41 +382,20 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
               {t("salesCatalog.commerce.openShopify")}
             </a>
           )}
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.guidance")}
-            </span>
-            <Textarea
-              value={guidance}
-              maxLength={1500}
-              onChange={(e) => setGuidance(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.notes")}
-            </span>
-            <Textarea
-              value={notes}
-              maxLength={2000}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">
-              {t("salesCatalog.commerce.tags")}
-            </span>
-            <span className="block text-xs text-muted-foreground">{t("salesCatalog.commerce.shoppingRulesHint")}</span>
-            <Input
-              value={tags}
-              maxLength={800}
-              onChange={(e) => setTags(e.target.value)}
-            />
-          </label>
-          <Button disabled={save.isPending} onClick={() => save.mutate()}>
-            {t("salesCatalog.commerce.save")}
-          </Button>
-        </section>
+            </div>
+            <div className="shrink-0 border-t pt-3">
+              {error && <p role="alert" className="mb-2 text-sm text-red-700">{error}</p>}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" disabled={save.isPending} onClick={() => setSelected(null)}>
+                  {t("salesCatalog.commerce.close")}
+                </Button>
+                <Button disabled={save.isPending} onClick={() => save.mutate()}>
+                  {t("salesCatalog.commerce.save")}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

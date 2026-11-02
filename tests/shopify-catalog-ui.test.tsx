@@ -1,5 +1,6 @@
 import React from "react";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nextProvider } from "react-i18next";
@@ -93,6 +94,7 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
               onSync={() => {}}
               syncing={false}
               onSelect={() => {}}
+              selectedProductId="fixture-product"
             />
           </SalesCatalogView>
         </I18nextProvider>,
@@ -107,6 +109,11 @@ test("localized responsive Shopify catalog distinguishes authorization, freshnes
     );
     assert.ok(html.includes(lng === "he" ? 'dir="rtl"' : 'dir="ltr"'));
     assert.match(html, /sm:grid-cols-2 lg:grid-cols-3/);
+    const escapedEditLabel = resource.salesCatalog.commerce.editGuidance.replaceAll("&", "&amp;");
+    assert.ok(html.includes(escapedEditLabel));
+    assert.match(html, /aria-haspopup="dialog"/);
+    assert.doesNotMatch(html, /aria-controls="shopify-product-details"/);
+    assert.match(html, /aria-expanded="true"/);
     const blocked = render({
       ...uiStatus,
       status: "permission_required",
@@ -174,4 +181,16 @@ test("cards show independent localized publication and product-wide availability
         assert.ok(!html.includes(resource.salesCatalog.commerce.not_published));
     }
   }
+});
+
+test("catalog product editing stays in a modal with AI Guidance and Save visible, not below the product grid", () => {
+  const source = readFileSync("client/src/components/ShopifyCatalog.tsx", "utf8");
+  assert.match(source, /<Dialog open=\{!!selected\}/);
+  assert.match(source, /data-testid="shopify-product-editor-dialog"/);
+  assert.match(source, /<DialogTitle>\{currentProduct.title\}<\/DialogTitle>/);
+  assert.match(source, /min-h-0 flex-1 space-y-4 overflow-y-auto/);
+  assert.match(source, /shrink-0 border-t pt-3/);
+  assert.match(source, /salesCatalog\.commerce\.guidance/);
+  assert.match(source, /onClick=\{\(\) => save\.mutate\(\)\}/);
+  assert.doesNotMatch(source, /scrollIntoView/);
 });

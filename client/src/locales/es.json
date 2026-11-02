@@ -2,6 +2,7 @@
   "salesCatalog": {
     "commerce": {
       "missingDescription": "Falta la descripción del producto",
+      "editGuidance": "Ver detalles y editar instrucciones de IA",
       "missingGuidance": "Sin orientación de venta para IA",
       "informationHelp": "Añade especificaciones y uso previsto a la descripción en Shopify y sincroniza. Usa la orientación de IA para argumentos de venta aprobados y límites de idoneidad. Las notas privadas no son información para clientes. Una descripción no garantiza información suficiente para cada pregunta.",
 
