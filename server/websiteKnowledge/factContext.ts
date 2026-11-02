@@ -75,12 +75,18 @@ export async function buildTurnGrounding(params: {
   subIntents?: string[];
   freshnessPolicyRaw?: unknown;
   limit?: number;
+  /** Optional strict source allowlist for store-scoped commerce, applied BEFORE retrieval and conflict detection. */
+  allowedSourceIds?: ReadonlySet<string>;
 }): Promise<TurnGrounding> {
   if (!knowledgeFactsActiveForWorkspace(params.knowledgeRow)) {
     return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
   }
 
-  const { facts, policy } = await getPublishedFactsCached(params.userId, params.freshnessPolicyRaw);
+  const published = await getPublishedFactsCached(params.userId, params.freshnessPolicyRaw);
+  const facts = params.allowedSourceIds
+    ? published.facts.filter(f => !!f.sourceId && params.allowedSourceIds!.has(f.sourceId))
+    : published.facts;
+  const policy = published.policy;
   if (facts.length === 0) {
     return { ...EMPTY_GROUNDING, block: { ...EMPTY_GROUNDING.block } };
   }
