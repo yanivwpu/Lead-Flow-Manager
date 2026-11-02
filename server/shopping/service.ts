@@ -90,7 +90,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    const previous=!expired && stored?.sourceId===source.id
     ? {...stored,step:stored.step==="pending"?(stored.pending?.resumeStep??"discovering"):stored.step}:null;
    let state:ShoppingState=previous?{...previous,choices:[...previous.choices]}:{version:1,sourceId:source.id,step:"discovering",intent,choices:[],quantity:1,updatedAt:new Date(stamp).toISOString(),lastEventId:turn.eventId,reply:"",consumedEventIds:[]};
-   if(plan?.action==="search" && plan.query?.toLowerCase()!==state.query?.toLowerCase())state.preference=undefined;
+   if(plan?.action==="search" && plan.query?.toLowerCase()!==state.query?.toLowerCase()) {state.preference=undefined;state.informationQuestionsAsked=undefined;}
    if(plan?.preference) state.preference=plan.preference;
    let explanation:string|undefined;
    let modelUsed=!!plan;

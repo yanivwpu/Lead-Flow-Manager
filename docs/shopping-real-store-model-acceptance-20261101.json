@@ -1,0 +1,1316 @@
+[
+  {
+    "phase": "plan",
+    "text": "I'm a beginner, weigh 180 pounds and want a snowboard under $750. What would you recommend?",
+    "output": {
+      "action": "search",
+      "query": "snowboard",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "beginner,180 pounds",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "I'm a beginner, weigh 180 pounds and want a snowboard under $750. What would you recommend?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "en",
+    "text": "I'm a beginner, weigh 180 pounds and want a snowboard under $750. What would you recommend?",
+    "reply": "1. Snowboard 1 / Red / M — USD 500\nTracked stock checked: 7 units; not reserved.\n2. Snowboard 2 / Red / M — USD 650\nTracked stock checked: 7 units; not reserved.\n3. Snowboard 4 / Red / M — USD 350\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMy strongest match for your request is Snowboard 1.\nSnowboard 1: “Designed for beginners.”\nSnowboard 2: “Designed for experienced riders.” “Weight 2.8 kg.”\nSnowboard 4: “Designed for beginners.” “Weight 3.1 kg.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Compare the first and second. Which is lighter?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "preference": "beginner,180 pounds",
+      "relativeSize": null,
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Compare the first and second. Which is lighter?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "en",
+    "text": "Compare the first and second. Which is lighter?",
+    "reply": "Snowboard 1 / Red / M — USD 500\nSnowboard 2 / Red / M — USD 650\nSnowboard 1: “Weight 2.4 kg.” “Rider weight range 160–200 pounds.”\nSnowboard 2: “Weight 2.8 kg.”\nThe lower verified price is Snowboard 1 (USD 500).\nThe lowest documented weight is Snowboard 1 (2.4 kg).",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "output": {
+      "action": "variant",
+      "query": "Snowboard",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "Blue"
+      ],
+      "relativeSize": null,
+      "preference": "beginner,180 pounds",
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-a-p1-v2"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "en",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "reply": "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.\n1. Snowboard 1 / Blue / M — USD 500\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nSnowboard 1: “Designed for beginners.”\nThe merchant's policy information:\n“Unridden boards can be returned within 14 days.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "en",
+    "text": "I'll take the first one",
+    "reply": "Snowboard 1 / Blue / M — USD 500 × 1\nTracked stock checked: 7 units; not reserved.\nPlease confirm this exact selection before checkout.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "What about a smaller size?",
+    "output": {
+      "action": "refine",
+      "query": "Snowboard",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "Blue",
+        "S"
+      ],
+      "relativeSize": "smaller",
+      "preference": "beginner,180 pounds",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "en",
+    "text": "What about a smaller size?",
+    "reply": "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.\n1. Snowboard 1 / Blue / S — USD 500\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v3"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Soy principiante, peso 180 libras y busco una tabla de snowboard hasta $750. Que recomiendas?",
+    "output": {
+      "action": "search",
+      "query": "tabla de snowboard",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "principiante, 180 libras",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Soy principiante, peso 180 libras y busco una tabla de snowboard hasta $750. Que recomiendas?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "es",
+    "text": "Soy principiante, peso 180 libras y busco una tabla de snowboard hasta $750. Que recomiendas?",
+    "reply": "1. Snowboard 1 / Red / M — USD 500\nExistencias verificadas: 7 unidades; no están reservadas.\n2. Snowboard 2 / Red / M — USD 650\nExistencias verificadas: 7 unidades; no están reservadas.\n3. Snowboard 4 / Red / M — USD 350\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nLa mejor coincidencia para tu solicitud es Snowboard 1.\nSnowboard 1: “Designed for beginners.”\nSnowboard 2: “Designed for experienced riders.” “Weight 2.8 kg.”\nSnowboard 4: “Designed for beginners.” “Weight 3.1 kg.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Compara el primero y el segundo. Cual pesa menos?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "preference": "principiante, 180 libras",
+      "relativeSize": null,
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Compara el primero y el segundo. Cual pesa menos?",
+    "output": {
+      "ranked": [
+        1,
+        2
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f1"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "es",
+    "text": "Compara el primero y el segundo. Cual pesa menos?",
+    "reply": "Snowboard 1 / Red / M — USD 500\nSnowboard 2 / Red / M — USD 650\nSnowboard 1: “Weight 2.4 kg.” “Rider weight range 160–200 pounds.”\nSnowboard 2: “Weight 2.8 kg.”\nEl menor precio verificado es Snowboard 1 (USD 500).\nEl menor peso documentado es Snowboard 1 (2.4 kg).",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "output": {
+      "action": "search",
+      "query": "Snowboard",
+      "references": [],
+      "optionValues": [
+        "Azul"
+      ],
+      "relativeSize": null,
+      "preference": "principiante, 180 libras",
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-a-p1-v2"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "es",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "reply": "Estas son las opciones que pude verificar. Tu selección anterior sigue guardada; elige explícitamente para cambiarla.\n1. Snowboard 1 / Blue / M — USD 500\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nSnowboard 1: “Designed for beginners.”\nInformación de la política de esta tienda:\n“Unridden boards can be returned within 14 days.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "es",
+    "text": "Elijo la primera",
+    "reply": "Snowboard 1 / Blue / M — USD 500 × 1\nExistencias verificadas: 7 unidades; no están reservadas.\nConfirma esta selección exacta antes de continuar al pago.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "Y una talla mas pequena?",
+    "output": {
+      "action": "variant",
+      "query": "Snowboard",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "S"
+      ],
+      "relativeSize": "smaller",
+      "preference": "principiante, 180 libras",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "es",
+    "text": "Y una talla mas pequena?",
+    "reply": "Estas son las opciones que pude verificar. Tu selección anterior sigue guardada; elige explícitamente para cambiarla.\n1. Snowboard 1 / Blue / S — USD 500\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v3"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "אני מתחיל, שוקל 180 פאונד ומחפש סנובורד מתחת $750. מה מומלץ?",
+    "output": {
+      "action": "search",
+      "query": "סנובורד",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "מתחיל, 180 פאונד",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "output": {
+      "hint": 1
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "אני מתחיל, שוקל 180 פאונד ומחפש סנובורד מתחת $750. מה מומלץ?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "he",
+    "text": "אני מתחיל, שוקל 180 פאונד ומחפש סנובורד מתחת $750. מה מומלץ?",
+    "reply": "לפי המידע המתועד של החנות:\n1. Snowboard 1 / Red / M — USD 500\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n2. Snowboard 2 / Red / M — USD 650\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n3. Snowboard 4 / Red / M — USD 350\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nההתאמה המובילה לבקשה שלכם היא Snowboard 1.\nSnowboard 1: “Designed for beginners.”\nSnowboard 2: “Designed for experienced riders.” “Weight 2.8 kg.”\nSnowboard 4: “Designed for beginners.” “Weight 3.1 kg.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "השוו בין הראשון והשני. מי קל יותר?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "relativeSize": null,
+      "preference": "מתחיל, 180 פאונד",
+      "moreExpensive": true,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "השוו בין הראשון והשני. מי קל יותר?",
+    "output": {
+      "ranked": [
+        1,
+        2
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f1"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "he",
+    "text": "השוו בין הראשון והשני. מי קל יותר?",
+    "reply": "לפי המידע המתועד של החנות:\nSnowboard 1 / Red / M — USD 500\nSnowboard 2 / Red / M — USD 650\nSnowboard 1: “Weight 2.4 kg.” “Rider weight range 160–200 pounds.”\nSnowboard 2: “Weight 2.8 kg.”\nהמחיר המאומת הנמוך יותר הוא Snowboard 1 (USD 500).\nהמשקל המתועד הנמוך ביותר הוא Snowboard 1 (2.4 kg).",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v1"
+      },
+      {
+        "productId": "tenant-a-p2",
+        "variantId": "tenant-a-p2-v1"
+      },
+      {
+        "productId": "tenant-a-p4",
+        "variantId": "tenant-a-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "output": {
+      "action": "clarify",
+      "query": null,
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": null,
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-a-p1-v2"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "he",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "reply": "אלה האפשרויות התואמות שהצלחתי לאמת. הבחירה הקודמת נשמרה; בחרו במפורש כדי לשנות אותה.\n1. Snowboard 1 / Blue / M — USD 500\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nSnowboard 1: “Designed for beginners.”\nמידע המדיניות של החנות:\n“Unridden boards can be returned within 14 days.”",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "he",
+    "text": "אקח את הראשון",
+    "reply": "לפי המידע המתועד של החנות:\nSnowboard 1 / Blue / M — USD 500 × 1\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nנא לאשר את הבחירה המדויקת לפני מעבר לתשלום.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v2"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "יש מידה קטנה יותר?",
+    "output": {
+      "action": "refine",
+      "query": "Snowboard",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "S"
+      ],
+      "relativeSize": "smaller",
+      "preference": "מתחיל, 180 פאונד",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-a",
+    "locale": "he",
+    "text": "יש מידה קטנה יותר?",
+    "reply": "אלה האפשרויות התואמות שהצלחתי לאמת. הבחירה הקודמת נשמרה; בחרו במפורש כדי לשנות אותה.\n1. Snowboard 1 / Blue / S — USD 500\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.",
+    "choices": [
+      {
+        "productId": "tenant-a-p1",
+        "variantId": "tenant-a-p1-v3"
+      }
+    ],
+    "selected": "tenant-a-p1-v2",
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "I have dry skin. Which moisturizer would you recommend under $50?",
+    "output": {
+      "action": "search",
+      "query": "Moisturizer",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "I have dry skin. Which moisturizer would you recommend under $50?",
+    "output": {
+      "ranked": [
+        1,
+        2,
+        3,
+        7,
+        8
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "en",
+    "text": "I have dry skin. Which moisturizer would you recommend under $50?",
+    "reply": "1. Moisturizer 1 / Red / M — USD 20\nTracked stock checked: 4 units; not reserved.\n2. Moisturizer 4 / Red / M — USD 12\nTracked stock checked: 4 units; not reserved.\n3. Moisturizer 2 / Red / M — USD 30\nTracked stock checked: 4 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMy strongest match for your request is Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Compare the first and second. What are the ingredient differences?",
+    "output": {
+      "action": "compare",
+      "query": "Moisturizer",
+      "references": [
+        1,
+        2
+      ],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Compare the first and second. What are the ingredient differences?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "en",
+    "text": "Compare the first and second. What are the ingredient differences?",
+    "reply": "Moisturizer 1 / Red / M — USD 20\nMoisturizer 4 / Red / M — USD 12\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 4: “Contains glycerin.”\nThe lower verified price is Moisturizer 4 (USD 12).",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "output": {
+      "action": "variant",
+      "query": "Moisturizer",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "Blue"
+      ],
+      "relativeSize": null,
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-b-p1-v2"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "en",
+    "text": "Do you have the first one in blue, and can I return it?",
+    "reply": "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.\n1. Moisturizer 1 / Blue / M — USD 20\nTracked stock checked: 4 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nMoisturizer 1: “Formulated for dry skin.”\nThe merchant's policy information:\n“Unopened skincare can be returned within 7 days.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "en",
+    "text": "I'll take the first one",
+    "reply": "Moisturizer 1 / Blue / M — USD 20 × 1\nTracked stock checked: 4 units; not reserved.\nPlease confirm this exact selection before checkout.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "What about a smaller size?",
+    "output": {
+      "action": "refine",
+      "query": "Moisturizer",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": "smaller",
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "en",
+    "text": "What about a smaller size?",
+    "reply": "These are the matching options I could verify. Your previous selection is saved; choose explicitly to change it.\n1. Moisturizer 1 / Blue / S — USD 20\nTracked stock checked: 4 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v3"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Tengo piel seca. Busco una crema moisturizer hasta $50. Que recomiendas?",
+    "output": {
+      "action": "search",
+      "query": "moisturizer",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "piel seca",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Tengo piel seca. Busco una crema moisturizer hasta $50. Que recomiendas?",
+    "output": {
+      "ranked": [
+        1,
+        7,
+        2,
+        4
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "es",
+    "text": "Tengo piel seca. Busco una crema moisturizer hasta $50. Que recomiendas?",
+    "reply": "1. Moisturizer 1 / Red / M — USD 20\nExistencias verificadas: 4 unidades; no están reservadas.\n2. Moisturizer 4 / Red / M — USD 12\nExistencias verificadas: 4 unidades; no están reservadas.\n3. Moisturizer 2 / Red / M — USD 30\nExistencias verificadas: 4 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nLa mejor coincidencia para tu solicitud es Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Compara el primero y el segundo. Cuales son las diferencias entre sus ingredientes?",
+    "output": {
+      "action": "compare",
+      "query": "Moisturizer",
+      "references": [
+        1,
+        3
+      ],
+      "preference": "piel seca",
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Compara el primero y el segundo. Cuales son las diferencias entre sus ingredientes?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "es",
+    "text": "Compara el primero y el segundo. Cuales son las diferencias entre sus ingredientes?",
+    "reply": "Moisturizer 1 / Red / M — USD 20\nMoisturizer 4 / Red / M — USD 12\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 4: “Contains glycerin.”\nEl menor precio verificado es Moisturizer 4 (USD 12).",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "output": {
+      "action": "variant",
+      "query": "Moisturizer",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "Azul"
+      ],
+      "relativeSize": null,
+      "preference": "piel seca",
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-b-p1-v2",
+        "tenant-b-p1-v3"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "es",
+    "text": "Tienes el primero en azul, y puedo devolverlo?",
+    "reply": "Estas son las opciones que pude verificar. Tu selección anterior sigue guardada; elige explícitamente para cambiarla.\n1. Moisturizer 1 / Blue / M — USD 20\nExistencias verificadas: 4 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nMoisturizer 1: “Formulated for dry skin.”\nInformación de la política de esta tienda:\n“Unopened skincare can be returned within 7 days.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "es",
+    "text": "Elijo la primera",
+    "reply": "Moisturizer 1 / Blue / M — USD 20 × 1\nExistencias verificadas: 4 unidades; no están reservadas.\nConfirma esta selección exacta antes de continuar al pago.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "Y una talla mas pequena?",
+    "output": {
+      "action": "variant",
+      "query": "Moisturizer",
+      "references": [
+        1
+      ],
+      "optionValues": [
+        "S"
+      ],
+      "relativeSize": "smaller",
+      "preference": "piel seca",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "es",
+    "text": "Y una talla mas pequena?",
+    "reply": "Estas son las opciones que pude verificar. Tu selección anterior sigue guardada; elige explícitamente para cambiarla.\n1. Moisturizer 1 / Blue / S — USD 20\nExistencias verificadas: 4 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v3"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "יש לי עור יבש. מחפש moisturizer מתחת $50. מה מומלץ?",
+    "output": {
+      "action": "search",
+      "query": "Moisturizer",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "יש לי עור יבש. מחפש moisturizer מתחת $50. מה מומלץ?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "he",
+    "text": "יש לי עור יבש. מחפש moisturizer מתחת $50. מה מומלץ?",
+    "reply": "לפי המידע המתועד של החנות:\n1. Moisturizer 1 / Red / M — USD 20\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\n2. Moisturizer 2 / Red / M — USD 30\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\n3. Moisturizer 4 / Red / M — USD 12\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nההתאמה המובילה לבקשה שלכם היא Moisturizer 1.\nMoisturizer 1: “Formulated for dry skin.”\nMoisturizer 2: “Contains glycerin and shea butter.” “Fragranced.”\nMoisturizer 4: “Formulated for dry skin.” “Contains glycerin.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "השוו בין הראשון והשני. מה ההבדל במרכיבים?",
+    "output": {
+      "action": "compare",
+      "query": "Moisturizer",
+      "references": [
+        1,
+        2
+      ],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "dry skin",
+      "moreExpensive": true,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "השוו בין הראשון והשני. מה ההבדל במרכיבים?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [],
+      "missing": false,
+      "variantIds": [],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "he",
+    "text": "השוו בין הראשון והשני. מה ההבדל במרכיבים?",
+    "reply": "לפי המידע המתועד של החנות:\nMoisturizer 1 / Red / M — USD 20\nMoisturizer 2 / Red / M — USD 30\nMoisturizer 1: “Contains glycerin and ceramides.”\nMoisturizer 2: “Contains glycerin and shea butter.”\nהמחיר המאומת הנמוך יותר הוא Moisturizer 1 (USD 20).",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v1"
+      },
+      {
+        "productId": "tenant-b-p2",
+        "variantId": "tenant-b-p2-v1"
+      },
+      {
+        "productId": "tenant-b-p4",
+        "variantId": "tenant-b-p4-v1"
+      }
+    ],
+    "model": true
+  },
+  {
+    "phase": "plan",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "output": {
+      "action": "clarify",
+      "query": null,
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": null,
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "phase": "answer",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "output": {
+      "ranked": [
+        1
+      ],
+      "reasons": [
+        {
+          "choice": 1,
+          "evidenceIds": [
+            "c1f0"
+          ]
+        }
+      ],
+      "policyIds": [
+        "returns"
+      ],
+      "missing": false,
+      "variantIds": [
+        "tenant-b-p1-v2"
+      ],
+      "missingAttributes": [],
+      "question": null
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "he",
+    "text": "יש את הראשון בכחול, ומה מדיניות ההחזרות?",
+    "reply": "אלה האפשרויות התואמות שהצלחתי לאמת. הבחירה הקודמת נשמרה; בחרו במפורש כדי לשנות אותה.\n1. Moisturizer 1 / Blue / M — USD 20\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nMoisturizer 1: “Formulated for dry skin.”\nמידע המדיניות של החנות:\n“Unopened skincare can be returned within 7 days.”",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "model": true
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "he",
+    "text": "אקח את הראשון",
+    "reply": "לפי המידע המתועד של החנות:\nMoisturizer 1 / Blue / M — USD 20 × 1\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\nנא לאשר את הבחירה המדויקת לפני מעבר לתשלום.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v2"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": false
+  },
+  {
+    "phase": "plan",
+    "text": "יש מידה קטנה יותר?",
+    "output": {
+      "action": "refine",
+      "query": "Moisturizer",
+      "references": [
+        1
+      ],
+      "relativeSize": "smaller",
+      "preference": "dry skin",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "userId": "tenant-b",
+    "locale": "he",
+    "text": "יש מידה קטנה יותר?",
+    "reply": "אלה האפשרויות התואמות שהצלחתי לאמת. הבחירה הקודמת נשמרה; בחרו במפורש כדי לשנות אותה.\n1. Moisturizer 1 / Blue / S — USD 20\nהמלאי המנוהל נבדק: 4 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.",
+    "choices": [
+      {
+        "productId": "tenant-b-p1",
+        "variantId": "tenant-b-p1-v3"
+      }
+    ],
+    "selected": "tenant-b-p1-v2",
+    "model": true
+  }
+]

@@ -23,6 +23,9 @@ function shoppingBusinessIntent(raw: string): "business" | "mixed" | null {
     clauses.some(clause => shoppingEmbeddedChoiceNumbers(clause).length>0 && /\b(?:in|comes?|colou?rs?|sizes?|interested|talla|color|azul|negro)\b|יש|בצבע|בכחול|בשחור|מידה/u.test(clause)) ||
     clauses.some(clause => shoppingChoiceNumber(clause.trim()) !== undefined);
   const productFacts = mutation || clauses.some(clause => {
+    // Attribute comparisons remain catalog-grounded even without repeating a
+    // product noun: "Which is lighter, and can I return it?"
+    if (/\b(?:lighter|weighs?|weight|ingredients?|materials?|dimensions?|pesa|peso|ingredientes?|materiales?|dimensiones)\b|קל יותר|משקל|מרכיב|חומרים|מידות/u.test(clause)) return true;
     const intent = catalogProductIntent(clause);
     if (intent === "product") return true;
     if (intent === "setup" || intent === "plan") return false;

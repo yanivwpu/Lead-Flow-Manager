@@ -1,0 +1,234 @@
+[
+  {
+    "phase": "plan",
+    "text": "I'm a beginner looking for a snowboard under $750.",
+    "output": {
+      "action": "search",
+      "query": "snowboard",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "beginner",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "locale": "en",
+    "text": "I'm a beginner looking for a snowboard under $750.",
+    "reply": "1. Hydrogen / Red / M — USD 500\nTracked stock checked: 7 units; not reserved.\n2. Multi-location / Red / M — USD 650\nTracked stock checked: 7 units; not reserved.\nChoose an option by name or number. Availability was just checked; it is not reserved.\nI can compare their verified prices and options. The merchant information I have does not establish suitability for your needs.\nHow do you plan to use it?",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "Compare the first and second. Which is better for me?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "beginner",
+      "moreExpensive": true,
+      "policy": false
+    }
+  },
+  {
+    "locale": "en",
+    "text": "Compare the first and second. Which is better for me?",
+    "reply": "Hydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nThe lower verified price is Hydrogen (USD 500).\nI can compare their verified prices and options. The merchant information I have does not establish suitability for your needs.\nThe store team can confirm those details before you decide.",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "Which is lighter, and can I return it?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "preference": "beginner",
+      "policy": true
+    }
+  },
+  {
+    "locale": "en",
+    "text": "Which is lighter, and can I return it?",
+    "reply": "Hydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nThe lower verified price is Hydrogen (USD 500).\nI can compare their verified prices and options. The merchant information I have does not establish product weight.\nThe store team can confirm those details before you decide.\nThe merchant's policy information:\n“Unridden boards can be returned within 14 days.”",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "Soy principiante y busco un snowboard hasta $750.",
+    "output": {
+      "action": "search",
+      "query": "snowboard",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "principiante",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "locale": "es",
+    "text": "Soy principiante y busco un snowboard hasta $750.",
+    "reply": "1. Hydrogen / Red / M — USD 500\nExistencias verificadas: 7 unidades; no están reservadas.\n2. Multi-location / Red / M — USD 650\nExistencias verificadas: 7 unidades; no están reservadas.\nElige una opción por nombre o número. Acabo de verificar la disponibilidad; no está reservada.\nPuedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar idoneidad para tus necesidades.\n¿Cómo piensas usarlo?",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "Compara el primero y el segundo. ¿Cuál me conviene más?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "principiante",
+      "moreExpensive": true,
+      "policy": false
+    }
+  },
+  {
+    "locale": "es",
+    "text": "Compara el primero y el segundo. ¿Cuál me conviene más?",
+    "reply": "Hydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nEl menor precio verificado es Hydrogen (USD 500).\nPuedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar idoneidad para tus necesidades.\nEl equipo de la tienda puede confirmar esos datos antes de que decidas.",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "¿Cuál pesa menos y puedo devolverlo?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "preference": "principiante",
+      "moreExpensive": true,
+      "policy": true
+    }
+  },
+  {
+    "locale": "es",
+    "text": "¿Cuál pesa menos y puedo devolverlo?",
+    "reply": "Hydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nEl menor precio verificado es Hydrogen (USD 500).\nPuedo comparar sus precios y opciones verificados. La información de esta tienda no permite confirmar peso del producto.\nEl equipo de la tienda puede confirmar esos datos antes de que decidas.\nInformación de la política de esta tienda:\n“Unridden boards can be returned within 14 days.”",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "אני מתחיל ומחפש סנובורד מתחת $750.",
+    "output": {
+      "action": "search",
+      "query": "סנובורד",
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "מתחיל",
+      "moreExpensive": false,
+      "policy": false
+    }
+  },
+  {
+    "phase": "answer",
+    "output": {
+      "hint": 1
+    }
+  },
+  {
+    "locale": "he",
+    "text": "אני מתחיל ומחפש סנובורד מתחת $750.",
+    "reply": "לפי המידע המתועד של החנות:\n1. Hydrogen / Red / M — USD 500\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\n2. Multi-location / Red / M — USD 650\nהמלאי המנוהל נבדק: 7 יחידות; אינן שמורות.\nבחרו אפשרות לפי שם או מספר. הזמינות נבדקה עכשיו; המוצר אינו שמור.\nאפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס התאמה לצרכים שלכם.\nאיך אתם מתכננים להשתמש בו?",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "השוו בין הראשון והשני. מה מתאים לי יותר?",
+    "output": {
+      "action": "compare",
+      "query": "Snowboard",
+      "references": [
+        1,
+        2
+      ],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "מתחיל",
+      "moreExpensive": true,
+      "policy": false
+    }
+  },
+  {
+    "locale": "he",
+    "text": "השוו בין הראשון והשני. מה מתאים לי יותר?",
+    "reply": "לפי המידע המתועד של החנות:\nHydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nהמחיר המאומת הנמוך יותר הוא Hydrogen (USD 500).\nאפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס התאמה לצרכים שלכם.\nצוות החנות יכול לאשר את הפרטים לפני שתחליטו.",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  },
+  {
+    "phase": "plan",
+    "text": "מי קל יותר ומה מדיניות ההחזרות?",
+    "output": {
+      "action": "clarify",
+      "query": null,
+      "references": [],
+      "optionValues": [],
+      "relativeSize": null,
+      "preference": "מתחיל",
+      "moreExpensive": false,
+      "policy": true
+    }
+  },
+  {
+    "locale": "he",
+    "text": "מי קל יותר ומה מדיניות ההחזרות?",
+    "reply": "לפי המידע המתועד של החנות:\nHydrogen / Red / M — USD 500\nMulti-location / Red / M — USD 650\nהמחיר המאומת הנמוך יותר הוא Hydrogen (USD 500).\nאפשר להשוות את המחירים והאפשרויות המאומתים. המידע של החנות אינו מבסס משקל המוצר.\nצוות החנות יכול לאשר את הפרטים לפני שתחליטו.\nמידע המדיניות של החנות:\n“Unridden boards can be returned within 14 days.”",
+    "model": true,
+    "choices": [
+      "tenant-a-p1",
+      "tenant-a-p2"
+    ]
+  }
+]

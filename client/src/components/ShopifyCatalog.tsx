@@ -249,6 +249,7 @@ export function ShopifyCatalog({ showShoppingSettings = true, authorizationOrigi
             </Button>
           </div>
           <p className="text-sm text-gray-600">{currentProduct.description}</p>
+          <p className="text-sm text-amber-800">{t("salesCatalog.commerce.informationHelp")}</p>
           <p className="text-sm">
             {currentProduct.collections.map((c) => c.title).join(" · ")}
           </p>

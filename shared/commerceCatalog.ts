@@ -150,3 +150,11 @@ export function catalogSearchTerms(message: string): string {
     .slice(0, 12)
     .join(" ");
 }
+
+/** Presence checks, not a claim that a product is recommendation-ready. */
+export function productInformationGaps(product: Pick<CommerceProduct, "description" | "aiGuidance">): Array<"description" | "guidance"> {
+  const gaps: Array<"description" | "guidance"> = [];
+  if (!product.description.replace(/<[^>]*>/g, " ").trim()) gaps.push("description");
+  if (!product.aiGuidance?.trim()) gaps.push("guidance");
+  return gaps;
+}
