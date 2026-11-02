@@ -125,15 +125,6 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
     limit: 180,
     windowMs: 15 * 60 * 1000,
   },
-  {
-    // Each request can probe up to five external storefront pages.
-    // Keep it separate from normal AI Brain polling and article editing.
-    id: "shopify-knowledge-discovery",
-    match: (path, method) =>
-      method === "GET" && path === "/api/ai/knowledge/shopify-page-suggestions",
-    limit: 4,
-    windowMs: 15 * 60 * 1000,
-  },
   { id: "ai", match: (path) => path.startsWith("/api/ai"), limit: 90, windowMs: 15 * 60 * 1000 },
   {
     id: "templates-send",
