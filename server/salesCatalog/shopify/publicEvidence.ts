@@ -1,11 +1,11 @@
 /** Read-only, bounded Shopify storefront-public product attributes.
  * Admin may expose PRIVATE metafields: never store or expose them to AI.
- * Public SEO/category and explicit PUBLIC_READ metafield definitions only.
+ * Taxonomy category and strictly typed PUBLIC_READ numeric measurements only.
  */
 import type { CatalogRequest } from "./api";
 
 export type PublicProductEvidence = {
-  source: "shopify_category" | "shopify_seo" | "shopify_metafield";
+  source: "shopify_category" | "shopify_metafield";
   key: string;
   text: string;
 };
@@ -13,43 +13,42 @@ export const SHOPIFY_PUBLIC_EVIDENCE_QUERY = `query CatalogPublicEvidence($id:ID
   product(id:$id) {
     id
     category { fullName }
-    seo { title description }
     metafields(first:25,after:$after) {
       nodes { namespace key type value definition { access { storefront } } }
       pageInfo { hasNextPage endCursor }
     }
   }
 }`;
-const ALLOWED_TYPES = new Set([
-  "single_line_text_field", "multi_line_text_field", "number_integer",
-  "number_decimal", "boolean", "weight", "dimension", "volume",
-  "list.single_line_text_field"
-]);
-const SENSITIVE_KEY = /(?:^|_)(?:cost|margin|wholesale|supplier|vendor_cost|password|token|secret|private|internal|staff|employee|customer|discount_code|api|credential)(?:_|$)/i;
+/** Free-form metafields and SEO copy are NOT auto-approved customer knowledge.
+ * Shopify PUBLIC_READ means storefront-accessible, not advice/PII-safe. Only
+ * bounded structured measurements with known field semantics become evidence.
+ * Free-form content must use the existing AI Brain review/publish path.
+ */
+const NUMERIC_KEYS = /^(?:length|width|height|depth|thickness|diameter|weight|capacity|volume|size|wattage|power|flex_rating|rating)$/i;
+const MEASURE_TYPES = new Set(["weight","dimension","volume"]);
+const UNITS = new Set(["G","KG","LB","OZ","MM","CM","M","IN","FT","ML","L","GAL"]);
+const SENSITIVE_KEY = /(?:^|_)(?:pin|code|cost|margin|wholesale|supplier|password|token|secret|private|internal|staff|employee|customer|discount|api|credential)(?:_|$)/i;
 const LABEL_KEY = /^[a-z0-9_]{1,80}$/i;
-const sanitize = (raw: unknown, max = 360): string => typeof raw === "string" ?
-  raw.replace(/<[^>]*>/g, " ").replace(/https?:\/\/\S+/gi, " ")
-    .replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g, " ")
-    .replace(/\s+/g, " ").trim().slice(0, max) : "";
+const sanitize = (raw: unknown, max = 160): string => typeof raw === "string" ?
+  raw.replace(/<[^>]*>/g," ").replace(/[\\u0000-\\u001f\\u007f\\u202a-\\u202e\\u2066-\\u2069]/g," ")
+    .replace(/\\s+/g," ").trim().slice(0,max) : "";
 function publicMetafield(raw: any): PublicProductEvidence | null {
   if (!raw || raw.definition?.access?.storefront !== "PUBLIC_READ" ||
-    !LABEL_KEY.test(raw.namespace) || /^(?:app|private|internal|admin|wholesale)/i.test(raw.namespace) || !LABEL_KEY.test(raw.key) ||
-    SENSITIVE_KEY.test(raw.key) || !ALLOWED_TYPES.has(raw.type)) return null;
-  let value: unknown = raw.value;
-  if (raw.type === "list.single_line_text_field") {
-    try { const list = JSON.parse(raw.value); value = Array.isArray(list) ?
-      list.filter((v):v is string => typeof v === "string").slice(0,12).join(", ") : ""; }
-    catch { return null; }
-  }
-  if (["weight","dimension","volume"].includes(raw.type)) {
-    try { const unit = JSON.parse(raw.value);
-      value = typeof unit?.value === "number" && typeof unit?.unit === "string" ?
-        `${unit.value} ${unit.unit}` : ""; }
-    catch { return null; }
-  }
-  const clean = sanitize(value);
-  if (!clean || /(?:ignore (?:all|previous) instructions|system prompt|developer instruction)/i.test(clean)) return null;
-  return { source: "shopify_metafield", key: raw.key, text: `${raw.key.replace(/_/g, " ")}: ${clean}` };
+      !LABEL_KEY.test(raw.namespace) || /^(?:app|private|internal|admin|wholesale)/i.test(raw.namespace) ||
+      !LABEL_KEY.test(raw.key) || !NUMERIC_KEYS.test(raw.key) || SENSITIVE_KEY.test(raw.key)) return null;
+  let display = "";
+  if (raw.type === "number_integer" || raw.type === "number_decimal") {
+    if(typeof raw.value !== "string" || !/^(?:0|[1-9]\\d{0,6})(?:\\.\\d{1,4})?$/.test(raw.value))return null;
+    display = raw.value;
+  } else if (MEASURE_TYPES.has(raw.type)) {
+    let measurement:any;
+    try { measurement=JSON.parse(raw.value); } catch { return null; }
+    if (typeof measurement?.value !== "number" || !Number.isFinite(measurement.value) ||
+      measurement.value < 0 || measurement.value > 1e7 || typeof measurement.unit !== "string" ||
+      !UNITS.has(measurement.unit.toUpperCase()))return null;
+    display = `${measurement.value} ${measurement.unit.toUpperCase()}`;
+  } else return null;
+  return {source:"shopify_metafield",key:raw.key,text:`${raw.key.replace(/_/g," ")}: ${display}`};
 }
 /** Sanitized output only. Paginate at most 3 x 25 attributes per product. */
 export async function readShopifyPublicEvidence(request: CatalogRequest, productId: string): Promise<PublicProductEvidence[]> {
@@ -64,9 +63,6 @@ export async function readShopifyPublicEvidence(request: CatalogRequest, product
     if (page === 0) {
       const category = sanitize(item.category?.fullName,160);
       if(category)result.push({source:"shopify_category",key:"category",text:`Category: ${category}`});
-      const seo = sanitize(item.seo?.description,360);
-      if(seo && !/(?:ignore (?:all|previous) instructions|system prompt)/i.test(seo))
-        result.push({source:"shopify_seo",key:"description",text:`Product page summary: ${seo}`});
     }
     for(const mf of item.metafields.nodes) {
       const allowed=publicMetafield(mf);
