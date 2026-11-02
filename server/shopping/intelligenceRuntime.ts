@@ -2,7 +2,7 @@ import { ShoppingModelFailure } from "./diagnostics";
 import { aiProvider } from "../aiProvider";
 import { storage } from "../storage";
 import { buildTurnGrounding } from "../websiteKnowledge/factContext";
-import { merchantScopedShoppingKnowledgeEnabled, verifiedShopifyKnowledgeSourceIds } from "./shopifyKnowledgeScope";
+import { merchantScopedShoppingKnowledgeEnabled, verifiedShopifyKnowledgeScope } from "./shopifyKnowledgeScope";
 import { createShoppingIntelligence, type ShoppingKnowledge, type ShoppingModel } from "./intelligence";
 import type { AiBusinessKnowledge } from "@shared/schema";
 import { resolveAiRouting, routingShouldTriggerHandoff } from "@shared/aiRouting";
@@ -29,9 +29,11 @@ export async function shoppingKnowledge(userId: string, text: string, row?: AiBu
   if (!knowledge || knowledge.userId !== userId) return { instructions: "", evidence: [] };
   const evidence: ShoppingKnowledge["evidence"] = [];
   const scoped = merchantScopedShoppingKnowledgeEnabled(userId);
-  const allowedSourceIds = scoped ? await verifiedShopifyKnowledgeSourceIds(userId) : undefined;
+  const verifiedStore = scoped ? await verifiedShopifyKnowledgeScope(userId) : undefined;
+  const allowedSourceIds = verifiedStore?.allowedSourceIds;
+  const allowedSourceHosts = verifiedStore?.allowedHosts;
   if (knowledge.knowledgeV2Enabled) {
-    const grounded = await buildTurnGrounding({ userId, message: text, knowledgeRow: knowledge, freshnessPolicyRaw: knowledge.knowledgeFreshnessPolicy, allowedSourceIds });
+    const grounded = await buildTurnGrounding({ userId, message: text, knowledgeRow: knowledge, freshnessPolicyRaw: knowledge.knowledgeFreshnessPolicy, allowedSourceIds, allowedSourceHosts });
     for (const entry of grounded.retrieved) {
       if (entry.fact.userId !== userId || entry.freshness.tier !== "fresh" || grounded.conflictingKeys.includes(entry.fact.factKey)) continue;
       if(!["policy","faq","business_hours","location","service_area","contact_method"].includes(entry.fact.factType))continue;
