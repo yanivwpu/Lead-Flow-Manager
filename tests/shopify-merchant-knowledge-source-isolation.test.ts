@@ -67,6 +67,7 @@ test("A trusted source ID cannot launder a redirect to another business into Sho
   assert.equal(factBelongsToShopifyStore({...own,provenance:[{sourceId:"shop-return",url:"https://realestate.example/privacy"}]},ids,hosts),false);
   assert.equal(factBelongsToShopifyStore({...own,provenance:[{sourceId:"other-merchant",url:"https://store.example/privacy"}]},ids,hosts),false);
   assert.equal(factBelongsToShopifyStore({...own,provenance:[{sourceId:"shop-return",url:null}]},ids,hosts),false);
+  assert.equal(factBelongsToShopifyStore({...own,provenance:[{sourceId:"shop-return"}]},ids,hosts),false);
   assert.equal(factBelongsToShopifyStore({...own,provenance:[]},ids,hosts),true);
   assert.equal(factBelongsToShopifyStore(own,ids,new Set()),false);
 });
