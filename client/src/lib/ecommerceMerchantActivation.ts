@@ -11,6 +11,8 @@ export type EcommerceMerchantActivationStatus = {
   outboundMessagingEnabled: false;
   /** Read-only infrastructure schema check. Not permission to send. */
   recoverySchemaReady?: boolean | null;
+  /** Merchant-scoped observation counts only; never a delivery/sending claim. */
+  recoveryObservations?: { total: number; open: number; dueForReview: number; latestAt: string | null } | null;
 };
 
 const endpoint = "/api/shopify/merchant-engine/status";
