@@ -75,7 +75,9 @@ test("preview reuses the existing owner-only endpoint and library, with no custo
  assert.match(route,/workflowActive: false, messagingEnabled: false/);
  assert.match(preview,/bindings=\{data\.postPurchaseTemplates\}/);
  assert.match(plans,/queryKey: withUserQueryScope\(\["\/api\/templates"\], user\?\.id\)/);
- assert.match(plans,/href="\/app\/templates"/);
+ assert.match(plans,/href="\/app\/templates\?tab=templates"/);
+ assert.ok(plans.includes("Create the message in Meta WhatsApp Manager"));
+ assert.ok(!plans.includes("Create or edit a message in Templates"));
  assert.match(plans,/action: "save_post_purchase_template"/);
  assert.match(plans,/result\.messagingEnabled !== false/);
  assert.doesNotMatch(plans,/send-template|send-message|MetaSender|checkoutCreate/);
