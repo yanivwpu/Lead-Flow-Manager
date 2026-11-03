@@ -9,23 +9,37 @@ export type RecoveryAutoPrepEnvironment={
  ECOMMERCE_RECOVERY_WORKER_MODE?:string;
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID?:string;
  ECOMMERCE_RECOVERY_TEMPLATE_NAME?:string;
+ ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED?:string;
+ ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP?:string;
+ ECOMMERCE_RECOVERY_SEND_ENABLED?:string;
 };
 const ACCOUNT=/^[a-zA-Z0-9][a-zA-Z0-9_-]{5,127}$/;
 const TEMPLATE=/^[a-z][a-z0-9_]{0,511}$/;
-/** Independent, operator-only auto-prepare switch. No customer sending here.
- * A staging merchant is named explicitly; no global/multimerchant loop.
+/** Independent, operator-only auto-prepare switch. Never grants permission
+ * to send: recoveryDeliveryExecutionEnabled() remains staging-only.
+ * Production requires a separate exact-store, exact-account no-send pilot.
  */
+const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 export function recoveryAutoPrepEnabled(env:RecoveryAutoPrepEnvironment):boolean{
- return env.RAILWAY_ENVIRONMENT_NAME==='staging' &&
-   env.APP_URL?.replace(/\/$/,'')==='https://whachatcrm-staging-app-staging.up.railway.app' &&
-   env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED==='true' &&
+ const base=env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED==='true' &&
    env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED==='true' &&
    env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED==='true' &&
-   env.ECOMMERCE_RECOVERY_WORKER_MODE==='staging-test-only' &&
    !!env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID &&
    ACCOUNT.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID) &&
    !!env.ECOMMERCE_RECOVERY_TEMPLATE_NAME &&
    TEMPLATE.test(env.ECOMMERCE_RECOVERY_TEMPLATE_NAME);
+ if(!base)return false;
+ const staging=env.RAILWAY_ENVIRONMENT_NAME==='staging' &&
+   env.APP_URL?.replace(/\/$/,'')==='https://whachatcrm-staging-app-staging.up.railway.app' &&
+   env.ECOMMERCE_RECOVERY_WORKER_MODE==='staging-test-only';
+ const production=env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+   env.APP_URL?.replace(/\/$/,'')==='https://app.whachatcrm.com' &&
+   env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-no-send' &&
+   env.ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED==='true' &&
+   env.ECOMMERCE_RECOVERY_SEND_ENABLED!=='true' &&
+   typeof env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP==='string' &&
+   SHOP.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP);
+ return staging||production;
 }
 export type AutoPrepMerchant={
  accountId:string;shop:string;accessToken:string;
@@ -56,7 +70,9 @@ export async function runAutoRecoveryPreparationTick(
  const accountId=env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID!;
  const merchant=await deps.merchant(accountId);
  if(!merchant||merchant.accountId!==accountId ||
-   !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(merchant.shop) ||
+   !SHOP.test(merchant.shop) ||
+   (env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+     merchant.shop!==env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP) ||
    !merchant.accessToken)return stats;
  const page=await deps.observePage(merchant);
  if(!Array.isArray(page.observations)||page.observations.length>25)

@@ -55,6 +55,27 @@ test('automatic preparation requires the exact staging, explicit opt-in, test te
   {ECOMMERCE_RECOVERY_TEMPLATE_NAME:'unapproved template'}
  ])assert.equal(recoveryAutoPrepEnabled({...env,...change}),false,JSON.stringify(change));
 });
+test('production pilot requires exact deployment, account, shop and separate approval',async()=>{
+ const prod={...env,RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
+   ECOMMERCE_RECOVERY_WORKER_MODE:'production-pilot-no-send',
+   ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:'true',
+   ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'demo.myshopify.com',
+   ECOMMERCE_RECOVERY_SEND_ENABLED:'false'};
+ assert.equal(recoveryAutoPrepEnabled(prod),true);
+ for (const change of [
+  {RAILWAY_ENVIRONMENT_NAME:'preview'},
+  {ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:'false'},
+  {ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'example.com'},
+  {ECOMMERCE_RECOVERY_SEND_ENABLED:'true'},
+  {ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:'other'},
+ ])assert.equal(recoveryAutoPrepEnabled({...prod,...change}),false);
+ const h=harness();
+ assert.equal((await runAutoRecoveryPreparationTick(prod,h.deps)).queued,1);
+ const wrong=harness();
+ const out=await runAutoRecoveryPreparationTick({...prod,ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'another.myshopify.com'},wrong.deps);
+ assert.equal(out.queued,0);
+ assert.equal(wrong.calls.length,0);
+});
 test('observation -> fresh purchase check -> verified matching customer -> durable enqueue; never calls Meta',async()=>{
  const h=harness();
  const result=await runAutoRecoveryPreparationTick(env,h.deps);

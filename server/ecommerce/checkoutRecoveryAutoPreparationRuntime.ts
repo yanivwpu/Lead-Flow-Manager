@@ -24,6 +24,9 @@ const env=():RecoveryAutoPrepEnvironment=>({
  ECOMMERCE_RECOVERY_WORKER_MODE:process.env.ECOMMERCE_RECOVERY_WORKER_MODE,
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:process.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID,
  ECOMMERCE_RECOVERY_TEMPLATE_NAME:process.env.ECOMMERCE_RECOVERY_TEMPLATE_NAME,
+ ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:process.env.ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED,
+ ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:process.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP,
+ ECOMMERCE_RECOVERY_SEND_ENABLED:process.env.ECOMMERCE_RECOVERY_SEND_ENABLED,
 });
 function safeConfig(v:unknown):Record<string,unknown>{
  return v && typeof v==='object' && !Array.isArray(v)?v as Record<string,unknown>:{};
@@ -152,8 +155,9 @@ async function suppress(merchant:AutoPrepMerchant,checkoutId:string):Promise<boo
    return true;
  });
 }
-/** Bounded, explicitly enabled auto-prep ONLY for the one staging test shop.
- * Does NOT start any send worker or enable Meta template messaging.
+/** Bounded, explicitly enabled auto-prep for one staging shop OR a separately
+ * approved production pilot with exact account and shop. Does NOT start any
+ * send worker or enable Meta template messaging.
  */
 export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
  const configuration=env();
