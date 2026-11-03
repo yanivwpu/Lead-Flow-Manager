@@ -85,11 +85,42 @@ router.get("/status", async (req: Request, res: Response) => {
         recoverySchemaReady = schema.rows[0]?.ready === true;
       } catch { recoverySchemaReady = null; }
     }
+    // Existing checkout observations, read-only and tenant scoped. This is
+    // detection evidence only, not a prepared intent, consent or send queue.
+    let recoveryObservations: { total: number; open: number; dueForReview: number; latestAt: string | null } | null = null;
+    if (state.activated && state.connected && state.shop && recoverySchemaReady === true) {
+      try {
+        const observed = await db.execute(sql`
+          SELECT COUNT(*)::integer AS total,
+            COUNT(*) FILTER (WHERE completed = FALSE)::integer AS open,
+            COUNT(*) FILTER (
+              WHERE completed = FALSE AND recovery_url_available = TRUE
+                AND next_review_at <= NOW()
+            )::integer AS due_for_review,
+            MAX(first_observed_at) AS latest_at
+          FROM ecommerce_abandoned_checkout_observations
+          WHERE account_id = ${accountId} AND shop = ${state.shop}
+        `);
+        const row = observed.rows[0];
+        if (row) {
+          const latest = row.latest_at ? new Date(String(row.latest_at)) : null;
+          recoveryObservations = {
+            total: Number(row.total ?? 0),
+            open: Number(row.open ?? 0),
+            dueForReview: Number(row.due_for_review ?? 0),
+            latestAt: latest && Number.isFinite(latest.getTime()) ? latest.toISOString() : null,
+          };
+        }
+      } catch {
+        // Unknown is not zero: do not mask an unavailable checkout source.
+        recoveryObservations = null;
+      }
+    }
     return res.json({
       activated: state.activated, eligible: state.eligible,
       connected: state.connected, planEligible: state.planEligible,
       cartExecutionEnabled: false, outboundMessagingEnabled: false,
-      recoverySchemaReady,
+      recoverySchemaReady, recoveryObservations,
     });
   } catch {
     return res.status(503).json({ error: "E-Commerce activation status unavailable" });
