@@ -76,6 +76,53 @@ test('production pilot requires exact deployment, account, shop and separate app
  assert.equal(out.queued,0);
  assert.equal(wrong.calls.length,0);
 });
+test('production observation-only pilot records checkout metadata without recipient checks or outbox',async()=>{
+ const obs={
+   ...env,
+   RAILWAY_ENVIRONMENT_NAME:'production',
+   APP_URL:'https://app.whachatcrm.com',
+   ECOMMERCE_RECOVERY_WORKER_MODE:'production-pilot-observe-only',
+   ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:'true',
+   ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'demo.myshopify.com',
+   ECOMMERCE_RECOVERY_OBSERVATION_ONLY:'true',
+   ECOMMERCE_RECOVERY_SEND_ENABLED:'false',
+   ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:undefined,
+   ECOMMERCE_RECOVERY_TEMPLATE_NAME:undefined,
+ };
+ assert.equal(recoveryAutoPrepEnabled(obs),true);
+ const h=harness();
+ assert.deepEqual(await runAutoRecoveryPreparationTick(obs,h.deps),{
+   observed:1,checked:0,queued:0,suppressed:0,skipped:0
+ });
+ assert.deepEqual(h.calls,['observe']);
+ for(const change of [
+   {ECOMMERCE_RECOVERY_OBSERVATION_ONLY:'false'},
+   {ECOMMERCE_RECOVERY_WORKER_MODE:'production-pilot-no-send'},
+   {ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:'true'},
+   {ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:'false'},
+   {ECOMMERCE_RECOVERY_SEND_ENABLED:'true'},
+   {ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'another.example'},
+   {ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'*.myshopify.com'},
+   {ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:'other'},
+   {RAILWAY_ENVIRONMENT_NAME:'preview'},
+ ]) {
+   const denied={...obs,...change};
+   assert.equal(recoveryAutoPrepEnabled(denied),false,JSON.stringify(change));
+   const h=harness();
+   assert.equal((await runAutoRecoveryPreparationTick(denied,h.deps)).disabled,true);
+   assert.deepEqual(h.calls,[]);
+ }
+ const wrongShop=harness();
+ const excluded=await runAutoRecoveryPreparationTick({
+   ...obs,ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'other.myshopify.com'
+ },wrongShop.deps);
+ assert.equal(excluded.observed,0);
+ assert.deepEqual(wrongShop.calls,[]);
+ const sender=readFileSync('server/ecommerce/checkoutRecoveryDeliveryWorker.ts','utf8');
+ assert.equal(sender.includes('production-pilot-observe-only'),false);
+ assert.match(sender,/RAILWAY_ENVIRONMENT_NAME==='staging'/);
+});
+
 test('observation -> fresh purchase check -> verified matching customer -> durable enqueue; never calls Meta',async()=>{
  const h=harness();
  const result=await runAutoRecoveryPreparationTick(env,h.deps);
