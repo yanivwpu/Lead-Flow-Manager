@@ -20,7 +20,7 @@ const copy = {
     blocked: "Activation unavailable: setup and operator release are required.",
     pause: "Uncheck a journey and save to pause its plan.", utility: "Approved utility template required",
     marketing: "Approved marketing template and separate marketing consent required",
-    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message selection saved", messageError: "Message selection could not be saved", editMessage: "Create or edit a message in Templates", messageHint: "Edit wording in Templates, submit to Meta and select the approved version. Choosing a message does not enable sending.", noApproved: "No matching approved text templates found.",
+    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message selection saved", messageError: "Message selection could not be saved", editMessage: "Open WhatsApp Library", messageHint: "Create the message in Meta WhatsApp Manager, then sync the approved template into the WhachatCRM WhatsApp Library and select it here. Selection does not enable customer sending.", noApproved: "No compatible approved text templates found.",
     labels: ["Order confirmation", "Shipping update", "Cancellation", "Review request", "Repeat-purchase offer", "Customer win-back"],
     examples: ["We received your order.", "Your order has been fulfilled.", "Your order was cancelled.", "Would you like to review your purchase?", "Ready for another purchase?", "We would love to welcome you back."],
   },
@@ -34,7 +34,7 @@ const copy = {
     blocked: "Activación no disponible: se requieren configuración y autorización del operador.",
     pause: "Desmarca un recorrido y guarda para pausar su plan.", utility: "Requiere plantilla de utilidad aprobada",
     marketing: "Requiere plantilla de marketing aprobada y consentimiento de marketing separado",
-    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Selección guardada", messageError: "No se pudo guardar la selección", editMessage: "Crear o editar un mensaje en Plantillas", messageHint: "Edita el texto en Plantillas, solicita aprobación a Meta y elige la versión aprobada. Seleccionar no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
+    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Selección guardada", messageError: "No se pudo guardar la selección", editMessage: "Abrir biblioteca de WhatsApp", messageHint: "Crea el mensaje en WhatsApp Manager de Meta. Tras su aprobación, sincronízalo con la biblioteca de WhatsApp de WhachatCRM y selecciónalo aquí. Seleccionarlo no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
     labels: ["Confirmación de pedido", "Actualización de envío", "Cancelación", "Solicitud de reseña", "Oferta de nueva compra", "Recuperación de clientes"],
     examples: ["Recibimos tu pedido.", "Tu pedido ha sido preparado.", "Tu pedido fue cancelado.", "¿Quieres dejar una reseña de tu compra?", "¿Listo para otra compra?", "Nos encantaría volver a recibirte."],
   },
@@ -48,7 +48,7 @@ const copy = {
     blocked: "הפעלה אינה זמינה: נדרשים השלמת ההגדרה ואישור מפעיל.",
     pause: "להשהיית תוכנית מסע, יש לבטל את הסימון ולשמור.", utility: "נדרשת תבנית שירות מאושרת",
     marketing: "נדרשות תבנית שיווק מאושרת והסכמה נפרדת לשיווק",
-    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "בחירת ההודעה נשמרה", messageError: "לא ניתן לשמור את בחירת ההודעה", editMessage: "יצירה או עריכת הודעה בתבניות", messageHint: "עורכים הודעה בתבניות, שולחים לאישור Meta ובוחרים גרסה מאושרת. בחירה אינה מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
+    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "בחירת ההודעה נשמרה", messageError: "לא ניתן לשמור את בחירת ההודעה", editMessage: "פתיחת ספריית WhatsApp", messageHint: "יוצרים את ההודעה ב-WhatsApp Manager של Meta, ולאחר אישור מסנכרנים אותה לספריית WhatsApp של WhachatCRM ובוחרים בה כאן. הבחירה לא מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
     labels: ["אישור הזמנה", "עדכון משלוח", "ביטול הזמנה", "בקשת חוות דעת", "הצעה לרכישה חוזרת", "החזרת לקוחות"],
     examples: ["קיבלנו את ההזמנה שלך.", "ההזמנה שלך טופלה.", "ההזמנה שלך בוטלה.", "רוצה לכתוב חוות דעת על הרכישה?", "מוכנים לרכישה נוספת?", "נשמח לראות אותך שוב."],
   },
@@ -184,7 +184,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       </label>
       {currentTemplate && <p className="whitespace-pre-wrap text-xs text-slate-700">{currentTemplate.bodyText}</p>}
       {approved.length === 0 && <p className="text-xs text-slate-600">{t.noApproved}</p>}
-      <a href="/app/templates" className="inline-block text-xs text-blue-700 underline">{t.editMessage}</a>
+      <a href="/app/templates?tab=templates" className="inline-block text-xs text-blue-700 underline">{t.editMessage}</a>
       <p className="text-xs text-slate-500">{t.messageHint}</p>
       <button type="button" onClick={() => void saveTemplate()} disabled={messageStatus === "saving"}
         className="rounded border bg-white px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.saveMessage}</button>
