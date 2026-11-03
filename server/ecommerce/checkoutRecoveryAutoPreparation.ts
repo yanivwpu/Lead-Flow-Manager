@@ -12,6 +12,7 @@ export type RecoveryAutoPrepEnvironment={
  ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED?:string;
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP?:string;
  ECOMMERCE_RECOVERY_SEND_ENABLED?:string;
+ ECOMMERCE_RECOVERY_OBSERVATION_ONLY?:string;
 };
 const ACCOUNT=/^[a-zA-Z0-9][a-zA-Z0-9_-]{5,127}$/;
 const TEMPLATE=/^[a-z][a-z0-9_]{0,511}$/;
@@ -22,24 +23,31 @@ const TEMPLATE=/^[a-z][a-z0-9_]{0,511}$/;
 const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 export function recoveryAutoPrepEnabled(env:RecoveryAutoPrepEnvironment):boolean{
  const base=env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED==='true' &&
-   env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED==='true' &&
    env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED==='true' &&
    !!env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID &&
-   ACCOUNT.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID) &&
+   ACCOUNT.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID);
+ if(!base)return false;
+ const prep=env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED==='true' &&
    !!env.ECOMMERCE_RECOVERY_TEMPLATE_NAME &&
    TEMPLATE.test(env.ECOMMERCE_RECOVERY_TEMPLATE_NAME);
- if(!base)return false;
  const staging=env.RAILWAY_ENVIRONMENT_NAME==='staging' &&
    env.APP_URL?.replace(/\/$/,'')==='https://whachatcrm-staging-app-staging.up.railway.app' &&
-   env.ECOMMERCE_RECOVERY_WORKER_MODE==='staging-test-only';
- const production=env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+   env.ECOMMERCE_RECOVERY_WORKER_MODE==='staging-test-only' &&
+   prep;
+ const productionBase=env.RAILWAY_ENVIRONMENT_NAME==='production' &&
    env.APP_URL?.replace(/\/$/,'')==='https://app.whachatcrm.com' &&
-   env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-no-send' &&
    env.ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED==='true' &&
    env.ECOMMERCE_RECOVERY_SEND_ENABLED!=='true' &&
    typeof env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP==='string' &&
    SHOP.test(env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP);
- return staging||production;
+ const productionPrep=productionBase &&
+   env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-no-send' &&
+   prep && env.ECOMMERCE_RECOVERY_OBSERVATION_ONLY!=='true';
+ const productionObservationOnly=productionBase &&
+   env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only' &&
+   env.ECOMMERCE_RECOVERY_OBSERVATION_ONLY==='true' &&
+   env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED!=='true';
+ return staging||productionPrep||productionObservationOnly;
 }
 export type AutoPrepMerchant={
  accountId:string;shop:string;accessToken:string;
@@ -80,6 +88,11 @@ export async function runAutoRecoveryPreparationTick(
  for(const item of page.observations){
    if(await deps.persistObservation(merchant,item))stats.observed++;
  }
+ // Observation-only production pilot never inspects recipients, consent or
+ // templates, never creates intents/outbox records, and cannot invoke Meta.
+ if(env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+    env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only')
+   return stats;
  const due=await deps.due(merchant);
  if(!Array.isArray(due)||due.length>25)throw Error('invalid_due_checkout_batch');
  for(const item of due.slice(0,3)){

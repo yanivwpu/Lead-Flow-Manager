@@ -27,6 +27,7 @@ const env=():RecoveryAutoPrepEnvironment=>({
  ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED:process.env.ECOMMERCE_RECOVERY_PRODUCTION_PREP_APPROVED,
  ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:process.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP,
  ECOMMERCE_RECOVERY_SEND_ENABLED:process.env.ECOMMERCE_RECOVERY_SEND_ENABLED,
+ ECOMMERCE_RECOVERY_OBSERVATION_ONLY:process.env.ECOMMERCE_RECOVERY_OBSERVATION_ONLY,
 });
 function safeConfig(v:unknown):Record<string,unknown>{
  return v && typeof v==='object' && !Array.isArray(v)?v as Record<string,unknown>:{};
@@ -67,13 +68,13 @@ async function ensureSchema():Promise<boolean>{
  const r=await db.execute(recoveryRuntimeSchemaReadyQuery());
  return r.rows[0]?.ready===true;
 }
-async function persist(merchant:AutoPrepMerchant,item:AbandonedCheckoutSnapshot):Promise<boolean>{
+async function persist(merchant:AutoPrepMerchant,item:AbandonedCheckoutSnapshot,observationOnly=false):Promise<boolean>{
  return withShopLock(merchant,async tx=>{
    if(!await ownerStillActive(tx,merchant))return false;
    await tx.execute(upsertCheckoutObservationQuery({
      accountId:merchant.accountId,shop:merchant.shop,snapshot:item
    }));
-   if(item.completed){
+   if(item.completed && !observationOnly){
      await tx.execute(suppressCompletedCheckoutIntentQuery({
        accountId:merchant.accountId,shop:merchant.shop,checkoutId:item.checkoutId
      }));
@@ -166,13 +167,19 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
  const tick=async()=>{
    if(busy||stopped)return;busy=true;
    try{
-     if(!await ensureSchema())return;
-     await runAutoRecoveryPreparationTick(configuration,{
+     if(!await ensureSchema()){
+       console.warn('[EcommerceRecoveryAutoPrep] schema_not_ready');
+       return;
+     }
+     const summary=await runAutoRecoveryPreparationTick(configuration,{
        merchant:getMerchant,
        observePage:merchant=>fetchShopifyAbandonedCheckoutPage({
          shop:merchant.shop,accessToken:merchant.accessToken
        }),
-       persistObservation:persist,
+       persistObservation:(merchant,item)=>persist(
+         merchant,item,
+         configuration.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only',
+       ),
        due:async merchant=>{
          const rows=await db.execute(dueCheckoutObservationsQuery(
            merchant.accountId,merchant.shop));
@@ -186,8 +193,23 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
        }),
        suppress,resolveIdentity:resolve,prepareAndEnqueue:prepare,
      });
-   }catch{
-     console.error('[EcommerceRecoveryAutoPrep] paused tick');
+     // Aggregate diagnostics only. Never log shop, customer, checkout IDs,
+     // tokens, recovery links or raw Shopify responses.
+     console.info('[EcommerceRecoveryAutoPrep] tick_summary', {
+       mode:configuration.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only'?
+         'observation_only':'preparation',
+       observed:summary.observed,checked:summary.checked,
+       queued:summary.queued,suppressed:summary.suppressed,skipped:summary.skipped,
+     });
+   }catch(error){
+     // Known static parser/API failure labels only, never provider payloads.
+     const code=error instanceof Error?error.message:'';
+     const known=new Set(['shopify_abandoned_checkout_source_unavailable',
+       'shopify_checkout_permission_or_query_error','shopify_checkout_source_invalid',
+       'invalid_checkout_record','invalid_checkout_observation_page']);
+     console.error('[EcommerceRecoveryAutoPrep] paused_tick', {
+       reason:known.has(code)?code:'unavailable',
+     });
    }finally{busy=false;}
  };
  const timer=setInterval(()=>{void tick()},90_000);
