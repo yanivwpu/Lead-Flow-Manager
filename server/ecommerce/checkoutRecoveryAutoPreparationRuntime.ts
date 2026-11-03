@@ -68,13 +68,13 @@ async function ensureSchema():Promise<boolean>{
  const r=await db.execute(recoveryRuntimeSchemaReadyQuery());
  return r.rows[0]?.ready===true;
 }
-async function persist(merchant:AutoPrepMerchant,item:AbandonedCheckoutSnapshot):Promise<boolean>{
+async function persist(merchant:AutoPrepMerchant,item:AbandonedCheckoutSnapshot,observationOnly=false):Promise<boolean>{
  return withShopLock(merchant,async tx=>{
    if(!await ownerStillActive(tx,merchant))return false;
    await tx.execute(upsertCheckoutObservationQuery({
      accountId:merchant.accountId,shop:merchant.shop,snapshot:item
    }));
-   if(item.completed){
+   if(item.completed && !observationOnly){
      await tx.execute(suppressCompletedCheckoutIntentQuery({
        accountId:merchant.accountId,shop:merchant.shop,checkoutId:item.checkoutId
      }));
@@ -176,7 +176,10 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
        observePage:merchant=>fetchShopifyAbandonedCheckoutPage({
          shop:merchant.shop,accessToken:merchant.accessToken
        }),
-       persistObservation:persist,
+       persistObservation:(merchant,item)=>persist(
+         merchant,item,
+         configuration.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only',
+       ),
        due:async merchant=>{
          const rows=await db.execute(dueCheckoutObservationsQuery(
            merchant.accountId,merchant.shop));
