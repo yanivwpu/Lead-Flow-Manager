@@ -59,3 +59,15 @@ test("private owner pilot has new features; other merchants keep their previous 
  assert.match(dashboard,/\{privatePilot && <p data-testid="ecommerce-recovery-readiness"/);
  assert.match(dashboard,/\{privatePilot && data\?\.connected===true && commerceStatus\.data/);
 });
+
+test("cart recovery displays only existing owner-scoped checkout observation aggregates, never a send claim",()=>{
+ assert.match(activation,/FROM ecommerce_abandoned_checkout_observations/);
+ assert.match(activation,/WHERE account_id = \\${accountId} AND shop = \\${state\\.shop}/);
+ assert.match(activation,/state\\.activated && state\\.connected && state\\.shop && recoverySchemaReady === true/);
+ assert.match(activation,/due_for_review/);
+ assert.doesNotMatch(activation,/INSERT INTO ecommerce_abandoned_checkout_observations|UPDATE ecommerce_abandoned_checkout_observations/);
+ assert.match(dashboard,/data-testid="ecommerce-recovery-observations"/);
+ assert.match(dashboard,/activation\\.data\\?\\.recoveryObservations/);
+ for(const label of ["Detected checkouts","Checkouts detectados","תשלומים שזוהו"])
+   assert.ok(dashboard.includes(label));
+});
