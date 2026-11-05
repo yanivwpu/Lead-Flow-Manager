@@ -20,7 +20,7 @@ const copy = {
     blocked: "Activation unavailable: setup and operator release are required.",
     pause: "Uncheck a journey and save to pause its plan.", utility: "Approved utility template required",
     marketing: "Approved marketing template and separate marketing consent required",
-    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message selection saved", messageError: "Message selection could not be saved", editMessage: "Open WhatsApp Library", messageHint: "Create the message in Meta WhatsApp Manager, then sync the approved template into the WhachatCRM WhatsApp Library and select it here. Selection does not enable customer sending.", noApproved: "No compatible approved text templates found.",
+    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message saved and verified", savingMessage: "Saving message selection…", retryMessage: "Retry saving", messageError: "Message selection was not saved. Retry before leaving this page.", editMessage: "Open WhatsApp Library", messageHint: "Create the message in Meta WhatsApp Manager, then sync the approved template into the WhachatCRM WhatsApp Library and select it here. Selection does not enable customer sending.", noApproved: "No compatible approved text templates found.",
     labels: ["Order confirmation", "Shipping update", "Cancellation", "Review request", "Repeat-purchase offer", "Customer win-back"],
     examples: ["We received your order.", "Your order has been fulfilled.", "Your order was cancelled.", "Would you like to review your purchase?", "Ready for another purchase?", "We would love to welcome you back."],
   },
@@ -34,7 +34,7 @@ const copy = {
     blocked: "Activación no disponible: se requieren configuración y autorización del operador.",
     pause: "Desmarca un recorrido y guarda para pausar su plan.", utility: "Requiere plantilla de utilidad aprobada",
     marketing: "Requiere plantilla de marketing aprobada y consentimiento de marketing separado",
-    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Selección guardada", messageError: "No se pudo guardar la selección", editMessage: "Abrir biblioteca de WhatsApp", messageHint: "Crea el mensaje en WhatsApp Manager de Meta. Tras su aprobación, sincronízalo con la biblioteca de WhatsApp de WhachatCRM y selecciónalo aquí. Seleccionarlo no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
+    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Mensaje guardado y verificado", savingMessage: "Guardando selección de mensaje…", retryMessage: "Reintentar guardado", messageError: "La selección no se guardó. Reintenta antes de salir de esta página.", editMessage: "Abrir biblioteca de WhatsApp", messageHint: "Crea el mensaje en WhatsApp Manager de Meta. Tras su aprobación, sincronízalo con la biblioteca de WhatsApp de WhachatCRM y selecciónalo aquí. Seleccionarlo no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
     labels: ["Confirmación de pedido", "Actualización de envío", "Cancelación", "Solicitud de reseña", "Oferta de nueva compra", "Recuperación de clientes"],
     examples: ["Recibimos tu pedido.", "Tu pedido ha sido preparado.", "Tu pedido fue cancelado.", "¿Quieres dejar una reseña de tu compra?", "¿Listo para otra compra?", "Nos encantaría volver a recibirte."],
   },
@@ -48,7 +48,7 @@ const copy = {
     blocked: "הפעלה אינה זמינה: נדרשים השלמת ההגדרה ואישור מפעיל.",
     pause: "להשהיית תוכנית מסע, יש לבטל את הסימון ולשמור.", utility: "נדרשת תבנית שירות מאושרת",
     marketing: "נדרשות תבנית שיווק מאושרת והסכמה נפרדת לשיווק",
-    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "בחירת ההודעה נשמרה", messageError: "לא ניתן לשמור את בחירת ההודעה", editMessage: "פתיחת ספריית WhatsApp", messageHint: "יוצרים את ההודעה ב-WhatsApp Manager של Meta, ולאחר אישור מסנכרנים אותה לספריית WhatsApp של WhachatCRM ובוחרים בה כאן. הבחירה לא מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
+    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "ההודעה נשמרה ואומתה", savingMessage: "שומר את בחירת ההודעה…", retryMessage: "נסה לשמור שוב", messageError: "בחירת ההודעה לא נשמרה. יש לנסות שוב לפני היציאה מהדף.", editMessage: "פתיחת ספריית WhatsApp", messageHint: "יוצרים את ההודעה ב-WhatsApp Manager של Meta, ולאחר אישור מסנכרנים אותה לספריית WhatsApp של WhachatCRM ובוחרים בה כאן. הבחירה לא מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
     labels: ["אישור הזמנה", "עדכון משלוח", "ביטול הזמנה", "בקשת חוות דעת", "הצעה לרכישה חוזרת", "החזרת לקוחות"],
     examples: ["קיבלנו את ההזמנה שלך.", "ההזמנה שלך טופלה.", "ההזמנה שלך בוטלה.", "רוצה לכתוב חוות דעת על הרכישה?", "מוכנים לרכישה נוספת?", "נשמח לראות אותך שוב."],
   },
@@ -130,19 +130,34 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
     (!template.buttons || (Array.isArray(template.buttons) && template.buttons.length === 0)) &&
     (!template.carouselCards || (Array.isArray(template.carouselCards) && template.carouselCards.length === 0)));
   const currentTemplate = approved.find(template => template.id === selectedTemplate);
-  async function saveTemplate() {
+  // Changing a selection saves immediately. The existing backend still validates
+  // tenant ownership and the approved Meta template without enabling any sends.
+  async function saveTemplate(templateId: string) {
     setMessageStatus("saving");
     try {
       const response = await fetch("/api/shopify/ecommerce/workflow-draft", {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_post_purchase_template", journey, templateId: selectedTemplate || null }),
+        body: JSON.stringify({ action: "save_post_purchase_template", journey, templateId: templateId || null }),
       });
       if (!response.ok) throw Error("binding_save_failed");
-      const result = await response.json();
+      const result = await response.json() as {
+        ok?: boolean; messagingEnabled?: boolean; workflowActive?: boolean;
+        activationEligible?: boolean; postPurchaseTemplates?: TemplateBindings;
+      };
       if (result.ok !== true || result.messagingEnabled !== false || result.workflowActive !== false ||
-          result.activationEligible !== false || result.postPurchaseTemplates?.[journey] !== (selectedTemplate || undefined))
-        throw Error("unexpected_response");
+          result.activationEligible !== false || result.postPurchaseTemplates?.[journey] !== (templateId || undefined))
+        throw Error("binding_save_unexpected_response");
+
+      // Independently read the committed value. An optimistic selected option,
+      // or just HTTP 200, must never be displayed as a successful saved binding.
       await onSaved();
+      const check = await fetch("/api/shopify/ecommerce/event-inbox-preview", {
+        credentials: "include", cache: "no-store",
+      });
+      if (!check.ok) throw Error("binding_readback_unavailable");
+      const state = await check.json() as { ok?: boolean; postPurchaseTemplates?: TemplateBindings };
+      if (state.ok !== true || state.postPurchaseTemplates?.[journey] !== (templateId || undefined))
+        throw Error("binding_not_persisted");
       setMessageStatus("saved");
     } catch { setMessageStatus("error"); }
   }
@@ -175,7 +190,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       <label className="block text-sm font-medium">{t.chooseMessage}
         <select aria-label={t.chooseMessage} className="mt-1 w-full rounded border bg-white p-2 text-sm"
           value={selectedTemplate} disabled={messageStatus === "saving"}
-          onChange={e => { setSelectedTemplate(e.target.value); setMessageStatus("idle"); }}>
+          onChange={e => { const nextTemplateId = e.target.value; setSelectedTemplate(nextTemplateId); void saveTemplate(nextTemplateId); }}>
           <option value="">{t.noMessage}</option>
           {approved.map(template => <option key={template.id} value={template.id}>
             {template.name} ({template.language || "en"})
@@ -186,10 +201,13 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       {approved.length === 0 && <p className="text-xs text-slate-600">{t.noApproved}</p>}
       <a href="/app/templates?tab=templates" className="inline-block text-xs text-blue-700 underline">{t.editMessage}</a>
       <p className="text-xs text-slate-500">{t.messageHint}</p>
-      <button type="button" onClick={() => void saveTemplate()} disabled={messageStatus === "saving"}
-        className="rounded border bg-white px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.saveMessage}</button>
-      {messageStatus === "saved" && <p role="status" className="text-xs">{t.savedMessage}</p>}
-      {messageStatus === "error" && <p role="alert" className="text-xs text-red-700">{t.messageError}</p>}
+      {messageStatus === "saving" && <p role="status" className="text-xs text-slate-600">{t.savingMessage}</p>}
+      {messageStatus === "saved" && <p role="status" className="text-xs text-green-700">{t.savedMessage}</p>}
+      {messageStatus === "error" && <div role="alert" className="space-y-1 text-xs text-red-700">
+        <p>{t.messageError}</p>
+        <button type="button" className="rounded border border-red-300 px-2 py-1 text-red-700"
+          onClick={() => void saveTemplate(selectedTemplate)}>{t.retryMessage}</button>
+      </div>}
     </div>
     <button type="submit" disabled={!valid || status === "saving"} className="rounded border px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.save}</button>
     {status === "saved" && <p role="status" className="text-xs">{t.saved}</p>}

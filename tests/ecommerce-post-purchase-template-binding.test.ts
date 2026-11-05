@@ -80,5 +80,11 @@ test("preview reuses the existing owner-only endpoint and library, with no custo
  assert.ok(!plans.includes("Create or edit a message in Templates"));
  assert.match(plans,/action: "save_post_purchase_template"/);
  assert.match(plans,/result\.messagingEnabled !== false/);
+ assert.ok(plans.includes("void saveTemplate(nextTemplateId)"),"template selection must save immediately");
+ assert.ok(plans.includes("postPurchaseTemplates?.[journey] !== (templateId || undefined)"),"saved binding must be checked");
+ assert.ok(plans.includes('cache: "no-store"'),"binding must be read back from the server");
+ assert.ok(plans.includes("binding_not_persisted"),"missing binding must not be reported as saved");
+ assert.ok(plans.includes('messageStatus === "error"'),"failed saves must show an error and retry");
+ assert.ok(!plans.includes("onClick={() => void saveTemplate()}"),"remove redundant Save message button");
  assert.doesNotMatch(plans,/send-template|send-message|MetaSender|checkoutCreate/);
 });
