@@ -207,7 +207,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
         <p>{t.messageError}</p>
         <button type="button" className="rounded border border-red-300 px-2 py-1 text-red-700"
           onClick={() => void saveTemplate(selectedTemplate)}>{t.retryMessage}</button>
-      </div>
+      </div>}
     </div>
     <button type="submit" disabled={!valid || status === "saving"} className="rounded border px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.save}</button>
     {status === "saved" && <p role="status" className="text-xs">{t.saved}</p>}
