@@ -79,7 +79,7 @@ test("preview reuses the existing owner-only endpoint and library, with no custo
  assert.ok(plans.includes("Create the message in Meta WhatsApp Manager"));
  assert.ok(!plans.includes("Create or edit a message in Templates"));
  assert.match(plans,/action: "save_post_purchase_template"/);
- assert.match(plans,/result\\.messagingEnabled !== false/);
+ assert.match(plans,/result\.messagingEnabled !== false/);
  assert.ok(plans.includes("void saveTemplate(nextTemplateId)"),"template selection must save immediately");
  assert.ok(plans.includes("postPurchaseTemplates?.[journey] !== (templateId || undefined)"),"saved binding must be checked");
  assert.ok(plans.includes('cache: "no-store"'),"binding must be read back from the server");
