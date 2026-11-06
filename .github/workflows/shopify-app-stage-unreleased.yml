@@ -1,0 +1,104 @@
+name: "Shopify — Stage production app version (no release)"
+
+# Never runs on push/PR or a schedule. Owner manually starts a stage-only run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: whachatcrm-shopify-app-unreleased-staging
+  cancel-in-progress: false
+
+jobs:
+  stage-only:
+    name: Validate and create unreleased Shopify app version
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SHOPIFY_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SHOPIFY_SERVICE_ACCOUNT_TOKEN }}
+      SHOPIFY_FLAG_NO_INPUT: "true"
+      SHOPIFY_CLI_NO_ANALYTICS: "1"
+    steps:
+      - name: Checkout reviewed production configuration
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check single-app Shopify authentication is available
+        shell: bash
+        run: |
+          if [ -z "$SHOPIFY_SERVICE_ACCOUNT_TOKEN" ]; then
+            echo "::error::Missing SHOPIFY_SERVICE_ACCOUNT_TOKEN GitHub Actions secret. Add an app-scoped Shopify service account with App development permission for WhachatCRM only."
+            exit 1
+          fi
+
+      - name: Verify pinned production config, scopes, and all webhook URLs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, tomllib
+          config = tomllib.loads(pathlib.Path("shopify.app.whachatcrm.toml").read_text())
+          expected = {
+              "customers/create": "https://app.whachatcrm.com/api/shopify/webhooks/customers-create",
+              "orders/create": "https://app.whachatcrm.com/api/shopify/webhooks/orders-create",
+              "customers/update": "https://app.whachatcrm.com/api/shopify/webhooks/customers-update",
+              "app/scopes_update": "https://app.whachatcrm.com/api/shopify/catalog-webhooks/app-scopes_update",
+              "orders/fulfilled": "https://app.whachatcrm.com/api/shopify/webhooks/orders-fulfilled",
+              "orders/cancelled": "https://app.whachatcrm.com/api/shopify/webhooks/orders-cancelled",
+          }
+          privacy = {
+              "customers/data_request": "https://app.whachatcrm.com/api/shopify/webhooks/customers/data_request",
+              "customers/redact": "https://app.whachatcrm.com/api/shopify/webhooks/customers/redact",
+              "shop/redact": "https://app.whachatcrm.com/api/shopify/webhooks/shop/redact",
+          }
+          assert config.get("client_id") == "e4585d4da1434c9e5649a2269e716076", "Unexpected Shopify app client ID"
+          assert config.get("name", "").strip() == "WhachatCRM", "Unexpected Shopify app name"
+          assert config.get("application_url") == "https://app.whachatcrm.com", "Unexpected app URL"
+          assert config.get("embedded") is False, "Unexpected embedded setting"
+          assert config.get("webhooks", {}).get("api_version") == "2026-01", "Webhook API version changed"
+          assert config.get("access_scopes", {}).get("scopes") == "read_customers,read_orders", "Required scopes changed"
+          assert config.get("access_scopes", {}).get("optional_scopes") == ["read_products", "read_inventory"], "Optional scopes changed"
+          assert config.get("auth", {}).get("redirect_urls") == ["https://app.whachatcrm.com/api/shopify/callback"], "OAuth callback changed"
+          found, found_privacy = {}, {}
+          for sub in config["webhooks"]["subscriptions"]:
+              for topic in sub.get("topics", []):
+                  assert topic not in found, f"Duplicate app-specific subscription {topic}"
+                  found[topic] = sub["uri"]
+              for topic in sub.get("compliance_topics", []):
+                  assert topic not in found_privacy, f"Duplicate privacy subscription {topic}"
+                  found_privacy[topic] = sub["uri"]
+          assert found == expected, f"App topics mismatch: {sorted(set(found) ^ set(expected))}"
+          assert found_privacy == privacy, "Privacy callbacks changed"
+          print("Preflight PASS: correct production identity; 6 standard and 3 privacy subscriptions; scopes and URLs unchanged.")
+          PY
+
+      - name: Install Node.js for Shopify CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Shopify CLI
+        shell: bash
+        run: npm install --global @shopify/cli@latest
+
+      - name: Validate production configuration using Shopify CLI
+        shell: bash
+        run: shopify app config validate --config whachatcrm --no-input
+
+      - name: Stage an unreleased version; NEVER release
+        shell: bash
+        run: |
+          VERSION="postpurchase-webhooks-${GITHUB_RUN_NUMBER}"
+          echo "Creating UNRELEASED app version $VERSION"
+          shopify app deploy --config whachatcrm --no-release --no-input --version "$VERSION"
+          {
+            echo "### Shopify app version staged — NOT released"
+            echo "- Version: \`$VERSION\`"
+            echo "- Exact production Client ID was verified before staging"
+            echo "- Check Shopify Dev Dashboard → Apps → WhachatCRM → Versions"
+            echo "- Confirm current four subscriptions, both new lifecycle topics, 3 privacy callbacks, API version 2026-01, OAuth scopes, and ALL extensions"
+            echo "- DO NOT release without a separate owner review and approval"
+          } >> "$GITHUB_STEP_SUMMARY"
