@@ -18,7 +18,11 @@ export interface ShoppingSessionStore {
 const SESSION_MS=30*60_000;
 const REPLAY_MS=60_000;
 function safeLabel(s:string) { return s.replace(/https?:\/\/\S+/gi,"").replace(/[\r\n\u0000-\u001f]/g," ").slice(0,180); }
-function line(c:ShoppingChoice) {return `${safeLabel(c.productTitle)} / ${safeLabel(c.variantTitle)} — ${c.currency} ${c.price}`;}
+function line(c:ShoppingChoice) {
+ const defaultVariant=c.variantTitle.trim().toLowerCase()==="default title" &&
+   c.options.every(o=>o.name.trim().toLowerCase()==="title" && o.value.trim().toLowerCase()==="default title");
+ return `${safeLabel(c.productTitle)}${defaultVariant?"":` / ${safeLabel(c.variantTitle)}`} — ${c.currency} ${c.price}`;
+}
 function inventoryProof(v:ShoppingInventory): Pick<ShoppingChoice,"inventoryQuantity"> {
  return v.variant.tracked === true && Number.isSafeInteger(v.variant.quantity) && v.variant.quantity! >= 0
    ? {inventoryQuantity:v.variant.quantity!} : {};
@@ -220,7 +224,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     // verified alternatives for an explicit subsequent choice/confirmation.
     state.choices=choices;
     explanation=plan.policy?result.text:undefined;
-    return finish(`${smartCopy.variant}\n${choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")}\n${copy.choose}`,state.selected?"confirming":"selecting");
+    return finish(`${smartCopy.variant}\n${choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")}\n${choices.length===1?copy.singleChoice:copy.choose}`,state.selected?"confirming":"selecting");
    }
    // A request to verify "that exact variant" is not permission to pick one.
    // Preserve the offered list until the customer explicitly chooses an option.
@@ -263,7 +267,16 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if((intent==="select" && !!previous?.choices.length) || intent==="other") return clarify(state.choices.length?copy.options:copy.repeatSearch);
    if(["variants","availability","compare"].includes(intent) && !state.query && !hasProductQuery) return clarify(copy.repeatSearch);
    // Variant/availability follow-ups reuse the last discovery query; never use a model ID.
-   const query=plan?.action==="refine" && state.query?state.query:plan?.query || ((cheaper || retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query || state.query);
+   let query=plan?.action==="refine" && state.query?state.query:plan?.query || ((cheaper || retryTurn || ["variants","availability","confirm","compare"].includes(intent)) && state.query?state.query:filters.query || state.query);
+    if(cheaper && (state.selected || state.choices.length)) {
+     // An exact product title is too narrow to find a lower-priced model. Broaden
+     // ONLY to this verified merchant product's own category, never the whole shop.
+     // Source ownership, live stock, currency and strictly-lower price checks remain.
+     const referenceChoice=state.selected??state.choices[0];
+     const [referenceProduct]=await evidenceProducts([referenceChoice.productId]);
+     const category=referenceProduct?.id===referenceChoice.productId ? referenceProduct.productType?.trim() : null;
+     if(category && category.length<=100 && catalogSearchTerms(category)) query=category;
+    }
    if(!query || !catalogSearchTerms(query)) return clarify(copy.repeatSearch);
    if(!retryTurn && (filters.maxPrice || filters.minPrice)) {state.maxPrice=filters.maxPrice;state.minPrice=filters.minPrice;}
    if(cheaper) {
@@ -305,7 +318,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     explanation=result.text;
     state.choices=result.ranked.map(n=>choices[n-1]);
    }
-   return finish(state.choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")+`\n${copy.choose}`,"selecting");
+   return finish(state.choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")+`\n${state.choices.length===1?copy.singleChoice:copy.choose}`,"selecting");
   });
  }};
 }
