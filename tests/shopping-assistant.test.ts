@@ -377,3 +377,53 @@ test("natural cheaper follow-up broadens an exact title ONLY to its owned catego
  assert.doesNotMatch(cheaper.reply,/Liquid/);
  assert.equal(cheaper.state.selected,undefined,"a cheaper alternative is not automatically selected or checked out");
 });
+
+
+test("inventory verifier order cannot crowd out cheaper distinct models",async()=>{
+ const product=(id:string,title:string,variants:Array<{id:string;title:string;price:string;quantity:number}>)=>({
+  id,title,variants,userId:"tenant-a",sourceId:"shop-source",productType:"snowboard",
+  status:"ACTIVE",published:true,merchantTags:[],
+ });
+ const liquid=product("liquid","The Collection Snowboard: Liquid",[{id:"liquid-v",title:"Default Title",price:"749.95",quantity:49}]);
+ const complete=product("complete","The Complete Snowboard",[
+  {id:"ice",title:"Ice",price:"699.95",quantity:10},
+  {id:"dawn",title:"Dawn",price:"699.95",quantity:10},
+  {id:"powder",title:"Powder",price:"699.95",quantity:10},
+ ]);
+ const hydrogen=product("hydrogen","The Collection Snowboard: Hydrogen",[{id:"hydrogen-v",title:"Default Title",price:"600.00",quantity:50}]);
+ const multi=product("multi","The Multi-managed Snowboard",[{id:"multi-v",title:"Default Title",price:"629.95",quantity:100}]);
+ const all=[liquid,complete,hydrogen,multi];
+ const commerce={
+  source:async()=>({id:"shop-source",currency:"USD"}),
+  purchaseCandidates:async(_userId:string,req:{query:string;filters:{priceBelow?:string}})=>{
+   if(req.query.toLowerCase().includes("liquid"))return [liquid];
+   if(req.query==="snowboard" && req.filters.priceBelow==="749.95")
+    return [complete,hydrogen,multi]; // Full-text rank favors the 3-variant product.
+   return [];
+  },
+  products:async(_u:string,_s:string,ids:string[])=>all.filter(p=>ids.includes(p.id)),
+  lookupVariant:async()=>null,
+  verifyForPurchase:async(_u:string,_s:string,ids:string[])=>all.flatMap(p=>p.variants.map(v=>({
+   product:p,variant:{...v,options:v.title==="Default Title"?[{name:"Title",value:"Default Title"}]:[{name:"Color",value:v.title}],
+    currency:"USD",tracked:true,inventoryPolicy:"DENY",verifiedAt:new Date()},
+   availability:"available",
+  }))).filter(result=>ids.includes(result.variant.id)),
+ } as unknown as CommerceShoppingProvider;
+ let saved:ShoppingState|null=null;
+ const sessions:ShoppingSessionStore={async withTurn(turn,run){
+  if(turn.userId!=="tenant-a")return null;
+  return run(saved,async s=>{saved=s;});
+ }};
+ const service=createShoppingService({commerce,sessions,settings:async()=>shoppingSettings({enabled:true,maxRecommendations:3}),entitled:async()=>true});
+ let seq=0;
+ const turn=(text:string)=>service.turn({userId:"tenant-a",conversationId:"test",eventId:"e"+(++seq),text,channel:"webchat"});
+ const initial=(await turn("Show me The Collection Snowboard: Liquid"))!;
+ assert.equal(initial.state.choices.length,1);
+ const cheaper=(await turn("Do you have anything cheaper?"))!;
+ assert.equal(cheaper.state.cheaperThan,"749.95");
+ assert.deepEqual(cheaper.state.choices.map(c=>c.productId),["hydrogen","multi","complete"],"show distinct models cheapest first, never grouped verifier variants");
+ assert.deepEqual(cheaper.state.choices.map(c=>c.price),["600.00","629.95","699.95"]);
+ assert.match(cheaper.reply,/Hydrogen[\s\S]*600\.00[\s\S]*Multi-managed[\s\S]*629\.95[\s\S]*Complete[\s\S]*699\.95/);
+ assert.equal(cheaper.state.selected,undefined);
+ assert.equal(cheaper.state.checkout,undefined);
+});

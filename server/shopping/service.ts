@@ -300,14 +300,37 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    if(!candidates.length) return unavailable();
    const live=await verify(candidates.map(c=>c.v.id));
    if(!live.length) return pending("discover");
-   const choices=live.filter(v=>candidates.some(c=>c.v.id===v.variant.id&&c.p.id===v.product.id) &&
-     ["available","not_tracked"].includes(v.availability) && v.product.published && v.product.status==="ACTIVE" &&
+   // The live verifier may return refreshed variants grouped by product
+   // rather than in bounded candidate order. Restore merchant/source-owned
+   // candidate order before truncating so one product cannot crowd every slot.
+   const eligible=candidates.flatMap(candidate=>{
+    const v=live.find(item=>item.variant.id===candidate.v.id && item.product.id===candidate.p.id);
+    return v && ["available","not_tracked"].includes(v.availability) && v.product.published && v.product.status==="ACTIVE" &&
      v.variant.currency===source.currency && v.variant.price!==null && Number.isFinite(new Date(v.variant.verifiedAt).getTime()) &&
      stamp-new Date(v.variant.verifiedAt).getTime()<=REPLAY_MS &&
      (!state.cheaperThan || compareMoney(v.variant.price,state.cheaperThan)<0) &&
      (!state.dearerThan || compareMoney(v.variant.price,state.dearerThan)>0) &&
-     (!state.maxPrice || compareMoney(v.variant.price,state.maxPrice)<=0) && (!state.minPrice || compareMoney(v.variant.price,state.minPrice)>=0))
-    .slice(0,plan?8:config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)}));
+     (!state.maxPrice || compareMoney(v.variant.price,state.maxPrice)<=0) && (!state.minPrice || compareMoney(v.variant.price,state.minPrice)>=0)
+     ? [v] : [];
+   });
+   // For a cheaper-product request, lead with the lowest *freshly verified*
+   // price across distinct models, then show additional variants if space remains.
+   const byPrice=state.cheaperThan
+    ? [...eligible].sort((a,b)=>compareMoney(a.variant.price!,b.variant.price!) ||
+      a.product.id.localeCompare(b.product.id) || a.variant.id.localeCompare(b.variant.id))
+    : eligible;
+   const seenProducts=new Set<string>(),featuredVariants=new Set<string>();
+   const diverse=state.cheaperThan
+    ? [
+      ...byPrice.filter(v=>{
+       if(seenProducts.has(v.product.id))return false;
+       seenProducts.add(v.product.id);featuredVariants.add(v.variant.id);
+       return true;
+      }),
+      ...byPrice.filter(v=>!featuredVariants.has(v.variant.id)),
+     ]
+    : byPrice;
+   const choices=diverse.slice(0,plan?8:config.maxRecommendations).map(v=>({productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price!,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)}));
    if(!choices.length) {
     if(live.some(v=>["unknown","stale"].includes(v.availability) || v.variant.price===null || !Number.isFinite(new Date(v.variant.verifiedAt).getTime()) || stamp-new Date(v.variant.verifiedAt).getTime()>REPLAY_MS)) return pending("discover");
     return unavailable();
