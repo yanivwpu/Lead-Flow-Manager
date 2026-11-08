@@ -363,7 +363,7 @@ test("natural cheaper follow-up broadens an exact title ONLY to its owned catego
  let event=0;
  const send=async(text:string)=>svc.turn({userId:"tenant-a",conversationId:"chat-1",eventId:`evt-${++event}`,text,channel:"webchat"});
  const initial=(await send("Show me The Collection Snowboard: Liquid"))!;
- assert.match(initial.reply,/749\\.95/);
+ assert.match(initial.reply,/749\.95/);
  assert.doesNotMatch(initial.reply,/Default Title/,"Shopify placeholder variant must be hidden");
  assert.match(initial.reply,/only verified option/i,"single variant should not ask to choose an unspecified option");
  const cheaper=(await send("Do you have anything cheaper?"))!;
@@ -373,7 +373,7 @@ test("natural cheaper follow-up broadens an exact title ONLY to its owned catego
  assert.equal(queried.at(-1)?.priceBelow,"749.95");
  assert.equal(cheaper.state.choices.length,1);
  assert.equal(cheaper.state.choices[0].productId,hydrogen.id);
- assert.match(cheaper.reply,/Hydrogen.*600\\.00/);
+ assert.match(cheaper.reply,/Hydrogen.*600\.00/);
  assert.doesNotMatch(cheaper.reply,/Liquid/);
  assert.equal(cheaper.state.selected,undefined,"a cheaper alternative is not automatically selected or checked out");
 });
