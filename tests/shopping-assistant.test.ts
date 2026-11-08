@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup } from "../shared/shoppingAssistant";
+import { shoppingIntent, shoppingFilters, compareMoney, shoppingSettingsSchema, shoppingSettings, type ShoppingState, shoppingVerificationFollowup, shoppingCheaperFollowup } from "../shared/shoppingAssistant";
 import { createShoppingService, type CommerceShoppingProvider, type ShoppingSessionStore, type ShoppingCheckout } from "../server/shopping/service";
 import { catalogSearchTerms } from "../shared/commerceCatalog";
 import { detectConversationLanguage } from "../shared/conversationLanguage";
@@ -313,4 +313,67 @@ test("a store-currency change cannot turn an old selection confirmation into ano
  assert.equal(checkouts,0);assert.equal(result.state.selected,undefined);
  assert.equal(result.state.maxPrice,undefined);assert.equal(result.state.currency,"EUR");
  assert.match(result.reply,/repeat your product search/);
+});
+
+
+test("natural cheaper follow-up broadens an exact title ONLY to its owned category and verifies lower live price",async()=>{
+ for(const phrase of ["Do you have anything cheaper?", "Anything cheaper?", "Is there a cheaper one?"]) {
+  assert.equal(shoppingCheaperFollowup(phrase),true,phrase);
+ }
+ const makeProduct=(id:string,title:string)=>({
+  id,userId:"tenant-a",sourceId:"source-a",title,productType:"snowboard",
+  published:true,status:"ACTIVE",merchantTags:[],
+ });
+ const liquid=makeProduct("liquid","The Collection Snowboard: Liquid");
+ const hydrogen=makeProduct("hydrogen","The Collection Snowboard: Hydrogen");
+ const liquidVariant={id:"liquid-v",title:"Default Title",options:[{name:"Title",value:"Default Title"}]};
+ const hydrogenVariant={id:"hydrogen-v",title:"Default Title",options:[{name:"Title",value:"Default Title"}]};
+ const queried:Array<{query:string;priceBelow?:string}>=[];
+ const commerce={
+  source:async()=>({id:"source-a",currency:"USD"}),
+  purchaseCandidates:async(_userId:string,ctx:{query:string;filters:{priceBelow?:string}})=>{
+   queried.push({query:ctx.query,priceBelow:ctx.filters.priceBelow});
+   if(ctx.query.toLowerCase().includes("liquid"))return [{...liquid,variants:[liquidVariant]}];
+   if(ctx.query.toLowerCase()==="snowboard" && ctx.filters.priceBelow==="749.95")
+    return [{...hydrogen,variants:[hydrogenVariant]}];
+   return [];
+  },
+  products:async(_userId:string,_sourceId:string,ids:string[])=>
+   [liquid,hydrogen].filter(p=>ids.includes(p.id)),
+  lookupVariant:async()=>null,
+  verifyForPurchase:async(_userId:string,_sourceId:string,ids:string[])=>{
+   return [{product:liquid,variant:{...liquidVariant,price:"749.95",currency:"USD"}},
+    {product:hydrogen,variant:{...hydrogenVariant,price:"600.00",currency:"USD"}}]
+    .filter(v=>ids.includes(v.variant.id))
+    .map(v=>({...v,availability:"available",variant:{
+      ...v.variant,tracked:true,quantity:50,inventoryPolicy:"DENY",verifiedAt:new Date(),
+    }}));
+  },
+ } as unknown as CommerceShoppingProvider;
+ let saved:ShoppingState|null=null;
+ const sessions:ShoppingSessionStore={async withTurn(turn,run){
+  if(turn.userId!=="tenant-a")return null;
+  return run(saved,async s=>{saved=s;});
+ }};
+ const svc=createShoppingService({
+  commerce,sessions,
+  settings:async()=>shoppingSettings({enabled:true,handoffOnFailure:true,maxRecommendations:3}),
+  entitled:async()=>true,
+ });
+ let event=0;
+ const send=async(text:string)=>svc.turn({userId:"tenant-a",conversationId:"chat-1",eventId:`evt-${++event}`,text,channel:"webchat"});
+ const initial=(await send("Show me The Collection Snowboard: Liquid"))!;
+ assert.match(initial.reply,/749\\.95/);
+ assert.doesNotMatch(initial.reply,/Default Title/,"Shopify placeholder variant must be hidden");
+ assert.match(initial.reply,/only verified option/i,"single variant should not ask to choose an unspecified option");
+ const cheaper=(await send("Do you have anything cheaper?"))!;
+ assert.equal(cheaper.state.query,"snowboard");
+ assert.equal(cheaper.state.cheaperThan,"749.95");
+ assert.equal(queried.at(-1)?.query,"snowboard");
+ assert.equal(queried.at(-1)?.priceBelow,"749.95");
+ assert.equal(cheaper.state.choices.length,1);
+ assert.equal(cheaper.state.choices[0].productId,hydrogen.id);
+ assert.match(cheaper.reply,/Hydrogen.*600\\.00/);
+ assert.doesNotMatch(cheaper.reply,/Liquid/);
+ assert.equal(cheaper.state.selected,undefined,"a cheaper alternative is not automatically selected or checked out");
 });
