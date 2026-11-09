@@ -347,3 +347,41 @@ test("internal private-QA guidance never becomes a shopper-facing product fact o
  const answer=await intelligence.answer({turn,state,plan,products:[product],choices:[choice]});
  assert.doesNotMatch(answer.text,/private QA|demonstration snowboard|for beginner riders|soft forgiving flex/i);
 });
+
+
+test("mixed unavailable-color and returns turn uses one policy answer, no model fallback or duplicate disclaimers",async()=>{
+ const model=async(system:string,input:unknown)=>{
+  // Policy-only reasoning for a catalog-verified variant must not ask the
+  // advisory model for a second JSON answer, even with sparse evidence.
+  if(system.startsWith("Reason over") && /return policy/i.test(String((input as {text?:string})?.text)))
+   throw Error("advisory variant-policy answer must not run");
+  return fixtureShoppingModel(system,input);
+ };
+ const f=await intelligenceFixture(model);
+ try{
+  const c=f.conversation("tenant-a");
+  const initial=(await c.turn("Show me snowboard options"))!;
+  assert.ok(initial.state.choices.length>0);
+  const original=structuredClone(initial.state.choices);
+  const unavailable=(await c.turn("Do you have the first one in purple, and what is your return policy?"))!;
+  assert.match(unavailable.reply,/couldn't verify that exact option/i);
+  assert.match(unavailable.reply,/purple/i);
+  assert.match(unavailable.reply,/Snowboard 1/i);
+  assert.equal(unavailable.reply.split(f.merchant["tenant-a"].policy).length-1,1,"policy is included exactly once");
+  assert.doesNotMatch(unavailable.reply,/does not establish a recommendation|couldn't finish evaluating/i);
+  assert.deepEqual(unavailable.state.choices,original,"missing color does not change existing options");
+  assert.equal(unavailable.state.checkout,undefined);
+
+  const available=(await c.turn("Do you have the first one in blue, and what is your return policy?"))!;
+  assert.match(available.reply,/matching options/i);
+  assert.ok(available.state.choices.length>0);
+  assert.ok(available.state.choices.every(x=>x.options.some(o=>o.name==="Color"&&o.value==="Blue")));
+  assert.equal(available.reply.split(f.merchant["tenant-a"].policy).length-1,1,"verified color policy is included once");
+  assert.doesNotMatch(available.reply,/does not establish a recommendation|couldn't finish evaluating/i);
+
+  f.missingPolicy(true);
+  const unknown=(await c.turn("Do you have the first one in purple, and what is your return policy?"))!;
+  assert.equal(unknown.reply.split("I couldn't establish that policy").length-1,1,"missing merchant policy is disclosed exactly once");
+  assert.doesNotMatch(unknown.reply,/does not establish a recommendation|couldn't finish evaluating/i);
+ }finally{await f.cleanup();}
+});
