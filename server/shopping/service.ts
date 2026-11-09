@@ -5,7 +5,7 @@ import type { CommerceProduct } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
 import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup, shoppingCheaperFollowup } from "@shared/shoppingAssistant";
-export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant"> & Partial<Pick<ReturnType<typeof createCommerceStore>, "products"|"variantPage"|"recommendationVocabulary">>;
+export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant"> & Partial<Pick<ReturnType<typeof createCommerceStore>, "products"|"variantPage"|"recommendationVocabulary"|"browse">>;
 export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
 export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean; modelGenerationSucceeded?:boolean; intelligenceReview?:boolean};
 export type ShoppingTurnGuard = { token: string; check: () => Promise<void> };
@@ -195,9 +195,22 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     const exactTitle=namedCatalogShoppingTitle(turn.text,vocabulary);
     if(exactTitle) {
      const normalized=(value:string)=>value.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
-     let matched:Awaited<ReturnType<CommerceShoppingProvider["purchaseCandidates"]>>;
-     try {matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:exactTitle,limit:8,filters:{currency:source.currency}});}
-     catch {return pending("discover");}
+     let matched:Awaited<ReturnType<CommerceShoppingProvider["purchaseCandidates"]>>=[];
+     try {
+      if(deps.commerce.browse) {
+       // Exact-title resolution must not depend on full-text search ranking:
+       // the indexed searchText may contain only a product category.
+       let cursor:string|undefined;
+       for(let page=0;page<5;page++) {
+        const result=await deps.commerce.browse(turn.userId,source.id,{limit:100,status:"ACTIVE",...(cursor?{cursor}:{})});
+        matched.push(...result.items);
+        if(!result.nextCursor)break;
+        cursor=result.nextCursor;
+       }
+      } else {
+       matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:plan?.query??exactTitle,limit:8,filters:{currency:source.currency}});
+      }
+     } catch {return pending("discover");}
      const exact=matched.filter(p=>normalized(p.title)===normalized(exactTitle) && p.userId===turn.userId &&
        p.sourceId===source.id && p.status==="ACTIVE" && p.published && !excludedShoppingProduct(p));
      if(exact.length!==1)return clarify(smartCopy.clarify);
