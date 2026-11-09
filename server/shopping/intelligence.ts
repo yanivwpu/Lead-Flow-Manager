@@ -130,7 +130,7 @@ function sentences(text: string): string[] {
 /** Private QA/demo instructions are allowed to guide internal tests, but
  * must never be presented as verified merchant product specifications. */
 function customerProductGuidance(guidance:string):string[] {
-  if(/\b(?:private\\s+qa(?:\\s+testing)?|for\\s+(?:internal|private)\\s+(?:testing|qa)|qa\\s+testing\\s+only|internal\\s+demo\\s+only)\b/iu.test(guidance))return [];
+  if(/\b(?:private\s+qa(?:\s+testing)?|for\s+(?:internal|private)\s+(?:testing|qa)|qa\s+testing\s+only|internal\s+demo\s+only)\b/iu.test(guidance))return [];
   return sentences(guidance).slice(0,4);
 }
 
