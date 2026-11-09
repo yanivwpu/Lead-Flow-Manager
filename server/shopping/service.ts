@@ -191,10 +191,10 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    // only a unique FULL title from the tenant/source-owned vocabulary, then
    // re-check the owned product and variants. No model-selected product IDs.
    if(!previous && deps.intelligence && deps.commerce.products && vocabulary.length &&
-      /\\b(?:colou?rs?|sizes?|talla|azul|blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|rosa|negro|rojo|verde|blanco|morado)\\b|בצבע|מידה|כחול|שחור|אדום/u.test(turn.text.toLowerCase())) {
+      /\b(?:colou?rs?|sizes?|talla|azul|blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|rosa|negro|rojo|verde|blanco|morado)\b|בצבע|מידה|כחול|שחור|אדום/u.test(turn.text.toLowerCase())) {
     const exactTitle=namedCatalogShoppingTitle(turn.text,vocabulary);
     if(exactTitle) {
-     const normalized=(value:string)=>value.normalize("NFD").replace(/\\p{M}/gu,"").toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu," ").trim();
+     const normalized=(value:string)=>value.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
      const matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:exactTitle,limit:8,filters:{currency:source.currency}});
      const exact=matched.filter(p=>normalized(p.title)===normalized(exactTitle) && p.userId===turn.userId &&
        p.sourceId===source.id && p.status==="ACTIVE" && p.published && !excludedShoppingProduct(p));
@@ -217,9 +217,9 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      const choices=live.flatMap(v=>{const match=candidates.some(candidate=>candidate.id===v.variant.id)&&v.product.id===product.id;
        const choice=match&&freshChoice(v);return choice?[choice]:[];});
      // A missing color must not be replaced by another color/product. Read
-     // the product's verified default option only for an optional price/stock.
+     // the product's other verified options (without claiming a color match).
      const fallback=values.length && !optionRows.length
-       ? (await verify(product.variants.slice(0,1).map(v=>v.id))).flatMap(v=>{
+       ? (await verify(product.variants.slice(0,8).map(v=>v.id))).flatMap(v=>{
           const choice=v.product.id===product.id&&freshChoice(v);return choice?[choice]:[];
          }):[];
      const offered=choices.length?choices:fallback;
@@ -239,8 +239,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      const note=noColors
        ? {en:"This product has no listed color choices.",es:"Este producto no tiene opciones de color indicadas.",he:"למוצר זה לא מופיעות אפשרויות צבע."}[shoppingLocale(turn.locale)]
        : "";
-     const rows=offered.map(choice=>`${line(choice)}${stockNote(choice,copy.verifiedStock)}`).join("\\n");
-     return finish([prefix,note,rows].filter(Boolean).join("\\n"),"selecting");
+     const rows=offered.map(choice=>`${line(choice)}${stockNote(choice,copy.verifiedStock)}`).join("\n");
+     return finish([prefix,note,rows].filter(Boolean).join("\n"),"selecting");
     }
    }
    if(plan && deps.intelligence && ["compare","variant"].includes(plan.action)) {
