@@ -414,3 +414,27 @@ test("fresh named catalog title binds only one owned product for color and polic
   assert.ok(!unrelated || !unrelated.state.choices.some(choice=>choice.productId.startsWith("tenant-a")));
  }finally{await f.cleanup();}
 });
+
+test("first-turn real Hydrogen title with only Default Title never invents Blue or substitutes Liquid",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try {
+  await f.database.update(schema.catalogProducts).set({title:"The Collection Snowboard: Hydrogen",variantCount:1})
+   .where(eq(schema.catalogProducts.id,"tenant-a-p1"));
+  for(const n of [2,3,4])await f.database.delete(schema.catalogVariants)
+   .where(eq(schema.catalogVariants.id,`tenant-a-p1-v${n}`));
+  await f.database.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}]})
+   .where(eq(schema.catalogVariants.id,"tenant-a-p1-v1"));
+  f.missingPolicy(true);
+  const result=(await f.conversation("tenant-a").turn(
+   "Do you have The Collection Snowboard: Hydrogen in blue? If not, what colors or options are available, and what is your return policy?"
+  ))!;
+  assert.ok(result,result?.reply);
+  assert.match(result.reply,/couldn't verify.*blue.*Hydrogen/i);
+  assert.match(result.reply,/no listed color choices/i);
+  assert.equal(result.reply.split("I couldn't establish that policy").length-1,1);
+  assert.equal(result.state.selected,undefined);
+  assert.equal(result.state.checkout,undefined);
+  assert.ok(result.state.choices.every(c=>c.productId==="tenant-a-p1"),result.reply);
+  assert.doesNotMatch(result.reply,/Snowboard 2|Snowboard 4|Default Title|selection is saved/i);
+ } finally {await f.cleanup();}
+});
