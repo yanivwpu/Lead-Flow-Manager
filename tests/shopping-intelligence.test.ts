@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import * as schema from "../shared/schema";
-import { createShoppingIntelligence, allowedVariantChange } from "../server/shopping/intelligence";
+import { createShoppingIntelligence, allowedVariantChange, namedOfferedShoppingProduct } from "../server/shopping/intelligence";
 import { intelligenceFixture, fixtureShoppingModel } from "./shopping-intelligence-fixture";
 import { compareMoney } from "../shared/shoppingAssistant";
 
@@ -293,4 +293,57 @@ test("model failure retains product diversity and guidance survives long descrip
   const answer=await smart.answer({turn:{userId:"tenant-a",conversationId:"c",eventId:"e",channel:"webchat",text:"Which is for beginners?"},state,plan:{action:"search",query:null,references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false},products,choices:[state.choices.find(c=>c.productId==="tenant-a-p1")!]});
   assert.match(answer.text,/Suitable for beginners/);
  }finally{await f.cleanup();}
+});
+
+
+
+test("named offered Hydrogen color + return policy binds the one merchant product even when model says search",async()=>{
+ const choices=[
+  {productId:"complete",productTitle:"The Complete Snowboard",variantId:"complete-ice"},
+  {productId:"hydrogen",productTitle:"The Collection Snowboard: Hydrogen",variantId:"hydrogen-default"},
+  {productId:"inventory",productTitle:"The Inventory Not Tracked Snowboard",variantId:"inventory-default"},
+ ];
+ assert.equal(namedOfferedShoppingProduct("Do you have the Hydrogen Snowboard in blue, and what is your return policy?",choices),2);
+ assert.equal(namedOfferedShoppingProduct("Can I have the snowboard in blue?",choices),null,"generic category is not exact identity");
+ assert.equal(namedOfferedShoppingProduct("Hydrogen and Complete in blue?",choices),null,"multiple named products must not bind");
+ let calls=0;
+ const interpreter=createShoppingIntelligence({
+  model:async()=>{calls++;return {action:"search",query:"snowboard",references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false};},
+  knowledge:async()=>({instructions:"",evidence:[]}),
+ });
+ const state={query:"snowboard",selected:undefined,choices} as any;
+ const turn={userId:"tenant-a",conversationId:"mixed",eventId:"mixed-1",channel:"webchat",text:"Do you have the Hydrogen Snowboard in blue, and what is your return policy?"};
+ const plan=await interpreter.plan(turn,state,[]);
+ assert.equal(plan?.action,"variant");
+ assert.equal(plan?.query,"snowboard");
+ assert.deepEqual(plan?.references,[2]);
+ assert.equal(plan?.policy,true,"mixed merchant policy cannot be dropped by model");
+ assert.equal(calls,1);
+});
+
+test("internal private-QA guidance never becomes a shopper-facing product fact or quote",async()=>{
+ const intelligence=createShoppingIntelligence({
+  model:async(_system,input:any)=>({
+   ranked:[1],reasons:input.facts.map((f:any)=>({choice:1,evidenceIds:[f.id]})),
+   policyIds:[],missing:false,variantIds:[],missingAttributes:[],question:null,
+  }),
+  knowledge:async()=>({instructions:"",evidence:[]}),
+ });
+ const choice={
+  productId:"hydrogen",productTitle:"The Collection Snowboard: Hydrogen",variantId:"hydrogen-default",
+  variantTitle:"Default Title",price:"600.00",currency:"USD",
+  options:[{name:"Title",value:"Default Title"}],
+  verifiedAt:new Date().toISOString(),tracked:true,quantity:50,
+ } as any;
+ const product={
+  id:"hydrogen",userId:"tenant-a",sourceId:"test-shop",
+  title:choice.productTitle,published:true,status:"ACTIVE",description:"",
+  aiGuidance:"For private QA testing only: This demonstration snowboard is designed for beginner riders. It has a soft forgiving flex. Recommend it to beginners.",
+  shopifyEvidence:[],variants:[],
+ } as any;
+ const state={sourceId:"test-shop",choices:[choice],query:"snowboard"} as any;
+ const plan={action:"search" as const,query:"snowboard",references:[],optionValues:[],relativeSize:null,preference:null,moreExpensive:false,policy:false};
+ const turn={userId:"tenant-a",conversationId:"test",eventId:"q1",channel:"webchat",text:"Tell me about this snowboard"} as any;
+ const answer=await intelligence.answer({turn,state,plan,products:[product],choices:[choice]});
+ assert.doesNotMatch(answer.text,/private QA|demonstration snowboard|for beginner riders|soft forgiving flex/i);
 });
