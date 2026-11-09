@@ -61,6 +61,26 @@ export function namedOfferedShoppingProduct(text: string, choices: Pick<Shopping
   return matched.length===1?matched[0].index+1:null;
 }
 
+/** Only an explicitly spoken FULL product title can bind a fresh session.
+ * Catalog vocabulary is tenant/source-owned but also includes categories;
+ * require a multiword exact title and reject overlapping/ambiguous matches.
+ * This is never a purchase selection or a substitute for live verification. */
+export function namedCatalogShoppingTitle(text:string, catalogHints:string[]):string|null {
+  const normalized=(value:string)=>norm(value).replace(/[^\p{L}\p{N}]+/gu," ").trim();
+  const question=` ${normalized(text)} `;
+  const matches=[...new Set(catalogHints.filter(title=>{
+    const words=normalized(title).split(" ").filter(Boolean);
+    return words.length>=2 && words.join(" ").length>=8 &&
+      question.includes(` ${words.join(" ")} `);
+  }))];
+  // If a shorter title is contained in a longer one, only the unique longest
+  // is unambiguous. Two equally long distinct titles must never auto-bind.
+  const longest=matches.sort((a,b)=>normalized(b).length-normalized(a).length);
+  return longest.length===1 || (longest.length>1 &&
+    normalized(longest[0]).length>normalized(longest[1]).length &&
+    normalized(longest[0]).includes(normalized(longest[1])))?longest[0]:null;
+}
+
 export function requestedShoppingOptions(text:string, values:string[], relative:ShoppingPlan["relativeSize"]=null):string[] {
   const raw=norm(text);
   const words=raw.replace(/([\p{L}])['’](?=[\p{L}])/gu,"$1").split(/[^\p{L}\p{N}-]+/u).filter(Boolean);

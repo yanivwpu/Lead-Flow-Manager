@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { eq } from "drizzle-orm";
 import * as schema from "../shared/schema";
-import { createShoppingIntelligence, allowedVariantChange, namedOfferedShoppingProduct } from "../server/shopping/intelligence";
+import { createShoppingIntelligence, allowedVariantChange, namedOfferedShoppingProduct, namedCatalogShoppingTitle } from "../server/shopping/intelligence";
 import { intelligenceFixture, fixtureShoppingModel } from "./shopping-intelligence-fixture";
 import { compareMoney } from "../shared/shoppingAssistant";
 
@@ -384,4 +384,57 @@ test("mixed unavailable-color and returns turn uses one policy answer, no model 
   assert.equal(unknown.reply.split("I couldn't establish that policy").length-1,1,"missing merchant policy is disclosed exactly once");
   assert.doesNotMatch(unknown.reply,/does not establish a recommendation|couldn't finish evaluating/i);
  }finally{await f.cleanup();}
+});
+
+test("fresh named catalog title binds only one owned product for color and policy",async()=>{
+ const hints=["Snowboard","Snowboard 1","Snowboard 2","Snowboard 4"];
+ assert.equal(namedCatalogShoppingTitle("Do you have Snowboard 1 in purple, and what is your return policy?",hints),"Snowboard 1");
+ assert.equal(namedCatalogShoppingTitle("Is there a snowboard in purple?",hints),null,"category is not a named product");
+ assert.equal(namedCatalogShoppingTitle("Do you have Snowboard 1 and Snowboard 2 in blue?",hints),null,"two named models cannot bind");
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try{
+  f.missingPolicy(true);
+  const c=f.conversation("tenant-a");
+  const result=(await c.turn("Do you have Snowboard 1 in purple, and what is your return policy?"))!;
+  assert.ok(result,"first-turn shopping reply must be available");
+  assert.match(result.reply,/purple.*Snowboard 1/i);
+  assert.ok(result.state.choices.every(choice=>choice.productId==="tenant-a-p1"),result.reply);
+  assert.equal(result.state.selected,undefined,"query must never auto-select");
+  assert.equal(result.state.checkout,undefined,"query must never create checkout");
+  assert.equal(result.reply.split("I couldn't establish that policy").length-1,1);
+  assert.doesNotMatch(result.reply,/Snowboard 2|Snowboard 4|saved selection|recommendation/i);
+  const second=f.conversation("tenant-a");
+  const blue=(await second.turn("Do you have Snowboard 1 in blue, and what is your return policy?"))!;
+  assert.ok(blue.state.choices.length>0,blue.reply);
+  assert.ok(blue.state.choices.every(choice=>choice.productId==="tenant-a-p1"&&choice.options.some(option=>option.value==="Blue")),blue.reply);
+  assert.equal(blue.reply.split("I couldn't establish that policy").length-1,1);
+  assert.equal(blue.state.checkout,undefined);
+  const other=f.conversation("tenant-b");
+  const unrelated=(await other.turn("Do you have Snowboard 1 in blue, and what is your return policy?"));
+  assert.ok(!unrelated || !unrelated.state.choices.some(choice=>choice.productId.startsWith("tenant-a")));
+ }finally{await f.cleanup();}
+});
+
+test("first-turn real Hydrogen title with only Default Title never invents Blue or substitutes Liquid",async()=>{
+ const f=await intelligenceFixture(fixtureShoppingModel);
+ try {
+  await f.database.update(schema.catalogProducts).set({title:"The Collection Snowboard: Hydrogen",variantCount:1})
+   .where(eq(schema.catalogProducts.id,"tenant-a-p1"));
+  for(const n of [2,3,4])await f.database.delete(schema.catalogVariants)
+   .where(eq(schema.catalogVariants.id,`tenant-a-p1-v${n}`));
+  await f.database.update(schema.catalogVariants).set({title:"Default Title",options:[{name:"Title",value:"Default Title"}]})
+   .where(eq(schema.catalogVariants.id,"tenant-a-p1-v1"));
+  f.missingPolicy(true);
+  const result=(await f.conversation("tenant-a").turn(
+   "Do you have The Collection Snowboard: Hydrogen in blue? If not, what colors or options are available, and what is your return policy?"
+  ))!;
+  assert.ok(result,result?.reply);
+  assert.match(result.reply,/couldn't verify.*blue.*Hydrogen/i);
+  assert.match(result.reply,/no listed color choices/i);
+  assert.equal(result.reply.split("I couldn't establish that policy").length-1,1);
+  assert.equal(result.state.selected,undefined);
+  assert.equal(result.state.checkout,undefined);
+  assert.ok(result.state.choices.every(c=>c.productId==="tenant-a-p1"),result.reply);
+  assert.doesNotMatch(result.reply,/Snowboard 2|Snowboard 4|Default Title|selection is saved/i);
+ } finally {await f.cleanup();}
 });

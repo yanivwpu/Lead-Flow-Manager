@@ -1,11 +1,11 @@
 import { catalogSearchTerms } from "@shared/commerceCatalog";
 import { shoppingBusinessQuestion, mixedShoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
-import { beginnerQualification, allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
+import { beginnerQualification, namedCatalogShoppingTitle, allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
 import type { CommerceProduct } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
 import { shoppingIntent, shoppingFilters, shoppingChoiceNumber, matchShoppingChoice, compareMoney, shoppingCopy, shoppingLocale, shoppingVerificationFollowup, shoppingCheaperFollowup } from "@shared/shoppingAssistant";
-export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant"> & Partial<Pick<ReturnType<typeof createCommerceStore>, "products"|"variantPage"|"recommendationVocabulary">>;
+export type CommerceShoppingProvider = Pick<ReturnType<typeof createCommerceStore>, "source"|"purchaseCandidates"|"verifyForPurchase"|"lookupVariant"> & Partial<Pick<ReturnType<typeof createCommerceStore>, "products"|"variantPage"|"recommendationVocabulary"|"browse">>;
 export type ShoppingTurn = {userId:string; conversationId:string; eventId:string; text:string; channel:string; locale?:string};
 export type ShoppingResult = {reply:string; state:ShoppingState; handoff:boolean; modelGenerationSucceeded?:boolean; intelligenceReview?:boolean};
 export type ShoppingTurnGuard = { token: string; check: () => Promise<void> };
@@ -37,10 +37,15 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   // Delegate before the state machine can consume a policy question or mistake
   // Hebrew shipping/returns for an order handoff. Preserve the saved selection.
   const businessQuestion=shoppingBusinessQuestion(turn.text);
+  // A fresh question about a specifically named item in a requested color can
+  // otherwise look like a policy-only turn to the generic intent router.
+  // This opens interpretation only, not inventory claims or a purchase action.
+  const initialNamedOptionQuestion=/\b(?:do you have|have you got|tienes|tienen)\b|יש לכם/u.test(turn.text.toLowerCase()) &&
+    /\b(?:in|en)\s+(?:blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|azul|negro|rojo|verde|blanco|morado|rosa)\b|בכחול|בשחור|באדום/u.test(turn.text.toLowerCase());
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    // A supported explicit named selection must still be resolved against this
    // owned conversation's choices before a policy clause can delegate the turn.
-   if(businessQuestion && !(shoppingIntent(turn.text)==="select" && matchShoppingChoice(turn.text,stored?.choices??[]))) return null;
+   if(businessQuestion && !initialNamedOptionQuestion && !(shoppingIntent(turn.text)==="select" && matchShoppingChoice(turn.text,stored?.choices??[]))) return null;
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
    const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
@@ -72,8 +77,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      requestedIntent==="select" && !!matchShoppingChoice(turn.text,ownedPrevious?.choices??[]) ||
      shoppingChoiceNumber(turn.text)!==undefined || !!turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/iu);
    let plan:ShoppingPlan|null=null;
-   if(deps.intelligence && (requestedIntent!=="other" || !!ownedPrevious?.query) && !controlled && !cheaper && !verificationFollowup && ownedPrevious?.step!=="handoff") {
-    let vocabulary:string[]=[];
+   let vocabulary:string[]=[];
+   if(deps.intelligence && (requestedIntent!=="other" || !!ownedPrevious?.query || initialNamedOptionQuestion) && !controlled && !cheaper && !verificationFollowup && ownedPrevious?.step!=="handoff") {
     if((!ownedPrevious?.query || requestedIntent==="search") && deps.commerce.recommendationVocabulary)try{vocabulary=await deps.commerce.recommendationVocabulary(turn.userId,source.id);}catch{/* deterministic fallback remains available */}
     plan=await deps.intelligence.plan(turn,ownedPrevious,vocabulary);
     if(plan) {intent=plan.action==="variant"?"variants":plan.action==="compare"?"compare":plan.action==="search"||plan.action==="refine"?"search":"other";requestedIntent=intent;}
@@ -177,7 +182,6 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    }
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
    const smartCopy=intelligenceCopy[shoppingLocale(turn.locale)];
-   if(plan?.action==="clarify")return clarify(smartCopy.clarify);
    function freshChoice(v:ShoppingInventory):ShoppingChoice|undefined {
     if(!["available","not_tracked"].includes(v.availability) || !v.product.published || v.product.status!=="ACTIVE" ||
       v.variant.currency!==source!.currency || v.variant.price===null ||
@@ -186,6 +190,83 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
       (state.maxPrice && compareMoney(v.variant.price,state.maxPrice)>0) || (state.minPrice && compareMoney(v.variant.price,state.minPrice)<0)) return undefined;
     return {productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)};
    }
+   // A fresh first message can name an exact catalog product AND request a
+   // color/size. The saved-choice guard cannot handle it (no state yet). Bind
+   // only a unique FULL title from the tenant/source-owned vocabulary, then
+   // re-check the owned product and variants. No model-selected product IDs.
+   if(!previous && deps.intelligence && deps.commerce.products && vocabulary.length &&
+      /\b(?:colou?rs?|sizes?|talla|azul|blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|rosa|negro|rojo|verde|blanco|morado)\b|בצבע|מידה|כחול|שחור|אדום/u.test(turn.text.toLowerCase())) {
+    const exactTitle=namedCatalogShoppingTitle(turn.text,vocabulary);
+    if(exactTitle) {
+     const normalized=(value:string)=>value.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
+     let matched:Awaited<ReturnType<CommerceShoppingProvider["purchaseCandidates"]>>=[];
+     try {
+      if(deps.commerce.browse) {
+       // Exact-title resolution must not depend on full-text search ranking:
+       // the indexed searchText may contain only a product category.
+       let cursor:string|undefined;
+       for(let page=0;page<5;page++) {
+        const result=await deps.commerce.browse(turn.userId,source.id,{limit:100,status:"ACTIVE",...(cursor?{cursor}:{})});
+        matched=[...matched,...result.items];
+        if(!result.nextCursor)break;
+        cursor=result.nextCursor;
+       }
+      } else {
+       matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:plan?.query??exactTitle,limit:8,filters:{currency:source.currency}});
+      }
+     } catch {return pending("discover");}
+     const exact=matched.filter(p=>normalized(p.title)===normalized(exactTitle) && p.userId===turn.userId &&
+       p.sourceId===source.id && p.status==="ACTIVE" && p.published && !excludedShoppingProduct(p));
+     if(exact.length!==1)return clarify(smartCopy.clarify);
+     const [product]=await evidenceProducts([exact[0].id]);
+     if(!product || normalized(product.title)!==normalized(exactTitle))return clarify(smartCopy.clarify);
+     if(deps.commerce.variantPage) {
+      try { const page=await deps.commerce.variantPage(turn.userId,source.id,product.id);
+       if(page)product.variants=page.items;
+      } catch {return clarify(smartCopy.noVariant);}
+     }
+     const values=requestedShoppingOptions(turn.text,product.variants.flatMap(v=>options(v.options).map(o=>o.value)))
+       .filter(v=>!/^(?:or|and|options?|available|what|the|a|en|in)$/iu.test(v));
+     const relevant=(v:typeof product.variants[number])=>values.every(value=>
+       options(v.options).some(o=>o.name.toLowerCase()!=="title" &&
+         requestedShoppingOptions(value,[o.value]).some(m=>normalized(m)===normalized(o.value))));
+     const optionRows=product.variants.filter(v=>values.length===0 || relevant(v));
+     const candidates=optionRows.slice(0,8);
+     const live=candidates.length?await verify(candidates.map(v=>v.id)):[];
+     const choices=live.flatMap(v=>{const match=candidates.some(candidate=>candidate.id===v.variant.id)&&v.product.id===product.id;
+       const choice=match&&freshChoice(v);return choice?[choice]:[];});
+     // A missing color must not be replaced by another color/product. Read
+     // the product's other verified options (without claiming a color match).
+     const fallback=values.length && !optionRows.length
+       ? (await verify(product.variants.slice(0,8).map(v=>v.id))).flatMap(v=>{
+          const choice=v.product.id===product.id&&freshChoice(v);return choice?[choice]:[];
+         }):[];
+     const offered=choices.length?choices:fallback;
+     state.choices=offered;state.selected=undefined;state.checkout=undefined;state.query=exactTitle;state.currency=source.currency;
+     // Reuse the policy evidence path of #275 (once, never an advisory JSON
+     // answer); unlike a broad search, this path never offers other models.
+     plan={action:"variant",query:exactTitle,references:[],optionValues:values,relativeSize:null,
+       preference:null,moreExpensive:false,policy:!!(plan?.policy || mixedShoppingBusinessQuestion(turn.text) || businessQuestion)};
+     const noColors=!product.variants.some(v=>options(v.options).some(o=>/^(?:color|colour|farbe|couleur|צבע)$/iu.test(o.name)));
+     const prefix=values.length && optionRows.length>0 && !choices.length
+       ? {en:`I could not verify ${values.join(" / ")} as currently available for ${safeLabel(product.title)}.`,
+          es:`No pude confirmar la disponibilidad actual de ${values.join(" / ")} para ${safeLabel(product.title)}.`,
+          he:`לא הצלחתי לאמת זמינות נוכחית של ${values.join(" / ")} עבור ${safeLabel(product.title)}.`}[shoppingLocale(turn.locale)]
+       : values.length && !optionRows.length
+       ? {en:`I couldn't verify ${values.join(" / ")} for ${safeLabel(product.title)}.`,
+          es:`No pude verificar ${values.join(" / ")} para ${safeLabel(product.title)}.`,
+          he:`לא הצלחתי לאמת את האפשרות ${values.join(" / ")} עבור ${safeLabel(product.title)}.`}[shoppingLocale(turn.locale)]
+       : {en:`Verified options for ${safeLabel(product.title)}:`,
+          es:`Opciones verificadas para ${safeLabel(product.title)}:`,
+          he:`אפשרויות מאומתות עבור ${safeLabel(product.title)}:`}[shoppingLocale(turn.locale)];
+     const note=noColors
+       ? {en:"This product has no listed color choices.",es:"Este producto no tiene opciones de color indicadas.",he:"למוצר זה לא מופיעות אפשרויות צבע."}[shoppingLocale(turn.locale)]
+       : "";
+     const rows=offered.map(choice=>`${line(choice)}${stockNote(choice,copy.verifiedStock)}`).join("\n");
+     return finish([prefix,note,rows].filter(Boolean).join("\n"),"selecting");
+    }
+   }
+   if(plan?.action==="clarify")return clarify(smartCopy.clarify);
    if(plan && deps.intelligence && ["compare","variant"].includes(plan.action)) {
     const references=plan.references.length ? plan.references.map(n=>state.choices[n-1]) : plan.action==="variant" ? state.selected?[state.selected]:[] : state.choices;
     if(!references.length || references.some(c=>!c))return clarify(smartCopy.clarify);
