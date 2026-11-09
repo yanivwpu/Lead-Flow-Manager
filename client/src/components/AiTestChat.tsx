@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { cartTestPreparationAllowed, preparePrivateCartTest, privateCartPreparationError, privateCartServerTime, PrivateCartResponseError, type PrivateCartTestSummary, type PrivateCartTestRequest } from "@/lib/aiTestCartPreparation";
 import { createPrivateCartTestRunner, privateCartConfirmationAllowed, privateCartAttemptKey } from "@/lib/aiTestCartExecution";
 import { scheduleTestChatCooldownRefresh } from "@/lib/aiTestChatCooldown";
+import { committedTestChatTurn } from "@/lib/aiTestChatTurnRecovery";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -222,14 +223,30 @@ function Console() {
         await diagnose(chat.id);
       }
     } catch (failure) {
-      if (
-        failure instanceof Error &&
-        failure.message === "409: repeat_as_new_turn"
-      )
-        pending.current = undefined;
-      if (mounted.current) {
-        setError(true);
-        await diagnose(chat.id);
+      // The server may have committed this event even if the browser lost
+      // the response. Read the existing session once. Do not POST again.
+      let recovered = false;
+      try {
+        const response = await apiRequest("GET", `/api/ai/test-chat/${chat.id}`);
+        const saved: unknown = await response.json();
+        if (committedTestChatTurn(saved, chat.id, turn)) {
+          recovered = true;
+          if (mounted.current) {
+            setChat(saved);
+            setText("");
+            pending.current = undefined;
+            setError(false);
+            await diagnose(chat.id);
+          }
+        }
+      } catch { /* Preserve the original failure; never repeat an uncertain turn. */ }
+      if (!recovered) {
+        if (failure instanceof Error && failure.message === "409: repeat_as_new_turn")
+          pending.current = undefined;
+        if (mounted.current) {
+          setError(true);
+          await diagnose(chat.id);
+        }
       }
     } finally {
       if (mounted.current) setBusy(false);
