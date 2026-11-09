@@ -37,10 +37,15 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   // Delegate before the state machine can consume a policy question or mistake
   // Hebrew shipping/returns for an order handoff. Preserve the saved selection.
   const businessQuestion=shoppingBusinessQuestion(turn.text);
+  // A fresh question about a specifically named item in a requested color can
+  // otherwise look like a policy-only turn to the generic intent router.
+  // This opens interpretation only, not inventory claims or a purchase action.
+  const initialNamedOptionQuestion=/\\b(?:do you have|have you got|tienes|tienen)\\b|יש לכם/u.test(turn.text.toLowerCase()) &&
+    /\\b(?:in|en)\\s+(?:blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|azul|negro|rojo|verde|blanco|morado|rosa)\\b|בכחול|בשחור|באדום/u.test(turn.text.toLowerCase());
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    // A supported explicit named selection must still be resolved against this
    // owned conversation's choices before a policy clause can delegate the turn.
-   if(businessQuestion && !(shoppingIntent(turn.text)==="select" && matchShoppingChoice(turn.text,stored?.choices??[]))) return null;
+   if(businessQuestion && !initialNamedOptionQuestion && !(shoppingIntent(turn.text)==="select" && matchShoppingChoice(turn.text,stored?.choices??[]))) return null;
    const copy=shoppingCopy[shoppingLocale(turn.locale)], stamp=now();
    const numberedSelection=shoppingChoiceNumber(turn.text);
    const verificationFollowup=shoppingVerificationFollowup(turn.text,stored?.selected);
@@ -73,7 +78,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      shoppingChoiceNumber(turn.text)!==undefined || !!turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/iu);
    let plan:ShoppingPlan|null=null;
    let vocabulary:string[]=[];
-   if(deps.intelligence && (requestedIntent!=="other" || !!ownedPrevious?.query) && !controlled && !cheaper && !verificationFollowup && ownedPrevious?.step!=="handoff") {
+   if(deps.intelligence && (requestedIntent!=="other" || !!ownedPrevious?.query || initialNamedOptionQuestion) && !controlled && !cheaper && !verificationFollowup && ownedPrevious?.step!=="handoff") {
     if((!ownedPrevious?.query || requestedIntent==="search") && deps.commerce.recommendationVocabulary)try{vocabulary=await deps.commerce.recommendationVocabulary(turn.userId,source.id);}catch{/* deterministic fallback remains available */}
     plan=await deps.intelligence.plan(turn,ownedPrevious,vocabulary);
     if(plan) {intent=plan.action==="variant"?"variants":plan.action==="compare"?"compare":plan.action==="search"||plan.action==="refine"?"search":"other";requestedIntent=intent;}
@@ -177,7 +182,6 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
    }
    if(filters.currency!==source.currency) return finish(copy.currency,"discovering");
    const smartCopy=intelligenceCopy[shoppingLocale(turn.locale)];
-   if(plan?.action==="clarify")return clarify(smartCopy.clarify);
    function freshChoice(v:ShoppingInventory):ShoppingChoice|undefined {
     if(!["available","not_tracked"].includes(v.availability) || !v.product.published || v.product.status!=="ACTIVE" ||
       v.variant.currency!==source!.currency || v.variant.price===null ||
@@ -262,6 +266,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      return finish([prefix,note,rows].filter(Boolean).join("\n"),"selecting");
     }
    }
+   if(plan?.action==="clarify")return clarify(smartCopy.clarify);
    if(plan && deps.intelligence && ["compare","variant"].includes(plan.action)) {
     const references=plan.references.length ? plan.references.map(n=>state.choices[n-1]) : plan.action==="variant" ? state.selected?[state.selected]:[] : state.choices;
     if(!references.length || references.some(c=>!c))return clarify(smartCopy.clarify);
