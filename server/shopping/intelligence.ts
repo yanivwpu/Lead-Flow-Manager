@@ -66,7 +66,7 @@ export function namedOfferedShoppingProduct(text: string, choices: Pick<Shopping
  * require a multiword exact title and reject overlapping/ambiguous matches.
  * This is never a purchase selection or a substitute for live verification. */
 export function namedCatalogShoppingTitle(text:string, catalogHints:string[]):string|null {
-  const normalized=(value:string)=>norm(value).replace(/[^\\p{L}\\p{N}]+/gu," ").trim();
+  const normalized=(value:string)=>norm(value).replace(/[^\p{L}\p{N}]+/gu," ").trim();
   const question=` ${normalized(text)} `;
   const matches=[...new Set(catalogHints.filter(title=>{
     const words=normalized(title).split(" ").filter(Boolean);
