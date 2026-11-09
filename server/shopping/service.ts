@@ -40,8 +40,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
   // A fresh question about a specifically named item in a requested color can
   // otherwise look like a policy-only turn to the generic intent router.
   // This opens interpretation only, not inventory claims or a purchase action.
-  const initialNamedOptionQuestion=/\\b(?:do you have|have you got|tienes|tienen)\\b|יש לכם/u.test(turn.text.toLowerCase()) &&
-    /\\b(?:in|en)\\s+(?:blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|azul|negro|rojo|verde|blanco|morado|rosa)\\b|בכחול|בשחור|באדום/u.test(turn.text.toLowerCase());
+  const initialNamedOptionQuestion=/\b(?:do you have|have you got|tienes|tienen)\b|יש לכם/u.test(turn.text.toLowerCase()) &&
+    /\b(?:in|en)\s+(?:blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|azul|negro|rojo|verde|blanco|morado|rosa)\b|בכחול|בשחור|באדום/u.test(turn.text.toLowerCase());
   return deps.sessions.withTurn(turn,async(stored,save,guard)=>{
    // A supported explicit named selection must still be resolved against this
    // owned conversation's choices before a policy clause can delegate the turn.
