@@ -45,6 +45,22 @@ const optionKey = (value: string) => {
   // Language equivalents only; no product taxonomy or suitability assumptions.
   return colorGroups.find(g=>g.includes(v))?.[0]??v;
 };
+/** Resolve an explicitly named *already offered* product, not an unrelated
+ * catalog substitute. Require a title token unique across offered product IDs;
+ * ambiguous names intentionally remain model clarification, never a selection. */
+export function namedOfferedShoppingProduct(text: string, choices: Pick<ShoppingChoice,"productId"|"productTitle">[]): number | null {
+  const words=(value:string)=>[...new Set(norm(value).split(/[^\p{L}\p{N}]+/u).filter(token=>token.length>=4))];
+  const customer=new Set(words(text));
+  const products=new Map<string,{index:number;tokens:string[]}>();
+  choices.forEach((choice,index)=>{
+    if(!products.has(choice.productId))products.set(choice.productId,{index,tokens:words(choice.productTitle)});
+  });
+  const offered=[...products.values()];
+  const matched=offered.filter((product,index)=>product.tokens.some(token=>customer.has(token) &&
+    offered.every((other,otherIndex)=>otherIndex===index || !other.tokens.includes(token))));
+  return matched.length===1?matched[0].index+1:null;
+}
+
 export function requestedShoppingOptions(text:string, values:string[], relative:ShoppingPlan["relativeSize"]=null):string[] {
   const raw=norm(text);
   const words=raw.replace(/([\p{L}])['’](?=[\p{L}])/gu,"$1").split(/[^\p{L}\p{N}-]+/u).filter(Boolean);
@@ -111,6 +127,13 @@ function sentences(text: string): string[] {
     .filter(s => !/\b(?:\d+|one|two|three|few|several)\s+(?:(?:units?|pieces?|items?)\s+)?(?:left|remaining|remain)\b|\b(?:quedan|restan)\s+\d|(?:נותרו|נשארו)\s+\d/iu.test(s))
     .filter(s => !/https?:|\b(?:ignore|instructions?|system|assistant|prompt|recommend|always|never|must|should|price|stock|inventory|available|cures?|treats?|heals?|prevents?|guaranteed|precio|existencias|cura|trata)\b|מלאי|מחיר|מרפא|הוראות/iu.test(s)).slice(0, 8);
 }
+/** Private QA/demo instructions are allowed to guide internal tests, but
+ * must never be presented as verified merchant product specifications. */
+function customerProductGuidance(guidance:string):string[] {
+  if(/\b(?:private\s+qa(?:\s+testing)?|for\s+(?:internal|private)\s+(?:testing|qa)|qa\s+testing\s+only|internal\s+demo\s+only)\b/iu.test(guidance))return [];
+  return sentences(guidance).slice(0,4);
+}
+
 function documentedWeight(description:string) {
   const match=description.match(/(?:^|[.!?;\n])\s*(?:product\s+)?(?:weight|peso|משקל)\s*[:=]?\s*(\d{1,6}(?:\.\d{1,6})?)\s*(kg|g|lb|lbs|pounds)\b/iu);
   if(!match)return null;
@@ -186,6 +209,18 @@ export function createShoppingIntelligence(deps: {
           parsed.relativeSize=relative??parsed.relativeSize;
           if(mentioned.length)parsed.references=mentioned;
         }
+        // "Do you have the Hydrogen snowboard in blue, and what is your
+        // return policy?" refers to an explicitly named earlier offer,
+        // even when the model calls it a new search. Preserve that identity;
+        // never replace an unverified color with another merchant product.
+        if(state && explicitOption && !relative && !mentioned.length && !selectedReference) {
+          const named=namedOfferedShoppingProduct(turn.text,state.choices);
+          if(named!==null) {
+            parsed.action="variant";
+            parsed.references=[named];
+            parsed.query=state.query??null;
+          }
+        }
         if(state?.query && !mentioned.length && /\b(?:more expensive|mas car[oa])\b|יקר(?:ה)?\s+יותר|יותר\s+יקר/u.test(text)) {
           parsed.action="refine";parsed.query=state.query;parsed.moreExpensive=true;
         }
@@ -222,7 +257,7 @@ export function createShoppingIntelligence(deps: {
       const products = input.products.filter(p => p.userId === turn.userId && p.sourceId === state.sourceId && !excludedShoppingProduct(p));
       const facts = input.choices.flatMap((c, index) => {
         const product = products.find(p => p.id === c.productId);
-        return product ? [...sentences(product.description).slice(0, 6), ...sentences(product.aiGuidance ?? "").slice(0, 4), ...(shopifyPublicEvidencePilotEnabled(product.userId) ? (product.shopifyEvidence ?? []).slice(0,8).flatMap(e => sentences(e.text).slice(0,1)) : [])].slice(0,18).map((text, i) => ({ id: `c${index + 1}f${i}`, choice: index + 1, text })) : [];
+        return product ? [...sentences(product.description).slice(0, 6), ...customerProductGuidance(product.aiGuidance ?? ""), ...(shopifyPublicEvidencePilotEnabled(product.userId) ? (product.shopifyEvidence ?? []).slice(0,8).flatMap(e => sentences(e.text).slice(0,1)) : [])].slice(0,18).map((text, i) => ({ id: `c${index + 1}f${i}`, choice: index + 1, text })) : [];
       });
       let stage: ShoppingFailureStage = "render";
       const diagnostic = (outcome: ShoppingAnswerDiagnostic["outcome"], failureStage?: ShoppingAnswerDiagnostic["stage"]) => {
