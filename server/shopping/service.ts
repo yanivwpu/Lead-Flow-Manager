@@ -195,7 +195,9 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     const exactTitle=namedCatalogShoppingTitle(turn.text,vocabulary);
     if(exactTitle) {
      const normalized=(value:string)=>value.normalize("NFD").replace(/\p{M}/gu,"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();
-     const matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:exactTitle,limit:8,filters:{currency:source.currency}});
+     let matched:Awaited<ReturnType<CommerceShoppingProvider["purchaseCandidates"]>>;
+     try {matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:exactTitle,limit:8,filters:{currency:source.currency}});}
+     catch {return pending("discover");}
      const exact=matched.filter(p=>normalized(p.title)===normalized(exactTitle) && p.userId===turn.userId &&
        p.sourceId===source.id && p.status==="ACTIVE" && p.published && !excludedShoppingProduct(p));
      if(exact.length!==1)return clarify(smartCopy.clarify);
@@ -213,7 +215,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
          requestedShoppingOptions(value,[o.value]).some(m=>normalized(m)===normalized(o.value))));
      const optionRows=product.variants.filter(v=>values.length===0 || relevant(v));
      const candidates=optionRows.slice(0,8);
-     const live=await verify(candidates.map(v=>v.id));
+     const live=candidates.length?await verify(candidates.map(v=>v.id)):[];
      const choices=live.flatMap(v=>{const match=candidates.some(candidate=>candidate.id===v.variant.id)&&v.product.id===product.id;
        const choice=match&&freshChoice(v);return choice?[choice]:[];});
      // A missing color must not be replaced by another color/product. Read
@@ -229,7 +231,11 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      plan={action:"variant",query:exactTitle,references:[],optionValues:values,relativeSize:null,
        preference:null,moreExpensive:false,policy:!!(plan?.policy || mixedShoppingBusinessQuestion(turn.text) || businessQuestion)};
      const noColors=!product.variants.some(v=>options(v.options).some(o=>/^(?:color|colour|farbe|couleur|צבע)$/iu.test(o.name)));
-     const prefix=values.length && !optionRows.length
+     const prefix=values.length && optionRows.length>0 && !choices.length
+       ? {en:`I could not verify ${values.join(" / ")} as currently available for ${safeLabel(product.title)}.`,
+          es:`No pude confirmar la disponibilidad actual de ${values.join(" / ")} para ${safeLabel(product.title)}.`,
+          he:`לא הצלחתי לאמת זמינות נוכחית של ${values.join(" / ")} עבור ${safeLabel(product.title)}.`}[shoppingLocale(turn.locale)]
+       : values.length && !optionRows.length
        ? {en:`I couldn't verify ${values.join(" / ")} for ${safeLabel(product.title)}.`,
           es:`No pude verificar ${values.join(" / ")} para ${safeLabel(product.title)}.`,
           he:`לא הצלחתי לאמת את האפשרות ${values.join(" / ")} עבור ${safeLabel(product.title)}.`}[shoppingLocale(turn.locale)]
