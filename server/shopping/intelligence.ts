@@ -49,7 +49,7 @@ const optionKey = (value: string) => {
  * catalog substitute. Require a title token unique across offered product IDs;
  * ambiguous names intentionally remain model clarification, never a selection. */
 export function namedOfferedShoppingProduct(text: string, choices: Pick<ShoppingChoice,"productId"|"productTitle">[]): number | null {
-  const words=(value:string)=>[...new Set(norm(value).split(/[^\\p{L}\\p{N}]+/u).filter(token=>token.length>=4))];
+  const words=(value:string)=>[...new Set(norm(value).split(/[^\p{L}\p{N}]+/u).filter(token=>token.length>=4))];
   const customer=new Set(words(text));
   const products=new Map<string,{index:number;tokens:string[]}>();
   choices.forEach((choice,index)=>{
@@ -130,7 +130,7 @@ function sentences(text: string): string[] {
 /** Private QA/demo instructions are allowed to guide internal tests, but
  * must never be presented as verified merchant product specifications. */
 function customerProductGuidance(guidance:string):string[] {
-  if(/\\b(?:private\\s+qa(?:\\s+testing)?|for\\s+(?:internal|private)\\s+(?:testing|qa)|qa\\s+testing\\s+only|internal\\s+demo\\s+only)\\b/iu.test(guidance))return [];
+  if(/\b(?:private\\s+qa(?:\\s+testing)?|for\\s+(?:internal|private)\\s+(?:testing|qa)|qa\\s+testing\\s+only|internal\\s+demo\\s+only)\b/iu.test(guidance))return [];
   return sentences(guidance).slice(0,4);
 }
 
