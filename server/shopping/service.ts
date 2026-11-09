@@ -207,7 +207,7 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
        let cursor:string|undefined;
        for(let page=0;page<5;page++) {
         const result=await deps.commerce.browse(turn.userId,source.id,{limit:100,status:"ACTIVE",...(cursor?{cursor}:{})});
-        matched.push(...result.items);
+        matched=[...matched,...result.items];
         if(!result.nextCursor)break;
         cursor=result.nextCursor;
        }
