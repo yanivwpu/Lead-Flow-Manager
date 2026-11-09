@@ -1,6 +1,6 @@
 import { catalogSearchTerms } from "@shared/commerceCatalog";
 import { shoppingBusinessQuestion, mixedShoppingBusinessQuestion } from "@shared/shoppingBusinessRouting";
-import { beginnerQualification, allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
+import { beginnerQualification, namedCatalogShoppingTitle, allowedVariantChange, requestedShoppingOptions, excludedShoppingProduct, intelligenceCopy, type ShoppingIntelligence, type ShoppingPlan } from "./intelligence";
 import type { CommerceProduct } from "@shared/commerceCatalog";
 import type { createCommerceStore } from "../salesCatalog/commerceStore";
 import type { ShoppingChoice, ShoppingState, ShoppingSettings } from "@shared/shoppingAssistant";
@@ -72,8 +72,8 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
      requestedIntent==="select" && !!matchShoppingChoice(turn.text,ownedPrevious?.choices??[]) ||
      shoppingChoiceNumber(turn.text)!==undefined || !!turn.text.match(/(?:quantity|cantidad|כמות)\s*[:=]?\s*\d+/iu);
    let plan:ShoppingPlan|null=null;
+   let vocabulary:string[]=[];
    if(deps.intelligence && (requestedIntent!=="other" || !!ownedPrevious?.query) && !controlled && !cheaper && !verificationFollowup && ownedPrevious?.step!=="handoff") {
-    let vocabulary:string[]=[];
     if((!ownedPrevious?.query || requestedIntent==="search") && deps.commerce.recommendationVocabulary)try{vocabulary=await deps.commerce.recommendationVocabulary(turn.userId,source.id);}catch{/* deterministic fallback remains available */}
     plan=await deps.intelligence.plan(turn,ownedPrevious,vocabulary);
     if(plan) {intent=plan.action==="variant"?"variants":plan.action==="compare"?"compare":plan.action==="search"||plan.action==="refine"?"search":"other";requestedIntent=intent;}
@@ -185,6 +185,63 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
       (v.variant.tracked && v.variant.inventoryPolicy!=="CONTINUE" && (v.variant.quantity===null || v.variant.quantity<state.quantity)) ||
       (state.maxPrice && compareMoney(v.variant.price,state.maxPrice)>0) || (state.minPrice && compareMoney(v.variant.price,state.minPrice)<0)) return undefined;
     return {productId:v.product.id,variantId:v.variant.id,productTitle:v.product.title,variantTitle:v.variant.title,options:options(v.variant.options),price:v.variant.price,currency:v.variant.currency!,verifiedAt:new Date(v.variant.verifiedAt).toISOString(),...inventoryProof(v)};
+   }
+   // A fresh first message can name an exact catalog product AND request a
+   // color/size. The saved-choice guard cannot handle it (no state yet). Bind
+   // only a unique FULL title from the tenant/source-owned vocabulary, then
+   // re-check the owned product and variants. No model-selected product IDs.
+   if(!previous && deps.intelligence && deps.commerce.products && vocabulary.length &&
+      /\\b(?:colou?rs?|sizes?|talla|azul|blue|black|red|green|white|purple|pink|orange|yellow|grey|gray|rosa|negro|rojo|verde|blanco|morado)\\b|בצבע|מידה|כחול|שחור|אדום/u.test(turn.text.toLowerCase())) {
+    const exactTitle=namedCatalogShoppingTitle(turn.text,vocabulary);
+    if(exactTitle) {
+     const normalized=(value:string)=>value.normalize("NFD").replace(/\\p{M}/gu,"").toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu," ").trim();
+     const matched=await deps.commerce.purchaseCandidates(turn.userId,{sourceId:source.id,query:exactTitle,limit:8,filters:{currency:source.currency}});
+     const exact=matched.filter(p=>normalized(p.title)===normalized(exactTitle) && p.userId===turn.userId &&
+       p.sourceId===source.id && p.status==="ACTIVE" && p.published && !excludedShoppingProduct(p));
+     if(exact.length!==1)return clarify(smartCopy.clarify);
+     const [product]=await evidenceProducts([exact[0].id]);
+     if(!product || normalized(product.title)!==normalized(exactTitle))return clarify(smartCopy.clarify);
+     if(deps.commerce.variantPage) {
+      try { const page=await deps.commerce.variantPage(turn.userId,source.id,product.id);
+       if(page)product.variants=page.items;
+      } catch {return clarify(smartCopy.noVariant);}
+     }
+     const values=requestedShoppingOptions(turn.text,product.variants.flatMap(v=>options(v.options).map(o=>o.value)))
+       .filter(v=>!/^(?:or|and|options?|available|what|the|a|en|in)$/iu.test(v));
+     const relevant=(v:typeof product.variants[number])=>values.every(value=>
+       options(v.options).some(o=>o.name.toLowerCase()!=="title" &&
+         requestedShoppingOptions(value,[o.value]).some(m=>normalized(m)===normalized(o.value))));
+     const optionRows=product.variants.filter(v=>values.length===0 || relevant(v));
+     const candidates=optionRows.slice(0,8);
+     const live=await verify(candidates.map(v=>v.id));
+     const choices=live.flatMap(v=>{const match=candidates.some(candidate=>candidate.id===v.variant.id)&&v.product.id===product.id;
+       const choice=match&&freshChoice(v);return choice?[choice]:[];});
+     // A missing color must not be replaced by another color/product. Read
+     // the product's verified default option only for an optional price/stock.
+     const fallback=values.length && !optionRows.length
+       ? (await verify(product.variants.slice(0,1).map(v=>v.id))).flatMap(v=>{
+          const choice=v.product.id===product.id&&freshChoice(v);return choice?[choice]:[];
+         }):[];
+     const offered=choices.length?choices:fallback;
+     state.choices=offered;state.selected=undefined;state.checkout=undefined;state.query=exactTitle;state.currency=source.currency;
+     // Reuse the policy evidence path of #275 (once, never an advisory JSON
+     // answer); unlike a broad search, this path never offers other models.
+     plan={action:"variant",query:exactTitle,references:[],optionValues:values,relativeSize:null,
+       preference:null,moreExpensive:false,policy:!!(plan?.policy || mixedShoppingBusinessQuestion(turn.text) || businessQuestion)};
+     const noColors=!product.variants.some(v=>options(v.options).some(o=>/^(?:color|colour|farbe|couleur|צבע)$/iu.test(o.name)));
+     const prefix=values.length && !optionRows.length
+       ? {en:`I couldn't verify ${values.join(" / ")} for ${safeLabel(product.title)}.`,
+          es:`No pude verificar ${values.join(" / ")} para ${safeLabel(product.title)}.`,
+          he:`לא הצלחתי לאמת את האפשרות ${values.join(" / ")} עבור ${safeLabel(product.title)}.`}[shoppingLocale(turn.locale)]
+       : {en:`Verified options for ${safeLabel(product.title)}:`,
+          es:`Opciones verificadas para ${safeLabel(product.title)}:`,
+          he:`אפשרויות מאומתות עבור ${safeLabel(product.title)}:`}[shoppingLocale(turn.locale)];
+     const note=noColors
+       ? {en:"This product has no listed color choices.",es:"Este producto no tiene opciones de color indicadas.",he:"למוצר זה לא מופיעות אפשרויות צבע."}[shoppingLocale(turn.locale)]
+       : "";
+     const rows=offered.map(choice=>`${line(choice)}${stockNote(choice,copy.verifiedStock)}`).join("\\n");
+     return finish([prefix,note,rows].filter(Boolean).join("\\n"),"selecting");
+    }
    }
    if(plan && deps.intelligence && ["compare","variant"].includes(plan.action)) {
     const references=plan.references.length ? plan.references.map(n=>state.choices[n-1]) : plan.action==="variant" ? state.selected?[state.selected]:[] : state.choices;
