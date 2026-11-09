@@ -213,9 +213,20 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     plan.optionValues=requestedShoppingOptions(turn.text,product.variants.flatMap(v=>options(v.options).map(o=>o.value)),plan.relativeSize);
     // Exact saved options and comparable relative sizes resolve deterministically.
     // A model nomination cannot substitute a different color or discard size.
-    const result=plan.policy?await deps.intelligence.answer({turn,state,plan,products:[product],choices:references}):{text:""};
+    // The matching product and every requested option are already checked
+    // against the owned catalog. Don't run an advisory answer model before
+    // verification: finish() composes the merchant policy exactly once.
     const candidates=product.variants.filter(v=>allowedVariantChange(references[0],v,plan!.optionValues,plan!.relativeSize));
-    if(!candidates.length)return clarify(`${smartCopy.noVariant}${plan.policy?`\n${result.text}`:""}`);
+    if(!candidates.length) {
+     const requested=plan.optionValues.map(value=>safeLabel(value)).join(" / ").slice(0,80);
+     const title=safeLabel(product.title);
+     const specific=requested ? {
+      en:`I couldn't verify that exact option: ${requested} for ${title}. The previously offered options are unchanged.`,
+      es:`No pude verificar esa opción exacta: ${requested} para ${title}. Las opciones anteriores no han cambiado.`,
+      he:`לא הצלחתי לאמת את האפשרות המבוקשת: ${requested} עבור ${title}. האפשרויות שהוצגו קודם נשארו ללא שינוי.`,
+     }[shoppingLocale(turn.locale)] : smartCopy.noVariant;
+     return clarify(specific);
+    }
     const live=await verify(candidates.slice(0,8).map(v=>v.id));
     const choices=live.flatMap(v=>{const c=v.product.id===product.id&&candidates.some(c=>c.id===v.variant.id)&&freshChoice(v);return c?[c]:[];});
     if(!choices.length)return clarify(copy.pending);
@@ -223,7 +234,6 @@ export function createShoppingService(deps:{commerce:CommerceShoppingProvider; s
     // Informational variant questions preserve the selected variant, but offer
     // verified alternatives for an explicit subsequent choice/confirmation.
     state.choices=choices;
-    explanation=plan.policy?result.text:undefined;
     return finish(`${smartCopy.variant}\n${choices.map((c,i)=>`${i+1}. ${line(c)}${stockNote(c,copy.verifiedStock)}`).join("\n")}\n${choices.length===1?copy.singleChoice:copy.choose}`,state.selected?"confirming":"selecting");
    }
    // A request to verify "that exact variant" is not permission to pick one.

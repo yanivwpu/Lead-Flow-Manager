@@ -273,6 +273,19 @@ export function createShoppingIntelligence(deps: {
         if(!selected.length)return [copy.noPolicy];
         return [`${copy.policy}\n${selected.map(e=>`“${e.text}”`).join("\n")}`, ...(requested.some(topic=>!selected.some(e=>topic.test(norm(e.text))))?[copy.noPolicy]:[])];
       };
+      // A variant's existence/price/stock is checked deterministically by the
+      // Shopping service. A mixed variant + policy request needs only this
+      // merchant's policy evidence, not an advisory recommendation/model JSON.
+      // This path also handles zero verified choices (unavailable color/size).
+      if (plan.action === "variant" && plan.policy) {
+        const messages = policyReply([]);
+        const missing = messages.includes(copy.noPolicy);
+        diagnostic(missing ? "insufficient_evidence" : "grounded");
+        return {
+          text: messages.join("\n"), variantIds: [], missing,
+          ranked: input.choices.map((_, index) => index + 1),
+        };
+      }
       const variants = products.flatMap(p => p.variants.map(v => ({ productId: p.id, id: v.id, options: v.options, title: v.title })));
       try {
         // No product evidence means there is nothing for a model to cite or
