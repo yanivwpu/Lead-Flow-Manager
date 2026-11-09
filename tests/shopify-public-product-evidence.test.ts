@@ -49,12 +49,15 @@ test("Refuses instruction-shaped metafields even when marked public",async()=>{
 });
 
 
-test("merchant-approved AI Guidance retains four evidence slots ahead of auto-imports",()=>{
+test("merchant-approved AI Guidance retains four safe evidence slots ahead of auto-imports",()=>{
  const src=readFileSync("server/shopping/intelligence.ts","utf8");
  const start=src.indexOf("return product ? [...sentences(product.description");
  assert.ok(start >= 0);
- const chunk=src.slice(start,start+520);
- assert.ok(chunk.indexOf("sentences(product.description)") < chunk.indexOf("sentences(product.aiGuidance"));
- assert.ok(chunk.indexOf("sentences(product.aiGuidance") < chunk.indexOf("product.shopifyEvidence"));
+ const chunk=src.slice(start,start+560);
+ assert.ok(chunk.indexOf("sentences(product.description)") < chunk.indexOf("customerProductGuidance(product.aiGuidance"));
+ assert.ok(chunk.indexOf("customerProductGuidance(product.aiGuidance") < chunk.indexOf("product.shopifyEvidence"));
  assert.ok(chunk.includes(".slice(0,18)"));
+ const sanitizedGuidance=src.slice(src.indexOf("function customerProductGuidance("),src.indexOf("function documentedWeight("));
+ assert.ok(sanitizedGuidance.includes("return sentences(guidance).slice(0,4)"),"normal approved AI guidance still yields four source facts");
+ assert.ok(sanitizedGuidance.includes("private"),"guidance marked private QA is excluded");
 });
