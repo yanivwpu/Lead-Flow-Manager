@@ -7,6 +7,7 @@ import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import {PgDialect} from 'drizzle-orm/pg-core';
 import { createShopifyTemplateProvisioner, shopifyTemplateSetupAllowed, packageTemplateCompatible,
   dueShopifyTemplateSetupsQuery,type TemplateDatabase, type TemplateProvider } from "../server/ecommerce/shopifyTemplateProvisioning";
 import { SHOPIFY_GROWTH_TEMPLATES, parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
@@ -60,7 +61,8 @@ async function fixture() {
     },
   };
   const db = drizzle(pool);
-  const service = (database: TemplateDatabase = db) => createShopifyTemplateProvisioner({ database, provider, env, now: () => clock });
+  const service = (database: TemplateDatabase = db,configuration:Record<string,string|undefined>=env) =>
+    createShopifyTemplateProvisioner({ database, provider, env:configuration, now: () => clock });
   const config = async (id = account) => (await pool.query("SELECT config FROM integrations WHERE user_id=$1", [id])).rows[0].config;
   const tick = async (id = account) => { clock += 16 * 60_000; return service().reconcile(id); };
   return { pool, db, service, config, tick, provider, inventory, creates, reads,
@@ -297,4 +299,48 @@ test('existing manual library sync and automatic provisioning share a native WAB
     assert.equal(f.creates.length,0);
     await assert.rejects(()=>withMetaTemplateManagementLock(account,'22221',async()=>{throw Error('must_not_enter');}),/meta_connection_changed/);
   }finally{delete (globalThis as any).__templateLibraryDb;await rm(dir,{recursive:true,force:true});await f.close();}
+});
+
+test('explicit activation persists only with independent release and live approval; changed approval and connection block it',async()=>{
+  const f=await fixture();
+  try{
+    f.inventory.set('11111',SHOPIFY_GROWTH_TEMPLATES.map((_,i)=>liveTemplate(i)));
+    await f.service().authorize(account);await f.tick();
+    await f.service().savePlan(account,'orderConfirmation',{selected:true,delayMinutes:0});
+    assert.equal(await f.service().setDelivery(account,'postPurchase',true),false,'default-off release cannot be enabled by merchant config');
+    // Schema/migration behavior is covered by the existing native migration tests.
+    // Simulate that independently verified prerequisite here while all owner,
+    // installation/config locks, approval checks and persistence use real PG.
+    const dialect=new PgDialect();
+    const ready:TemplateDatabase={execute:q=>f.db.execute(q),transaction:fn=>f.db.transaction(tx=>fn({execute:async q=>
+      dialect.sqlToQuery(q).sql.includes('to_regclass')?{rows:[{outbox:true,intents:true,consents:true,ready:true}]}:tx.execute(q)}))};
+    const staging={...env,RAILWAY_ENVIRONMENT_NAME:'staging',APP_URL:'https://whachatcrm-staging-app-staging.up.railway.app',
+      ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_ACCOUNT_ID:account,
+      ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED:'true',ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID:account,
+      ECOMMERCE_POST_PURCHASE_RECEIPTS_ENABLED:'true',ECOMMERCE_POST_PURCHASE_WEBHOOKS_VERIFIED:'true',
+      ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY:'synthetic-fixture-key-'.repeat(3)};
+    const allowed=f.service(ready,staging);
+    assert.equal((await allowed.view(account)).delivery?.postPurchase.canActivate,true);
+    assert.equal(await allowed.setDelivery(account,'postPurchase',true),true);
+    assert.equal((await f.config()).ecommercePostPurchaseDeliveryEnabled,true);
+    assert.match((await f.config()).ecommercePostPurchaseDeliveryConnection,/^[a-f0-9]{64}$/);
+    assert.equal(await allowed.savePlan(account,'fulfillmentUpdate',{selected:true,delayMinutes:0}),false,'a new purpose needs a separate explicit activation');
+    assert.equal(await allowed.setDelivery(account,'postPurchase',false),true);
+    f.inventory.get('11111')![0].status='PAUSED';
+    assert.equal(await allowed.setDelivery(account,'postPurchase',true),false,'activation checks fresh Meta approval, not cached IDs');
+    f.inventory.get('11111')![0].status='APPROVED';
+    const production={...staging,RAILWAY_ENVIRONMENT_NAME:'production',APP_URL:'https://app.whachatcrm.com',
+      ECOMMERCE_RECOVERY_PRODUCTION_DELIVERY_APPROVED:'true',ECOMMERCE_RECOVERY_WORKER_MODE:'production-controlled-one-checkout',
+      ECOMMERCE_RECOVERY_WORKER_ENABLED:'true',ECOMMERCE_RECOVERY_SEND_ENABLED:'true',ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:'true',
+      ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:'true',ECOMMERCE_RECOVERY_RECEIPTS_ENABLED:'true',ECOMMERCE_RECOVERY_WEBHOOKS_VERIFIED:'true',
+      ECOMMERCE_RECOVERY_PRODUCTION_RECEIPTS_APPROVED:'true',ECOMMERCE_RECOVERY_PRODUCTION_CONSENT_APPROVED:'true',ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED:'true',
+      ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID:account,ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP:'first.myshopify.com',
+      ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID:'gid://shopify/AbandonedCheckout/12',ECOMMERCE_RECOVERY_CONTROLLED_RECIPIENT_HMAC:'a'.repeat(64),
+      ECOMMERCE_RECOVERY_CONTROLLED_EXPIRES_AT:new Date(Date.now()+10*60_000).toISOString()};
+    assert.equal(await f.service(ready,production).setDelivery(account,'checkoutRecovery',true),true);
+    assert.match((await f.config()).ecommerceCheckoutRecoveryDeliveryConnection,/^[a-f0-9]{64}$/);
+    await f.pool.query("UPDATE users SET meta_phone_number_id='55555' WHERE id=$1",[account]);
+    assert.equal(await f.service(ready,production).setDelivery(account,'checkoutRecovery',true),false,'changed connection needs fresh authorization');
+    assert.equal(f.creates.length,0,'activation never submits or sends a message');
+  }finally{await f.close();}
 });

@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from "express";
+import rateLimit,{ipKeyGenerator} from "express-rate-limit";
+import {consumeRateLimit,inspectRateLimit,resetRateLimitKey,getClientIp} from "./rateLimitMiddleware";
 import { isEcommerceOnboardingDocumentRequest } from "./ecommerce/onboardingDocumentAccess";
 import { and, eq, sql } from "drizzle-orm";
 import { users, integrations } from "@shared/schema";
@@ -23,11 +25,34 @@ import {
  * This router intentionally does not use the private Shopping pilot allowance.
  */
 const router = Router();
+/** Reuse the shared Redis counter (local fallback in tests/dev) across replicas.
+ * Setup writes share one account budget; unauthed callers use the existing
+ * trusted-client-IP resolver and IPv6 subnet normalization.
+ */
+const merchantSetupWriteLimiter=rateLimit({
+  windowMs:60_000,limit:30,standardHeaders:true,legacyHeaders:false,
+  keyGenerator:req=>{
+    const id=(req.user as {id?:string}|undefined)?.id;
+    return id?'account:'+id:ipKeyGenerator(getClientIp(req),56);
+  },
+  store:{
+    localKeys:false,
+    increment:async(key:string)=>{
+      const counter='shopify-growth-setup:'+key;
+      const {count}=await consumeRateLimit(counter,30,60_000);
+      const {ttlMs}=await inspectRateLimit(counter);
+      return {totalHits:count,resetTime:new Date(Date.now()+Math.max(ttlMs,1))};
+    },
+    decrement:async()=>{},
+    resetKey:async(key:string)=>resetRateLimitKey('shopify-growth-setup:'+key),
+  },
+  message:{error:'Too many setup requests. Try again shortly.',code:'setup_rate_limited'},
+});
 
 /** Same owner/workspace and same-origin boundary as installation. These endpoints
  * reuse the saved plans and independent operator gates; no queue or sender runs.
  */
-router.post("/journey-plan",async(req:Request,res:Response)=>{
+router.post("/journey-plan",merchantSetupWriteLimiter,async(req:Request,res:Response)=>{
   res.set({"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
   const accountId=(req.user as {id?:string}|undefined)?.id;
   if(!accountId)return res.status(401).json({error:"Unauthorized"});
@@ -40,7 +65,7 @@ router.post("/journey-plan",async(req:Request,res:Response)=>{
     return res.json({ok:true,messagingEnabled:false});
   }catch{return res.status(503).json({error:"Journey plan unavailable"});}
 });
-router.post("/journey-activation",async(req:Request,res:Response)=>{
+router.post("/journey-activation",merchantSetupWriteLimiter,async(req:Request,res:Response)=>{
   res.set({"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
   const accountId=(req.user as {id?:string}|undefined)?.id;
   if(!accountId)return res.status(401).json({error:"Unauthorized"});
@@ -64,7 +89,7 @@ router.get("/template-setup", async (req: Request, res: Response) => {
   catch { return res.status(503).json({ error: "Template setup unavailable" }); }
 });
 
-router.post("/template-setup", async (req: Request, res: Response) => {
+router.post("/template-setup",merchantSetupWriteLimiter, async (req: Request, res: Response) => {
   res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
   const accountId = (req.user as { id?: string } | undefined)?.id;
   if (!accountId) return res.status(401).json({ error: "Unauthorized" });

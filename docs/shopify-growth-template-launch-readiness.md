@@ -33,18 +33,18 @@ All new provisioning writes use the existing Shopify uninstall/privacy lock, liv
 
 ## Automated validation
 
-Eighteen new fixture tests cover empty WABA submission, compatible approved reuse, pending approval, rejection/pause/disable/category/content changes, durable reconnect bindings, concurrency and committed crash fences, tenant/WABA isolation, permission/expiry failures, supported variables, merchant-cleared selections, fair bounded account selection, authenticated same-origin routes, localized RTL setup and disabled-by-default production scopes. Production-entry tests also preserve purchase-completion and missing/revoked consent suppression. Existing native PostgreSQL outbox/privacy/receipt tests supply the historical no-duplicate-send regression coverage; they are not relabeled as new live acceptance.
+Nineteen new fixture tests cover empty WABA submission, compatible approved reuse, pending approval, rejection/pause/disable/category/content changes, durable reconnect bindings, concurrency and committed crash fences, tenant/WABA isolation, permission/expiry failures, supported variables, merchant-cleared selections, fair bounded account selection, authenticated same-origin routes and shared per-account write rate limits, explicit activation persistence, localized RTL setup and disabled-by-default production scopes. Production-entry tests also preserve purchase-completion and missing/revoked consent suppression. Existing native PostgreSQL outbox/privacy/receipt tests supply the historical no-duplicate-send regression coverage; they are not relabeled as new live acceptance.
 
 Local evidence before hosted CI:
 
-- E-Commerce + PostgreSQL + UI suite: 188 passed, zero skipped. The final additional manual-sync/provisioning concurrency test also passed against native PostgreSQL; the PR head is verified again by hosted CI.
+- E-Commerce + PostgreSQL + UI suite: 188 passed, zero skipped. The additional manual-sync/provisioning concurrency and explicit activation persistence tests also passed against native PostgreSQL; the PR head is verified again by hosted CI.
 - Shopify automated suite: 240 passed, zero skipped.
 - Sales Catalog/shopping/session compatibility: 195 passed, three optional model tests skipped; separate admin checkout/diagnostic fixture suite: 62 passed. These used the repository's isolated local/native/PGlite settings. Initial local fixture-role mistakes were corrected; no application change was made for those failures.
 - Security/credential/DNC tests: 18 passed. Production/staging Shopify configuration tests passed.
 - Production build passed. TypeScript regression comparison: base 97 diagnostics, candidate 97, zero added. The repository-wide absolute typecheck is already failing on main.
 - Chromium fixture browser: EN/ES/HE authorization → pending → approved/bound → plan save → explicit enable/pause; disabled release controls, desktop/mobile layout, Hebrew RTL, no horizontal overflow and no browser errors. This is fixture UI evidence, not live Meta/Shopify acceptance.
 - `npm audit --omit=dev`: 31 existing findings (1 critical, 12 high, 13 moderate, 5 low). `package.json` and lockfile are unchanged from main. Dependency remediation/security triage remains a broader public-rollout gate; this PR does not claim a clean dependency audit.
-- Hosted E-Commerce, Shopify onboarding/privacy, build/TypeScript and Sales Catalog security-extended CodeQL results must be green on the PR head before merge. CodeQL is run in GitHub Actions rather than simulated locally.
+- Hosted E-Commerce, Shopify onboarding/privacy, build/TypeScript and Sales Catalog security-extended CodeQL results must be green on the PR head before merge. CodeQL is run in GitHub Actions; its SARIF is compared with the accepted PR #277 artifact. Its initial added setup-route rate-limit warning was addressed using the existing shared counter service. Repository-wide historical findings are not represented as a clean security baseline.
 
 ## Operator rollout checklist
 

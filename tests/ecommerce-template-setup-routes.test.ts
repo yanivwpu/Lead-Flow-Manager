@@ -52,6 +52,10 @@ test("merchant setup HTTP routes enforce session ownership, same origin, strict 
     assert.equal((await post("/journey-activation", { ...activation, productionApproved: true })).status, 400);
     assert.equal((await post("/journey-activation", activation)).status, 409);
     assert.deepEqual(calls.at(-1), ["activate", "tenant-a", "checkoutRecovery", true]);
+    for(let i=0;i<30;i++)assert.equal((await post('/template-setup',auth,{'x-fixture-user':'rate-limit-tenant'})).status,202);
+    const blocked=await post('/template-setup',auth,{'x-fixture-user':'rate-limit-tenant'});
+    assert.equal(blocked.status,429);assert.ok(Number(blocked.headers.get('retry-after'))>0);
+    assert.equal(calls.filter(call=>call[0]==='authorize'&&call[1]==='rate-limit-tenant').length,30);
   } finally {
     if (server) await new Promise<void>((resolve, reject) => server!.close(e => e ? reject(e) : resolve()));
     if (previous === undefined) delete process.env.APP_URL; else process.env.APP_URL = previous;
