@@ -6,29 +6,14 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { format, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
 import { useIsMobile } from "@/hooks/use-mobile";
-
-interface Chat {
-  id: string;
-  name: string;
-  avatar: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  tag: string;
-  followUp: string | null;
-  followUpDate: string | null;
-  notes: string;
-  pipelineStage: string;
-  messages: any[];
-  lastMessageDirection?: string;
-  appointmentId?: string;
-  contactId?: string;
-  appointmentType?: string;
-  isAppointment?: boolean;
-}
+import {
+  applyKPIFilter, buildFollowUpItems, getTaskStatus, hasNeedsReply, hasTask,
+  hasScheduledFollowUp, isClosedStage, prioritizeTasks, validTaskDate,
+  type FollowUpItem as Chat, type FollowUpInboxItem as InboxItem, type KPIFilter,
+} from "@shared/followUpTasks";
 
 interface AppointmentRecord {
   id: string;
@@ -40,87 +25,22 @@ interface AppointmentRecord {
   status: string;
 }
 
-interface InboxItem {
-  contact: {
-    id: string;
-    name: string;
-    avatar?: string;
-    tag: string;
-    pipelineStage: string;
-    notes?: string;
-    followUp?: string | null;
-    followUpDate?: string | null;
-    source?: string | null;
-  };
-  conversation?: {
-    lastMessageDirection?: string;
-  } | null;
-  lastMessage: string;
-  lastMessageAt: string | null;
-  unreadCount: number;
-}
-
 type ViewMode = 'list' | 'calendar' | 'pipeline';
-type KPIFilter = 'overdue' | 'today' | 'booking-requested' | 'booked' | 'needs-reply' | 'active-deals' | null;
 
 const PIPELINE_STAGES = ['Lead', 'Contacted', 'Proposal', 'Negotiation', 'Closed'] as const;
-
-function getTaskStatus(followUpDate: string | null): 'overdue' | 'today' | 'upcoming' | null {
-  if (!followUpDate) return null;
-  const dueDate = new Date(followUpDate);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-  
-  if (dueDateOnly < today) return 'overdue';
-  if (isSameDay(dueDate, now)) return 'today';
-  return 'upcoming';
-}
-
-function isClosedStage(stage: string): boolean {
-  return stage === 'Closed' || stage === 'Closed Won';
-}
-
-function hasNeedsReply(chat: Chat): boolean {
-  return (chat.lastMessageDirection === 'inbound' && chat.unread > 0) || chat.unread > 0;
-}
 
 function KPIHeader({ chats, activeFilter, onFilterChange }: { 
   chats: Chat[]; 
   activeFilter: KPIFilter;
   onFilterChange: (filter: KPIFilter) => void;
 }) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  const overdueCount = useMemo(() => 
-    chats.filter(c => {
-      if (!c.followUpDate) return false;
-      const dueDate = new Date(c.followUpDate);
-      const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-      return dueDateOnly < today;
-    }).length, 
-  [chats, today]);
-
-  const todayCount = useMemo(() => 
-    chats.filter(c => c.followUpDate && isSameDay(new Date(c.followUpDate), now)).length,
-  [chats, now]);
-
-  const bookingRequestedCount = useMemo(() => 
-    chats.filter(c => c.pipelineStage === 'Negotiation').length,
-  [chats]);
-
-  const bookedCount = useMemo(() => 
-    chats.filter(c => isClosedStage(c.pipelineStage)).length,
-  [chats]);
-
-  const needsReplyCount = useMemo(() => 
-    chats.filter(c => hasNeedsReply(c)).length,
-  [chats]);
-
-  const activeDealsCount = useMemo(() => 
-    chats.filter(c => !isClosedStage(c.pipelineStage)).length,
-  [chats]);
+  // Counters and filters use the same predicates as every view.
+  const overdueCount = applyKPIFilter(chats, 'overdue').length;
+  const todayCount = applyKPIFilter(chats, 'today').length;
+  const bookingRequestedCount = applyKPIFilter(chats, 'booking-requested').length;
+  const bookedCount = applyKPIFilter(chats, 'booked').length;
+  const needsReplyCount = applyKPIFilter(chats, 'needs-reply').length;
+  const activeDealsCount = applyKPIFilter(chats, 'active-deals').length;
 
   const kpis: { label: string; filterKey: KPIFilter; value: number; icon: any; color: string; bg: string; border: string; activeBorder: string }[] = [
     { label: 'Active Deals', filterKey: 'active-deals', value: activeDealsCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100', activeBorder: 'border-indigo-500 ring-2 ring-indigo-200' },
@@ -203,7 +123,7 @@ function TaskListItem({
       onClick={() => onClick(chat.id)}
       data-testid={`task-item-${chat.id}`}
     >
-      <button 
+      {hasTask(chat) && !chat.isAppointment && <button
         className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white mr-4 shrink-0 transition-colors flex items-center justify-center"
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
@@ -215,7 +135,7 @@ function TaskListItem({
         ) : (
           <CheckCircle2 className="h-4 w-4 opacity-0 group-hover:opacity-100" />
         )}
-      </button>
+      </button>}
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -230,7 +150,7 @@ function TaskListItem({
           )}
         </div>
         <p className="text-sm text-gray-600 mb-1">
-          Follow up: {chat.followUp}
+          {hasTask(chat) ? `Follow up: ${chat.followUp}` : needsReply ? 'Reply to customer inquiry' : `Sales opportunity · ${chat.pipelineStage}`}
           {chat.followUpDate && (
             <span className="text-gray-400 ml-2">
               ({format(new Date(chat.followUpDate), 'MMM d, yyyy')})
@@ -331,7 +251,8 @@ function PipelineView({
     chats.forEach(chat => {
       let stage: string = chat.pipelineStage;
       if (isClosedStage(stage)) stage = 'Closed';
-      if (!PIPELINE_STAGES.includes(stage as any)) stage = 'Lead';
+      if (!stage.trim()) stage = 'Lead';
+      if (!map.has(stage)) map.set(stage, []);
       map.get(stage)?.push(chat);
     });
     return map;
@@ -375,12 +296,12 @@ function PipelineView({
     'Contacted': 'No leads contacted yet',
     'Proposal': 'No proposals sent yet',
     'Negotiation': 'No deals in negotiation',
-    'Closed': 'Drag here when deal is won',
+    'Closed': 'No closed opportunities',
   };
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4" data-testid="pipeline-view">
-      {PIPELINE_STAGES.map(stage => {
+      {[...chatsByStage.keys()].map(stage => {
         const stageChats = chatsByStage.get(stage) || [];
         const colors = stageColors[stage] || stageColors['Lead'];
         
@@ -401,7 +322,7 @@ function PipelineView({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900 text-sm">{stage}</h3>
-                  <p className="text-xs text-gray-500">{stageChats.length} contact{stageChats.length !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-gray-500">{stageChats.length} opportunit{stageChats.length !== 1 ? 'ies' : 'y'}</p>
                 </div>
               </div>
             </div>
@@ -465,7 +386,7 @@ function TaskCalendarView({
   }, [tasks]);
   
   const handleDragStart = (e: React.DragEvent, task: Chat) => {
-    if (isMobile) return;
+    if (isMobile || task.isAppointment) return;
     setDraggedTask(task);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -560,7 +481,7 @@ function TaskCalendarView({
                   return (
                     <div
                       key={task.id}
-                      draggable={!isMobile}
+                      draggable={!isMobile && !task.isAppointment}
                       onDragStart={(e) => handleDragStart(e, task)}
                       onDragEnd={handleDragEnd}
                       onClick={(e) => {
@@ -597,35 +518,6 @@ function TaskCalendarView({
       </div>
     </div>
   );
-}
-
-function applyKPIFilter(chatList: Chat[], filter: KPIFilter): Chat[] {
-  if (!filter) return chatList;
-  
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
-  switch (filter) {
-    case 'overdue':
-      return chatList.filter(c => {
-        if (!c.followUpDate) return false;
-        const dueDate = new Date(c.followUpDate);
-        const dueDateOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-        return dueDateOnly < today;
-      });
-    case 'today':
-      return chatList.filter(c => c.followUpDate && isSameDay(new Date(c.followUpDate), now));
-    case 'booking-requested':
-      return chatList.filter(c => c.pipelineStage === 'Negotiation');
-    case 'booked':
-      return chatList.filter(c => isClosedStage(c.pipelineStage));
-    case 'needs-reply':
-      return chatList.filter(c => hasNeedsReply(c));
-    case 'active-deals':
-      return chatList.filter(c => !isClosedStage(c.pipelineStage));
-    default:
-      return chatList;
-  }
 }
 
 export function FollowUps() {
@@ -683,30 +575,8 @@ export function FollowUps() {
     };
   }, [user, queryClient, toast]);
 
-  // Map /api/inbox items to the Chat shape used by this page
-  const chats = useMemo<Chat[]>(() => {
-    return inboxData
-      .filter((item) => item.contact.source !== "email_inbox")
-      .map(item => ({
-      id: item.contact.id,
-      name: item.contact.name,
-      avatar: item.contact.avatar || '',
-      lastMessage: item.lastMessage,
-      time: item.lastMessageAt || '',
-      unread: item.unreadCount,
-      tag: item.contact.tag,
-      followUp: item.contact.followUp ?? null,
-      followUpDate: item.contact.followUpDate
-        ? typeof item.contact.followUpDate === 'string'
-          ? item.contact.followUpDate
-          : new Date(item.contact.followUpDate as any).toISOString()
-        : null,
-      notes: item.contact.notes || '',
-      pipelineStage: item.contact.pipelineStage,
-      messages: [],
-      lastMessageDirection: item.conversation?.lastMessageDirection,
-    }));
-  }, [inboxData]);
+  const chats = useMemo(() => buildFollowUpItems(inboxData), [inboxData]);
+  const scheduledFollowUps = useMemo(() => chats.filter(hasScheduledFollowUp), [chats]);
 
   const patchContact = async (contactId: string, fields: Record<string, unknown>) => {
     const res = await fetch(`/api/contacts/${contactId}`, {
@@ -752,46 +622,20 @@ export function FollowUps() {
   }, [chats, kpiFilter]);
 
   const followUps = useMemo(() => {
-    const baseList = kpiFilter 
-      ? filteredChats 
-      : filteredChats.filter(c => c.followUp && c.followUpDate);
-    
-    return baseList.sort((a, b) => {
-      const dateA = a.followUpDate ? new Date(a.followUpDate).getTime() : Infinity;
-      const dateB = b.followUpDate ? new Date(b.followUpDate).getTime() : Infinity;
-      return dateA - dateB;
-    });
+    const items = kpiFilter ? filteredChats : filteredChats.filter(c => hasTask(c) || hasNeedsReply(c));
+    return [...items].sort((a, b) =>
+      (a.followUpDate ? Date.parse(a.followUpDate) : Infinity) -
+      (b.followUpDate ? Date.parse(b.followUpDate) : Infinity));
   }, [filteredChats, kpiFilter]);
 
-  const aiRecommendedTasks = useMemo(() => {
-    return [...followUps].sort((a, b) => {
-      let scoreA = 0;
-      let scoreB = 0;
-      
-      if (hasNeedsReply(a)) scoreA += 50;
-      if (hasNeedsReply(b)) scoreB += 50;
-      
-      const statusA = getTaskStatus(a.followUpDate);
-      const statusB = getTaskStatus(b.followUpDate);
-      if (statusA === 'overdue') scoreA += 40;
-      if (statusB === 'overdue') scoreB += 40;
-      if (statusA === 'today') scoreA += 20;
-      if (statusB === 'today') scoreB += 20;
-      
-      scoreA += (a.unread || 0) * 5;
-      scoreB += (b.unread || 0) * 5;
-      
-      return scoreB - scoreA;
-    }).slice(0, 5);
-  }, [followUps]);
-
+  const recommendedTasks = useMemo(() => prioritizeTasks(followUps).slice(0, 5), [followUps]);
   const regularTasks = useMemo(() => {
-    const aiRecommendedIds = new Set(aiRecommendedTasks.map(t => t.id));
-    return followUps.filter(t => !aiRecommendedIds.has(t.id));
-  }, [followUps, aiRecommendedTasks]);
+    const recommendedIds = new Set(recommendedTasks.map(t => t.id));
+    return followUps.filter(t => !recommendedIds.has(t.id));
+  }, [followUps, recommendedTasks]);
 
   const appointmentTasks = useMemo<Chat[]>(() => {
-    return appointmentsData.map(appt => ({
+    return appointmentsData.filter(appt => validTaskDate(appt.appointmentDate)).map(appt => ({
       id: appt.id,
       name: appt.contactName,
       avatar: '',
@@ -800,10 +644,10 @@ export function FollowUps() {
       unread: 0,
       tag: '',
       followUp: appt.appointmentType,
-      followUpDate: appt.appointmentDate,
+      followUpDate: validTaskDate(appt.appointmentDate),
       notes: '',
       pipelineStage: '',
-      messages: [],
+      needsReply: false, isOpportunity: false, urgent: false, engaged: false,
       appointmentId: appt.id,
       contactId: appt.contactId,
       appointmentType: appt.appointmentType,
@@ -812,10 +656,17 @@ export function FollowUps() {
   }, [appointmentsData]);
 
   const calendarTasks = useMemo<Chat[]>(() => {
-    const contactsWithAppointments = new Set(appointmentsData.map(a => a.contactId));
-    const followUpEvents = followUps.filter(f => !f.isAppointment && !contactsWithAppointments.has(f.id));
-    return [...followUpEvents, ...appointmentTasks];
-  }, [followUps, appointmentTasks, appointmentsData]);
+    // Only dated work belongs on the calendar; filter appointments by their own date.
+    const selectedContactIds = new Set(filteredChats.map(chat => chat.id));
+    const appointments = kpiFilter === 'overdue' || kpiFilter === 'today'
+      ? applyKPIFilter(appointmentTasks, kpiFilter)
+      : appointmentTasks.filter(task => !kpiFilter || selectedContactIds.has(task.contactId!));
+    const followUpEvents = followUps.filter(hasScheduledFollowUp).filter(task =>
+      !appointments.some(appt => appt.contactId === task.id &&
+        appt.followUpDate === task.followUpDate &&
+        (appt.followUp === task.followUp || appointmentsData.find(a => a.id === appt.id)?.title === task.followUp)));
+    return [...followUpEvents, ...appointments];
+  }, [followUps, appointmentTasks, appointmentsData, filteredChats, kpiFilter]);
 
   const handleMarkDone = async (e: React.MouseEvent, chatId: string) => {
     e.stopPropagation();
@@ -824,7 +675,9 @@ export function FollowUps() {
 
   const handleRowClick = (chatId: string) => {
     const appt = appointmentsData.find(a => a.id === chatId);
-    setLocation(`/app/inbox/${appt ? appt.contactId : chatId}`);
+    const chat = chats.find(c => c.id === chatId);
+    const conversationQuery = chat?.conversationId ? `?conversation=${encodeURIComponent(chat.conversationId)}` : '';
+    setLocation(`/app/inbox/${appt ? appt.contactId : chatId}${appt ? '' : conversationQuery}`);
   };
 
   const handleReschedule = (chatId: string, newDate: Date) => {
@@ -849,7 +702,8 @@ export function FollowUps() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <h1 className="text-xl md:text-2xl font-display font-bold text-gray-900">Tasks</h1>
-            <p className="text-sm md:text-base text-gray-500 mt-1">You have {followUps.length} follow-up{followUps.length !== 1 ? 's' : ''} scheduled.</p>
+            <p className="text-sm md:text-base text-gray-500 mt-1">{scheduledFollowUps.length} scheduled follow-up{scheduledFollowUps.length !== 1 ? 's' : ''} · {appointmentTasks.length} appointment{appointmentTasks.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-gray-400 mt-1">Contact task and deal counts reflect the recent inbox.</p>
           </div>
           
           <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg self-start md:self-auto" data-testid="view-toggle">
@@ -926,19 +780,19 @@ export function FollowUps() {
         
         {viewMode === 'list' ? (
           <div className="max-w-3xl">
-            {aiRecommendedTasks.length > 0 && (
+            {recommendedTasks.length > 0 && (
               <div className="mb-8">
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles className="h-4 w-4 text-purple-500" />
-                  <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-ai-recommended">
-                    AI Recommended
+                  <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
+                    Recommended Tasks
                   </h2>
                 </div>
-                <p className="text-xs text-gray-500 mb-3" title="AI Recommended: Prioritized tasks based on engagement, overdue status, and unread messages.">
-                  Prioritized based on engagement, overdue status, and unread messages
+                <p className="text-xs text-gray-500 mb-3" title="Rule-based priority using due dates, urgency, customer inquiries, and sales qualification.">
+                  Prioritized by due date, urgency, and customer intent
                 </p>
                 <div className="space-y-3">
-                  {aiRecommendedTasks.map(chat => (
+                  {recommendedTasks.map(chat => (
                     <div key={chat.id} className="relative">
                       <div className="absolute -left-2 top-4 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-300 rounded-full" />
                       <TaskListItem
@@ -956,7 +810,7 @@ export function FollowUps() {
 
             <div className="mb-8">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4" data-testid="section-all-tasks">
-                {aiRecommendedTasks.length > 0 ? 'Other Tasks' : 'All Tasks'}
+                {recommendedTasks.length > 0 ? 'Other Tasks' : 'All Tasks'}
               </h2>
               <div className="space-y-3">
                 {regularTasks.map(chat => (
@@ -973,8 +827,8 @@ export function FollowUps() {
                 {followUps.length === 0 && (
                   <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                     <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500 font-medium">All caught up!</p>
-                    <p className="text-sm text-gray-400 mt-1">No tasks pending.</p>
+                    <p className="text-gray-500 font-medium">No matching tasks</p>
+                    <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
                     <Button 
                       className="mt-4 bg-brand-green hover:bg-emerald-700" 
                       data-testid="button-view-chats"
@@ -996,7 +850,7 @@ export function FollowUps() {
           />
         ) : (
           <PipelineView
-            chats={filteredChats}
+            chats={filteredChats.filter(chat => chat.isOpportunity)}
             onCardClick={handleRowClick}
             onStageChange={handleStageChange}
             isMobile={isMobile}

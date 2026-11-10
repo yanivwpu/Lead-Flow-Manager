@@ -41,7 +41,7 @@ export function generateAIFeaturesPDF() {
   
   // Data rows
   const features = [
-    { name: 'Smart Task Prioritization (AI Recommended)', free: '✓', starter: '✓', pro: '✓', aiBrain: '✓' },
+    { name: 'Task Prioritization (Due Dates & Urgency)', free: '✓', starter: '✓', pro: '✓', aiBrain: '✓' },
     { name: 'AI Reply Suggestions', free: '—', starter: '50/mo', pro: '200/mo', aiBrain: 'Unlimited' },
     { name: 'Sentiment Detection', free: '—', starter: '50/mo', pro: '200/mo', aiBrain: 'Unlimited' },
     { name: 'Lead Qualification & Scoring', free: '—', starter: '—', pro: '—', aiBrain: '✓' },
@@ -135,7 +135,7 @@ export function generateAIFeaturesPDF() {
   doc.setTextColor(75, 85, 99);
   
   const explanations = [
-    'AI Recommended: Smart task prioritization based on engagement & urgency (available to all)',
+    'Recommended Tasks: Rule-based priority using due dates, urgency & customer intent (available to all)',
     'AI Assist: Reply suggestions & sentiment detection with fair use (included with Pro)',
     'AI Brain: Business knowledge, lead qualification, Copilot, and recommendations (included with Pro)',
   ];

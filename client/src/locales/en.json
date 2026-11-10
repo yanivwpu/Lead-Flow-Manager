@@ -395,7 +395,7 @@
       "autoRouting": "Auto channel routing",
       "tagsNotes": "Tags & internal notes",
       "tasksReminders": "Tasks & reminders",
-      "smartPrioritization": "Smart task prioritization (AI Recommended)",
+      "smartPrioritization": "Task prioritization (due dates and urgency)",
       "awayMessages": "Away messages (business hours)",
       "exportConversations": "Export conversations (CSV)",
       "communitySupport": "Community support",

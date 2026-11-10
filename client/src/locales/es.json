@@ -397,7 +397,7 @@
       "autoRouting": "Enrutamiento automático de canales",
       "tagsNotes": "Etiquetas y notas internas",
       "tasksReminders": "Tareas y recordatorios",
-      "smartPrioritization": "Priorización inteligente de tareas (Recomendado por IA)",
+      "smartPrioritization": "Priorización de tareas (fechas de vencimiento y urgencia)",
       "awayMessages": "Mensajes de ausencia (horario comercial)",
       "exportConversations": "Exportar conversaciones (CSV)",
       "communitySupport": "Soporte comunitario",
