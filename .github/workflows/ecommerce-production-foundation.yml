@@ -19,6 +19,8 @@ on:
       - "client/src/components/integrations/ShopifySimpleSetup.tsx"
       - "shared/appNav.ts"
       - "shared/contactDetails.ts"
+      - "shared/followUpTasks.ts"
+      - "tests/follow-up-*.test.ts"
       - "migrations/*ecommerce*.sql"
       - "tests/ecommerce-*.test.ts"
       - "tests/shopify-*.test.ts"
@@ -68,6 +70,8 @@ jobs:
           tests/shopify-simple-order-support-postgres.test.ts
       - name: Existing navigation and CRM behavior
         run: node --import tsx --test tests/app-nav-ia.test.ts tests/contact-details*.test.ts
+      - name: Actionable tasks, replies and opportunity presentation
+        run: node --import tsx --test tests/follow-up-*.test.ts tests/email-contact-creation-policy.test.ts tests/inbox-needs-reply-pill.test.ts tests/active-appointment.test.ts
       - name: Reject TypeScript regressions against exact main base
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

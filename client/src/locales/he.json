@@ -397,7 +397,7 @@
       "autoRouting": "ניתוב ערוצים אוטומטי",
       "tagsNotes": "תגיות והערות פנימיות",
       "tasksReminders": "משימות ותזכורות",
-      "smartPrioritization": "תעדוף משימות חכם (מומלץ AI)",
+      "smartPrioritization": "תעדוף משימות לפי תאריך יעד ודחיפות",
       "awayMessages": "הודעות היעדרות (שעות פעילות)",
       "exportConversations": "ייצוא שיחות (CSV)",
       "communitySupport": "תמיכת קהילה",
