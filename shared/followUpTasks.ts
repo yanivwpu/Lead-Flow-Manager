@@ -1,6 +1,7 @@
 /** Read-only Tasks presentation. Never promotes contacts or rewrites CRM history. */
 import {
-  looksLikeHumanAsk, looksLikeSystemNotificationContent, looksLikeSystemOrNotificationEmail,
+  looksLikeHumanAsk, looksLikeProductOrSaasInquiry,
+  looksLikeSystemNotificationContent, looksLikeSystemOrNotificationEmail,
 } from './aiDomainEligibility';
 
 export type FollowUpInboxItem = {
@@ -66,7 +67,7 @@ export function isSalesOpportunity(contact: FollowUpInboxItem['contact']): boole
 // Do not block a whole channel or provider domain (a Railway customer can ask for help).
 const TASK_NOTIFICATION_CONTENT = /\b(?:newsletter|weekly digest|daily digest|unsubscribe|promotional offer|limited[- ]time offer|flash sale|shop now|save \d+%|\d+% off|reset your password|verification code|shipping notification|delivery status notification)\b|(?:^|\n)(?:your\s+)?(?:railway\s+)?(?:deployment (?:failed|successful|succeeded|complete|completed|crashed)|build (?:failed|successful|succeeded)|usage (?:alert|limit)|service (?:crashed|deployed))\b/i;
 const SOCIAL_ONLY = /^(?:hi|hello|hey|thanks|thank you|ok|okay|great|sounds good|got it|how are you|good (?:morning|afternoon|evening))[\s!.?]*$/i;
-const CUSTOMER_REQUEST = /\b(?:interested in|looking (?:for|to)|(?:i|we)(?: (?:need|want|would like)|'d like) (?:help|support|a (?:refund|quote|demo)|to (?:buy|rent|book|order|schedule|sell))|(?:need|please|can you|could you) (?:help|send|share|check|confirm|call|contact|fix|reschedule)|(?:quote|pricing|refund|demo|support) (?:please|request)|arrived (?:broken|damaged)|was charged twice|(?:cannot|can't) log in|not working|(?:my|our) (?:order|package|item).{0,40}(?:missing|never arrived|hasn't arrived|damaged))\b/i;
+const CUSTOMER_REQUEST = /\b(?:interested in|looking (?:for|to)|(?:i|we)(?: (?:need|want|would like)|'d like) (?:help|support|info(?:rmation)?|a (?:refund|quote|demo)|to (?:buy|rent|book|order|schedule|sell))|(?:need|please|can you|could you) (?:help|send|share|check|confirm|call|contact|fix|reschedule)|(?:quote|pricing|refund|demo|support) (?:please|request)|arrived (?:broken|damaged)|was charged twice|(?:cannot|can't) log in|not working|(?:my|our) (?:order|package|item|account|payment|subscription).{0,40}(?:missing|never arrived|hasn't arrived|damaged|locked|failed))\b/i;
 const CUSTOMER_TOPIC = /\b(?:pric(?:e|es|ing)|cost|quot(?:e|es|ation)|proposal|demo|support|refund|return|invoice|cancel\w*|reschedul\w*|appointment|availability|available|(?:my|our) (?:order|account|payment|subscription|delivery)|tour|showing)\b/i;
 
 export function hasActionableInquiry(row: FollowUpInboxItem): boolean {
@@ -85,7 +86,9 @@ export function hasActionableInquiry(row: FollowUpInboxItem): boolean {
   // Reuse the existing email/system policy. Blank text tests sender evidence alone,
   // so a notification CTA cannot override a known automated sender.
   if (isEmail && looksLikeSystemOrNotificationEmail({ contactEmail: row.contact.email, channel: 'email', inboundText: '' })) return false;
-  return CUSTOMER_REQUEST.test(text) || (/[?？]/.test(text) && CUSTOMER_TOPIC.test(text));
+  return CUSTOMER_REQUEST.test(text) ||
+    ((/[?？]/.test(text) || looksLikeHumanAsk(text)) &&
+      (CUSTOMER_TOPIC.test(text) || looksLikeProductOrSaasInquiry(text)));
 }
 
 /** One CRM task/deal per contact, even when Inbox expands that contact into email threads. */

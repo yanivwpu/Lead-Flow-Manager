@@ -47,6 +47,8 @@ test('sales inquiries and support requests need a reply regardless of read state
     'My package never arrived.', 'The item arrived damaged.',
     'Can you help with my Railway deployment?', 'Can you help with my deployment failed error?',
     'Can you send your privacy policy?',
+    'Does WhachatCRM work with GHL agencies?', 'Do you integrate with Shopify?',
+    "I'd like information about your services", 'My account is locked.',
   ];
   for (const channel of ['email', 'whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'tiktok', 'gohighlevel']) {
     for (const text of inquiries) {
