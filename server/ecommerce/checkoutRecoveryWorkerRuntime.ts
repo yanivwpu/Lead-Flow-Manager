@@ -11,6 +11,7 @@ import {processClaimedRecoveryDelivery,type ClaimedRecoveryDelivery} from './che
 import {sendRecoveryViaMeta} from './checkoutRecoveryMetaSender';
 import {recoveryRuntimeSchemaReadyQuery} from './checkoutRecoverySchema';
 import {recoveryWorkerEnabled,startStagingRecoveryWorkerScheduler,
+ startControlledProductionRecoveryWorkerScheduler,
  type RecoveryWorkerEnvironment} from './checkoutRecoveryWorkerScheduler';
 import type {RecoveryContact,WhatsAppRecoveryConsent,RecoveryTemplateApproval} from './checkoutRecoveryMessagingEligibility';
 
@@ -133,13 +134,15 @@ async function settle(claim:ClaimedRecoveryDelivery,
  return result.rows.length===1;
 }
 /**
- * Not started unless ALL staging, test tenant and outbound approvals are set.
+ * Starts only through the existing staging approvals or the independent exact
+ * production release. Neither path grants merchant or recipient permission.
  * Reuses two independent purchase/Meta/consent checks and the existing sender.
  */
 export function startCheckoutRecoveryRuntime():null|(()=>void){
  const configuration=env();
  if(!recoveryWorkerEnabled(configuration)&&!readProductionRecoveryScope(configuration))return null;
- return startStagingRecoveryWorkerScheduler(configuration,{
+ const schedule=recoveryWorkerEnabled(configuration)?startStagingRecoveryWorkerScheduler:startControlledProductionRecoveryWorkerScheduler;
+ return schedule(configuration,{
    claim:claimOne,
    process:async (claim,setting)=>{
      const status=await processClaimedRecoveryDelivery(claim,setting,{
@@ -152,6 +155,6 @@ export function startCheckoutRecoveryRuntime():null|(()=>void){
      return status==='disabled'?'uncertain':status;
    }
  },()=>{
-   console.error('[EcommerceRecoveryWorker] guarded staging tick failed');
+   console.error('[EcommerceRecoveryWorker] guarded tick failed');
  });
 }

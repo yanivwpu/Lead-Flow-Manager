@@ -25,7 +25,8 @@ function customerIdentity(contact:{customFields:unknown;sourceDetails:unknown},
 /**
  * Called only from the already verified Meta webhook, after the inbound CRM
  * message was persisted and bound to the merchant phone_number_id.
- * This is a staging-only capture, not an automatic sender or marketing toggle.
+ * Existing staging capture and separately approved production evidence scopes
+ * share these identity/privacy guards. Capture never activates customer sending.
  */
 export async function captureRecoveryConsentFromVerifiedMeta(input:{
  accountId:string;inboxContactId:string|null;candidate:VerifiedInboundConsentCandidate;

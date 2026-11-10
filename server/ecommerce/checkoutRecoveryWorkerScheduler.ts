@@ -2,9 +2,9 @@ import type {ClaimedRecoveryDelivery} from './checkoutRecoveryDeliveryWorker';
 import {processClaimedRecoveryDelivery,recoveryDeliveryExecutionEnabled} from './checkoutRecoveryDeliveryWorker';
 import {readProductionRecoveryScope} from './checkoutRecoveryProductionRelease';
 
-/** Server-side only. Test-store allowlist and an independent manual approval
- * flag are required IN ADDITION to the already-disabled outbound send gates.
- * Scheduling never runs for production. At most one delivery is claimed/tick.
+/** Server-side only. Preserve the staging entry and its independent flags.
+ * Production has a separate exact-scope entry; both reuse this one-shot worker.
+ * At most one delivery is claimed/tick.
  */
 export type RecoveryWorkerEnvironment=Record<string,string|undefined>&{
  RAILWAY_ENVIRONMENT_NAME?:string;APP_URL?:string;
@@ -49,7 +49,7 @@ export async function runRecoveryWorkerTick(
 /** Reserved for explicit reviewed server bootstrap. No worker starts from an
  * import, webhook request, merchant UI or an automatically applied migration.
  */
-export function startStagingRecoveryWorkerScheduler(
+function startGuardedRecoveryWorkerScheduler(
  env:RecoveryWorkerEnvironment,deps:WorkerDeps,
  onError:(error:unknown)=>void
 ):null|(()=>void){
@@ -71,4 +71,15 @@ export function startStagingRecoveryWorkerScheduler(
  const timer=setInterval(()=>{void tick()},90_000);
  timer.unref?.();
  return ()=>{closed=true;clearInterval(timer)};
+}
+
+/** Existing staging API remains staging-only, even with a complete production scope. */
+export function startStagingRecoveryWorkerScheduler(env:RecoveryWorkerEnvironment,deps:WorkerDeps,onError:(error:unknown)=>void):null|(()=>void){
+ if(!recoveryWorkerEnabled(env))return null;
+ return startGuardedRecoveryWorkerScheduler(env,deps,onError);
+}
+/** Independently approved production path; no staging-flag fallback. */
+export function startControlledProductionRecoveryWorkerScheduler(env:RecoveryWorkerEnvironment,deps:WorkerDeps,onError:(error:unknown)=>void):null|(()=>void){
+ if(!readProductionRecoveryScope(env))return null;
+ return startGuardedRecoveryWorkerScheduler(env,deps,onError);
 }

@@ -32,7 +32,7 @@ type ProviderDeps={
 /**
  * Not registered in a route, scheduler or webhook. Future worker may inject
  * this adapter only after it acquired an at-most-once outbox claim.
- * Explicit staging flags, live tenant/shop ownership, exact checkout/customer,
+ * Existing staging flags or a separately pinned production release, live tenant/shop ownership, exact checkout/customer,
  * locked current opt-in/contact and live Meta template are rechecked under the
  * existing Shopify shop privacy lock, including during the provider request.
  */

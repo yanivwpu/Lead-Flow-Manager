@@ -4,7 +4,8 @@ import {readProductionRecoveryScope,productionRecoveryClaimAllowed,productionRec
   productionRecoveryEvidenceScope} from "../server/ecommerce/checkoutRecoveryProductionRelease";
 import {recoveryDeliveryExecutionEnabled,recoveryClaimExecutionEnabled,processClaimedRecoveryDelivery} from "../server/ecommerce/checkoutRecoveryDeliveryWorker";
 import {metaRecoveryReceiptCaptureEnabled} from "../server/ecommerce/checkoutRecoveryMetaReceiptGate";
-import {runRecoveryWorkerTick,recoveryWorkerEnabled} from "../server/ecommerce/checkoutRecoveryWorkerScheduler";
+import {runRecoveryWorkerTick,recoveryWorkerEnabled,startStagingRecoveryWorkerScheduler,
+  startControlledProductionRecoveryWorkerScheduler} from "../server/ecommerce/checkoutRecoveryWorkerScheduler";
 import {recoveryPhoneDigest} from "../server/ecommerce/checkoutRecoveryMessagingEligibility";
 
 const account="10000000-0000-4000-8000-000000000001", secret="synthetic-fixture-key-".repeat(3), phone="+447700900123";
@@ -42,6 +43,10 @@ test("controlled production scheduling can claim only the approved checkout and 
   const deps={claim:async(a:string,c:string)=>{claims++;assert.equal(a,account);assert.equal(c,claim.checkoutId);return claim;},
     process:async()=>{sends++;return "accepted" as const;}};
   assert.equal(await runRecoveryWorkerTick({},deps),"disabled");assert.equal(claims,0);
+  assert.equal(startStagingRecoveryWorkerScheduler(env,deps,()=>{}),null);
+  assert.equal(startControlledProductionRecoveryWorkerScheduler({},deps,()=>{}),null);
+  const stop=startControlledProductionRecoveryWorkerScheduler(env,deps,()=>{});
+  assert.ok(stop);stop();
   assert.equal(await runRecoveryWorkerTick(env,deps),"accepted");assert.equal(claims,1);assert.equal(sends,1);
 });
 test("new production entry preserves purchase completion, recipient-specific consent and no uncertain retries",async()=>{
