@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   WebsiteFormMessageCard,
   type WebsiteFormMetaView,
 } from "./WebsiteFormMessageCard";
 import { EmailHtmlFrame } from "./EmailHtmlFrame";
+import { EmailBodyLoading } from "./EmailBodyLoading";
 
 type EmailDetail = {
   subject?: string | null;
@@ -35,38 +36,43 @@ type EmailDetailsResponse = {
  * so third-party `<style>` rules cannot leak into Inbox chrome.
  * Website-form notifications use the dedicated form card when classified.
  */
-export function EmailMessageBody({
-  messageId,
-  fallbackText,
-  className,
-  layout = "inline",
-}: {
+type EmailMessageBodyProps = {
   messageId: string;
   fallbackText: string;
   className?: string;
   /** document = show subject/from meta above body (email reader) */
   layout?: "inline" | "document";
-}) {
+};
+
+export function EmailMessageBody(props: EmailMessageBodyProps) {
+  // A new message owns its query observer, image retry and frame lifecycle.
+  return <EmailMessageBodyContent key={props.messageId} {...props} />;
+}
+
+function EmailMessageBodyContent({
+  messageId,
+  fallbackText,
+  className,
+  layout = "inline",
+}: EmailMessageBodyProps) {
   const retriedFailedImage = useRef(false);
-  const { data, isLoading, refetch } = useQuery<EmailDetailsResponse>({
+  const enabled = !!messageId && !messageId.startsWith("optimistic-");
+  const { data, isPending, refetch } = useQuery<EmailDetailsResponse>({
     queryKey: ["/api/messages", messageId, "email-details"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await fetch(`/api/messages/${messageId}/email-details`, {
         credentials: "include",
         cache: "no-store",
+        signal,
       });
       if (!res.ok) throw new Error("Failed to load email details");
       return res.json();
     },
-    enabled: !!messageId && !messageId.startsWith("optimistic-"),
+    enabled,
     staleTime: 0,
     gcTime: 0,
     refetchOnMount: "always",
   });
-
-  useEffect(() => {
-    retriedFailedImage.current = false;
-  }, [messageId]);
 
   const refreshAfterImageError = useCallback(() => {
     if (retriedFailedImage.current) return;
@@ -79,8 +85,10 @@ export function EmailMessageBody({
   const html = detail?.htmlBody?.trim();
   const text = detail?.textBody?.trim() || fallbackText;
 
-  if (isLoading && !fallbackText) {
-    return <p className={cn("text-xs text-muted-foreground", className)}>Loading email…</p>;
+  // Until details resolve, a preview cannot tell us whether this is HTML or text.
+  // Disabled optimistic messages and failed requests retain their text fallback.
+  if (enabled && isPending) {
+    return <EmailBodyLoading className={className} />;
   }
 
   if (formMeta?.sourceType === "website_form" && (formMeta.visitorMessage || formMeta.visitorEmail)) {
