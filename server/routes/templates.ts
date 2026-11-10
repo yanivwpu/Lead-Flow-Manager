@@ -1180,7 +1180,7 @@ export function registerTemplateRoutes(app: Express): void {
           })}`
         );
 
-        await withMetaTemplateManagementLock(user.id,wabaId!,async()=>{
+        await withMetaTemplateManagementLock(user.id,wabaId!,async tx=>{
         for (const t of approvedTemplates) {
           const status = (t.status || "pending").toLowerCase();
           const category = (t.category || "utility").toLowerCase();
@@ -1240,18 +1240,25 @@ export function registerTemplateRoutes(app: Express): void {
 
           try {
             const metaId = `meta_${t.id || t.name}_${language}`;
-            const existing = await storage.getMessageTemplateByTwilioSid(user.id, metaId);
-
-            if (existing) {
-              await storage.updateMessageTemplate(existing.id, metaRowPayload);
-              updated++;
-              console.log(`[TemplateSync] Updated: ${templateName} [${status}]`);
-            } else {
+            // A bad row must not abort the surrounding WABA-lock transaction.
+            // Drizzle savepoints use the same connection as the parent lock.
+            const result = await tx.transaction(async rowTx => {
+              const existing = await storage.getMessageTemplateByTwilioSid(user.id, metaId, rowTx);
+              if (existing) {
+                await storage.updateMessageTemplate(existing.id, metaRowPayload, rowTx);
+                return "updated";
+              }
               await storage.createMessageTemplate({
                 userId: user.id,
                 twilioSid: metaId,
                 ...metaRowPayload,
-              });
+              }, rowTx);
+              return "inserted";
+            });
+            if (result === "updated") {
+              updated++;
+              console.log(`[TemplateSync] Updated: ${templateName} [${status}]`);
+            } else {
               inserted++;
               console.log(`[WA_TEMPLATE_SYNC] Inserted: ${templateName} [${status}]`);
             }

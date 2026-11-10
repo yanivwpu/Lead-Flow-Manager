@@ -874,16 +874,17 @@ async function templateManagementConnection(userId: string, expectedWabaId?: str
 }
 
 /** Share the provisioning WABA lock with the existing manual library sync.
- * Its storage calls can keep their current API while competing sync/provision
- * requests serialize before checking/inserting a provider template ID.
+ * All callback library queries use this transaction's connection, so waiting
+ * lock transactions cannot exhaust the pool needed by the lock holder.
  */
-export async function withMetaTemplateManagementLock<T>(userId:string,expectedWabaId:string,operation:()=>Promise<T>):Promise<T>{
+export async function withMetaTemplateManagementLock<T>(userId:string,expectedWabaId:string,
+  operation:(tx:Parameters<Parameters<typeof db.transaction>[0]>[0])=>Promise<T>):Promise<T>{
   return db.transaction(async tx=>{
     const [owner]=await tx.select({wabaId:users.metaBusinessAccountId,connected:users.metaConnected})
       .from(users).where(eq(users.id,userId)).for('share').limit(1);
     if(!owner?.connected||owner.wabaId!==expectedWabaId)throw Error('meta_connection_changed');
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'shopify-template:'+expectedWabaId},0))`);
-    return operation();
+    return operation(tx);
   });
 }
 

@@ -5,6 +5,8 @@ import {build} from 'esbuild';
 import {mkdir,mkdtemp,rm} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {once} from 'node:events';
+import express from 'express';
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {sql} from 'drizzle-orm';
@@ -23,13 +25,14 @@ const liveTemplate = (index: number, status = "APPROVED") => ({
   components: [{ type: "BODY", text: SHOPIFY_GROWTH_TEMPLATES[index].bodyText }],
 });
 
-async function fixture() {
+async function fixture(maxConnections = 8) {
   const url = process.env.ECOMMERCE_TEST_DATABASE_URL ?? process.env.SHOPIFY_TEST_DATABASE_URL;
   if (!url) throw Error("isolated_postgres_required");
   const schema = "template_setup_" + randomUUID().replaceAll("-", "");
   const admin = new Pool({ connectionString: url });
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: 8 });
+  const pool = new Pool({ connectionString: url, options: `-c search_path=${schema}`, max: maxConnections,
+    connectionTimeoutMillis: 2000 });
   await pool.query(`
     CREATE TABLE users(id text PRIMARY KEY,shopify_shop text,shopify_access_token text DEFAULT 'fixture-shopify',
       shopify_subscription_status text DEFAULT 'active',shopify_installed_at timestamptz DEFAULT NOW(),deletion_requested_at timestamptz,
@@ -41,6 +44,8 @@ async function fixture() {
     CREATE TABLE ecommerce_shopify_workspace_activations(account_id text,installation_id text,shop text);
     CREATE TABLE message_templates(id text PRIMARY KEY DEFAULT gen_random_uuid()::text,user_id text,twilio_sid text,
       name text,language text,category text,status text,template_type text,body_text text,footer_text text,header_type text,
+      header_format text,header_content text,approved_sample_media_url text,approved_sample_media_type text,
+      media_runtime_required boolean,created_at timestamptz DEFAULT NOW(),
       buttons jsonb DEFAULT '[]',carousel_cards jsonb DEFAULT '[]',variables jsonb DEFAULT '[]',last_synced_at timestamptz DEFAULT NOW());
   `);
   for (const [id, shop, wabaId, phone] of [[account, "first.myshopify.com", "11111", "11112"], [other, "second.myshopify.com", "22221", "22222"]]) {
@@ -287,10 +292,11 @@ test('existing manual library sync and automatic provisioning share a native WAB
     await f.service().authorize(account);
     let entered!:()=>void,release!:()=>void;
     const started=new Promise<void>(r=>{entered=r;}),wait=new Promise<void>(r=>{release=r;});
-    const manual=withMetaTemplateManagementLock(account,'11111',async()=>{
+    const manual=withMetaTemplateManagementLock(account,'11111',async(tx:TemplateDatabase)=>{
       entered();await wait;
       const t=SHOPIFY_GROWTH_TEMPLATES[0];
-      await f.pool.query("INSERT INTO message_templates(id,user_id,twilio_sid,name,language,category,status,template_type,body_text) VALUES('manual-winner',$1,'meta_1000_en',$2,'en','utility','approved','text',$3)",[account,t.name,t.bodyText]);
+      await tx.execute(sql`INSERT INTO message_templates(id,user_id,twilio_sid,name,language,category,status,template_type,body_text)
+        VALUES('manual-winner',${account},'meta_1000_en',${t.name},'en','utility','approved','text',${t.bodyText})`);
     });
     await started;
     const automatic=f.service().reconcile(account);
@@ -343,6 +349,112 @@ test('explicit activation persists only with independent release and live approv
     await f.pool.query("UPDATE users SET meta_phone_number_id='55555' WHERE id=$1",[account]);
     assert.equal(await f.service(ready,production).setDelivery(account,'checkoutRecovery',true),false,'changed connection needs fresh authorization');
     assert.equal(f.creates.length,0,'activation never submits or sends a message');
+  }finally{await f.close();}
+});
+
+test('concurrent manual sync completes with a saturated two-connection pool and retains one library row',{timeout:15_000},async t=>{
+  const f=await fixture(2);await mkdir('work',{recursive:true});const dir=await mkdtemp(resolve('work/template-sync-pool-'));
+  (globalThis as any).__templateSyncDb=f.db;
+  let server:ReturnType<ReturnType<typeof express>['listen']>|undefined;
+  let release!:()=>void;
+  const held=new Promise<void>(r=>{release=r;});
+  const httpFetch=globalThis.fetch;
+  let inventory=[liveTemplate(0)];
+  const fetchMock=t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({data:inventory})));
+  try{
+    await build({stdin:{contents:`export {registerTemplateRoutes} from './server/routes/templates'; export {storage} from './server/storage';`,
+      resolveDir:process.cwd(),loader:'ts'},outfile:join(dir,'sync.mjs'),bundle:true,platform:'node',format:'esm',packages:'external',
+      plugins:[{name:'native-sync-dependencies',setup(b){
+        b.onResolve({filter:/.*/},args=>args.kind==='dynamic-import'?{path:args.path,external:true}:undefined);
+        b.onLoad({filter:/[/\\]drizzle[/\\]db\.ts$/},()=>({loader:'js',contents:'export const db=globalThis.__templateSyncDb;'}));
+        b.onLoad({filter:/[/\\]server[/\\]subscriptionService\.ts$/},()=>({loader:'js',contents:'export const subscriptionService={getUserLimits:async()=>({templatesEnabled:true})};'}));
+        b.onLoad({filter:/[/\\]server[/\\]whatsappService\.ts$/},()=>({loader:'js',contents:'export const getWhatsAppAvailability=async()=>({available:true,provider:"meta"});'}));
+        b.onLoad({filter:/[/\\]server[/\\]userTwilio\.ts$/},()=>({loader:'js',contents:'export const getUserTwilioClient=async()=>null;'}));
+      }}]});
+    const {registerTemplateRoutes,storage}=await import(pathToFileURL(join(dir,'sync.mjs')).href);
+    storage.getUserForSession=async()=>({id:account,whatsappProvider:'meta',metaConnected:true,
+      metaAccessToken:'fixture-meta',metaBusinessAccountId:'11111'});
+    let entered!:()=>void;
+    const started=new Promise<void>(r=>{entered=r;});
+    const get=storage.getMessageTemplateByTwilioSid.bind(storage);
+    let reads=0;
+    storage.getMessageTemplateByTwilioSid=async(...args:any[])=>{
+      if(++reads===1){entered();await held;}
+      return get(...args);
+    };
+    const app=express();app.use((req,_res,next)=>{req.user={id:account} as any;next();});registerTemplateRoutes(app);
+    server=app.listen(0,'127.0.0.1');await once(server,'listening');
+    const endpoint=`http://127.0.0.1:${(server.address() as any).port}/api/templates/sync`;
+    // The real HTTP route, Meta adapter, storage methods and WABA lock all run.
+    // Only the provider response/session/plan availability are synthetic.
+    const first=httpFetch(endpoint,{method:'POST'}).then(async r=>({status:r.status,body:await r.json()}));
+    await started;
+    const second=httpFetch(endpoint,{method:'POST'}).then(async r=>({status:r.status,body:await r.json()}));
+    const deadline=Date.now()+1500;
+    while((f.pool.totalCount!==2||f.pool.idleCount!==0)&&Date.now()<deadline)
+      await new Promise(r=>setTimeout(r,5));
+    assert.equal(f.pool.totalCount,2);assert.equal(f.pool.idleCount,0,'lock holder and waiter occupy the entire pool');
+    const unrelated=f.pool.query('SELECT 1 AS healthy');
+    release();
+    const [one,two,healthy]=await Promise.all([first,second,unrelated]);
+    const results=[one,two];
+    assert.ok(results.every(r=>r.status===200&&r.body.skipped===0),JSON.stringify(results));
+    assert.equal(healthy.rows[0].healthy,1,'unrelated database work resumes');
+    assert.equal((await f.pool.query('SELECT * FROM message_templates WHERE user_id=$1',[account])).rowCount,1);
+    assert.equal(results.reduce((sum,r)=>sum+r.body.inserted,0),1);
+    assert.equal(results.reduce((sum,r)=>sum+r.body.updated,0),1);
+    // Preserve the existing per-row skip behavior after moving writes into the
+    // lock transaction: one failed row must not undo or block the good rows.
+    await f.pool.query("ALTER TABLE message_templates ADD CONSTRAINT valid_name CHECK (name <> 'invalid_fixture')");
+    inventory=[liveTemplate(0),{...liveTemplate(1),name:'invalid_fixture'},liveTemplate(2)];
+    const retry=await httpFetch(endpoint,{method:'POST'}),body=await retry.json();
+    assert.equal(retry.status,200);
+    assert.deepEqual([body.inserted,body.updated,body.skipped],[1,1,1]);
+    assert.deepEqual((await f.pool.query('SELECT name FROM message_templates ORDER BY name')).rows.map(r=>r.name),
+      [SHOPIFY_GROWTH_TEMPLATES[2].name,SHOPIFY_GROWTH_TEMPLATES[0].name].sort());
+  }finally{
+    release();fetchMock.mock.restore();
+    if(server)await new Promise<void>((resolve,reject)=>server!.close(e=>e?reject(e):resolve()));
+    delete (globalThis as any).__templateSyncDb;await rm(dir,{recursive:true,force:true});await f.close();
+  }
+});
+
+test('pauses persist without Meta credentials, entitlement or provider access and remain paused after renewal',async()=>{
+  const f=await fixture();
+  try{
+    const active={ecommercePostPurchaseDeliveryEnabled:true,ecommerceCheckoutRecoveryDeliveryEnabled:true};
+    for(const connection of [
+      {meta_connected:true,meta_access_token:'fixture-expired',meta_token_expires_at:new Date(0)},
+      {meta_connected:false,meta_access_token:null,meta_token_expires_at:null},
+    ]){
+      await f.pool.query('UPDATE integrations SET config=config || $1::jsonb WHERE user_id=$2',[active,account]);
+      await f.pool.query(`UPDATE users SET meta_connected=$1,meta_access_token=$2,meta_token_expires_at=$3,
+        meta_business_account_id=CASE WHEN $1 THEN '11111' ELSE NULL END,
+        meta_phone_number_id=CASE WHEN $1 THEN '11112' ELSE NULL END WHERE id=$4`,
+        [connection.meta_connected,connection.meta_access_token,connection.meta_token_expires_at,account]);
+      f.provider.list=async()=>{throw Error('pause_must_not_contact_meta');};
+      const unavailable=await f.service().view(account);
+      for(const kind of ['postPurchase','checkoutRecovery'] as const){
+        assert.deepEqual(unavailable.delivery?.[kind],{canActivate:false,merchantEnabled:true,deliveryEnabled:false,
+          reason:connection.meta_connected?'meta_credentials_expired':'connect_whatsapp'});
+        if(connection.meta_connected)await assert.rejects(()=>f.service().setDelivery(account,kind,true),/meta_credentials_expired/);
+        else assert.equal(await f.service().setDelivery(account,kind,true),false);
+        assert.equal(await f.service().setDelivery(account,kind,false),true);
+      }
+      await f.pool.query("UPDATE users SET meta_connected=true,meta_access_token='fixture-renewed',meta_token_expires_at=NULL,meta_business_account_id='11111',meta_phone_number_id='11112' WHERE id=$1",[account]);
+      const renewed=await f.service().view(account);
+      assert.equal(renewed.delivery?.postPurchase.merchantEnabled,false);
+      assert.equal(renewed.delivery?.checkoutRecovery.merchantEnabled,false);
+      assert.equal((await f.config(other)).ecommerceCheckoutRecoveryDeliveryEnabled,undefined);
+    }
+    await f.pool.query('UPDATE integrations SET config=config || $1::jsonb WHERE user_id=$2',[active,account]);
+    await f.pool.query("UPDATE users SET billing_plan='free',subscription_status='none',shopify_subscription_status='none',meta_connected=false WHERE id=$1",[account]);
+    assert.equal(await f.service().setDelivery(account,'postPurchase',false),true);
+    assert.equal(await f.service().setDelivery(account,'checkoutRecovery',false),true);
+    assert.equal(f.reads.length,0);assert.equal(f.creates.length,0);
+    await f.pool.query('UPDATE users SET deletion_requested_at=NOW() WHERE id=$1',[account]);
+    assert.equal(await f.service().setDelivery(account,'checkoutRecovery',false),false,'privacy rejection is retained');
+    assert.equal(await f.service().setDelivery('foreign','checkoutRecovery',false),false);
   }finally{await f.close();}
 });
 

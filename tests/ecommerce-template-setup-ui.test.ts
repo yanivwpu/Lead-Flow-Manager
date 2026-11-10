@@ -43,6 +43,18 @@ test("EN/ES/HE setup shows actual approval progress, RTL, explicit authorization
       assert.equal(completed.querySelectorAll('input[type="checkbox"][checked]').length, 0);
       assert.ok(!completed.querySelector('[data-testid="authorize-template-setup"]'));
       assert.ok(!completed.documentElement.textContent.includes("Create the message in Meta WhatsApp Manager"));
+      for(const connected of [true,false]){
+        const unavailable=render(locale,{...progress,connected,authorized:false,
+          delivery:{postPurchase:{canActivate:false,merchantEnabled:true,deliveryEnabled:false,reason:'meta_credentials_expired'},
+            checkoutRecovery:{canActivate:false,merchantEnabled:true,deliveryEnabled:false,reason:'meta_credentials_expired'}},
+          rows:progress.rows.map(row=>({...row,status:'unavailable',reason:connected?'meta_credentials_expired':'connect_whatsapp'}))});
+        for(const kind of ['postPurchase','checkoutRecovery']){
+          const pause=unavailable.querySelector(`[data-testid="activate-${kind}"]`);
+          assert.ok(pause,'saved delivery remains pausable when WhatsApp is unavailable');
+          assert.equal(pause.hasAttribute('disabled'),false);
+        }
+        assert.equal(unavailable.querySelector('[data-testid="authorize-template-setup"]'),null);
+      }
     }
     assert.equal(render("en", { ...data, available: false }).querySelector('[data-testid="authorize-template-setup"]'), null);
     assert.ok(render("en", { ...data, connected: false }).querySelector('a[href="/app/settings?tab=channels"]'));

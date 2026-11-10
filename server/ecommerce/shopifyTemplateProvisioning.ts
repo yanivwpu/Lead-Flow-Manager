@@ -23,8 +23,9 @@ type WabaState = { authorizedFor?: string; authorizedAt?: number; nextCheckAt?: 
   phoneId?:string;installedAt?:number;
   leaseId?: string; leaseUntil?: number; items: Partial<Record<ShopifyTemplateJourney|PostPurchaseJourney, Item>> };
 type State = { version: 1; wabas: Record<string, WabaState> };
-export type TemplateMerchant = { accountId: string; shop: string; installationId: string;
-  wabaId: string; phoneId:string;installedAt:number; fingerprint: string; config: Record<string, unknown> };
+type TemplateInstallation = { accountId: string; shop: string; installationId: string; config: Record<string, unknown> };
+export type TemplateMerchant = TemplateInstallation & {
+  wabaId: string; phoneId:string;installedAt:number; fingerprint: string };
 export type TemplateProvider = {
   list: (merchant: TemplateMerchant) => Promise<unknown[]>;
   create: (merchant: TemplateMerchant, template: ShopifyGrowthTemplate) => Promise<{ id: string }>;
@@ -113,7 +114,9 @@ export function createShopifyTemplateProvisioner(deps: {
   database: TemplateDatabase; provider: TemplateProvider; env: Env; now?: () => number;
 }) {
   const now = deps.now ?? Date.now;
-  async function locked<T>(accountId: string, fn: (tx: TemplateTx, merchant: TemplateMerchant) => Promise<T>): Promise<T | null> {
+  /** Pausing needs current ownership/privacy protection, never send prerequisites. */
+  async function lockedInstallation<T>(accountId: string,
+    fn: (tx: TemplateTx, installation: TemplateInstallation, owner: Record<string, unknown>) => Promise<T>): Promise<T | null> {
     return deps.database.transaction(async tx => {
       const hint = (await tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`)).rows[0]?.shopify_shop;
       if (typeof hint !== "string" || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(hint)) return null;
@@ -126,29 +129,39 @@ export function createShopifyTemplateProvisioner(deps: {
           'trialStatus',trial_status,'trialPlan',trial_plan,'shopifyShop',shopify_shop,
           'shopifySubscriptionStatus',shopify_subscription_status) AS entitlement
         FROM users WHERE id=${accountId} AND shopify_shop=${hint} FOR SHARE`)).rows[0];
-      if (!owner || owner.deletion_requested_at || !owner.shopify_access_token ||
-          !Number.isFinite(millis(owner.shopify_installed_at)) ||
-          ["uninstalled", "redacted"].includes(String(owner.shopify_subscription_status).toLowerCase()) ||
-          getEffectivePlanForUser(owner.entitlement as Parameters<typeof getEffectivePlanForUser>[0], new Date(now())) !== "pro") return null;
+      if (!owner || owner.deletion_requested_at ||
+          ["uninstalled", "redacted"].includes(String(owner.shopify_subscription_status).toLowerCase())) return null;
       const installations = await tx.execute(sql`SELECT id,config FROM integrations WHERE user_id=${accountId}
         AND type='shopify' AND is_active IS TRUE LIMIT 2 FOR UPDATE`);
       if (installations.rows.length !== 1) return null;
       const installation = installations.rows[0], config = object(installation.config);
       if ([config.shop, config.shopUrl].some(shop => shop != null && shop !== hint)) return null;
-      const activation = await tx.execute(sql`SELECT account_id FROM ecommerce_shopify_workspace_activations
-        WHERE account_id=${accountId} AND installation_id=${installation.id} AND shop=${hint} LIMIT 1`);
-      if (activation.rows.length !== 1) return null;
-      if (owner.meta_connected !== true || !owner.meta_access_token || !numericId(owner.meta_business_account_id) ||
-          !numericId(owner.meta_phone_number_id) || owner.whatsapp_provider === "twilio") return null;
-      const expiry = owner.meta_token_expires_at == null ? null : new Date(String(owner.meta_token_expires_at)).getTime();
-      if (expiry !== null && (!Number.isFinite(expiry) || expiry <= now())) throw Error("meta_credentials_expired");
-      const wabaId = owner.meta_business_account_id;
-      // Also serialize different installations/workers using this same merchant WABA.
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"shopify-template:" + wabaId},0))`);
-      const fingerprint = commerceConnectionFingerprint({accountId,shop:hint,installationId:String(installation.id),wabaId,
-        phoneId:String(owner.meta_phone_number_id),installedAt:owner.shopify_installed_at});
-      return fn(tx, { accountId, shop: hint, installationId: String(installation.id), wabaId, fingerprint, config,
-        phoneId:String(owner.meta_phone_number_id),installedAt:millis(owner.shopify_installed_at) });
+      return fn(tx, { accountId, shop: hint, installationId: String(installation.id), config }, owner);
+    });
+  }
+  async function currentMerchant(tx: TemplateTx, installation: TemplateInstallation,
+    owner: Record<string, unknown>): Promise<TemplateMerchant | null> {
+    if (!owner.shopify_access_token || !Number.isFinite(millis(owner.shopify_installed_at)) ||
+        getEffectivePlanForUser(owner.entitlement as Parameters<typeof getEffectivePlanForUser>[0], new Date(now())) !== "pro") return null;
+    const activation = await tx.execute(sql`SELECT account_id FROM ecommerce_shopify_workspace_activations
+      WHERE account_id=${installation.accountId} AND installation_id=${installation.installationId} AND shop=${installation.shop} LIMIT 1`);
+    if (activation.rows.length !== 1) return null;
+    if (owner.meta_connected !== true || !owner.meta_access_token || !numericId(owner.meta_business_account_id) ||
+        !numericId(owner.meta_phone_number_id) || owner.whatsapp_provider === "twilio") return null;
+    const expiry = owner.meta_token_expires_at == null ? null : new Date(String(owner.meta_token_expires_at)).getTime();
+    if (expiry !== null && (!Number.isFinite(expiry) || expiry <= now())) throw Error("meta_credentials_expired");
+    const wabaId = owner.meta_business_account_id;
+    // Also serialize different installations/workers using this same merchant WABA.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"shopify-template:" + wabaId},0))`);
+    const fingerprint = commerceConnectionFingerprint({ ...installation, wabaId,
+      phoneId:owner.meta_phone_number_id,installedAt:owner.shopify_installed_at });
+    return { ...installation, wabaId, fingerprint, phoneId:owner.meta_phone_number_id,
+      installedAt:millis(owner.shopify_installed_at) };
+  }
+  async function locked<T>(accountId: string, fn: (tx: TemplateTx, merchant: TemplateMerchant) => Promise<T>): Promise<T | null> {
+    return lockedInstallation(accountId, async (tx, installation, owner) => {
+      const merchant = await currentMerchant(tx, installation, owner);
+      return merchant ? fn(tx, merchant) : null;
     });
   }
   async function persist(tx: TemplateTx, m: TemplateMerchant, s: WabaState) {
@@ -204,6 +217,8 @@ export function createShopifyTemplateProvisioner(deps: {
     })??false;
   }
   async function setDelivery(accountId:string,kind:'postPurchase'|'checkoutRecovery',enabled:boolean):Promise<boolean>{
+    if(!enabled)return await lockedInstallation(accountId,async(tx,installation)=>
+      (await saveDelivery(tx,installation,kind,false)).rows.length===1)??false;
     return await locked(accountId,async(tx,m)=>{
       if(enabled){
         const readiness=await deliveryReadiness(tx,m);
@@ -221,24 +236,36 @@ export function createShopifyTemplateProvisioner(deps: {
             !compatibleShopifyTemplate(shape(local[0]),matches[0],journey))return false;
         }
       }
-      const saved=kind==='postPurchase'?await tx.execute(savePostPurchaseActivationQuery(accountId,m.shop,m.installationId,enabled)):
-        await tx.execute(sql`UPDATE integrations SET config=jsonb_set(config,'{ecommerceCheckoutRecoveryDeliveryEnabled}',
-          ${JSON.stringify(enabled)}::jsonb,true) WHERE id=${m.installationId} AND user_id=${accountId} AND is_active IS TRUE RETURNING id`);
+      const saved=await saveDelivery(tx,m,kind,enabled);
       if(enabled)await tx.execute(sql`UPDATE integrations SET config=jsonb_set(config,
         ${kind==='postPurchase'?'{ecommercePostPurchaseDeliveryConnection}':'{ecommerceCheckoutRecoveryDeliveryConnection}'}::text[],
         ${JSON.stringify(m.fingerprint)}::jsonb,true) WHERE id=${m.installationId} AND user_id=${accountId}`);
       return saved.rows.length===1;
     })??false;
   }
+  function saveDelivery(tx:TemplateTx,m:TemplateInstallation,kind:'postPurchase'|'checkoutRecovery',enabled:boolean){
+    return kind==='postPurchase'?tx.execute(savePostPurchaseActivationQuery(m.accountId,m.shop,m.installationId,enabled)):
+      tx.execute(sql`UPDATE integrations SET config=jsonb_set(COALESCE(config,'{}'::jsonb),'{ecommerceCheckoutRecoveryDeliveryEnabled}',
+        ${JSON.stringify(enabled)}::jsonb,true) WHERE id=${m.installationId} AND user_id=${m.accountId}
+          AND type='shopify' AND is_active IS TRUE RETURNING id`);
+  }
   async function view(accountId: string): Promise<ShopifyTemplateSetup> {
     const available = shopifyTemplateSetupAllowed(deps.env, accountId);
-    const fallback = (connected = false, reason = "connect_whatsapp"): ShopifyTemplateSetup => ({
+    const fallback = (connected = false, reason = "connect_whatsapp", installation?:TemplateInstallation): ShopifyTemplateSetup => ({
       available, connected, authorized: false, rows: SHOPIFY_GROWTH_TEMPLATES.map(t => ({
         journey: t.journey, name: t.name, status: "unavailable", reason,
       })),
+      ...(installation?{postPurchasePlans:readPostPurchasePlans(installation.config),delivery:{
+        postPurchase:{canActivate:false,merchantEnabled:installation.config.ecommercePostPurchaseDeliveryEnabled===true,deliveryEnabled:false,reason},
+        checkoutRecovery:{canActivate:false,merchantEnabled:installation.config.ecommerceCheckoutRecoveryDeliveryEnabled===true,deliveryEnabled:false,reason},
+      }}:{}),
     });
     try {
-      return await locked(accountId, async (tx, m) => {
+      return await lockedInstallation(accountId, async (tx, installation, owner) => {
+        let m:TemplateMerchant|null;
+        try { m=await currentMerchant(tx,installation,owner); }
+        catch(error){return fallback(owner.meta_connected===true,templateProvisioningFailure(error),installation);}
+        if(!m)return fallback(false,'connect_whatsapp',installation);
         const s = waba(m), authorized = s.authorizedFor === m.fingerprint;
         return { available, connected: true, authorized,postPurchasePlans:readPostPurchasePlans(m.config),
           delivery:await deliveryReadiness(tx,m),
