@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { sql,type SQL } from "drizzle-orm";
+import {SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS,stripShopifyGrowthManagedConfig} from "../../shared/shopifyGrowthTemplates";
 import { JOURNEY_POLICY, isPostPurchaseJourney, POST_PURCHASE_JOURNEYS, type PostPurchaseJourney } from "../../shared/postPurchase";
 
 /**
@@ -8,6 +9,21 @@ import { JOURNEY_POLICY, isPostPurchaseJourney, POST_PURCHASE_JOURNEYS, type Pos
  */
 export type PostPurchaseTemplateBindings = Partial<Record<PostPurchaseJourney, string>>;
 export type TemplateBindingChange = { journey: PostPurchaseJourney; templateId: string | null };
+
+/** Atomic boundary for ordinary settings/OAuth storage updates. Read protected
+ * keys from the locked current row, never the caller's potentially stale copy.
+ * Other integration types retain their existing full-config replacement behavior.
+ */
+export function preserveShopifyGrowthManagedConfig(config:unknown,current:SQL,type:SQL):SQL{
+  const keys=JSON.stringify(SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS);
+  const replacement=config===null?sql`NULL::jsonb`:sql`${JSON.stringify(config)}::jsonb`;
+  return sql`CASE WHEN ${type}='shopify' THEN
+    ${JSON.stringify(stripShopifyGrowthManagedConfig(config))}::jsonb ||
+      COALESCE((SELECT jsonb_object_agg(entry.key,entry.value)
+        FROM jsonb_each(CASE WHEN jsonb_typeof(${current})='object' THEN ${current} ELSE '{}'::jsonb END) entry
+        WHERE entry.key IN (SELECT jsonb_array_elements_text(${keys}::jsonb))),'{}'::jsonb)
+    ELSE ${replacement} END`;
+}
 
 export function parsePostPurchaseTemplateBindingChange(input: unknown): TemplateBindingChange | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;

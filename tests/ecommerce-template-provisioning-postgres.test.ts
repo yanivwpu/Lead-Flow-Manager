@@ -7,11 +7,12 @@ import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import {sql} from 'drizzle-orm';
 import {PgDialect} from 'drizzle-orm/pg-core';
 import { createShopifyTemplateProvisioner, shopifyTemplateSetupAllowed, packageTemplateCompatible,
   dueShopifyTemplateSetupsQuery,type TemplateDatabase, type TemplateProvider } from "../server/ecommerce/shopifyTemplateProvisioning";
-import { SHOPIFY_GROWTH_TEMPLATES, parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
-import {savePostPurchaseTemplateBindingQuery} from '../server/ecommerce/postPurchaseTemplateBinding';
+import { SHOPIFY_GROWTH_TEMPLATES, parseShopifyTemplateSetupAuthorization,stripShopifyGrowthManagedConfig } from "../shared/shopifyGrowthTemplates";
+import {savePostPurchaseTemplateBindingQuery,preserveShopifyGrowthManagedConfig} from '../server/ecommerce/postPurchaseTemplateBinding';
 
 const account = "10000000-0000-4000-8000-000000000001", other = "20000000-0000-4000-8000-000000000002";
 const env = { ECOMMERCE_TEMPLATE_PROVISIONING_ENABLED: "true", ECOMMERCE_TEMPLATE_PROVISIONING_STAGE: "internal_pilot",
@@ -342,5 +343,31 @@ test('explicit activation persists only with independent release and live approv
     await f.pool.query("UPDATE users SET meta_phone_number_id='55555' WHERE id=$1",[account]);
     assert.equal(await f.service(ready,production).setDelivery(account,'checkoutRecovery',true),false,'changed connection needs fresh authorization');
     assert.equal(f.creates.length,0,'activation never submits or sends a message');
+  }finally{await f.close();}
+});
+
+test('generic settings/reconnect writes preserve committed fences and cannot fabricate activation or bindings',async()=>{
+  const f=await fixture();
+  try{
+    await f.service().authorize(account);
+    const stale=await f.config();
+    await f.tick();assert.equal(f.creates.length,1);
+    const committed=(await f.config()).ecommerceTemplateSetup;
+    const supplied={...stale,syncOptions:['new_orders'],ecommerceTemplateSetup:{version:1,wabas:{}},
+      ecommercePostPurchaseDeliveryEnabled:true,ecommercePostPurchaseTemplates:{orderConfirmation:'foreign-id'},
+      ecommerceCheckoutRecoveryDeliveryEnabled:true};
+    await f.db.execute(sql`UPDATE integrations SET config=${preserveShopifyGrowthManagedConfig(supplied,sql`config`,sql`type`)} WHERE user_id=${account}`);
+    const saved=await f.config();
+    assert.deepEqual(saved.ecommerceTemplateSetup,committed);
+    assert.deepEqual(saved.syncOptions,['new_orders']);
+    assert.equal(saved.ecommercePostPurchaseDeliveryEnabled,undefined);
+    assert.equal(saved.ecommercePostPurchaseTemplates,undefined);
+    assert.equal(saved.ecommerceCheckoutRecoveryDeliveryEnabled,undefined);
+    f.inventory.set('11111',[]);await f.tick();
+    assert.equal(f.creates.filter(t=>t.name==='shopify_order_confirmation_v1').length,1,'lost provider acknowledgement plus a stale settings save cannot resubmit');
+    assert.deepEqual(stripShopifyGrowthManagedConfig(supplied),{shop:'first.myshopify.com',unrelated:{preserved:true},syncOptions:['new_orders']});
+    await f.pool.query("UPDATE integrations SET type='woocommerce' WHERE user_id=$1",[other]);
+    await f.db.execute(sql`UPDATE integrations SET config=${preserveShopifyGrowthManagedConfig(supplied,sql`config`,sql`type`)} WHERE user_id=${other}`);
+    assert.deepEqual(await f.config(other),supplied,'other providers keep their existing config replacement behavior');
   }finally{await f.close();}
 });

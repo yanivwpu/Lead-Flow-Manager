@@ -1,4 +1,6 @@
 import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
+import {stripShopifyGrowthManagedConfig} from "@shared/shopifyGrowthTemplates";
+import {preserveShopifyGrowthManagedConfig} from "./ecommerce/postPurchaseTemplateBinding";
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
@@ -1456,12 +1458,15 @@ export class DbStorage implements IStorage {
   }
 
   async createIntegration(integration: InsertIntegration): Promise<Integration> {
-    const result = await db.insert(integrations).values(integration).returning();
+    const values=integration.type==='shopify'?{...integration,config:stripShopifyGrowthManagedConfig(integration.config)}:integration;
+    const result = await db.insert(integrations).values(values).returning();
     return result[0];
   }
 
   async updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined> {
-    const result = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
+    const patch=updates.config===undefined?updates:{...updates,
+      config:preserveShopifyGrowthManagedConfig(updates.config,sql`${integrations.config}`,sql`${integrations.type}`)};
+    const result = await db.update(integrations).set(patch).where(eq(integrations.id, id)).returning();
     return result[0];
   }
 

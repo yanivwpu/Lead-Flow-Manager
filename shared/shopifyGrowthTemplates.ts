@@ -1,5 +1,19 @@
 import type {PostPurchasePlans} from "./postPurchase";
 
+/** Reserved state can only be changed by the locked Growth Engine services.
+ * Generic integration edits/reconnects must preserve the committed current values.
+ */
+export const SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS=[
+  'ecommerceTemplateSetup','ecommercePostPurchaseTemplates','ecommercePostPurchaseTemplateAutoDisabled',
+  'ecommercePostPurchasePlans','ecommercePostPurchaseDeliveryEnabled','ecommercePostPurchaseDeliveryConnection',
+  'ecommerceCheckoutRecoveryTemplateId','ecommerceCheckoutRecoveryDeliveryEnabled','ecommerceCheckoutRecoveryDeliveryConnection',
+] as const;
+export function stripShopifyGrowthManagedConfig(config:unknown):Record<string,unknown>{
+  if(!config||typeof config!=='object'||Array.isArray(config))return {};
+  const reserved=new Set<string>(SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS);
+  return Object.fromEntries(Object.entries(config).filter(([key])=>!reserved.has(key)));
+}
+
 /** English package only. Utility bodies copied from the approved pilot library.
  * Approval belongs to a WABA, never to this package. {{1}} is the existing
  * numeric Shopify order ID, or the full freshly verified checkout recovery URL.
