@@ -5,6 +5,7 @@ import { rememberEcommerceShopifyInstallReturn, clearEcommerceShopifyInstallRetu
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, CheckCircle2, LockKeyhole, ShoppingBag } from "lucide-react";
 import { EcommerceGrowthEngineDetails } from "./EcommerceGrowthEngineDetails";
+import { ShopifyTemplateSetup } from "@/components/ecommerce/ShopifyTemplateSetup";
 import { useActivateEcommerceMerchant, useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
 
 type Mode = "setup" | "about";
@@ -163,6 +164,7 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
           </p>}
         </section>
       )}
+      {mode === "setup" && activated && <ShopifyTemplateSetup locale={locale}/>}
       {mode === "setup" && <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600" data-testid="ecommerce-setup-delivery-guidance">
         <LockKeyhole className="me-2 inline h-4 w-4"/>{t.safe}
       </p>}

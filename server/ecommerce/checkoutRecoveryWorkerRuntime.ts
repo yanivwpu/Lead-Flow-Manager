@@ -2,6 +2,7 @@ import {and,eq,sql} from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users,contacts,messageTemplates} from '@shared/schema';
 import {storage} from '../storage';
+import {readProductionRecoveryScope} from './checkoutRecoveryProductionRelease';
 import {getMetaMessageTemplates} from '../userMeta';
 import {isShopifyContactInstallationActive} from '@shared/shopifyContactPrivacy';
 import {recheckShopifyCheckoutForRecovery} from './checkoutFreshRecheck';
@@ -10,6 +11,7 @@ import {processClaimedRecoveryDelivery,type ClaimedRecoveryDelivery} from './che
 import {sendRecoveryViaMeta} from './checkoutRecoveryMetaSender';
 import {recoveryRuntimeSchemaReadyQuery} from './checkoutRecoverySchema';
 import {recoveryWorkerEnabled,startStagingRecoveryWorkerScheduler,
+ startControlledProductionRecoveryWorkerScheduler,
  type RecoveryWorkerEnvironment} from './checkoutRecoveryWorkerScheduler';
 import type {RecoveryContact,WhatsAppRecoveryConsent,RecoveryTemplateApproval} from './checkoutRecoveryMessagingEligibility';
 
@@ -18,6 +20,7 @@ const isShop=(shop:unknown):shop is string=>typeof shop==='string'&&
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)
  ? v as Record<string,unknown>:{};
 const env=():RecoveryWorkerEnvironment=>({
+ ...process.env,
  RAILWAY_ENVIRONMENT_NAME:process.env.RAILWAY_ENVIRONMENT_NAME,
  APP_URL:process.env.APP_URL,
  ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:process.env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED,
@@ -43,6 +46,13 @@ async function claimOne(accountId:string,checkoutId:string):Promise<ClaimedRecov
  if(!owner||!isShop(owner.shopifyShop)||
    !await installation(accountId,owner.shopifyShop))return null;
  const shop=owner.shopifyShop;
+ if(process.env.RAILWAY_ENVIRONMENT_NAME==='production'){
+   const scope=readProductionRecoveryScope(process.env);
+   if(!scope||scope.accountId!==accountId||scope.shop!==shop||scope.checkoutId!==checkoutId)return null;
+   const active=await db.execute(sql`SELECT config FROM integrations WHERE user_id=${accountId}
+     AND type='shopify' AND is_active IS TRUE LIMIT 2`);
+   if(active.rows.length!==1||obj(active.rows[0].config).ecommerceCheckoutRecoveryDeliveryEnabled!==true)return null;
+ }
  const schema=await db.execute(recoveryRuntimeSchemaReadyQuery());
  if(schema.rows[0]?.ready!==true)
    return null;
@@ -124,13 +134,15 @@ async function settle(claim:ClaimedRecoveryDelivery,
  return result.rows.length===1;
 }
 /**
- * Not started unless ALL staging, test tenant and outbound approvals are set.
+ * Starts only through the existing staging approvals or the independent exact
+ * production release. Neither path grants merchant or recipient permission.
  * Reuses two independent purchase/Meta/consent checks and the existing sender.
  */
 export function startCheckoutRecoveryRuntime():null|(()=>void){
  const configuration=env();
- if(!recoveryWorkerEnabled(configuration))return null;
- return startStagingRecoveryWorkerScheduler(configuration,{
+ if(!recoveryWorkerEnabled(configuration)&&!readProductionRecoveryScope(configuration))return null;
+ const schedule=recoveryWorkerEnabled(configuration)?startStagingRecoveryWorkerScheduler:startControlledProductionRecoveryWorkerScheduler;
+ return schedule(configuration,{
    claim:claimOne,
    process:async (claim,setting)=>{
      const status=await processClaimedRecoveryDelivery(claim,setting,{
@@ -143,6 +155,6 @@ export function startCheckoutRecoveryRuntime():null|(()=>void){
      return status==='disabled'?'uncertain':status;
    }
  },()=>{
-   console.error('[EcommerceRecoveryWorker] guarded staging tick failed');
+   console.error('[EcommerceRecoveryWorker] guarded tick failed');
  });
 }

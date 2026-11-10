@@ -18,6 +18,7 @@ import { parseReviewEventRequest } from "./ecommerce/reviewIntent";
 import { requireEcommercePilot } from "./ecommerce/pilotMiddleware";
 import {postPurchaseActivationReadiness,parsePostPurchaseActivation,savePostPurchaseActivationQuery} from './ecommerce/postPurchaseActivation';
 import {postPurchaseDeliveryReadinessQuery} from './ecommerce/postPurchaseDeliveryReadiness';
+import {shopifyTemplateProvisioner} from './ecommerce/shopifyTemplateProvisioningRuntime';
 
 const router = Router();
 router.use(requireEcommercePilot);
@@ -105,7 +106,12 @@ router.get('/event-inbox-preview', async (req: Request, res: Response) => {
     const deliverySchema=await db.execute(postPurchaseDeliveryReadinessQuery);
     const deliveryReady=deliverySchema.rows[0]?.outbox===true&&postPurchaseSchemaReady===true;
     postPurchaseSchemaReady=postPurchaseSchemaReady===null?null:deliveryReady;
-    const deliveryActivation=postPurchaseActivationReadiness(process.env,accountId,cfg,deliveryReady);
+    const existingActivation=postPurchaseActivationReadiness(process.env,accountId,cfg,deliveryReady);
+    const verifiedActivation=(await shopifyTemplateProvisioner.view(accountId)).delivery?.postPurchase;
+    const deliveryActivation={...existingActivation,
+      canActivate:existingActivation.canActivate&&verifiedActivation?.canActivate===true,
+      deliveryEnabled:existingActivation.deliveryEnabled&&verifiedActivation?.deliveryEnabled===true,
+      blockers:verifiedActivation?.canActivate?existingActivation.blockers:[...existingActivation.blockers,'verification_required']};
     return res.json({ ok: true,
       deliveryActivation,
       mode: process.env.ECOMMERCE_EVENT_RECORDING_ENABLED === 'true' ? 'recording' : 'paused',
@@ -158,6 +164,10 @@ router.post('/post-purchase-activation', async (req:Request,res:Response)=>{
   if(!req.user)return res.status(401).json({error:'Unauthorized'});
   const accountId=(req.user as {id:string}).id;
   try{
+    if(enabled){
+      const saved=await shopifyTemplateProvisioner.setDelivery(accountId,'postPurchase',true);
+      return saved?res.json({ok:true,merchantEnabled:true}):res.status(409).json({error:'Activation prerequisites are incomplete'});
+    }
     const owner=await storage.getUserForSession(accountId);
     const shop=normalizeShopifyShopDomain(owner?.shopifyShop);
     if(!shop)return res.status(409).json({error:'Active Shopify connection required'});

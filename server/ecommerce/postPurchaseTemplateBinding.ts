@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { sql,type SQL } from "drizzle-orm";
+import {SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS,stripShopifyGrowthManagedConfig} from "../../shared/shopifyGrowthTemplates";
 import { JOURNEY_POLICY, isPostPurchaseJourney, POST_PURCHASE_JOURNEYS, type PostPurchaseJourney } from "../../shared/postPurchase";
 
 /**
@@ -8,6 +9,21 @@ import { JOURNEY_POLICY, isPostPurchaseJourney, POST_PURCHASE_JOURNEYS, type Pos
  */
 export type PostPurchaseTemplateBindings = Partial<Record<PostPurchaseJourney, string>>;
 export type TemplateBindingChange = { journey: PostPurchaseJourney; templateId: string | null };
+
+/** Atomic boundary for ordinary settings/OAuth storage updates. Read protected
+ * keys from the locked current row, never the caller's potentially stale copy.
+ * Other integration types retain their existing full-config replacement behavior.
+ */
+export function preserveShopifyGrowthManagedConfig(config:unknown,current:SQL,type:SQL):SQL{
+  const keys=JSON.stringify(SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS);
+  const replacement=config===null?sql`NULL::jsonb`:sql`${JSON.stringify(config)}::jsonb`;
+  return sql`CASE WHEN ${type}='shopify' THEN
+    ${JSON.stringify(stripShopifyGrowthManagedConfig(config))}::jsonb ||
+      COALESCE((SELECT jsonb_object_agg(entry.key,entry.value)
+        FROM jsonb_each(CASE WHEN jsonb_typeof(${current})='object' THEN ${current} ELSE '{}'::jsonb END) entry
+        WHERE entry.key IN (SELECT jsonb_array_elements_text(${keys}::jsonb))),'{}'::jsonb)
+    ELSE ${replacement} END`;
+}
 
 export function parsePostPurchaseTemplateBindingChange(input: unknown): TemplateBindingChange | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -63,8 +79,9 @@ export function eligiblePostPurchaseTemplateLookupQuery(accountId: string, templ
 export function savePostPurchaseTemplateBindingQuery(input: {
   integrationId: string; accountId: string; shop: string;
   journey: PostPurchaseJourney; templateId: string | null;
+  automatic?: boolean;
 }) {
-  return sql`UPDATE integrations SET config=jsonb_set(
+  const merged=sql`jsonb_set(
       COALESCE(config, '{}'::jsonb), '{ecommercePostPurchaseTemplates}',
       ((CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplates')='object'
         THEN config->'ecommercePostPurchaseTemplates' ELSE '{}'::jsonb END)
@@ -72,7 +89,12 @@ export function savePostPurchaseTemplateBindingQuery(input: {
       || (CASE WHEN ${input.templateId}::text IS NULL THEN '{}'::jsonb
              ELSE jsonb_build_object(${input.journey}::text,${input.templateId}::text) END),
       true
-    ) WHERE id=${input.integrationId} AND user_id=${input.accountId}
+    )`;
+  const config=input.automatic?merged:sql`jsonb_set(${merged},'{ecommercePostPurchaseTemplateAutoDisabled}',
+    ((CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplateAutoDisabled')='object'
+      THEN config->'ecommercePostPurchaseTemplateAutoDisabled' ELSE '{}'::jsonb END)-${input.journey}::text)
+    || (CASE WHEN ${input.templateId}::text IS NULL THEN jsonb_build_object(${input.journey}::text,true) ELSE '{}'::jsonb END),true)`;
+  return sql`UPDATE integrations SET config=${config} WHERE id=${input.integrationId} AND user_id=${input.accountId}
       AND type='shopify' AND is_active IS TRUE
       AND (config->>'shop' IS NULL OR config->>'shop'=${input.shop})
     RETURNING config->'ecommercePostPurchaseTemplates' AS bindings`;

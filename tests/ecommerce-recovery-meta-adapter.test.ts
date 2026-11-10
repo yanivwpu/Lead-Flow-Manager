@@ -70,7 +70,7 @@ test('reject malformed recovery URLs before entering a Meta component',()=>{
 test('server adapter stays unwired, demands lock-held claim and final Shopify/consent checks',()=>{
  const source=readFileSync('server/ecommerce/checkoutRecoveryMetaSender.ts','utf8');
  for(const required of [
-  'recoveryDeliveryExecutionEnabled','pg_advisory_xact_lock',
+  'recoveryClaimExecutionEnabled','pg_advisory_xact_lock',
   'ecommerce_checkout_recovery_outbox','claim_token=CAST',
   "o.state='claimed'","i.status='ready'","for('share')",
   'recheckShopifyCheckoutForRecovery','getMetaMessageTemplates',

@@ -1,4 +1,6 @@
 import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
+import {stripShopifyGrowthManagedConfig} from "@shared/shopifyGrowthTemplates";
+import {preserveShopifyGrowthManagedConfig} from "./ecommerce/postPurchaseTemplateBinding";
 import { 
   type User, type InsertUser, type Chat, type InsertChat,
   type RegisteredPhone, type InsertRegisteredPhone,
@@ -95,6 +97,9 @@ import {
   mapDemoBookingRow,
 } from "./demoBookingRows";
 import { readDemoBookings, writeDemoBookingUpdate } from "./demoBookingStorage";
+
+/** Library operations inside a management lock must use its reserved connection. */
+export type MessageTemplateDatabase = Pick<typeof db, "select" | "insert" | "update">;
 
 /** Columns always present on legacy Neon `public.users`; avoids Drizzle hydrating rows when DB lacks newer schema columns (42703). */
 export type UsersAuthCoreRow = {
@@ -307,9 +312,9 @@ export interface IStorage {
   // Template methods
   getMessageTemplates(userId: string): Promise<MessageTemplate[]>;
   getMessageTemplate(id: string): Promise<MessageTemplate | undefined>;
-  getMessageTemplateByTwilioSid(userId: string, twilioSid: string): Promise<MessageTemplate | undefined>;
-  createMessageTemplate(template: InsertMessageTemplate): Promise<MessageTemplate>;
-  updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined>;
+  getMessageTemplateByTwilioSid(userId: string, twilioSid: string, database?: MessageTemplateDatabase): Promise<MessageTemplate | undefined>;
+  createMessageTemplate(template: InsertMessageTemplate, database?: MessageTemplateDatabase): Promise<MessageTemplate>;
+  updateMessageTemplate(id: string, updates: Partial<MessageTemplate>, database?: MessageTemplateDatabase): Promise<MessageTemplate | undefined>;
   deleteMessageTemplate(id: string): Promise<void>;
   listTemplateCarouselMediaDefaultsByUser(userId: string): Promise<TemplateCarouselMediaDefault[]>;
   getTemplateCarouselMediaDefaults(
@@ -1456,12 +1461,15 @@ export class DbStorage implements IStorage {
   }
 
   async createIntegration(integration: InsertIntegration): Promise<Integration> {
-    const result = await db.insert(integrations).values(integration).returning();
+    const values=integration.type==='shopify'?{...integration,config:stripShopifyGrowthManagedConfig(integration.config)}:integration;
+    const result = await db.insert(integrations).values(values).returning();
     return result[0];
   }
 
   async updateIntegration(id: string, updates: Partial<Integration>): Promise<Integration | undefined> {
-    const result = await db.update(integrations).set(updates).where(eq(integrations.id, id)).returning();
+    const patch=updates.config===undefined?updates:{...updates,
+      config:preserveShopifyGrowthManagedConfig(updates.config,sql`${integrations.config}`,sql`${integrations.type}`)};
+    const result = await db.update(integrations).set(patch).where(eq(integrations.id, id)).returning();
     return result[0];
   }
 
@@ -1523,19 +1531,19 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async getMessageTemplateByTwilioSid(userId: string, twilioSid: string): Promise<MessageTemplate | undefined> {
-    const result = await db.select().from(messageTemplates)
+  async getMessageTemplateByTwilioSid(userId: string, twilioSid: string, database: MessageTemplateDatabase = db): Promise<MessageTemplate | undefined> {
+    const result = await database.select().from(messageTemplates)
       .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.twilioSid, twilioSid)));
     return result[0];
   }
 
-  async createMessageTemplate(template: InsertMessageTemplate): Promise<MessageTemplate> {
-    const result = await db.insert(messageTemplates).values(template).returning();
+  async createMessageTemplate(template: InsertMessageTemplate, database: MessageTemplateDatabase = db): Promise<MessageTemplate> {
+    const result = await database.insert(messageTemplates).values(template).returning();
     return result[0];
   }
 
-  async updateMessageTemplate(id: string, updates: Partial<MessageTemplate>): Promise<MessageTemplate | undefined> {
-    const result = await db.update(messageTemplates).set(updates).where(eq(messageTemplates.id, id)).returning();
+  async updateMessageTemplate(id: string, updates: Partial<MessageTemplate>, database: MessageTemplateDatabase = db): Promise<MessageTemplate | undefined> {
+    const result = await database.update(messageTemplates).set(updates).where(eq(messageTemplates.id, id)).returning();
     return result[0];
   }
 
