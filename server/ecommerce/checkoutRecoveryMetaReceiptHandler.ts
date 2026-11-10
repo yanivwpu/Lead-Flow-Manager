@@ -2,6 +2,7 @@ import { and,eq,sql } from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users} from '@shared/schema';
 import {metaRecoveryReceiptCaptureEnabled} from './checkoutRecoveryMetaReceiptGate';
+import {productionRecoveryEvidenceScope} from './checkoutRecoveryProductionRelease';
 import {parseSignedRecoveryReceipt,
  applySignedRecoveryReceiptQuery,type MetaRecoveryReceiptCandidate
 } from './checkoutRecoveryMetaReceipts';
@@ -20,6 +21,10 @@ export async function recordRecoveryReceiptFromVerifiedMeta(input:{
       owner.metaPhoneNumberId!==input.candidate.phoneNumberId ||
       !shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop))
      return 'ignored';
+   if(input.env.RAILWAY_ENVIRONMENT_NAME==='production'){
+     const scope=productionRecoveryEvidenceScope(input.env);
+     if(!scope||scope.accountId!==input.accountId||scope.shop!==shop||scope.recipientHmac!==receipt.recipientDigest)return 'ignored';
+   }
    // Serialize with Shopify signed privacy erasure and uninstall.
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop},0))`);
    const [live]=await tx.select().from(users)

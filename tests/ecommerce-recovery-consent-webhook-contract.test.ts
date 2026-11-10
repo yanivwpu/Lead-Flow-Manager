@@ -10,7 +10,7 @@ test('signed inbound consent capture is AFTER Meta signature verification and BE
  const block=src.slice(verify,ack);
  for(const guard of ['signatureValid && rawBodyBuffer',"incomingMessage.type === \"text\"",
    'metaInboxContact?.id','Buffer.isBuffer(rawBodyBuffer)',
-   'ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED']) assert.ok(block.includes(guard),guard);
+   'env: process.env']) assert.ok(block.includes(guard),guard);
  assert.ok(!block.includes('signatureValid: true'),'webhook must pass real verification');
 });
 test('there is no merchant/browser/API route to mint signed consent evidence',()=>{

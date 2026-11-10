@@ -6,7 +6,9 @@ import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
 import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from '../userMeta';
 import { recheckShopifyCheckoutForRecovery } from './checkoutFreshRecheck';
 import { evaluateRecoveryMessagingEligibility, type RecoveryTemplateApproval } from './checkoutRecoveryMessagingEligibility';
-import { recoveryDeliveryExecutionEnabled, type ClaimedRecoveryDelivery } from './checkoutRecoveryDeliveryWorker';
+import { recoveryClaimExecutionEnabled, type ClaimedRecoveryDelivery } from './checkoutRecoveryDeliveryWorker';
+import {productionRecoveryRecipientAllowed,readProductionRecoveryScope,commerceConnectionFingerprint} from './checkoutRecoveryProductionRelease';
+import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
 import { validateRecoveryMetaTemplate, recoveryTemplateBodyComponents, type RecoveryTemplateShape } from './checkoutRecoveryMetaTemplate';
 import { fenceRecoveryProviderAttemptQuery, settleRecoveryDeliveryQuery } from './checkoutRecoveryOutbox';
 import { CHECKOUT_OBSERVATION_DELAY_MINUTES } from './checkoutObservationQueries';
@@ -24,7 +26,7 @@ export type RecoveryMetaSenderArgs={
 type ProviderDeps={
  templates:(accountId:string)=>Promise<unknown[]>;
  send:(accountId:string,phone:string,templateName:string,language:string,
-  components:Record<string,unknown>[])=>Promise<{messageId:string}>;
+  components:Record<string,unknown>[],options?:Parameters<typeof sendMetaWhatsAppTemplate>[5])=>Promise<{messageId:string}>;
  recheck:typeof recheckShopifyCheckoutForRecovery;
 };
 /**
@@ -38,21 +40,19 @@ export async function sendRecoveryViaMeta(
  args:RecoveryMetaSenderArgs,
  deps:ProviderDeps={
    templates:getMetaMessageTemplates,
-   send:async(a,p,n,l,c)=>{
-     const r=await sendMetaWhatsAppTemplate(a,p,n,l,c);
+   send:async(a,p,n,l,c,options)=>{
+     const r=await sendMetaWhatsAppTemplate(a,p,n,l,c,options);
      return {messageId:r.messageId};
    },
    recheck:recheckShopifyCheckoutForRecovery,
  },
 ):Promise<{messageId:string}> {
  const {claim}=args;
- if(!recoveryDeliveryExecutionEnabled({
-   RAILWAY_ENVIRONMENT_NAME:process.env.RAILWAY_ENVIRONMENT_NAME,
-   APP_URL:process.env.APP_URL,
-   ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED:process.env.ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED,
-   ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED:process.env.ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED,
-   ECOMMERCE_RECOVERY_SEND_ENABLED:process.env.ECOMMERCE_RECOVERY_SEND_ENABLED,
- }))throw Error('recovery_send_disabled');
+ if(!recoveryClaimExecutionEnabled(process.env,claim))throw Error('recovery_send_disabled');
+ const productionScope=readProductionRecoveryScope(process.env);
+ if(process.env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+    !productionRecoveryRecipientAllowed(process.env,recoveryPhoneDigest(
+      process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'',args.phone)))throw Error('recovery_recipient_not_released');
  if(!E164.test(args.phone) || !/^[1-9][0-9]{0,18}$/.test(claim.id) ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claim.claimToken) ||
     !claim.accountId || !claim.shop || !claim.checkoutId || !claim.contactId ||
@@ -97,6 +97,11 @@ export async function sendRecoveryViaMeta(
        eq(integrations.type,'shopify'),eq(integrations.isActive,true))).limit(2);
    if(active.length!==1)throw Error('shopify_integration_ambiguous');
    const cfg=plainObject(active[0].config);
+   if(process.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
+     (cfg.ecommerceCheckoutRecoveryDeliveryEnabled!==true||cfg.ecommerceCheckoutRecoveryTemplateId!==claim.templateId||
+      cfg.ecommerceCheckoutRecoveryDeliveryConnection!==commerceConnectionFingerprint({accountId:claim.accountId,shop:claim.shop,
+        installationId:active[0].id,wabaId:merchant.metaBusinessAccountId||'',phoneId:merchant.metaPhoneNumberId||'',installedAt:merchant.shopifyInstalledAt})))
+     throw Error('recovery_merchant_activation_required');
    for(const key of ['shop','shopUrl'])if(cfg[key]!=null &&
      (typeof cfg[key]!=='string' || normalizeShopifyShopDomain(cfg[key])!==claim.shop))
      throw Error('shopify_integration_shop_mismatch');
@@ -141,6 +146,7 @@ export async function sendRecoveryViaMeta(
       Date.now()-Date.parse(fresh.lastActivityAt)<CHECKOUT_OBSERVATION_DELAY_MINUTES*60_000)
      throw Error('checkout_recovery_no_longer_valid');
 
+   const freshUntil=Date.now()+25_000;
    const live=await deps.templates(claim.accountId);
    const matches=live.filter(item=>{
      const row=plainObject(item);
@@ -184,7 +190,11 @@ export async function sendRecoveryViaMeta(
      throw Error('whatsapp_recovery_consent_or_recipient_invalid');
    const response=await deps.send(claim.accountId,args.phone,
      approved.name,approved.language,
-     recoveryTemplateBodyComponents(approved,fresh.recoveryUrl));
+     recoveryTemplateBodyComponents(approved,fresh.recoveryUrl),{
+       signal:AbortSignal.timeout(8000),suppressionExecutor:tx,
+       authorizeDispatch:()=>Date.now()<freshUntil&&recoveryClaimExecutionEnabled(process.env,claim)&&
+         JSON.stringify(readProductionRecoveryScope(process.env))===JSON.stringify(productionScope),
+     });
    if(!response?.messageId || response.messageId.length>256)
      throw Error('meta_provider_acceptance_unknown');
    // Commit the provider ID while still holding the shop lock. A fast signed

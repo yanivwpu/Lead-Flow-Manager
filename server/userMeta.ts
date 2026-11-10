@@ -1,12 +1,13 @@
 import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError, readProviderDeliveryJson } from "./marketingCompliance/store";
 import crypto from "crypto";
-import { eq } from "drizzle-orm";
+import { eq,sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { storage } from "./storage";
 import type { User, Chat } from "@shared/schema";
 import { getMetaGraphApiBase } from "./metaGraphVersion";
 import { resolvePersistedMetaConnectionType } from "../shared/whatsappConnectionType";
+import type { ShopifyGrowthTemplate } from "../shared/shopifyGrowthTemplates";
 
 export {
   isMetaCredentialEncryptionConfigured,
@@ -860,28 +861,96 @@ export async function markMessageAsRead(
   }
 }
 
-export async function getMetaMessageTemplates(
-  userId: string, options?: {signal?: AbortSignal}
-): Promise<any[]> {
-  const accessToken = await getMetaAccessToken(userId);
+async function templateManagementConnection(userId: string, expectedWabaId?: string) {
   const user = await storage.getUserForSession(userId);
-
-  if (!accessToken || !user?.metaBusinessAccountId) {
-    throw new Error("Meta WhatsApp Business API not connected.");
+  if (!user || user.id !== userId || !user.metaConnected || !user.metaAccessToken || !user.metaBusinessAccountId ||
+      user.deletionRequestedAt || (expectedWabaId && user.metaBusinessAccountId !== expectedWabaId)) {
+    throw Error("meta_connection_changed");
   }
+  if (user.metaTokenExpiresAt && new Date(user.metaTokenExpiresAt).getTime() <= Date.now())
+    throw Error("meta_credentials_expired");
+  return { wabaId: user.metaBusinessAccountId, accessToken: isEncrypted(user.metaAccessToken)
+    ? decryptCredential(user.metaAccessToken) : user.metaAccessToken };
+}
 
-  const response = await fetch(
-    `${getMetaGraphApiBase()}/${user.metaBusinessAccountId}/message_templates?fields=id,name,status,language,category,components&limit=100&access_token=${accessToken}`,
-    { signal: options?.signal }
-  );
+/** Share the provisioning WABA lock with the existing manual library sync.
+ * Its storage calls can keep their current API while competing sync/provision
+ * requests serialize before checking/inserting a provider template ID.
+ */
+export async function withMetaTemplateManagementLock<T>(userId:string,expectedWabaId:string,operation:()=>Promise<T>):Promise<T>{
+  return db.transaction(async tx=>{
+    const [owner]=await tx.select({wabaId:users.metaBusinessAccountId,connected:users.metaConnected})
+      .from(users).where(eq(users.id,userId)).for('share').limit(1);
+    if(!owner?.connected||owner.wabaId!==expectedWabaId)throw Error('meta_connection_changed');
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'shopify-template:'+expectedWabaId},0))`);
+    return operation();
+  });
+}
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Failed to fetch templates");
+async function readTemplateManagementResponse(response: Response): Promise<any> {
+  // Raw provider errors may contain merchant details. Only fixed labels escape.
+  let result: any;
+  try { result = await response.json(); } catch { throw Error("meta_template_response_invalid"); }
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw Error("meta_template_response_invalid");
+  if (!response.ok || result?.error) {
+    const code = result?.error?.code;
+    if (response.status === 401 || code === 190) throw Error("meta_credentials_expired");
+    if (response.status === 403 || [10, 200, 294].includes(code)) throw Error("meta_management_permission_required");
+    if (response.status === 429 || [4, 17, 80007].includes(code)) throw Error("meta_rate_limited");
+    throw Error("meta_template_management_unavailable");
   }
+  return result;
+}
 
-  const result = await response.json();
-  return result.data || [];
+export async function getMetaMessageTemplates(
+  userId: string, options?: { signal?: AbortSignal; expectedWabaId?: string; maxPages?: number }
+): Promise<any[]> {
+  const connection = await templateManagementConnection(userId, options?.expectedWabaId);
+  const maxPages = Math.min(5, Math.max(1, options?.maxPages ?? 1));
+  const templates: any[] = [], seen = new Set<string>();
+  let after: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const query = new URLSearchParams({ fields: "id,name,status,language,category,components", limit: "100" });
+    if (after) query.set("after", after);
+    const response = await fetch(`${getMetaGraphApiBase()}/${connection.wabaId}/message_templates?${query}`, {
+      headers: { Authorization: `Bearer ${connection.accessToken}` },
+      redirect:"error",
+      signal: options?.signal ?? AbortSignal.timeout(8000),
+    });
+    const result = await readTemplateManagementResponse(response);
+    if (!Array.isArray(result.data)) throw Error("meta_template_response_invalid");
+    templates.push(...result.data);
+    if (!result.paging?.next) return templates;
+    after = result.paging?.cursors?.after;
+    if (typeof after !== "string" || !after || after.length > 4096 || seen.has(after))
+      throw Error("meta_template_inventory_incomplete");
+    seen.add(after);
+  }
+  // Existing library/delivery callers retain their bounded first-page behavior.
+  // Provisioning requests a complete bounded inventory and NEVER creates from a partial list.
+  if (options?.maxPages) throw Error("meta_template_inventory_incomplete");
+  return templates;
+}
+
+/** POST creates and submits for review in the CURRENT merchant WABA. No edit,
+ * deletion, messaging, shared company credential, or automatic retry path.
+ * Caller must commit a durable submission fence before invoking this method.
+ */
+export async function createMetaShopifyMessageTemplate(
+  userId: string, expectedWabaId: string, template: ShopifyGrowthTemplate,
+): Promise<{ id: string }> {
+  if (!/^[1-9][0-9]{0,30}$/.test(expectedWabaId)) throw Error("meta_connection_changed");
+  const connection = await templateManagementConnection(userId, expectedWabaId);
+  const response = await fetch(`${getMetaGraphApiBase()}/${connection.wabaId}/message_templates`, {
+    method: "POST", headers: { Authorization: `Bearer ${connection.accessToken}`, "Content-Type": "application/json" },
+    redirect:"error",
+    signal: AbortSignal.timeout(8000),
+    body: JSON.stringify({ name: template.name, language: "en", category: template.category,
+      components: [{ type: "BODY", text: template.bodyText, example: { body_text: [[template.example]] } }] }),
+  });
+  const result = await readTemplateManagementResponse(response);
+  if (typeof result.id !== "string" || !/^[1-9][0-9]{0,30}$/.test(result.id)) throw Error("meta_template_response_invalid");
+  return { id: result.id };
 }
 
 export interface MetaWebhookEntry {

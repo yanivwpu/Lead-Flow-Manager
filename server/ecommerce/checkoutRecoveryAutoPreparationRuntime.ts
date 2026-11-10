@@ -104,8 +104,12 @@ async function resolve(merchant:AutoPrepMerchant,shopifyCustomerId:string,templa
      AND consent.granted_at > NOW()-INTERVAL '365 days'
      AND consent.last_verified_inbound_at IS NOT NULL
    JOIN message_templates t ON t.user_id=c.user_id
-     AND t.name=${templateName} AND lower(t.category)='marketing'
+     AND lower(t.category)='marketing'
      AND lower(t.status)='approved'
+   JOIN integrations installation ON installation.user_id=c.user_id
+     AND installation.type='shopify' AND installation.is_active IS TRUE
+     AND ((installation.config->>'ecommerceCheckoutRecoveryTemplateId' IS NULL AND t.name=${templateName})
+       OR t.id=installation.config->>'ecommerceCheckoutRecoveryTemplateId')
    WHERE c.user_id=${merchant.accountId}
      AND COALESCE(c.custom_fields->>'shopifyCustomerId',
                   c.source_details->>'shopifyCustomerId')=${customerNumeric}

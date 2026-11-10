@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { ShopifySimpleSetup } from "@/components/integrations/ShopifySimpleSetup";
 import { ShopifyPostPurchasePreview } from "@/components/ecommerce/ShopifyPostPurchasePreview";
+import { ShopifyTemplateSetup } from "@/components/ecommerce/ShopifyTemplateSetup";
 import { ShopifyCatalog } from "@/components/ShopifyCatalog";
 import { ShoppingSettings } from "@/components/ShoppingSettings";
 import { useEcommerceMerchantActivationStatus } from "@/lib/ecommerceMerchantActivation";
@@ -113,7 +114,7 @@ export function EcommerceGrowthEngineDashboardContent() {
            </>}
        </div>}
      </div>}
-     {view==="post" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.postDetail}</p><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
+     {view==="post" && <div className="space-y-4"><ShopifyTemplateSetup locale={locale}/><p className="text-sm text-slate-600">{t.postDetail}</p><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
      {view==="settings" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.settingsDetail}</p>{data?.connected ? <ShopifySimpleSetup syncEnabled={data.syncEnabled === true}/> : <Link href="/app/integrations?setup=shopify" className="font-semibold text-blue-700">{t.setup} →</Link>}</div>}
    </section>
  </main>;

@@ -3,6 +3,7 @@ import { evaluateRecoveryMessagingEligibility,
 } from './checkoutRecoveryMessagingEligibility';
 import type { FreshRecoveryResult } from './checkoutFreshRecheck';
 import { CHECKOUT_OBSERVATION_DELAY_MINUTES } from './checkoutObservationQueries';
+import {productionRecoveryClaimAllowed,productionRecoveryRecipientAllowed} from './checkoutRecoveryProductionRelease';
 
 /**
  * Adapter-driven delivery core, NOT registered with any scheduler/API route.
@@ -43,10 +44,10 @@ export function recoveryDeliveryExecutionEnabled(env:{
    env.ECOMMERCE_RECOVERY_SEND_ENABLED==='true';
 }
 export async function processClaimedRecoveryDelivery(
- claim:ClaimedRecoveryDelivery,env:Parameters<typeof recoveryDeliveryExecutionEnabled>[0],
+ claim:ClaimedRecoveryDelivery,env:Record<string,string|undefined>,
  deps:DeliveryDeps,consentDigestSecret:string
 ):Promise<'disabled'|'suppressed'|'accepted'|'uncertain'> {
- if(!recoveryDeliveryExecutionEnabled(env))return 'disabled';
+ if(!recoveryClaimExecutionEnabled(env,claim))return 'disabled';
  try{
    if(!await deps.verifyCurrentInstallation(claim)){
      if(!await deps.settle(claim,'suppressed'))return 'uncertain';
@@ -76,6 +77,10 @@ export async function processClaimedRecoveryDelivery(
      if(!await deps.settle(claim,'suppressed'))return 'uncertain';
      return 'suppressed';
    }
+   if(env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+      !productionRecoveryRecipientAllowed(env,proof.consent?.phoneDigest??'')){
+     await deps.settle(claim,'suppressed');return 'suppressed';
+   }
    // The fresh Shopify check, verified recipient, opt-in and live Meta status
    // immediately precede the one-and-only provider attempt. No send here if
    // any prior guard is unavailable.
@@ -93,4 +98,9 @@ export async function processClaimedRecoveryDelivery(
    try{await deps.settle(claim,'uncertain');}catch{/* operator reconciliation */}
    return 'uncertain';
  }
+}
+/** The staging guard above stays staging-only. This separate path pins the exact
+ * production tenant, shop, checkout, recipient, approval and expiry. */
+export function recoveryClaimExecutionEnabled(env:Record<string,string|undefined>,claim:ClaimedRecoveryDelivery):boolean{
+ return recoveryDeliveryExecutionEnabled(env)||productionRecoveryClaimAllowed(env,claim);
 }

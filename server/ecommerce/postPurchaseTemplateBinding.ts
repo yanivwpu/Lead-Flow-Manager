@@ -63,8 +63,9 @@ export function eligiblePostPurchaseTemplateLookupQuery(accountId: string, templ
 export function savePostPurchaseTemplateBindingQuery(input: {
   integrationId: string; accountId: string; shop: string;
   journey: PostPurchaseJourney; templateId: string | null;
+  automatic?: boolean;
 }) {
-  return sql`UPDATE integrations SET config=jsonb_set(
+  const merged=sql`jsonb_set(
       COALESCE(config, '{}'::jsonb), '{ecommercePostPurchaseTemplates}',
       ((CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplates')='object'
         THEN config->'ecommercePostPurchaseTemplates' ELSE '{}'::jsonb END)
@@ -72,7 +73,12 @@ export function savePostPurchaseTemplateBindingQuery(input: {
       || (CASE WHEN ${input.templateId}::text IS NULL THEN '{}'::jsonb
              ELSE jsonb_build_object(${input.journey}::text,${input.templateId}::text) END),
       true
-    ) WHERE id=${input.integrationId} AND user_id=${input.accountId}
+    )`;
+  const config=input.automatic?merged:sql`jsonb_set(${merged},'{ecommercePostPurchaseTemplateAutoDisabled}',
+    ((CASE WHEN jsonb_typeof(config->'ecommercePostPurchaseTemplateAutoDisabled')='object'
+      THEN config->'ecommercePostPurchaseTemplateAutoDisabled' ELSE '{}'::jsonb END)-${input.journey}::text)
+    || (CASE WHEN ${input.templateId}::text IS NULL THEN jsonb_build_object(${input.journey}::text,true) ELSE '{}'::jsonb END),true)`;
+  return sql`UPDATE integrations SET config=${config} WHERE id=${input.integrationId} AND user_id=${input.accountId}
       AND type='shopify' AND is_active IS TRUE
       AND (config->>'shop' IS NULL OR config->>'shop'=${input.shop})
     RETURNING config->'ecommercePostPurchaseTemplates' AS bindings`;

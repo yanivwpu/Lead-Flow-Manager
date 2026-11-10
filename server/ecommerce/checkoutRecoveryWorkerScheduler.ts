@@ -1,11 +1,12 @@
 import type {ClaimedRecoveryDelivery} from './checkoutRecoveryDeliveryWorker';
 import {processClaimedRecoveryDelivery,recoveryDeliveryExecutionEnabled} from './checkoutRecoveryDeliveryWorker';
+import {readProductionRecoveryScope} from './checkoutRecoveryProductionRelease';
 
 /** Server-side only. Test-store allowlist and an independent manual approval
  * flag are required IN ADDITION to the already-disabled outbound send gates.
  * Scheduling never runs for production. At most one delivery is claimed/tick.
  */
-export type RecoveryWorkerEnvironment={
+export type RecoveryWorkerEnvironment=Record<string,string|undefined>&{
  RAILWAY_ENVIRONMENT_NAME?:string;APP_URL?:string;
  ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED?:string;
  ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED?:string;
@@ -36,7 +37,7 @@ type WorkerDeps={
 export async function runRecoveryWorkerTick(
  env:RecoveryWorkerEnvironment,deps:WorkerDeps
 ):Promise<'disabled'|'empty'|'accepted'|'suppressed'|'uncertain'>{
- if(!recoveryWorkerEnabled(env))return 'disabled';
+ if(!recoveryWorkerEnabled(env)&&!readProductionRecoveryScope(env))return 'disabled';
  const accountId=env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID!;
  const checkoutId=env.ECOMMERCE_RECOVERY_ONE_SHOT_CHECKOUT_GID!;
  const claimed=await deps.claim(accountId,checkoutId);
@@ -52,7 +53,7 @@ export function startStagingRecoveryWorkerScheduler(
  env:RecoveryWorkerEnvironment,deps:WorkerDeps,
  onError:(error:unknown)=>void
 ):null|(()=>void){
- if(!recoveryWorkerEnabled(env))return null;
+ if(!recoveryWorkerEnabled(env)&&!readProductionRecoveryScope(env))return null;
  let busy=false,closed=false;
  const tick=async()=>{
    if(busy||closed)return;

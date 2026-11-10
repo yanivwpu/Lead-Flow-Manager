@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
@@ -20,7 +20,7 @@ const copy = {
     blocked: "Activation unavailable: setup and operator release are required.",
     pause: "Uncheck a journey and save to pause its plan.", utility: "Approved utility template required",
     marketing: "Approved marketing template and separate marketing consent required",
-    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message saved and verified", savingMessage: "Saving message selection…", retryMessage: "Retry saving", messageError: "Message selection was not saved. Retry before leaving this page.", editMessage: "Open WhatsApp Library", messageHint: "Create the message in Meta WhatsApp Manager, then sync the approved template into the WhachatCRM WhatsApp Library and select it here. Selection does not enable customer sending.", noApproved: "No compatible approved text templates found.",
+    chooseMessage: "Choose approved message", noMessage: "Not selected — message disabled", saveMessage: "Save message", savedMessage: "Message saved and verified", savingMessage: "Saving message selection…", retryMessage: "Retry saving", messageError: "Message selection was not saved. Retry before leaving this page.", editMessage: "Open WhatsApp Library", messageHint: "Use automatic message setup above to submit, sync and assign compatible messages. You can also select an existing approved message here. Selection does not enable customer sending.", noApproved: "No compatible approved text templates found.",
     labels: ["Order confirmation", "Shipping update", "Cancellation", "Review request", "Repeat-purchase offer", "Customer win-back"],
     examples: ["We received your order.", "Your order has been fulfilled.", "Your order was cancelled.", "Would you like to review your purchase?", "Ready for another purchase?", "We would love to welcome you back."],
   },
@@ -34,7 +34,7 @@ const copy = {
     blocked: "Activación no disponible: se requieren configuración y autorización del operador.",
     pause: "Desmarca un recorrido y guarda para pausar su plan.", utility: "Requiere plantilla de utilidad aprobada",
     marketing: "Requiere plantilla de marketing aprobada y consentimiento de marketing separado",
-    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Mensaje guardado y verificado", savingMessage: "Guardando selección de mensaje…", retryMessage: "Reintentar guardado", messageError: "La selección no se guardó. Reintenta antes de salir de esta página.", editMessage: "Abrir biblioteca de WhatsApp", messageHint: "Crea el mensaje en WhatsApp Manager de Meta. Tras su aprobación, sincronízalo con la biblioteca de WhatsApp de WhachatCRM y selecciónalo aquí. Seleccionarlo no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
+    chooseMessage: "Elegir mensaje aprobado", noMessage: "Sin seleccionar — envío desactivado", saveMessage: "Guardar mensaje", savedMessage: "Mensaje guardado y verificado", savingMessage: "Guardando selección de mensaje…", retryMessage: "Reintentar guardado", messageError: "La selección no se guardó. Reintenta antes de salir de esta página.", editMessage: "Abrir biblioteca de WhatsApp", messageHint: "Usa la configuración automática para enviar a revisión, sincronizar y asignar mensajes compatibles. También puedes elegir aquí un mensaje ya aprobado. Seleccionarlo no activa el envío.", noApproved: "No hay plantillas de texto aprobadas compatibles.",
     labels: ["Confirmación de pedido", "Actualización de envío", "Cancelación", "Solicitud de reseña", "Oferta de nueva compra", "Recuperación de clientes"],
     examples: ["Recibimos tu pedido.", "Tu pedido ha sido preparado.", "Tu pedido fue cancelado.", "¿Quieres dejar una reseña de tu compra?", "¿Listo para otra compra?", "Nos encantaría volver a recibirte."],
   },
@@ -48,7 +48,7 @@ const copy = {
     blocked: "הפעלה אינה זמינה: נדרשים השלמת ההגדרה ואישור מפעיל.",
     pause: "להשהיית תוכנית מסע, יש לבטל את הסימון ולשמור.", utility: "נדרשת תבנית שירות מאושרת",
     marketing: "נדרשות תבנית שיווק מאושרת והסכמה נפרדת לשיווק",
-    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "ההודעה נשמרה ואומתה", savingMessage: "שומר את בחירת ההודעה…", retryMessage: "נסה לשמור שוב", messageError: "בחירת ההודעה לא נשמרה. יש לנסות שוב לפני היציאה מהדף.", editMessage: "פתיחת ספריית WhatsApp", messageHint: "יוצרים את ההודעה ב-WhatsApp Manager של Meta, ולאחר אישור מסנכרנים אותה לספריית WhatsApp של WhachatCRM ובוחרים בה כאן. הבחירה לא מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
+    chooseMessage: "בחירת הודעה מאושרת", noMessage: "לא נבחרה הודעה — שליחה מושבתת", saveMessage: "שמירת הודעה", savedMessage: "ההודעה נשמרה ואומתה", savingMessage: "שומר את בחירת ההודעה…", retryMessage: "נסה לשמור שוב", messageError: "בחירת ההודעה לא נשמרה. יש לנסות שוב לפני היציאה מהדף.", editMessage: "פתיחת ספריית WhatsApp", messageHint: "משתמשים בהגדרה האוטומטית להגשה לבדיקה, סנכרון ושיוך של הודעות מתאימות. אפשר גם לבחור כאן הודעה שכבר אושרה. הבחירה לא מפעילה שליחה.", noApproved: "לא נמצאו תבניות טקסט מאושרות מתאימות.",
     labels: ["אישור הזמנה", "עדכון משלוח", "ביטול הזמנה", "בקשת חוות דעת", "הצעה לרכישה חוזרת", "החזרת לקוחות"],
     examples: ["קיבלנו את ההזמנה שלך.", "ההזמנה שלך טופלה.", "ההזמנה שלך בוטלה.", "רוצה לכתוב חוות דעת על הרכישה?", "מוכנים לרכישה נוספת?", "נשמח לראות אותך שוב."],
   },
@@ -119,6 +119,11 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selectedTemplate, setSelectedTemplate] = useState(initialTemplateId);
   const [messageStatus, setMessageStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  // Background approval/binding can update props without remounting the form.
+  // Keep an in-progress or failed manual edit available for the merchant to retry.
+  useEffect(() => {
+    if (messageStatus === "idle" || messageStatus === "saved") setSelectedTemplate(initialTemplateId);
+  }, [initialTemplateId, messageStatus]);
   const approved = templates.filter(template =>
     template.id && template.twilioSid?.startsWith("meta_") &&
     template.status?.toLowerCase() === "approved" &&

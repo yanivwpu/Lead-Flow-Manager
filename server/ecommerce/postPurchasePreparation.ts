@@ -1,4 +1,5 @@
 import {eligiblePostPurchaseLibraryTemplate} from './postPurchaseTemplateBinding';
+import {commerceConnectionFingerprint} from './checkoutRecoveryProductionRelease';
 import {isEcommercePilotOwner} from './pilotAccess';
 import {sql,type SQL} from 'drizzle-orm';
 import {isShopifyContactInstallationActive} from '../../shared/shopifyContactPrivacy';
@@ -226,6 +227,11 @@ export function createPostPurchasePreparation(deps:{
     const m=await merchant(tx,scope.shop);
     if(!m||m.accountId!==scope.accountId||m.installationId!==scope.installationId||
       m.config.ecommercePostPurchaseDeliveryEnabled!==true)return null;
+    if(m.config.ecommercePostPurchaseDeliveryConnection){
+      const owner=(await tx.execute(sql`SELECT to_jsonb(u)->>'meta_business_account_id' AS waba_id FROM users u WHERE id=${m.accountId}`)).rows[0];
+      if(m.config.ecommercePostPurchaseDeliveryConnection!==commerceConnectionFingerprint({accountId:m.accountId,shop:m.shop,
+        installationId:m.installationId,wabaId:String(owner?.waba_id||''),phoneId:m.metaPhoneId,installedAt:new Date(m.installedAt)}))return null;
+    }
     await schema(tx);
     const found=await tx.execute(sql`SELECT i.*,e.delivery_id FROM ecommerce_post_purchase_intents i
       JOIN ecommerce_growth_event_inbox e ON e.id=i.event_id AND e.account_id=i.account_id AND e.shop=i.shop

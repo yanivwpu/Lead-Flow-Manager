@@ -3341,11 +3341,7 @@ export async function registerRoutes(
           await captureRecoveryConsentFromVerifiedMeta({
             accountId: owner.id, inboxContactId: metaInboxContact?.id ?? null,
             candidate: { ...incomingMessage, text: incomingMessage.text, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer) },
-            env: {
-              RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
-              APP_URL: process.env.APP_URL,
-              ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED: process.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED,
-            },
+            env: process.env,
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
           });
           const { postPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
@@ -3361,11 +3357,7 @@ export async function registerRoutes(
           await recordRecoveryReceiptFromVerifiedMeta({
             accountId: owner.id,
             candidate: { ...statusUpdate, signatureValid, hasRawBody: Buffer.isBuffer(rawBodyBuffer) },
-            env: {
-              RAILWAY_ENVIRONMENT_NAME: process.env.RAILWAY_ENVIRONMENT_NAME,
-              APP_URL: process.env.APP_URL,
-              ECOMMERCE_RECOVERY_RECEIPTS_ENABLED: process.env.ECOMMERCE_RECOVERY_RECEIPTS_ENABLED,
-            },
+            env: process.env,
             secret: process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY || "",
           });
           const { recordPostPurchaseReceiptFromVerifiedMeta } = await import("./ecommerce/postPurchaseReceiptRuntime");

@@ -7,6 +7,8 @@ import {classifyRecoveryConsentInbound,recoveryConsentCaptureEnabled,
  type VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
 import {grantSignedRecoveryConsentQuery,revokeSignedRecoveryConsentQuery,
  suppressRecoveryOutboxByContactQuery} from './checkoutRecoveryInboundConsentQueries';
+import {productionRecoveryEvidenceScope} from './checkoutRecoveryProductionRelease';
+import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
 
 const SHOP=/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 const CUSTOMER=/^[1-9][0-9]{0,19}$/;
@@ -27,14 +29,17 @@ function customerIdentity(contact:{customFields:unknown;sourceDetails:unknown},
  */
 export async function captureRecoveryConsentFromVerifiedMeta(input:{
  accountId:string;inboxContactId:string|null;candidate:VerifiedInboundConsentCandidate;
- env:{
-  RAILWAY_ENVIRONMENT_NAME?:string;APP_URL?:string;
-  ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED?:string;
- };
+ env:Record<string,string|undefined>;
  secret:string;now?:number;
 }):Promise<'disabled'|'ignored'|'granted'|'revoked'> {
- if(!recoveryConsentCaptureEnabled(input.env))return 'disabled';
  const classified=classifyRecoveryConsentInbound(input.candidate,input.now);
+ const production=input.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
+   input.env.APP_URL?.replace(/\/$/,'')==='https://app.whachatcrm.com';
+ const scope=productionRecoveryEvidenceScope(input.env);
+ const productionGrant=production&&!!scope&&scope.accountId===input.accountId&&
+   input.env.ECOMMERCE_RECOVERY_PRODUCTION_CONSENT_APPROVED==='true'&&input.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED==='true';
+ // A signed STOP remains effective after rollout is paused or its scope expires.
+ if(!recoveryConsentCaptureEnabled(input.env)&&!productionGrant&&!(production&&classified?.action==='revoke'))return 'disabled';
  if(!classified || !input.accountId || input.secret.length<32)return 'ignored';
  const {candidate}=input;
  const currentPhone='+'+candidate.from;
@@ -78,6 +83,7 @@ export async function captureRecoveryConsentFromVerifiedMeta(input:{
    }
    if(!isShopifyContactInstallationActive(liveOwner) || !liveOwner.shopifyAccessToken)
      return 'ignored';
+   if(production&&(!scope||scope.shop!==shop||scope.recipientHmac!==recoveryPhoneDigest(input.secret,currentPhone)))return 'ignored';
    const active=await tx.select().from(integrations).where(and(
      eq(integrations.userId,input.accountId),eq(integrations.type,'shopify'),
      eq(integrations.isActive,true))).limit(2);

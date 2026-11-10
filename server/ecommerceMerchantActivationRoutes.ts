@@ -9,6 +9,9 @@ import { isShopifyContactInstallationActive } from "@shared/shopifyContactPrivac
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { getEffectivePlanForUser } from "@shared/trialEntitlements";
 import { recoveryRuntimeSchemaReadyQuery } from "./ecommerce/checkoutRecoverySchema";
+import { shopifyTemplateProvisioner } from "./ecommerce/shopifyTemplateProvisioningRuntime";
+import { parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
+import {parsePostPurchasePlanChange} from "../shared/postPurchase";
 import {
   canActivateMerchantWorkspace,
   merchantWorkspaceActivated,
@@ -20,6 +23,62 @@ import {
  * This router intentionally does not use the private Shopping pilot allowance.
  */
 const router = Router();
+
+/** Same owner/workspace and same-origin boundary as installation. These endpoints
+ * reuse the saved plans and independent operator gates; no queue or sender runs.
+ */
+router.post("/journey-plan",async(req:Request,res:Response)=>{
+  res.set({"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
+  const accountId=(req.user as {id?:string}|undefined)?.id;
+  if(!accountId)return res.status(401).json({error:"Unauthorized"});
+  const origin=(process.env.APP_URL||"https://app.whachatcrm.com").replace(/\/$/,"");
+  if(!isMerchantActivationPost(req.get("origin"),req.get("content-type"),{},origin))return res.status(403).json({error:"Invalid request"});
+  const parsed=parsePostPurchasePlanChange(req.body);
+  if(!parsed)return res.status(400).json({error:"Invalid journey plan"});
+  try{
+    if(!await shopifyTemplateProvisioner.savePlan(accountId,parsed.journey,parsed.plan))return res.status(409).json({error:"Journey plan unavailable"});
+    return res.json({ok:true,messagingEnabled:false});
+  }catch{return res.status(503).json({error:"Journey plan unavailable"});}
+});
+router.post("/journey-activation",async(req:Request,res:Response)=>{
+  res.set({"Cache-Control":"no-store","X-Robots-Tag":"noindex, nofollow"});
+  const accountId=(req.user as {id?:string}|undefined)?.id;
+  if(!accountId)return res.status(401).json({error:"Unauthorized"});
+  const origin=(process.env.APP_URL||"https://app.whachatcrm.com").replace(/\/$/,"");
+  if(!isMerchantActivationPost(req.get("origin"),req.get("content-type"),{},origin))return res.status(403).json({error:"Invalid request"});
+  const body=req.body;
+  if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).length!==3||
+    body.action!=="set_journey_delivery"||!["postPurchase","checkoutRecovery"].includes(body.journey)||typeof body.enabled!=="boolean")
+    return res.status(400).json({error:"Invalid activation request"});
+  try{
+    if(!await shopifyTemplateProvisioner.setDelivery(accountId,body.journey,body.enabled))return res.status(409).json({error:"Activation prerequisites are incomplete"});
+    return res.json({ok:true,merchantEnabled:body.enabled});
+  }catch{return res.status(503).json({error:"Journey activation unavailable"});}
+});
+
+router.get("/template-setup", async (req: Request, res: Response) => {
+  res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
+  const accountId = (req.user as { id?: string } | undefined)?.id;
+  if (!accountId) return res.status(401).json({ error: "Unauthorized" });
+  try { return res.json(await shopifyTemplateProvisioner.view(accountId)); }
+  catch { return res.status(503).json({ error: "Template setup unavailable" }); }
+});
+
+router.post("/template-setup", async (req: Request, res: Response) => {
+  res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
+  const accountId = (req.user as { id?: string } | undefined)?.id;
+  if (!accountId) return res.status(401).json({ error: "Unauthorized" });
+  const appOrigin = (process.env.APP_URL || "https://app.whachatcrm.com").replace(/\/$/, "");
+  if (!isMerchantActivationPost(req.get("origin"), req.get("content-type"), {}, appOrigin))
+    return res.status(403).json({ error: "Invalid setup request" });
+  if (!parseShopifyTemplateSetupAuthorization(req.body)) return res.status(400).json({ error: "Invalid template authorization" });
+  try {
+    if (!await shopifyTemplateProvisioner.authorize(accountId))
+      return res.status(409).json({ error: "Connect Shopify and WhatsApp, install the engine, and check rollout availability" });
+    // The bounded restart-safe worker performs management calls after this commit.
+    return res.status(202).json({ ok: true, messagingEnabled: false });
+  } catch { return res.status(503).json({ error: "Template setup unavailable" }); }
+});
 
 type Current = {
   accountId: string;

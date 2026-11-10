@@ -18,7 +18,7 @@ import {
   substituteTemplateVariablesForDisplay,
 } from "@shared/metaTemplateSend";
 import { storage } from "../storage";
-import { getMetaMessageTemplates, sendMetaWhatsAppTemplate } from "../userMeta";
+import { getMetaMessageTemplates, sendMetaWhatsAppTemplate,withMetaTemplateManagementLock } from "../userMeta";
 import { classifyTemplateMediaUrlForLog } from "../templateSendMediaPreflight";
 import {
   enumerateTemplateHttpsMediaLinks,
@@ -1165,7 +1165,7 @@ export function registerTemplateRoutes(app: Express): void {
           });
         }
 
-        const rawTemplates = await getMetaMessageTemplates(req.user.id);
+        const rawTemplates = await getMetaMessageTemplates(req.user.id,{expectedWabaId:wabaId!});
         const approvedTemplates = (rawTemplates || []).filter(
           (t: any) => String(t?.status || "").toLowerCase() === "approved"
         );
@@ -1180,6 +1180,7 @@ export function registerTemplateRoutes(app: Express): void {
           })}`
         );
 
+        await withMetaTemplateManagementLock(user.id,wabaId!,async()=>{
         for (const t of approvedTemplates) {
           const status = (t.status || "pending").toLowerCase();
           const category = (t.category || "utility").toLowerCase();
@@ -1239,7 +1240,7 @@ export function registerTemplateRoutes(app: Express): void {
 
           try {
             const metaId = `meta_${t.id || t.name}_${language}`;
-            const existing = await storage.getMessageTemplateByTwilioSid(req.user.id, metaId);
+            const existing = await storage.getMessageTemplateByTwilioSid(user.id, metaId);
 
             if (existing) {
               await storage.updateMessageTemplate(existing.id, metaRowPayload);
@@ -1247,7 +1248,7 @@ export function registerTemplateRoutes(app: Express): void {
               console.log(`[TemplateSync] Updated: ${templateName} [${status}]`);
             } else {
               await storage.createMessageTemplate({
-                userId: req.user.id,
+                userId: user.id,
                 twilioSid: metaId,
                 ...metaRowPayload,
               });
@@ -1269,6 +1270,7 @@ export function registerTemplateRoutes(app: Express): void {
           }
         }
 
+        });
       // ===== TWILIO SYNC =====
       } else if (resolvedProvider === "twilio") {
         if (!user.twilioConnected || !user.twilioAccountSid || !user.twilioAuthToken) {
