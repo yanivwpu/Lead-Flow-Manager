@@ -1,3 +1,4 @@
+import { persistOfflineInstallation } from './shopifyOfflineTokens';
 import { respondShopifyBillingReturn } from "./shopifyBillingReturn";
 import { catalogAuthorizationReturnPath } from "./salesCatalog/shopify/authorization";
 import { verifyWebhookHmac } from "./shopifyWebhookSignature";
@@ -234,9 +235,9 @@ router.get('/callback', async (req: Request, res: Response) => {
 
   try {
     const { user, normalizedShop, accessToken, firstTokenInstall, usableAppAccess } = await withShopifyInstallPrivacyFence(shop, async () => {
-      const accessToken = await exchangeShopifyCode(shop, code);
+      const tokenPair = await exchangeShopifyCode(shop, code);
 
-      if (!accessToken) {
+      if (!tokenPair) {
         throw new Error("Shopify authorization exchange failed");
       }
 
@@ -315,7 +316,6 @@ router.get('/callback', async (req: Request, res: Response) => {
 
       const installPatch: Parameters<typeof storage.updateUser>[1] = {
         shopifyShop: normalizedShop,
-        shopifyAccessToken: accessToken,
         shopifyInstalledAt: user.shopifyInstalledAt ?? new Date(),
       };
 
@@ -336,7 +336,7 @@ router.get('/callback', async (req: Request, res: Response) => {
         });
       }
 
-      await storage.updateUser(user.id, installPatch);
+      const accessToken = await persistOfflineInstallation(user.id, normalizedShop, tokenPair, installPatch);
       const existingIntegration = await storage.getIntegrationByUserAndType(user.id, 'shopify');
       if (!existingIntegration) {
         await storage.createIntegration({

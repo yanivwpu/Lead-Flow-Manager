@@ -42,6 +42,7 @@ async function main(){
       '271c48f9-3515-4682-b391-2fead371593d','whachatcrm.myshopify.com']);
     if(result.rows.length!==1 || !result.rows[0].shopify_access_token || !result.rows[0].shopify_charge_id) throw Error('SOURCE_INSTALLATION_UNAVAILABLE');
     token=result.rows[0].shopify_access_token; expectedCharge=result.rows[0].shopify_charge_id;
+    if(token.startsWith('shopify-offline:')) throw Error('MIGRATED_INSTALLATION_REQUIRES_RUNTIME_READINESS');
     await client.query('ROLLBACK');
   }finally{client.release();await pool.end();}
   const verified=await verifyBilling({token,expectedCharge});

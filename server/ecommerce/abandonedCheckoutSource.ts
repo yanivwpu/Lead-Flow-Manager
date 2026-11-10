@@ -1,3 +1,4 @@
+import { offlineAdminFetch } from '../shopifyAdminClient';
 /**
  * Bounded, read-only Shopify Admin API source for abandoned checkout observations.
  * Shopify returns both abandoned and recovered checkouts; completedAt is authoritative.
@@ -49,7 +50,7 @@ export async function fetchShopifyAbandonedCheckoutPage(input: {
   if (!SHOP_RE.test(input.shop) || !input.accessToken || input.accessToken.length > 4096 ||
       (input.after != null && (typeof input.after !== 'string' || !input.after || input.after.length > 2048)))
     throw Error('invalid_shopify_checkout_request');
-  const response = await (input.fetchImpl || fetch)(
+  const response = await (input.fetchImpl || offlineAdminFetch)(
     `https://${input.shop}/admin/api/2026-10/graphql.json`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-Shopify-Access-Token': input.accessToken},

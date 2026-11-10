@@ -1,3 +1,4 @@
+import { offlineGraphqlClient } from '../../shopifyAdminClient';
 import { boundedRequest } from "../../shopifyWebhookHealthAudit";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 /** Bounded diagnostics only: no provider messages, query variables, tokens or payloads. */
@@ -34,9 +35,7 @@ export function shopifyCatalogClient(shop: string, token: string) {
       const { getShopifyApi } = await import("../../shopify");
       const api = getShopifyApi();
       if (!api) throw new CatalogApiError("unavailable");
-      const client = new api.clients.Graphql({
-        session: { shop: normalized, accessToken: token } as any,
-      });
+      const client = offlineGraphqlClient(normalized, token);
       return client.request(query, options);
     },
   };
