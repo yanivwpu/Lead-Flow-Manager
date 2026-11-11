@@ -101,3 +101,26 @@ test('explicit legacy migration uses the documented exchange grant; never an ins
     return Response.json(response);
   });
 });
+
+test('SDK and HTTP auth errors retain only sanitized status and token code', async () => {
+  const { createOfflineAdminFetch } = await import('../server/shopifyAdminClient');
+  const { inspect } = await import('node:util');
+  const secret = 'private-provider-token';
+  for (const status of [401, 403] as const) {
+    const verify = (error: any) => {
+      assert.equal(error.status, status);
+      assert.equal(error.code, status === 401 ? 'reauthorization_required' : 'scope_denied');
+      assert.ok(!inspect(error, { showHidden: true }).includes(secret));
+      return true;
+    };
+    const client = offlineGraphqlClient(shop, 'ref', {
+      resolve: async () => secret,
+      client: async () => ({ request: async () => {
+        throw { response: { code: status, headers: { authorization: secret } }, body: { errors: secret }, cause: Error(secret) };
+      } }) as any,
+    });
+    await assert.rejects(client.request('query catalog'), verify);
+    const transport = createOfflineAdminFetch(async () => secret, async () => new Response(secret, { status }));
+    await assert.rejects(transport(`https://${shop}/admin/api/2026-10/graphql.json`), verify);
+  }
+});

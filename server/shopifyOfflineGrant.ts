@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { normalizeShopifyShopDomain } from '@shared/shopifyBilling';
 
 export class ShopifyTokenError extends Error {
-  constructor(public readonly code: 'invalid_response' | 'retry_later' | 'reauthorization_required' | 'configuration' | 'installation_changed' | 'scope_denied' | 'legacy_rejected') {
+  constructor(public readonly code: 'invalid_response' | 'retry_later' | 'reauthorization_required' | 'configuration' | 'installation_changed' | 'scope_denied' | 'legacy_rejected', public readonly status?: 401 | 403) {
     super(`shopify_token_${code}`);
   }
 }
@@ -78,5 +78,5 @@ export async function requestOfflinePair(shop: string, grant: { code: string } |
 }
 export function classifyShopifyAdminFailure(status: number, message: string): ShopifyTokenError {
   return new ShopifyTokenError(status === 403 && message.includes('Non-expiring access tokens are no longer accepted for the Admin API')
-    ? 'legacy_rejected' : status === 403 ? 'scope_denied' : status === 401 ? 'reauthorization_required' : 'retry_later');
+    ? 'legacy_rejected' : status === 403 ? 'scope_denied' : status === 401 ? 'reauthorization_required' : 'retry_later', status === 401 || status === 403 ? status : undefined);
 }

@@ -1,3 +1,4 @@
+import { ShopifyTokenError } from '../../shopifyOfflineGrant';
 import { offlineGraphqlClient } from '../../shopifyAdminClient';
 import { boundedRequest } from "../../shopifyWebhookHealthAudit";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -92,6 +93,7 @@ function classifyApiError(error: any): CatalogApiError {
   if (
     status === 401 ||
     status === 403 ||
+    (error instanceof ShopifyTokenError && ['reauthorization_required', 'scope_denied', 'legacy_rejected'].includes(error.code)) ||
     codes.some((e: any) => e.extensions?.code === "ACCESS_DENIED")
   )
     return new CatalogApiError("access_denied", 600_000);
