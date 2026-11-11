@@ -33,6 +33,7 @@ The application is non-embedded. App Bridge `app.extensions()` therefore is not 
 | Merchant confirmed saved | Merchant declares preview/save; distinct from server verification |
 | Enabled/disabled, verified | Fresh authenticated MAIN-theme settings read |
 | Permission required | Optional theme-read approval missing; published state unknown |
+| Proxy approval required | Required Shopify proxy access is missing; add flow stops at merchant approval |
 | Unsupported/unverified | No Online Store theme, malformed data, API failure or connection change; no live claim |
 
 Required installation scopes gain only `write_app_proxy`, needed by Shopify for the signed display proxy. Existing customer/order scopes remain. `read_themes` is optional, with Shopify's own approval link, and catalog scopes retain their separate approval flow. No `write_themes`, theme asset mutation, silent activation, automatic publishing, token exchange or scope grant is implemented. Existing installed merchants must approve Shopify's new required proxy permission after the separately reviewed app version is released; code/config changes alone do not grant it. Missing optional read access does not prevent storefront display, but prevents a verified published-state claim.

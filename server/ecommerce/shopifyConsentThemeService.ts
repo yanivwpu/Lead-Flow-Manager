@@ -31,10 +31,16 @@ export function createConsentThemeService(deps: {
       if (meta?.shop?.myshopifyDomain !== install.shop) return { ...result, state: 'unverified' };
       const scopes = meta?.currentAppInstallation?.accessScopes;
       if (!Array.isArray(scopes)) return { ...result, state: 'unverified' };
+      const approval = new URL(`https://admin.shopify.com/store/${install.shop.replace('.myshopify.com', '')}/oauth/install`);
+      approval.searchParams.set('client_id', clientId);
+      if (!scopes.some(s => s.handle === 'write_app_proxy')) {
+        // Required permissions are approved in Shopify's install/update flow.
+        // Do not send a merchant into a theme with an unavailable data proxy.
+        return { ...result, editorUrl: null, state: 'proxy_permission_required', approvalUrl: approval.href };
+      }
       if (!scopes.some(s => s.handle === 'read_themes')) {
-        const url = new URL(`https://admin.shopify.com/store/${install.shop.replace('.myshopify.com', '')}/oauth/install`);
-        url.searchParams.set('client_id', clientId); url.searchParams.set('optional_scopes', 'read_themes');
-        return { ...result, state: 'permission_required', approvalUrl: url.href };
+        approval.searchParams.set('optional_scopes', 'read_themes');
+        return { ...result, state: 'permission_required', approvalUrl: approval.href };
       }
       const response = await deps.request(install.shop, install.token, CONSENT_THEME_QUERY);
       // Discard results if privacy, ownership, installation or WABA changed in flight.

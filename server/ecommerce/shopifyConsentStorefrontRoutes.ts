@@ -40,7 +40,9 @@ export function registerConsentThemeRoutes(router: Router, deps: {
     if (!isMerchantActivationPost(req.get('origin'), req.get('content-type'), {}, deps.appOrigin())) return res.status(403).end();
     if (!req.body || Object.keys(req.body).length !== 1 || !['open_editor', 'confirm_saved', 'verify'].includes(req.body.action)) return res.status(400).end();
     try {
-      const initial = await deps.setup(id);
+      const initial = await deps.setup(id, req.body.action === 'open_editor');
+      if (initial?.state === 'proxy_permission_required')
+        return res.json({ ...initial, consentGranted: false, messagingEnabled: false });
       if (!initial?.editorUrl) return res.status(409).end();
       if (req.body.action !== 'verify' && !await deps.record(id, req.body.action)) return res.status(409).end();
       const setup = await deps.setup(id, req.body.action !== 'open_editor');

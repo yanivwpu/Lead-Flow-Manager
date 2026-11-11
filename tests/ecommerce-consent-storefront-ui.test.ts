@@ -22,7 +22,7 @@ const { ConsentThemePanel: Panel } = await import(pathToFileURL(join(scratch, 'p
 const setup = (state: ConsentThemeState): ConsentThemeSetup => ({ state, editorUrl: 'https://first.myshopify.com/admin/themes/current/editor',
   releasedVersion: 'reviewed', approvalUrl: null, checkedAt: null, editorOpenedAt: null, merchantConfirmedAt: null });
 for (const locale of ['en', 'es', 'he']) test(`${locale} storefront setup offers one add action, merchant-owned confirmation and truthful published states`, () => {
-  for (const state of ['unreleased', 'configured', 'editor_opened', 'merchant_confirmed_saved', 'enabled_verified', 'disabled_verified', 'not_supported', 'permission_required', 'unverified'] as const) {
+  for (const state of ['unreleased', 'configured', 'editor_opened', 'merchant_confirmed_saved', 'enabled_verified', 'disabled_verified', 'not_supported', 'proxy_permission_required', 'permission_required', 'unverified'] as const) {
     const { document } = parseHTML(renderToStaticMarkup(React.createElement(Panel, { locale, setup: setup(state), blocked: false, busy: false, failed: false, action: () => assert.fail('SSR action') })));
     const panel = document.querySelector('[data-testid="consent-theme-setup"]')!;
     assert.equal(panel.getAttribute('dir'), locale === 'he' ? 'rtl' : 'ltr');

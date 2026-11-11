@@ -74,13 +74,13 @@ test('published-theme evidence distinguishes active, disabled, missing, draft, f
   assert.equal(consentThemeState({ themes: { nodes: [{ role: 'MAIN' }] } }, extensionId), 'unverified');
 });
 test('release and merchant confirmations cannot claim live status; permission failure and connection races fail closed', async () => {
-  let install: any = { shop, token: 'PRIVATE_TOKEN', connection: 'current', setup: {} }, calls = 0, readAllowed = false;
+  let install: any = { shop, token: 'PRIVATE_TOKEN', connection: 'current', setup: {} }, calls = 0, readAllowed = false, proxyAllowed = true;
   let mutate = false;
   const env: Record<string, string> = { SHOPIFY_API_KEY: key };
   const setup = createConsentThemeService({ env, now: () => now, installation: async () => install,
     request: async (domain, token, q) => {
       calls++; assert.equal(domain, shop); assert.equal(token, 'PRIVATE_TOKEN');
-      if (q.includes('ConsentThemeAccess')) return { shop: { myshopifyDomain: shop }, currentAppInstallation: { accessScopes: readAllowed ? [{ handle: 'read_themes' }] : [] } };
+      if (q.includes('ConsentThemeAccess')) return { shop: { myshopifyDomain: shop }, currentAppInstallation: { accessScopes: [...(readAllowed ? [{ handle: 'read_themes' }] : []), ...(proxyAllowed ? [{ handle: 'write_app_proxy' }] : [])] } };
       if (mutate) install = { ...install, connection: 'changed' };
       return theme({ embed: block(false) });
     } });
@@ -91,17 +91,20 @@ test('release and merchant confirmations cannot claim live status; permission fa
   let result = (await setup('owner', true))!;
   assert.equal(result.state, 'permission_required'); assert.equal(new URL(result.approvalUrl!).searchParams.get('optional_scopes'), 'read_themes');
   assert.ok(!JSON.stringify(result).includes('PRIVATE_TOKEN'));
-  readAllowed = true; result = (await setup('owner', true))!;
+  proxyAllowed = false; result = (await setup('owner', true))!;
+  assert.equal(result.state, 'proxy_permission_required'); assert.equal(result.editorUrl, null);
+  assert.equal(new URL(result.approvalUrl!).searchParams.has('optional_scopes'), false);
+  proxyAllowed = true; readAllowed = true; result = (await setup('owner', true))!;
   assert.equal(result.state, 'enabled_verified'); assert.equal(result.checkedAt, new Date(now).toISOString());
   mutate = true; assert.equal(await setup('owner', true), null);
   install = null; assert.equal(await setup('owner'), null);
 });
 test('native HTTP proxy and merchant setup enforce separate provenance, no cache/CORS, same-origin and no grant writes', async () => {
-  const app = express(), router = Router(); let reads = 0, records = 0;
+  const app = express(), router = Router(); let reads = 0, records = 0, requiresApproval = false;
   app.use(express.json()); app.use((req, _res, next) => { if (req.get('x-fixture-owner')) req.user = { id: 'owner' } as any; next(); });
   registerConsentProxyRoute(router, { secret: () => secret, limiter: (_q, _s, n) => n(), enrollmentForShop: async domain => { reads++; return domain === shop ? view() : null; } });
   registerConsentThemeRoutes(router, { limiter: (_q, _s, n) => n(), appOrigin: () => 'https://app.whachatcrm.com',
-    record: async (id) => { assert.equal(id, 'owner'); records++; return true; }, setup: async () => ({ state: 'configured', editorUrl: consentEditorUrl(shop, key),
+    record: async (id) => { assert.equal(id, 'owner'); records++; return true; }, setup: async (_id, verify) => ({ state: requiresApproval && verify ? 'proxy_permission_required' : 'configured', editorUrl: requiresApproval && verify ? null : consentEditorUrl(shop, key),
       approvalUrl: null, releasedVersion: 'reviewed', checkedAt: null, editorOpenedAt: null, merchantConfirmedAt: null }) });
   app.use(router); const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const root = `http://127.0.0.1:${(server.address() as any).port}`;
@@ -118,6 +121,10 @@ test('native HTTP proxy and merchant setup enforce separate provenance, no cache
     const confirmation = await post({ action: 'confirm_saved' }); assert.equal(confirmation.status, 200);
     const body = await confirmation.json(); assert.equal(body.consentGranted, false); assert.equal(body.messagingEnabled, false);
     assert.notEqual(body.state, 'enabled_verified'); assert.equal(records, 1);
+    requiresApproval = true;
+    const approval = await (await post({ action: 'open_editor' })).json();
+    assert.equal(approval.state, 'proxy_permission_required'); assert.equal(approval.editorUrl, null);
+    assert.equal(records, 1, 'missing merchant approval cannot record an editor-open action');
     assert.equal((await fetch(root + '/consent-storefront?' + query(), { method: 'POST' })).status, 404);
   } finally { await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())); }
 });
