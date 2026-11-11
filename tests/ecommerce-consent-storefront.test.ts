@@ -68,6 +68,27 @@ test('deep links validate exact shop and app identity and use idempotent embed a
   for (const s of ['https://first.myshopify.com', 'first.myshopify.com.evil.test', 'evil@first.myshopify.com']) assert.equal(consentEditorUrl(s, key), null);
   assert.equal(consentEditorUrl(shop, 'unverified-app'), null);
 });
+test('Shopify CLI registered production extension UID (8-4-4-4-20) enables setup and exact MAIN-theme verification', async () => {
+  const registeredUid = '490ef38e-bb3d-fa92-4a1e-2c4bc52c21d8d951047c';
+  const registeredType = `shopify://apps/whachatcrm/blocks/whatsapp-consent/${registeredUid}`;
+  const payload = theme({ embed: { type: registeredType, disabled: false } });
+  assert.equal(consentThemeState(payload, registeredUid), 'enabled_verified');
+  assert.equal(consentThemeState(theme({ embed: { type: registeredType, disabled: true } }), registeredUid), 'disabled_verified');
+  assert.equal(consentThemeState(payload, registeredUid.slice(0,-1)+'a'), 'disabled_verified');
+  assert.equal(consentThemeState(payload, 'not-a-uid'), 'unverified');
+  const install = { shop, token: 'PRIVATE_TOKEN', connection: 'pilot', setup: {} };
+  const service = createConsentThemeService({
+    env: { SHOPIFY_API_KEY: key, SHOPIFY_CONSENT_EXTENSION_RELEASED_VERSION: 'postpurchase-webhooks-2',
+      SHOPIFY_CONSENT_EXTENSION_ID: registeredUid },
+    installation: async () => install,
+    request: async (_shop, _token, query) => query.includes('ConsentThemeAccess')
+      ? { shop: { myshopifyDomain: shop }, currentAppInstallation: { accessScopes: [{ handle: 'write_app_proxy' }, { handle: 'read_themes' }] } }
+      : payload,
+  });
+  assert.equal((await service('pilot'))?.state, 'configured');
+  assert.equal((await service('pilot', true))?.state, 'enabled_verified');
+});
+
 test('published-theme evidence distinguishes active, disabled, missing, draft, foreign and malformed blocks', () => {
   assert.equal(consentThemeState(theme({ embed: block(false) }), extensionId), 'enabled_verified');
   assert.equal(consentThemeState(theme({ embed: block(true) }), extensionId), 'disabled_verified');

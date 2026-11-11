@@ -16,7 +16,7 @@ export function createConsentThemeService(deps: {
     // Operator records the reviewed Shopify version/extension identity AFTER a
     // separately approved release. Railway builds cannot set this implicitly.
     const released = !!version && /^[a-zA-Z0-9._-]{1,120}$/.test(version) &&
-      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(extensionId) && !!consentEditorUrl(install.shop, clientId);
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-(?:[a-f0-9]{12}|[a-f0-9]{20})$/.test(extensionId) && !!consentEditorUrl(install.shop, clientId);
     const current = install.setup.connection === install.connection ? install.setup : {};
     const result: ConsentThemeSetup = {
       state: released ? current.merchantConfirmedAt ? 'merchant_confirmed_saved' : current.editorOpenedAt ? 'editor_opened' : 'configured' : 'unreleased',
