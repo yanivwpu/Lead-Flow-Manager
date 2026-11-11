@@ -29,14 +29,16 @@ const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;'
  * intended wa.me link; no customer phone, account, scopes or credentials. */
 export function consentStorefrontHtml(view: EnrollmentView): string | null {
   if (!view.connectionCurrent || !view.draft) return null;
-  const locale = view.draft.locale;
+  const draft = view.draft, locale = draft.locale;
   const labels = {
     en: { title: 'WhatsApp preferences', action: 'Open WhatsApp to opt in', rule: 'Sending the displayed text is optional. Opening this link does not grant consent. Unknown customers remain ineligible.' },
     es: { title: 'Preferencias de WhatsApp', action: 'Abrir WhatsApp para aceptar', rule: 'Enviar el texto mostrado es opcional. Abrir este enlace no otorga consentimiento. Los clientes no identificados siguen sin ser elegibles.' },
     he: { title: 'העדפות WhatsApp', action: 'פתיחת WhatsApp להסכמה', rule: 'שליחת הטקסט המוצג היא רשות. פתיחת הקישור אינה מעניקה הסכמה. לקוחות לא מזוהים אינם זכאים.' },
   }[locale];
-  const rows = view.rows.filter(row => row.selected && row.notice && row.link && row.captureReady &&
-    CONSENT_PURPOSES.includes(row.purpose) && /^https:\/\/wa\.me\/[1-9][0-9]{7,14}\?text=/.test(row.link));
+  // Delivery/journey selection is a separate gate. Customers must be able to
+  // enroll while delivery is paused or before a journey is selected.
+  const rows = view.rows.filter(row => CONSENT_PURPOSES.includes(row.purpose) && draft.purposes[row.purpose].selected &&
+    row.notice && row.link && row.captureReady && /^https:\/\/wa\.me\/[1-9][0-9]{7,14}\?text=/.test(row.link));
   if (!rows.length) return null;
   return `<section class="whachat-consent" lang="${locale}" dir="${locale === 'he' ? 'rtl' : 'ltr'}" aria-label="${escape(labels.title)}">
 <h2>${escape(view.draft.merchantName)} — ${escape(labels.title)}</h2><p>${escape(labels.rule)}</p>

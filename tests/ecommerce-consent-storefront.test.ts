@@ -53,6 +53,10 @@ test('localized public notices are a safe allowlist with exact affirmative phras
     for (const value of ['revision', 'savedAt', 'recipientConsent', 'operatorReleased', 'accountId', 'customerId']) assert.ok(!html.includes(value));
     assert.equal(consentStorefrontHtml({ ...v, connectionCurrent: false }), null);
     assert.equal(consentStorefrontHtml({ ...v, rows: v.rows.map(r => ({ ...r, captureReady: false })) }), null);
+    const paused = { ...v, rows: v.rows.map(r => ({ ...r, selected: false, merchantEnabled: false })) };
+    assert.equal(parseHTML(consentStorefrontHtml(paused)!).document.querySelectorAll('article').length, 7);
+    for (const purpose of CONSENT_PURPOSES) paused.draft!.purposes[purpose].selected = false;
+    assert.equal(consentStorefrontHtml(paused), null, 'delivery selection cannot offer a purpose the merchant did not enroll');
   }
 });
 test('deep links validate exact shop and app identity and use idempotent embed activation', () => {
