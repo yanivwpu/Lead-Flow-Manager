@@ -36,9 +36,11 @@ export function createPostPurchasePreparation(deps:{
       deletion_requested_at,shopify_installed_at,meta_connected,meta_phone_number_id,
       to_jsonb(users)->>'meta_business_account_id' AS waba_id FROM users WHERE shopify_shop=${shop} LIMIT 2 FOR SHARE`);
     if(rows.rows.length!==1)return null;const user=rows.rows[0],accountId=String(user.id);
-    if(!consentOnly&&!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return null;
-    if(!consentOnly&&deps.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
-      !isEcommercePilotOwner({id:accountId,email:typeof user.email==='string'?user.email:null},stopOnly?{...deps.env,ECOMMERCE_PILOT_ENABLED:'true'}:deps.env))return null;
+    const legacyEnv={...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})};
+    const preparationAllowed=postPurchasePreparationEnabled(legacyEnv,accountId)&&
+      (deps.env.RAILWAY_ENVIRONMENT_NAME!=='production'||isEcommercePilotOwner({id:accountId,
+        email:typeof user.email==='string'?user.email:null},legacyEnv));
+    if(!consentOnly&&!preparationAllowed)return null;
     if(!stopOnly&&!isShopifyContactInstallationActive({shopifyShop:shop,shopifyAccessToken:user.shopify_access_token as string|null,
       shopifySubscriptionStatus:user.shopify_subscription_status as string|null,deletionRequestedAt:user.deletion_requested_at as Date|null}))return null;
     if(user.deletion_requested_at)return null;
@@ -46,7 +48,7 @@ export function createPostPurchasePreparation(deps:{
     if(active.rows.length!==1)return null;const config=object(active.rows[0].config);
     for(const key of ['shop','shopUrl'])if(config[key]!=null&&normalizeShopifyShopDomain(String(config[key]))!==shop)return null;
     const installedAt=date(user.shopify_installed_at);if(!Number.isFinite(installedAt))return null;
-    if(consentOnly&&!stopOnly&&!productionConsentCaptureAllowed(deps.env,{accountId,shop,
+    if(consentOnly&&!stopOnly&&!preparationAllowed&&!productionConsentCaptureAllowed(deps.env,{accountId,shop,
       installationId:String(active.rows[0].id),wabaId:String(user.waba_id||''),phoneId:String(user.meta_phone_number_id||''),
       installedAt:new Date(installedAt)}))return null;
     return {accountId,shop,installationId:String(active.rows[0].id),accessToken:String(user.shopify_access_token||''),config,installedAt,

@@ -74,14 +74,10 @@ return async function captureRecoveryConsentFromVerifiedMeta(input:{
    // Explicit Shopify customer/redact locks always win. No phone-only inference
    // can reconnect or regrant an erased Shopify customer.
    const ready=await tx.execute(sql`
-     SELECT to_regclass('public.ecommerce_whatsapp_recovery_consents') IS NOT NULL AS consent,
-            to_regclass('public.ecommerce_checkout_recovery_outbox') IS NOT NULL AS outbox,
-            EXISTS (SELECT 1 FROM information_schema.columns
-              WHERE table_schema='public'
-                AND table_name='ecommerce_whatsapp_recovery_consents'
-                AND column_name='last_verified_inbound_at') AS ordered`);
+     SELECT to_regclass('ecommerce_whatsapp_recovery_consents') IS NOT NULL AS consent,
+            to_regclass('ecommerce_checkout_recovery_outbox') IS NOT NULL AS outbox`);
    if((await tx.execute(consentCaptureSchemaQuery)).rows[0]?.recovery!==true ||
-      ready.rows[0]?.consent!==true || ready.rows[0]?.ordered!==true)
+      ready.rows[0]?.consent!==true)
      throw Error('signed_recovery_consent_schema_missing');
    if(classified.action==='revoke'){
      const rows=await tx.execute(revokeSignedRecoveryConsentQuery({

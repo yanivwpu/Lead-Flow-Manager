@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import * as schema from '../shared/schema';
+import { consentCaptureSchemaQuery } from '../server/ecommerce/consentCaptureSchema';
 import { productionConsentCaptureAllowed, productionConsentCaptureBlocker } from '../server/ecommerce/consentCaptureGate';
 import { commerceConnectionFingerprint, readProductionRecoveryScope } from '../server/ecommerce/checkoutRecoveryProductionRelease';
 import { createRecoveryConsentCapture } from '../server/ecommerce/checkoutRecoveryInboundConsentCapture';
@@ -131,6 +132,36 @@ test('real capture handlers: exact signed purpose only, verified Shopify identit
       for (const purpose of ['orderConfirmation','checkoutRecovery'] as const) assert.equal(await capture(purpose), 'ignored');
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_post_purchase_consents WHERE granted_at IS NOT NULL AND revoked_at IS NULL`)).rows[0].n, 0);
       assert.equal((await execute(sql`SELECT count(*)::int n FROM ecommerce_whatsapp_recovery_consents WHERE revoked_at IS NULL`)).rows[0].n, 0);
+    });
+    await t.test('an unrelated capture pilot cannot replace an existing approved post-purchase consent path', async () => {
+      await reset();
+      const before={...env};
+      try {
+        await execute(sql`UPDATE users SET email='owner@example.test' WHERE id=${account}`);
+        Object.assign(env,{ECOMMERCE_PILOT_ENABLED:'true',ECOMMERCE_PILOT_WORKSPACE_ID:account,
+          ECOMMERCE_PILOT_OWNER_EMAIL:'owner@example.test',ECOMMERCE_POST_PURCHASE_ACCOUNT_ID:account,
+          ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',
+          ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED:'false'});
+        assert.equal(await capture('orderConfirmation'), 'granted');
+        Object.assign(env,{ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED:'true',ECOMMERCE_CONSENT_CAPTURE_ACCOUNT_ID:other,
+          ECOMMERCE_CONSENT_CAPTURE_SHOP:'other.myshopify.com',ECOMMERCE_CONSENT_CAPTURE_CONNECTION_SHA256:commerceConnectionFingerprint({
+            ...current,accountId:other,shop:'other.myshopify.com',installationId:'other-install',wabaId:'222221',phoneId:'222222'})});
+        assert.equal(enrollmentCaptureReadiness(env,account,shop,connection).postPurchase,true);
+        assert.equal(await capture('orderConfirmation',candidate(WHATSAPP_CONSENT_PHRASES.orderConfirmation,clock+1000)), 'granted');
+        assert.equal(postPurchaseDeliveryEnabled(env,account),false);
+      } finally {for(const key of Object.keys(env))delete env[key];Object.assign(env,before);}
+    });
+    await t.test('schema readiness follows the actual search-path relation; missing ordered fields fail closed', async () => {
+      await reset();
+      await pg.exec(`CREATE SCHEMA capture_fixture;
+        ALTER TABLE ecommerce_post_purchase_consents SET SCHEMA capture_fixture;
+        ALTER TABLE ecommerce_whatsapp_recovery_consents SET SCHEMA capture_fixture;
+        SET search_path=capture_fixture,public;`);
+      assert.deepEqual((await execute(consentCaptureSchemaQuery)).rows[0], {post_purchase:true,recovery:true});
+      for (const purpose of ['orderConfirmation','checkoutRecovery'] as const) assert.equal(await capture(purpose), 'granted');
+      await pg.exec('ALTER TABLE ecommerce_whatsapp_recovery_consents DROP COLUMN last_verified_wamid');
+      assert.equal((await execute(consentCaptureSchemaQuery)).rows[0].recovery, false);
+      await assert.rejects(()=>capture('checkoutRecovery',candidate('STOP',clock+1000)), /signed_recovery_consent_schema_missing/);
     });
   } finally { await pg.close(); }
 });
