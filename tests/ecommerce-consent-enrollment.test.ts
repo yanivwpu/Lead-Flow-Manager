@@ -265,3 +265,30 @@ test('production readiness shows release only for the exact existing intent jour
     assert.equal(f.calls(), 0);
   } finally { await f.pg.close(); }
 });
+
+test('theme setup uses native JSONB, is idempotent and connection-bound, and cannot alter consent/delivery or another tenant', async () => {
+  const f = await fixture();
+  try {
+    const foreign = await f.config(other), before = await f.config();
+    for (let i = 0; i < 2; i++) assert.equal(await f.service.recordConsentThemeAction(account, 'open_editor'), true);
+    assert.equal(await f.service.recordConsentThemeAction(account, 'confirm_saved'), true);
+    const saved = await f.config(), context = await f.service.consentInstallation(account);
+    assert.equal(saved.ecommerceConsentThemeSetup.editorOpenedAt, new Date(at).toISOString());
+    assert.equal(saved.ecommerceConsentThemeSetup.merchantConfirmedAt, new Date(at).toISOString());
+    assert.equal(context?.setup.connection, context?.connection);
+    assert.deepEqual(Object.fromEntries(Object.entries(saved).filter(([k]) => k !== 'ecommerceConsentThemeSetup')), before);
+    assert.deepEqual(await f.config(other), foreign);
+    assert.equal((await f.db.execute(sql`SELECT count(*)::int AS total FROM ecommerce_post_purchase_consents`)).rows[0].total, 0);
+    assert.deepEqual(stripShopifyGrowthManagedConfig({ ecommerceConsentThemeSetup: saved.ecommerceConsentThemeSetup, keep: true }), { keep: true });
+    await f.db.execute(sql`UPDATE users SET meta_phone_number_id='999999' WHERE id=${account}`);
+    const changed = await f.service.consentInstallation(account);
+    assert.notEqual(changed?.setup.connection, changed?.connection);
+    await f.service.recordConsentThemeAction(account, 'open_editor');
+    assert.equal((await f.config()).ecommerceConsentThemeSetup.merchantConfirmedAt, undefined);
+    await f.db.execute(sql`UPDATE users SET deletion_requested_at=NOW() WHERE id=${account}`);
+    assert.equal(await f.service.consentInstallation(account), null);
+    assert.equal(await f.service.recordConsentThemeAction(account, 'open_editor'), false);
+    assert.equal(await f.service.recordConsentThemeAction('unknown', 'confirm_saved'), false);
+    assert.equal(f.calls(), 0);
+  } finally { await f.pg.close(); }
+});

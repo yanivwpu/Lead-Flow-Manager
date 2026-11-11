@@ -45,9 +45,15 @@ topics = ["orders/cancelled"]
 uri = "https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/webhooks/orders-cancelled"
 
 [access_scopes]
-scopes = "read_customers,read_orders"
-optional_scopes = []
+scopes = "read_customers,read_orders,write_app_proxy"
+optional_scopes = ["read_themes"]
 use_legacy_install_flow = false
 
 [auth]
 redirect_urls = ["https://whachatcrm-staging-app-staging.up.railway.app/api/shopify/callback"]
+
+# Storefront notices only. Shopify signs requests; no customer grants here.
+[app_proxy]
+url = "/api/shopify/consent-storefront"
+prefix = "apps"
+subpath = "whachat-consent"

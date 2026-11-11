@@ -510,5 +510,27 @@ export function createShopifyTemplateProvisioner(deps: {
     }
     return "reconciled";
   }
-  return { authorize, view, reconcile, savePlan, setDelivery, saveEnrollment, enrollmentView };
+  /** Internal adapter only. Never serialize the token into a merchant/public view. */
+  async function consentInstallation(accountId: string) {
+    return lockedInstallation(accountId, async (tx, installation, owner) => {
+      const merchant = await currentMerchant(tx, installation, owner);
+      return merchant ? { shop: merchant.shop, token: String(owner.shopify_access_token),
+        connection: merchant.fingerprint, setup: object(merchant.config.ecommerceConsentThemeSetup) } : null;
+    });
+  }
+  async function recordConsentThemeAction(accountId: string, action: 'open_editor' | 'confirm_saved') {
+    return await locked(accountId, async (tx, m) => {
+      const old = object(m.config.ecommerceConsentThemeSetup);
+      const state = old.connection === m.fingerprint ? old : {};
+      const field = action === 'open_editor' ? 'editorOpenedAt' : 'merchantConfirmedAt';
+      // Repeated setup clicks keep one record and do not duplicate a block.
+      const updated = { ...state, connection: m.fingerprint, [field]: state[field] ?? new Date(now()).toISOString() };
+      await tx.execute(sql`UPDATE integrations SET config=jsonb_set(COALESCE(config,'{}'::jsonb),
+        '{ecommerceConsentThemeSetup}',${JSON.stringify(updated)}::jsonb,true)
+        WHERE id=${m.installationId} AND user_id=${accountId} AND is_active IS TRUE`);
+      return true;
+    }) ?? false;
+  }
+  return { authorize, view, reconcile, savePlan, setDelivery, saveEnrollment, enrollmentView,
+    consentInstallation, recordConsentThemeAction };
 }

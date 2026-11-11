@@ -5,8 +5,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 ORIGIN = 'https://app.whachatcrm.com'
-REQUIRED_SCOPES = ['read_customers', 'read_orders']
-OPTIONAL_SCOPES = ['read_products', 'read_inventory']
+REQUIRED_SCOPES = ['read_customers', 'read_orders', 'write_app_proxy']
+OPTIONAL_SCOPES = ['read_products', 'read_inventory', 'read_themes']
 # Existing app-owned commerce/privacy subscriptions must retain their ownership and URLs.
 EXISTING = {
     'customers/create': 'customers-create',
@@ -43,11 +43,12 @@ class ProductionConfig(unittest.TestCase):
 
     def test_production_identity_oauth_and_managed_installation_preserved(self):
         self.assertEqual(set(self.config), {'client_id', 'name', 'application_url', 'embedded',
-                                            'webhooks', 'access_scopes', 'auth'})
+                                            'webhooks', 'access_scopes', 'auth', 'app_proxy'})
         self.assertEqual(self.config['client_id'], 'e4585d4da1434c9e5649a2269e716076')
         self.assertEqual(self.config['name'], ' WhachatCRM')
         self.assertEqual(self.config['application_url'], ORIGIN)
         self.assertIs(self.config['embedded'], False)
+        self.assertEqual(self.config['app_proxy'], {'url': '/api/shopify/consent-storefront', 'prefix': 'apps', 'subpath': 'whachat-consent'})
         self.assertEqual(self.config['auth'], {'redirect_urls': [ORIGIN + '/api/shopify/callback']})
         self.assertEqual(self.config['access_scopes'], {
             'scopes': ','.join(REQUIRED_SCOPES),
@@ -55,7 +56,7 @@ class ProductionConfig(unittest.TestCase):
             'use_legacy_install_flow': False,
         })
         self.assertEqual(declared_strings('server/shopify.ts', 'SHOPIFY_SCOPES'), REQUIRED_SCOPES)
-        self.assertEqual(declared_strings('shared/commerceCatalog.ts', 'SHOPIFY_CATALOG_SCOPES'), OPTIONAL_SCOPES)
+        self.assertEqual(declared_strings('shared/commerceCatalog.ts', 'SHOPIFY_CATALOG_SCOPES'), OPTIONAL_SCOPES[:2])
 
     def test_exact_versioned_topics_callbacks_and_privacy_ownership(self):
         self.assertEqual(self.config['webhooks']['api_version'], '2026-01')

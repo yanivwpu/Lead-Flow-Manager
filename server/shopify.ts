@@ -21,8 +21,9 @@ const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET || '';
  * Shopify OAuth scopes (keep in sync with shopify.app.whachatcrm.toml).
  * read_customers — GDPR redact flows and customers/create commerce webhooks.
  * read_orders — orders/create webhook and order ingestion (requires protected customer data approval in Partner Dashboard).
+ * write_app_proxy — signed, read-only storefront notices; requires merchant approval on the later Shopify app release.
  */
-export const SHOPIFY_SCOPES = ['read_customers', 'read_orders'] as const;
+export const SHOPIFY_SCOPES = ['read_customers', 'read_orders', 'write_app_proxy'] as const;
 export const HOST = process.env.APP_URL || process.env.SHOPIFY_APP_HOST || process.env.HOST || 'https://app.whachatcrm.com';
 
 /**

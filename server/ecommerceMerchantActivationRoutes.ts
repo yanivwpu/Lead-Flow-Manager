@@ -15,6 +15,8 @@ import { shopifyTemplateProvisioner } from "./ecommerce/shopifyTemplateProvision
 import { parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
 import {parsePostPurchasePlanChange} from "../shared/postPurchase";
 import { registerConsentEnrollmentRoutes } from './ecommerce/shopifyConsentEnrollmentRoutes';
+import { registerConsentThemeRoutes } from './ecommerce/shopifyConsentStorefrontRoutes';
+import { consentThemeSetup } from './ecommerce/shopifyConsentStorefrontRuntime';
 import {
   canActivateMerchantWorkspace,
   merchantWorkspaceActivated,
@@ -92,6 +94,8 @@ router.get("/template-setup", async (req: Request, res: Response) => {
 
 registerConsentEnrollmentRoutes(router, { service: shopifyTemplateProvisioner, writeLimiter: merchantSetupWriteLimiter,
   appOrigin: () => (process.env.APP_URL || 'https://app.whachatcrm.com').replace(/\/$/, '') });
+registerConsentThemeRoutes(router, { setup: consentThemeSetup, record: shopifyTemplateProvisioner.recordConsentThemeAction,
+  limiter: merchantSetupWriteLimiter, appOrigin: () => (process.env.APP_URL || 'https://app.whachatcrm.com').replace(/\/$/, '') });
 
 router.post("/template-setup",merchantSetupWriteLimiter, async (req: Request, res: Response) => {
   res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
