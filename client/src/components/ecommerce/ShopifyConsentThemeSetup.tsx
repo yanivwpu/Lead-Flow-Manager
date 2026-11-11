@@ -18,8 +18,8 @@ const copy = {
     save: 'יש לשמור תחילה את ההודעות ולבדוק מוכנות לאיסוף הסכמה.', confirmed: 'אישורך על בדיקה ושמירה תועד.', error: 'לא ניתן לאמת את ההתקנה. יש לנסות שוב את בדיקת ערכת העיצוב.',
     states: { unreleased: 'התוסף ממתין לשחרור נפרד של גרסת יישום Shopify.', configured: 'הוגדר; ההפעלה בחנות לא אומתה.', editor_opened: 'העורך נפתח; תצוגה מקדימה ושמירה טרם אומתו.', merchant_confirmed_saved: 'אישרת בדיקה ושמירה; ההפעלה שפורסמה לא אומתה.', enabled_verified: 'מקטע ההסכמה מופעל בערכת העיצוב שפורסמה (אומת).', disabled_verified: 'מקטע ההסכמה אינו מופעל בערכת העיצוב שפורסמה (אומת).', not_supported: 'לא נמצאה ערכת עיצוב נתמכת. התכונות הקיימות ממשיכות לפעול.', proxy_permission_required: 'Shopify דורש את אישורך לגישה להודעות בחנות לפני הוספת המקטע.', permission_required: 'המצב שפורסם לא אומת. נדרש אישור רשות לקריאת ההגדרות.', unverified: 'לא ניתן לאמת את המצב שפורסם.' } },
 };
-export function ConsentThemePanel({ locale, setup, blocked, busy, failed, action }: {
-  locale: string; setup?: ConsentThemeSetup; blocked: boolean; busy: boolean; failed: boolean;
+export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy, failed, action }: {
+  locale: string; setup?: ConsentThemeSetup; blocked: boolean; blockedReason?: string; busy: boolean; failed: boolean;
   action: (action: 'open_editor' | 'confirm_saved' | 'verify') => void;
 }) {
   const lang = locale.startsWith('he') ? 'he' : locale.startsWith('es') ? 'es' : 'en', t = copy[lang];
@@ -28,8 +28,8 @@ export function ConsentThemePanel({ locale, setup, blocked, busy, failed, action
     {setup && <p role="status">{t.states[setup.state]}</p>}
     {setup?.merchantConfirmedAt && <p className="text-sm">{t.confirmed}</p>}
     {setup?.checkedAt && <time className="block text-xs" dateTime={setup.checkedAt}>{new Date(setup.checkedAt).toLocaleString(lang)}</time>}
-    {blocked && <p>{t.save}</p>}
-    <button type="button" className="rounded border px-4 py-2 disabled:opacity-50" disabled={blocked || busy || !setup?.editorUrl} onClick={() => action('open_editor')}>{t.add}</button>
+    {blocked && <p id="consent-storefront-blocker" role="status">{blockedReason ?? t.save}</p>}
+    <button type="button" className="rounded border px-4 py-2 disabled:opacity-50" aria-describedby={blocked ? 'consent-storefront-blocker' : undefined} disabled={blocked || busy || !setup?.editorUrl} onClick={() => action('open_editor')}>{t.add}</button>
     {setup?.editorUrl && <div className="flex flex-wrap gap-2">
       <button type="button" className="rounded border p-2" disabled={blocked || busy} onClick={() => action('confirm_saved')}>{t.confirm}</button>
       <button type="button" className="rounded border p-2" disabled={busy} onClick={() => action('verify')}>{t.verify}</button>
@@ -38,7 +38,7 @@ export function ConsentThemePanel({ locale, setup, blocked, busy, failed, action
     {failed && <p role="alert">{t.error}</p>}
   </div>;
 }
-export function ShopifyConsentThemeSetup({ locale, blocked }: { locale: string; blocked: boolean }) {
+export function ShopifyConsentThemeSetup({ locale, blocked, blockedReason }: { locale: string; blocked: boolean; blockedReason?: string }) {
   const { user, sessionAligned } = useAuth();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
@@ -68,5 +68,5 @@ export function ShopifyConsentThemeSetup({ locale, blocked }: { locale: string; 
       client.setQueryData(withUserQueryScope([endpoint], user.id), next);
     } catch { tab?.close(); setFailed(true); } finally { setBusy(false); }
   }
-  return <ConsentThemePanel locale={locale} setup={setup} blocked={blocked} busy={busy} failed={failed || query.isError} action={a => void act(a)}/>;
+  return <ConsentThemePanel locale={locale} setup={setup} blocked={blocked} blockedReason={blockedReason} busy={busy} failed={failed || query.isError} action={a => void act(a)}/>;
 }

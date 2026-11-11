@@ -33,8 +33,11 @@ async function fixture(configuration: Record<string, string | undefined> = env) 
     CREATE TABLE ecommerce_shopify_workspace_activations(account_id text,installation_id text,shop text);
     CREATE TABLE ecommerce_post_purchase_intents(id bigint,account_id text,shop text,installation_id text,journey text);
     CREATE TABLE ecommerce_post_purchase_orders(id bigint);
-    CREATE TABLE ecommerce_post_purchase_consents(id bigint);
-    CREATE TABLE ecommerce_whatsapp_recovery_consents(last_verified_inbound_at timestamptz,last_verified_wamid text);`);
+    CREATE TABLE ecommerce_post_purchase_consents(id bigint,account_id text,shop text,recipient_hmac text,purpose text,
+      contact_id text,customer_gid text,granted_at timestamptz,revoked_at timestamptz,last_inbound_at timestamptz,last_wamid text);
+    CREATE TABLE ecommerce_whatsapp_recovery_consents(account_id text,shop text,contact_id text,shopify_customer_gid text,
+      purpose text,channel text,evidence_source text,recipient_hmac text,granted_at timestamptz,revoked_at timestamptz,
+      last_verified_inbound_at timestamptz,last_verified_wamid text);`);
   for (const [id, domain, wabaId, phoneId, phone] of [[account, shop, '111111', '111112', '+1 (555) 123-4567'], [other, 'second.myshopify.com', '222221', '222222', '+15557654321']]) {
     await db.execute(sql`INSERT INTO users(id,shopify_shop,shopify_installed_at,meta_business_account_id,meta_phone_number_id,meta_display_phone_number)
       VALUES(${id},${domain},${new Date(at - 60000)},${wabaId},${phoneId},${phone})`);
@@ -313,6 +316,37 @@ test('real enrollment readback offers checkout and post-purchase consent before 
       assert.ok(v.rows.every(r => !r.merchantEnabled));
     }
     assert.equal((await f.db.execute(sql`SELECT count(*)::int AS total FROM ecommerce_post_purchase_consents`)).rows[0].total, 0);
+    assert.equal(f.calls(), 0);
+  } finally { await f.pg.close(); }
+});
+
+
+test('production capture-only enrollment enables storefront notices for exactly the approved connection while delivery stays blocked', async () => {
+  const connection = commerceConnectionFingerprint({ accountId: account, shop, installationId: 'i-' + account,
+    wabaId: '111111', phoneId: '111112', installedAt: at - 60000 });
+  const env = { RAILWAY_ENVIRONMENT_NAME: 'production', APP_URL: 'https://app.whachatcrm.com',
+    ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED: 'true', ECOMMERCE_CONSENT_CAPTURE_ACCOUNT_ID: account,
+    ECOMMERCE_CONSENT_CAPTURE_SHOP: shop, ECOMMERCE_CONSENT_CAPTURE_CONNECTION_SHA256: connection,
+    ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY: key };
+  const f = await fixture(env);
+  try {
+    const d = draft(); d.purposes.checkoutRecovery.selected = true;
+    assert.equal(await f.service.saveEnrollment(account, d), true);
+    const before = await f.config();
+    const view = (await f.service.enrollmentView(account))!;
+    assert.ok(view.rows.every(r => r.captureReady));
+    assert.equal(view.rows.filter(r => r.link).length, 2);
+    assert.ok(consentStorefrontHtml(view)?.includes('YES WHATSAPP CHECKOUT REMINDERS'));
+    assert.ok(view.rows.every(r => !r.operatorReleased && r.activationBlocked));
+    for (const kind of ['postPurchase', 'checkoutRecovery'] as const) assert.equal(await f.service.setDelivery(account, kind, true), false);
+    assert.deepEqual(await f.config(), before);
+    assert.ok((await f.service.enrollmentView(other))!.rows.every(r => !r.captureReady && r.link === null));
+    await f.pg.exec('ALTER TABLE ecommerce_post_purchase_consents DROP COLUMN last_wamid');
+    assert.equal((await f.service.enrollmentView(account))!.rows[0].captureReady, false);
+    await f.db.execute(sql`UPDATE users SET meta_business_account_id='999999' WHERE id=${account}`);
+    const stale = (await f.service.enrollmentView(account))!;
+    assert.ok(stale.rows.every(r => !r.captureReady && r.link === null));
+    assert.ok(stale.rows[0].blockers.includes('consent_capture_connection_required'));
     assert.equal(f.calls(), 0);
   } finally { await f.pg.close(); }
 });

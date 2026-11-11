@@ -104,6 +104,12 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Create isolated e-commerce test database
         run: node --input-type=module -e 'import pg from "pg"; const p=new pg.Pool({connectionString:process.env.SHOPIFY_TEST_DATABASE_URL}); await p.query("CREATE DATABASE whachat_ecommerce_test"); await p.end();'
+      - name: Isolated consent-only capture and localized save regressions (no live services)
+        run: >-
+          node --import tsx --test --test-concurrency=2
+          tests/ecommerce-consent-capture-pilot.test.ts
+          tests/ecommerce-consent-enrollment*.test.ts
+          tests/ecommerce-recovery-consent-webhook-contract.test.ts
       - name: Pilot isolation, migrations, tasks, observation eligibility and localized UI
         run: >-
           node --import tsx --test --test-concurrency=2
