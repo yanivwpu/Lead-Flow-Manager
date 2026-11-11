@@ -1,3 +1,4 @@
+import { offlineAdminFetch } from '../shopifyAdminClient';
 /**
  * One-shot Shopify Admin recheck of a single abandoned checkout before
  * preparing a recovery. NO outbound messaging or checkout creation.
@@ -49,7 +50,7 @@ export async function recheckShopifyCheckoutForRecovery(input: {
   if (!SHOP_RE.test(input.shop) || !match || !input.accessToken || input.accessToken.length > 4096)
     return blocked('invalid_checkout_or_shop');
   try {
-    const response = await (input.fetchImpl || fetch)(
+    const response = await (input.fetchImpl || offlineAdminFetch)(
       'https://' + input.shop + '/admin/api/2026-10/graphql.json', {
         method:'POST',
         headers:{'Content-Type':'application/json', 'X-Shopify-Access-Token':input.accessToken},

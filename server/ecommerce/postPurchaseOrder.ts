@@ -1,3 +1,4 @@
+import { offlineAdminFetch } from '../shopifyAdminClient';
 import type { ShopifyOrderTopic } from '../shopifyOrderWebhookHandler';
 export type PostPurchaseOrderEvent={
   topic:ShopifyOrderTopic;deliveryId:string;orderId:string;customerId:string;occurredAt:number;
@@ -25,7 +26,7 @@ export async function recheckPostPurchaseOrder(input:{shop:string;accessToken:st
     !/^gid:\/\/shopify\/Order\/[1-9][0-9]{0,19}$/.test(input.orderId)||
     !/^gid:\/\/shopify\/Customer\/[1-9][0-9]{0,19}$/.test(input.customerId))return null;
   try{
-    const response=await (input.fetchImpl??fetch)('https://'+input.shop+'/admin/api/2026-10/graphql.json',{
+    const response=await (input.fetchImpl??offlineAdminFetch)('https://'+input.shop+'/admin/api/2026-10/graphql.json',{
       method:'POST',redirect:'error',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':input.accessToken},
       body:JSON.stringify({query:QUERY,variables:{id:input.orderId}}),signal:AbortSignal.timeout(8000),
     });

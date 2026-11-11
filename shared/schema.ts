@@ -230,6 +230,28 @@ export const users = pgTable("users", {
 }));
 
 /** Hashed, single-use email verification tokens for public signup. */
+/** Server-only encrypted Shopify pairs; users.shopifyAccessToken holds an opaque installation reference.
+ * SQL migration 0119 also installs the uninstall/redaction/reassignment cleanup trigger.
+ */
+export const shopifyOfflineTokens = pgTable("shopify_offline_tokens", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  shop: text("shop").notNull().unique(),
+  credentialRef: text("credential_ref").notNull().unique(),
+  appClientId: text("app_client_id").notNull(),
+  encryptedPair: text("encrypted_pair").notNull(),
+  accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
+  refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("active"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [check("shopify_offline_tokens_status_check", sql`${table.status} IN ('active', 'reauthorization_required')`)]);
+
+/** Non-secret durable fence for explicit operator migration/recovery only. */
+export const shopifyOfflineMigrationAttempts = pgTable("shopify_offline_migration_attempts", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  shop: text("shop").notNull().unique(),
+  firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const emailVerificationTokens = pgTable(
   "email_verification_tokens",
   {

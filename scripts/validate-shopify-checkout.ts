@@ -30,6 +30,7 @@ async function main() {
       approval,
       installation:()=>resolveCatalogInstallation(database,selection.userId,SHOP),
       requestFor:(shop,token)=>createCatalogRequest({request:async(query,options)=>{
+        if (token.startsWith('shopify-offline:')) throw Error('migrated_installation_requires_runtime_readiness');
         if (shop!==SHOP || ![META,SHOPIFY_INVENTORY_BATCH_QUERY].includes(query)) throw Error('admin_read_not_allowed');
         const response = await fetch(`https://${SHOP}/admin/api/2026-01/graphql.json`,{
           method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),

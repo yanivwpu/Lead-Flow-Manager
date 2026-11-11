@@ -1,5 +1,8 @@
+import { offlineGraphqlClient } from './shopifyAdminClient';
+import { assertOfflineTokenStorage } from './shopifyOfflineTokens';
+import { requestOfflinePair, type OfflinePair } from './shopifyOfflineGrant';
 import '@shopify/shopify-api/adapters/node';
-import { shopifyApi, BillingInterval, Session, ApiVersion } from '@shopify/shopify-api';
+import { shopifyApi, BillingInterval, ApiVersion } from '@shopify/shopify-api';
 import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import crypto from 'crypto';
@@ -105,7 +108,7 @@ export async function fetchShopifyShopOwnerEmailResult(
   try {
     const api = getShopifyApi();
     if (!api) return { status: "fetch_failed", email: null };
-    const client = new api.clients.Graphql({ session: { shop, accessToken } as Session });
+    const client = offlineGraphqlClient(shop, accessToken);
     const response = await client.request(SHOPIFY_SHOP_OWNER_EMAIL_QUERY);
     const data = (response as { data?: { shop?: { email?: unknown } } }).data;
     return classifyShopifyOwnerEmail(data?.shop?.email);
@@ -319,9 +322,7 @@ export async function createShopifyBillingCharge(
   console.log("[ShopifyBilling] appSubscriptionCreate request", logContext);
 
   try {
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
+    const client = offlineGraphqlClient(shop, accessToken);
 
     const response = await client.request(
       `
@@ -444,9 +445,7 @@ export async function listShopifyActiveSubscriptions(
   const shopify = getShopifyApi();
   if (!shopify) throw new Error("SHOPIFY_BILLING_UNAVAILABLE");
   try {
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
+    const client = offlineGraphqlClient(shop, accessToken);
     const response = await client.request(
       `
       query VerifiedBillingSubscription {
@@ -602,9 +601,7 @@ export async function cancelShopifySubscription(
   if (!shopify) return false;
 
   try {
-    const client = new shopify.clients.Graphql({
-      session: { shop, accessToken } as Session,
-    });
+    const client = offlineGraphqlClient(shop, accessToken);
 
     const response = await client.request(`
       mutation appSubscriptionCancel($id: ID!) {
@@ -785,32 +782,10 @@ export function validateOAuthStateWithReason(
   return signed;
 }
 
-export async function exchangeShopifyCode(
-  shop: string,
-  code: string
-): Promise<string | null> {
-  try {
-    const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: SHOPIFY_API_KEY,
-        client_secret: SHOPIFY_API_SECRET,
-        code,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Failed to exchange Shopify code:', await response.text());
-      return null;
-    }
-
-    const data = await response.json();
-    return data.access_token;
-  } catch (error) {
-    console.error('Shopify code exchange error:', error);
-    return null;
-  }
+export async function exchangeShopifyCode(shop: string, code: string): Promise<OfflinePair> {
+  // Preflight storage/key before consuming the single-use code.
+  await assertOfflineTokenStorage();
+  return requestOfflinePair(shop, { code });
 }
 
 export { registerMandatoryWebhooks } from "./shopifyWebhookHealth";

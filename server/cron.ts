@@ -1,3 +1,4 @@
+import { runShopifyOfflineTokenTick } from './shopifyOfflineTokenMaintenance';
 import { runShopifyCustomerEffectsTick } from "./shopifyCustomerEffects";
 import { runShopifyPrivacyTick } from "./shopifyExternalErasure";
 import { db } from '../drizzle/db';
@@ -314,6 +315,7 @@ export function startCronJobs() {
   }, 30_000);
   
   cronInterval = setInterval(() => {
+    void runShopifyOfflineTokenTick();
     void runShopifyPrivacyTick();
     void runShopifyCustomerEffectsTick();
     const now = new Date();
