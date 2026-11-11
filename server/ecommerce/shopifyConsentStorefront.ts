@@ -48,7 +48,7 @@ ${rows.map(row => `<article><h3>${escape(CONSENT_LABELS[locale][CONSENT_PURPOSES
 /** Inspect only current settings from the MAIN theme. A disabled block persists
  * in settings_data.json; presets and other apps are never activation evidence. */
 export function consentThemeState(payload: any, extensionId: string): ConsentThemeState {
-  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(extensionId)) return 'unverified';
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-(?:[a-f0-9]{12}|[a-f0-9]{20})$/.test(extensionId)) return 'unverified';
   const themes = payload?.themes?.nodes;
   if (!Array.isArray(themes) || themes.length !== 1) return Array.isArray(themes) && !themes.length ? 'not_supported' : 'unverified';
   const theme = themes[0];
