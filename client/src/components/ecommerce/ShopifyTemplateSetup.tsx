@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { SHOPIFY_GROWTH_TEMPLATES, type ShopifyTemplateSetup as Setup, type ShopifySetupStatus } from "@shared/shopifyGrowthTemplates";
 import {POST_PURCHASE_JOURNEYS,type PostPurchaseJourney} from "@shared/postPurchase";
+import { ShopifyConsentEnrollment } from './ShopifyConsentEnrollment';
 
 const copy = {
   en: {
@@ -199,10 +200,11 @@ export function ShopifyTemplateSetup({ locale }: { locale: string }) {
       await client.invalidateQueries({queryKey:withUserQueryScope(['/api/shopify/ecommerce/event-inbox-preview'],user.id)});
     }catch{setFailed(true);}finally{setSaving(false);}
   }
-  return <ShopifyTemplateSetupPanel locale={locale} data={sessionAligned && !query.isError ? setupData : undefined}
+  return <><ShopifyTemplateSetupPanel locale={locale} data={sessionAligned && !query.isError ? setupData : undefined}
     saving={saving} failed={failed || query.isError} refreshing={refreshing} refreshedAt={refreshedAt} onAuthorize={() => void authorize()}
     onRefresh={() => { void refreshStatus(); }}
     onPlan={(journey,selected)=>void update('journey-plan',{action:'save_post_purchase_plan',journey,
       plan:{selected,delayMinutes:query.data?.postPurchasePlans?.[journey].delayMinutes??0}})}
     onDelivery={(journey,enabled)=>void update('journey-activation',{action:'set_journey_delivery',journey,enabled})}/>
+    <ShopifyConsentEnrollment key={user?.id} locale={locale}/></>;
 }

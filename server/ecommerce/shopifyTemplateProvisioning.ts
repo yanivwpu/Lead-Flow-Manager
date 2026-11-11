@@ -9,11 +9,17 @@ import { validateRecoveryMetaTemplate, type RecoveryTemplateShape } from "./chec
 import { readPostPurchaseTemplateBindings, savePostPurchaseTemplateBindingQuery } from "./postPurchaseTemplateBinding";
 import {readPostPurchasePlans,type PostPurchaseJourney,type JourneyPlan} from "../../shared/postPurchase";
 import {savePostPurchasePlanQuery} from "./postPurchasePlans";
-import {postPurchaseActivationReadiness,savePostPurchaseActivationQuery} from "./postPurchaseActivation";
+import {postPurchaseActivationReadiness,postPurchaseOperatorReady,savePostPurchaseActivationQuery} from "./postPurchaseActivation";
 import {postPurchaseDeliveryReadinessQuery} from "./postPurchaseDeliveryReadiness";
 import {recoveryRuntimeSchemaReadyQuery} from "./checkoutRecoverySchema";
 import {readProductionRecoveryScope,commerceConnectionFingerprint} from "./checkoutRecoveryProductionRelease";
 import {recoveryWorkerEnabled} from "./checkoutRecoveryWorkerScheduler";
+import { CONSENT_PURPOSES, enrollmentLink, enrollmentNotice, isPostPurchasePurpose,
+  type EnrollmentDraft, type EnrollmentView } from '../../shared/shopifyConsentEnrollment';
+import { enrollmentCaptureReadiness, savedEnrollment, stampEnrollment } from './shopifyConsentEnrollment';
+import { readControlledPostPurchaseScope } from './postPurchaseControlledScope';
+import { postPurchaseTablesQuery, postPurchaseTables } from './postPurchaseQueries';
+import { isEcommercePilotOwner } from './pilotAccess';
 
 export type TemplateTx = { execute: (query: SQL) => Promise<{ rows: Record<string, unknown>[] }> };
 export type TemplateDatabase = TemplateTx & { transaction: <T>(fn: (tx: TemplateTx) => Promise<T>) => Promise<T> };
@@ -181,6 +187,13 @@ export function createShopifyTemplateProvisioner(deps: {
       await persist(tx, m, s); return true;
     }) ?? false;
   }
+  async function controlledPostPurchaseJourney(tx: TemplateTx, m: TemplateMerchant, intentsReady: boolean): Promise<unknown> {
+    const scope = readControlledPostPurchaseScope(deps.env);
+    if (!scope || !intentsReady) return null;
+    return (await tx.execute(sql`SELECT journey FROM ecommerce_post_purchase_intents
+      WHERE id=${scope.intentId}::bigint AND account_id=${m.accountId} AND shop=${m.shop}
+        AND installation_id=${m.installationId} LIMIT 1`)).rows[0]?.journey ?? null;
+  }
   async function deliveryReadiness(tx:TemplateTx,m:TemplateMerchant){
     const schema=(await tx.execute(postPurchaseDeliveryReadinessQuery)).rows[0];
     const post=postPurchaseActivationReadiness(deps.env,m.accountId,m.config,
@@ -193,6 +206,9 @@ export function createShopifyTemplateProvisioner(deps: {
       return item?.status==='ready'&&item.templateId===bindings[journey as PostPurchaseJourney]&&
         typeof item.checkedAt==='number'&&now()-item.checkedAt<=30*60_000;
     });
+    const scopeMatchesSelection = deps.env.RAILWAY_ENVIRONMENT_NAME !== 'production' ||
+      selected.length === 1 && selected[0][0] === await controlledPostPurchaseJourney(tx, m, schema?.intents === true);
+    const postReady = post.canActivate && selectedTemplatesCurrent && s.authorizedFor === m.fingerprint && scopeMatchesSelection;
     const recoverySchema=(await tx.execute(recoveryRuntimeSchemaReadyQuery())).rows[0]?.ready===true;
     const recoveryReleased=!!production&&production.accountId===m.accountId&&production.shop===m.shop ||
       recoveryWorkerEnabled(deps.env)&&deps.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID===m.accountId;
@@ -200,10 +216,11 @@ export function createShopifyTemplateProvisioner(deps: {
       recovery?.status==='ready'&&recovery.templateId===m.config.ecommerceCheckoutRecoveryTemplateId&&
       typeof recovery.checkedAt==='number'&&now()-recovery.checkedAt<=30*60_000;
     return {
-      postPurchase:{canActivate:post.canActivate&&selectedTemplatesCurrent&&s.authorizedFor===m.fingerprint,merchantEnabled:post.merchantEnabled,
-        deliveryEnabled:post.canActivate&&post.merchantEnabled&&selectedTemplatesCurrent&&
+      postPurchase:{canActivate:postReady,merchantEnabled:post.merchantEnabled,
+        deliveryEnabled:postReady&&post.merchantEnabled&&
           (!m.config.ecommercePostPurchaseDeliveryConnection||m.config.ecommercePostPurchaseDeliveryConnection===m.fingerprint),
-        reason:post.blockers[0]??(!selectedTemplatesCurrent?'verification_required':'merchant_activation_required')},
+        reason:post.blockers[0]??(!scopeMatchesSelection?'controlled_journey_release_required':
+          !selectedTemplatesCurrent||s.authorizedFor!==m.fingerprint?'verification_required':'merchant_activation_required')},
       checkoutRecovery:{canActivate:recoveryReady,merchantEnabled:m.config.ecommerceCheckoutRecoveryDeliveryEnabled===true,
         deliveryEnabled:recoveryReady&&m.config.ecommerceCheckoutRecoveryDeliveryEnabled===true&&m.config.ecommerceCheckoutRecoveryDeliveryConnection===m.fingerprint,
         reason:!recoveryReleased?'operator_release_required':!recoverySchema?'schema_required':!recoveryReady?'verification_required':'merchant_activation_required'},
@@ -215,6 +232,76 @@ export function createShopifyTemplateProvisioner(deps: {
       const saved=await tx.execute(savePostPurchasePlanQuery({accountId,shop:m.shop,integrationId:m.installationId,journey,plan}));
       return saved.rows.length===1;
     })??false;
+  }
+  /** Enrollment configuration uses the same owner, installation, privacy and WABA
+   * locks as setup. It never writes consent, outbox, activation or credentials. */
+  async function saveEnrollment(accountId: string, draft: EnrollmentDraft): Promise<boolean> {
+    return await locked(accountId, async (tx, m) => {
+      const saved = stampEnrollment(draft, accountId, m.shop, m.fingerprint, now());
+      if (!saved) return false;
+      const result = await tx.execute(sql`UPDATE integrations SET config=jsonb_set(COALESCE(config,'{}'::jsonb),
+        '{ecommerceConsentEnrollment}',${JSON.stringify(saved)}::jsonb,true)
+        WHERE id=${m.installationId} AND user_id=${accountId} AND type='shopify' AND is_active IS TRUE RETURNING id`);
+      return result.rows.length === 1;
+    }) ?? false;
+  }
+  async function enrollmentView(accountId: string): Promise<EnrollmentView | null> {
+    return locked(accountId, async (tx, m) => {
+      const saved = savedEnrollment(m.config.ecommerceConsentEnrollment);
+      const current = !!saved && saved.connection === m.fingerprint && saved.savedBy === accountId;
+      // Read only the connected merchant's display number, never a caller-supplied
+      // destination or the numeric Graph phone_number_id. Missing metadata fails closed.
+      const metadata = (await tx.execute(sql`SELECT meta_display_phone_number AS display_phone, email AS owner_email
+        FROM users u WHERE id=${accountId} AND meta_phone_number_id=${m.phoneId}
+          AND meta_business_account_id=${m.wabaId} FOR SHARE`)).rows[0];
+      const phone = metadata?.display_phone;
+      const capture = enrollmentCaptureReadiness(deps.env, accountId, m.shop);
+      const postTables = postPurchaseTables((await tx.execute(postPurchaseTablesQuery)).rows[0]);
+      const captureSchema = {
+        postPurchase: postTables.intents && postTables.orders && postTables.consents,
+        checkoutRecovery: (await tx.execute(sql`SELECT to_regclass('public.ecommerce_whatsapp_recovery_consents') IS NOT NULL
+          AND (SELECT count(*) FROM information_schema.columns WHERE table_schema='public'
+            AND table_name='ecommerce_whatsapp_recovery_consents'
+            AND column_name IN ('last_verified_inbound_at','last_verified_wamid'))=2 AS ready`)).rows[0]?.ready === true,
+      };
+      if (deps.env.RAILWAY_ENVIRONMENT_NAME === 'production' && !isEcommercePilotOwner({ id: accountId,
+        email: typeof metadata?.owner_email === 'string' ? metadata.owner_email : null }, deps.env)) capture.postPurchase = false;
+      const delivery = await deliveryReadiness(tx, m), s = waba(m);
+      const plans = readPostPurchasePlans(m.config), bindings = readPostPurchaseTemplateBindings(m.config);
+      const recoveryScope = readProductionRecoveryScope(deps.env, now());
+      const recoveryReleased = !!recoveryScope && recoveryScope.accountId === accountId && recoveryScope.shop === m.shop ||
+        recoveryWorkerEnabled(deps.env) && deps.env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID === accountId;
+      // A production release authorizes one existing intent, not every purpose.
+      // Return only its journey; never expose recipient digests or order identity.
+      const postReleased = postPurchaseOperatorReady(deps.env, accountId);
+      const releasedJourney = postReleased && deps.env.RAILWAY_ENVIRONMENT_NAME === 'production' ?
+        await controlledPostPurchaseJourney(tx, m, postTables.intents) : null;
+      return {
+        shop: m.shop, draft: saved ? { locale: saved.locale, sourceUrl: saved.sourceUrl, merchantName: saved.merchantName, purposes: saved.purposes } : null,
+        revision: saved?.revision ?? null, savedAt: saved?.savedAt ?? null, connectionCurrent: current,
+        phoneAvailable: enrollmentLink(phone, 'orderConfirmation') !== null,
+        rows: CONSENT_PURPOSES.map(purpose => {
+          const kind = isPostPurchasePurpose(purpose) ? 'postPurchase' : 'checkoutRecovery';
+          const state = delivery[kind], item = s.items[purpose];
+          const binding = isPostPurchasePurpose(purpose) ? bindings[purpose] : m.config.ecommerceCheckoutRecoveryTemplateId;
+          const templateReady = s.authorizedFor === m.fingerprint && item?.status === 'ready' && !!binding &&
+            item.templateId === binding && typeof item.checkedAt === 'number' && now() - item.checkedAt <= 30 * 60_000;
+          const selected = isPostPurchasePurpose(purpose) ? plans[purpose].selected : state.merchantEnabled;
+          const operatorReleased = kind === 'postPurchase' ? postReleased &&
+            (deps.env.RAILWAY_ENVIRONMENT_NAME !== 'production' || releasedJourney === purpose) : recoveryReleased;
+          return { purpose, selected, templateReady, merchantEnabled: selected && state.merchantEnabled,
+            operatorReleased, captureReady: capture[kind] && captureSchema[kind], activationBlocked: !operatorReleased || !state.canActivate || !templateReady || (isPostPurchasePurpose(purpose) && !selected),
+            recipientConsent: 'required_per_recipient' as const,
+            blockers: [...(!selected ? ['journey_not_selected'] : []), ...(!templateReady ? ['template_verification_required'] : []),
+              ...(!operatorReleased ? ['operator_release_required'] : []), ...(!capture[kind] ? ['consent_capture_release_required'] : []),
+              ...(!captureSchema[kind] ? ['consent_schema_required'] : []),
+              ...(!state.canActivate ? [state.reason] : []), ...(!state.merchantEnabled ? ['merchant_activation_required'] : []),
+              'recipient_consent_required'],
+            notice: saved?.purposes[purpose].selected ? enrollmentNotice(m.shop, purpose, saved) : null,
+            link: current && saved?.purposes[purpose].selected && capture[kind] && captureSchema[kind] ? enrollmentLink(phone, purpose) : null };
+        }),
+      };
+    });
   }
   async function setDelivery(accountId:string,kind:'postPurchase'|'checkoutRecovery',enabled:boolean):Promise<boolean>{
     if(!enabled)return await lockedInstallation(accountId,async(tx,installation)=>
@@ -423,5 +510,5 @@ export function createShopifyTemplateProvisioner(deps: {
     }
     return "reconciled";
   }
-  return { authorize, view, reconcile, savePlan, setDelivery };
+  return { authorize, view, reconcile, savePlan, setDelivery, saveEnrollment, enrollmentView };
 }

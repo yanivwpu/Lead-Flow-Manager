@@ -14,6 +14,7 @@ import { recoveryRuntimeSchemaReadyQuery } from "./ecommerce/checkoutRecoverySch
 import { shopifyTemplateProvisioner } from "./ecommerce/shopifyTemplateProvisioningRuntime";
 import { parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
 import {parsePostPurchasePlanChange} from "../shared/postPurchase";
+import { registerConsentEnrollmentRoutes } from './ecommerce/shopifyConsentEnrollmentRoutes';
 import {
   canActivateMerchantWorkspace,
   merchantWorkspaceActivated,
@@ -88,6 +89,9 @@ router.get("/template-setup", async (req: Request, res: Response) => {
   try { return res.json(await shopifyTemplateProvisioner.view(accountId)); }
   catch { return res.status(503).json({ error: "Template setup unavailable" }); }
 });
+
+registerConsentEnrollmentRoutes(router, { service: shopifyTemplateProvisioner, writeLimiter: merchantSetupWriteLimiter,
+  appOrigin: () => (process.env.APP_URL || 'https://app.whachatcrm.com').replace(/\/$/, '') });
 
 router.post("/template-setup",merchantSetupWriteLimiter, async (req: Request, res: Response) => {
   res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });

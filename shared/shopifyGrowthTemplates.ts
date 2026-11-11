@@ -4,6 +4,7 @@ import type {PostPurchasePlans} from "./postPurchase";
  * Generic integration edits/reconnects must preserve the committed current values.
  */
 export const SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS=[
+  'ecommerceConsentEnrollment',
   'ecommerceTemplateSetup','ecommercePostPurchaseTemplates','ecommercePostPurchaseTemplateAutoDisabled',
   'ecommercePostPurchasePlans','ecommercePostPurchaseDeliveryEnabled','ecommercePostPurchaseDeliveryConnection',
   'ecommerceCheckoutRecoveryTemplateId','ecommerceCheckoutRecoveryDeliveryEnabled','ecommerceCheckoutRecoveryDeliveryConnection',

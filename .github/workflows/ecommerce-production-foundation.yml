@@ -14,6 +14,7 @@ on:
       - "client/src/components/followups/Shopify*"
       - "client/src/components/ecommerce/**"
       - "shared/shopifyGrowthTemplates.ts"
+      - "shared/shopifyConsentEnrollment.ts"
       - "server/ecommerceMerchantActivationRoutes.ts"
       - "server/userMeta.ts"
       - "client/src/components/integrations/ShopifySimpleSetup.tsx"
