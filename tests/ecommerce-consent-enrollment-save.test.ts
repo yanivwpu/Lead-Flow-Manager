@@ -21,7 +21,7 @@ await build({ entryPoints: ['client/src/components/ecommerce/ShopifyConsentEnrol
       react: `export const useState=(...args)=>globalThis.${fixtureKey}.useState(...args)`,
       '@/lib/auth-context': 'export const useAuth=()=>({user:{id:"fixture"},sessionAligned:true})',
       '@/lib/accountQueryScope': 'export const withUserQueryScope=k=>k',
-      '@tanstack/react-query': `export const useQuery=()=>globalThis.${fixtureKey}.query`,
+      '@tanstack/react-query': `export const useQuery=()=>globalThis.${fixtureKey}.query; export const useQueryClient=()=>({})`,
     };
     b.onResolve({ filter: /.*/ }, a => stubs[a.path] ? { path: a.path, namespace: 'stub' } : undefined);
     b.onLoad({ filter: /.*/, namespace: 'stub' }, a => ({ contents: stubs[a.path], loader: 'js' }));

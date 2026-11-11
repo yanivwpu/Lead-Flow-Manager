@@ -1,0 +1,15 @@
+<div data-whachat-consent data-proxy-path="/apps/whachat-consent" {{ block.shopify_attributes }}>
+  {% if request.design_mode %}
+    <p role="status">{{ 'consent.preview' | t | escape }}</p>
+  {% endif %}
+  <noscript><p>{{ 'consent.javascript' | t | escape }}</p></noscript>
+</div>
+{% schema %}
+{
+  "name": "t:consent.name",
+  "target": "body",
+  "javascript": "consent.js",
+  "stylesheet": "consent.css",
+  "settings": []
+}
+{% endschema %}

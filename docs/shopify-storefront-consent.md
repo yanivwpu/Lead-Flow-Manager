@@ -1,0 +1,67 @@
+# Storefront consent section — issue #285
+
+## Audit and accepted evidence
+
+Base: `805aa566b8a8c42aa857c35cd6c83dec02eb748d` (merged #284). Before implementation, inspected all three app TOMLs, extension directories, proxy/widget routes, merchant configuration, consent ingestion, installation/privacy locks and the manual app-version workflow. No Theme App Extension or Shopify app proxy existed. The generic CRM widget is not Shopify-authenticated and cannot supply customer identity or consent provenance.
+
+PR #284's final commit `cec6dfbd65dccea94855af075d3430b4987d5dea` has four successful Actions runs: e-commerce foundation `42970944548`, onboarding `42970944525`, contact privacy `42970944744`, Marketing `42970944527`. Its PR records 23 focused tests, JSONB save/readback, fixture-browser EN/ES/HE/RTL checks, production build, zero added TypeScript diagnostics, and accepted live UI verification. Reuse that evidence. #279's approved Utility templates and pending Marketing submission, AI Shopping, checkout/email observation, YES/STOP and order-event acceptance are unchanged. This work runs automated fixtures only; no accepted live scenario is replayed.
+
+Production Shopify ownership is pinned by the existing workflow to **WhachatCRM**, client ID `e4585d4da1434c9e5649a2269e716076`, using `shopify.app.whachatcrm.toml`. The legacy reference `shopify.app.toml` contains a different historical client ID; it is not a release target. Do not “repair” IDs or use the default config for release. Staging remains the independently confirmed `2e424c769c25776a9086c36490ed14fc`, not the retired duplicate ending `b56`. No Dashboard ownership query, token inspection/rotation or Shopify mutation was performed.
+
+References reviewed on 2026-11-11:
+
+- [Theme extension configuration, deep links and activation detection](https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/configuration)
+- [Theme extension UX and compatibility](https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/ux)
+- [App proxies](https://shopify.dev/docs/apps/build/online-store/app-proxies) and [signature verification](https://shopify.dev/docs/apps/build/online-store/app-proxies/authenticate-app-proxies)
+- [2026-01 OnlineStoreTheme files](https://shopify.dev/docs/api/admin-graphql/2026-01/objects/OnlineStoreTheme)
+
+## Merchant flow and compatibility
+
+The Growth Engine consent panel reuses the existing saved business name, notice language, purpose selections and additional text. New configurations automatically use the connected shop homepage as configuration provenance; existing declared URLs remain intact. No page or URL entry is needed. Saving retains #284's authenticated write and structural JSONB readback. It creates no grant or delivery permission.
+
+After the separate Shopify version release below, **Add consent to my storefront** opens the connected shop's current theme editor using `activateAppId=<configured app API key>/whatsapp-consent`. The merchant previews the section near the bottom of the page and saves in Shopify. Repeating this embed activation flow does not add repeated app blocks or create pages. Notices load from saved configuration on each page load; edits require no second theme edit. There are no editable notice copies inside Liquid.
+
+The `body` app embed works on Shopify-hosted Online Store 2.0 and vintage themes. It inherits theme typography/colors, offers separate purpose notices/links, mobile touch targets, keyboard focus and EN/ES/HE RTL. It does not extend checkout, headless/Hydrogen, password-protected surfaces that omit embeds, or non-Shopify pages. No compatible Online Store, blocked scripts/CSP or a renamed proxy path yields no consent links and leaves other engine functions usable. A merchant who has customized `/apps/whachat-consent` must restore that app-proxy path in Shopify before using this release; the extension does not fall back to an unsigned cross-origin API.
+
+The application is non-embedded. App Bridge `app.extensions()` therefore is not available here. Backend published-state checks use optional, merchant-approved `read_themes` and a read-only GraphQL query for the MAIN theme's `config/settings_data.json`. They require the exact registered extension UUID, correct shop, `disabled: false`, and a non-processing theme. A draft theme or another app's block cannot establish activation. Changing theme or disabling the embed is detected on the next explicit **Check published theme**; a result is a point-in-time check, not continuous monitoring.
+
+| State | What it proves |
+| --- | --- |
+| Awaiting app release | No operator-recorded released version/UUID; add flow disabled |
+| Configured | Backend is configured, no theme activation claim |
+| Editor opened | Authenticated merchant requested the editor; preview/save still unknown |
+| Merchant confirmed saved | Merchant declares preview/save; distinct from server verification |
+| Enabled/disabled, verified | Fresh authenticated MAIN-theme settings read |
+| Permission required | Optional theme-read approval missing; published state unknown |
+| Proxy approval required | Required Shopify proxy access is missing; add flow stops at merchant approval |
+| Unsupported/unverified | No Online Store theme, malformed data, API failure or connection change; no live claim |
+
+Required installation scopes gain only `write_app_proxy`, needed by Shopify for the signed display proxy. Existing customer/order scopes remain. `read_themes` is optional, with Shopify's own approval link, and catalog scopes retain their separate approval flow. No `write_themes`, theme asset mutation, silent activation, automatic publishing, token exchange or scope grant is implemented. Existing installed merchants must approve Shopify's new required proxy permission after the separately reviewed app version is released; code/config changes alone do not grant it. Missing optional read access does not prevent storefront display, but prevents a verified published-state claim.
+
+## Security and identity
+
+The extension's CDN script requests only the same-origin `/apps/whachat-consent`, without cookies or customer selectors. Shopify forwards to `/api/shopify/consent-storefront`. The handler verifies the raw query's SHA-256 HMAC, fixed proxy prefix, exact shop domain and five-minute freshness; duplicate keys and malformed signatures fail closed before DB access. It does not use browser Origin, unsigned query parameters or Liquid customer fields to select a tenant/customer. No CORS permission is exposed. Shopify signature is the data-provenance authority for public display; custom storefront domains work through the same-origin proxy.
+
+The signed shop must resolve to exactly one owner. The reused enrollment view repeats active installation, entitlement, workspace, privacy, WABA, phone, connection-fingerprint, schema and authorized capture checks under existing locks. The response is an allowlisted HTML fragment containing only selected, current notices and their authorized wa.me links. The intended public **business** destination in those links is necessary for customer-initiated opt-in. No separate phone field, customer phone, customer ID, account ID, token, WABA/Graph ID, HMAC digest, grant state or delivery gate metadata is exposed. All text/URLs are escaped, and the browser rebuilds a strict element/link allowlist without executing returned markup. CSP, nosniff, noindex and private/no-store response headers apply; proxy header restrictions mean the storefront's own CSP remains authoritative. Assets load from Shopify's CDN and the browser uses same-origin fetch; no external script/iframe or inline script permission is needed.
+
+Display and clicks never write consent, customer identity, messages, outbox or delivery preferences. Each purpose retains #284's exact English WhatsApp phrase alongside localized notices. Only a fresh verified Meta inbound signature/raw body with the existing owner/shop/WABA/phone/customer/contact match can create purpose-specific consent. Unknown/ambiguous identities fail closed; matching a Liquid or signed proxy customer ID is deliberately insufficient and unused. Existing STOP tombstones, replay ordering, DNC, privacy, purchase, freshness and delivery rechecks remain authoritative. There is no visitor form, consent POST or customer data retention added.
+
+Setup audit metadata is one connection-bound JSONB object in the existing installation config: editor request and merchant confirmation timestamps. Repeat actions are idempotent. Generic integration writes strip this reserved field; a changed installation/WABA/phone invalidates prior confirmations. Existing integration erasure removes this metadata with the installation. Published reads are returned to the authenticated merchant and are not retained as customer evidence. Request handlers log no signatures, customer parameters or tokens.
+
+Template approval, merchant delivery preference, **per-recipient verified consent**, and operator production delivery release remain four independent gates in the existing readiness table. This section grants none of them. Public delivery stays OFF.
+
+## Separate controlled pilot release — not executed by this code task
+
+1. Review this PR and CI. Review required `write_app_proxy`, optional `read_themes`, exact production/staging app identities, fixed proxy path and all unchanged webhook/privacy URLs. Keep #281 expiring-token work separate. No migration or template resubmission is needed.
+2. Obtain separate owner authorization before any backend deployment, Shopify staging/dev-store operation or app version operation. Backend deployment alone does **not** publish Liquid/CDN assets or the proxy config. The existing manual `shopify-app-stage-unreleased.yml` workflow validates the pinned production identity and uses `shopify app deploy --config whachatcrm --no-release`; it is never triggered by push/PR. Do not run it as part of this code task.
+3. Under that separate authorization, create an **unreleased** complete app version for the correct app, review the generated extension registration/UUID, all extensions, scopes, proxy and webhook diff in Shopify Dev Dashboard. Use Shopify's native development-store/version review to validate the new surface only; do not repeat accepted live journeys. First registration can add a CLI-managed extension UID: review/persist that identity before subsequent version operations. This task intentionally does not invent a registered production UUID.
+4. Obtain explicit owner approval before releasing that exact Shopify app version. Required scope approval belongs to the merchant in Shopify. Verify that approved proxy requests reach the backend. Keep recipient capture scopes and all delivery gates at their existing settings.
+5. Only after the real Shopify release, record `SHOPIFY_CONSENT_EXTENSION_RELEASED_VERSION=<reviewed version name>` and `SHOPIFY_CONSENT_EXTENSION_ID=<registered UUID from Shopify's block type>` for the matching app/environment. `SHOPIFY_API_KEY` must match the pinned app client ID. Leave both new variables absent until then; the UI truthfully shows awaiting release. The version name is an operator attestation, not an API-discovered release assertion. A staged unreleased version is insufficient.
+6. Merchant opens Growth Engine, reviews/saves existing notices, chooses **Add consent to my storefront**, previews and saves in Shopify. Confirm through **I previewed and saved in Shopify**, optionally approve read-only theme access, then **Check published theme**. Without read permission, display remains possible but state remains unverified. Never represent merchant confirmation as server proof.
+7. Customer opt-in remains voluntary, exact-purpose, and subject to signed Meta identity checks. Any new real-customer acceptance or send requires separate explicit authorization for the exact recipient/journey and existing independent operator gates. Neither the release nor merchant save authorizes messaging. No pilot send is requested by this runbook.
+
+Rollback: merchant disables the embed in Shopify and saves; recheck MAIN theme. Remove the two operator release-record variables to disable new add flows. If needed, separately authorize rollback of the Shopify app version and backend release. Preserve consent/STOP history and independent delivery kill switches. No theme-code surgery, page deletion, token rotation or grant backfill is needed.
+
+## Automated validation
+
+`node --import tsx --test tests/ecommerce-consent-*.test.ts` covers proxy tampering, cross-shop injection, untrusted customer fields, no grant route, allowlisted output, XSS, EN/ES/HE/RTL, release state, merchant confirmation, MAIN theme/foreign UUID/disabled status, missing permissions, in-flight connection changes, native HTTP and real JSONB idempotency/isolation. The unchanged signed inbound/STOP/identity tests are retained in the e-commerce CI suite, including native PostgreSQL. Shopify CLI **5.0.1** Theme Check validates the actual Liquid/schema/locale files without an app release. A dedicated CodeQL job, exact-base TypeScript regression check and production build run on the PR. Local Chromium desktop/mobile fixtures verify rendering, focus, touch targets, no overflow, DOM sanitization and no external calls. These are simulated local checks, not live Shopify acceptance or proof of a registered/released extension.

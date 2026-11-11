@@ -8,6 +8,7 @@ export const SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS=[
   'ecommerceTemplateSetup','ecommercePostPurchaseTemplates','ecommercePostPurchaseTemplateAutoDisabled',
   'ecommercePostPurchasePlans','ecommercePostPurchaseDeliveryEnabled','ecommercePostPurchaseDeliveryConnection',
   'ecommerceCheckoutRecoveryTemplateId','ecommerceCheckoutRecoveryDeliveryEnabled','ecommerceCheckoutRecoveryDeliveryConnection',
+  'ecommerceConsentThemeSetup',
 ] as const;
 export function stripShopifyGrowthManagedConfig(config:unknown):Record<string,unknown>{
   if(!config||typeof config!=='object'||Array.isArray(config))return {};

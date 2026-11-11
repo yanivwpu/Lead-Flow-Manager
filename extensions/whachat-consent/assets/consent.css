@@ -1,0 +1,7 @@
+.whachat-consent { color: inherit; background: inherit; font: inherit; max-width: 64rem; margin: 1.5rem auto; padding: 1rem; text-align: start; overflow-wrap: anywhere; }
+.whachat-consent article { border: 1px solid currentColor; border-radius: .5rem; padding: 1rem; margin-block: 1rem; }
+.whachat-consent-notice { white-space: pre-wrap; }
+.whachat-consent code { white-space: normal; unicode-bidi: isolate; }
+.whachat-consent a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: .5rem; text-decoration: underline; color: inherit; }
+.whachat-consent a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (max-width: 480px) { .whachat-consent { margin: .5rem; padding: .5rem; } }

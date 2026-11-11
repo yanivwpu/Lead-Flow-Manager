@@ -12,6 +12,7 @@ import { enrollmentCaptureReadiness } from '../server/ecommerce/shopifyConsentEn
 import { CONSENT_PURPOSES, emptyEnrollment, enrollmentLink, enrollmentNotice, parseEnrollmentDraft, enrollmentSourceAllowed, enrollmentDraftsEqual,
   WHATSAPP_CONSENT_PHRASES } from '../shared/shopifyConsentEnrollment';
 import { stripShopifyGrowthManagedConfig } from '../shared/shopifyGrowthTemplates';
+import { consentStorefrontHtml } from '../server/ecommerce/shopifyConsentStorefront';
 
 const account = '10000000-0000-4000-8000-000000000001', other = '20000000-0000-4000-8000-000000000002';
 const shop = 'first.myshopify.com', at = Date.now(), key = 'k'.repeat(36);
@@ -262,6 +263,56 @@ test('production readiness shows release only for the exact existing intent jour
     await f.db.execute(sql`UPDATE ecommerce_post_purchase_intents SET account_id=${other}`);
     view = (await f.service.enrollmentView(account))!;
     assert.ok(view.rows.every(r => !r.operatorReleased));
+    assert.equal(f.calls(), 0);
+  } finally { await f.pg.close(); }
+});
+
+test('theme setup uses native JSONB, is idempotent and connection-bound, and cannot alter consent/delivery or another tenant', async () => {
+  const f = await fixture();
+  try {
+    const foreign = await f.config(other), before = await f.config();
+    for (let i = 0; i < 2; i++) assert.equal(await f.service.recordConsentThemeAction(account, 'open_editor'), true);
+    assert.equal(await f.service.recordConsentThemeAction(account, 'confirm_saved'), true);
+    const saved = await f.config(), context = await f.service.consentInstallation(account);
+    assert.equal(saved.ecommerceConsentThemeSetup.editorOpenedAt, new Date(at).toISOString());
+    assert.equal(saved.ecommerceConsentThemeSetup.merchantConfirmedAt, new Date(at).toISOString());
+    assert.equal(context?.setup.connection, context?.connection);
+    assert.deepEqual(Object.fromEntries(Object.entries(saved).filter(([k]) => k !== 'ecommerceConsentThemeSetup')), before);
+    assert.deepEqual(await f.config(other), foreign);
+    assert.equal((await f.db.execute(sql`SELECT count(*)::int AS total FROM ecommerce_post_purchase_consents`)).rows[0].total, 0);
+    assert.deepEqual(stripShopifyGrowthManagedConfig({ ecommerceConsentThemeSetup: saved.ecommerceConsentThemeSetup, keep: true }), { keep: true });
+    await f.db.execute(sql`UPDATE users SET meta_phone_number_id='999999' WHERE id=${account}`);
+    const changed = await f.service.consentInstallation(account);
+    assert.notEqual(changed?.setup.connection, changed?.connection);
+    await f.service.recordConsentThemeAction(account, 'open_editor');
+    assert.equal((await f.config()).ecommerceConsentThemeSetup.merchantConfirmedAt, undefined);
+    await f.db.execute(sql`UPDATE users SET deletion_requested_at=NOW() WHERE id=${account}`);
+    assert.equal(await f.service.consentInstallation(account), null);
+    assert.equal(await f.service.recordConsentThemeAction(account, 'open_editor'), false);
+    assert.equal(await f.service.recordConsentThemeAction('unknown', 'confirm_saved'), false);
+    assert.equal(f.calls(), 0);
+  } finally { await f.pg.close(); }
+});
+
+test('real enrollment readback offers checkout and post-purchase consent before delivery/journey activation and after pause', async () => {
+  const f = await fixture();
+  try {
+    const selected = draft(); selected.purposes.checkoutRecovery.selected = true; selected.purposes.fulfillmentUpdate.selected = true;
+    assert.equal(await f.service.saveEnrollment(account, selected), true);
+    for (const phase of ['before activation', 'after explicit pause']) {
+      if (phase === 'after explicit pause') {
+        assert.equal(await f.service.setDelivery(account, 'checkoutRecovery', false), true);
+        assert.equal(await f.service.setDelivery(account, 'postPurchase', false), true);
+      }
+      const v = (await f.service.enrollmentView(account))!;
+      for (const purpose of ['checkoutRecovery', 'fulfillmentUpdate'] as const) {
+        const row = v.rows.find(r => r.purpose === purpose)!;
+        assert.equal(row.selected, false); assert.equal(row.merchantEnabled, false); assert.ok(row.link);
+        assert.ok(consentStorefrontHtml(v)?.includes(row.link!.replaceAll('&', '&amp;')), `${purpose}: ${phase}`);
+      }
+      assert.ok(v.rows.every(r => !r.merchantEnabled));
+    }
+    assert.equal((await f.db.execute(sql`SELECT count(*)::int AS total FROM ecommerce_post_purchase_consents`)).rows[0].total, 0);
     assert.equal(f.calls(), 0);
   } finally { await f.pg.close(); }
 });
