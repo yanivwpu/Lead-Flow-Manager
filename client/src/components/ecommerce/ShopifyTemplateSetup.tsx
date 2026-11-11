@@ -9,7 +9,7 @@ const copy = {
   en: {
     title: "Automatic WhatsApp message setup", detail: "We check your connected WhatsApp Business Account, reuse compatible approved messages, and submit missing English messages to Meta for review.",
     permission: "Set up order confirmations, shipping updates, cancellations and checkout reminders. This authorizes template setup only. Choose and enable your journeys separately; customers need consent for each message purpose.",
-    authorize: "Set up my messages", working: "Saving…", connect: "Connect WhatsApp", refresh: "Check progress", error: "Setup status is unavailable. Try again.",
+    authorize: "Set up my messages", working: "Saving…", connect: "Connect WhatsApp", refresh: "Refresh template status", refreshing:"Checking Meta status…", refreshed:"Status updated", lastChecked:"Last checked", pendingHint:"Meta approval may take additional time. You can leave this page while we keep checking.", error: "Setup status is unavailable. Try again.",
     waiting: "Setup is running. You can leave this page; we keep checking Meta approval.", rollout: "Automatic setup is not available for this store yet.",
     safe: "Template approval does not turn on customer messages. Each journey needs your permission and must pass its delivery checks.",
     labels: ["Order confirmation", "Shipping update", "Order cancellation", "Checkout reminder"],
@@ -33,7 +33,7 @@ const copy = {
   es: {
     title: "Configuración automática de mensajes WhatsApp", detail: "Comprobamos tu cuenta de WhatsApp Business, reutilizamos mensajes aprobados compatibles y enviamos los que faltan en inglés a Meta para su revisión.",
     permission: "Configura confirmaciones, envíos, cancelaciones y recordatorios de checkout. Esto autoriza solo las plantillas. Elige y activa los recorridos por separado; cada finalidad requiere consentimiento del cliente.",
-    authorize: "Configurar mis mensajes", working: "Guardando…", connect: "Conectar WhatsApp", refresh: "Consultar progreso", error: "Estado no disponible. Inténtalo de nuevo.",
+    authorize: "Configurar mis mensajes", working: "Guardando…", connect: "Conectar WhatsApp", refresh: "Actualizar estado de plantillas", refreshing:"Consultando el estado de Meta…", refreshed:"Estado actualizado", lastChecked:"Última comprobación", pendingHint:"La aprobación de Meta puede tardar. Puedes salir de esta página mientras seguimos comprobando.", error: "Estado no disponible. Inténtalo de nuevo.",
     waiting: "La configuración continúa aunque salgas de esta página. Comprobamos la aprobación de Meta.", rollout: "La configuración automática aún no está disponible para esta tienda.",
     safe: "La aprobación no activa mensajes a clientes. Cada recorrido requiere tu permiso y las comprobaciones de envío.",
     labels: ["Confirmación de pedido", "Actualización de envío", "Cancelación de pedido", "Recordatorio de checkout"],
@@ -55,7 +55,7 @@ const copy = {
   he: {
     title: "הגדרה אוטומטית של הודעות WhatsApp", detail: "נבדוק את חשבון WhatsApp Business המחובר, נשתמש בהודעות מאושרות מתאימות ונגיש ל-Meta הודעות חסרות באנגלית לבדיקה.",
     permission: "הגדרת אישורי הזמנה, עדכוני משלוח, ביטולים ותזכורות תשלום. האישור מתייחס להגדרת תבניות בלבד. בוחרים ומפעילים מסעות בנפרד; נדרשת הסכמת הלקוח לכל מטרת הודעה.",
-    authorize: "הגדרת ההודעות שלי", working: "שומרים…", connect: "חיבור WhatsApp", refresh: "בדיקת התקדמות", error: "מצב ההגדרה אינו זמין. יש לנסות שוב.",
+    authorize: "הגדרת ההודעות שלי", working: "שומרים…", connect: "חיבור WhatsApp", refresh: "רענון מצב התבניות", refreshing:"בודקים את המצב מול Meta…", refreshed:"המצב עודכן", lastChecked:"נבדק לאחרונה", pendingHint:"אישור Meta עשוי להימשך זמן נוסף. ניתן לצאת מהדף בזמן שאנו ממשיכים לבדוק.", error: "מצב ההגדרה אינו זמין. יש לנסות שוב.",
     waiting: "ההגדרה ממשיכה גם לאחר יציאה מהדף. נמשיך לבדוק את האישור של Meta.", rollout: "ההגדרה האוטומטית עדיין אינה זמינה לחנות זו.",
     safe: "אישור תבנית אינו מפעיל שליחה ללקוחות. כל מסע דורש את אישורכם ואת בדיקות הזכאות לשליחה.",
     labels: ["אישור הזמנה", "עדכון משלוח", "ביטול הזמנה", "תזכורת לתשלום"],
@@ -75,8 +75,8 @@ const copy = {
   },
 } as const;
 
-export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed = false, onAuthorize, onRefresh,onPlan,onDelivery }: {
-  locale: string; data?: Setup; saving?: boolean; failed?: boolean; onAuthorize: () => void; onRefresh: () => void;
+export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed = false, refreshing = false, refreshedAt = null, onAuthorize, onRefresh,onPlan,onDelivery }: {
+  locale: string; data?: Setup; saving?: boolean; failed?: boolean; refreshing?: boolean; refreshedAt?: number|null; onAuthorize: () => void; onRefresh: () => void;
   onPlan?:(journey:PostPurchaseJourney,selected:boolean)=>void;
   onDelivery?:(journey:'postPurchase'|'checkoutRecovery',enabled:boolean)=>void;
 }) {
@@ -130,10 +130,19 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
     </div>}
     {failed && <p role="alert" className="text-sm text-red-700">{t.error}</p>}
     {saving&&data?.authorized&&<p role="status" className="text-sm text-slate-600">{t.working}</p>}
-    <div className="flex flex-wrap gap-4 text-sm text-blue-700">
-      <button type="button" disabled={saving} onClick={onRefresh} className="underline">{t.refresh}</button>
+    <div className="flex flex-wrap items-center gap-4 text-sm text-blue-700">
+      <button type="button" disabled={saving || refreshing} aria-busy={refreshing}
+        data-testid="refresh-template-status" onClick={onRefresh}
+        className="inline-flex items-center gap-2 rounded-md border border-blue-200 px-3 py-2 font-medium hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60">
+        {refreshing && <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />}
+        {refreshing ? t.refreshing : t.refresh}
+      </button>
       {data?.rows.some(row => row.status === "action_required" || row.status === "paused") && <a href="/app/templates?tab=templates" className="underline">{t.library}</a>}
     </div>
+    <p role="status" aria-live="polite" data-testid="template-refresh-feedback" className="text-xs text-slate-600">
+      {refreshing ? t.refreshing : refreshedAt != null ? `${t.refreshed}: ${new Date(refreshedAt).toLocaleTimeString(language)}` : ""}
+      {data?.rows.some(row => row.status === "awaiting_approval") && ` ${t.pendingHint}`}
+    </p>
     <p className="text-xs text-slate-600">{t.safe}</p>
   </section>;
 }
@@ -141,6 +150,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
 export function ShopifyTemplateSetup({ locale }: { locale: string }) {
   const { user, sessionAligned } = useAuth(), client = useQueryClient();
   const [saving, setSaving] = useState(false), [failed, setFailed] = useState(false);
+  const [refreshing,setRefreshing]=useState(false), [refreshedAt,setRefreshedAt]=useState<number|null>(null);
   const endpoint = "/api/shopify/merchant-engine/template-setup";
   const query = useQuery<Setup>({
     queryKey: withUserQueryScope([endpoint], user?.id), enabled: !!user?.id && sessionAligned, retry: false,
@@ -169,6 +179,15 @@ export function ShopifyTemplateSetup({ locale }: { locale: string }) {
       await client.invalidateQueries({ queryKey: withUserQueryScope(["/api/templates"], user?.id) });
     } catch { setFailed(true); } finally { setSaving(false); }
   }
+  async function refreshStatus(){
+    if(refreshing || saving || !sessionAligned)return;
+    setRefreshing(true);setFailed(false);
+    try {
+      const result=await query.refetch();
+      if(result.isError || !result.data)throw Error("template_setup_unavailable");
+      setRefreshedAt(Date.now());
+    } catch { setFailed(true); } finally { setRefreshing(false); }
+  }
   async function update(path:string,body:unknown){
     if(!user?.id||!sessionAligned||saving)return;
     setSaving(true);setFailed(false);
@@ -181,8 +200,8 @@ export function ShopifyTemplateSetup({ locale }: { locale: string }) {
     }catch{setFailed(true);}finally{setSaving(false);}
   }
   return <ShopifyTemplateSetupPanel locale={locale} data={sessionAligned && !query.isError ? setupData : undefined}
-    saving={saving} failed={failed || query.isError} onAuthorize={() => void authorize()}
-    onRefresh={() => { void query.refetch(); }}
+    saving={saving} failed={failed || query.isError} refreshing={refreshing} refreshedAt={refreshedAt} onAuthorize={() => void authorize()}
+    onRefresh={() => { void refreshStatus(); }}
     onPlan={(journey,selected)=>void update('journey-plan',{action:'save_post_purchase_plan',journey,
       plan:{selected,delayMinutes:query.data?.postPurchasePlans?.[journey].delayMinutes??0}})}
     onDelivery={(journey,enabled)=>void update('journey-activation',{action:'set_journey_delivery',journey,enabled})}/>

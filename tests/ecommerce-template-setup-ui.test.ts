@@ -20,8 +20,8 @@ test("EN/ES/HE setup shows actual approval progress, RTL, explicit authorization
       } }] });
     const { ShopifyTemplateSetupPanel } = await import(pathToFileURL(join(dir, "ui.mjs")).href);
     const data: ShopifyTemplateSetup = { available: true, connected: true, authorized: false, rows: [] };
-    const render = (locale: string, result: ShopifyTemplateSetup = data) => parseHTML(renderToStaticMarkup(React.createElement(ShopifyTemplateSetupPanel, {
-      locale, data: result, onAuthorize: () => {}, onRefresh: () => {}, onPlan: () => {}, onDelivery: () => {},
+    const render = (locale: string, result: ShopifyTemplateSetup = data, extra:Record<string,unknown>={}) => parseHTML(renderToStaticMarkup(React.createElement(ShopifyTemplateSetupPanel, {
+      locale, data: result, onAuthorize: () => {}, onRefresh: () => {}, onPlan: () => {}, onDelivery: () => {}, ...extra,
     }))).document;
     for (const [locale, title, ready] of [["en", "Automatic WhatsApp message setup", "Ready"],
       ["es", "Configuración automática de mensajes WhatsApp", "Listo"], ["he", "הגדרה אוטומטית של הודעות WhatsApp", "מוכן"]]) {
@@ -36,6 +36,20 @@ test("EN/ES/HE setup shows actual approval progress, RTL, explicit authorization
           status: i === 0 ? "ready" : i === 1 ? "awaiting_approval" : i === 2 ? "action_required" : "paused",
           reason: i === 0 ? "approved_and_bound" : i === 1 ? "meta_review_pending" : i === 2 ? "meta_template_rejected" : "meta_template_paused" })) };
       const completed = render(locale, progress);
+      const refresh=completed.querySelector('[data-testid="refresh-template-status"]');
+      assert.ok(refresh && !refresh.hasAttribute("disabled"),"refresh is an enabled button");
+      assert.equal(refresh.getAttribute("aria-busy"),"false");
+      assert.ok(completed.querySelector('[data-testid="template-refresh-feedback"]')?.textContent.includes(
+        locale==="en"?"Meta approval":locale==="es"?"aprobación de Meta":"אישור Meta"
+      ));
+      const loading=render(locale,progress,{refreshing:true});
+      assert.equal(loading.querySelector('[data-testid="refresh-template-status"]')?.getAttribute("aria-busy"),"true");
+      assert.ok(loading.querySelector('[data-testid="refresh-template-status"]')?.hasAttribute("disabled"));
+      const refreshed=render(locale,progress,{refreshedAt:Date.UTC(2026,10,10,16,0,0)});
+      assert.ok(refreshed.querySelector('[data-testid="template-refresh-feedback"]')?.textContent.includes(
+        locale==="en"?"Status updated":locale==="es"?"Estado actualizado":"המצב עודכן"
+      ));
+
       assert.equal(completed.querySelectorAll('li[data-testid^="template-progress-"]').length, 4);
       assert.ok(completed.querySelector('[data-testid="template-progress-orderConfirmation"]')?.textContent.includes(ready));
       assert.ok(completed.querySelector('[data-testid="activate-postPurchase"]')?.hasAttribute("disabled"));
