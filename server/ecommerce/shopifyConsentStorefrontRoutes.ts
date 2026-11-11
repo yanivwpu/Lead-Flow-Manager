@@ -1,14 +1,18 @@
 import type { Router, RequestHandler } from 'express';
+import rateLimit from 'express-rate-limit';
 import { verifyConsentProxy, consentStorefrontHtml } from './shopifyConsentStorefront';
 import { isMerchantActivationPost } from './merchantActivationPolicy';
 import type { EnrollmentView } from '../../shared/shopifyConsentEnrollment';
 import type { ConsentThemeSetup } from '../../shared/shopifyConsentStorefront';
 
 export function registerConsentProxyRoute(router: Router, deps: {
-  secret: () => string; limiter: RequestHandler;
+  secret: () => string;
   enrollmentForShop: (shop: string) => Promise<EnrollmentView | null>;
 }) {
-  router.get('/consent-storefront', deps.limiter, async (req, res) => {
+  // Keep the concrete middleware at the route boundary so both production
+  // wiring and security analysis can verify that signature checks are bounded.
+  router.get('/consent-storefront', rateLimit({ windowMs: 60_000, limit: 120,
+    standardHeaders: true, legacyHeaders: false }), async (req, res) => {
     res.set({ 'Cache-Control': 'no-store, private, max-age=0', 'X-Content-Type-Options': 'nosniff',
       'X-Robots-Tag': 'noindex, nofollow', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'" });
     const verified = verifyConsentProxy(req.originalUrl.split('?')[1] ?? '', deps.secret());

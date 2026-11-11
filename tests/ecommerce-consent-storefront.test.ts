@@ -45,7 +45,8 @@ test('localized public notices are a safe allowlist with exact affirmative phras
     assert.equal(section.lang, locale); assert.equal(section.dir, locale === 'he' ? 'rtl' : 'ltr');
     assert.equal(document.querySelectorAll('article').length, 7);
     assert.equal(document.querySelector('script, img, form, input'), null);
-    assert.ok(section.textContent.includes('STOP')); assert.ok(section.textContent.includes(shop));
+    assert.ok(section.textContent.includes('STOP'));
+    assert.equal(document.querySelector('article p')!.textContent, v.rows[0].notice);
     for (const a of document.querySelectorAll('a')) {
       const link = new URL(a.getAttribute('href')!);
       assert.equal(link.host, 'wa.me'); assert.ok(Object.values(WHATSAPP_CONSENT_PHRASES).includes(link.searchParams.get('text')!));
@@ -106,7 +107,7 @@ test('release and merchant confirmations cannot claim live status; permission fa
 test('native HTTP proxy and merchant setup enforce separate provenance, no cache/CORS, same-origin and no grant writes', async () => {
   const app = express(), router = Router(); let reads = 0, records = 0, requiresApproval = false;
   app.use(express.json()); app.use((req, _res, next) => { if (req.get('x-fixture-owner')) req.user = { id: 'owner' } as any; next(); });
-  registerConsentProxyRoute(router, { secret: () => secret, limiter: (_q, _s, n) => n(), enrollmentForShop: async domain => { reads++; return domain === shop ? view() : null; } });
+  registerConsentProxyRoute(router, { secret: () => secret, enrollmentForShop: async domain => { reads++; return domain === shop ? view() : null; } });
   registerConsentThemeRoutes(router, { limiter: (_q, _s, n) => n(), appOrigin: () => 'https://app.whachatcrm.com',
     record: async (id) => { assert.equal(id, 'owner'); records++; return true; }, setup: async (_id, verify) => ({ state: requiresApproval && verify ? 'proxy_permission_required' : 'configured', editorUrl: requiresApproval && verify ? null : consentEditorUrl(shop, key),
       approvalUrl: null, releasedVersion: 'reviewed', checkedAt: null, editorOpenedAt: null, merchantConfirmedAt: null }) });
@@ -130,5 +131,14 @@ test('native HTTP proxy and merchant setup enforce separate provenance, no cache
     assert.equal(approval.state, 'proxy_permission_required'); assert.equal(approval.editorUrl, null);
     assert.equal(records, 1, 'missing merchant approval cannot record an editor-open action');
     assert.equal((await fetch(root + '/consent-storefront?' + query(), { method: 'POST' })).status, 404);
+    const beforeBurst = reads;
+    let limited = false;
+    for (let i = 0; i < 125; i++) {
+      const response = await fetch(root + '/consent-storefront?signature=invalid');
+      if (response.status === 429) { limited = true; break; }
+      assert.equal(response.status, 403);
+    }
+    assert.equal(limited, true, 'invalid signature checks are rate limited at the actual route boundary');
+    assert.equal(reads, beforeBurst, 'forged requests never reach tenant data');
   } finally { await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())); }
 });

@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { sql } from 'drizzle-orm';
 import { db } from '../../drizzle/db';
 import { shopifyTemplateProvisioner } from './shopifyTemplateProvisioningRuntime';
@@ -14,7 +13,6 @@ export const consentThemeSetup = createConsentThemeService({
 export const consentProxyRouter = Router();
 registerConsentProxyRoute(consentProxyRouter, {
   secret: () => process.env.SHOPIFY_API_SECRET ?? '',
-  limiter: rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }),
   enrollmentForShop: async shop => {
     // Shopify signs the shop. Never accept account/phone/customer selectors.
     // Ambiguous/reassigned/deleted installations fail closed in the reused
