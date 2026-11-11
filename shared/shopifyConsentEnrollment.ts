@@ -1,4 +1,5 @@
 import { POST_PURCHASE_JOURNEYS, type PostPurchaseJourney } from './postPurchase';
+import isEqual from 'lodash/isEqual.js';
 
 export const CONSENT_PURPOSES = [...POST_PURCHASE_JOURNEYS, 'checkoutRecovery'] as const;
 export type ConsentPurpose = typeof CONSENT_PURPOSES[number];
@@ -19,6 +20,10 @@ export type EnrollmentDraft = {
   locale: ConsentLocale; sourceUrl: string; merchantName: string;
   purposes: Record<ConsentPurpose, { selected: boolean; additionalText: string }>;
 };
+/** JSONB may reorder keys at every nesting level. Missing readback is never a match. */
+export function enrollmentDraftsEqual(a: EnrollmentDraft | null | undefined, b: EnrollmentDraft | null | undefined): boolean {
+  return !!a && !!b && isEqual(a, b);
+}
 export type SavedEnrollment = EnrollmentDraft & {
   version: 1; revision: string; savedAt: string; savedBy: string; connection: string;
 };

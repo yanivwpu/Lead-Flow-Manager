@@ -9,7 +9,7 @@ import { classifyPostPurchaseConsent } from '../server/ecommerce/postPurchaseCon
 import { classifyRecoveryConsentInbound } from '../server/ecommerce/checkoutRecoveryInboundConsentGate';
 import { postPurchaseDeliveryReadinessQuery } from '../server/ecommerce/postPurchaseDeliveryReadiness';
 import { enrollmentCaptureReadiness } from '../server/ecommerce/shopifyConsentEnrollment';
-import { CONSENT_PURPOSES, emptyEnrollment, enrollmentLink, enrollmentNotice, parseEnrollmentDraft, enrollmentSourceAllowed,
+import { CONSENT_PURPOSES, emptyEnrollment, enrollmentLink, enrollmentNotice, parseEnrollmentDraft, enrollmentSourceAllowed, enrollmentDraftsEqual,
   WHATSAPP_CONSENT_PHRASES } from '../shared/shopifyConsentEnrollment';
 import { stripShopifyGrowthManagedConfig } from '../shared/shopifyGrowthTemplates';
 
@@ -118,6 +118,43 @@ test('enrollment persists provenance only in its tenant, survives refresh, and c
     const missingSchema = (await f.service.enrollmentView(account))!;
     assert.equal(missingSchema.rows[0].link, null); assert.equal(missingSchema.rows[0].captureReady, false);
     assert.ok(missingSchema.rows[0].blockers.includes('consent_schema_required'));
+  } finally { await f.pg.close(); }
+});
+
+test('first enrollment save matches its real JSONB readback regardless of nested key order; real edits never match', async () => {
+  const f = await fixture();
+  try {
+    for (const locale of ['en', 'es', 'he'] as const) {
+      const submitted = draft(); submitted.locale = locale;
+      submitted.purposes.orderConfirmation.additionalText = 'Merchant notice';
+      assert.equal(await f.service.saveEnrollment(account, submitted), true);
+      const persisted = (await f.service.enrollmentView(account))!.draft!;
+      assert.notEqual(JSON.stringify(persisted), JSON.stringify(submitted), 'exercise actual PostgreSQL JSONB key reordering');
+      assert.equal(enrollmentDraftsEqual(persisted, submitted), true);
+      assert.equal(enrollmentDraftsEqual(submitted, persisted), true);
+      const reversed = Object.fromEntries(Object.entries(persisted).reverse());
+      reversed.purposes = Object.fromEntries(Object.entries(persisted.purposes).reverse().map(([purpose, row]) =>
+        [purpose, Object.fromEntries(Object.entries(row).reverse())]));
+      assert.equal(enrollmentDraftsEqual(reversed as typeof submitted, submitted), true);
+      const changedFields = [
+        { ...submitted, sourceUrl: 'https://fixture.myshopify.com/pages/other' },
+        { ...submitted, merchantName: 'Changed name' },
+        { ...submitted, locale: locale === 'es' ? 'en' as const : 'es' as const },
+      ];
+      for (const edited of changedFields) assert.equal(enrollmentDraftsEqual(persisted, edited), false);
+      for (const purpose of CONSENT_PURPOSES) {
+        for (const field of ['selected', 'additionalText'] as const) {
+          const edited = structuredClone(submitted);
+          if (field === 'selected') edited.purposes[purpose].selected = !edited.purposes[purpose].selected;
+          else edited.purposes[purpose].additionalText += ' changed';
+          assert.equal(enrollmentDraftsEqual(persisted, edited), false, `${purpose}.${field}`);
+        }
+      }
+      assert.equal(enrollmentDraftsEqual(persisted, null), false);
+      assert.equal(enrollmentDraftsEqual(undefined, submitted), false);
+      assert.equal(enrollmentDraftsEqual(null, undefined), false);
+    }
+    assert.equal(f.calls(), 0);
   } finally { await f.pg.close(); }
 });
 

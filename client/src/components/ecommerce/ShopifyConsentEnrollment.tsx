@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { withUserQueryScope } from '@/lib/accountQueryScope';
-import { CONSENT_PURPOSES, CONSENT_LABELS, WHATSAPP_CONSENT_PHRASES, emptyEnrollment, enrollmentNotice,
+import { CONSENT_PURPOSES, CONSENT_LABELS, WHATSAPP_CONSENT_PHRASES, emptyEnrollment, enrollmentNotice, enrollmentDraftsEqual,
   type ConsentLocale, type EnrollmentDraft, type EnrollmentView } from '@shared/shopifyConsentEnrollment';
 
 const copy = {
@@ -53,7 +53,7 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
   const lang = (locale.split('-')[0] in copy ? locale.split('-')[0] : 'en') as ConsentLocale, t = copy[lang];
   const [draft, setDraft] = useState<EnrollmentDraft>(() => data?.draft ?? emptyEnrollment(lang));
   const [copied, setCopied] = useState<string | null>(null), [copyFailed, setCopyFailed] = useState(false);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(data?.draft);
+  const dirty = !enrollmentDraftsEqual(draft, data?.draft);
   return <section lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} data-testid="shopify-consent-enrollment" className="space-y-4 rounded-xl border bg-white p-5">
     <h2 className="font-semibold">{t.title}</h2>
     <p className="text-sm text-slate-600">{t.intro}</p><p className="text-sm">{t.rules}</p>
@@ -129,7 +129,7 @@ export function ShopifyConsentEnrollment({ locale }: { locale: string }) {
       const result = await response.json();
       if (result.ok !== true || result.consentGranted !== false || result.messagingEnabled !== false) throw Error('unexpected_consent');
       const check = await query.refetch();
-      if (check.isError || !check.data?.connectionCurrent || JSON.stringify(check.data.draft) !== JSON.stringify(draft)) throw Error('enrollment_not_persisted');
+      if (check.isError || !check.data?.connectionCurrent || !enrollmentDraftsEqual(check.data.draft, draft)) throw Error('enrollment_not_persisted');
       setSaved(true);
     } catch { setFailed(true); } finally { setSaving(false); }
   }
