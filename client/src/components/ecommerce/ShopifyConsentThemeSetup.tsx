@@ -7,15 +7,15 @@ import type { ConsentThemeSetup } from '@shared/shopifyConsentStorefront';
 const copy = {
   en: { add: 'Add consent to my storefront', confirm: 'I previewed and saved in Shopify', verify: 'Check published theme', approve: 'Approve theme read access in Shopify',
     help: 'Preview the consent section in Shopify, then save the theme yourself. Notices stay in sync with your saved configuration. This does not grant consent or enable messaging.',
-    save: 'Save your notice configuration first.', error: 'Storefront setup could not be verified. Retry the published-theme check.',
+    save: 'Save your notices and check consent capture readiness first.', confirmed: 'Your preview/save confirmation is recorded.', error: 'Storefront setup could not be verified. Retry the published-theme check.',
     states: { unreleased: 'Storefront extension awaiting a separate Shopify app version release.', configured: 'Configured; storefront activation not verified.', editor_opened: 'Editor opened; preview and save are not yet verified.', merchant_confirmed_saved: 'You confirmed preview and save; published activation is not verified.', enabled_verified: 'Consent embed enabled on the published theme (verified).', disabled_verified: 'Consent embed is not enabled on the published theme (verified).', not_supported: 'No supported Online Store theme found. Existing engine functions remain available.', permission_required: 'Published state is unverified. Optional merchant approval is needed to read theme settings.', unverified: 'Published state could not be verified.' } },
   es: { add: 'Añadir consentimiento a mi tienda', confirm: 'Revisé y guardé en Shopify', verify: 'Comprobar tema publicado', approve: 'Aprobar lectura del tema en Shopify',
     help: 'Revisa la sección en Shopify y guarda el tema tú mismo. Los avisos se actualizan con la configuración guardada. Esto no otorga consentimiento ni activa mensajes.',
-    save: 'Guarda primero la configuración de avisos.', error: 'No se pudo verificar la instalación. Reintenta comprobar el tema publicado.',
+    save: 'Guarda los avisos y revisa la captura de consentimiento primero.', confirmed: 'Se registró tu confirmación de revisión y guardado.', error: 'No se pudo verificar la instalación. Reintenta comprobar el tema publicado.',
     states: { unreleased: 'La extensión requiere un lanzamiento separado de versión en Shopify.', configured: 'Configurado; activación sin verificar.', editor_opened: 'Editor abierto; vista previa y guardado sin verificar.', merchant_confirmed_saved: 'Confirmaste revisión y guardado; activación publicada sin verificar.', enabled_verified: 'Sección activada en el tema publicado (verificado).', disabled_verified: 'Sección no activada en el tema publicado (verificado).', not_supported: 'No hay tema de tienda compatible. Las funciones existentes siguen disponibles.', permission_required: 'Estado publicado sin verificar. Se necesita aprobación opcional para leer el tema.', unverified: 'No se pudo verificar el estado publicado.' } },
   he: { add: 'הוספת הסכמה לחנות שלי', confirm: 'בדקתי תצוגה מקדימה ושמרתי ב-Shopify', verify: 'בדיקת ערכת העיצוב שפורסמה', approve: 'אישור קריאת ערכת העיצוב ב-Shopify',
     help: 'יש לבדוק את מקטע ההסכמה ב-Shopify ולשמור את ערכת העיצוב בעצמך. ההודעות מתעדכנות לפי ההגדרות השמורות. הפעולה אינה מעניקה הסכמה ואינה מפעילה הודעות.',
-    save: 'יש לשמור תחילה את הגדרות ההודעות.', error: 'לא ניתן לאמת את ההתקנה. יש לנסות שוב את בדיקת ערכת העיצוב.',
+    save: 'יש לשמור תחילה את ההודעות ולבדוק מוכנות לאיסוף הסכמה.', confirmed: 'אישורך על בדיקה ושמירה תועד.', error: 'לא ניתן לאמת את ההתקנה. יש לנסות שוב את בדיקת ערכת העיצוב.',
     states: { unreleased: 'התוסף ממתין לשחרור נפרד של גרסת יישום Shopify.', configured: 'הוגדר; ההפעלה בחנות לא אומתה.', editor_opened: 'העורך נפתח; תצוגה מקדימה ושמירה טרם אומתו.', merchant_confirmed_saved: 'אישרת בדיקה ושמירה; ההפעלה שפורסמה לא אומתה.', enabled_verified: 'מקטע ההסכמה מופעל בערכת העיצוב שפורסמה (אומת).', disabled_verified: 'מקטע ההסכמה אינו מופעל בערכת העיצוב שפורסמה (אומת).', not_supported: 'לא נמצאה ערכת עיצוב נתמכת. התכונות הקיימות ממשיכות לפעול.', permission_required: 'המצב שפורסם לא אומת. נדרש אישור רשות לקריאת ההגדרות.', unverified: 'לא ניתן לאמת את המצב שפורסם.' } },
 };
 export function ConsentThemePanel({ locale, setup, blocked, busy, failed, action }: {
@@ -26,6 +26,8 @@ export function ConsentThemePanel({ locale, setup, blocked, busy, failed, action
   return <div lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} className="space-y-2 rounded border p-3" data-testid="consent-theme-setup">
     <p className="text-sm">{t.help}</p>
     {setup && <p role="status">{t.states[setup.state]}</p>}
+    {setup?.merchantConfirmedAt && <p className="text-sm">{t.confirmed}</p>}
+    {setup?.checkedAt && <time className="block text-xs" dateTime={setup.checkedAt}>{new Date(setup.checkedAt).toLocaleString(lang)}</time>}
     {blocked && <p>{t.save}</p>}
     <button type="button" className="rounded border px-4 py-2 disabled:opacity-50" disabled={blocked || busy || !setup?.editorUrl} onClick={() => action('open_editor')}>{t.add}</button>
     {setup?.editorUrl && <div className="flex flex-wrap gap-2">
