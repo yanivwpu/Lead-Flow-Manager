@@ -1,3 +1,5 @@
+import { consentCaptureSchemaQuery } from './consentCaptureSchema';
+import { productionConsentCaptureBlocker } from './consentCaptureGate';
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { getEffectivePlanForUser } from "../../shared/trialEntitlements";
@@ -16,7 +18,7 @@ import {readProductionRecoveryScope,commerceConnectionFingerprint} from "./check
 import {recoveryWorkerEnabled} from "./checkoutRecoveryWorkerScheduler";
 import { CONSENT_PURPOSES, enrollmentLink, enrollmentNotice, isPostPurchasePurpose,
   type EnrollmentDraft, type EnrollmentView } from '../../shared/shopifyConsentEnrollment';
-import { enrollmentCaptureReadiness, savedEnrollment, stampEnrollment } from './shopifyConsentEnrollment';
+import { enrollmentCaptureReadiness, enrollmentCaptureBlocker, savedEnrollment, stampEnrollment } from './shopifyConsentEnrollment';
 import { readControlledPostPurchaseScope } from './postPurchaseControlledScope';
 import { postPurchaseTablesQuery, postPurchaseTables } from './postPurchaseQueries';
 import { isEcommercePilotOwner } from './pilotAccess';
@@ -255,16 +257,15 @@ export function createShopifyTemplateProvisioner(deps: {
         FROM users u WHERE id=${accountId} AND meta_phone_number_id=${m.phoneId}
           AND meta_business_account_id=${m.wabaId} FOR SHARE`)).rows[0];
       const phone = metadata?.display_phone;
-      const capture = enrollmentCaptureReadiness(deps.env, accountId, m.shop);
+      const capture = enrollmentCaptureReadiness(deps.env, accountId, m.shop, m.fingerprint);
       const postTables = postPurchaseTables((await tx.execute(postPurchaseTablesQuery)).rows[0]);
+      const evidenceSchema = (await tx.execute(consentCaptureSchemaQuery)).rows[0];
       const captureSchema = {
-        postPurchase: postTables.intents && postTables.orders && postTables.consents,
-        checkoutRecovery: (await tx.execute(sql`SELECT to_regclass('public.ecommerce_whatsapp_recovery_consents') IS NOT NULL
-          AND (SELECT count(*) FROM information_schema.columns WHERE table_schema='public'
-            AND table_name='ecommerce_whatsapp_recovery_consents'
-            AND column_name IN ('last_verified_inbound_at','last_verified_wamid'))=2 AS ready`)).rows[0]?.ready === true,
+        postPurchase: postTables.intents && postTables.orders && postTables.consents && evidenceSchema?.post_purchase === true,
+        checkoutRecovery: evidenceSchema?.recovery === true,
       };
-      if (deps.env.RAILWAY_ENVIRONMENT_NAME === 'production' && !isEcommercePilotOwner({ id: accountId,
+      if (deps.env.RAILWAY_ENVIRONMENT_NAME === 'production' &&
+        productionConsentCaptureBlocker(deps.env, accountId, m.shop, m.fingerprint) !== null && !isEcommercePilotOwner({ id: accountId,
         email: typeof metadata?.owner_email === 'string' ? metadata.owner_email : null }, deps.env)) capture.postPurchase = false;
       const delivery = await deliveryReadiness(tx, m), s = waba(m);
       const plans = readPostPurchasePlans(m.config), bindings = readPostPurchaseTemplateBindings(m.config);
@@ -293,7 +294,7 @@ export function createShopifyTemplateProvisioner(deps: {
             operatorReleased, captureReady: capture[kind] && captureSchema[kind], activationBlocked: !operatorReleased || !state.canActivate || !templateReady || (isPostPurchasePurpose(purpose) && !selected),
             recipientConsent: 'required_per_recipient' as const,
             blockers: [...(!selected ? ['journey_not_selected'] : []), ...(!templateReady ? ['template_verification_required'] : []),
-              ...(!operatorReleased ? ['operator_release_required'] : []), ...(!capture[kind] ? ['consent_capture_release_required'] : []),
+              ...(!operatorReleased ? ['operator_release_required'] : []), ...(!capture[kind] ? [enrollmentCaptureBlocker(deps.env, accountId, m.shop, m.fingerprint)] : []),
               ...(!captureSchema[kind] ? ['consent_schema_required'] : []),
               ...(!state.canActivate ? [state.reason] : []), ...(!state.merchantEnabled ? ['merchant_activation_required'] : []),
               'recipient_consent_required'],

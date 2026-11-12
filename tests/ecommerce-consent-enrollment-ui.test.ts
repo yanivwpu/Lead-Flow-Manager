@@ -62,3 +62,40 @@ test('missing eligibility does not render a usable enrollment form or destinatio
   assert.equal(document.querySelector('form'), null);
   assert.equal(document.querySelector('input[value^="https://wa.me/"]'), null);
 });
+
+for (const locale of ['en', 'es', 'he'] as const) {
+  test(`${locale} save action is sticky, green only when dirty, and reports saving/saved/error and the exact storefront blocker`, () => {
+    const draft = emptyEnrollment(locale); draft.merchantName = 'Pilot'; draft.sourceUrl = 'https://first.myshopify.com/';
+    draft.purposes.orderConfirmation.selected = true;
+    const data: EnrollmentView = {shop:'first.myshopify.com', draft, revision:null, savedAt:null, connectionCurrent:true, phoneAvailable:true,
+      rows:[{purpose:'orderConfirmation',selected:true,templateReady:false,merchantEnabled:false,operatorReleased:false,captureReady:false,
+        activationBlocked:true,recipientConsent:'required_per_recipient',blockers:['operator_release_required','consent_capture_connection_required'],
+        notice:enrollmentNotice('first.myshopify.com','orderConfirmation',draft),link:null}]};
+    let reason: string|undefined;
+    const render = (props = {}) => parseHTML(renderToStaticMarkup(React.createElement(Panel, {locale,data,onSave:()=>assert.fail('render must not save'),
+      themeSetup:(blocked:boolean, why:string) => {reason=why;return React.createElement('button', {disabled:blocked,'data-testid':'storefront'},why);}, ...props}))).document;
+    let document = render();
+    const save = document.querySelector('button[type="submit"]')!;
+    assert.ok(save.hasAttribute('disabled')); assert.ok(!save.className.includes('bg-green-700'));
+    assert.ok(document.querySelector('[data-testid="consent-save-bar"]')!.className.includes('sticky'));
+    assert.ok(document.querySelector('[data-testid="storefront"]')!.hasAttribute('disabled'));
+    const connectionCopy = {en:'Your Shopify or WhatsApp connection needs pilot approval again. Contact support.',
+      es:'Tu conexión Shopify o WhatsApp requiere nueva aprobación piloto. Contacta con soporte.',
+      he:'חיבור Shopify או WhatsApp דורש אישור פיילוט מחדש. יש לפנות לתמיכה.'};
+    assert.equal(reason, connectionCopy[locale]);
+    document = render({data:{...data,draft:null}});
+    assert.ok(!document.querySelector('button[type="submit"]')!.hasAttribute('disabled'));
+    assert.ok(document.querySelector('button[type="submit"]')!.className.includes('bg-green-700'));
+    const labels = {en:'Save changes',es:'Guardar cambios',he:'שמירת שינויים'};
+    assert.equal(document.querySelector('button[type="submit"]')!.textContent,labels[locale]);
+    document = render({saving:true});
+    assert.ok(document.querySelector('button[type="submit"]')!.hasAttribute('disabled'));
+    assert.equal(document.querySelector('button[type="submit"]')!.getAttribute('aria-busy'),'true');
+    assert.ok(!document.querySelector('button[type="submit"]')!.className.includes('bg-green-700'));
+    document = render({failed:true}); assert.ok(document.querySelector('[role="alert"]'));
+    const ready = {...data,rows:data.rows.map(row=>({...row,captureReady:true,link:enrollmentLink('+15551234567',row.purpose),blockers:['operator_release_required']}))};
+    document = render({data:ready});
+    assert.ok(!document.querySelector('[data-testid="storefront"]')!.hasAttribute('disabled'), 'outbound approval must not block embed');
+    assert.equal(reason, undefined);
+  });
+}

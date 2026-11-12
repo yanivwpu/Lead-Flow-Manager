@@ -2,15 +2,17 @@ import { createHash } from 'node:crypto';
 import { type EnrollmentDraft, type SavedEnrollment, parseEnrollmentDraft, enrollmentSourceAllowed } from '../../shared/shopifyConsentEnrollment';
 import { postPurchasePreparationEnabled } from './postPurchaseGate';
 import { recoveryConsentCaptureEnabled } from './checkoutRecoveryInboundConsentGate';
+import { productionConsentCaptureBlocker } from './consentCaptureGate';
 import { productionRecoveryEvidenceScope } from './checkoutRecoveryProductionRelease';
 
-/** Mirrors the existing capture gates; production recovery is still one recipient only. */
-export function enrollmentCaptureReadiness(env: Record<string, string | undefined>, accountId: string, shop: string) {
+/** Capture permission is independent of outbound preparation and delivery. */
+export function enrollmentCaptureReadiness(env: Record<string, string | undefined>, accountId: string, shop: string, connection?: string) {
   const strongKey = (env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY?.length ?? 0) >= 32;
   const scope = productionRecoveryEvidenceScope(env);
+  const pilot = productionConsentCaptureBlocker(env, accountId, shop, connection) === null;
   return {
-    postPurchase: strongKey && postPurchasePreparationEnabled(env, accountId),
-    checkoutRecovery: strongKey && (recoveryConsentCaptureEnabled(env) || !!scope &&
+    postPurchase: strongKey && (pilot || postPurchasePreparationEnabled(env, accountId)),
+    checkoutRecovery: strongKey && (pilot || recoveryConsentCaptureEnabled(env) || !!scope &&
       scope.accountId === accountId && scope.shop === shop &&
       env.ECOMMERCE_RECOVERY_PRODUCTION_CONSENT_APPROVED === 'true' && env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED === 'true'),
   };
@@ -26,4 +28,9 @@ export function stampEnrollment(draft: EnrollmentDraft, accountId: string, shop:
   if (!parseEnrollmentDraft(draft) || !enrollmentSourceAllowed(draft.sourceUrl, shop)) return null;
   return { ...draft, version: 1, connection, savedBy: accountId, savedAt: new Date(now).toISOString(),
     revision: createHash('sha256').update(JSON.stringify({ draft, accountId, shop, connection, now })).digest('hex') };
+}
+
+export function enrollmentCaptureBlocker(env: Record<string, string | undefined>, accountId: string, shop: string, connection: string): string {
+  if ((env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY?.length ?? 0) < 32) return 'consent_capture_signing_key_required';
+  return productionConsentCaptureBlocker(env, accountId, shop, connection) ?? 'consent_capture_release_required';
 }
