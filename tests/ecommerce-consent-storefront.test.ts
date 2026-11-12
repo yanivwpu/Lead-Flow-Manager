@@ -253,7 +253,10 @@ test('signed proxy response reaches the actual embed renderer in EN/ES/HE; empty
       assert.equal(section.querySelectorAll('article').length,7);
       assert.equal(section.querySelectorAll('a[href^="https://wa.me/"]').length,7);
       for(const phrase of Object.values(WHATSAPP_CONSENT_PHRASES))assert.ok(section.textContent.includes(phrase));
-      assert.equal(section.querySelector('script,form,input'),null);
+      assert.equal(section.querySelector('script,form'),null);
+      assert.equal(section.querySelectorAll('input[type=checkbox]').length,7);
+      assert.equal(section.querySelectorAll('input:checked').length,0);
+      assert.equal(section.querySelectorAll('button').length,1);
     }
     current={...view(),rows:view().rows.map(row=>({...row,captureReady:false,link:null}))};
     const empty=await fetch(root+'/consent-storefront?'+query());assert.equal(empty.status,204);
