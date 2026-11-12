@@ -7,7 +7,7 @@ export function createConsentThemeService(deps: {
   request: (shop: string, token: string, query: string) => Promise<any>;
   env: Record<string, string | undefined>; now?: () => number;
 }) {
-  return async (accountId: string, verify = false): Promise<ConsentThemeSetup | null> => {
+  return async (accountId: string, verify = false, includeBlockDiagnostic = false): Promise<ConsentThemeSetup | null> => {
     const install = await deps.installation(accountId);
     if (!install) return null;
     const { env } = deps, now = deps.now ?? Date.now;
@@ -50,7 +50,7 @@ export function createConsentThemeService(deps: {
       // Discard results if privacy, ownership, installation or WABA changed in flight.
       const latest = await deps.installation(accountId);
       if (!latest || latest.shop !== install.shop || latest.token !== install.token || latest.connection !== install.connection) return null;
-      return { ...result, ...inspectConsentTheme(response, extensionId), checkedAt: new Date(now()).toISOString() };
+      return { ...result, ...inspectConsentTheme(response, extensionId, includeBlockDiagnostic), checkedAt: new Date(now()).toISOString() };
     } catch (error) {
       const verificationReason = error instanceof CatalogApiError ? error.code === 'access_denied' ? 'unauthorized' :
         error.code === 'throttled' ? 'throttled' : error.code === 'invalid_response' ? 'malformed_graphql' : 'provider_unavailable' : 'provider_unavailable';

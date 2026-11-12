@@ -26,7 +26,7 @@ export function registerConsentProxyRoute(router: Router, deps: {
   });
 }
 export function registerConsentThemeRoutes(router: Router, deps: {
-  setup: (id: string, verify?: boolean) => Promise<ConsentThemeSetup | null>;
+  setup: (id: string, verify?: boolean, includeBlockDiagnostic?: boolean) => Promise<ConsentThemeSetup | null>;
   record: (id: string, action: 'open_editor' | 'confirm_saved') => Promise<boolean>;
   appOrigin: () => string; limiter: RequestHandler;
 }) {
@@ -36,6 +36,19 @@ export function registerConsentThemeRoutes(router: Router, deps: {
     if (!id) return res.status(401).end();
     try { const setup = await deps.setup(id, true); return setup ? res.json(setup) : res.status(409).end(); }
     catch { return res.status(503).end(); }
+  });
+  // Explicit read-only diagnostic for the current authenticated installation.
+  // No tenant selector, record action, logging or provider mutation is allowed.
+  router.get('/consent-theme/diagnostic', deps.limiter, async (req, res) => {
+    res.set({ 'Cache-Control': 'no-store, private, max-age=0', 'X-Content-Type-Options': 'nosniff' });
+    const id = (req.user as { id?: string } | undefined)?.id;
+    if (!id) return res.status(401).end();
+    if (Object.keys(req.query).length) return res.status(400).end();
+    try {
+      const setup = await deps.setup(id, true, true);
+      return setup ? res.json({ state: setup.state, verificationReason: setup.verificationReason,
+        blocks: setup.blockDiagnostic ?? [] }) : res.status(409).end();
+    } catch { return res.status(503).end(); }
   });
   router.post('/consent-theme', deps.limiter, async (req, res) => {
     res.set('Cache-Control', 'no-store');

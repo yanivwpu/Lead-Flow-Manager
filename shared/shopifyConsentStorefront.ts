@@ -13,9 +13,16 @@ export type ConsentThemeVerificationReason =
   | 'enabled_flag_missing' | 'enabled_flag_invalid' | 'block_enabled'
   | 'shop_mismatch' | 'scope_metadata_invalid' | 'proxy_permission_required'
   | 'theme_permission_required' | 'unauthorized' | 'throttled' | 'provider_unavailable';
-export type ConsentThemeVerification = { state: ConsentThemeState; verificationReason: ConsentThemeVerificationReason };
+/** Explicit diagnostic projection only; invalid flag values and malformed type
+ * strings are redacted instead of copying arbitrary settings into a response. */
+export type ConsentThemeBlockDiagnostic = { type: string | null; disabled: boolean | 'missing' | 'invalid' };
+export type ConsentThemeVerification = {
+  state: ConsentThemeState; verificationReason: ConsentThemeVerificationReason;
+  blockDiagnostic?: ConsentThemeBlockDiagnostic[];
+};
 export type ConsentThemeSetup = {
   verificationReason?: ConsentThemeVerificationReason;
+  blockDiagnostic?: ConsentThemeBlockDiagnostic[];
   state: ConsentThemeState; editorUrl: string | null; approvalUrl: string | null;
   releasedVersion: string | null; checkedAt: string | null;
   editorOpenedAt: string | null; merchantConfirmedAt: string | null;

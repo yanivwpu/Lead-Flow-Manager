@@ -64,3 +64,32 @@ test('service diagnostics distinguish authorization, throttling and GraphQL fail
   assert.equal((await service('owner',true))?.verificationReason,'enabled_flag_missing');
   assert.equal((await service('owner',true))?.state,'unverified','missing enabled flag is uncertainty, not proof of either toggle state');
 });
+
+test('explicit block diagnostic projects only consent type/disabled, redacts arbitrary values and caps ambiguous candidates', () => {
+  const payload=theme({
+    unrelated:{type:'shopify://apps/other/blocks/widget/11111111-2222-4333-8444-555555555555',disabled:false,customer:'customer@example.test'},
+    embed:{...block,settings:{token:'PRIVATE_TOKEN',customer:'customer@example.test'},other:'PRIVATE_FIELD'},
+  });
+  assert.deepEqual(inspectConsentTheme(payload,uid,true),{
+    state:'enabled_verified',verificationReason:'block_enabled',blockDiagnostic:[{type,disabled:false}],
+  });
+  assert.equal(inspectConsentTheme(payload,uid).blockDiagnostic,undefined,'normal setup inspection has no block payload');
+  for(const [disabled,expected] of [[true,true],[false,false],[null,'invalid'],['PRIVATE_TOKEN','invalid'],[{email:'customer@example.test'},'invalid']] as const){
+    assert.deepEqual(inspectConsentTheme(theme({embed:{type,disabled}}),uid,true).blockDiagnostic,[{type,disabled:expected}]);
+  }
+  assert.deepEqual(inspectConsentTheme(theme({embed:{type}}),uid,true).blockDiagnostic,[{type,disabled:'missing'}]);
+  const wrongHandle=type.replace('/whatsapp-consent/','/another-handle/');
+  assert.deepEqual(inspectConsentTheme(theme({embed:{type:wrongHandle,disabled:false}}),uid,true).blockDiagnostic,[{type:wrongHandle,disabled:false}]);
+  const wrongUid=type.replace(uid,uid.slice(0,-1)+'a');
+  assert.deepEqual(inspectConsentTheme(theme({embed:{type:wrongUid,disabled:true}}),uid,true).blockDiagnostic,[{type:wrongUid,disabled:true}]);
+  const duplicate=inspectConsentTheme(theme({a:block,b:block,c:block}),uid,true);
+  assert.equal(duplicate.verificationReason,'duplicate_block');assert.equal(duplicate.blockDiagnostic?.length,2);
+  const hostileType=`shopify://apps/private?token=PRIVATE_TOKEN/blocks/whatsapp-consent/${uid}`;
+  const hostile=inspectConsentTheme(theme({embed:{type:hostileType,disabled:{customer:'customer@example.test'}}}),uid,true);
+  assert.deepEqual(hostile.blockDiagnostic,[{type:null,disabled:'invalid'}]);
+  for(const result of [inspectConsentTheme(payload,uid,true),hostile]){
+    for(const secret of ['PRIVATE_TOKEN','PRIVATE_FIELD','customer@example.test','settings','unrelated'])assert.ok(!JSON.stringify(result).includes(secret));
+  }
+  const draft=theme();draft.themes.nodes[0].role='UNPUBLISHED';
+  assert.deepEqual(inspectConsentTheme(draft,uid,true).blockDiagnostic,[],'never project draft/preset settings');
+});

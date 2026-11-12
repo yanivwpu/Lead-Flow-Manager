@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { CONSENT_EMBED_HANDLE, CONSENT_PROXY_PATH, type ConsentThemeState, type ConsentThemeVerification } from '../../shared/shopifyConsentStorefront';
+import { CONSENT_EMBED_HANDLE, CONSENT_PROXY_PATH, type ConsentThemeState, type ConsentThemeVerification, type ConsentThemeBlockDiagnostic } from '../../shared/shopifyConsentStorefront';
 import { CONSENT_LABELS, CONSENT_PURPOSES, WHATSAPP_CONSENT_PHRASES, type EnrollmentView } from '../../shared/shopifyConsentEnrollment';
 
 export function consentEditorUrl(shop: string, clientId: string): string | null {
@@ -47,8 +47,9 @@ ${rows.map(row => `<article><h3>${escape(CONSENT_LABELS[locale][CONSENT_PURPOSES
 }
 /** Inspect only current settings from the MAIN theme. A disabled block persists
  * in settings_data.json; presets and other apps are never activation evidence. */
-export function inspectConsentTheme(payload: any, extensionId: string): ConsentThemeVerification {
-  const result = (state: ConsentThemeState, verificationReason: ConsentThemeVerification['verificationReason']) => ({ state, verificationReason });
+export function inspectConsentTheme(payload: any, extensionId: string, includeBlockDiagnostic = false): ConsentThemeVerification {
+  let blockDiagnostic: ConsentThemeBlockDiagnostic[] = [];
+  const result = (state: ConsentThemeState, verificationReason: ConsentThemeVerification['verificationReason']) => ({ state, verificationReason, ...(includeBlockDiagnostic ? { blockDiagnostic } : {}) });
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-(?:[a-f0-9]{12}|[a-f0-9]{20})$/.test(extensionId)) return result('unverified', 'extension_id_invalid');
   if (payload?.errors) return result('unverified', 'malformed_graphql');
   const themes = payload?.themes?.nodes;
@@ -77,6 +78,19 @@ export function inspectConsentTheme(payload: any, extensionId: string): ConsentT
   const types = Object.values(blocks).map((b: any) => ({ block: b,
     parts: typeof b?.type === 'string' ? /^shopify:\/\/apps\/[^/]+\/blocks\/([^/]+)\/([^/]+)$/.exec(b.type) : null }));
   const matches = types.filter(({ parts }) => parts?.[1] === CONSENT_EMBED_HANDLE && parts[2] === extensionId);
+  if (includeBlockDiagnostic) {
+    // Only this embed's matching identity or mismatch candidates are relevant.
+    // Never include block IDs, settings, presets or unrelated app blocks. Two
+    // entries suffice to explain ambiguous/duplicate matches.
+    const candidates = matches.length ? matches : types.filter(({ parts }) =>
+      parts?.[1] === CONSENT_EMBED_HANDLE || parts?.[2] === extensionId);
+    const publicType = /^shopify:\/\/apps\/[A-Za-z0-9][A-Za-z0-9_-]{0,99}\/blocks\/[A-Za-z0-9][A-Za-z0-9_-]{0,99}\/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-(?:[a-fA-F0-9]{12}|[a-fA-F0-9]{20})$/;
+    blockDiagnostic = candidates.slice(0, 2).map(({ block }) => ({
+      type: publicType.test(block.type) ? block.type : null,
+      disabled: typeof block.disabled === 'boolean' ? block.disabled :
+        Object.prototype.hasOwnProperty.call(block, 'disabled') ? 'invalid' : 'missing',
+    }));
+  }
   if (matches.length > 1) return result('unverified', 'duplicate_block');
   if (!matches.length) {
     const reason = types.some(({ parts }) => parts?.[2] === extensionId) ? 'wrong_handle' :
