@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { withUserQueryScope } from '@/lib/accountQueryScope';
@@ -38,7 +38,7 @@ export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy,
   const primary = 'border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800';
   const secondary = 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50';
   const actionClass = (name: string) => `${base} ${name === nextAction ? primary : secondary}`;
-  const step = (name: string, heading: string, body: React.ReactNode, complete = false) =>
+  const step = (name: string, heading: string, body: ReactNode, complete = false) =>
     <div className="rounded-lg border border-slate-200 bg-white p-3" data-testid={`consent-action-${name}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <strong className="text-sm">{heading}</strong>
