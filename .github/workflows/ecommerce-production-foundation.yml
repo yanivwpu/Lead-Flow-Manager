@@ -17,6 +17,8 @@ on:
       - "shared/shopifyConsentEnrollment.ts"
       - "shared/shopifyConsentStorefront.ts"
       - "extensions/whachat-consent/**"
+      - "scripts/shopify-consent/**"
+      - "scripts/build-shopify-consent.mjs"
       - "shopify.app*.toml"
       - "server/ecommerceMerchantActivationRoutes.ts"
       - "server/userMeta.ts"
@@ -43,6 +45,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Verify Shopify asset matches readable source
+        run: node scripts/build-shopify-consent.mjs --check
       - name: Native Shopify Liquid, schema and locale validation (no app release)
         env:
           SHOPIFY_CLI_NO_ANALYTICS: "1"

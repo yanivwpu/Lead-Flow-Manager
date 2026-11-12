@@ -1,4 +1,4 @@
-<div class="whachat-consent-host" data-whachat-consent data-placement="{{ block.settings.placement | default: 'content_end' | escape }}" {{ block.shopify_attributes }}>
+<div class="whachat-consent-host" data-whachat-consent data-placement="{{ block.settings.placement | default: 'before_footer' | escape }}" {{ block.shopify_attributes }}>
   {% if request.design_mode %}
     <p role="status">{{ 'consent.preview' | t | escape }}</p>
   {% endif %}
@@ -10,6 +10,6 @@
   "target": "body",
   "javascript": "consent.js",
   "stylesheet": "consent.css",
-  "settings": [{ "type": "select", "id": "placement", "label": "t:consent.placement", "default": "content_end", "options": [{ "value": "content_end", "label": "t:consent.content_end" }, { "value": "original", "label": "t:consent.original" }] }]
+  "settings": [{ "type": "select", "id": "placement", "label": "t:consent.placement", "default": "before_footer", "options": [{ "value": "before_footer", "label": "t:consent.before_footer" }, { "value": "content_end", "label": "t:consent.content_end" }, { "value": "original", "label": "t:consent.original" }] }]
 }
 {% endschema %}

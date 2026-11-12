@@ -1,16 +1,21 @@
 .whachat-consent-host { display: block; clear: both; inline-size: 100%; }
-.whachat-consent { box-sizing: border-box; color: inherit; background: inherit; font: inherit; line-height: 1.6; max-width: 70rem; margin: 2rem auto; padding: clamp(1rem, 3vw, 2rem); border: 1px solid #a7d8c5; border-radius: 1.25rem; box-shadow: 0 8px 28px #00000009; text-align: start; overflow-wrap: anywhere; display: grid; gap: 1rem; }
-.whachat-consent > header { grid-column: 1 / -1; max-width: 48rem; }
-.whachat-consent h2 { color: inherit; font: inherit; font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.25; font-weight: 700; margin: .25rem 0 .75rem; }
-.whachat-consent .whachat-consent-intro { margin: 0 0 .5rem; opacity: .85; }
-.whachat-consent article { box-sizing: border-box; min-width: 0; border: 1px solid #a7d8c5; border-radius: .85rem; padding: 1.25rem; display: flex; flex-direction: column; gap: .75rem; }
-.whachat-consent h3 { color: inherit; font: inherit; font-size: 1.1rem; font-weight: 700; line-height: 1.4; margin: 0; }
-.whachat-consent-notice { white-space: pre-wrap; margin: 0; }
-.whachat-consent details { margin-block: .25rem; }
-.whachat-consent summary { cursor: pointer; min-height: 44px; align-content: center; font-size: .85rem; text-decoration: underline; text-underline-offset: .2rem; }
-.whachat-consent code { display: block; padding: .75rem; border-inline-start: 3px solid #087f5b; font-size: .8rem; white-space: normal; unicode-bidi: isolate; overflow-wrap: anywhere; }
-.whachat-consent a { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; margin-block-start: auto; padding: .75rem 1rem; border: 1px solid #087f5b; border-radius: .6rem; background: #087f5b; color: #fff; font: inherit; font-weight: 600; text-decoration: none; }
-.whachat-consent a:hover { background: #065f46; color: #fff; }
-.whachat-consent a:focus-visible, .whachat-consent summary:focus-visible { outline: 2px solid #087f5b; outline-offset: 3px; }
-@media (min-width: 640px) { .whachat-consent { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 480px) { .whachat-consent { margin: 1rem auto; padding: 1rem; border-radius: .85rem; } .whachat-consent article { padding: 1rem; } }
+.whachat-consent { box-sizing: border-box; color: inherit; background: inherit; font: inherit; line-height: 1.5; max-inline-size: 48rem; margin: 1.5rem auto; padding: clamp(1rem, 3vw, 1.5rem); border: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 20%, transparent); border-radius: .85rem; text-align: start; overflow-wrap: anywhere; }
+.whachat-consent h2 { color: inherit; font: inherit; font-size: clamp(1.25rem, 3vw, 1.5rem); line-height: 1.3; font-weight: 700; margin: 0 0 .5rem; }
+.whachat-consent p { margin: .5rem 0; }
+.whachat-consent fieldset { min-inline-size: 0; margin: 1rem 0; padding: 0; border: 0; display: grid; gap: .5rem 1rem; }
+.whachat-consent legend { font-size: .85em; margin-block-end: .5rem; }
+.whachat-consent article { min-inline-size: 0; border-block-end: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 15%, transparent); padding-block-end: .25rem; }
+.whachat-consent label { display: flex; align-items: center; gap: .65rem; min-height: 44px; cursor: pointer; font-weight: 600; }
+.whachat-consent input { appearance: auto; accent-color: #087f5b; inline-size: 1.2rem; block-size: 1.2rem; flex-shrink: 0; margin: 0; }
+.whachat-consent-notice { white-space: pre-wrap; }
+.whachat-consent summary { cursor: pointer; min-height: 44px; align-content: center; font-size: .85em; text-decoration: underline; text-underline-offset: .2rem; }
+.whachat-consent code { display: block; padding: .5rem; border-inline-start: 3px solid #087f5b; font-size: .85em; white-space: normal; unicode-bidi: isolate; overflow-wrap: anywhere; }
+.whachat-consent a { display: inline-flex; align-items: center; min-height: 44px; color: inherit; text-underline-offset: .2rem; }
+.whachat-consent [hidden] { display: none !important; }
+.whachat-consent-review { box-sizing: border-box; min-height: 44px; padding: .65rem 1rem; border: 1px solid #087f5b; border-radius: .5rem; background: #087f5b; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.whachat-consent-review:hover { background: #065f46; }
+.whachat-consent-review:disabled { opacity: .65; cursor: default; }
+.whachat-consent-hint { font-size: .85em; }
+.whachat-consent :is(a, button, input, summary):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (min-width: 640px) { .whachat-consent fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .whachat-consent { margin: 1rem auto; } .whachat-consent-review { inline-size: 100%; } }
