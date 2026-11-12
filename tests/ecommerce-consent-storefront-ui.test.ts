@@ -50,7 +50,14 @@ for (const locale of ['en', 'es', 'he']) test(`${locale} setup preserves gates, 
   const notSet = {en:'Not set up',es:'Sin configurar',he:'לא הוגדר'}[locale];
   assert.equal(render('configured').querySelector('[role="status"]')!.textContent, ready);
   assert.equal(render('configured',{blocked:true}).querySelector('[role="status"]')!.textContent, notSet);
-  for (const props of [{blocked:true}, {busy:true}, {checking:true}]) assert.ok(button(render('configured',props)).hasAttribute('disabled'));
+  for (const props of [{blocked:true}, {busy:true}]) assert.ok(button(render('configured',props)).hasAttribute('disabled'));
+  const checking=render('enabled_verified',{checking:true});
+  assert.ok(!button(checking).hasAttribute('disabled'),'background read must not pale/disable setup');
+  assert.ok(!checking.querySelector('[role="status"]')!.textContent.includes({en:'Live on store',es:'Activo en la tienda',he:'פעיל בחנות'}[locale]!), 'checking is not a new enabled result');
+  const disabled=render('disabled_verified',{setup:{...setup('disabled_verified'),verificationReason:'block_missing'}});
+  assert.equal(disabled.querySelector('[role="status"]')!.textContent,{en:'Not enabled on published theme',es:'No activado en el tema publicado',he:'לא מופעל בערכת העיצוב שפורסמה'}[locale]);
+  assert.ok(!disabled.querySelector('[role="status"]')!.textContent.includes(ready!));
+  assert.ok(disabled.querySelector('details [data-testid="consent-verification-reason"]')!.textContent.includes('block_missing'));
   for (const state of ['unreleased','not_supported'] as const) assert.ok(button(render(state)).hasAttribute('disabled'));
   assert.ok(!button(render('proxy_permission_required',{setup:{...setup('proxy_permission_required'),editorUrl:null,approvalUrl:'https://admin.shopify.com/store/first/oauth/install'}})).hasAttribute('disabled'));
   const optional = render('permission_required');
