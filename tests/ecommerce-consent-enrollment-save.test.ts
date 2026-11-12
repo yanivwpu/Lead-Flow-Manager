@@ -18,7 +18,7 @@ after(async () => { await rm(scratch, { recursive: true, force: true }); delete 
 await build({ entryPoints: ['client/src/components/ecommerce/ShopifyConsentEnrollment.tsx'], outfile: join(scratch, 'save.mjs'),
   bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic', plugins: [{ name: 'save-boundaries', setup(b) {
     const stubs: Record<string, string> = {
-      react: `export const useState=(...args)=>globalThis.${fixtureKey}.useState(...args)`,
+      react: `export const useEffect=()=>{}; export const useRef=()=>({}); export const useState=(...args)=>globalThis.${fixtureKey}.useState(...args)`,
       '@/lib/auth-context': 'export const useAuth=()=>({user:{id:"fixture"},sessionAligned:true})',
       '@/lib/accountQueryScope': 'export const withUserQueryScope=k=>k',
       '@tanstack/react-query': `export const useQuery=()=>globalThis.${fixtureKey}.query; export const useQueryClient=()=>({})`,

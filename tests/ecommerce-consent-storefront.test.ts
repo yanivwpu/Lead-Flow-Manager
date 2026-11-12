@@ -163,3 +163,63 @@ test('native HTTP proxy and merchant setup enforce separate provenance, no cache
     assert.equal(reads, beforeBurst, 'forged requests never reach tenant data');
   } finally { await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())); }
 });
+
+test('automatic read verifies published state without confirmation, and retry/optional permissions never write theme or consent', async () => {
+  let allowed = true, proxy = true, failure = false, enabled = false, records = 0, providerReads = 0;
+  let install: any = {shop, token:'PRIVATE_TOKEN', connection:'current', setup:{}};
+  const service = createConsentThemeService({
+    env: {SHOPIFY_API_KEY:key, SHOPIFY_CONSENT_EXTENSION_RELEASED_VERSION:'reviewed', SHOPIFY_CONSENT_EXTENSION_ID:extensionId},
+    installation: async id => id === 'owner' ? install : null,
+    request: async (_shop, _token, q) => {
+      providerReads++; assert.ok(q.startsWith('query '), 'no Shopify mutation');
+      if (failure) throw Error('provider unavailable');
+      if (q.includes('ConsentThemeAccess')) return {shop:{myshopifyDomain:shop},currentAppInstallation:{accessScopes:[
+        ...(allowed ? [{handle:'read_themes'}] : []), ...(proxy ? [{handle:'write_app_proxy'}] : []),
+      ]}};
+      return theme({embed:block(!enabled)});
+    },
+  });
+  const app = express(), router = Router(); app.use(express.json());
+  app.use((req, _res, next) => {req.user={id:'owner'} as any;next();});
+  registerConsentThemeRoutes(router, {setup:service, appOrigin:()=> 'https://app.whachatcrm.com', limiter:(_q,_s,n)=>n(),
+    record:async (_id, action) => { records++; assert.equal(action,'open_editor'); install.setup={connection:'current',editorOpenedAt:new Date(now).toISOString()};return true; }});
+  app.use(router); const server=app.listen(0,'127.0.0.1');await once(server,'listening');
+  const url=`http://127.0.0.1:${(server.address() as any).port}/consent-theme`;
+  const post=(action:string)=>fetch(url,{method:'POST',headers:{origin:'https://app.whachatcrm.com','content-type':'application/json'},body:JSON.stringify({action})});
+  try {
+    const first=await fetch(url); assert.ok(first.headers.get('cache-control')?.includes('no-store'));
+    assert.equal((await first.json()).state,'disabled_verified');assert.equal(records,0);
+    enabled=true;
+    assert.equal((await (await fetch(url)).json()).state,'enabled_verified');
+    assert.equal(records,0,'returning merchant never needs to declare preview/save');
+    const before=providerReads;
+    const check=await (await post('verify')).json();assert.equal(check.state,'enabled_verified');
+    assert.equal(providerReads-before,2,'one scope read and one MAIN theme read per verification');
+    assert.equal(check.messagingEnabled,false);assert.equal(check.consentGranted,false);
+    failure=true;
+    const failed=await (await fetch(url)).json();assert.equal(failed.state,'unverified');assert.equal(failed.editorUrl,null);
+    assert.equal((await post('open_editor')).status,409,'cannot bypass required access check on provider failure');
+    failure=false;allowed=false;
+    const optional=await (await post('open_editor')).json();
+    assert.equal(optional.state,'permission_required');assert.ok(optional.editorUrl);assert.ok(optional.approvalUrl);assert.equal(records,1);
+    proxy=false;
+    const required=await (await post('open_editor')).json();assert.equal(required.state,'proxy_permission_required');
+    assert.equal(required.editorUrl,null);assert.ok(required.approvalUrl);assert.equal(records,1);
+    install=null;assert.equal((await fetch(url)).status,409);
+  } finally {await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('scope-read races and invalid scope provenance never authorize opening a theme editor', async () => {
+  for (const mode of ['connection','token','shop','owner_removed','wrong_shop','malformed_scopes']) {
+    let install: any={shop,token:'private',connection:'current',setup:{}};
+    const service=createConsentThemeService({env:{SHOPIFY_API_KEY:key,SHOPIFY_CONSENT_EXTENSION_RELEASED_VERSION:'reviewed',SHOPIFY_CONSENT_EXTENSION_ID:extensionId},
+      installation:async()=>install, request:async()=>{
+        if(mode==='owner_removed') install=null;
+        else if(['connection','token','shop'].includes(mode)) install={...install,[mode]:'changed'};
+        return {shop:{myshopifyDomain:mode==='wrong_shop'?'other.myshopify.com':shop},currentAppInstallation:{accessScopes:mode==='malformed_scopes'?null:[{handle:'write_app_proxy'}]}};
+      }});
+    const result=await service('owner',true);
+    if(['wrong_shop','malformed_scopes'].includes(mode)){assert.equal(result?.state,'unverified');assert.equal(result?.editorUrl,null);}
+    else assert.equal(result,null,mode);
+  }
+});

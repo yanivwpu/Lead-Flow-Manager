@@ -22,46 +22,6 @@ await build({ entryPoints: ['client/src/components/ecommerce/ShopifyConsentEnrol
   } }] });
 const { ShopifyConsentEnrollmentPanel: Panel } = await import(pathToFileURL(join(scratch, 'panel.mjs')).href);
 
-await build({ entryPoints: ['client/src/components/ecommerce/ShopifyConsentThemeSetup.tsx'], outfile: join(scratch, 'theme-panel.mjs'),
-  bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic', plugins: [{ name: 'hooks', setup(b) {
-    const stubs: Record<string, string> = {
-      '@/lib/auth-context': 'export const useAuth=()=>({})', '@/lib/accountQueryScope': 'export const withUserQueryScope=k=>k',
-    };
-    b.onResolve({ filter: /.*/ }, a => stubs[a.path] ? { path: a.path, namespace: 'stub' } : undefined);
-    b.onLoad({ filter: /.*/, namespace: 'stub' }, a => ({ contents: stubs[a.path], loader: 'js' }));
-  } }] });
-const { ConsentThemePanel } = await import(pathToFileURL(join(scratch, 'theme-panel.mjs')).href);
-
-for (const locale of ['en', 'es', 'he'] as const) {
-  test(`${locale} storefront actions prioritize merchant permission and communicate next step`, () => {
-    const editorUrl='https://first.myshopify.com/admin/themes/current/editor';
-    const approvalUrl='https://admin.shopify.com/store/first/oauth/install?client_id=example';
-    const setup={state:'permission_required',editorUrl,approvalUrl,editorOpenedAt:'2026-11-11T12:00:00Z',merchantConfirmedAt:'2026-11-11T12:05:00Z',
-      checkedAt:null,releasedVersion:'postpurchase-webhooks-2'};
-    const render = (props={}) => parseHTML(renderToStaticMarkup(React.createElement(ConsentThemePanel,{locale,setup,blocked:false,busy:false,
-      failed:false,action:()=>assert.fail('SSR must not invoke actions'),...props}))).document;
-    let document=render();
-    const panel=document.querySelector('[data-testid="consent-theme-setup"]')!;
-    assert.equal(panel.getAttribute('dir'),locale==='he'?'rtl':'ltr');
-    assert.equal(panel.querySelectorAll('[data-testid^="consent-action-"]').length,4);
-    const approval=panel.querySelector('[data-testid="consent-action-approve"] a')!;
-    assert.ok(approval.className.includes('bg-emerald-700'), 'required permission is the primary CTA');
-    assert.equal(approval.getAttribute('href'),approvalUrl);
-    assert.ok(!panel.querySelector('[data-testid="consent-action-add"] button')!.className.includes('bg-emerald-700'));
-    document=render({setup:{...setup,state:'merchant_confirmed_saved',approvalUrl:null}});
-    assert.ok(document.querySelector('[data-testid="consent-action-verify"] button')!.className.includes('bg-emerald-700'),
-      'after merchant confirmation verification becomes primary');
-    document=render({setup:{...setup,state:'configured',approvalUrl:null,editorOpenedAt:null,merchantConfirmedAt:null}});
-    assert.ok(document.querySelector('[data-testid="consent-action-add"] button')!.className.includes('bg-emerald-700'),
-      'first action is clearly primary');
-    assert.ok(document.querySelector('[data-testid="consent-action-confirm"] button')!.hasAttribute('disabled'),
-      'cannot claim theme save before editor opened');
-    document=render({blocked:true});
-    assert.ok(document.querySelector('[data-testid="consent-action-add"] button')!.hasAttribute('disabled'),
-      'UI styling must not bypass readiness gating');
-  });
-}
-
 for (const locale of ['en', 'es', 'he'] as const) {
   test(`${locale} enrollment renders separate purposes and four truthful gates${locale === 'he' ? ' in RTL' : ''}`, () => {
     const draft = emptyEnrollment(locale); draft.sourceUrl = 'https://first.myshopify.com/pages/whatsapp'; draft.merchantName = 'First Store';
@@ -87,6 +47,11 @@ for (const locale of ['en', 'es', 'he'] as const) {
     assert.equal(url.getAttribute('dir'), 'ltr');
     assert.ok(panel.textContent.includes('YES WHATSAPP ORDER CONFIRMATIONS'));
     assert.ok(panel.textContent.includes('STOP'));
+    const help = panel.querySelector('[data-testid="consent-compliance-help"]')!;
+    assert.ok(!help.hasAttribute('open'));
+    assert.ok(help.textContent.includes('STOP'));
+    assert.ok(help.textContent.includes('Meta'));
+    assert.ok(help.textContent.includes('Shopify'));
     const blockedText = { en: 'Activation blocked', es: 'Activación bloqueada', he: 'ההפעלה חסומה' };
     assert.ok(panel.textContent.includes(blockedText[locale]));
     assert.ok(!panel.querySelector('button[data-testid^="activate"]'), 'enrollment itself never enables sends');

@@ -1,69 +1,61 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { withUserQueryScope } from '@/lib/accountQueryScope';
 import type { ConsentThemeSetup } from '@shared/shopifyConsentStorefront';
 
 const copy = {
-  en: { stepTitle: 'Storefront setup actions', next:'Next step', step1:'Add to Shopify',step2:'Confirm theme save',step3:'Verify storefront',step4:'Approve access', done:'Completed', add: 'Add consent to my storefront', confirm: 'I previewed and saved in Shopify', verify: 'Check published theme', approve: 'Approve theme read access in Shopify', approveProxy: 'Approve storefront proxy access in Shopify',
-    help: 'Preview the consent section in Shopify, then save the theme yourself. Notices stay in sync with your saved configuration. This does not grant consent or enable messaging.',
-    save: 'Save your notices and check consent capture readiness first.', confirmed: 'Your preview/save confirmation is recorded.', error: 'Storefront setup could not be verified. Retry the published-theme check.',
-    states: { unreleased: 'Storefront extension awaiting a separate Shopify app version release.', configured: 'Configured; storefront activation not verified.', editor_opened: 'Editor opened; preview and save are not yet verified.', merchant_confirmed_saved: 'You confirmed preview and save; published activation is not verified.', enabled_verified: 'Consent embed enabled on the published theme (verified).', disabled_verified: 'Consent embed is not enabled on the published theme (verified).', not_supported: 'No supported Online Store theme found. Existing engine functions remain available.', proxy_permission_required: 'Shopify requires your approval for storefront notice access before adding this section.', permission_required: 'Published state is unverified. Optional merchant approval is needed to read theme settings.', unverified: 'Published state could not be verified.' } },
-  es: { stepTitle: 'Acciones de instalación en la tienda', next:'Siguiente paso', step1:'Añadir a Shopify',step2:'Confirmar guardado',step3:'Verificar la tienda',step4:'Aprobar acceso',done:'Completado', add: 'Añadir consentimiento a mi tienda', confirm: 'Revisé y guardé en Shopify', verify: 'Comprobar tema publicado', approve: 'Aprobar lectura del tema en Shopify', approveProxy: 'Aprobar acceso de la tienda en Shopify',
-    help: 'Revisa la sección en Shopify y guarda el tema tú mismo. Los avisos se actualizan con la configuración guardada. Esto no otorga consentimiento ni activa mensajes.',
-    save: 'Guarda los avisos y revisa la captura de consentimiento primero.', confirmed: 'Se registró tu confirmación de revisión y guardado.', error: 'No se pudo verificar la instalación. Reintenta comprobar el tema publicado.',
-    states: { unreleased: 'La extensión requiere un lanzamiento separado de versión en Shopify.', configured: 'Configurado; activación sin verificar.', editor_opened: 'Editor abierto; vista previa y guardado sin verificar.', merchant_confirmed_saved: 'Confirmaste revisión y guardado; activación publicada sin verificar.', enabled_verified: 'Sección activada en el tema publicado (verificado).', disabled_verified: 'Sección no activada en el tema publicado (verificado).', not_supported: 'No hay tema de tienda compatible. Las funciones existentes siguen disponibles.', proxy_permission_required: 'Shopify requiere tu aprobación de acceso a los avisos antes de añadir la sección.', permission_required: 'Estado publicado sin verificar. Se necesita aprobación opcional para leer el tema.', unverified: 'No se pudo verificar el estado publicado.' } },
-  he: { stepTitle: 'שלבי ההתקנה בחנות', next:'השלב הבא', step1:'הוספה ל-Shopify',step2:'אישור שמירה',step3:'בדיקת החנות',step4:'אישור גישה',done:'הושלם', add: 'הוספת הסכמה לחנות שלי', confirm: 'בדקתי תצוגה מקדימה ושמרתי ב-Shopify', verify: 'בדיקת ערכת העיצוב שפורסמה', approve: 'אישור קריאת ערכת העיצוב ב-Shopify', approveProxy: 'אישור גישה לחנות ב-Shopify',
-    help: 'יש לבדוק את מקטע ההסכמה ב-Shopify ולשמור את ערכת העיצוב בעצמך. ההודעות מתעדכנות לפי ההגדרות השמורות. הפעולה אינה מעניקה הסכמה ואינה מפעילה הודעות.',
-    save: 'יש לשמור תחילה את ההודעות ולבדוק מוכנות לאיסוף הסכמה.', confirmed: 'אישורך על בדיקה ושמירה תועד.', error: 'לא ניתן לאמת את ההתקנה. יש לנסות שוב את בדיקת ערכת העיצוב.',
-    states: { unreleased: 'התוסף ממתין לשחרור נפרד של גרסת יישום Shopify.', configured: 'הוגדר; ההפעלה בחנות לא אומתה.', editor_opened: 'העורך נפתח; תצוגה מקדימה ושמירה טרם אומתו.', merchant_confirmed_saved: 'אישרת בדיקה ושמירה; ההפעלה שפורסמה לא אומתה.', enabled_verified: 'מקטע ההסכמה מופעל בערכת העיצוב שפורסמה (אומת).', disabled_verified: 'מקטע ההסכמה אינו מופעל בערכת העיצוב שפורסמה (אומת).', not_supported: 'לא נמצאה ערכת עיצוב נתמכת. התכונות הקיימות ממשיכות לפעול.', proxy_permission_required: 'Shopify דורש את אישורך לגישה להודעות בחנות לפני הוספת המקטע.', permission_required: 'המצב שפורסם לא אומת. נדרש אישור רשות לקריאת ההגדרות.', unverified: 'לא ניתן לאמת את המצב שפורסם.' } },
+  en: { setup: 'Set up in Shopify', instruction: 'Enable the consent section and save your theme in Shopify. We’ll check when you return.',
+    notSet: 'Not set up', ready: 'Ready to install', live: 'Live on store', checking: 'Checking store…', unavailable: 'Setup unavailable', verification: 'Verification needed',
+    save: 'Save your notices first.', unreleased: 'Storefront setup is not available yet. Contact support.', unsupported: 'This store has no supported Online Store theme.',
+    proxy: 'Approve access in Shopify to continue setup.', permission: 'Automatic verification needs theme read access. You can still set up in Shopify.',
+    unverified: 'We couldn’t verify the published theme. Try again.', help: 'Setup help', approve: 'Allow automatic verification in Shopify', retry: 'Check again',
+    detail: 'Only the published theme can confirm installation. Opening the editor or saving notices does not prove it is live. Setup does not grant customer consent or enable messaging.',
+    error: 'Couldn’t complete setup. Allow pop-ups for Shopify and try again.' },
+  es: { setup: 'Configurar en Shopify', instruction: 'Activa la sección de consentimiento y guarda el tema en Shopify. Lo comprobaremos cuando vuelvas.',
+    notSet: 'Sin configurar', ready: 'Listo para instalar', live: 'Activo en la tienda', checking: 'Comprobando tienda…', unavailable: 'Configuración no disponible', verification: 'Verificación pendiente',
+    save: 'Guarda tus avisos primero.', unreleased: 'La instalación aún no está disponible. Contacta con soporte.', unsupported: 'Esta tienda no tiene un tema de tienda online compatible.',
+    proxy: 'Aprueba el acceso en Shopify para continuar.', permission: 'La verificación automática necesita acceso de lectura al tema. Puedes configurar en Shopify igualmente.',
+    unverified: 'No pudimos verificar el tema publicado. Reintenta.', help: 'Ayuda de instalación', approve: 'Permitir verificación automática en Shopify', retry: 'Comprobar de nuevo',
+    detail: 'Solo el tema publicado confirma la instalación. Abrir el editor o guardar avisos no demuestra que esté activo. La instalación no otorga consentimiento ni activa mensajes.',
+    error: 'No se pudo completar la instalación. Permite ventanas emergentes de Shopify y reintenta.' },
+  he: { setup: 'הגדרה ב-Shopify', instruction: 'יש להפעיל את מקטע ההסכמה ולשמור את ערכת העיצוב ב-Shopify. נבדוק כשתחזרו.',
+    notSet: 'לא הוגדר', ready: 'מוכן להתקנה', live: 'פעיל בחנות', checking: 'בודקים את החנות…', unavailable: 'ההגדרה אינה זמינה', verification: 'נדרש אימות',
+    save: 'יש לשמור תחילה את ההודעות.', unreleased: 'ההתקנה עדיין אינה זמינה. יש לפנות לתמיכה.', unsupported: 'אין בחנות ערכת עיצוב נתמכת של חנות מקוונת.',
+    proxy: 'יש לאשר גישה ב-Shopify כדי להמשיך בהגדרה.', permission: 'אימות אוטומטי דורש הרשאת קריאה לערכת העיצוב. עדיין ניתן להגדיר ב-Shopify.',
+    unverified: 'לא ניתן לאמת את ערכת העיצוב שפורסמה. יש לנסות שוב.', help: 'עזרה בהגדרה', approve: 'אישור אימות אוטומטי ב-Shopify', retry: 'בדיקה חוזרת',
+    detail: 'רק ערכת העיצוב שפורסמה מאשרת התקנה. פתיחת העורך או שמירת ההודעות אינן מוכיחות שהמקטע פעיל. ההגדרה אינה מעניקה הסכמת לקוח ואינה מפעילה הודעות.',
+    error: 'לא ניתן להשלים את ההגדרה. יש לאפשר חלונות קופצים עבור Shopify ולנסות שוב.' },
 };
-export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy, failed, action }: {
-  locale: string; setup?: ConsentThemeSetup; blocked: boolean; blockedReason?: string; busy: boolean; failed: boolean;
-  action: (action: 'open_editor' | 'confirm_saved' | 'verify') => void;
+export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy, failed, checking = false, action }: {
+  locale: string; setup?: ConsentThemeSetup; blocked: boolean; blockedReason?: string; busy: boolean; failed: boolean; checking?: boolean;
+  action: (action: 'open_editor' | 'verify') => void;
 }) {
   const lang = locale.startsWith('he') ? 'he' : locale.startsWith('es') ? 'es' : 'en', t = copy[lang];
-  const approvalRequired = !!setup?.approvalUrl &&
-    (setup?.state === 'permission_required' || setup?.state === 'proxy_permission_required');
-  const storefrontVerified = setup?.state === 'enabled_verified';
-  const hasEditor = !!setup?.editorUrl;
-  const editorOpened = !!setup?.editorOpenedAt;
-  const merchantConfirmed = !!setup?.merchantConfirmedAt;
-  const nextAction = approvalRequired ? 'approve' :
-    blocked || !hasEditor ? 'setup' :
-    storefrontVerified ? 'done' :
-    !editorOpened ? 'add' :
-    !merchantConfirmed ? 'confirm' : 'verify';
-  const base = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold shadow-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-45';
-  const primary = 'border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800';
-  const secondary = 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50';
-  const actionClass = (name: string) => `${base} ${name === nextAction ? primary : secondary}`;
-  const step = (name: string, heading: string, body: ReactNode, complete = false) =>
-    <div className="rounded-lg border border-slate-200 bg-white p-3" data-testid={`consent-action-${name}`}>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <strong className="text-sm">{heading}</strong>
-        {name === nextAction && <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">{t.next}</span>}
-        {complete && <span className="text-xs font-medium text-emerald-700">✓ {t.done}</span>}
-      </div>
-      {body}
-    </div>;
+  const state = setup?.state;
+  const unavailable = !setup || state === 'unreleased' || state === 'not_supported';
+  const verification = state === 'permission_required' || state === 'unverified' || state === 'editor_opened' || state === 'merchant_confirmed_saved';
+  const status = checking ? t.checking : failed ? t.verification : unavailable ? t.unavailable :
+    state === 'enabled_verified' ? t.live : blocked ? t.notSet : verification ? t.verification : t.ready;
+  const reason = state === 'unreleased' ? t.unreleased : state === 'not_supported' ? t.unsupported :
+    state === 'proxy_permission_required' ? t.proxy : state === 'permission_required' ? t.permission : verification ? t.unverified : null;
+  const base = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-45';
   return <div lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} className="space-y-3 rounded border p-3" data-testid="consent-theme-setup">
-    <p className="text-sm">{t.help}</p>
-    {setup && <p role="status">{t.states[setup.state]}</p>}
-    {setup?.merchantConfirmedAt && <p className="text-sm">{t.confirmed}</p>}
-    {setup?.checkedAt && <time className="block text-xs" dateTime={setup.checkedAt}>{new Date(setup.checkedAt).toLocaleString(lang)}</time>}
+    <p role="status" aria-live="polite" className="font-semibold">{status}</p>
+    <p className="text-sm">{t.instruction}</p>
+    {reason && <p className="text-sm">{reason}</p>}
     {blocked && <p id="consent-storefront-blocker" role="status">{blockedReason ?? t.save}</p>}
-    <h3 className="font-semibold">{t.stepTitle}</h3>
-    <div className="grid gap-3 sm:grid-cols-2">
-      {step('add', t.step1, <button type="button" data-testid="consent-add-storefront" className={actionClass('add')} aria-describedby={blocked ? 'consent-storefront-blocker' : undefined}
-        disabled={blocked || busy || !hasEditor} onClick={() => action('open_editor')}>{t.add} <span aria-hidden="true">↗</span></button>, editorOpened)}
-      {step('confirm', t.step2, <button type="button" className={actionClass('confirm')} disabled={blocked || busy || !hasEditor || !editorOpened}
-        onClick={() => action('confirm_saved')}>{t.confirm}</button>, merchantConfirmed)}
-      {step('verify', t.step3, <button type="button" className={actionClass('verify')} disabled={busy || !hasEditor}
-        onClick={() => action('verify')}>{t.verify}</button>, storefrontVerified)}
-      {approvalRequired && step('approve', t.step4, <a className={actionClass('approve')} target="_blank" rel="noopener noreferrer"
-        href={setup!.approvalUrl!}>{setup?.state === 'proxy_permission_required' ? t.approveProxy : t.approve} <span aria-hidden="true">↗</span></a>)}
-    </div>
+    <button type="button" data-testid="consent-add-storefront" className={`${base} border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-800`}
+      aria-describedby={blocked ? 'consent-storefront-blocker' : undefined} aria-busy={busy}
+      disabled={blocked || busy || checking || unavailable || !(setup?.editorUrl || (state === 'proxy_permission_required' && setup.approvalUrl))}
+      onClick={() => action('open_editor')}>{t.setup} <span aria-hidden="true">↗</span></button>
+    <details className="text-sm" data-testid="consent-theme-help">
+      <summary className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">{t.help}</summary>
+      <p className="my-2">{t.detail}</p>
+      {state === 'permission_required' && setup?.approvalUrl && <a className={`${base} border-slate-300`} target="_blank" rel="noopener noreferrer" href={setup.approvalUrl}>{t.approve} ↗</a>}
+      <button type="button" className={`${base} border-slate-300`} disabled={busy || checking} onClick={() => action('verify')}>{t.retry}</button>
+      {setup?.checkedAt && <time className="block text-xs" dateTime={setup.checkedAt}>{new Date(setup.checkedAt).toLocaleString(lang)}</time>}
+    </details>
     {failed && <p role="alert">{t.error}</p>}
   </div>;
 }
@@ -71,31 +63,57 @@ export function ShopifyConsentThemeSetup({ locale, blocked, blockedReason }: { l
   const { user, sessionAligned } = useAuth();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false), [failed, setFailed] = useState(false);
+  const activeAccount = useRef<string | undefined>(undefined), acting = useRef(false);
+  activeAccount.current = sessionAligned ? user?.id : undefined;
   const endpoint = '/api/shopify/merchant-engine/consent-theme';
   const query = useQuery<ConsentThemeSetup>({ queryKey: withUserQueryScope([endpoint], user?.id), enabled: !!user?.id && sessionAligned,
-    retry: false, queryFn: async () => { const r = await fetch(endpoint, { credentials: 'include', cache: 'no-store' }); if (!r.ok) throw Error('setup'); return r.json(); } });
+    retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
+    queryFn: async () => { const r = await fetch(endpoint, { credentials: 'include', cache: 'no-store' }); if (!r.ok) throw Error('setup'); return r.json(); } });
+  const { refetch } = query;
+  useEffect(() => {
+    if (!sessionAligned || !user?.id) return;
+    let lastReturn = 0;
+    const check = () => {
+      // Both events can fire for one return. Coalesce them and any running read;
+      // there is no polling and no merchant declaration of preview/save.
+      if (document.visibilityState === 'hidden' || acting.current || Date.now() - lastReturn < 1000) return;
+      lastReturn = Date.now();
+      void refetch({ cancelRefetch: false });
+    };
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      activeAccount.current = undefined;
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, [user?.id, sessionAligned, refetch]);
   const setup = sessionAligned && !query.isError ? query.data : undefined;
-  async function act(action: 'open_editor' | 'confirm_saved' | 'verify') {
-    if (busy || !sessionAligned || !user?.id) return;
-    // Create a tab inside the gesture to avoid popup blockers, then navigate
-    // only to the authenticated server's validated Shopify destination.
-    const tab = action === 'open_editor' ? window.open('about:blank', '_blank') : null;
-    if (tab) tab.opener = null;
-    setBusy(true); setFailed(false);
+  async function act(action: 'open_editor' | 'verify') {
+    if (acting.current || !sessionAligned || !user?.id || (action === 'open_editor' && blocked)) return;
+    if (action === 'verify') { setFailed(false); await refetch({ cancelRefetch: false }); return; }
+    const accountId = user.id;
+    // Open during the gesture, then use only the authenticated server's
+    // validated destination. Shopify retains control of approval and saving.
+    const tab = window.open('about:blank', '_blank');
+    if (!tab) { setFailed(true); return; }
+    tab.opener = null;
+    acting.current = true; setBusy(true); setFailed(false);
     try {
       const r = await fetch(endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
       if (!r.ok) throw Error('setup');
       const next = await r.json();
-      if (next.consentGranted !== false || next.messagingEnabled !== false) throw Error('unsafe_setup');
-      if (action === 'open_editor' && next.state === 'proxy_permission_required') {
-        tab?.close();
-      } else if (action === 'open_editor') {
-        if (!next.editorUrl || next.editorUrl !== setup?.editorUrl || !tab) throw Error('editor');
-        tab.location.href = next.editorUrl;
-      }
-      // Preserve the just-read published-state result without automatic API polling.
-      client.setQueryData(withUserQueryScope([endpoint], user.id), next);
-    } catch { tab?.close(); setFailed(true); } finally { setBusy(false); }
+      if (activeAccount.current !== accountId || next.consentGranted !== false || next.messagingEnabled !== false) throw Error('unsafe_setup');
+      const destination = next.state === 'proxy_permission_required' ? next.approvalUrl : next.editorUrl;
+      // Destination must match the current server-read setup. If permissions
+      // changed, show the new state and let the merchant retry explicitly.
+      const expected = next.state === 'proxy_permission_required' ? setup?.approvalUrl : setup?.editorUrl;
+      client.setQueryData(withUserQueryScope([endpoint], accountId), next);
+      if (!destination || destination !== expected) throw Error('destination_changed');
+      tab.location.href = destination;
+    } catch { tab.close(); if (activeAccount.current === accountId) setFailed(true); }
+    finally { acting.current = false; if (activeAccount.current === accountId) setBusy(false); }
   }
-  return <ConsentThemePanel locale={locale} setup={setup} blocked={blocked} blockedReason={blockedReason} busy={busy} failed={failed || query.isError} action={a => void act(a)}/>;
+  return <ConsentThemePanel locale={locale} setup={setup} blocked={blocked} blockedReason={blockedReason} busy={busy}
+    checking={query.isFetching} failed={failed || query.isError} action={a => void act(a)}/>;
 }

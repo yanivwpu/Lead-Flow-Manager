@@ -21,18 +21,43 @@ await build({ entryPoints: ['client/src/components/ecommerce/ShopifyConsentTheme
 const { ConsentThemePanel: Panel } = await import(pathToFileURL(join(scratch, 'panel.mjs')).href);
 const setup = (state: ConsentThemeState): ConsentThemeSetup => ({ state, editorUrl: 'https://first.myshopify.com/admin/themes/current/editor',
   releasedVersion: 'reviewed', approvalUrl: null, checkedAt: null, editorOpenedAt: null, merchantConfirmedAt: null });
-for (const locale of ['en', 'es', 'he']) test(`${locale} storefront setup offers one add action, merchant-owned confirmation and truthful published states`, () => {
+for (const locale of ['en', 'es', 'he']) test(`${locale} storefront setup offers one primary setup action and truthful published states without manual confirmation`, () => {
   for (const state of ['unreleased', 'configured', 'editor_opened', 'merchant_confirmed_saved', 'enabled_verified', 'disabled_verified', 'not_supported', 'proxy_permission_required', 'permission_required', 'unverified'] as const) {
     const { document } = parseHTML(renderToStaticMarkup(React.createElement(Panel, { locale, setup: setup(state), blocked: false, busy: false, failed: false, action: () => assert.fail('SSR action') })));
     const panel = document.querySelector('[data-testid="consent-theme-setup"]')!;
     assert.equal(panel.getAttribute('dir'), locale === 'he' ? 'rtl' : 'ltr');
     assert.equal(panel.getAttribute('lang'), locale);
-    assert.equal(panel.querySelectorAll('button').length, 3);
+    assert.equal(panel.querySelectorAll('button').length, 2);
+    const help = panel.querySelector('details')!;
+    assert.ok(!help.hasAttribute('open'));
+    assert.equal(panel.querySelectorAll('button:not(details button)').length, 1);
+    assert.ok(panel.querySelector('[data-testid="consent-add-storefront"]')!.className.includes('bg-emerald-700'));
+    assert.ok(!panel.textContent.includes('I previewed'));
+    const live = {en:'Live on store',es:'Activo en la tienda',he:'פעיל בחנות'}[locale];
+    assert.equal(panel.querySelector('[role="status"]')!.textContent === live, state === 'enabled_verified');
     assert.ok(panel.querySelector('[role="status"]')?.textContent);
     assert.equal(panel.querySelector('input, textarea, form'), null, 'no page URL or code copy step');
   }
   const { document } = parseHTML(renderToStaticMarkup(React.createElement(Panel, { locale, setup: { ...setup('unreleased'), editorUrl: null }, blocked: true, busy: false, failed: true, action: () => {} })));
   assert.ok(document.querySelector('button[disabled]')); assert.ok(document.querySelector('[role="alert"]'));
+});
+for (const locale of ['en', 'es', 'he']) test(`${locale} setup preserves gates, folds optional approval and distinguishes initial/ready/error states`, () => {
+  const render = (state: ConsentThemeState, props = {}) => parseHTML(renderToStaticMarkup(React.createElement(Panel, {
+    locale, setup: {...setup(state), approvalUrl:'https://admin.shopify.com/store/first/oauth/install'}, blocked:false, busy:false, failed:false, action:()=>{}, ...props,
+  }))).document;
+  const button = (doc: Document) => doc.querySelector('[data-testid="consent-add-storefront"]')!;
+  const ready = {en:'Ready to install',es:'Listo para instalar',he:'מוכן להתקנה'}[locale];
+  const notSet = {en:'Not set up',es:'Sin configurar',he:'לא הוגדר'}[locale];
+  assert.equal(render('configured').querySelector('[role="status"]')!.textContent, ready);
+  assert.equal(render('configured',{blocked:true}).querySelector('[role="status"]')!.textContent, notSet);
+  for (const props of [{blocked:true}, {busy:true}, {checking:true}]) assert.ok(button(render('configured',props)).hasAttribute('disabled'));
+  for (const state of ['unreleased','not_supported'] as const) assert.ok(button(render(state)).hasAttribute('disabled'));
+  assert.ok(!button(render('proxy_permission_required',{setup:{...setup('proxy_permission_required'),editorUrl:null,approvalUrl:'https://admin.shopify.com/store/first/oauth/install'}})).hasAttribute('disabled'));
+  const optional = render('permission_required');
+  assert.ok(!button(optional).hasAttribute('disabled'), 'optional read access does not prevent installation');
+  assert.ok(optional.querySelector('details a'), 'optional permission belongs in help');
+  assert.equal(optional.querySelector('a:not(details a)'), null);
+  assert.ok(render('enabled_verified',{failed:true}).querySelector('[role="alert"]'));
 });
 test('native extension JavaScript fetches only the Shopify proxy, sanitizes fetched markup, renders once and never sends a customer message', async () => {
   const { document, DOMParser, Node } = parseHTML('<html><body><div data-whachat-consent></div></body></html>');
