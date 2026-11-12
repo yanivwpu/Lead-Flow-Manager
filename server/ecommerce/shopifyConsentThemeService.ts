@@ -28,9 +28,11 @@ export function createConsentThemeService(deps: {
     try {
       const meta = await deps.request(install.shop, install.token,
         'query ConsentThemeAccess { currentAppInstallation { accessScopes { handle } } shop { myshopifyDomain } }');
-      if (meta?.shop?.myshopifyDomain !== install.shop) return { ...result, state: 'unverified' };
+      const currentInstall = await deps.installation(accountId);
+      if (!currentInstall || currentInstall.shop !== install.shop || currentInstall.token !== install.token || currentInstall.connection !== install.connection) return null;
+      if (meta?.shop?.myshopifyDomain !== install.shop) return { ...result, editorUrl: null, state: 'unverified' };
       const scopes = meta?.currentAppInstallation?.accessScopes;
-      if (!Array.isArray(scopes)) return { ...result, state: 'unverified' };
+      if (!Array.isArray(scopes)) return { ...result, editorUrl: null, state: 'unverified' };
       const approval = new URL(`https://admin.shopify.com/store/${install.shop.replace('.myshopify.com', '')}/oauth/install`);
       approval.searchParams.set('client_id', clientId);
       if (!scopes.some(s => s.handle === 'write_app_proxy')) {
@@ -47,6 +49,6 @@ export function createConsentThemeService(deps: {
       const latest = await deps.installation(accountId);
       if (!latest || latest.shop !== install.shop || latest.token !== install.token || latest.connection !== install.connection) return null;
       return { ...result, state: consentThemeState(response, extensionId), checkedAt: new Date(now()).toISOString() };
-    } catch { return { ...result, state: 'unverified' }; }
+    } catch { return { ...result, editorUrl: null, state: 'unverified' }; }
   };
 }

@@ -8,7 +8,7 @@ import { CONSENT_PURPOSES, CONSENT_LABELS, WHATSAPP_CONSENT_PHRASES, emptyEnroll
 
 const copy = {
   en: {
-    title: 'Customer WhatsApp consent', intro: 'Choose each purpose separately and save your notices. Add the consent section through the Shopify theme editor, preview it and save your theme. Your saved notices appear automatically; no page creation or code copying is needed.',
+    title: 'Customer WhatsApp consent', intro: 'Choose what customers can opt into, save your notices, then set up in Shopify.', help: 'How consent and messaging work',
     rules: 'Customers must choose freely and send the exact displayed WhatsApp text themselves. A click, saved setting, generic YES/OK, or Shopify email/SMS checkbox grants no consent. Never send an unsolicited WhatsApp message to request consent.',
     merchantName: 'Your business name shown to customers', pages: 'Open Shopify Pages', source: 'Store page where you will display these notices (HTTPS myshopify.com URL)', language: 'Customer notice language', select: 'Offer this purpose', extra: 'Additional merchant notice (optional)', save: 'Save changes', unsaved: 'Unsaved changes. Save before adding consent to your storefront.', selectPurpose: 'Select and save at least one consent purpose.', saving: 'Saving…', saved: 'Configuration saved; no customer consent was created.', error: 'Could not save or verify configuration. Check your connections and saved notice, then retry.', unavailable: 'Connect Shopify and WhatsApp and activate your Growth Engine workspace to configure consent.',
     share: 'Copy notice and opt-in link', copied: 'Copied', copyError: 'Copy failed. Select and copy the notice and link below.', notShared: 'Save this purpose before sharing. A current connection, connected business phone and authorized consent capture scope are required.',
@@ -19,7 +19,7 @@ const copy = {
     eligibility: 'No recipient is declared eligible here. At send time, consent must match this exact purpose and pass identity, freshness, STOP, DNC, purchase and privacy checks.',
   },
   es: {
-    title: 'Consentimiento del cliente para WhatsApp', intro: 'Elige cada finalidad y guarda los avisos. Añade la sección desde el editor de temas de Shopify, revísala y guarda el tema. Los avisos aparecen automáticamente, sin crear páginas ni copiar código.',
+    title: 'Consentimiento del cliente para WhatsApp', intro: 'Elige las finalidades, guarda los avisos y configura en Shopify.', help: 'Cómo funcionan el consentimiento y los mensajes',
     rules: 'El cliente debe elegir libremente y enviar por sí mismo el texto exacto de WhatsApp. Un clic, una configuración guardada, YES/OK genérico o una casilla de email/SMS de Shopify no otorgan consentimiento. No envíes mensajes de WhatsApp no solicitados para pedirlo.',
     merchantName: 'Nombre del comercio mostrado al cliente', pages: 'Abrir Páginas de Shopify', source: 'Página de la tienda donde mostrarás los avisos (URL HTTPS myshopify.com)', language: 'Idioma del aviso al cliente', select: 'Ofrecer esta finalidad', extra: 'Aviso adicional del comercio (opcional)', save: 'Guardar cambios', unsaved: 'Cambios sin guardar. Guarda antes de añadir consentimiento a tu tienda.', selectPurpose: 'Selecciona y guarda al menos una finalidad.', saving: 'Guardando…', saved: 'Configuración guardada; no se creó consentimiento del cliente.', error: 'No se pudo guardar o verificar. Revisa las conexiones y el aviso guardado y reintenta.', unavailable: 'Conecta Shopify y WhatsApp y activa tu espacio de Growth Engine para configurar el consentimiento.',
     share: 'Copiar aviso y enlace de aceptación', copied: 'Copiado', copyError: 'No se pudo copiar. Selecciona y copia el aviso y el enlace de abajo.', notShared: 'Guarda esta finalidad antes de compartir. Se requieren conexión actual, teléfono comercial conectado y autorización para capturar consentimiento.',
@@ -30,7 +30,7 @@ const copy = {
     eligibility: 'Aquí no se declara elegible a ningún destinatario. Al enviar, el consentimiento debe coincidir con la finalidad y superar las comprobaciones de identidad, vigencia, STOP, no contactar, compra y privacidad.',
   },
   he: {
-    title: 'הסכמת לקוחות ל-WhatsApp', intro: 'יש לבחור כל מטרה ולשמור את ההודעות. מוסיפים את מקטע ההסכמה בעורך ערכות העיצוב של Shopify, בודקים תצוגה מקדימה ושומרים. ההודעות מופיעות אוטומטית ללא יצירת דפים או העתקת קוד.',
+    title: 'הסכמת לקוחות ל-WhatsApp', intro: 'יש לבחור מטרות להסכמה, לשמור את ההודעות ולהגדיר ב-Shopify.', help: 'כיצד פועלים הסכמה ושליחת הודעות',
     rules: 'הלקוח חייב לבחור מרצונו ולשלוח בעצמו את הטקסט המדויק ב-WhatsApp. לחיצה, הגדרה שמורה, YES/OK כללי או תיבת הסכמה לאימייל/SMS ב-Shopify אינם מעניקים הסכמה. אין לשלוח הודעת WhatsApp לא רצויה כדי לבקש הסכמה.',
     merchantName: 'שם העסק המוצג ללקוחות', pages: 'פתיחת דפים ב-Shopify', source: 'דף החנות להצגת ההודעות (כתובת HTTPS ב-myshopify.com)', language: 'שפת הודעת ההסכמה ללקוח', select: 'הצעת מטרה זו', extra: 'הודעה נוספת מטעם העסק (רשות)', save: 'שמירת שינויים', unsaved: 'יש שינויים שלא נשמרו. יש לשמור לפני הוספת הסכמה לחנות.', selectPurpose: 'יש לבחור ולשמור לפחות מטרת הסכמה אחת.', saving: 'שומרים…', saved: 'ההגדרה נשמרה; לא נוצרה הסכמת לקוח.', error: 'לא ניתן לשמור או לאמת. יש לבדוק את החיבורים וההודעה השמורה ולנסות שוב.', unavailable: 'יש לחבר Shopify ו-WhatsApp ולהפעיל את סביבת Growth Engine כדי להגדיר הסכמה.',
     share: 'העתקת ההודעה וקישור ההסכמה', copied: 'הועתק', copyError: 'ההעתקה נכשלה. יש לבחור ולהעתיק את ההודעה והקישור למטה.', notShared: 'יש לשמור מטרה זו לפני שיתוף. נדרשים חיבור עדכני, מספר עסק מחובר והרשאה לאיסוף הסכמה.',
@@ -64,7 +64,7 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
       (captureReason ? (blockerCopy[lang] as Record<string, string>)[captureReason] : undefined) ?? t.captureBlocked : undefined;
   return <section lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} data-testid="shopify-consent-enrollment" className="space-y-4 rounded-xl border bg-white p-5">
     <h2 className="font-semibold">{t.title}</h2>
-    <p className="text-sm text-slate-600">{t.intro}</p><p className="text-sm">{t.rules}</p>
+    <p className="text-sm text-slate-600">{t.intro}</p>
     {!data ? <p role="status">{t.unavailable}</p> : <>
       {!data.connectionCurrent && data.draft && <p role="status">{t.stale}</p>}
       {!data.phoneAvailable && <p role="status">{t.phone}</p>}
@@ -117,9 +117,11 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
             <li key={reason}>{(blockerCopy[lang] as Record<string, string>)[reason] ?? t.blocked}</li>)}</ul></details></th>
         <td className="p-2">{row.templateReady ? t.ready : t.blocked}</td><td className="p-2">{row.merchantEnabled ? t.on : t.off}<span className="block text-xs">{row.activationBlocked ? t.activationBlocked : t.activationReady}</span></td>
         <td className="p-2">{t.perRecipient}{!row.captureReady && <span className="block text-xs">{t.captureBlocked}</span>}</td><td className="p-2">{row.operatorReleased ? t.scoped : t.blocked}</td>
-      </tr>)}</tbody></table></div><p className="text-sm">{t.eligibility}</p>
+      </tr>)}</tbody></table></div>
     </>}
-    <p className="text-xs text-slate-600">{t.proof}</p><p className="text-xs text-slate-600">{t.scopes}</p>
+    <details className="space-y-2 text-sm" data-testid="consent-compliance-help"><summary className="cursor-pointer">{t.help}</summary>
+      <p>{t.rules}</p><p>{t.proof}</p><p>{t.scopes}</p><p>{t.eligibility}</p>
+    </details>
   </section>;
 }
 
