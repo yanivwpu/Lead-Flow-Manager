@@ -1,1 +1,8 @@
-{"consent":{"name":"הסכמה ל-WhatsApp"}}
+{
+  "consent": {
+    "name": "הסכמה ל-WhatsApp",
+    "placement": "מיקום ההודעות",
+    "content_end": "בסוף התוכן הראשי (מומלץ)",
+    "original": "המיקום המקורי בערכת העיצוב"
+  }
+}

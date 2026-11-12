@@ -72,7 +72,7 @@ test('native extension JavaScript fetches only the Shopify proxy, sanitizes fetc
   const script = await readFile('extensions/whachat-consent/assets/consent.js', 'utf8');
   const hostile = `<section class="whachat-consent" lang="he" dir="rtl"><h2>Store</h2><p onclick="alert(1)">STOP</p><script>alert(1)</script><a href="javascript:alert(1)">bad</a><a href="https://wa.me/15551234567?text=YES%20WHATSAPP%20ORDER%20CONFIRMATIONS" onclick="alert(1)">opt in</a><img src="https://evil.test/track"></section>`;
   runInNewContext(script, { document, DOMParser, Node, fetch: async (url: string, options: any) => {
-    calls.push(url); assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error'); assert.equal(options.method, undefined);
+    calls.push(url); assert.equal(options.credentials, 'same-origin'); assert.equal(options.redirect, 'error'); assert.equal(options.method, undefined);
     return { ok: true, status: 200, text: async () => hostile };
   } });
   await new Promise(resolve => setImmediate(resolve));

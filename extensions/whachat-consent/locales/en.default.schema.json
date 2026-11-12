@@ -1,1 +1,8 @@
-{"consent":{"name":"WhatsApp consent"}}
+{
+  "consent": {
+    "name": "WhatsApp consent",
+    "placement": "Notice placement",
+    "content_end": "End of main content (recommended)",
+    "original": "Original theme embed position"
+  }
+}

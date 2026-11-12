@@ -31,9 +31,9 @@ export function consentStorefrontHtml(view: EnrollmentView): string | null {
   if (!view.connectionCurrent || !view.draft) return null;
   const draft = view.draft, locale = draft.locale;
   const labels = {
-    en: { title: 'WhatsApp preferences', action: 'Open WhatsApp to opt in', rule: 'Sending the displayed text is optional. Opening this link does not grant consent. Unknown customers remain ineligible.' },
-    es: { title: 'Preferencias de WhatsApp', action: 'Abrir WhatsApp para aceptar', rule: 'Enviar el texto mostrado es opcional. Abrir este enlace no otorga consentimiento. Los clientes no identificados siguen sin ser elegibles.' },
-    he: { title: 'העדפות WhatsApp', action: 'פתיחת WhatsApp להסכמה', rule: 'שליחת הטקסט המוצג היא רשות. פתיחת הקישור אינה מעניקה הסכמה. לקוחות לא מזוהים אינם זכאים.' },
+    en: { title: 'WhatsApp preferences', action: 'Choose in WhatsApp', rule: 'Choose the updates you want. Opening a link does not subscribe you. Review and send the message in WhatsApp to opt in. You can stop anytime by sending STOP.' },
+    es: { title: 'Preferencias de WhatsApp', action: 'Elegir en WhatsApp', rule: 'Elige las novedades que quieres. Abrir un enlace no te suscribe. Revisa y envía el mensaje en WhatsApp para aceptar. Puedes cancelar en cualquier momento enviando STOP.' },
+    he: { title: 'העדפות WhatsApp', action: 'בחירה ב-WhatsApp', rule: 'אפשר לבחור אילו עדכונים לקבל. פתיחת קישור אינה הרשמה. כדי להסכים, יש לבדוק ולשלוח את ההודעה ב-WhatsApp. אפשר לבטל בכל עת בשליחת STOP.' },
   }[locale];
   // Delivery/journey selection is a separate gate. Customers must be able to
   // enroll while delivery is paused or before a journey is selected.

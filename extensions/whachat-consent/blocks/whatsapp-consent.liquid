@@ -1,4 +1,4 @@
-<div data-whachat-consent data-proxy-path="/apps/whachat-consent" {{ block.shopify_attributes }}>
+<div class="whachat-consent-host" data-whachat-consent data-placement="{{ block.settings.placement | default: 'content_end' | escape }}" {{ block.shopify_attributes }}>
   {% if request.design_mode %}
     <p role="status">{{ 'consent.preview' | t | escape }}</p>
   {% endif %}
@@ -10,6 +10,6 @@
   "target": "body",
   "javascript": "consent.js",
   "stylesheet": "consent.css",
-  "settings": []
+  "settings": [{ "type": "select", "id": "placement", "label": "t:consent.placement", "default": "content_end", "options": [{ "value": "content_end", "label": "t:consent.content_end" }, { "value": "original", "label": "t:consent.original" }] }]
 }
 {% endschema %}
