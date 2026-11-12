@@ -2,7 +2,8 @@
   "consent": {
     "name": "Consentimiento WhatsApp",
     "placement": "Ubicación de los avisos",
-    "content_end": "Al final del contenido principal (recomendado)",
-    "original": "Posición original del tema"
+    "content_end": "Al final del contenido principal",
+    "original": "Posición original del tema",
+    "before_footer": "Encima del pie de página (recomendado)"
   }
 }

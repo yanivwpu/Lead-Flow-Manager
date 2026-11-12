@@ -35,7 +35,7 @@ test('published-theme browser fixture renders safely through Shopify proxy/sessi
   const schema=JSON.parse(liquid.split('{% schema %}')[1].split('{% endschema %}')[0]);
   assert.equal(schema.target,'body');assert.equal(schema.javascript,'consent.js');assert.equal(schema.stylesheet,'consent.css');
   const host=liquid.slice(0,liquid.indexOf('>')+1).replace(/{{(.*?)}}/g,(_match,expression:string)=>{
-    if(expression.includes('block.settings.placement'))return 'content_end';
+    if(expression.includes('block.settings.placement'))return schema.settings[0].default;
     if(expression.trim()==='block.shopify_attributes')return 'data-shopify-editor-block="fixture"';
     throw Error('unexpected Liquid host interpolation');
   })+'</div>';
@@ -88,13 +88,24 @@ test('published-theme browser fixture renders safely through Shopify proxy/sessi
         const section=f.page.locator('section.whachat-consent');await section.waitFor();
         assert.equal(await section.locator('article').count(),4);assert.equal(await section.getAttribute('dir'),lang==='he'?'rtl':'ltr');
         assert.ok((await section.textContent())?.includes('STOP'));
-        assert.equal(await f.page.locator('main [data-whachat-consent]').count(),1);
-        assert.equal(await section.locator('details[open]').count(),0);
-        await section.locator('summary').first().focus();await f.page.keyboard.press('Enter');assert.ok(await section.locator('details[open] code').count());
+        assert.equal(await f.page.locator('[data-whachat-consent]').evaluate(e=>e.nextElementSibling?.tagName),'FOOTER');
+        assert.equal(await section.locator('input[type=checkbox]').count(),4);
+        assert.equal(await section.locator('input:checked').count(),0);
+        assert.equal(await section.locator('button:disabled').count(),1);
+        assert.equal(await section.locator('a:visible').count(),0);
+        assert.ok((await section.boundingBox())!.height < (width===390?750:550),'compact collapsed section');
+        if(process.env.SHOPIFY_CONSENT_SCREENSHOTS){await mkdir('work/compact-previews',{recursive:true});await f.page.screenshot({path:`work/compact-previews/${lang}-${width}.png`,fullPage:true});}
+        await section.locator('input').first().check();
+        await section.locator('button').click();
+        assert.equal(await section.locator('a:visible').count(),1);
+        assert.equal(await section.locator('details[open]').count(),1);
+        await section.locator('summary').nth(1).focus();await f.page.keyboard.press('Enter');assert.ok(await section.locator('details[open] code').count());
         const link=section.locator('a').first();await link.focus();assert.equal(await link.evaluate(e=>e===document.activeElement),true);
         assert.ok((await link.getAttribute('href'))?.startsWith('https://wa.me/'));assert.equal(await link.getAttribute('rel'),'noopener noreferrer');
         assert.ok((await link.boundingBox())!.height>=44);assert.equal(await f.page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-        const grid=await section.evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length);assert.equal(grid,width===390?1:2);
+        const firstBox=(await section.locator('article').nth(0).boundingBox())!;
+        const secondBox=(await section.locator('article').nth(1).boundingBox())!;
+        assert.equal(Math.round(firstBox.y)===Math.round(secondBox.y),width!==390);
         assert.deepEqual(await diag(f.page),{scriptLoaded:true,containers:1,state:'ready',reason:'notices_rendered',attempts:1,rendered:true});
         const before=attempts;await f.page.evaluate(()=>{for(let i=0;i<8;i++)document.dispatchEvent(new Event('shopify:section:load'));});
         await f.page.addScriptTag({url:origin+'/assets/consent.js'});await f.page.waitForTimeout(100);
@@ -103,6 +114,30 @@ test('published-theme browser fixture renders safely through Shopify proxy/sessi
         await section.waitFor();assert.equal(await section.locator('article').count(),4);assert.equal(attempts,before,'DOM re-render uses the sanitized cache');assert.deepEqual(f.external,[]);assert.deepEqual(f.posts,[]);
         if(process.env.SHOPIFY_CONSENT_SCREENSHOTS){await mkdir('work/issue295',{recursive:true});await f.page.screenshot({path:`work/issue295/storefront-${lang}-${width}.png`,fullPage:true});}
       }finally{await f.context.close();}
+    });
+    await t.test('preferences remain independent and review preserves each exact-purpose link without consent writes',async()=>{
+      const f=await pageFor('ok');
+      try {
+        const section=f.page.locator('section.whachat-consent');await section.waitFor();
+        const original=await section.locator('article a').evaluateAll(links=>links.map(a=>a.getAttribute('href')));
+        assert.equal(new Set(original).size,4);
+        await section.locator('input').nth(0).check();
+        await section.locator('input').nth(3).check();
+        await section.locator('button').click();
+        assert.deepEqual(await section.locator('a:visible').evaluateAll(links=>links.map(a=>a.getAttribute('href'))),[original[0],original[3]]);
+        await section.locator('input').nth(0).uncheck();
+        assert.equal(await section.locator('input').nth(3).isChecked(),true);
+        assert.equal(await section.locator('a:visible').count(),0);
+        await section.locator('button').click();
+        assert.deepEqual(await section.locator('a:visible').evaluateAll(links=>links.map(a=>a.getAttribute('href'))),[original[3]]);
+        for(const article of await section.locator('article').all()) {
+          const exact=await article.locator('code').textContent();
+          assert.equal(new URL((await article.locator('a').getAttribute('href'))!).searchParams.get('text'),exact);
+        }
+        assert.deepEqual(f.posts,[]);assert.deepEqual(f.external,[]);assert.equal(attempts,1);
+        await f.page.reload();
+        await section.waitFor();assert.equal(await section.locator('input:checked').count(),0);
+      } finally {await f.context.close();}
     });
     await t.test('password session stays on Shopify origin and is not forwarded to application',async()=>{
       const f=await pageFor('gate','en',390,true);
@@ -126,7 +161,7 @@ test('published-theme browser fixture renders safely through Shopify proxy/sessi
     });
     await t.test('merchant original placement and vintage footer fallback stay in normal page flow',async()=>{
       let f=await pageFor('late');
-      try{await f.page.evaluate(h=>document.body.insertAdjacentHTML('beforeend',h.replace('content_end','original')),host);await f.page.locator('body > [data-whachat-consent] section').waitFor();assert.equal(await f.page.locator('main [data-whachat-consent]').count(),0);}
+      try{await f.page.evaluate(h=>document.body.insertAdjacentHTML('beforeend',h.replace('before_footer','original')),host);await f.page.locator('body > [data-whachat-consent] section').waitFor();assert.equal(await f.page.locator('main [data-whachat-consent]').count(),0);}
       finally{await f.context.close();}
       f=await pageFor('late');
       try{await f.page.evaluate(h=>{document.querySelector('main')!.remove();document.body.insertAdjacentHTML('beforeend',h);},host);await f.page.locator('section.whachat-consent').waitFor();assert.equal(await f.page.locator('[data-whachat-consent]').evaluate(e=>e.nextElementSibling?.tagName), 'FOOTER');}
@@ -150,7 +185,7 @@ test('published-theme browser fixture renders safely through Shopify proxy/sessi
     });
     await t.test('a hidden theme injection wrapper is escaped by inline main-content placement',async()=>{
       const f=await pageFor('hidden');
-      try{await f.page.locator('main section.whachat-consent').waitFor();assert.equal(await f.page.locator('[hidden] [data-whachat-consent]').count(),0);}
+      try{await f.page.locator('section.whachat-consent').waitFor();assert.equal(await f.page.locator('[hidden] [data-whachat-consent]').count(),0);}
       finally{await f.context.close();}
     });
     await t.test('CSP denial and missing assets have safe distinguishable runtime evidence',async()=>{
