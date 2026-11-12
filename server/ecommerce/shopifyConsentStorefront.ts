@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { CONSENT_EMBED_HANDLE, CONSENT_PROXY_PATH, type ConsentThemeState } from '../../shared/shopifyConsentStorefront';
+import { CONSENT_EMBED_HANDLE, CONSENT_PROXY_PATH, type ConsentThemeState, type ConsentThemeVerification } from '../../shared/shopifyConsentStorefront';
 import { CONSENT_LABELS, CONSENT_PURPOSES, WHATSAPP_CONSENT_PHRASES, type EnrollmentView } from '../../shared/shopifyConsentEnrollment';
 
 export function consentEditorUrl(shop: string, clientId: string): string | null {
@@ -47,25 +47,51 @@ ${rows.map(row => `<article><h3>${escape(CONSENT_LABELS[locale][CONSENT_PURPOSES
 }
 /** Inspect only current settings from the MAIN theme. A disabled block persists
  * in settings_data.json; presets and other apps are never activation evidence. */
-export function consentThemeState(payload: any, extensionId: string): ConsentThemeState {
-  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-(?:[a-f0-9]{12}|[a-f0-9]{20})$/.test(extensionId)) return 'unverified';
+export function inspectConsentTheme(payload: any, extensionId: string): ConsentThemeVerification {
+  const result = (state: ConsentThemeState, verificationReason: ConsentThemeVerification['verificationReason']) => ({ state, verificationReason });
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-(?:[a-f0-9]{12}|[a-f0-9]{20})$/.test(extensionId)) return result('unverified', 'extension_id_invalid');
+  if (payload?.errors) return result('unverified', 'malformed_graphql');
   const themes = payload?.themes?.nodes;
-  if (!Array.isArray(themes) || themes.length !== 1) return Array.isArray(themes) && !themes.length ? 'not_supported' : 'unverified';
+  if (!Array.isArray(themes) || themes.length > 1) return result('unverified', 'malformed_graphql');
+  if (!themes.length) return result('not_supported', 'no_published_theme');
   const theme = themes[0];
-  if (theme.role !== 'MAIN' || theme.processing !== false || theme.processingFailed !== false) return 'unverified';
-  const file = theme.files?.nodes?.find((f: any) => f.filename === 'config/settings_data.json');
-  if (typeof file?.body?.content !== 'string' || file.body.content.length > 1_000_000) return 'unverified';
+  if (!theme || theme.role !== 'MAIN') return result('unverified', 'theme_not_main');
+  if (theme.processing !== false || theme.processingFailed !== false) return result('unverified', 'theme_processing');
+  const files = theme.files?.nodes;
+  if (!Array.isArray(files)) return result('unverified', 'malformed_graphql');
+  const matchingFiles = files.filter((f: any) => f?.filename === 'config/settings_data.json');
+  if (!matchingFiles.length) return result('unverified', 'settings_file_missing');
+  if (matchingFiles.length !== 1) return result('unverified', 'malformed_graphql');
+  const content = matchingFiles[0].body?.content;
+  if (typeof content !== 'string' || content.length > 1_000_000) return result('unverified', 'settings_content_invalid');
+  let settings;
   try {
     // Shopify can prepend a generated-file comment to JSON theme assets.
-    const settings = JSON.parse(file.body.content.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, ''));
-    if (!settings.current || typeof settings.current !== 'object' || Array.isArray(settings.current)) return 'unverified';
-    const blocks = settings.current.blocks ?? {};
-    if (typeof blocks !== 'object' || Array.isArray(blocks)) return 'unverified';
-    const matches = Object.values(blocks).filter((b: any) => typeof b?.type === 'string' &&
-      /^shopify:\/\/apps\/[^/]+\/blocks\//.test(b.type) && b.type.endsWith(`/blocks/${CONSENT_EMBED_HANDLE}/${extensionId}`)) as any[];
-    if (matches.length > 1) return 'unverified';
-    return matches.length === 1 && matches[0].disabled === false ? 'enabled_verified' : 'disabled_verified';
-  } catch { return 'unverified'; }
+    settings = JSON.parse(content.replace(/^\s*\/\*[\s\S]*?\*\/\s*/, ''));
+  } catch { return result('unverified', 'settings_json_invalid'); }
+  if (!settings?.current || typeof settings.current !== 'object' || Array.isArray(settings.current)) return result('unverified', 'current_settings_invalid');
+  const blocks = settings.current.blocks === undefined ? {} : settings.current.blocks;
+  if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) return result('unverified', 'blocks_invalid');
+  // The app slug can vary; the exact block handle AND registered extension UID
+  // select this embed. Other blocks, presets and draft themes are not proof.
+  const types = Object.values(blocks).map((b: any) => ({ block: b,
+    parts: typeof b?.type === 'string' ? /^shopify:\/\/apps\/[^/]+\/blocks\/([^/]+)\/([^/]+)$/.exec(b.type) : null }));
+  const matches = types.filter(({ parts }) => parts?.[1] === CONSENT_EMBED_HANDLE && parts[2] === extensionId);
+  if (matches.length > 1) return result('unverified', 'duplicate_block');
+  if (!matches.length) {
+    const reason = types.some(({ parts }) => parts?.[2] === extensionId) ? 'wrong_handle' :
+      types.some(({ parts }) => parts?.[1] === CONSENT_EMBED_HANDLE) ? 'extension_id_mismatch' : 'block_missing';
+    return result('disabled_verified', reason);
+  }
+  const block = matches[0].block;
+  if (block.disabled === true) return result('disabled_verified', 'block_disabled');
+  if (block.disabled === false) return result('enabled_verified', 'block_enabled');
+  // An omitted flag is not positive activation evidence. Keep serialization
+  // uncertainty distinct from an explicitly disabled block.
+  return result('unverified', Object.prototype.hasOwnProperty.call(block, 'disabled') ? 'enabled_flag_invalid' : 'enabled_flag_missing');
+}
+export function consentThemeState(payload: any, extensionId: string): ConsentThemeState {
+  return inspectConsentTheme(payload, extensionId).state;
 }
 export const CONSENT_THEME_QUERY = `query ConsentPublishedTheme {
   themes(first: 2, roles: [MAIN]) { nodes { id role processing processingFailed

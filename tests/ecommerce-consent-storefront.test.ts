@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
@@ -188,7 +190,7 @@ test('automatic read verifies published state without confirmation, and retry/op
   const post=(action:string)=>fetch(url,{method:'POST',headers:{origin:'https://app.whachatcrm.com','content-type':'application/json'},body:JSON.stringify({action})});
   try {
     const first=await fetch(url); assert.ok(first.headers.get('cache-control')?.includes('no-store'));
-    assert.equal((await first.json()).state,'disabled_verified');assert.equal(records,0);
+    const firstBody=await first.json();assert.equal(firstBody.state,'disabled_verified');assert.equal(firstBody.verificationReason,'block_disabled');assert.equal(records,0);
     enabled=true;
     assert.equal((await (await fetch(url)).json()).state,'enabled_verified');
     assert.equal(records,0,'returning merchant never needs to declare preview/save');
@@ -197,7 +199,7 @@ test('automatic read verifies published state without confirmation, and retry/op
     assert.equal(providerReads-before,2,'one scope read and one MAIN theme read per verification');
     assert.equal(check.messagingEnabled,false);assert.equal(check.consentGranted,false);
     failure=true;
-    const failed=await (await fetch(url)).json();assert.equal(failed.state,'unverified');assert.equal(failed.editorUrl,null);
+    const failed=await (await fetch(url)).json();assert.equal(failed.state,'unverified');assert.equal(failed.verificationReason,'provider_unavailable');assert.equal(failed.editorUrl,null);
     assert.equal((await post('open_editor')).status,409,'cannot bypass required access check on provider failure');
     failure=false;allowed=false;
     const optional=await (await post('open_editor')).json();
@@ -222,4 +224,46 @@ test('scope-read races and invalid scope provenance never authorize opening a th
     if(['wrong_shop','malformed_scopes'].includes(mode)){assert.equal(result?.state,'unverified');assert.equal(result?.editorUrl,null);}
     else assert.equal(result,null,mode);
   }
+});
+
+
+test('signed proxy response reaches the actual embed renderer in EN/ES/HE; empty/error/password responses never become notices', async () => {
+  const script=await readFile('extensions/whachat-consent/assets/consent.js','utf8');
+  const app=express(), router=Router();let current=view(), reads=0;
+  registerConsentProxyRoute(router,{secret:()=>secret,enrollmentForShop:async domain=>{assert.equal(domain,shop);reads++;return current;}});
+  app.use(router);const server=app.listen(0,'127.0.0.1');await once(server,'listening');
+  const root=`http://127.0.0.1:${(server.address() as any).port}`;
+  try{
+    for(const locale of ['en','es','he'] as const){
+      current=view(locale);
+      const {document,DOMParser,Node}=parseHTML('<html><body><div data-whachat-consent></div></body></html>');
+      let finished!:()=>void;const done=new Promise<void>(resolve=>{finished=resolve;});
+      runInNewContext(script,{document,DOMParser,Node,fetch:async(path:string,options:any)=>{
+        assert.equal(path,'/apps/whachat-consent');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
+        // Fixture Shopify forwarder signs the request; no customer id or cookie.
+        const response=await fetch(root+'/consent-storefront?'+query());
+        assert.equal(response.status,200);const html=await response.text();setImmediate(finished);
+        return {ok:response.ok,status:response.status,text:async()=>html};
+      }});
+      await done;
+      const section=document.querySelector('section.whachat-consent')!;
+      assert.ok(section,'not just a theme-enabled flag or a blank placeholder');
+      assert.equal(section.getAttribute('lang'),locale);assert.equal(section.getAttribute('dir'),locale==='he'?'rtl':'ltr');
+      assert.ok(section.textContent.includes(current.draft!.merchantName));assert.ok(section.textContent.includes('STOP'));
+      assert.equal(section.querySelectorAll('article').length,7);
+      assert.equal(section.querySelectorAll('a[href^="https://wa.me/"]').length,7);
+      for(const phrase of Object.values(WHATSAPP_CONSENT_PHRASES))assert.ok(section.textContent.includes(phrase));
+      assert.equal(section.querySelector('script,form,input'),null);
+    }
+    current={...view(),rows:view().rows.map(row=>({...row,captureReady:false,link:null}))};
+    const empty=await fetch(root+'/consent-storefront?'+query());assert.equal(empty.status,204);
+    assert.equal(await empty.text(),'');
+    for(const response of [{ok:true,status:204,text:async()=>''},{ok:false,status:403,text:async()=>'<h1>Denied</h1>'},
+      {ok:true,status:200,text:async()=>'<html><body><form action="/password">Password protected store</form></body></html>'}]){
+      const {document,DOMParser,Node}=parseHTML('<html><body><div data-whachat-consent></div></body></html>');
+      runInNewContext(script,{document,DOMParser,Node,fetch:async()=>response});await new Promise(resolve=>setImmediate(resolve));
+      assert.equal(document.querySelector('section.whachat-consent,form'),null,'no rendered-notice claim on empty, denied or password HTML');
+    }
+    assert.equal(reads,4);
+  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
