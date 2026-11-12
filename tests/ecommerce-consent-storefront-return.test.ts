@@ -41,14 +41,15 @@ test('mount/return checks are automatic, coalesced and read-only; setup routes r
     }
     reads++;assert.equal(options?.cache,'no-store');return {ok:!readFailure,json:async()=>setup()};
   }) as typeof fetch;
-  const client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});
+  const client=new QueryClient({defaultOptions:{queries:{retry:false,staleTime:300_000,gcTime:1_800_000}}});
+  client.setQueryData(['/api/shopify/merchant-engine/consent-theme','user:owner'], {...setup(),state:'enabled_verified'});
   const root=createRoot(document.getElementById('root')!);
   const flush=()=>new Promise(resolve=>setTimeout(resolve,25));
   const render=()=>root.render(React.createElement(QueryClientProvider,{client},React.createElement(Component,{locale:'en',blocked:false})));
   const click=()=>document.querySelector<HTMLButtonElement>('[data-testid="consent-add-storefront"]')!.click();
   try{
     await act(async()=>{render();await flush();});await act(flush);
-    assert.equal(reads,1);assert.equal(posts,0);
+    assert.equal(reads,1,'mount checks even a recently cached result under the app’s five-minute stale default');assert.equal(posts,0);
     assert.ok(document.body.textContent.includes('Ready to install'));
     await act(async()=>{click();await flush();});
     assert.equal(posts,1);assert.ok(tabs[0].location.href.includes('/themes/current/editor'));assert.equal(tabs[0].opener,null);

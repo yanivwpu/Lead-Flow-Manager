@@ -67,7 +67,7 @@ export function ShopifyConsentThemeSetup({ locale, blocked, blockedReason }: { l
   activeAccount.current = sessionAligned ? user?.id : undefined;
   const endpoint = '/api/shopify/merchant-engine/consent-theme';
   const query = useQuery<ConsentThemeSetup>({ queryKey: withUserQueryScope([endpoint], user?.id), enabled: !!user?.id && sessionAligned,
-    retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
+    retry: false, staleTime: 0, refetchOnMount: 'always', refetchOnWindowFocus: false, refetchOnReconnect: false,
     queryFn: async () => { const r = await fetch(endpoint, { credentials: 'include', cache: 'no-store' }); if (!r.ok) throw Error('setup'); return r.json(); } });
   const { refetch } = query;
   useEffect(() => {
