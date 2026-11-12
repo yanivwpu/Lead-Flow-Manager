@@ -1,1 +1,8 @@
-{"consent":{"name":"Consentimiento WhatsApp"}}
+{
+  "consent": {
+    "name": "Consentimiento WhatsApp",
+    "placement": "Ubicación de los avisos",
+    "content_end": "Al final del contenido principal (recomendado)",
+    "original": "Posición original del tema"
+  }
+}

@@ -49,6 +49,12 @@ jobs:
         run: npx --yes @shopify/cli@5.0.1 theme check --path extensions/whachat-consent --fail-level error
       - name: Signed proxy, published theme and tenant regressions
         run: node --import tsx --test tests/ecommerce-consent-storefront*.test.ts
+      - name: Install Chromium for storefront render regressions
+        run: npx playwright install --with-deps chromium
+      - name: Real browser signed proxy, password session, retries, placement and RTL (fixtures only)
+        env:
+          SHOPIFY_CONSENT_BROWSER_TESTS: "1"
+        run: node --import tsx --test tests/ecommerce-consent-storefront-browser.test.ts
   consent-codeql:
     name: Shopify consent CodeQL
     runs-on: ubuntu-latest

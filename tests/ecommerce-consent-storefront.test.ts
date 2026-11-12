@@ -239,7 +239,7 @@ test('signed proxy response reaches the actual embed renderer in EN/ES/HE; empty
       const {document,DOMParser,Node}=parseHTML('<html><body><div data-whachat-consent></div></body></html>');
       let finished!:()=>void;const done=new Promise<void>(resolve=>{finished=resolve;});
       runInNewContext(script,{document,DOMParser,Node,fetch:async(path:string,options:any)=>{
-        assert.equal(path,'/apps/whachat-consent');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');
+        assert.equal(path,'/apps/whachat-consent');assert.equal(options.credentials,'same-origin');assert.equal(options.redirect,'error');
         // Fixture Shopify forwarder signs the request; no customer id or cookie.
         const response=await fetch(root+'/consent-storefront?'+query());
         assert.equal(response.status,200);const html=await response.text();setImmediate(finished);
