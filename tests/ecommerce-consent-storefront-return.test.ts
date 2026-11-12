@@ -25,7 +25,7 @@ test('mount/return checks are automatic, coalesced and read-only; setup routes r
   const {window,document}=parseHTML('<html><body><div id="root"></div></body></html>');
   Object.assign(globalThis,{window,document,IS_REACT_ACT_ENVIRONMENT:true});
   Object.defineProperty(document,'visibilityState',{value:'visible',configurable:true,writable:true});
-  let state='configured', owner='owner', reads=0, posts=0, pending: (()=>void)|undefined;
+  let state='configured', owner='owner', reads=0, posts=0, readFailure=false, unsafe=false, pending: (()=>void)|undefined;
   const tabs: any[]=[];
   (window as any).open=()=>{const tab={opener:{},location:{href:''},closed:false,close(){this.closed=true;}};tabs.push(tab);return tab;};
   const auth={user:{id:owner},sessionAligned:true};(globalThis as any)[fixture]={auth};
@@ -37,9 +37,9 @@ test('mount/return checks are automatic, coalesced and read-only; setup routes r
     if(options?.method==='POST'){
       posts++;assert.deepEqual(JSON.parse(String(options.body)),{action:'open_editor'});
       if(pending) await new Promise<void>(resolve=>{pending=resolve;});
-      return {ok:true,json:async()=>({...setup(),consentGranted:false,messagingEnabled:false})};
+      return {ok:true,json:async()=>({...setup(),consentGranted:unsafe,messagingEnabled:false})};
     }
-    reads++;assert.equal(options?.cache,'no-store');return {ok:true,json:async()=>setup()};
+    reads++;assert.equal(options?.cache,'no-store');return {ok:!readFailure,json:async()=>setup()};
   }) as typeof fetch;
   const client=new QueryClient({defaultOptions:{queries:{retry:false,gcTime:0}}});
   const root=createRoot(document.getElementById('root')!);
@@ -57,17 +57,28 @@ test('mount/return checks are automatic, coalesced and read-only; setup routes r
     await act(flush);
     assert.equal(reads,2,'focus and visibility are one return');assert.equal(posts,1);
     assert.ok(document.body.textContent.includes('Live on store'));
+    readFailure=true;
+    await act(async()=>{await client.invalidateQueries();await flush();});await act(flush);
+    assert.ok(!document.body.textContent.includes('Live on store'), 'failed reads discard cached live claim');
+    assert.ok(document.querySelector('[role="alert"]'));
+    readFailure=false;
+    await act(async()=>{document.querySelector<HTMLButtonElement>('details button')!.click();await flush();});await act(flush);
+    assert.ok(document.body.textContent.includes('Live on store'));
+    unsafe=true;
+    await act(async()=>{click();await flush();});
+    assert.ok(tabs.at(-1).closed,'unsafe response cannot navigate');
+    unsafe=false;
     state='proxy_permission_required';
     await act(async()=>{await client.invalidateQueries();await flush();});await act(flush);
     await act(async()=>{click();await flush();});
-    assert.equal(posts,2);assert.ok(tabs[1].location.href.startsWith('https://admin.shopify.com/'));
+    assert.equal(posts,3);assert.ok(tabs[2].location.href.startsWith('https://admin.shopify.com/'));
     pending=()=>{};
     await act(async()=>{click();await flush();});
     owner='other';auth.user={id:owner};
     await act(async()=>{render();await flush();});await act(flush);
     await act(async()=>{pending!();await flush();});
-    assert.ok(tabs[2].closed,'account change discards in-flight setup destination');
-    assert.equal(tabs[2].location.href,'');
+    assert.ok(tabs[3].closed,'account change discards in-flight setup destination');
+    assert.equal(tabs[3].location.href,'');
     const before=reads;
     await act(async()=>root.unmount());
     window.dispatchEvent(new window.Event('focus'));assert.equal(reads,before,'return listener is removed');

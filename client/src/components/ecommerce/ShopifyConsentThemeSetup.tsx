@@ -71,14 +71,18 @@ export function ShopifyConsentThemeSetup({ locale, blocked, blockedReason }: { l
     queryFn: async () => { const r = await fetch(endpoint, { credentials: 'include', cache: 'no-store' }); if (!r.ok) throw Error('setup'); return r.json(); } });
   const { refetch } = query;
   useEffect(() => {
+    activeAccount.current = sessionAligned ? user?.id : undefined;
     if (!sessionAligned || !user?.id) return;
+    const accountId = user.id;
     let lastReturn = 0;
     const check = () => {
       // Both events can fire for one return. Coalesce them and any running read;
       // there is no polling and no merchant declaration of preview/save.
       if (document.visibilityState === 'hidden' || acting.current || Date.now() - lastReturn < 1000) return;
       lastReturn = Date.now();
-      void refetch({ cancelRefetch: false });
+      void refetch({ cancelRefetch: false }).then(result => {
+        if (!result.isError && activeAccount.current === accountId) setFailed(false);
+      });
     };
     window.addEventListener('focus', check);
     document.addEventListener('visibilitychange', check);
