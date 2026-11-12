@@ -39,7 +39,7 @@ export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy,
     state === 'enabled_verified' ? t.live : blocked ? t.notSet : verification ? t.verification : t.ready;
   const reason = state === 'unreleased' ? t.unreleased : state === 'not_supported' ? t.unsupported :
     state === 'proxy_permission_required' ? t.proxy : state === 'permission_required' ? t.permission : verification ? t.unverified : null;
-  const base = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-45';
+  const base = 'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:opacity-45';
   return <div lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} className="space-y-3 rounded border p-3" data-testid="consent-theme-setup">
     <p role="status" aria-live="polite" className="font-semibold">{status}</p>
     <p className="text-sm">{t.instruction}</p>
