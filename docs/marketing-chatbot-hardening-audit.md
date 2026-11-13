@@ -87,4 +87,12 @@ Local work is complete without requesting production access. The earlier HTTP pr
 - AI Brain entitlement, response mode, live knowledge sources/freshness, routing ownership, server rollout/allowlist and human handoff state.
 - Real public incognito desktop/mobile behavior, browser third-party storage policies, public CSP/origin configuration, real product/pricing/integration answers and all EN/ES/HE model quality checks.
 
-The additive configuration is a proposal, not an applied marketing settings change. No production workspace was modified. No globally unattended automation was enabled. Draft PR #300 remains unmerged and undeployed.
+The additive configuration is a proposal, not an applied marketing settings change. No production workspace was modified. No globally unattended automation was enabled. PR #300 remains unmerged and undeployed.
+
+## Review finalization
+
+The six changed files were reviewed for storage/session behavior, stale async responses, page matching and localization, configuration isolation, and test side effects. The 16 marketing page rules remain a pure, unapplied proposal: no runtime imports activate it, and applying rules is a separate configuration step.
+
+GitHub reported four medium CodeQL annotations for unrestricted iframe-to-parent postMessage origins. Remove the wildcard defaults and exception retries from both branding-ready and teaser-gate effects. Send only to a known HTTP(S) parent origin, skip standalone windows, and do not retry an inaccessible parent with `*`. The actual-installation browser test records both message types and forces a parent exception to verify that no unrestricted retry occurs.
+
+The repository's public main-branch metadata reports protection disabled and an empty required-status-check list; its ruleset collection is empty. All available final-head checks must be green before Ready for Review. Production incident attribution, live AI quality and activation prerequisites remain unverified as listed above; this PR does not perform the separate configuration rollout.

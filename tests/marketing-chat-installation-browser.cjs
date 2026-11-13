@@ -28,6 +28,20 @@ async function waitUntil(fn, message) {
   for(const mobile of [false,true]) {
    const context=await browser.newContext({isMobile:mobile,hasTouch:mobile,viewport:mobile?{width:390,height:844}:{width:1280,height:900}});
    try {
+    await context.addInitScript(() => {
+     if (window.parent === window) return;
+     // Define the spy in the sending frame's realm so MessageEvent.source stays genuine.
+     const destination = window.parent;
+     destination.__widgetTargets = [];
+     const original = destination.postMessage;
+     destination.postMessage = function(payload, targetOrigin) {
+      if (payload?.source === 'wcw') {
+       destination.__widgetTargets.push({type:payload.type,targetOrigin});
+       if (destination.__rejectWidgetPosts) throw new DOMException('Parent unavailable', 'SecurityError');
+      }
+      return original.apply(this, arguments);
+     };
+    });
     const histories=new Map(); const posts=[]; const polls=[]; let releaseHistory; let releasePricing;
     const historyGate=new Promise(resolve=>{releaseHistory=resolve});
     const pricingGate=new Promise(resolve=>{releasePricing=resolve});
@@ -124,6 +138,15 @@ async function waitUntil(fn, message) {
     await waitUntil(()=>posts.length===3,'explicit integrations follow-up sends');
     assert.equal(posts[2].parentUrl,origin+'/integrations');
     assert.equal(posts[2].pageTitle,undefined,'neither the previous parent title nor the iframe title is sent');
+    const beforeRejectedPost = await page.evaluate(() => {window.__rejectWidgetPosts=true;return window.__widgetTargets.length});
+    await page.evaluate(()=>history.pushState({},'', '/es/integrations'));
+    await waitUntil(async()=>await frame.locator('html').getAttribute('lang')==='es','language still updates when the parent rejects a message');
+    await waitUntil(async()=>await page.evaluate(()=>window.__widgetTargets.length)>beforeRejectedPost,'exercise failed parent communication');
+    const targets = await page.evaluate(() => window.__widgetTargets);
+    assert.ok(targets.length > 0, 'branding and teaser messages must reach the embedding parent');
+    assert.ok(targets.every(message => message.targetOrigin === origin), 'all frame messages must restrict the target to the parent origin');
+    assert.ok(targets.some(message => message.type === 'wcw-branding-ready'));
+    assert.ok(targets.some(message => message.type === 'wcw-teaser-gate'));
     results.push({mobile,followupContext:true,officialInstallation:true,deliberateClick:true,persistedUuid:true,historyBubbleReproduced:true,navigation:true,delayedSettings:true,result:'PASS'});
    } finally {await context.close();}
   }

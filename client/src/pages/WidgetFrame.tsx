@@ -165,7 +165,8 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     const href = parentPageHref || initialParentHref;
     if (!href) return "";
     try {
-      return new URL(href).origin;
+      const parsed = new URL(href);
+      return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.origin : "";
     } catch {
       return "";
     }
@@ -402,26 +403,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [userId, parentPageHref, parentPageLocale, urlLocale, pageSettingsKey]);
 
   useLayoutEffect(() => {
-    if (!presentation || !userId) return;
+    if (!presentation || !userId || !expectedParentOrigin || window.parent === window) return;
     const payload = webchatBrandingReadyMessage(userId);
-    let target = "*";
-    if (parentPageHref) {
-      try {
-        target = new URL(parentPageHref).origin;
-      } catch {
-        target = "*";
-      }
-    }
     try {
-      window.parent.postMessage(payload, target);
+      window.parent.postMessage(payload, expectedParentOrigin);
     } catch {
-      try {
-        window.parent.postMessage(payload, "*");
-      } catch {
-        /* parent may be inaccessible */
-      }
+      /* parent may be inaccessible; never retry with an unrestricted origin */
     }
-  }, [presentation, userId, parentPageHref]);
+  }, [presentation, userId, expectedParentOrigin]);
 
   useEffect(() => {
     // The iframe URL is an installation-time snapshot; live settings own page copy.
@@ -624,27 +613,15 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [pageRulePresentation, pageRuleKey, markRuleShown, visitorId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !expectedParentOrigin || window.parent === window) return;
     const gateReason = humanTakeover ? "takeover" : pendingVisitorInput ? "pending_chatbot" : null;
     const payload = webchatTeaserGateMessage(userId, Boolean(gateReason), gateReason);
-    let target = "*";
-    if (parentPageHref) {
-      try {
-        target = new URL(parentPageHref).origin;
-      } catch {
-        target = "*";
-      }
-    }
     try {
-      window.parent.postMessage(payload, target);
+      window.parent.postMessage(payload, expectedParentOrigin);
     } catch {
-      try {
-        window.parent.postMessage(payload, "*");
-      } catch {
-        /* parent may be inaccessible */
-      }
+      /* parent may be inaccessible; never retry with an unrestricted origin */
     }
-  }, [userId, humanTakeover, pendingVisitorInput, parentPageHref]);
+  }, [userId, humanTakeover, pendingVisitorInput, expectedParentOrigin]);
 
   useLayoutEffect(() => {
     const decision = decideWebchatScrollAction({
