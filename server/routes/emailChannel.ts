@@ -1,4 +1,5 @@
 import { requireInboxWorkspace, inboxWorkspaceId } from "../inboxWorkspaceAccess";
+import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import type { Express, Request, Response } from "express";
 import {
   completeGmailOAuth,
@@ -92,7 +93,7 @@ export function registerEmailChannelRoutes(app: Express): void {
   });
 
   /** CID / inline MIME image for a message the user owns. */
-  app.get("/api/messages/:messageId/email-inline", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/messages/:messageId/email-inline", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
       const cid = typeof req.query.cid === "string" ? req.query.cid : "";
@@ -122,7 +123,7 @@ export function registerEmailChannelRoutes(app: Express): void {
    * Regular (non-CID) email attachment — on-demand Gmail fetch with strict ownership checks.
    * Query: attachmentId (providerAttachmentId), optional download=1
    */
-  app.get("/api/messages/:messageId/email-attachment", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/messages/:messageId/email-attachment", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
       const attachmentId =
@@ -300,7 +301,7 @@ export function registerEmailChannelRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/messages/:messageId/email-details", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/messages/:messageId/email-details", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
       // Ownership: message must belong to workspace

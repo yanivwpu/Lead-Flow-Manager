@@ -1,4 +1,5 @@
 import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
+import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import type { Express } from "express";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import { waMetaWebhookFailureHint } from "../waMetaDeliveryHints";
@@ -376,7 +377,7 @@ export function registerConversationRoutes(app: Express): void {
   //
   // All errors are logged with messageId, channel, and reason for easy debugging.
   // ---------------------------------------------------------------------------
-  app.get("/api/media/proxy", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/media/proxy", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     const messageId = req.query.messageId as string;
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });

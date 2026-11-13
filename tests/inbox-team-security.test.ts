@@ -9,6 +9,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import { eq } from "drizzle-orm";
 import { WebSocket } from "ws";
+import { rateLimit } from "express-rate-limit";
 import * as schema from "../shared/schema";
 
 // All database calls below use isolated in-memory PostgreSQL. No provider is invoked.
@@ -71,7 +72,7 @@ async function fixture() {
   const sessions = new session.MemoryStore();
   setupAuth(app, { store: sessions });
   // Test-only login creates genuine signed cookies and uses the production serializer/deserializer.
-  app.post("/__login", async (req, res, next) => {
+  app.post("/__login", rateLimit({ windowMs: 60_000, limit: 30, legacyHeaders: false }), async (req, res, next) => {
     const user = await storage.getUserForSession(req.body.id);
     if (!user) return res.sendStatus(401);
     req.logIn(user, error => error ? next(error) : req.session.save(error => error ? next(error) : res.json({ ok: true })));
@@ -234,6 +235,26 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal((await f.request("owner-b",`/api/contacts/contact-a/notes/${noteId}`,"PATCH",{content:"foreign"})).status,404);
       assert.equal((await f.request("owner-a",`/api/contacts/contact-b/notes/${noteId}`,"DELETE")).status,404);
       assert.equal((await f.request("admin","/api/contacts/contact-a/notes")).status,200);
+    });
+    await t.test("all four actual content routes enforce the actor budget before resource access", async () => {
+      const { INBOX_CONTENT_READ_LIMIT, INBOX_CONTENT_WINDOW_MS } = await import("../server/inboxContentRateLimit");
+      const { consumeRateLimit, __resetRateLimitMemoryForTests } = await import("../server/rateLimitMiddleware");
+      const realNow = Date.now;
+      const now = realNow(); Date.now = () => now;
+      __resetRateLimitMemoryForTests();
+      try {
+        // Set up an exhausted real counter; requests still traverse actual session/route middleware.
+        const key = `ratelimit:inbox-content-read:user:agent:${Math.floor(now / INBOX_CONTENT_WINDOW_MS)}`;
+        for (let i = 0; i < INBOX_CONTENT_READ_LIMIT; i++) await consumeRateLimit(key, INBOX_CONTENT_READ_LIMIT, INBOX_CONTENT_WINDOW_MS);
+        for (const path of ["/api/media/proxy?messageId=message-a", "/api/messages/message-a/email-inline?cid=image",
+          "/api/messages/message-a/email-attachment?attachmentId=file", "/api/messages/message-a/email-details"]) {
+          const response = await f.request("agent", path);
+          assert.equal(response.status, 429, path);
+          assert.ok(Number(response.headers.get("retry-after")) > 0);
+          assert.equal((await response.json()).limiter, "inbox-content-read");
+        }
+        assert.equal((await f.request("owner-a", "/api/messages/message-a/email-details")).status, 200);
+      } finally { Date.now = realNow; __resetRateLimitMemoryForTests(); }
     });
     await t.test("socket upgrade rejects absent/tampered sessions and cross-origin requests", async () => {
       await assert.rejects(f.socket(), /401/);

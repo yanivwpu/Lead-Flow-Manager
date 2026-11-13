@@ -5,6 +5,8 @@ on:
       - 'server/auth.ts'
       - 'server/presence.ts'
       - 'server/inboxWorkspace*.ts'
+      - 'server/inboxContentRateLimit.ts'
+      - 'server/rateLimitMiddleware.ts'
       - 'server/contactPatchSecurity.ts'
       - 'server/contactDetailsRoute.ts'
       - 'server/routes.ts'
@@ -16,6 +18,7 @@ on:
       - 'server/index.ts'
       - 'shared/schema.ts'
       - 'tests/inbox-team-security.test.ts'
+      - 'tests/inbox-content-rate-limit.test.ts'
       - 'package*.json'
       - '.github/workflows/inbox-team-security.yml'
 permissions:
@@ -39,7 +42,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Session-backed HTTP, WebSocket and SQL authorization regressions
-        run: node --import tsx --test tests/inbox-team-security.test.ts
+        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts
       - name: Existing ownership, auth and Inbox contracts
         run: >-
           node --import tsx --test
