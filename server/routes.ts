@@ -1,3 +1,6 @@
+import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";
+import { requireInboxWorkspace, inboxWorkspaceId } from "./inboxWorkspaceAccess";
+import { revokePresenceMembership } from "./presence";
 import { createSecondCartReview } from "./aiTestChat/secondCartReview";
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
@@ -550,6 +553,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerInboxWorkspaceRoutes(app);
   registerMarketingComplianceRoutes(app);
   registerSeoIntelligenceRoutes(app, requireSalesAdmin);
 
@@ -2155,13 +2159,13 @@ export async function registerRoutes(
   // ============ TEAM MEMBER ROUTES ============
 
   // Get team members
-  app.get("/api/team", async (req, res) => {
+  app.get("/api/team", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const members = await storage.getTeamMembers(req.user.id);
-      const user = await storage.getUser(req.user.id);
+      const members = await storage.getTeamMembers(inboxWorkspaceId(req));
+      const user = await storage.getUser(inboxWorkspaceId(req));
       
       // Filter out any owner entries from database (owner is added dynamically)
       const nonOwnerMembers = members.filter(m => m.role !== 'owner');
@@ -2169,8 +2173,8 @@ export async function registerRoutes(
       // Include the owner as the first team member
       const ownerMember = {
         id: "owner",
-        ownerId: req.user.id,
-        memberId: req.user.id,
+        ownerId: inboxWorkspaceId(req),
+        memberId: inboxWorkspaceId(req),
         email: user?.email || "",
         name: user?.name || "You",
         role: "owner",
@@ -2194,6 +2198,7 @@ export async function registerRoutes(
       }
 
       const { email, name, role = "member" } = req.body;
+      if (role !== "member" && role !== "admin") return res.status(400).json({ error: "Invalid team role" });
       
       if (!email) {
         return res.status(400).json({ error: "Email is required" });
@@ -2259,6 +2264,7 @@ export async function registerRoutes(
       }
 
       await storage.deleteTeamMember(req.params.id);
+      revokePresenceMembership(member.ownerId, member.memberId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error removing team member:", error);
@@ -2283,12 +2289,15 @@ export async function registerRoutes(
       }
 
       const { role, status, name } = req.body;
+      if (role !== undefined && role !== "member" && role !== "admin") return res.status(400).json({ error: "Invalid team role" });
+      if (status !== undefined && !["pending", "active", "inactive"].includes(status)) return res.status(400).json({ error: "Invalid membership status" });
       const updated = await storage.updateTeamMember(req.params.id, { 
         ...(role && { role }),
         ...(status && { status }),
         ...(name !== undefined && { name }),
       });
 
+      revokePresenceMembership(member.ownerId, member.memberId);
       res.json(updated);
     } catch (error) {
       console.error("Error updating team member:", error);
@@ -10595,13 +10604,13 @@ export async function registerRoutes(
   // ============= UNIFIED INBOX API (Multi-Channel CRM) =============
 
   // Lightweight sidebar badge — new inbound since last visible Inbox check (not total unread).
-  app.get("/api/inbox/activity", async (req, res) => {
+  app.get("/api/inbox/activity", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const { getInboxNewActivity } = await import("./inboxNewActivity");
-      const payload = await getInboxNewActivity(req.user.id);
+      const payload = await getInboxNewActivity(inboxWorkspaceId(req));
       res.json(payload);
     } catch (error) {
       console.error("Error fetching inbox activity:", error);
@@ -10609,13 +10618,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/inbox/activity/ack", async (req, res) => {
+  app.post("/api/inbox/activity/ack", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const { ackInboxNewActivity } = await import("./inboxNewActivity");
-      const payload = await ackInboxNewActivity(req.user.id);
+      const payload = await ackInboxNewActivity(inboxWorkspaceId(req));
       res.json(payload);
     } catch (error) {
       console.error("Error acknowledging inbox activity:", error);
@@ -10624,7 +10633,7 @@ export async function registerRoutes(
   });
 
   // Get unified inbox - recent page, or server-side search via ?q= (min 2 chars).
-  app.get("/api/inbox", async (req, res) => {
+  app.get("/api/inbox", requireInboxWorkspace, async (req, res) => {
     const t0 = Date.now();
     const userId = req.user?.id ?? null;
     const rawQ = typeof req.query.q === "string" ? req.query.q : "";
@@ -10646,13 +10655,13 @@ export async function registerRoutes(
       let inbox;
       if (searchQ) {
         inbox = await storage.searchUnifiedInbox(
-          req.user.id,
+          inboxWorkspaceId(req),
           searchQ,
           INBOX_SEARCH_RESULT_LIMIT,
         );
       } else {
         const limit = parseInt(req.query.limit as string) || 100;
-        inbox = await storage.getUnifiedInbox(req.user.id, limit);
+        inbox = await storage.getUnifiedInbox(inboxWorkspaceId(req), limit);
       }
       const ms = Date.now() - t0;
       const rowCount = Array.isArray(inbox) ? inbox.length : -1;
@@ -10660,7 +10669,7 @@ export async function registerRoutes(
         rowCount,
       });
       devLog("[InboxEvidence:GET /api/inbox] end", {
-        userId: req.user.id,
+        userId: inboxWorkspaceId(req),
         rowCount,
         returnedZero: rowCount === 0,
         ms,

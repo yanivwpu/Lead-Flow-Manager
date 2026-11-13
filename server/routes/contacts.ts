@@ -1,3 +1,5 @@
+import { contactPatchSchema } from "../contactPatchSecurity";
+import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { customerPrivacyLocked } from "../shopifyPrivacyRequests";
@@ -58,13 +60,13 @@ async function resolveEntityForNotes(id: string): Promise<{ userId: string } | n
 
 export function registerContactRoutes(app: Express): void {
   // Get all contacts
-  app.get("/api/contacts", async (req, res) => {
+  app.get("/api/contacts", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const limit = parseInt(req.query.limit as string) || 1000;
-      const contacts = await storage.getContacts(req.user.id, limit);
+      const contacts = await storage.getContacts(inboxWorkspaceId(req), limit);
       const listed = filterCrmListedContacts(contacts);
       const listedIds = listed.map((c) => c.id);
       let activeEnrollmentIds = new Set<string>();
@@ -75,7 +77,7 @@ export function registerContactRoutes(app: Express): void {
             .from(campaignEnrollments)
             .where(
               and(
-                eq(campaignEnrollments.userId, req.user.id),
+                eq(campaignEnrollments.userId, inboxWorkspaceId(req)),
                 eq(campaignEnrollments.status, "active"),
                 inArray(campaignEnrollments.contactId, listedIds),
               ),
@@ -98,7 +100,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Search contacts — must be BEFORE /:id
-  app.get("/api/contacts/search", async (req, res) => {
+  app.get("/api/contacts/search", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -107,7 +109,7 @@ export function registerContactRoutes(app: Express): void {
       if (!query) {
         return res.status(400).json({ error: "Search query required" });
       }
-      const contacts = await storage.searchContacts(req.user.id, query);
+      const contacts = await storage.searchContacts(inboxWorkspaceId(req), query);
       res.json(filterCrmListedContacts(contacts));
     } catch (error) {
       console.error("Error searching contacts:", error);
@@ -116,7 +118,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Notes summary — MUST be before /:id to avoid Express treating "notes-summary" as an id param
-  app.get("/api/contacts/notes-summary", async (req, res) => {
+  app.get("/api/contacts/notes-summary", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const rows = await db
@@ -125,7 +127,7 @@ export function registerContactRoutes(app: Express): void {
           count: sql<number>`count(*)::int`,
         })
         .from(contactNotes)
-        .where(eq(contactNotes.workspaceId, req.user.id))
+        .where(eq(contactNotes.workspaceId, inboxWorkspaceId(req)))
         .groupBy(contactNotes.contactId);
       const summary: Record<string, number> = {};
       rows.forEach((r) => { if (r.contactId) summary[r.contactId] = r.count; });
@@ -439,7 +441,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Get single contact with all conversations
-  app.get("/api/contacts/:id", async (req, res) => {
+  app.get("/api/contacts/:id", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -448,7 +450,7 @@ export function registerContactRoutes(app: Express): void {
       if (!result) {
         return res.status(404).json({ error: "Contact not found" });
       }
-      if (result.contact.userId !== req.user.id) {
+      if (result.contact.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       res.json(result);
@@ -458,7 +460,7 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/contacts/:id/details", createContactDetailsHandler({
+  app.get("/api/contacts/:id/details", requireInboxWorkspace, createContactDetailsHandler({
     getContact: async (id, userId) => (await db.select().from(contacts).where(and(eq(contacts.id, id), eq(contacts.userId, userId))).limit(1))[0],
     getConversations: (id, userId) => db.select().from(conversations).where(and(eq(conversations.contactId, id), eq(conversations.userId, userId))).orderBy(desc(conversations.lastMessageAt)),
     getActivityEvents: (id, userId, limit) => db.select().from(activityEvents).where(and(eq(activityEvents.contactId, id), eq(activityEvents.userId, userId))).orderBy(desc(activityEvents.createdAt)).limit(limit),
@@ -582,7 +584,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Update contact
-  app.patch("/api/contacts/:id", async (req, res) => {
+  app.patch("/api/contacts/:id", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -591,7 +593,7 @@ export function registerContactRoutes(app: Express): void {
       if (!contact) {
         return res.status(404).json({ error: "Contact not found" });
       }
-      if (contact.userId !== req.user.id) {
+      if (contact.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       const identityVersion = req.get("X-Contact-Updated-At");
@@ -601,7 +603,19 @@ export function registerContactRoutes(app: Express): void {
         return res.status(409).json({ error: "Customer information changed. Refresh before editing; Shopify identity is synchronized from the store." });
       }
       // Coerce date strings → Date objects for timestamp columns
-      const body = { ...req.body };
+      const parsedPatch = contactPatchSchema.safeParse(req.body);
+      if (!parsedPatch.success) return res.status(400).json({ error: "Invalid contact fields", fields: parsedPatch.error.flatten() });
+      const body: Record<string, any> = { ...parsedPatch.data };
+      if (Object.prototype.hasOwnProperty.call(body, "assignedTo")) {
+        const target = body.assignedTo;
+        if (target !== null && (typeof target !== "string" || !await getInboxWorkspaceAccess(target, inboxWorkspaceId(req)))) {
+          return res.status(400).json({ error: "Assignee must be an active workspace teammate" });
+        }
+        if (!isInboxAdmin(req) && ((target !== null && target !== req.user.id) ||
+            (contact.assignedTo !== null && contact.assignedTo !== req.user.id))) {
+          return res.status(403).json({ error: "Only workspace admins can reassign another teammate's work" });
+        }
+      }
       delete body.automationsPausedAt;
       delete body.automationsPausedByUserId;
       if (Object.prototype.hasOwnProperty.call(req.body, "automationsPaused")) {
@@ -621,10 +635,6 @@ export function registerContactRoutes(app: Express): void {
           contact.followUp != null &&
           contact.followUp !== "");
 
-      if (clearingFollowUp && !identityVersion) {
-        await clearActiveAppointmentsForContact(req.user.id, req.params.id);
-      }
-
       // Facebook: user-edited names are stamped so Meta profile enrichment never overwrites them.
       if (
         contact.facebookId &&
@@ -639,11 +649,13 @@ export function registerContactRoutes(app: Express): void {
         );
       }
 
-      const updated = await storage.updateContact(req.params.id, body, identityVersion ? {
-        expectedWorkspaceUserId: req.user.id, expectedUpdatedAt, requireUnsyncedIdentity: true,
-      } : undefined);
+      const updated = await storage.updateContact(req.params.id, body, {
+        expectedWorkspaceUserId: inboxWorkspaceId(req), expectedActorUserId: req.user.id,
+        ...(identityVersion ? { expectedUpdatedAt, requireUnsyncedIdentity: true } : {}),
+      });
+      if (!updated && !identityVersion) return res.status(403).json({ error: "Workspace or assignment permission changed" });
       if (identityVersion && !updated) return res.status(409).json({ error: "Customer information changed. Refresh before editing." });
-      if (clearingFollowUp && identityVersion) await clearActiveAppointmentsForContact(req.user.id, req.params.id);
+      if (clearingFollowUp) await clearActiveAppointmentsForContact(inboxWorkspaceId(req), req.params.id);
 
       if (
         updated &&
@@ -655,7 +667,7 @@ export function registerContactRoutes(app: Express): void {
             "../campaignExecution"
           );
           await syncCampaignEnrollmentsForContactAutomationPause({
-            userId: req.user.id,
+            userId: inboxWorkspaceId(req),
             contactId: contact.id,
             paused: updated.automationsPaused === true,
           });
@@ -686,7 +698,7 @@ export function registerContactRoutes(app: Express): void {
 
         if (Object.keys(fieldsToSync).length > 0) {
           import('../ghlSync').then(({ ghlSyncContactFields }) => {
-            ghlSyncContactFields(req.user!.id, contact.ghlId!, fieldsToSync).catch(() => {});
+            ghlSyncContactFields(inboxWorkspaceId(req), contact.ghlId!, fieldsToSync).catch(() => {});
           }).catch(() => {});
         }
 
@@ -697,7 +709,7 @@ export function registerContactRoutes(app: Express): void {
         ) {
           import('../ghlSync').then(({ ghlSyncPipelineStage }) => {
             ghlSyncPipelineStage(
-              req.user!.id,
+              inboxWorkspaceId(req),
               contact.id,
               contact.ghlId!,
               req.body.pipelineStage as string,
@@ -707,7 +719,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       if (contactPatchAffectsHubSpot(body as Record<string, unknown>)) {
-        scheduleHubSpotAutoSync(req.user.id, req.params.id);
+        scheduleHubSpotAutoSync(inboxWorkspaceId(req), req.params.id);
       }
 
       res.json(updated);
@@ -998,7 +1010,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Send message to contact (auto channel selection, or forceChannel from body when set)
-  app.post("/api/contacts/:id/send", async (req, res) => {
+  app.post("/api/contacts/:id/send", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -1038,7 +1050,7 @@ export function registerContactRoutes(app: Express): void {
       }
       if (process.env.NODE_ENV !== "production") {
         const contactRow = await storage.getContact(req.params.id);
-        const channelSettingsRows = await storage.getChannelSettings(req.user.id);
+        const channelSettingsRows = await storage.getChannelSettings(inboxWorkspaceId(req));
         const payloadPreview = typeof content === "string" ? content.slice(0, 200) : "";
         console.log("[api/contacts/send] start", {
           contactId: req.params.id,
@@ -1090,7 +1102,7 @@ export function registerContactRoutes(app: Express): void {
 
       const send = async () =>
         channelService.sendMessage({
-          userId: req.user!.id,
+          userId: inboxWorkspaceId(req),
           contactId: req.params.id,
           content: content || '',
           contentType: contentType || mediaType || (mediaUrl ? 'image' : 'text'),
@@ -1106,14 +1118,14 @@ export function registerContactRoutes(app: Express): void {
       const guarded = guardedSource
         ? await withAutomationSendGuard(
             {
-              userId: req.user.id,
+              userId: inboxWorkspaceId(req),
               contactId: req.params.id,
               channel: requested,
               source: guardedSource,
               idempotencyKey:
                 typeof idempotencyKey === "string" && idempotencyKey.trim()
                   ? idempotencyKey.trim()
-                  : `${guardedSource}:${req.user.id}:${req.params.id}:${String(content || "").slice(0, 160)}:${Math.floor(Date.now() / 60_000)}`,
+                  : `${guardedSource}:${inboxWorkspaceId(req)}:${req.params.id}:${String(content || "").slice(0, 160)}:${Math.floor(Date.now() / 60_000)}`,
             },
             send
           )
@@ -1146,12 +1158,12 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Get Team Notes for a contact or chat
-  app.get("/api/contacts/:id/notes", async (req, res) => {
+  app.get("/api/contacts/:id/notes", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const entity = await resolveEntityForNotes(req.params.id);
       if (!entity) return res.status(404).json({ error: "Not found" });
-      if (entity.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
+      if (entity.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
       const notes = await storage.getContactNotes(entity.userId, req.params.id);
       res.json(notes);
     } catch (error) {
@@ -1161,12 +1173,12 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Add a Team Note to a contact or chat
-  app.post("/api/contacts/:id/notes", async (req, res) => {
+  app.post("/api/contacts/:id/notes", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
       const entity = await resolveEntityForNotes(req.params.id);
       if (!entity) return res.status(404).json({ error: "Not found" });
-      if (entity.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
+      if (entity.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
       const { content } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "Content is required" });
       const note = await storage.addContactNote({
@@ -1184,18 +1196,20 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Update (edit) a Team Note
-  app.patch("/api/contacts/:id/notes/:noteId", async (req, res) => {
+  app.patch("/api/contacts/:id/notes/:noteId", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const entity = await resolveEntityForNotes(req.params.id);
+      if (!entity || entity.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
       const { noteId } = req.params;
       const { content } = req.body;
       if (!content?.trim()) return res.status(400).json({ error: "Content is required" });
 
       const note = await storage.getContactNoteById(noteId);
-      if (!note) return res.status(404).json({ error: "Note not found" });
+      if (!note || note.workspaceId !== inboxWorkspaceId(req) || note.contactId !== req.params.id) return res.status(404).json({ error: "Note not found" });
 
       const isCreator = note.createdByUserId === req.user.id;
-      const isWorkspaceOwner = note.workspaceId === req.user.id;
+      const isWorkspaceOwner = isInboxAdmin(req);
       if (!isCreator && !isWorkspaceOwner) {
         return res.status(403).json({ error: "You don't have permission to edit this note" });
       }
@@ -1209,17 +1223,19 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Delete a Team Note
-  app.delete("/api/contacts/:id/notes/:noteId", async (req, res) => {
+  app.delete("/api/contacts/:id/notes/:noteId", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const entity = await resolveEntityForNotes(req.params.id);
+      if (!entity || entity.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
       const { noteId } = req.params;
 
       const note = await storage.getContactNoteById(noteId);
-      if (!note) return res.status(404).json({ error: "Note not found" });
+      if (!note || note.workspaceId !== inboxWorkspaceId(req) || note.contactId !== req.params.id) return res.status(404).json({ error: "Note not found" });
 
-      // Workspace owner check: workspaceId === req.user.id
+      // Workspace owner check: workspaceId === inboxWorkspaceId(req)
       const isCreator      = note.createdByUserId === req.user.id;
-      const isWorkspaceOwner = note.workspaceId === req.user.id;
+      const isWorkspaceOwner = isInboxAdmin(req);
       if (!isCreator && !isWorkspaceOwner) {
         return res.status(403).json({ error: "You don't have permission to delete this note" });
       }
@@ -1302,10 +1318,10 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/contacts/:id/appointments", async (req, res) => {
+  app.get("/api/contacts/:id/appointments", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const appts = await storage.getAppointmentsByContact(req.user.id, req.params.id);
+      const appts = await storage.getAppointmentsByContact(inboxWorkspaceId(req), req.params.id);
       res.json(appts.filter(isActiveFutureAppointment));
     } catch (err) {
       console.error("Error fetching contact appointments:", err);
@@ -1375,7 +1391,7 @@ export function registerContactRoutes(app: Express): void {
   });
 
   // Get activity timeline for a contact
-  app.get("/api/contacts/:id/timeline", async (req, res) => {
+  app.get("/api/contacts/:id/timeline", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -1384,7 +1400,7 @@ export function registerContactRoutes(app: Express): void {
       if (!contact) {
         return res.status(404).json({ error: "Contact not found" });
       }
-      if (contact.userId !== req.user.id) {
+      if (contact.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       const limit = parseInt(req.query.limit as string) || 100;

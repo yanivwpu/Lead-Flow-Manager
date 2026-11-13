@@ -1,3 +1,4 @@
+import { requireInboxWorkspace, inboxWorkspaceId } from "../inboxWorkspaceAccess";
 import type { Express, Request, Response } from "express";
 import {
   completeGmailOAuth,
@@ -91,13 +92,13 @@ export function registerEmailChannelRoutes(app: Express): void {
   });
 
   /** CID / inline MIME image for a message the user owns. */
-  app.get("/api/messages/:messageId/email-inline", async (req, res) => {
+  app.get("/api/messages/:messageId/email-inline", requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
       const cid = typeof req.query.cid === "string" ? req.query.cid : "";
       const { fetchEmailInlineImageForUser } = await import("../emailChannel/emailInlineImages");
       const result = await fetchEmailInlineImageForUser({
-        workspaceUserId: req.user.id,
+        workspaceUserId: inboxWorkspaceId(req),
         messageId: req.params.messageId,
         contentId: cid,
       });
@@ -121,7 +122,7 @@ export function registerEmailChannelRoutes(app: Express): void {
    * Regular (non-CID) email attachment — on-demand Gmail fetch with strict ownership checks.
    * Query: attachmentId (providerAttachmentId), optional download=1
    */
-  app.get("/api/messages/:messageId/email-attachment", async (req, res) => {
+  app.get("/api/messages/:messageId/email-attachment", requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
       const attachmentId =
@@ -137,7 +138,7 @@ export function registerEmailChannelRoutes(app: Express): void {
       const { fetchEmailAttachmentForUser } = await import("../emailChannel/emailAttachments");
       const { sanitizeEmailAttachmentFilename } = await import("@shared/emailAttachmentPolicy");
       const result = await fetchEmailAttachmentForUser({
-        workspaceUserId: req.user.id,
+        workspaceUserId: inboxWorkspaceId(req),
         messageId: req.params.messageId,
         providerAttachmentId: attachmentId,
         forceDownload,
@@ -299,14 +300,14 @@ export function registerEmailChannelRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/messages/:messageId/email-details", async (req, res) => {
+  app.get("/api/messages/:messageId/email-details", requireInboxWorkspace, async (req, res) => {
     try {
       if (!requireAuth(req, res)) return;
-      const detail = await getEmailMessageDetail(req.params.messageId);
-      if (!detail) return res.status(404).json({ error: "Not found" });
       // Ownership: message must belong to workspace
       const msg = await storageGetMessage(req.params.messageId);
-      if (!msg || msg.userId !== req.user.id) return res.status(403).json({ error: "Forbidden" });
+      if (!msg || msg.userId !== inboxWorkspaceId(req)) return res.status(403).json({ error: "Forbidden" });
+      const detail = await getEmailMessageDetail(req.params.messageId);
+      if (!detail) return res.status(404).json({ error: "Not found" });
 
       const { formMetaFromEmailDetail } = await import(
         "../emailChannel/resolveConversationReplyTarget"

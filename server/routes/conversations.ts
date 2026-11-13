@@ -1,3 +1,4 @@
+import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import type { Express } from "express";
 import { computeConversationReplyWindowStatus } from "@shared/conversationReplyWindow";
 import { waMetaWebhookFailureHint } from "../waMetaDeliveryHints";
@@ -109,7 +110,7 @@ function enrichConversationMessagesForClient(rows: unknown[]): unknown[] {
 
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
-  app.get("/api/conversations/:id/messages", async (req, res) => {
+  app.get("/api/conversations/:id/messages", requireInboxWorkspace, async (req, res) => {
     const conversationId = req.params.id;
     const userId = req.user?.id ?? null;
     const t0 = Date.now();
@@ -136,14 +137,15 @@ export function registerConversationRoutes(app: Express): void {
           ...dbErrorPayload(e),
         });
       }
-      if (!conversation || conversation.userId !== req.user.id) {
+      if (!conversation || conversation.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       const rawL = parseInt(String(req.query.limit ?? ""), 10);
       const rawO = parseInt(String(req.query.offset ?? ""), 10);
       const limit = Number.isFinite(rawL) ? rawL : 100;
       const offset = Number.isFinite(rawO) ? rawO : 0;
-      const messages = await storage.getMessages(conversationId, limit, offset);
+      const messages = (await storage.getMessages(conversationId, limit, offset))
+        .filter(message => message.userId === inboxWorkspaceId(req) && message.contactId === conversation.contactId);
       const payload = enrichConversationMessagesForClient(messages);
       if (String(conversation.channel || "").toLowerCase() === "email") {
         const { getEmailFromAddressesByMessageIds } = await import("../emailChannel/mailboxStore");
@@ -181,12 +183,13 @@ export function registerConversationRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/conversations/:id", async (req, res) => {
+  app.delete("/api/conversations/:id", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const result = await deleteAnonymousInboxConversationSafely(req.user.id, req.params.id);
+      if (!isInboxAdmin(req)) return res.status(403).json({ error: "Only workspace admins can delete conversations" });
+      const result = await deleteAnonymousInboxConversationSafely(inboxWorkspaceId(req), req.params.id);
       if (!result.ok) {
         if (result.code === "identified_contact") {
           return res.status(403).json({ error: "identified_contact", code: "identified_contact" });
@@ -201,7 +204,7 @@ export function registerConversationRoutes(app: Express): void {
   });
 
   // Update conversation (status, etc.)
-  app.patch("/api/conversations/:id", async (req, res) => {
+  app.patch("/api/conversations/:id", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -210,7 +213,7 @@ export function registerConversationRoutes(app: Express): void {
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      if (conversation.userId !== req.user.id) {
+      if (conversation.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       const allowed = ['status'];
@@ -226,13 +229,13 @@ export function registerConversationRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/conversations/:id/ai-control", async (req, res) => {
+  app.post("/api/conversations/:id/ai-control", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const conversation = await storage.getConversation(req.params.id);
-      if (!conversation || conversation.userId !== req.user.id) {
+      if (!conversation || conversation.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
       const action = String(req.body?.action || "").trim();
@@ -249,7 +252,7 @@ export function registerConversationRoutes(app: Express): void {
         }, conversation.aiControl);
         const updated = await storage.updateConversation(conversation.id, { aiControl: next });
         await storage.createActivityEvent({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           contactId: conversation.contactId,
           conversationId: conversation.id,
           eventType: "ai_paused",
@@ -265,7 +268,7 @@ export function registerConversationRoutes(app: Express): void {
         const next = resumeAiControl(conversation.aiControl);
         const updated = await storage.updateConversation(conversation.id, { aiControl: next });
         await storage.createActivityEvent({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           contactId: conversation.contactId,
           conversationId: conversation.id,
           eventType: "ai_resumed",
@@ -284,7 +287,7 @@ export function registerConversationRoutes(app: Express): void {
 
   // Mark conversation as read — only the viewed conversation/thread.
   // Sibling channels/threads stay unread. Inbox row badge uses that conversation's unread.
-  app.post("/api/conversations/:id/read", async (req, res) => {
+  app.post("/api/conversations/:id/read", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -293,7 +296,7 @@ export function registerConversationRoutes(app: Express): void {
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      if (conversation.userId !== req.user.id) {
+      if (conversation.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
 
@@ -373,7 +376,7 @@ export function registerConversationRoutes(app: Express): void {
   //
   // All errors are logged with messageId, channel, and reason for easy debugging.
   // ---------------------------------------------------------------------------
-  app.get("/api/media/proxy", async (req, res) => {
+  app.get("/api/media/proxy", requireInboxWorkspace, async (req, res) => {
     const messageId = req.query.messageId as string;
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
@@ -387,9 +390,10 @@ export function registerConversationRoutes(app: Express): void {
 
       // Security: message must belong to the requesting user's account
       const conversation = await storage.getConversation(message.conversationId);
-      if (!conversation || conversation.userId !== req.user.id) {
+      if (!conversation || conversation.userId !== inboxWorkspaceId(req) ||
+          message.userId !== inboxWorkspaceId(req) || message.contactId !== conversation.contactId) {
         console.warn(
-          `[MediaProxy] messageId=${messageId} reason=forbidden userId=${req.user.id}`
+          `[MediaProxy] messageId=${messageId} reason=forbidden userId=${inboxWorkspaceId(req)}`
         );
         return res.status(404).json({ error: "Not found" });
       }
@@ -418,7 +422,7 @@ export function registerConversationRoutes(app: Express): void {
       if (whatsappMediaId && !message.mediaUrl) {
         const idSource = message.platformMediaId ? 'platform_media_id' : 'media_filename (legacy)';
         console.log(`[MediaProxy] messageId=${messageId} channel=whatsapp mediaId=${whatsappMediaId} (from ${idSource}) — fetching fresh URL`);
-        const freshUrl = await getMediaUrl(req.user.id, whatsappMediaId);
+        const freshUrl = await getMediaUrl(inboxWorkspaceId(req), whatsappMediaId);
         if (!freshUrl) {
           console.error(
             `[MediaProxy] messageId=${messageId} channel=whatsapp reason=getMediaUrl_null (token invalid or media expired)`
@@ -426,7 +430,7 @@ export function registerConversationRoutes(app: Express): void {
           return res.status(502).json({ error: "Could not retrieve WhatsApp media URL. Check Meta credentials." });
         }
 
-        const buffer = await downloadMedia(req.user.id, freshUrl);
+        const buffer = await downloadMedia(inboxWorkspaceId(req), freshUrl);
         if (!buffer) {
           console.error(
             `[MediaProxy] messageId=${messageId} channel=whatsapp reason=downloadMedia_failed url=${freshUrl.substring(0, 80)}`
@@ -604,7 +608,7 @@ export function registerConversationRoutes(app: Express): void {
   });
 
   // Get messaging window status for Meta channels (Instagram, Facebook)
-  app.get("/api/conversations/:id/window-status", async (req, res) => {
+  app.get("/api/conversations/:id/window-status", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -613,7 +617,7 @@ export function registerConversationRoutes(app: Express): void {
       if (!conversation) {
         return res.status(404).json({ error: "Conversation not found" });
       }
-      if (conversation.userId !== req.user.id) {
+      if (conversation.userId !== inboxWorkspaceId(req)) {
         return res.status(404).json({ error: "Not found" });
       }
 
