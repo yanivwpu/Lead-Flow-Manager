@@ -165,13 +165,18 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     const href = parentPageHref || initialParentHref;
     if (!href) return "";
     try {
-      return new URL(href).origin;
+      const parsed = new URL(href);
+      return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.origin : "";
     } catch {
       return "";
     }
   }, [parentPageHref, initialParentHref]);
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
+  const pageSettingsKey = JSON.stringify([widgetId, parentPageHref, parentPageLocale, urlLocale]);
+  const [loadedPageSettingsKey, setLoadedPageSettingsKey] = useState<string | null>(null);
+  const pageSettingsReady = loadedPageSettingsKey === pageSettingsKey;
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
@@ -249,11 +254,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   useEffect(() => {
     if (!userId) return;
     const storageKey = `wchat_visitor_${userId}`;
-    const stored = localStorage.getItem(storageKey);
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(storageKey); } catch { /* blocked third-party storage */ }
     const { visitorId: vid } = loadOrRotateWebchatVisitorId(stored);
-    localStorage.setItem(storageKey, vid);
+    try { localStorage.setItem(storageKey, vid); } catch { /* retain identity for this mount */ }
     setVisitorId(vid);
-    setShownRuleKeys(readShownPageRuleKeys(localStorage.getItem(shownPageRulesStorageKey(userId, vid))));
+    try {
+      setShownRuleKeys(readShownPageRuleKeys(localStorage.getItem(shownPageRulesStorageKey(userId, vid))));
+    } catch { setShownRuleKeys([]); }
   }, [userId]);
 
   const markRuleShown = useCallback((ruleKey: string) => {
@@ -289,7 +297,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         lastPrefixedLocaleRef.current = next.lastPrefixedLocale;
         return next.locale;
       });
-      if (parsed.pageTitle) setParentPageTitle(parsed.pageTitle);
+      setParentPageTitle(parsed.pageTitle || "");
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -322,6 +330,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           return;
         }
         const data = await r.json();
+        if (cancelled) return;
         const settings = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
         const painted = resolveWebchatPanelHeaderPaint({
           settingsStatus: "ready",
@@ -361,6 +370,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         setPageRuleKey(nextRuleKey);
         settingsReadyRef.current = true;
+        setLoadedPageSettingsKey(pageSettingsKey);
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
         else setCtaLabel("");
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
@@ -390,32 +400,23 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     return () => {
       cancelled = true;
     };
-  }, [userId, parentPageHref, parentPageLocale, urlLocale]);
+  }, [userId, parentPageHref, parentPageLocale, urlLocale, pageSettingsKey]);
 
   useLayoutEffect(() => {
-    if (!presentation || !userId) return;
+    if (!presentation || !userId || !expectedParentOrigin || window.parent === window) return;
     const payload = webchatBrandingReadyMessage(userId);
-    let target = "*";
-    if (parentPageHref) {
-      try {
-        target = new URL(parentPageHref).origin;
-      } catch {
-        target = "*";
-      }
-    }
     try {
-      window.parent.postMessage(payload, target);
+      window.parent.postMessage(payload, expectedParentOrigin);
     } catch {
-      try {
-        window.parent.postMessage(payload, "*");
-      } catch {
-        /* parent may be inaccessible */
-      }
+      /* parent may be inaccessible; never retry with an unrestricted origin */
     }
-  }, [presentation, userId, parentPageHref]);
+  }, [presentation, userId, expectedParentOrigin]);
 
   useEffect(() => {
-    const prefill = urlPrefill || apiPrefill || "";
+    // The iframe URL is an installation-time snapshot; live settings own page copy.
+    // Wait for history so a returning visitor never receives a starter draft.
+    if (!historyReady || !pageSettingsReady) return;
+    const prefill = parentPageHref ? apiPrefill : urlPrefill || apiPrefill || "";
     if (
       !shouldApplyPageRulePrefill({
         transcriptCount: messages.length,
@@ -428,7 +429,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     }
     setInputText(prefill);
     setPrefillApplied(true);
-  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied]);
+  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied, historyReady, parentPageHref, pageSettingsReady]);
 
   const fetchMessages = useCallback(async (): Promise<boolean> => {
     if (!userId || !visitorId) return false;
@@ -466,6 +467,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         return merged;
       });
+      setHistoryReady(true);
       return true;
     } catch {
       setPollError(true);
@@ -593,7 +595,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const pendingVisitorInput = transcriptHasPendingVisitorInput(deduped);
   const alreadyShownRule = Boolean(pageRuleKey && shownRuleKeys.includes(pageRuleKey));
   const pageRulePresentation = decidePageRuleEngagement({
-    hasMatch: Boolean(pageRuleKey),
+    hasMatch: historyReady && pageSettingsReady && Boolean(pageRuleKey),
     ruleKey: pageRuleKey,
     alreadyShown: alreadyShownRule,
     activeThisMount: Boolean(pageRuleKey && activePageRuleRef.current === pageRuleKey),
@@ -611,27 +613,15 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [pageRulePresentation, pageRuleKey, markRuleShown, visitorId]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !expectedParentOrigin || window.parent === window) return;
     const gateReason = humanTakeover ? "takeover" : pendingVisitorInput ? "pending_chatbot" : null;
     const payload = webchatTeaserGateMessage(userId, Boolean(gateReason), gateReason);
-    let target = "*";
-    if (parentPageHref) {
-      try {
-        target = new URL(parentPageHref).origin;
-      } catch {
-        target = "*";
-      }
-    }
     try {
-      window.parent.postMessage(payload, target);
+      window.parent.postMessage(payload, expectedParentOrigin);
     } catch {
-      try {
-        window.parent.postMessage(payload, "*");
-      } catch {
-        /* parent may be inaccessible */
-      }
+      /* parent may be inaccessible; never retry with an unrestricted origin */
     }
-  }, [userId, humanTakeover, pendingVisitorInput, parentPageHref]);
+  }, [userId, humanTakeover, pendingVisitorInput, expectedParentOrigin]);
 
   useLayoutEffect(() => {
     const decision = decideWebchatScrollAction({
@@ -702,6 +692,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       const visitorLabel =
         urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
       const parentUrl = parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined);
+      const pageTitle = parentPageTitle || (!parentPageHref && typeof document !== "undefined" ? document.title : undefined);
       let res: Response;
       if (file) {
         const form = new FormData();
@@ -713,7 +704,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (urlLeadSource) form.append("source", urlLeadSource);
         if (parentUrl) form.append("parentUrl", parentUrl);
         if (typeof document !== "undefined") {
-          form.append("pageTitle", document.title);
+          if (pageTitle) form.append("pageTitle", pageTitle);
           if (document.referrer) form.append("referrer", document.referrer);
         }
         if (widgetLocale) form.append("locale", widgetLocale);
@@ -731,7 +722,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             name: visitorLabel,
             source: urlLeadSource || undefined,
             parentUrl,
-            pageTitle: parentPageTitle || (typeof document !== "undefined" ? document.title : undefined),
+            pageTitle,
             referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
             locale: widgetLocale,
             ...(typeof meta?.pageRuleActionIndex === "number"
@@ -889,7 +880,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           </p>
         )}
         {/* Welcome bubble */}
-        {!isLoading && !widgetUnavailable && deduped.length === 0 && (
+        {!isLoading && historyReady && pageSettingsReady && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
               <WebchatLinkedText
