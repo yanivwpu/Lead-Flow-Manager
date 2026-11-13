@@ -16,6 +16,13 @@ test('real PostgreSQL privilege audit rejects writers, inaccessible tables and s
       GRANT SELECT ON ALL TABLES IN SCHEMA public TO preview_reader;
       SET SESSION AUTHORIZATION preview_reader;`);
     await requireReadOnlyRole(client);
+    await pg.exec('SET SESSION AUTHORIZATION postgres');
+    await pg.exec('ALTER TABLE role_fixture ENABLE ROW LEVEL SECURITY');
+    await pg.exec('SET SESSION AUTHORIZATION preview_reader');
+    await assert.rejects(requireReadOnlyRole(client),/read_only_database_role_required/,'filtered rows cannot produce a complete reference audit');
+    await pg.exec('SET SESSION AUTHORIZATION postgres');
+    await pg.exec('ALTER TABLE role_fixture DISABLE ROW LEVEL SECURITY');
+    await pg.exec('SET SESSION AUTHORIZATION preview_reader');
     for(const grant of ['UPDATE ON role_fixture','UPDATE(private_data) ON role_fixture']) {
       await pg.exec('SET SESSION AUTHORIZATION postgres');
       await pg.exec(`GRANT ${grant} TO preview_reader`);

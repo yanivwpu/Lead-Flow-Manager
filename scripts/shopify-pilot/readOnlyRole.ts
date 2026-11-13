@@ -21,7 +21,7 @@ export async function requireReadOnlyRole(client: Client) {
           (c.relkind='S' AND has_sequence_privilege(r.oid,c.oid,'USAGE,UPDATE'))))
     ) AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f')
-      AND NOT has_table_privilege(current_user,c.oid,'SELECT'))
+      AND (NOT has_table_privilege(current_user,c.oid,'SELECT') OR c.relrowsecurity))
       AND has_schema_privilege(current_user,'public','USAGE') AS read_only_role`);
     if (result.rows.length !== 1 || result.rows[0].read_only_role !== true)
       throw Error('read_only_database_role_required');
