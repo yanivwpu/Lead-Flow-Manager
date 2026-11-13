@@ -150,9 +150,13 @@ test("PostgreSQL engine customer synchronization regression fixtures", async t =
       await send(4, { email: null, phone: "", first_name: " ", last_name: null }); await send(5, { email: "invalid", phone: "12" });
       const [c] = await rows(); assert.equal(c.name, "New Name"); assert.equal(c.email, "new@example.invalid"); assert.equal(c.phone, "15555550123");
       assert.equal((c.customFields as any).shopifyCustomerSync.consent.email_marketing_consent.state, "subscribed");
+      // A reconciliation must survive the next same-number Shopify sync.
+      await database.update(schema.contacts).set({ phone: "+15555550123", whatsappId: "15555550123" }).where(eq(schema.contacts.id, c.id));
     });
     await t.test("partial names preserve other name component", async () => {
-      await send(6, { last_name: "Changed" }); assert.equal((await rows())[0].name, "New Changed");
+      await send(6, { last_name: "Changed", phone: "+15555550123" }); assert.equal((await rows())[0].name, "New Changed");
+      assert.equal((await rows())[0].phone, "+15555550123", "same-number sync preserves the established E.164 WhatsApp identity");
+      assert.equal((await rows())[0].whatsappId, "15555550123");
     });
     await t.test("older and equal-version deliveries are ignored", async () => {
       const count = (await database.select().from(schema.activityEvents)).length;
