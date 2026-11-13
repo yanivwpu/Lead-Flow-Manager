@@ -1,6 +1,7 @@
 /** Reviewable additions for the dedicated marketing workspace; never tenant defaults. */
 import { matchWidgetPageRule } from './webchatPageRuleMatch';
 import { MARKETING_WEBSITE_CHAT_WIDGET_PUBLIC_ID } from './marketingWebsiteChatWidget';
+import { validateWidgetPageRules } from './webchatWidgetSettings';
 
 export const MARKETING_CHAT_OWNER_EMAIL = 'marketing@whachatcrm.com';
 
@@ -41,10 +42,12 @@ export function proposeMarketingChatPageCoverage(input: {
     const paths = [path, ...(translatedRoute ? [`/es${path}`, `/he${path}`] : [])];
     const missing = paths.filter(p => !covered(p));
     if (!missing.length) continue;
-    const en = { greeting: `Have questions about ${product}? Ask me about this product, pricing, or requesting a demo.`, suggestedQuestions: [`Tell me about ${product}`, 'Pricing and free trial', 'Request a demo'] };
-    const es = { greeting: `¿Tienes preguntas sobre ${product}? Pregúntame por el producto, los precios o cómo solicitar una demo.`, suggestedQuestions: [`Cuéntame sobre ${product}`, 'Precios y prueba gratuita', 'Solicitar una demo'] };
-    const he = { greeting: `יש שאלות על ${product}? אפשר לשאול על המוצר, המחירים או בקשת הדגמה.`, suggestedQuestions: [`ספרו לי על ${product}`, 'מחירים ותקופת ניסיון', 'בקשת הדגמה'] };
+    const en = { greeting: `Have questions about ${product}? Ask me about this product, pricing, or requesting a demo.`, suggestedQuestions: [`Tell me about ${product}`, 'Pricing and free trial', 'Book a demo'] };
+    const es = { greeting: `¿Tienes preguntas sobre ${product}? Pregúntame por el producto, los precios o cómo solicitar una demo.`, suggestedQuestions: [`Cuéntame sobre ${product}`, 'Precios y prueba gratuita', 'Reservar una demo'] };
+    const he = { greeting: `יש שאלות על ${product}? אפשר לשאול על המוצר, המחירים או בקשת הדגמה.`, suggestedQuestions: [`ספרו לי על ${product}`, 'מחירים ותקופת ניסיון', 'קביעת הדגמה'] };
     rules.push({ urlContains: missing[0], matchType: 'pathname', urlAliases: missing.slice(1), prefilledMessage: '', ...en, localized: { en, es, he } });
   }
+  const validation = validateWidgetPageRules(rules);
+  if (!validation.ok) throw new Error(`Marketing page-rule proposal is invalid: ${validation.error}`);
   return { ...input.settings, pageRules: rules };
 }

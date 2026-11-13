@@ -2,10 +2,10 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 (async () => {
- const browser = await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+ const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  const results=[];
  for (const mobile of [false,true]) for (const returning of [false,true]) for (const locale of ['en','es','he']) {
-  const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1280,height:900}});
+  const context=await browser.newContext({isMobile:mobile,hasTouch:mobile,viewport:mobile?{width:390,height:844}:{width:1280,height:900}});
   const page=await context.newPage(); let posts=0;
   const greeting={en:'Unified Inbox help',es:'Ayuda con la bandeja',he:'עזרה עם תיבת ההודעות'}[locale];
   await page.route('**/api/**',async route=>{

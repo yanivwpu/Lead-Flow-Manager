@@ -173,6 +173,9 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyReady, setHistoryReady] = useState(false);
+  const pageSettingsKey = JSON.stringify([widgetId, parentPageHref, parentPageLocale, urlLocale]);
+  const [loadedPageSettingsKey, setLoadedPageSettingsKey] = useState<string | null>(null);
+  const pageSettingsReady = loadedPageSettingsKey === pageSettingsKey;
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
@@ -293,7 +296,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         lastPrefixedLocaleRef.current = next.lastPrefixedLocale;
         return next.locale;
       });
-      if (parsed.pageTitle) setParentPageTitle(parsed.pageTitle);
+      setParentPageTitle(parsed.pageTitle || "");
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -326,6 +329,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           return;
         }
         const data = await r.json();
+        if (cancelled) return;
         const settings = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
         const painted = resolveWebchatPanelHeaderPaint({
           settingsStatus: "ready",
@@ -365,6 +369,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         setPageRuleKey(nextRuleKey);
         settingsReadyRef.current = true;
+        setLoadedPageSettingsKey(pageSettingsKey);
         if (typeof data?.ctaLabel === "string") setCtaLabel(data.ctaLabel);
         else setCtaLabel("");
         if (typeof data?.ctaUrl === "string") setCtaUrl(data.ctaUrl);
@@ -394,7 +399,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     return () => {
       cancelled = true;
     };
-  }, [userId, parentPageHref, parentPageLocale, urlLocale]);
+  }, [userId, parentPageHref, parentPageLocale, urlLocale, pageSettingsKey]);
 
   useLayoutEffect(() => {
     if (!presentation || !userId) return;
@@ -421,7 +426,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   useEffect(() => {
     // The iframe URL is an installation-time snapshot; live settings own page copy.
     // Wait for history so a returning visitor never receives a starter draft.
-    if (!historyReady || !settingsReadyRef.current) return;
+    if (!historyReady || !pageSettingsReady) return;
     const prefill = parentPageHref ? apiPrefill : urlPrefill || apiPrefill || "";
     if (
       !shouldApplyPageRulePrefill({
@@ -435,7 +440,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     }
     setInputText(prefill);
     setPrefillApplied(true);
-  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied, historyReady, parentPageHref, isLoading]);
+  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied, historyReady, parentPageHref, pageSettingsReady]);
 
   const fetchMessages = useCallback(async (): Promise<boolean> => {
     if (!userId || !visitorId) return false;
@@ -601,7 +606,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   const pendingVisitorInput = transcriptHasPendingVisitorInput(deduped);
   const alreadyShownRule = Boolean(pageRuleKey && shownRuleKeys.includes(pageRuleKey));
   const pageRulePresentation = decidePageRuleEngagement({
-    hasMatch: Boolean(pageRuleKey),
+    hasMatch: historyReady && pageSettingsReady && Boolean(pageRuleKey),
     ruleKey: pageRuleKey,
     alreadyShown: alreadyShownRule,
     activeThisMount: Boolean(pageRuleKey && activePageRuleRef.current === pageRuleKey),
@@ -710,6 +715,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       const visitorLabel =
         urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
       const parentUrl = parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined);
+      const pageTitle = parentPageTitle || (!parentPageHref && typeof document !== "undefined" ? document.title : undefined);
       let res: Response;
       if (file) {
         const form = new FormData();
@@ -721,7 +727,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (urlLeadSource) form.append("source", urlLeadSource);
         if (parentUrl) form.append("parentUrl", parentUrl);
         if (typeof document !== "undefined") {
-          form.append("pageTitle", document.title);
+          if (pageTitle) form.append("pageTitle", pageTitle);
           if (document.referrer) form.append("referrer", document.referrer);
         }
         if (widgetLocale) form.append("locale", widgetLocale);
@@ -739,7 +745,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
             name: visitorLabel,
             source: urlLeadSource || undefined,
             parentUrl,
-            pageTitle: parentPageTitle || (typeof document !== "undefined" ? document.title : undefined),
+            pageTitle,
             referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
             locale: widgetLocale,
             ...(typeof meta?.pageRuleActionIndex === "number"
@@ -897,7 +903,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           </p>
         )}
         {/* Welcome bubble */}
-        {!isLoading && historyReady && !widgetUnavailable && deduped.length === 0 && (
+        {!isLoading && historyReady && pageSettingsReady && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
               <WebchatLinkedText
