@@ -72,7 +72,11 @@ export async function syncShopifyCustomer(input: {
     const emailValue = text(input.body.email, 254);
     const email = emailValue && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue) ? emailValue.toLowerCase() : undefined;
     const phoneValue = text(input.body.phone, 50)?.replace(/\D/g, "");
-    const phone = phoneValue && phoneValue.length >= 8 && phoneValue.length <= 15 ? phoneValue : undefined;
+    // Preserve an already matched WhatsApp E.164 identity on same-number sync.
+    // A changed Shopify number still requires fresh identity matching/consent.
+    const phone = phoneValue && phoneValue.length >= 8 && phoneValue.length <= 15
+      ? existing?.phone === '+' + phoneValue && existing?.whatsappId === phoneValue ? existing.phone : phoneValue
+      : undefined;
     // Missing, null, blank and invalid values never erase CRM information. No clearing semantics assumed.
     const legacyNames = existing && existing.name !== "Shopify customer" && existing.name !== existing.email
       ? existing.name.split(" ") : undefined;

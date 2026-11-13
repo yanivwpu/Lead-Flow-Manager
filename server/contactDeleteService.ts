@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   appointments,
   calendlyCanceledEventTombstones,
@@ -30,6 +30,11 @@ export async function purgeContactOwnedOrphans(
   await tx.delete(contactNotes).where(inArray(contactNotes.contactId, contactIds));
   await tx.delete(appointments).where(inArray(appointments.contactId, contactIds));
   await tx.delete(flowJobs).where(inArray(flowJobs.contactId, contactIds));
+  // No FK: retained workflow fences can contain message text in the key. Privacy
+  // erasure must remove them after an identity reconciliation re-parents ownership.
+  const dedup = await tx.execute(sql`SELECT to_regclass('automation_send_dedup') IS NOT NULL AS ready`);
+  if (dedup.rows[0]?.ready === true)
+    await tx.execute(sql`DELETE FROM automation_send_dedup WHERE contact_id IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
   await tx
     .update(calendlyCanceledEventTombstones)
     .set({ contactId: null })
