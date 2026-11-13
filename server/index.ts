@@ -7,7 +7,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startNotificationScheduler } from "./notifications";
-import { setupAuth, registerAuthRoutes } from "./auth";
+import { setupAuth, registerAuthRoutes, authenticatePresenceRequest } from "./auth";
 import { startCronJobs } from "./cron";
 import { WebhookHandlers } from "./webhookHandlers";
 import { setupPresenceServer } from "./presence";
@@ -221,9 +221,6 @@ app.use((req, res, next) => {
   next();
 });
 
-setupPresenceServer(httpServer);
-
-  
 // Stripe: express.raw preserves the exact body Buffer for stripe-signature verification.
 app.post(
   '/api/stripe/webhook',
@@ -324,6 +321,7 @@ app.use(oidcRouter);
 
 // Setup authentication
 setupAuth(app);
+setupPresenceServer(httpServer, authenticatePresenceRequest);
 
 // Conservative API rate limits for abuse-prone routes (Redis/Upstash when available).
 // Webhook paths are excluded — see rateLimitMiddleware.ts and comments above.

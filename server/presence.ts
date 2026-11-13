@@ -1,247 +1,173 @@
 import { WebSocketServer, WebSocket } from "ws";
-import { Server } from "http";
+import type { IncomingMessage, Server } from "http";
+import { storage } from "./storage";
+import { getAppOrigin } from "./urlOrigins";
+import type { InboxWorkspaceAccess } from "./inboxWorkspaceAccess";
 
-interface PresenceUser {
-  id: string;
-  name: string;
+type Identity = InboxWorkspaceAccess & { userName: string };
+type Authenticate = (req: IncomingMessage) => Promise<Identity>;
+interface ClientConnection extends Identity {
+  ws: WebSocket;
+  request: IncomingMessage;
+  authenticate: Authenticate;
   chatId: string | null;
   isTyping: boolean;
   lastSeen: number;
+  queue: Promise<void>;
+}
+const clients = new Map<WebSocket, ClientConnection>();
+const INBOX_EVENTS = new Set(["new_message", "contact_updated", "ai_review_draft", "appointment_booked", "booking_confirmed", "buyer_preferences_updated"]);
+
+export function presenceOriginAllowed(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin || origin === "null") return false;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.origin !== origin || !["http:", "https:"].includes(parsed.protocol)) return false;
+    if (origin === getAppOrigin()) return true;
+    return process.env.NODE_ENV !== "production" && parsed.host === req.headers.host;
+  } catch { return false; }
 }
 
-interface ClientConnection {
-  ws: WebSocket;
-  userId: string;
-  userName: string;
-}
-
-const clients: Map<WebSocket, ClientConnection> = new Map();
-const chatPresence: Map<string, Set<string>> = new Map();
-const userPresence: Map<string, PresenceUser> = new Map();
-
-export function setupPresenceServer(server: Server) {
-  const wss = new WebSocketServer({ server, path: "/ws/presence" });
-
-  wss.on("connection", (ws: WebSocket) => {
-    ws.on("message", (data: Buffer) => {
-      try {
-        const message = JSON.parse(data.toString());
-        handleMessage(ws, message);
-      } catch (error) {
-        console.error("Presence WebSocket parse error:", error);
-      }
-    });
-
-    ws.on("close", () => {
-      handleDisconnect(ws);
-    });
-
-    ws.on("error", (error) => {
-      console.error("Presence WebSocket error:", error);
-      handleDisconnect(ws);
-    });
+export function setupPresenceServer(server: Server, authenticate: Authenticate) {
+  const authenticated = new WeakMap<IncomingMessage, Identity>();
+  const wss = new WebSocketServer({
+    server, path: "/ws/presence", maxPayload: 4096,
+    verifyClient(info, done) {
+      if (!presenceOriginAllowed(info.req)) return done(false, 403, "Forbidden");
+      authenticate(info.req).then(identity => {
+        authenticated.set(info.req, identity);
+        done(true);
+      }).catch(() => done(false, 401, "Unauthorized"));
+    },
   });
-
-  setInterval(() => {
-    const now = Date.now();
-    userPresence.forEach((user, odlUserId) => {
-      if (now - user.lastSeen > 60000) {
-        leaveChat(user.id, user.chatId);
-        userPresence.delete(user.id);
+  wss.on("connection", (ws, request) => {
+    const identity = authenticated.get(request);
+    if (!identity) { ws.close(1008, "Unauthorized"); return; }
+    const client: ClientConnection = {
+      ...identity, ws, request, authenticate, chatId: null, isTyping: false,
+      lastSeen: Date.now(), queue: Promise.resolve(),
+    };
+    clients.set(ws, client);
+    ws.on("message", data => enqueue(client, async () => {
+      const message = JSON.parse(data.toString());
+      if (!message || typeof message !== "object") return;
+      // Legacy clients still send auth; the frame never establishes identity.
+      if ((message.userId !== undefined && message.userId !== client.actorUserId) ||
+          (message.workspaceId !== undefined && message.workspaceId !== client.workspaceUserId)) {
+        ws.close(1008, "Identity mismatch"); return;
       }
-    });
+      switch (message.type) {
+        case "auth": send(client, { type: "auth_success" }); break;
+        case "join_chat": {
+          const id = message.chatId;
+          if (typeof id !== "string" || !id || id.length > 128) return;
+          // Both current conversations and the existing legacy Chats page use this transport.
+          const conversation = await storage.getConversation(id);
+          const resource = conversation ?? await storage.getChat(id);
+          if (!resource || resource.userId !== client.workspaceUserId) {
+            send(client, { type: "error", code: "forbidden_room" }); return;
+          }
+          const previous = client.chatId;
+          client.chatId = id; client.isTyping = false;
+          if (previous && previous !== id) await broadcastChatPresence(previous, client.workspaceUserId);
+          await broadcastChatPresence(id, client.workspaceUserId);
+          break;
+        }
+        case "leave_chat": {
+          if (message.chatId !== client.chatId) return;
+          const id = client.chatId; client.chatId = null; client.isTyping = false;
+          if (id) await broadcastChatPresence(id, client.workspaceUserId);
+          break;
+        }
+        case "typing":
+        case "stop_typing": {
+          if (!client.chatId || message.chatId !== client.chatId) {
+            send(client, { type: "error", code: "forbidden_room" }); return;
+          }
+          client.isTyping = message.type === "typing";
+          await broadcastChatPresence(client.chatId, client.workspaceUserId);
+          break;
+        }
+        case "heartbeat": send(client, { type: "heartbeat_ack" }); break;
+      }
+      client.lastSeen = Date.now();
+    }));
+    ws.on("close", () => disconnect(client));
+    ws.on("error", () => disconnect(client));
+  });
+  const cleanup = setInterval(() => {
+    for (const client of clients.values()) {
+      if (Date.now() - client.lastSeen > 60000) client.ws.close(1008, "Session idle");
+      else enqueue(client, async () => {}); // Detect expired sessions and revoked memberships while idle.
+    }
   }, 30000);
-
-  console.log("Presence WebSocket server ready");
+  cleanup.unref();
+  wss.on("close", () => clearInterval(cleanup));
+  return wss;
 }
 
-function handleMessage(ws: WebSocket, message: any) {
-  switch (message.type) {
-    case "auth":
-      handleAuth(ws, message);
-      break;
-    case "join_chat":
-      handleJoinChat(ws, message);
-      break;
-    case "leave_chat":
-      handleLeaveChat(ws, message);
-      break;
-    case "typing":
-      handleTyping(ws, message);
-      break;
-    case "stop_typing":
-      handleStopTyping(ws, message);
-      break;
-    case "heartbeat":
-      handleHeartbeat(ws);
-      break;
+async function validate(client: ClientConnection): Promise<boolean> {
+  if (clients.get(client.ws) !== client || client.ws.readyState !== WebSocket.OPEN) return false;
+  try {
+    const fresh = await client.authenticate(client.request);
+    if (fresh.actorUserId !== client.actorUserId || fresh.workspaceUserId !== client.workspaceUserId) throw new Error("Changed session");
+    if (client.chatId) {
+      const resource = await storage.getConversation(client.chatId) ?? await storage.getChat(client.chatId);
+      if (!resource || resource.userId !== fresh.workspaceUserId) throw new Error("Room access expired");
+    }
+    client.role = fresh.role;
+    client.userName = fresh.userName;
+    return clients.get(client.ws) === client && client.ws.readyState === WebSocket.OPEN;
+  } catch {
+    disconnect(client);
+    client.ws.close(1008, "Access expired");
+    return false;
   }
 }
 
-function handleAuth(ws: WebSocket, message: { userId: string; userName: string }) {
-  const { userId, userName } = message;
-  
-  clients.set(ws, { ws, userId, userName });
-  userPresence.set(userId, {
-    id: userId,
-    name: userName,
-    chatId: null,
-    isTyping: false,
-    lastSeen: Date.now(),
+function enqueue(client: ClientConnection, action: () => Promise<void>) {
+  client.queue = client.queue.then(async () => {
+    if (await validate(client)) await action();
+  }).catch(() => {
+    client.ws.close(1008, "Invalid presence message");
   });
-
-  ws.send(JSON.stringify({ type: "auth_success" }));
-  console.log(`[WS Presence] Client authenticated — userId=${userId} totalClients=${clients.size}`);
+}
+function send(client: ClientConnection, payload: Record<string, unknown>) {
+  if (client.ws.readyState === WebSocket.OPEN) client.ws.send(JSON.stringify(payload));
+}
+function disconnect(client: ClientConnection) {
+  if (!clients.delete(client.ws)) return;
+  if (client.chatId) void broadcastChatPresence(client.chatId, client.workspaceUserId);
 }
 
-function handleJoinChat(ws: WebSocket, message: { chatId: string }) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  const { chatId } = message;
-  const user = userPresence.get(client.userId);
-  
-  if (user?.chatId && user.chatId !== chatId) {
-    leaveChat(client.userId, user.chatId);
-  }
-
-  if (!chatPresence.has(chatId)) {
-    chatPresence.set(chatId, new Set());
-  }
-  chatPresence.get(chatId)!.add(client.userId);
-
-  if (user) {
-    user.chatId = chatId;
-    user.isTyping = false;
-    user.lastSeen = Date.now();
-  }
-
-  broadcastChatPresence(chatId);
-}
-
-function handleLeaveChat(ws: WebSocket, message: { chatId: string }) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  leaveChat(client.userId, message.chatId);
-}
-
-function leaveChat(userId: string, chatId: string | null) {
-  if (!chatId) return;
-
-  const viewers = chatPresence.get(chatId);
-  if (viewers) {
-    viewers.delete(userId);
-    if (viewers.size === 0) {
-      chatPresence.delete(chatId);
-    } else {
-      broadcastChatPresence(chatId);
+export function revokePresenceMembership(workspaceUserId: string, actorUserId: string | null) {
+  for (const client of clients.values()) {
+    if (client.workspaceUserId === workspaceUserId && client.actorUserId === actorUserId) {
+      disconnect(client); client.ws.close(1008, "Membership changed");
     }
   }
-
-  const user = userPresence.get(userId);
-  if (user && user.chatId === chatId) {
-    user.chatId = null;
-    user.isTyping = false;
-  }
 }
 
-function handleTyping(ws: WebSocket, message: { chatId: string }) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  const user = userPresence.get(client.userId);
-  if (user) {
-    user.isTyping = true;
-    user.lastSeen = Date.now();
-  }
-
-  broadcastChatPresence(message.chatId);
-}
-
-function handleStopTyping(ws: WebSocket, message: { chatId: string }) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  const user = userPresence.get(client.userId);
-  if (user) {
-    user.isTyping = false;
-    user.lastSeen = Date.now();
-  }
-
-  broadcastChatPresence(message.chatId);
-}
-
-function handleHeartbeat(ws: WebSocket) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  const user = userPresence.get(client.userId);
-  if (user) {
-    user.lastSeen = Date.now();
-  }
-
-  ws.send(JSON.stringify({ type: "heartbeat_ack" }));
-}
-
-function handleDisconnect(ws: WebSocket) {
-  const client = clients.get(ws);
-  if (!client) return;
-
-  const user = userPresence.get(client.userId);
-  if (user?.chatId) {
-    leaveChat(client.userId, user.chatId);
-  }
-
-  console.log(`[WS Presence] Client disconnected — userId=${client.userId} remainingClients=${clients.size - 1}`);
-  userPresence.delete(client.userId);
-  clients.delete(ws);
-}
-
+/** Keep non-Inbox account notifications private to the account holder. */
 export function notifyUser(userId: string, payload: Record<string, unknown>) {
-  let sent = 0;
-  let skipped = 0;
-  clients.forEach((client) => {
-    if (client.userId === userId) {
-      if (client.ws.readyState === WebSocket.OPEN) {
-        client.ws.send(JSON.stringify(payload));
-        sent++;
-      } else {
-        skipped++;
-      }
-    }
-  });
-  console.log(`[WS Push] type=${payload.type} userId=${userId} — sent to ${sent} client(s), skipped ${skipped} (not OPEN)`);
+  for (const client of clients.values()) {
+    const allowed = INBOX_EVENTS.has(String(payload.type))
+      ? client.workspaceUserId === userId
+      : client.actorUserId === userId;
+    if (allowed) enqueue(client, async () => { send(client, payload); });
+  }
 }
 
-function broadcastChatPresence(chatId: string) {
-  const viewers = chatPresence.get(chatId);
-  if (!viewers) return;
-
-  const presenceList: { userId: string; userName: string; isTyping: boolean }[] = [];
-  
-  viewers.forEach((userId) => {
-    const user = userPresence.get(userId);
-    if (user) {
-      const client = Array.from(clients.values()).find(c => c.userId === userId);
-      presenceList.push({
-        userId: user.id,
-        userName: client?.userName || user.name,
-        isTyping: user.isTyping,
-      });
-    }
-  });
-
-  const message = JSON.stringify({
-    type: "presence_update",
-    chatId,
-    viewers: presenceList,
-  });
-
-  clients.forEach((client) => {
-    const user = userPresence.get(client.userId);
-    if (user?.chatId === chatId && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(message);
-    }
-  });
+async function broadcastChatPresence(chatId: string, workspaceUserId: string) {
+  const room = [...clients.values()].filter(c => c.chatId === chatId && c.workspaceUserId === workspaceUserId);
+  const valid: ClientConnection[] = [];
+  for (const client of room) if (await validate(client)) valid.push(client);
+  const viewers = new Map<string, { userId: string; userName: string; isTyping: boolean }>();
+  for (const client of valid) {
+    const existing = viewers.get(client.actorUserId);
+    viewers.set(client.actorUserId, { userId: client.actorUserId, userName: client.userName,
+      isTyping: client.isTyping || existing?.isTyping === true });
+  }
+  for (const client of valid) send(client, { type: "presence_update", chatId, viewers: [...viewers.values()] });
 }

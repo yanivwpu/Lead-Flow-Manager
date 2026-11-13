@@ -1,0 +1,61 @@
+name: Inbox team security
+on:
+  pull_request:
+    paths:
+      - 'server/auth.ts'
+      - 'server/presence.ts'
+      - 'server/inboxWorkspace*.ts'
+      - 'server/inboxContentRateLimit.ts'
+      - 'server/rateLimitMiddleware.ts'
+      - 'server/contactPatchSecurity.ts'
+      - 'server/contactDetailsRoute.ts'
+      - 'server/routes.ts'
+      - 'server/routes/contacts.ts'
+      - 'server/routes/conversations.ts'
+      - 'server/routes/emailChannel.ts'
+      - 'server/routes/inboxWorkspace.ts'
+      - 'server/storage.ts'
+      - 'server/index.ts'
+      - 'shared/schema.ts'
+      - 'tests/inbox-team-security.test.ts'
+      - 'tests/inbox-content-rate-limit.test.ts'
+      - 'package*.json'
+      - '.github/workflows/inbox-team-security.yml'
+permissions:
+  contents: read
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+      AI_INTEGRATIONS_OPENAI_API_KEY: synthetic-test-key
+      EMAIL_IMAGE_PROXY_SECRET: synthetic-inbox-image-secret-000000
+      EMAIL_ENCRYPTION_KEY: synthetic-inbox-email-secret-000000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Session-backed HTTP, WebSocket and SQL authorization regressions
+        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts
+      - name: Existing ownership, auth and Inbox contracts
+        run: >-
+          node --import tsx --test
+          tests/account-switch-auth-isolation.test.ts tests/contact-details.test.ts
+          tests/contact-details-concurrency.test.ts tests/contact-automations-pause.test.ts
+          tests/inbox-auto-refresh-send.test.ts tests/inbox-auto-polling-harness.test.ts
+          tests/inbox-selection-isolation.test.ts tests/inbox-channel-adaptive-conversation.test.ts
+          tests/inbox-new-activity-badge.test.ts tests/inbox-deep-link-and-perf.test.ts
+          tests/auth-security-fix.test.ts tests/auth-login-rate-limit.test.ts tests/webchat-tenant-isolation.test.ts
+          tests/webchat-ui-controls.test.ts tests/native-email-channel-1a.test.ts
+      - name: Reject new TypeScript diagnostics
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: npm run build
+      - run: git diff --check

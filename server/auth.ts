@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 import { validateNewPassword } from './passwordPolicy';
 import type { Express, Request, Response } from 'express';
 import session from 'express-session';
+import type { RequestHandler } from 'express';
+import { IncomingMessage, ServerResponse } from 'http';
+import { resolveInboxWorkspace } from './inboxWorkspaceAccess';
 import connectPgSimple from 'connect-pg-simple';
 import { storage } from './storage';
 import type { User } from '@shared/schema';
@@ -132,7 +135,32 @@ async function verifyLoginPassword(
   }
 }
 
-export function setupAuth(app: Express) {
+let sessionAuthentication: RequestHandler[] | undefined;
+
+/** Reuse the exact HTTP cookie signature, session store and Passport deserializer. */
+export async function authenticatePresenceRequest(incoming: IncomingMessage) {
+  if (!sessionAuthentication) throw new Error('Session authentication is not initialized');
+  const req = incoming as Request;
+  const res = new ServerResponse(incoming) as unknown as Response;
+  const run = (middleware: RequestHandler) => new Promise<void>((resolve, reject) => {
+    middleware(req, res, error => error ? reject(error) : resolve());
+  });
+  if (req.session) {
+    await new Promise<void>((resolve, reject) => req.session.reload(error => error ? reject(error) : resolve()));
+    // Passport passes through an anonymous session; do not retain the previous socket user.
+    delete req.user;
+    await run(sessionAuthentication[2]);
+  } else {
+    for (const middleware of sessionAuthentication) await run(middleware);
+  }
+  if (!req.isAuthenticated() || !req.user || req.user.deletionRequestedAt || !isEmailVerified(req.user)) throw new Error('Unauthorized');
+  if (req.session.cookie.expires && new Date(req.session.cookie.expires).getTime() <= Date.now()) throw new Error('Session expired');
+  const access = await resolveInboxWorkspace(req);
+  if (!access) throw new Error('Workspace access revoked');
+  return { ...access, userName: req.user.name };
+}
+
+export function setupAuth(app: Express, options: { store?: session.Store } = {}) {
   // Railway terminates TLS at one reverse-proxy hop. Express then sets req.ip from
   // the right-most trusted X-Forwarded-For entry. Do not raise this without measuring
   // extra hops (e.g. orange-cloud Cloudflare in front of Railway).
@@ -141,12 +169,11 @@ export function setupAuth(app: Express) {
 
   // Session configuration with PostgreSQL store for production persistence
   const isProduction = process.env.NODE_ENV === 'production';
-  app.use(
-    session({
+  const sessionMiddleware = session({
       secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
       resave: true,
       saveUninitialized: true, // Changed to true to help with session persistence
-      store: new PgStore({
+      store: options.store ?? new PgStore({
         conString: process.env.DATABASE_URL,
         tableName: 'user_sessions',
         createTableIfMissing: true,
@@ -157,11 +184,9 @@ export function setupAuth(app: Express) {
         secure: isProduction, // true for production HTTPS, false for development
         sameSite: 'lax',
       },
-    })
-  );
-
-  app.use(passport.initialize());
-  app.use(passport.session());
+    });
+  sessionAuthentication = [sessionMiddleware, passport.initialize(), passport.session()];
+  app.use(...sessionAuthentication);
 
   // Configure passport local strategy
   passport.use(
