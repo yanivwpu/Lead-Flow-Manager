@@ -1,6 +1,6 @@
 /** Read-only entry point. Deliberately no apply option or production write URL. */
 import { pathToFileURL } from 'node:url';
-import { Pool } from 'pg';
+import { Pool, type PoolConfig } from 'pg';
 import { preview, PILOT_ACCOUNT, PILOT_SHOP } from './identityPreview';
 import { requireReadOnlyRole } from './readOnlyRole';
 
@@ -26,14 +26,28 @@ export function sanitizedFailure(error: unknown) {
   return {digest:null,blockers:[safe.has(code) ? code : 'preview_unavailable'],references:[]};
 }
 
+/** Never pass a connectionString to pg: its parser takes precedence over explicit
+ * host/ssl options. Accept only URL fields we validate and project ourselves. */
+export function previewPoolOptions(binding: string): PoolConfig {
+  try {
+    const url = new URL(binding);
+    if (!['postgres:','postgresql:'].includes(url.protocol) || !/^[a-z0-9.-]+\.neon\.tech$/i.test(url.hostname) ||
+      !url.username || !url.password || url.pathname.length <= 1 || url.hash || (url.port && Number(url.port)<1)) throw Error();
+    // A normal Neon sslmode hint is compatible with our stronger fixed TLS
+    // policy. Every other option, duplicate or differently cased key fails closed.
+    for (const [key,value] of url.searchParams) {
+      if (key !== 'sslmode' || !['require','verify-full'].includes(value) || url.searchParams.getAll(key).length !== 1) throw Error();
+    }
+    return {host:url.hostname,port:url.port ? Number(url.port) : 5432,
+      user:decodeURIComponent(url.username),password:decodeURIComponent(url.password),database:decodeURIComponent(url.pathname.slice(1)),
+      ssl:{rejectUnauthorized:true,servername:url.hostname},max:1,connectionTimeoutMillis:5000};
+  } catch { throw Error('neon_read_only_binding_required'); }
+}
+
 export async function previewFromEnvironment(env: NodeJS.ProcessEnv) {
   if (!env.PILOT_IDENTITY_READ_ONLY_DATABASE_URL || !env.PILOT_IDENTITY_CANONICAL_CONTACT_ID ||
     !env.PILOT_IDENTITY_SOURCE_CONTACT_ID || !env.SHOPIFY_API_SECRET) throw Error('explicit_read_only_target_and_pair_required');
-  const url = new URL(env.PILOT_IDENTITY_READ_ONLY_DATABASE_URL);
-  if (!['postgres:','postgresql:'].includes(url.protocol) || !url.hostname.endsWith('.neon.tech')) throw Error('neon_read_only_binding_required');
-  // Require verified TLS rather than accepting URL options that weaken it.
-  for (const key of ['sslmode','sslcert','sslkey','sslrootcert']) url.searchParams.delete(key);
-  const pool = new Pool({connectionString:url.toString(),ssl:{rejectUnauthorized:true},max:1,connectionTimeoutMillis:5000});
+  const pool = new Pool(previewPoolOptions(env.PILOT_IDENTITY_READ_ONLY_DATABASE_URL));
   let client;
   try {
     client = await pool.connect();

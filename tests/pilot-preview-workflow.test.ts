@@ -2,8 +2,45 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
+import pg from 'pg';
 import {requireReadOnlyRole} from '../scripts/shopify-pilot/readOnlyRole';
-import {sanitizedPreview,sanitizedFailure,previewFromEnvironment} from '../scripts/shopify-pilot/previewIdentity';
+import {sanitizedPreview,sanitizedFailure,previewFromEnvironment,previewPoolOptions} from '../scripts/shopify-pilot/previewIdentity';
+
+test('pg receives only validated connection fields and fixed certificate-verified Neon TLS, without connecting',()=>{
+  const base='postgresql://fixture_reader:encoded%40password@ep-fixture.neon.tech:5432/fixture%2Ddatabase';
+  for(const suffix of ['', '?sslmode=require','?sslmode=verify-full']) {
+    const options=previewPoolOptions(base+suffix);
+    assert.equal(options.connectionString,undefined);
+    // Inspect the real installed pg client's effective config: no database IO.
+    const client=new pg.Client(options);
+    assert.equal(client.host,'ep-fixture.neon.tech');
+    assert.equal(client.port,5432);
+    assert.equal(client.user,'fixture_reader');
+    assert.equal(client.database,'fixture-database');
+    assert.equal(client.password,'encoded@password');
+    assert.deepEqual(client.ssl,{rejectUnauthorized:true,servername:'ep-fixture.neon.tech'});
+  }
+});
+
+test('conflicting or unknown URL parameters fail before constructing any connection',async()=>{
+  const base='postgresql://fixture_reader:fixture_password@ep-fixture.neon.tech/fixture';
+  for(const query of ['ssl=0','ssl=false','host=example.com','host=ep-other.neon.tech','hostaddr=127.0.0.1',
+    'port=5433','user=other','password=other','database=other','sslmode=disable','sslmode=no-verify','sslmode=verify-ca',
+    'sslcert=/private/cert','sslkey=/private/key','sslrootcert=/private/root','uselibpqcompat=true',
+    'options=-c%20role%3Dother','SSL=0','Host=example.com','%68ost=example.com','%73sl=0',
+    'sslmode=require&ssl=0','sslmode=verify-full&host=example.com','sslmode=require&sslmode=disable',
+    'sslmode=verify-full&sslmode=verify-full','sslmode=require&SSLMode=disable']) {
+    const binding=base+'?'+query;
+    assert.throws(()=>previewPoolOptions(binding),{message:'neon_read_only_binding_required'},query);
+    await assert.rejects(previewFromEnvironment({PILOT_IDENTITY_READ_ONLY_DATABASE_URL:binding,
+      PILOT_IDENTITY_CANONICAL_CONTACT_ID:'fixture-A',PILOT_IDENTITY_SOURCE_CONTACT_ID:'fixture-B',SHOPIFY_API_SECRET:'fixture-key'}),
+      {message:'neon_read_only_binding_required'},query);
+  }
+  for(const binding of ['not-a-url','postgresql://reader:password@example.com/db',
+    'postgresql://reader:password@ep-fixture.neon.tech.attacker.invalid/db',
+    'postgresql://ep-fixture.neon.tech/db','postgresql://reader:password@ep-fixture.neon.tech/',
+    base+'#host=example.com']) assert.throws(()=>previewPoolOptions(binding),{message:'neon_read_only_binding_required'});
+});
 
 test('real PostgreSQL privilege audit rejects writers, inaccessible tables and switchable write roles',async()=>{
   const pg=new PGlite();
