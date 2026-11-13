@@ -172,6 +172,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [parentPageHref, initialParentHref]);
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [visitorId, setVisitorId] = useState<string | null>(null);
@@ -249,11 +250,14 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   useEffect(() => {
     if (!userId) return;
     const storageKey = `wchat_visitor_${userId}`;
-    const stored = localStorage.getItem(storageKey);
+    let stored: string | null = null;
+    try { stored = localStorage.getItem(storageKey); } catch { /* blocked third-party storage */ }
     const { visitorId: vid } = loadOrRotateWebchatVisitorId(stored);
-    localStorage.setItem(storageKey, vid);
+    try { localStorage.setItem(storageKey, vid); } catch { /* retain identity for this mount */ }
     setVisitorId(vid);
-    setShownRuleKeys(readShownPageRuleKeys(localStorage.getItem(shownPageRulesStorageKey(userId, vid))));
+    try {
+      setShownRuleKeys(readShownPageRuleKeys(localStorage.getItem(shownPageRulesStorageKey(userId, vid))));
+    } catch { setShownRuleKeys([]); }
   }, [userId]);
 
   const markRuleShown = useCallback((ruleKey: string) => {
@@ -415,7 +419,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
   }, [presentation, userId, parentPageHref]);
 
   useEffect(() => {
-    const prefill = urlPrefill || apiPrefill || "";
+    // The iframe URL is an installation-time snapshot; live settings own page copy.
+    // Wait for history so a returning visitor never receives a starter draft.
+    if (!historyReady || !settingsReadyRef.current) return;
+    const prefill = parentPageHref ? apiPrefill : urlPrefill || apiPrefill || "";
     if (
       !shouldApplyPageRulePrefill({
         transcriptCount: messages.length,
@@ -428,7 +435,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     }
     setInputText(prefill);
     setPrefillApplied(true);
-  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied]);
+  }, [urlPrefill, apiPrefill, messages.length, composerDirty, prefillApplied, historyReady, parentPageHref, isLoading]);
 
   const fetchMessages = useCallback(async (): Promise<boolean> => {
     if (!userId || !visitorId) return false;
@@ -466,6 +473,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         }
         return merged;
       });
+      setHistoryReady(true);
       return true;
     } catch {
       setPollError(true);
@@ -889,7 +897,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
           </p>
         )}
         {/* Welcome bubble */}
-        {!isLoading && !widgetUnavailable && deduped.length === 0 && (
+        {!isLoading && historyReady && !widgetUnavailable && deduped.length === 0 && (
           <div className="flex justify-start">
             <div className="min-w-0 max-w-[75%] break-words bg-white text-gray-800 rounded-2xl rounded-bl-none px-3 py-2 text-sm shadow-sm border border-gray-100 whitespace-pre-wrap [overflow-wrap:anywhere]">
               <WebchatLinkedText
