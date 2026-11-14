@@ -1,3 +1,4 @@
+import {merchantProductionAvailable,loadMerchantRelease} from './merchantRelease';
 import {validRecoveryWamid} from './checkoutRecoveryInboundConsentGate';
 import {sql,type SQL} from 'drizzle-orm';
 import type {PostPurchaseDatabase,PostPurchaseTx,createPostPurchasePreparation} from './postPurchasePreparation';
@@ -11,11 +12,11 @@ type Claim={id:string;token:string;accountId:string;shop:string;installationId:s
 type Database=PostPurchaseDatabase&{execute:(q:SQL)=>Promise<{rows:Record<string,unknown>[]}>};
 /** Internal-only worker. No routes, migrations, consent grants or automatic retries. */
 export function createPostPurchaseDelivery(deps:{
-  database:Database;env:Record<string,string|undefined>;secret:()=>string;
+  merchantAccountId?:string;database:Database;env:Record<string,string|undefined>;secret:()=>string;
   authorize:ReturnType<typeof createPostPurchasePreparation>['authorizeDelivery'];
   send:(accountId:string,phone:string,name:string,language:string,components:Record<string,unknown>[],tx:PostPurchaseTx,authorizeDispatch:()=>boolean)=>Promise<{messageId:string}>;
 }){
-  const enabled=(accountId:string)=>postPurchaseOperatorReady({...deps.env,
+  const enabled=(accountId:string)=>deps.merchantAccountId!==undefined?deps.merchantAccountId===accountId&&merchantProductionAvailable(deps.env,accountId):postPurchaseOperatorReady({...deps.env,
     ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY:deps.secret()},accountId);
   async function locked<T>(shop:string,fn:(tx:PostPurchaseTx)=>Promise<T>){
     return deps.database.transaction(async tx=>{
@@ -25,7 +26,7 @@ export function createPostPurchaseDelivery(deps:{
   }
   async function processClaim(claim:Claim){
     if(!enabled(claim.accountId))return 'disabled';
-    const controlled=readControlledPostPurchaseScope(deps.env);
+    const controlled=deps.merchantAccountId?null:readControlledPostPurchaseScope(deps.env);
     // AUTOCOMMIT before authorization/provider IO: a crash or rolled-back send transaction
     // must never erase evidence that this claim has consumed its only provider opportunity.
     const fence=await deps.database.execute(recordPostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,controlled?.intentId));
@@ -42,7 +43,7 @@ export function createPostPurchaseDelivery(deps:{
         const proof=await deps.authorize(tx,claim,String(row.intent_id));
         const digest=proof?recoveryPhoneDigest(deps.secret(),proof.phone):null;
         if(!proof||!digest||proof.contactId!==row.contact_id||proof.templateId!==row.template_id||!enabled(claim.accountId)||
-          !sameControlledPostPurchaseScope(controlled,readControlledPostPurchaseScope(deps.env))||
+          !sameControlledPostPurchaseScope(controlled,deps.merchantAccountId?null:readControlledPostPurchaseScope(deps.env))||
           (controlled&&(String(row.intent_id)!==controlled.intentId||!controlledPostPurchaseRecipientMatches(controlled,digest)))){
           await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'uncertain'));
           return 'blocked';
@@ -51,7 +52,7 @@ export function createPostPurchaseDelivery(deps:{
           WHERE id=${claim.id}::bigint AND account_id=${claim.accountId} AND shop=${claim.shop}`);
         // The adapter checks this synchronously at fetch, after its awaited credential/DNC reads.
         const authorizeDispatch=()=>Date.now()<proof.freshUntil&&enabled(claim.accountId)&&
-          sameControlledPostPurchaseScope(controlled,readControlledPostPurchaseScope(deps.env));
+          sameControlledPostPurchaseScope(controlled,deps.merchantAccountId?null:readControlledPostPurchaseScope(deps.env));
         const response=await deps.send(claim.accountId,proof.phone,proof.templateName,proof.language,proof.components,tx,authorizeDispatch);
         if(!validRecoveryWamid(response?.messageId))throw Error('provider_acceptance_unknown');
         const result=await tx.execute(settlePostPurchaseAttemptQuery(claim.id,claim.accountId,claim.shop,claim.token,'accepted',response.messageId));
@@ -64,15 +65,16 @@ export function createPostPurchaseDelivery(deps:{
     }
   }
   async function tick(){
-    const accountId=deps.env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID??'';
+    const accountId=deps.merchantAccountId??deps.env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID??'';
     if(!enabled(accountId))return 'disabled';
-    const controlled=readControlledPostPurchaseScope(deps.env);
+    const controlled=deps.merchantAccountId?null:readControlledPostPurchaseScope(deps.env);
     const schema=await deps.database.execute(postPurchaseDeliveryReadinessQuery);
     if(!schema.rows[0]?.outbox||!schema.rows[0]?.intents||!schema.rows[0]?.consents)return 'schema_missing';
     const owner=await deps.database.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`);
     const shop=owner.rows[0]?.shopify_shop;
     if(typeof shop!=='string'||!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop))return 'unavailable';
     const claim=await locked(shop,async tx=>{
+      if(deps.merchantAccountId&&!await loadMerchantRelease(tx,deps.env,accountId,'postPurchase'))return null;
       const active=await tx.execute(sql`SELECT id,config FROM integrations WHERE user_id=${accountId}
         AND type='shopify' AND is_active IS TRUE LIMIT 2 FOR SHARE`);
       if(active.rows.length!==1)return null;

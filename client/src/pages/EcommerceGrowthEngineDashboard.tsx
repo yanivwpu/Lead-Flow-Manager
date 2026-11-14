@@ -85,11 +85,11 @@ export function EcommerceGrowthEngineDashboardContent() {
      {view==="orders" && <div className="rounded-xl border bg-white p-6"><p className="mb-4 text-slate-600">{t.ordersDetail}</p><div className="flex flex-wrap gap-5"><Link href="/app/contacts" className="font-semibold text-blue-700">{t.seeContacts} →</Link><Link href="/app/followups" className="font-semibold text-blue-700">{t.seeTasks} →</Link></div></div>}
      {view==="shopping" && <div className="rounded-xl border bg-white p-6 space-y-4">
        <p className="text-sm text-slate-600">{t.shoppingDetail}</p>
-       {privatePilot && <ShoppingSettings/>}
+       <ShoppingSettings showDiagnostics={privatePilot}/>
        <div className="flex flex-wrap gap-5"><Link href="/app/ai-brain" className="font-semibold text-blue-700">{t.seeBrain} →</Link><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link></div>
      </div>}
      {view==="recovery" && <div className="rounded-xl border bg-white p-6 space-y-3 text-sm text-slate-600">
-       <p>{t.recoveryDetail}</p>
+       <ShopifyTemplateSetup locale={locale}/>
        {privatePilot && <p data-testid="ecommerce-recovery-readiness" role="status" className="font-medium text-slate-700">
          {activation.isLoading || activation.isError || !activation.data || activation.data.recoverySchemaReady == null
            ? t.recoveryUnknown
@@ -114,7 +114,7 @@ export function EcommerceGrowthEngineDashboardContent() {
            </>}
        </div>}
      </div>}
-     {view==="post" && <div className="space-y-4"><ShopifyTemplateSetup locale={locale}/><p className="text-sm text-slate-600">{t.postDetail}</p><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
+     {view==="post" && <div className="space-y-4"><ShopifyTemplateSetup locale={locale}/><ShopifyPostPurchasePreview connected={data?.connected === true}/></div>}
      {view==="settings" && <div className="space-y-4"><p className="text-sm text-slate-600">{t.settingsDetail}</p>{data?.connected ? <ShopifySimpleSetup syncEnabled={data.syncEnabled === true}/> : <Link href="/app/integrations?setup=shopify" className="font-semibold text-blue-700">{t.setup} →</Link>}</div>}
    </section>
  </main>;

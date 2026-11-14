@@ -1,3 +1,4 @@
+import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
@@ -1368,6 +1369,10 @@ class ChannelService {
       }
       // If this contact was matched via the phone fallback (whatsappId was null),
       // backfill the whatsappId now so subsequent inbound lookups hit the fast path.
+      if(channel==='whatsapp'){
+        const canonicalPhone=canonicalMatchedShopifyPhone(contact,channelContactId);
+        if(canonicalPhone)contactUpdates.phone=canonicalPhone;
+      }
       if (channel === 'whatsapp' && !contact.whatsappId) {
         contactUpdates.whatsappId = channelContactId;
         console.log(`[Inbox Worker] Backfilling whatsappId=${channelContactId} on contact ${contact.id} (matched via phone fallback)`);
