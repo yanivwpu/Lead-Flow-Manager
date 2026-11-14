@@ -382,6 +382,7 @@ export function createShopifyTemplateProvisioner(deps: {
     })??false;
   }
   async function messagingSummary(tx:TemplateTx,m:TemplateMerchant){
+    try{
     const schema=(await tx.execute(postPurchaseDeliveryReadinessQuery)).rows[0];
     const recovery=(await tx.execute(recoveryRuntimeSchemaReadyQuery())).rows[0]?.ready===true;
     if(!schema?.outbox||!recovery)return null;
@@ -394,6 +395,7 @@ export function createShopifyTemplateProvisioner(deps: {
         UNION ALL SELECT state,meta_delivery_status FROM ecommerce_checkout_recovery_outbox WHERE account_id=${m.accountId} AND shop=${m.shop}
       ) deliveries`);
     const row=rows.rows[0];return row?{pending:Number(row.pending),accepted:Number(row.accepted),uncertain:Number(row.uncertain),delivered:Number(row.delivered),failed:Number(row.failed)}:null;
+    }catch{return null;}
   }
   async function view(accountId: string): Promise<ShopifyTemplateSetup> {
     const available = shopifyTemplateSetupAllowed(deps.env, accountId);
