@@ -1,3 +1,4 @@
+import {merchantActivationTime,loadMerchantRelease} from './merchantRelease';
 import {and,eq,sql} from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users,contacts,messageTemplates} from '@shared/schema';
@@ -37,7 +38,7 @@ async function installation(accountId:string,shop:string):Promise<boolean>{
  return !!user&&isShopifyContactInstallationActive(user)&&
    !!user.shopifyAccessToken&&user.metaConnected===true;
 }
-async function claimOne(accountId:string,checkoutId:string):Promise<ClaimedRecoveryDelivery|null>{
+async function claimOne(accountId:string,checkoutId:string,selfService=false):Promise<ClaimedRecoveryDelivery|null>{
  if(!/^gid:\/\/shopify\/AbandonedCheckout\/[1-9][0-9]{0,19}$/.test(checkoutId))
    return null;
  const secret=process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'';
@@ -46,7 +47,13 @@ async function claimOne(accountId:string,checkoutId:string):Promise<ClaimedRecov
  if(!owner||!isShop(owner.shopifyShop)||
    !await installation(accountId,owner.shopifyShop))return null;
  const shop=owner.shopifyShop;
- if(process.env.RAILWAY_ENVIRONMENT_NAME==='production'){
+ if(selfService){
+   const released=await db.transaction(async tx=>{
+     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${shop},0))`);
+     return loadMerchantRelease(tx,process.env,accountId,'checkoutRecovery');
+   });
+   if(!released)return null;
+ }else if(process.env.RAILWAY_ENVIRONMENT_NAME==='production'){
    const scope=readProductionRecoveryScope(process.env);
    if(!scope||scope.accountId!==accountId||scope.shop!==shop||scope.checkoutId!==checkoutId)return null;
    const active=await db.execute(sql`SELECT config FROM integrations WHERE user_id=${accountId}
@@ -157,4 +164,24 @@ export function startCheckoutRecoveryRuntime():null|(()=>void){
  },()=>{
    console.error('[EcommerceRecoveryWorker] guarded tick failed');
  });
+}
+
+/** One claim per selected merchant/tick, using the unchanged eligibility and at-most-once sender. */
+export async function runMerchantRecoveryDelivery(accountId:string){
+ const release=await db.transaction(tx=>loadMerchantRelease(tx,process.env,accountId,'checkoutRecovery'));
+ if(!release)return;
+ const rows=await db.execute(sql`SELECT o.checkout_gid FROM ecommerce_checkout_recovery_outbox o
+   JOIN ecommerce_abandoned_checkout_observations obs ON obs.account_id=o.account_id AND obs.shop=o.shop AND obs.checkout_gid=o.checkout_gid
+   WHERE o.account_id=${accountId} AND o.shop=${release.shop} AND o.state='pending'
+     AND obs.first_observed_at>=${new Date(merchantActivationTime(release.config,'checkoutRecovery'))}
+   ORDER BY o.id LIMIT 1`);
+ if(rows.rows.length!==1)return;
+ const claim=await claimOne(accountId,String(rows.rows[0].checkout_gid),true);if(!claim)return;
+ return processClaimedRecoveryDelivery(claim,process.env,{
+   merchantAccountId:accountId,
+   verifyCurrentInstallation:()=>installation(claim.accountId,claim.shop),
+   freshShopifyRecheck:()=>fetchFresh(claim),
+   resolveCurrentEvidence:(_claim,customerId)=>evidence(claim,customerId),
+   sendApprovedTemplate:args=>sendRecoveryViaMeta(args,undefined,accountId),settle,
+ },process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'');
 }

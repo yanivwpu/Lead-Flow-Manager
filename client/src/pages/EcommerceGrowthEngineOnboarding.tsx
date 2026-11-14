@@ -1,3 +1,4 @@
+import { ShoppingSettings } from "@/components/ShoppingSettings";
 import { Link, useLocation } from "wouter";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -34,7 +35,7 @@ const copy = {
     waiting: "Connect Shopify first.", pro: "An eligible Pro plan or trial is required.", plan: "Review plan",
     unavailable: "Couldn't verify setup status. No changes were made.", retry: "Try again",
     failed: "Activation didn't complete. Verify Shopify connection and Pro access.",
-    safe: "After activating your engine, choose and configure the customer journeys you want. WhatsApp follow-ups require a connected account, customer consent, approved templates and delivery approval before messages begin.",
+    safe: "After activating your engine, choose and configure the customer journeys you want. WhatsApp follow-ups require a connected account, customer consent, approved templates and your explicit activation before messages begin.",
   },
   es: {
     back: "Volver a motores de crecimiento", engine: "Motor de comercio electrónico",
@@ -164,7 +165,7 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
           </p>}
         </section>
       )}
-      {mode === "setup" && activated && <ShopifyTemplateSetup locale={locale}/>}
+      {mode === "setup" && activated && <><ShoppingSettings showDiagnostics={false}/><ShopifyTemplateSetup locale={locale}/></>}
       {mode === "setup" && <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600" data-testid="ecommerce-setup-delivery-guidance">
         <LockKeyhole className="me-2 inline h-4 w-4"/>{t.safe}
       </p>}

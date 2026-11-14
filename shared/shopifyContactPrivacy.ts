@@ -33,3 +33,15 @@ export function shopifyContactCaptureLog(status: ShopifyEmailCaptureStatus, at: 
   return JSON.stringify({ tag: "[ShopifyContact]", event: "owner_email_capture",
     status, source: "shop.email", at: at.toISOString() });
 }
+
+/** Format an already-matched Shopify contact's phone; never infer a different
+ * number or Shopify identity from an inbound sender. Consent remains separate. */
+export function canonicalMatchedShopifyPhone(contact:{phone?:string|null;customFields?:unknown;sourceDetails?:unknown},sender:string):string|null{
+  const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
+  const custom=obj(contact.customFields),source=obj(contact.sourceDetails);
+  const customer=custom.shopifyCustomerId??source.shopifyCustomerId,shop=custom.shopifyShop??source.shop;
+  if(typeof customer!=='string'||!/^[1-9][0-9]{0,19}$/.test(customer)||typeof shop!=='string'||
+    !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop)||!/^[1-9][0-9]{7,14}$/.test(sender)||
+    !contact.phone||!/^\+?[1-9][0-9]{7,14}$/.test(contact.phone)||contact.phone.replace(/^\+/,'')!==sender)return null;
+  return '+'+sender;
+}

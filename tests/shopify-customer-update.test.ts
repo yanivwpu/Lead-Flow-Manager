@@ -340,6 +340,20 @@ test("PostgreSQL engine customer synchronization regression fixtures", async t =
       } finally { globalThis.fetch = originalFetch; subscriptionService.getUserLimits = previousLimits;
         if (nativePool) await (await import("../drizzle/db")).db.$client.end(); }
     });
+    await t.test("matched WhatsApp E.164 formatting survives a same-number Shopify refresh",async()=>{
+      const formatShop='format.myshopify.com';await insertOwner('format-owner',formatShop);
+      const update=(n:number,phone:string)=>sync({shop:formatShop,topic:'customers/update',eventId:'format-'+n,
+        body:{id:'40001',phone,updated_at:stamp(n)}},database as any);
+      await update(1,'+1 (555) 555-0123');
+      const [contact]=await database.select().from(schema.contacts).where(eq(schema.contacts.userId,'format-owner'));
+      const {canonicalMatchedShopifyPhone}=await import('../shared/shopifyContactPrivacy');
+      const phone=canonicalMatchedShopifyPhone(contact,'15555550123');assert.equal(phone,'+15555550123');
+      await database.update(schema.contacts).set({phone}).where(eq(schema.contacts.id,contact.id));
+      await update(2,'+1 (555) 555-0123');
+      assert.equal((await database.select().from(schema.contacts).where(eq(schema.contacts.id,contact.id)))[0].phone,'+15555550123');
+      await update(3,'+1 (555) 555-0124');
+      assert.equal((await database.select().from(schema.contacts).where(eq(schema.contacts.id,contact.id)))[0].phone,'15555550124');
+    });
     if (nativePool) await t.test("privacy fence on a separate connection blocks delivery until suppression commits", async () => {
       let entered!: () => void, release!: () => void;
       const started = new Promise<void>(r => { entered = r; }); const hold = new Promise<void>(r => { release = r; });

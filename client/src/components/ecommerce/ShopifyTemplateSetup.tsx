@@ -15,7 +15,7 @@ const copy = {
     safe: "Template approval does not turn on customer messages. Each journey needs your permission and must pass its delivery checks.",
     labels: ["Order confirmation", "Shipping update", "Order cancellation", "Checkout reminder"],
     statuses: { ready: "Ready", awaiting_approval: "Awaiting Meta approval", action_required: "Action required", unavailable: "Unavailable", active: "Active", paused: "Paused" },
-    reasons: { merchant_template_paused: "You cleared this message selection. Select an approved message in Post-Purchase to resume.", connect_whatsapp: "Connect your WhatsApp Business Account to continue.", authorize_template_setup: "Allow automatic message setup to begin.",
+    reasons: { consent_setup_required: "Configure and save consent collection for the selected purposes below.", merchant_template_paused: "You cleared this message selection. Select an approved message in Post-Purchase to resume.", connect_whatsapp: "Connect your WhatsApp Business Account to continue.", authorize_template_setup: "Allow automatic message setup to begin.",
       operator_release_required: "Sending is awaiting a controlled release.", verification_required: "We need to check the current Meta status.",
       approved_and_bound: "Approved in your account and assigned to this journey.", meta_review_pending: "Meta is reviewing this message.", setup_queued: "Automatic setup is queued.", submission_pending: "Submitting this message for review.",
       meta_template_paused: "Meta paused or disabled this message. Sending is blocked.", meta_template_rejected: "Meta rejected this message. Review it in your WhatsApp Library.",
@@ -27,9 +27,10 @@ const copy = {
       submitted_template_not_visible: "The submitted message is not visible in Meta yet.", meta_connection_changed: "Your WhatsApp account changed. Review the connection and authorize setup again.",
       meta_template_inventory_incomplete: "We could not check all your messages. No new message was submitted.", meta_rate_limited: "Meta asked us to wait. We will check again later.",
       meta_temporarily_unavailable: "Meta is temporarily unavailable. We will check again later.", template_changed: "The current message no longer matches this journey." },
-    library: "Open WhatsApp Library",include:"Include this journey",enablePost:"Enable selected post-purchase journeys",pausePost:"Pause post-purchase journeys",
-    enableRecovery:"Enable checkout reminders",pauseRecovery:"Pause checkout reminders",release:"Sending is unavailable until the controlled release and all delivery checks pass.",
-    selected:"Selected post-purchase purposes",extraLabels:["Review request","Repeat-purchase offer","Customer win-back"],
+    messaging:"Customer messaging", pending:"Queued",accepted:"Accepted by Meta",delivered:"Delivered/read",uncertain:"Needs review",failed:"Failed",
+    library: "Review and customize in WhatsApp Library",include:"Include this journey",enablePost:"Enable selected post-purchase journeys",pausePost:"Pause post-purchase journeys",
+    enableRecovery:"Enable checkout reminders",pauseRecovery:"Pause checkout reminders",release:"Choose the journeys to enable. Only eligible customers with verified consent receive messages.",
+    message:"Approved message",none:"No message selected",selected:"Selected post-purchase purposes",extraLabels:["Review request","Repeat-purchase offer","Customer win-back"],
   },
   es: {
     title: "Configuración automática de mensajes WhatsApp", detail: "Comprobamos tu cuenta de WhatsApp Business, reutilizamos mensajes aprobados compatibles y enviamos los que faltan en inglés a Meta para su revisión.",
@@ -49,9 +50,10 @@ const copy = {
       submission_uncertain: "Meta no confirmó el envío a revisión. Consultaremos su estado sin enviarlo otra vez.", submitted_template_not_visible: "Meta aún no muestra el mensaje enviado.",
       meta_connection_changed: "Cambió la cuenta de WhatsApp. Revisa la conexión y autoriza de nuevo.", meta_template_inventory_incomplete: "No se pudieron consultar todos los mensajes. No se envió ninguno nuevo.",
       meta_rate_limited: "Meta pidió esperar. Lo comprobaremos más tarde.", meta_temporarily_unavailable: "Meta no está disponible temporalmente. Lo comprobaremos después.", template_changed: "El mensaje actual ya no es compatible con este recorrido." },
-    library: "Abrir biblioteca WhatsApp",include:"Incluir este recorrido",enablePost:"Activar recorridos poscompra seleccionados",pausePost:"Pausar recorridos poscompra",
-    enableRecovery:"Activar recordatorios de checkout",pauseRecovery:"Pausar recordatorios de checkout",release:"Envío no disponible hasta el lanzamiento controlado y todas las verificaciones.",
-    selected:"Finalidades poscompra seleccionadas",extraLabels:["Solicitud de reseña","Oferta de nueva compra","Recuperación de clientes"],
+    messaging:"Mensajes a clientes", pending:"En cola",accepted:"Aceptados por Meta",delivered:"Entregados/leídos",uncertain:"Requieren revisión",failed:"Fallidos",
+    library: "Revisar en biblioteca WhatsApp",include:"Incluir este recorrido",enablePost:"Activar recorridos poscompra seleccionados",pausePost:"Pausar recorridos poscompra",
+    enableRecovery:"Activar recordatorios de checkout",pauseRecovery:"Pausar recordatorios de checkout",release:"Elige los recorridos. Solo reciben mensajes los clientes elegibles con consentimiento verificado.",
+    message:"Mensaje aprobado",none:"Sin mensaje seleccionado",selected:"Finalidades poscompra seleccionadas",extraLabels:["Solicitud de reseña","Oferta de nueva compra","Recuperación de clientes"],
   },
   he: {
     title: "הגדרה אוטומטית של הודעות WhatsApp", detail: "נבדוק את חשבון WhatsApp Business המחובר, נשתמש בהודעות מאושרות מתאימות ונגיש ל-Meta הודעות חסרות באנגלית לבדיקה.",
@@ -70,14 +72,16 @@ const copy = {
       submitted_template_not_visible: "ההודעה שהוגשה עדיין אינה מופיעה ב-Meta.", meta_connection_changed: "חשבון WhatsApp השתנה. יש לבדוק את החיבור ולאשר מחדש.",
       meta_template_inventory_incomplete: "לא ניתן לבדוק את כל ההודעות. לא הוגשה הודעה חדשה.", meta_rate_limited: "Meta ביקשה להמתין. נבדוק שוב בהמשך.",
       meta_temporarily_unavailable: "Meta אינה זמינה כרגע. נבדוק שוב בהמשך.", template_changed: "ההודעה הנוכחית אינה מתאימה עוד למסע." },
-    library: "פתיחת ספריית WhatsApp",include:"הכללת המסע",enablePost:"הפעלת המסעות הנבחרים לאחר רכישה",pausePost:"השהיית המסעות לאחר רכישה",
-    enableRecovery:"הפעלת תזכורות לתשלום",pauseRecovery:"השהיית תזכורות לתשלום",release:"השליחה אינה זמינה עד לפתיחה מבוקרת והשלמת כל בדיקות הזכאות.",
-    selected:"מטרות נבחרות לאחר רכישה",extraLabels:["בקשת חוות דעת","הצעה לרכישה חוזרת","החזרת לקוחות"],
+    messaging:"הודעות ללקוחות", pending:"בתור",accepted:"התקבל ב-Meta",delivered:"נמסר/נקרא",uncertain:"נדרשת בדיקה",failed:"נכשל",
+    library: "בדיקה והתאמה בספריית WhatsApp",include:"הכללת המסע",enablePost:"הפעלת המסעות הנבחרים לאחר רכישה",pausePost:"השהיית המסעות לאחר רכישה",
+    enableRecovery:"הפעלת תזכורות לתשלום",pauseRecovery:"השהיית תזכורות לתשלום",release:"בחרו את המסעות להפעלה. הודעות יישלחו רק ללקוחות זכאים עם הסכמה מאומתת.",
+    message:"הודעה מאושרת",none:"לא נבחרה הודעה",selected:"מטרות נבחרות לאחר רכישה",extraLabels:["בקשת חוות דעת","הצעה לרכישה חוזרת","החזרת לקוחות"],
   },
 } as const;
 
-export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed = false, refreshing = false, refreshedAt = null, onAuthorize, onRefresh,onPlan,onDelivery }: {
+export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed = false, refreshing = false, refreshedAt = null, onAuthorize, onRefresh,onPlan,onDelivery,onTemplate }: {
   locale: string; data?: Setup; saving?: boolean; failed?: boolean; refreshing?: boolean; refreshedAt?: number|null; onAuthorize: () => void; onRefresh: () => void;
+  onTemplate?:(journey:import('@shared/shopifyGrowthTemplates').ShopifyTemplateJourney,templateId:string|null)=>void;
   onPlan?:(journey:PostPurchaseJourney,selected:boolean)=>void;
   onDelivery?:(journey:'postPurchase'|'checkoutRecovery',enabled:boolean)=>void;
 }) {
@@ -105,6 +109,15 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
           <h3 className="text-sm font-medium">{t.labels[index]}</h3>
           <p className={"text-sm font-semibold " + (status === "ready" ? "text-emerald-700" : "text-slate-700")}>{t.statuses[status]}</p>
           <p className="text-xs text-slate-600">{reasons[row?.reason ?? ""] ?? t.error}</p>
+          {onTemplate&&<label className="block pt-2 text-sm">{t.message}
+            <select className="mt-1 block w-full rounded border p-2" value={row?.templateId??''}
+              disabled={saving||data.delivery?.[template.journey==='checkoutRecovery'?'checkoutRecovery':'postPurchase'].merchantEnabled}
+              onChange={event=>onTemplate(template.journey,event.target.value||null)}>
+              <option value="">{t.none}</option>
+              {row?.choices?.map(choice=><option key={choice.id} value={choice.id}>{choice.name} ({choice.language})</option>)}
+            </select>
+            <span className="mt-2 block text-xs text-slate-600">{row?.choices?.find(choice=>choice.id===row.templateId)?.bodyText}</span>
+          </label>}
           {template.journey!=='checkoutRecovery'&&onPlan&&<label className="flex items-center gap-2 pt-2 text-sm">
             <input type="checkbox" checked={data.postPurchasePlans?.[template.journey]?.selected??false} disabled={saving||data.delivery?.postPurchase.merchantEnabled}
               onChange={event=>onPlan(template.journey as PostPurchaseJourney,event.target.checked)}/>{t.include}
@@ -126,8 +139,13 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
             {kind==='postPurchase'?(state.merchantEnabled?t.pausePost:t.enablePost):(state.merchantEnabled?t.pauseRecovery:t.enableRecovery)}
           </button>
           <span role="status">{state.deliveryEnabled?t.statuses.active:state.merchantEnabled?t.statuses.paused:state.canActivate?t.statuses.ready:t.statuses.unavailable}</span>
+          {!state.deliveryEnabled&&!state.canActivate&&<span className="text-xs text-slate-600">{(t.reasons as Record<string,string>)[state.reason]??t.safe}</span>}
         </div>;
       })}
+    </div>}
+    {data?.messaging&&<div className="rounded-lg border p-3 text-sm" aria-live="polite">
+      <p className="font-medium">{t.messaging}</p>
+      <p>{t.pending}: {data.messaging.pending} · {t.accepted}: {data.messaging.accepted} · {t.delivered}: {data.messaging.delivered} · {t.uncertain}: {data.messaging.uncertain} · {t.failed}: {data.messaging.failed}</p>
     </div>}
     {failed && <p role="alert" className="text-sm text-red-700">{t.error}</p>}
     {saving&&data?.authorized&&<p role="status" className="text-sm text-slate-600">{t.working}</p>}
@@ -138,7 +156,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
         {refreshing && <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />}
         {refreshing ? t.refreshing : t.refresh}
       </button>
-      {data?.rows.some(row => row.status === "action_required" || row.status === "paused") && <a href="/app/templates?tab=templates" className="underline">{t.library}</a>}
+      {data?.authorized && <a href="/app/templates?tab=templates" className="underline">{t.library}</a>}
     </div>
     <p role="status" aria-live="polite" data-testid="template-refresh-feedback" className="text-xs text-slate-600">
       {refreshing ? t.refreshing : refreshedAt != null ? `${t.refreshed}: ${new Date(refreshedAt).toLocaleTimeString(language)}` : ""}
@@ -197,12 +215,14 @@ export function ShopifyTemplateSetup({ locale }: { locale: string }) {
         headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(!response.ok)throw Error('journey_update_failed');
       await query.refetch();
+      await client.invalidateQueries({queryKey:withUserQueryScope(['/api/shopify/merchant-engine/status'],user.id)});
       await client.invalidateQueries({queryKey:withUserQueryScope(['/api/shopify/ecommerce/event-inbox-preview'],user.id)});
     }catch{setFailed(true);}finally{setSaving(false);}
   }
   return <><ShopifyTemplateSetupPanel locale={locale} data={sessionAligned && !query.isError ? setupData : undefined}
     saving={saving} failed={failed || query.isError} refreshing={refreshing} refreshedAt={refreshedAt} onAuthorize={() => void authorize()}
     onRefresh={() => { void refreshStatus(); }}
+    onTemplate={(journey,templateId)=>void update('template-selection',{action:'select_journey_template',journey,templateId})}
     onPlan={(journey,selected)=>void update('journey-plan',{action:'save_post_purchase_plan',journey,
       plan:{selected,delayMinutes:query.data?.postPurchasePlans?.[journey].delayMinutes??0}})}
     onDelivery={(journey,enabled)=>void update('journey-activation',{action:'set_journey_delivery',journey,enabled})}/>

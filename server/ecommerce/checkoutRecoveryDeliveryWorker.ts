@@ -1,3 +1,4 @@
+import {merchantProductionAvailable} from './merchantRelease';
 import { evaluateRecoveryMessagingEligibility,
  type RecoveryContact,type WhatsAppRecoveryConsent,type RecoveryTemplateApproval
 } from './checkoutRecoveryMessagingEligibility';
@@ -21,6 +22,7 @@ type Evidence={
  localTemplate:RecoveryTemplateApproval|null;liveMetaTemplate:RecoveryTemplateApproval|null;
 };
 type DeliveryDeps={
+ merchantAccountId?:string;
  verifyCurrentInstallation:(claim:ClaimedRecoveryDelivery)=>Promise<boolean>;
  freshShopifyRecheck:(claim:ClaimedRecoveryDelivery)=>Promise<FreshRecoveryResult>;
  resolveCurrentEvidence:(claim:ClaimedRecoveryDelivery,shopifyCustomerId:string)=>Promise<Evidence>;
@@ -47,7 +49,7 @@ export async function processClaimedRecoveryDelivery(
  claim:ClaimedRecoveryDelivery,env:Record<string,string|undefined>,
  deps:DeliveryDeps,consentDigestSecret:string
 ):Promise<'disabled'|'suppressed'|'accepted'|'uncertain'> {
- if(!recoveryClaimExecutionEnabled(env,claim))return 'disabled';
+ if(!recoveryClaimExecutionEnabled(env,claim,deps.merchantAccountId))return 'disabled';
  try{
    if(!await deps.verifyCurrentInstallation(claim)){
      if(!await deps.settle(claim,'suppressed'))return 'uncertain';
@@ -77,7 +79,7 @@ export async function processClaimedRecoveryDelivery(
      if(!await deps.settle(claim,'suppressed'))return 'uncertain';
      return 'suppressed';
    }
-   if(env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+   if(!deps.merchantAccountId&&env.RAILWAY_ENVIRONMENT_NAME==='production' &&
       !productionRecoveryRecipientAllowed(env,proof.consent?.phoneDigest??'')){
      await deps.settle(claim,'suppressed');return 'suppressed';
    }
@@ -101,6 +103,7 @@ export async function processClaimedRecoveryDelivery(
 }
 /** The staging guard above stays staging-only. This separate path pins the exact
  * production tenant, shop, checkout, recipient, approval and expiry. */
-export function recoveryClaimExecutionEnabled(env:Record<string,string|undefined>,claim:ClaimedRecoveryDelivery):boolean{
+export function recoveryClaimExecutionEnabled(env:Record<string,string|undefined>,claim:ClaimedRecoveryDelivery,merchantAccountId?:string):boolean{
+ if(merchantAccountId!==undefined)return merchantAccountId===claim.accountId&&merchantProductionAvailable(env,claim.accountId,claim.shop);
  return recoveryDeliveryExecutionEnabled(env)||productionRecoveryClaimAllowed(env,claim);
 }

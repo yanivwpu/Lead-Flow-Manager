@@ -1,3 +1,4 @@
+import {merchantActivationTime,record,loadMerchantRelease} from './merchantRelease';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../drizzle/db';
 import { users, contacts, messageTemplates, integrations } from '@shared/schema';
@@ -46,11 +47,12 @@ export async function sendRecoveryViaMeta(
    },
    recheck:recheckShopifyCheckoutForRecovery,
  },
+ merchantAccountId?:string,
 ):Promise<{messageId:string}> {
  const {claim}=args;
- if(!recoveryClaimExecutionEnabled(process.env,claim))throw Error('recovery_send_disabled');
+ if(!recoveryClaimExecutionEnabled(process.env,claim,merchantAccountId))throw Error('recovery_send_disabled');
  const productionScope=readProductionRecoveryScope(process.env);
- if(process.env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+ if(!merchantAccountId&&process.env.RAILWAY_ENVIRONMENT_NAME==='production' &&
     !productionRecoveryRecipientAllowed(process.env,recoveryPhoneDigest(
       process.env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY||'',args.phone)))throw Error('recovery_recipient_not_released');
  if(!E164.test(args.phone) || !/^[1-9][0-9]{0,18}$/.test(claim.id) ||
@@ -97,6 +99,16 @@ export async function sendRecoveryViaMeta(
        eq(integrations.type,'shopify'),eq(integrations.isActive,true))).limit(2);
    if(active.length!==1)throw Error('shopify_integration_ambiguous');
    const cfg=plainObject(active[0].config);
+   if(merchantAccountId){
+     if(merchantAccountId!==claim.accountId||!await loadMerchantRelease(tx,process.env,claim.accountId,'checkoutRecovery'))
+       throw Error('merchant_recovery_activation_required');
+     const activationTime=merchantActivationTime(cfg,'checkoutRecovery');
+     if(!Number.isFinite(activationTime))throw Error('merchant_recovery_activation_required');
+     const observation=await tx.execute(sql`SELECT first_observed_at FROM ecommerce_abandoned_checkout_observations
+       WHERE account_id=${claim.accountId} AND shop=${claim.shop} AND checkout_gid=${claim.checkoutId}`);
+     if(observation.rows.length!==1||new Date(String(observation.rows[0].first_observed_at)).getTime()<activationTime)
+       throw Error('checkout_predates_merchant_activation');
+   }
    if(process.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
      (cfg.ecommerceCheckoutRecoveryDeliveryEnabled!==true||cfg.ecommerceCheckoutRecoveryTemplateId!==claim.templateId||
       cfg.ecommerceCheckoutRecoveryDeliveryConnection!==commerceConnectionFingerprint({accountId:claim.accountId,shop:claim.shop,
@@ -115,6 +127,12 @@ export async function sendRecoveryViaMeta(
    if(!contact || !template || template.name!==args.templateName ||
       template.language!==args.templateLanguage)
      throw Error('recovery_contact_or_template_changed');
+   if(merchantAccountId){
+     const shared=await tx.execute(sql`SELECT id FROM contacts WHERE user_id=${claim.accountId} AND id<>${claim.contactId}
+       AND (regexp_replace(COALESCE(phone,''),'[^0-9]','','g')=${args.phone.slice(1)}
+         OR regexp_replace(COALESCE(whatsapp_id,''),'[^0-9]','','g')=${args.phone.slice(1)}) LIMIT 1`);
+     if(shared.rows.length)throw Error('recovery_recipient_identity_ambiguous');
+   }
    const cf=plainObject(contact.customFields),details=plainObject(contact.sourceDetails);
    const exactId=cf.shopifyCustomerId ?? details.shopifyCustomerId;
    if(!exactId || !/^[1-9]\d{0,19}$/.test(String(exactId)) ||
@@ -130,6 +148,8 @@ export async function sendRecoveryViaMeta(
      FOR SHARE`);
    if(data.rows.length!==1)throw Error('whatsapp_checkout_optin_missing');
    const proof=data.rows[0];
+   if(merchantAccountId&&new Date(String(proof.granted_at)).getTime()<Date.parse(String(record(cfg.ecommerceMerchantRelease).authorizedAt)))
+     throw Error('whatsapp_consent_connection_changed');
    const shopperId='gid://shopify/Customer/'+String(exactId);
    const stored=String(proof.shopify_customer_gid||'');
    if(stored!==shopperId)throw Error('whatsapp_checkout_customer_mismatch');
@@ -192,7 +212,7 @@ export async function sendRecoveryViaMeta(
      approved.name,approved.language,
      recoveryTemplateBodyComponents(approved,fresh.recoveryUrl),{
        signal:AbortSignal.timeout(8000),suppressionExecutor:tx,
-       authorizeDispatch:()=>Date.now()<freshUntil&&recoveryClaimExecutionEnabled(process.env,claim)&&
+       authorizeDispatch:()=>Date.now()<freshUntil&&recoveryClaimExecutionEnabled(process.env,claim,merchantAccountId)&&
          JSON.stringify(readProductionRecoveryScope(process.env))===JSON.stringify(productionScope),
      });
    if(!response?.messageId || response.messageId.length>256)

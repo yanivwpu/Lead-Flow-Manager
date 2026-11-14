@@ -6,13 +6,13 @@ import { productionConsentCaptureBlocker } from './consentCaptureGate';
 import { productionRecoveryEvidenceScope } from './checkoutRecoveryProductionRelease';
 
 /** Capture permission is independent of outbound preparation and delivery. */
-export function enrollmentCaptureReadiness(env: Record<string, string | undefined>, accountId: string, shop: string, connection?: string) {
+export function enrollmentCaptureReadiness(env: Record<string, string | undefined>, accountId: string, shop: string, connection?: string, merchantReleased=false) {
   const strongKey = (env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY?.length ?? 0) >= 32;
   const scope = productionRecoveryEvidenceScope(env);
   const pilot = productionConsentCaptureBlocker(env, accountId, shop, connection) === null;
   return {
-    postPurchase: strongKey && (pilot || postPurchasePreparationEnabled(env, accountId)),
-    checkoutRecovery: strongKey && (pilot || recoveryConsentCaptureEnabled(env) || !!scope &&
+    postPurchase: strongKey && (merchantReleased || pilot || postPurchasePreparationEnabled(env, accountId)),
+    checkoutRecovery: strongKey && (merchantReleased || pilot || recoveryConsentCaptureEnabled(env) || !!scope &&
       scope.accountId === accountId && scope.shop === shop &&
       env.ECOMMERCE_RECOVERY_PRODUCTION_CONSENT_APPROVED === 'true' && env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED === 'true'),
   };

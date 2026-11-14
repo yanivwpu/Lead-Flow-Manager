@@ -4,6 +4,7 @@ import type {PostPurchasePlans} from "./postPurchase";
  * Generic integration edits/reconnects must preserve the committed current values.
  */
 export const SHOPIFY_GROWTH_MANAGED_CONFIG_KEYS=[
+  'ecommerceMerchantRelease','ecommerceMerchantWorkerCheckedAt','ecommercePostPurchaseActivatedAt','ecommerceCheckoutRecoveryActivatedAt',
   'ecommerceConsentEnrollment',
   'ecommerceTemplateSetup','ecommercePostPurchaseTemplates','ecommercePostPurchaseTemplateAutoDisabled',
   'ecommercePostPurchasePlans','ecommercePostPurchaseDeliveryEnabled','ecommercePostPurchaseDeliveryConnection',
@@ -37,10 +38,12 @@ export type ShopifySetupStatus = "ready" | "awaiting_approval" | "action_require
 export type ShopifyTemplateProgress = {
   journey: ShopifyTemplateJourney; name: string; status: ShopifySetupStatus;
   reason: string; templateId?: string; checkedAt?: number;
+  choices?:Array<{id:string;name:string;language:string;bodyText:string}>;
 };
 export type ShopifyTemplateSetup = {
   available: boolean; connected: boolean; authorized: boolean;
   rows: ShopifyTemplateProgress[];
+  messaging?:{pending:number;accepted:number;uncertain:number;delivered:number;failed:number}|null;
   postPurchasePlans?:PostPurchasePlans;
   delivery?:Record<"postPurchase"|"checkoutRecovery",{
     canActivate:boolean;merchantEnabled:boolean;deliveryEnabled:boolean;reason:string;
