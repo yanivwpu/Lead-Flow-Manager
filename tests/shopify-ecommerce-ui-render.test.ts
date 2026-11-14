@@ -119,8 +119,8 @@ test("dashboard keeps Shopify setup out of overview and links to existing settin
   assert.ok(source.includes("<ShopifySimpleSetup"));
   assert.ok(source.includes('view==="recovery"'));
   assert.ok(source.includes('view==="post"'));
-  assert.ok(source.includes("t.recoveryDetail"));
-  assert.ok(source.includes("t.postDetail"));
+  assert.match(source,/view==="recovery"[\s\S]*?<ShopifyTemplateSetup locale=\{locale\}/);
+  assert.match(source,/view==="post"[\s\S]*?<ShopifyTemplateSetup locale=\{locale\}/);
 });
 
 test("actual dashboard pilot boundary denies missing grant, failed grant and stale sessions", () => {
