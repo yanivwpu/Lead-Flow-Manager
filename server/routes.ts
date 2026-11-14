@@ -1,3 +1,4 @@
+import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
 import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";
 import { requireInboxWorkspace, inboxWorkspaceId } from "./inboxWorkspaceAccess";
 import { revokePresenceMembership } from "./presence";
@@ -554,6 +555,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerInboxWorkspaceRoutes(app);
+  registerTeamInvitationRoutes(app);
   registerMarketingComplianceRoutes(app);
   registerSeoIntelligenceRoutes(app, requireSalesAdmin);
 
@@ -2191,59 +2193,9 @@ export async function registerRoutes(
   });
 
   // Invite a team member
-  app.post("/api/team", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const { email, name, role = "member" } = req.body;
-      if (role !== "member" && role !== "admin") return res.status(400).json({ error: "Invalid team role" });
-      
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-      }
-
-      // Check subscription limits
-      const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits) {
-        return res.status(400).json({ error: "Could not fetch subscription limits" });
-      }
-
-      const currentCount = await storage.getTeamMemberCount(req.user.id);
-      // -1 = unlimited (Pro). Same seat math as GET /api/subscription usersCount + limits.usersLimit.
-      if (limits.maxUsers !== -1 && currentCount >= limits.maxUsers) {
-        return res.status(403).json({
-          error:
-            limits.plan === "free"
-              ? "Your Free plan includes 1 user. Upgrade to Pro to invite team members."
-              : limits.plan === "starter"
-                ? "Starter includes up to 3 users. Upgrade to Pro for unlimited team members."
-                : `Your ${limits.planName} plan does not allow more team members right now.`,
-          upgradeRequired: true,
-          plan: limits.plan,
-        });
-      }
-
-      // Check if already invited
-      const existing = await storage.getTeamMembers(req.user.id);
-      if (existing.some(m => m.email.toLowerCase() === email.toLowerCase())) {
-        return res.status(400).json({ error: "This email has already been invited" });
-      }
-
-      const member = await storage.createTeamMember({
-        ownerId: req.user.id,
-        email: email.toLowerCase(),
-        name: name || null,
-        role,
-        status: "pending",
-      });
-
-      res.json(member);
-    } catch (error) {
-      console.error("Error inviting team member:", error);
-      res.status(500).json({ error: "Failed to invite team member" });
-    }
+  app.post("/api/team", teamInvitationLimiter, requireTeamInvitationActor, async (req, res) => {
+    try { res.json(await deliverTeamInvitation(await issueTeamInvitation(req.user!.id, req.body))); }
+    catch (error) { invitationFailure(res, error); }
   });
 
   // Remove a team member
@@ -2291,6 +2243,9 @@ export async function registerRoutes(
       const { role, status, name } = req.body;
       if (role !== undefined && role !== "member" && role !== "admin") return res.status(400).json({ error: "Invalid team role" });
       if (status !== undefined && !["pending", "active", "inactive"].includes(status)) return res.status(400).json({ error: "Invalid membership status" });
+      // Acceptance is the only path that can activate an unlinked invitation.
+      if (status === "active" && !member.memberId) return res.status(409).json({ error: "The invitee must accept the invitation first" });
+      if (status === "pending" && (member.status !== "pending" || member.memberId || member.joinedAt)) return res.status(409).json({ error: "Remove this membership before inviting again" });
       const updated = await storage.updateTeamMember(req.params.id, { 
         ...(role && { role }),
         ...(status && { status }),

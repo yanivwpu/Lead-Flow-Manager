@@ -57,7 +57,7 @@ section("signup routes to /check-email and establishes a pending session");
   assert.ok(page.includes("/api/auth/change-pending-email"));
   assert.ok(page.includes("startEmailVerificationWaiter"));
   assert.ok(page.includes("CHECK_EMAIL_SESSION_POLL_MS"));
-  assert.ok(page.includes('navigateAfterAuth("/app/inbox")'));
+  assert.ok(page.includes('navigateAfterAuth(consumeInvitationReturn() || "/app/inbox")'));
 
   const verifyPage = src("client/src/pages/VerifyEmail.tsx");
   assert.ok(verifyPage.includes("announceVerifiedAndAwaitOriginalTab"));

@@ -28,6 +28,7 @@ import { syncDocumentLanguage } from "@/lib/documentLanguage";
 import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
 import { WidgetFrameErrorBoundary } from "@/components/webchat/WidgetFrameErrorBoundary";
 
+const TeamInvitationPage = lazy(() => import("@/pages/TeamInvitation").then(m => ({ default: m.TeamInvitationPage })));
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 const CheckEmailPage = lazy(() =>
   import("@/pages/CheckEmail").then((m) => ({ default: m.CheckEmailPage })),
@@ -217,6 +218,7 @@ function MarketingRoutes() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/check-email" component={CheckEmailPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
+      <Route path="/team-invitation" component={TeamInvitationPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy">
         <Redirect to="/privacy-policy" />

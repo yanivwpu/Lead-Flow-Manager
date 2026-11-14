@@ -1,3 +1,4 @@
+import { rememberInvitationReturn } from "@/lib/teamInvitationReturn";
 import { useState, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -123,6 +124,7 @@ export function AuthPage() {
 
     try {
       const postAuthRedirect = redirectTo || "/app/inbox";
+      rememberInvitationReturn(redirectTo);
       if (isLogin) {
         if (Date.now() < loginLockoutUntil) {
           const waitSec = Math.max(1, Math.ceil((loginLockoutUntil - Date.now()) / 1000));

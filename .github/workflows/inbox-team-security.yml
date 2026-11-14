@@ -3,6 +3,21 @@ on:
   pull_request:
     paths:
       - 'server/auth.ts'
+      - 'server/teamInvitations.ts'
+      - 'server/email.ts'
+      - 'client/src/pages/TeamInvitation.tsx'
+      - 'client/src/components/InboxWorkspaceSelector.tsx'
+      - 'client/src/lib/teamInvitationReturn.ts'
+      - 'client/src/pages/Auth.tsx'
+      - 'client/src/pages/CheckEmail.tsx'
+      - 'client/src/pages/VerifyEmail.tsx'
+      - 'client/src/pages/Settings.tsx'
+      - 'client/src/pages/AppLayout.tsx'
+      - 'client/src/App.tsx'
+      - 'client/src/locales/*.json'
+      - 'tests/team-invitation-return.test.ts'
+      - 'tests/check-email-verification-ux.test.ts'
+      - 'tests/email-verification-tabs.test.ts'
       - 'server/presence.ts'
       - 'server/inboxWorkspace*.ts'
       - 'server/inboxContentRateLimit.ts'
@@ -42,7 +57,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Session-backed HTTP, WebSocket and SQL authorization regressions
-        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts
+        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts tests/team-invitation-return.test.ts
       - name: Existing ownership, auth and Inbox contracts
         run: >-
           node --import tsx --test
@@ -52,6 +67,8 @@ jobs:
           tests/inbox-selection-isolation.test.ts tests/inbox-channel-adaptive-conversation.test.ts
           tests/inbox-new-activity-badge.test.ts tests/inbox-deep-link-and-perf.test.ts
           tests/auth-security-fix.test.ts tests/auth-login-rate-limit.test.ts tests/webchat-tenant-isolation.test.ts
+          tests/email-verification-flow.test.ts tests/email-verification-tabs.test.ts
+          tests/check-email-verification-ux.test.ts tests/auth-signup-hardening.test.ts tests/http-access-log-redaction.test.ts
           tests/webchat-ui-controls.test.ts tests/native-email-channel-1a.test.ts
       - name: Reject new TypeScript diagnostics
         env:
