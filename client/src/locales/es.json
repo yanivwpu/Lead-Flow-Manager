@@ -1582,5 +1582,28 @@
     "confirmDnc": "¿Bloquear permanentemente el contacto en todos los canales? Se cancelarán los envíos pendientes, flujos de trabajo e inscripciones en campañas. No se puede deshacer aquí.",
     "setDnc": "Bloquear contacto en todos los canales",
     "missingIdentity": "Añade un correo válido o un teléfono internacional antes de bloquear el contacto."
+  },
+  "teamInvite": {
+    "title": "Invitación al espacio de trabajo",
+    "instructions": "Inicia sesión o regístrate con el correo que recibió esta invitación. Verifica tu correo y luego revisa y acepta la invitación.",
+    "signIn": "Iniciar sesión o registrarse",
+    "accept": "Aceptar invitación",
+    "verify": "Verificar tu correo",
+    "switchAccount": "Usar otra cuenta",
+    "invalid": "Esta invitación ha caducado, fue revocada o ya se usó. Pide al propietario que la reenvíe.",
+    "identityError": "Usa el correo verificado que recibió esta invitación.",
+    "loading": "Cargando…",
+    "workspace": "Espacio de trabajo",
+    "role": "Rol",
+    "owner": "Propietario",
+    "admin": "Administrador",
+    "member": "Miembro",
+    "sent": "Invitación enviada",
+    "deliveryFailed": "No se pudo enviar el correo. La invitación está pendiente; pulsa Reenviar para intentarlo de nuevo.",
+    "resend": "Reenviar",
+    "pending": "Pendiente",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "revoked": "El acceso no está disponible. Selecciona un espacio autorizado."
   }
 }

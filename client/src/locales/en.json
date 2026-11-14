@@ -1652,5 +1652,28 @@
     "confirmDnc": "Set permanent do not contact across channels? This cancels queued outreach, workflows and campaign enrollments and cannot be undone here.",
     "setDnc": "Set do not contact across channels",
     "missingIdentity": "Add a valid email or international phone number before setting do not contact."
+  },
+  "teamInvite": {
+    "title": "Workspace invitation",
+    "instructions": "Sign in or register with the email address that received this invitation. Verify your email, then review and accept the invitation.",
+    "signIn": "Sign in or register",
+    "accept": "Accept invitation",
+    "verify": "Verify your email",
+    "switchAccount": "Use another account",
+    "invalid": "This invitation has expired, was revoked, or has already been used. Ask the owner to resend it.",
+    "identityError": "Use the verified email address that received this invitation.",
+    "loading": "Loading…",
+    "workspace": "Workspace",
+    "role": "Role",
+    "owner": "Owner",
+    "admin": "Admin",
+    "member": "Member",
+    "sent": "Invitation sent",
+    "deliveryFailed": "Email delivery failed. The invitation is pending; use Resend to try again.",
+    "resend": "Resend",
+    "pending": "Pending",
+    "active": "Active",
+    "inactive": "Inactive",
+    "revoked": "Workspace access is unavailable. Select an authorized workspace."
   }
 }

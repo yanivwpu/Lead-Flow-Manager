@@ -680,12 +680,12 @@ export function Settings() {
       }
       return body;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/team"] });
       queryClient.invalidateQueries({ queryKey: ["/api/subscription"] });
       setInviteEmail("");
       setInviteName("");
-      toast({ title: "Invitation Sent", description: "Team member has been invited." });
+      toast({ title: t(data.deliveryStatus === "sent" ? "teamInvite.sent" : "teamInvite.deliveryFailed"), variant: data.deliveryStatus === "sent" ? "default" : "destructive" });
     },
     onError: (error: Error & { upgradeRequired?: boolean; plan?: string }) => {
       if (error.upgradeRequired) {
@@ -702,6 +702,17 @@ export function Settings() {
         toast({ title: "Error", description: error.message, variant: "destructive" });
       }
     },
+  });
+
+  const resendInvitationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/team/${id}/resend`, { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("teamInvite.deliveryFailed"));
+      return data;
+    },
+    onSuccess: data => toast({ title: t(data.deliveryStatus === "sent" ? "teamInvite.sent" : "teamInvite.deliveryFailed") }),
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const removeMemberMutation = useMutation({
@@ -972,7 +983,7 @@ export function Settings() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   {teamMembers.map((member) => (
-                    <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div key={member.id} className="flex flex-wrap gap-2 items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                           {member.role === "owner" ? (
@@ -984,9 +995,13 @@ export function Settings() {
                         <div className="min-w-0">
                           <p className="font-medium text-gray-900 truncate">{member.name || member.email.split("@")[0]}</p>
                           <p className="text-xs text-gray-500 truncate">{member.email}</p>
+                          <p className="text-xs text-gray-500">{t(`teamInvite.${member.status}`)} · {t(`teamInvite.${member.role}`)}</p>
                         </div>
                       </div>
-                      {member.role !== "owner" && (
+                      {member.status === "pending" && member.ownerId === user?.id && (
+                        <Button variant="outline" size="sm" disabled={resendInvitationMutation.isPending} onClick={() => resendInvitationMutation.mutate(member.id)}>{t("teamInvite.resend")}</Button>
+                      )}
+                      {member.role !== "owner" && member.ownerId === user?.id && (
                         <Button variant="ghost" size="sm" onClick={() => removeMemberMutation.mutate(member.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -995,7 +1010,7 @@ export function Settings() {
                   ))}
                 </div>
 
-                <div className="pt-2 border-t border-gray-200">
+                {teamMembers.some(m => m.role === "owner" && m.memberId === user?.id) && <div className="pt-2 border-t border-gray-200">
                   <p className="text-sm font-medium text-gray-700 mb-2">Invite a team member</p>
                   {atTeamLimit && effectivePlan === "free" && (
                     <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
@@ -1064,7 +1079,7 @@ export function Settings() {
                       )}
                     </Button>
                   </div>
-                </div>
+                </div>}
               </div>
             )}
           </div>

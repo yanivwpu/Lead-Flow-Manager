@@ -19,6 +19,7 @@ process.env.SESSION_SECRET = "inbox-security-test-session-secret";
 process.env.EMAIL_IMAGE_PROXY_SECRET = "synthetic-inbox-email-image-secret-00000";
 process.env.STRIPE_SECRET_KEY = "sk_test_synthetic";
 process.env.NODE_ENV = "test";
+process.env.RESEND_API_KEY = "synthetic-team-mail-key";
 
 async function fixture() {
   const pg = new PGlite();
@@ -277,6 +278,130 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       const socket=await f.socket("admin");const closed=once(socket.ws,"close");
       await f.request("admin","/__forget-user","POST");
       socket.send({type:"heartbeat"});assert.equal((await closed)[0],1008);
+    });
+    await t.test("email invitation to separate existing/new logins, acceptance, reuse, resend and revocation", async () => {
+      const { subscriptionService } = await import("../server/subscriptionService");
+      const { invitationToken } = await import("../server/teamInvitations");
+      const originalLimits = subscriptionService.getUserLimits;
+      const originalFetch = globalThis.fetch;
+      const sent: any[] = [];
+      let mailFails = false;
+      globalThis.fetch = async (input, init) => {
+        if (String(input) === "https://api.resend.com/emails") {
+          sent.push(JSON.parse(String(init?.body)));
+          return new Response(mailFails ? "failed" : JSON.stringify({id:"fixture"}), {status:mailFails ? 503 : 200});
+        }
+        return originalFetch(input, init);
+      };
+      subscriptionService.getUserLimits = async () => ({maxUsers:-1} as any);
+      const tokenFromMail = () => sent.at(-1).text.match(/team-invitation#([a-zA-Z0-9_.-]+)/)[1];
+      const accept = (actor: string, token: string, extra: any = {}) => f.request(actor,"/api/team/invitations/accept","POST",{token,...extra});
+      try {
+        assert.equal((await fetch(f.origin+"/api/team/invitations/accept", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:"invalid"})})).status,401);
+        assert.equal((await f.request("owner-a","/api/team","POST",{email:"csrf@example.com"},{Origin:"https://foreign.example"})).status,403);
+        const beforeContacts = await f.database.select().from(schema.contacts);
+        const beforeMessages = await f.database.select().from(schema.messages);
+        const beforeNotes = await f.database.select().from(schema.contactNotes);
+        assert.equal((await f.request("owner-a","/api/team","POST",{email:"not an email"})).status,400);
+        assert.equal((await f.request("owner-a","/api/team","POST",{email:" OWNER-A@example.com "})).status,409);
+        const issued = await f.request("owner-a","/api/team","POST",{email:" Employee@example.com ",role:"member",ownerId:"owner-b",memberId:"owner-b",status:"active"});
+        const invite = await issued.json(); assert.equal(issued.status,200); assert.equal(invite.deliveryStatus,"sent");
+        assert.equal(invite.ownerId,"owner-a"); assert.equal(invite.memberId,null);
+        const token = tokenFromMail();
+        // The same signature cannot be transplanted to another membership row/workspace.
+        const [foreignInvite] = await f.database.insert(schema.teamMembers).values({ownerId:"owner-b",email:"employee@example.com",status:"pending",role:"member"}).returning();
+        assert.equal((await accept("owner-b",`${foreignInvite.id}.${token.split(".")[1]}`)).status,410);
+        assert.ok(sent.at(-1).html.includes("/team-invitation#"));
+        assert.ok(!JSON.stringify(invite).includes(token));
+        assert.equal((await f.request("owner-a",`/api/team/${invite.id}`,"PATCH",{status:"active"})).status,409);
+        assert.equal((await f.request("owner-a","/api/team","POST",{email:"employee@EXAMPLE.com"})).status,409);
+        assert.equal((await accept("owner-b",token)).status,403);
+        assert.equal((await accept("owner-a",token)).status,403);
+        assert.equal((await accept("agent",token.slice(0,-1)+"!")).status,410);
+        assert.equal((await f.request("owner-b",`/api/team/${invite.id}/resend`,"POST")).status,404);
+        // New registration uses the existing auth/verification system. No workspace or data is created here.
+        await f.database.insert(schema.users).values({id:"employee",name:"Employee",email:"employee@example.com",password:"unused",emailVerifiedAt:null});
+        assert.equal((await accept("employee",token)).status,403);
+        await f.database.update(schema.users).set({emailVerifiedAt:new Date()}).where(eq(schema.users.id,"employee"));
+        const preview = await f.request("employee","/api/team/invitations/preview","POST",{token});
+        assert.equal(preview.status,200); assert.equal((await preview.json()).workspaceName,"Name owner-a");
+        assert.equal((await f.request("employee","/api/conversations/conv-a/messages")).status,404);
+        assert.equal((await accept("employee",token,{workspaceId:"owner-b",role:"admin"})).status,200);
+        assert.equal((await accept("employee",token)).status,410);
+        const rows = await (await f.request("employee","/api/inbox")).json();
+        assert.deepEqual(rows.map((r:any)=>r.contact.id),["contact-a"]);
+        assert.equal((await f.request("employee","/api/contacts/contact-a/notes")).status,200);
+        assert.equal((await f.request("employee","/api/conversations/conv-b/messages")).status,404);
+        const createdNote = await (await f.request("employee","/api/contacts/contact-a/notes","POST",{content:"Separate login note"})).json();
+        assert.equal(createdNote.createdByUserId,"employee"); assert.equal(createdNote.workspaceId,"owner-a");
+        assert.equal((await f.request("employee",`/api/contacts/contact-a/notes/${createdNote.id}`,"DELETE")).status,200);
+        assert.equal((await f.request("employee","/api/contacts/contact-a","PATCH",{assignedTo:"owner-b"})).status,400);
+        const { channelService } = await import("../server/channelService");
+        const originalSend = channelService.sendMessage;
+        const sends: any[] = [];
+        channelService.sendMessage=async params=>{sends.push(params);return {success:true,channel:params.forceChannel||"sms"};};
+        try {
+          for (const channel of ["whatsapp","sms","instagram","facebook","telegram","webchat","email"]) {
+            const response = await f.request("employee","/api/contacts/contact-a/send","POST",{content:"Team reply",channel});
+            assert.equal(response.status,200,channel);
+            assert.equal(sends.at(-1).userId,"owner-a"); assert.equal(sends.at(-1).sentByUserId,"employee");
+            assert.equal(sends.at(-1).forceChannel,channel);
+          }
+        } finally { channelService.sendMessage=originalSend; }
+        assert.equal((await f.request("employee",`/api/team/${invite.id}`,"DELETE")).status,403);
+        assert.equal((await f.request("employee","/api/inbox/workspace","POST",{workspaceId:"owner-b"})).status,403);
+        const workspaceList = await (await f.request("employee","/api/inbox/workspaces")).json();
+        assert.equal(workspaceList.currentWorkspaceId,"owner-a");
+        assert.equal(workspaceList.workspaces.find((w:any)=>w.id==="owner-a").role,"member");
+        assert.equal((await f.request("owner-a",`/api/team/${invite.id}`,"DELETE")).status,200);
+        assert.equal((await f.request("employee","/api/inbox")).status,403);
+        assert.equal((await accept("employee",token)).status,410);
+        assert.equal((await f.request("employee","/api/inbox/workspace","POST",{workspaceId:"employee"})).status,200);
+        // Existing account accepts a second invitation; resend invalidates the first email.
+        mailFails = true;
+        const reissued = await (await f.request("owner-a","/api/team","POST",{email:"employee@example.com",role:"admin"})).json();
+        assert.equal(reissued.deliveryStatus,"failed"); const oldToken = tokenFromMail();
+        mailFails = false;
+        assert.equal((await f.request("owner-a",`/api/team/${reissued.id}/resend`,"POST")).status,200);
+        const newToken = tokenFromMail(); assert.notEqual(newToken,oldToken);
+        assert.equal((await accept("employee",oldToken)).status,410);
+        // A legacy conflicting linked row must not be silently overridden.
+        await f.database.insert(schema.teamMembers).values({id:"legacy-conflict",ownerId:"owner-a",memberId:"employee",email:"old-identity@example.com",status:"inactive",role:"member"});
+        assert.equal((await accept("employee",newToken)).status,409);
+        await f.database.delete(schema.teamMembers).where(eq(schema.teamMembers.id,"legacy-conflict"));
+        const results = await Promise.all([accept("employee",newToken),accept("employee",newToken)]);
+        assert.deepEqual(results.map(r=>r.status).sort(),[200,410]);
+        assert.equal((await f.request("owner-a",`/api/team/${reissued.id}`,"PATCH",{status:"pending"})).status,409);
+        assert.equal((await f.request("owner-a",`/api/team/${reissued.id}`,"PATCH",{status:"inactive"})).status,200);
+        assert.equal((await f.request("employee","/api/inbox")).status,403);
+        assert.equal((await accept("employee",newToken)).status,410);
+        // Nothing is reparented, copied or rewritten by invitation/acceptance/revocation.
+        assert.deepEqual(await f.database.select().from(schema.contacts),beforeContacts);
+        assert.deepEqual(await f.database.select().from(schema.messages),beforeMessages);
+        assert.deepEqual(await f.database.select().from(schema.contactNotes),beforeNotes);
+        // Creation serializes concurrent email/seat checks under the existing owner row lock.
+        const { issueTeamInvitation } = await import("../server/teamInvitations");
+        const duplicate = await Promise.allSettled([issueTeamInvitation("owner-a",{email:"race@example.com"}),issueTeamInvitation("owner-a",{email:" RACE@example.com "})]);
+        assert.equal(duplicate.filter(r=>r.status==="fulfilled").length,1);
+        const current = await f.storage.getTeamMemberCount("owner-a");
+        subscriptionService.getUserLimits=async()=>({maxUsers:current+1,plan:"starter"} as any);
+        const seats=await Promise.allSettled([issueTeamInvitation("owner-a",{email:"seat-one@example.com"}),issueTeamInvitation("owner-a",{email:"seat-two@example.com"})]);
+        assert.equal(seats.filter(r=>r.status==="fulfilled").length,1);
+        // An expired capability fails even when correctly signed for the current row.
+        await f.database.insert(schema.teamMembers).values({id:"expired-invite",ownerId:"owner-a",email:"employee@example.com",role:"member",status:"pending",invitedAt:new Date(Date.now()-8*86400000)});
+        const [expired] = await f.database.select().from(schema.teamMembers).where(eq(schema.teamMembers.id,"expired-invite"));
+        assert.equal((await accept("employee",invitationToken(expired))).status,410);
+      } finally { subscriptionService.getUserLimits=originalLimits; globalThis.fetch=originalFetch; }
+    });
+    await t.test("invitation attempts are actually throttled and budgets are separate for each login", async () => {
+      let response: Response | undefined;
+      for (let i=0;i<31;i++) {
+        response = await f.request("employee","/api/team/invitations/accept","POST",{token:"invalid"});
+        if (response.status===429) break;
+      }
+      assert.equal(response?.status,429);
+      assert.ok(Number(response?.headers.get("retry-after"))>0);
+      assert.notEqual((await f.request("owner-b","/api/team/invitations/accept","POST",{token:"invalid"})).status,429);
     });
     await t.test("notifications reach only current authorized sessions; revocation and logout remove access", async () => {
       const agent=await f.socket("agent"), owner=await f.socket("owner-a"), foreign=await f.socket("owner-b");
