@@ -415,7 +415,8 @@ export function createShopifyTemplateProvisioner(deps: {
         catch(error){return fallback(owner.meta_connected===true,templateProvisioningFailure(error),installation);}
         if(!m)return fallback(false,'connect_whatsapp',installation);
         const s = waba(m), authorized = s.authorizedFor === m.fingerprint;
-        const library=authorized?(await tx.execute(sql`SELECT * FROM message_templates WHERE user_id=${accountId} AND lower(status)='approved' ORDER BY name,id LIMIT 200`)).rows:[];
+        const libraryReady=authorized&&(await tx.execute(sql`SELECT to_regclass('message_templates') IS NOT NULL AS ready`)).rows[0]?.ready===true;
+        const library=libraryReady?(await tx.execute(sql`SELECT * FROM message_templates WHERE user_id=${accountId} AND lower(status)='approved' ORDER BY name,id LIMIT 200`)).rows:[];
         return { available, connected: true, authorized,postPurchasePlans:readPostPurchasePlans(m.config),
           delivery:await deliveryReadiness(tx,m),messaging:await messagingSummary(tx,m),
           rows: SHOPIFY_GROWTH_TEMPLATES.map(t => {
