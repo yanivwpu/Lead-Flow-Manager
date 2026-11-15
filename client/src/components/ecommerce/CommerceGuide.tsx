@@ -27,14 +27,14 @@ function CommerceFeedback() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (sending) return;
-    if (!name.trim() || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim()) || !message.trim()) {
+    if (!name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !message.trim()) {
       setNotice("required"); return;
     }
     setSending(true); setNotice(null);
     try {
       const res = await fetch("/api/contact", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: "[Shopify Growth Engine guide / " + category + "]\\n" + message.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: "[Shopify Growth Engine guide / " + category + "]\n" + message.trim() }),
       });
       if (!res.ok) throw new Error("Feedback submission failed");
       setMessage(""); setNotice("sent");
