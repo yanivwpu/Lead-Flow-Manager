@@ -667,7 +667,9 @@ export async function maybeRunWebchatServerAi(
   }
 
   const joinedInbound = joinLatestVisitorTurn(messages, params.inboundText);
-  const history = messages.filter(isPublicWebchatMessageVisible).map((m) => ({
+  const history = messages.filter((m) => isPublicWebchatMessageVisible({
+    id: m.id, direction: m.direction, status: m.status,
+  })).map((m) => ({
     role: m.direction === "inbound" ? "user" : "assistant",
     content: m.content || "",
   }));
