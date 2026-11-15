@@ -484,7 +484,10 @@ export function evaluateFullAutoSend(params: {
     return none("last_message_greeting_only", inboundCount, missingLen);
   }
 
-  if (solutionJourney && journeyTrusted && !solutionAnswer) return none("intent_unclear", inboundCount, missingLen);
+  if (solutionJourney && journeyTrusted &&
+    (!isSubstantiveTextForAiAutoSend(lastInbound) || !/[\p{L}\p{N}]/u.test(lastInbound))) {
+    return none("intent_unclear", inboundCount, missingLen);
+  }
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =

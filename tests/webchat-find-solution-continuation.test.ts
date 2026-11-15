@@ -62,3 +62,9 @@ test("localized held recovery is fact-free and cannot override disqualifiers or 
 test("completion keeps answered qualification context", () => {
   assert.match(chatbotCompletionPromptRules({ inbound: "נדל״ן", journeyKind: "find_solution", journeyContinuation: true }), /do not repeat answered questions/);
 });
+
+test("a new substantive question remains answerable after qualification ends", () => {
+  assert.equal(run("What channels does your inbox support?", {
+    conversationHistory: [{role:"assistant",content:"Thanks for sharing."}, {role:"user",content:"What channels does your inbox support?"}],
+  }).allowed, true);
+});
