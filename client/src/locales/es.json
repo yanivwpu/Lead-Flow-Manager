@@ -1622,6 +1622,24 @@
     "inactive": "Inactivo",
     "revoked": "El acceso no está disponible. Selecciona un espacio autorizado."
   },
+  "commerceFeedback": {
+    "heading": "Ayúdanos a mejorar el motor de crecimiento",
+    "intro": "¿Tienes una idea, una solicitud de función o algo que no funciona? Compártelo con nuestro equipo.",
+    "kind": "¿Qué te gustaría compartir?",
+    "suggestion": "Sugerir una mejora",
+    "feature": "Solicitar una nueva función",
+    "issue": "Informar de un problema",
+    "name": "Tu nombre",
+    "email": "Correo electrónico",
+    "message": "Tus comentarios",
+    "placeholder": "Cuéntanos qué te gustaría mejorar…",
+    "send": "Enviar comentarios",
+    "sending": "Enviando…",
+    "sent": "¡Gracias! Hemos recibido tus comentarios.",
+    "failed": "No pudimos enviar tus comentarios. Inténtalo de nuevo.",
+    "required": "Escribe tu nombre, un correo válido y un mensaje.",
+    "privacy": "No incluyas contraseñas, mensajes de clientes ni información confidencial."
+  },
   "commerceEducation": {
     "guide": "Cómo funciona / Guía de uso",
     "back": "Volver al motor de crecimiento",
