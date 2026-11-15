@@ -10,7 +10,7 @@ test("merchant dashboard reuses existing authenticated catalog and shopping comp
  assert.match(dashboard,/import \{ ShopifyCatalog \} from "@\/components\/ShopifyCatalog"/);
  assert.match(dashboard,/import \{ ShoppingSettings \} from "@\/components\/ShoppingSettings"/);
  assert.match(dashboard,/view==="products"[\s\S]*?<ShopifyCatalog showShoppingSettings=\{!privatePilot\}/);
- assert.match(dashboard,/view==="shopping"[\s\S]*?privatePilot && <ShoppingSettings\/>/);
+ assert.match(dashboard,/view==="shopping"[\s\S]*?<ShoppingSettings showDiagnostics=\{privatePilot\}\/>/);
  assert.match(catalog,/showShoppingSettings = true/);
  assert.match(catalog,/showShoppingSettings && <ShoppingSettings\s*\/>/);
  assert.doesNotMatch(dashboard,/fetch\([^\n]*method:\s*["']POST["']/);
@@ -51,11 +51,11 @@ test("recovery readiness reuses the existing strict runtime schema guard without
  assert.doesNotMatch(activation,/\bstartCheckoutRecoveryRuntime\b|\bsendRecoveryViaMeta\b/);
 });
 
-test("private owner pilot has new features; other merchants keep their previous UI",()=>{
+test("shopping settings are available to merchants while private diagnostics remain pilot scoped",()=>{
  assert.match(dashboard,/useEcommercePilot\(\)/);
  assert.match(dashboard,/\{available:privatePilot\}/);
  assert.match(dashboard,/showShoppingSettings=\{!privatePilot\}/);
- assert.match(dashboard,/\{privatePilot && <ShoppingSettings\/>\}/);
+ assert.match(dashboard,/<ShoppingSettings showDiagnostics=\{privatePilot\}\/>/);
  assert.match(dashboard,/\{privatePilot && <p data-testid="ecommerce-recovery-readiness"/);
  assert.match(dashboard,/\{privatePilot && data\?\.connected===true && commerceStatus\.data/);
 });

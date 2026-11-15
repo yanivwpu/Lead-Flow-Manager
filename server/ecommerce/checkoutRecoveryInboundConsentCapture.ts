@@ -1,3 +1,4 @@
+import {merchantProductionAvailable,loadMerchantRelease} from './merchantRelease';
 import { consentCaptureSchemaQuery } from './consentCaptureSchema';
 import { productionConsentCaptureAllowed } from './consentCaptureGate';
 import {and,eq,sql} from 'drizzle-orm';
@@ -50,7 +51,7 @@ return async function captureRecoveryConsentFromVerifiedMeta(input:{
    input.env.ECOMMERCE_RECOVERY_PRODUCTION_CONSENT_APPROVED==='true'&&input.env.ECOMMERCE_RECOVERY_CONSENT_CAPTURE_ENABLED==='true';
  // A signed STOP remains effective after rollout is paused or its scope expires.
  if(!recoveryConsentCaptureEnabled(input.env)&&!productionGrant&&
-   !(production&&input.env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED==='true')&&!(production&&classified?.action==='revoke'))return 'disabled';
+   !merchantProductionAvailable(input.env,input.accountId)&&!(production&&input.env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED==='true')&&!(production&&classified?.action==='revoke'))return 'disabled';
  if(!classified || !input.accountId || input.secret.length<32)return 'ignored';
  const {candidate}=input;
  const currentPhone='+'+candidate.from;
@@ -101,20 +102,22 @@ return async function captureRecoveryConsentFromVerifiedMeta(input:{
    const cfg=obj(active[0].config);
    for(const k of ['shop','shopUrl'])if(cfg[k]!=null &&
      (typeof cfg[k]!=='string' || normalizeShopifyShopDomain(cfg[k])!==shop))return 'ignored';
+   const selfService=await loadMerchantRelease(tx,input.env,input.accountId);
    const pilot=productionConsentCaptureAllowed(input.env,{accountId:input.accountId,shop,
      installationId:active[0].id,wabaId:liveOwner.metaBusinessAccountId||'',phoneId:liveOwner.metaPhoneNumberId||'',
      installedAt:liveOwner.shopifyInstalledAt});
-   if(production&&!pilot&&(!productionGrant||!scope||scope.shop!==shop||
+   if(production&&!selfService&&!pilot&&(!productionGrant||!scope||scope.shop!==shop||
      scope.recipientHmac!==recoveryPhoneDigest(input.secret,currentPhone)))return 'ignored';
    if(!liveOwner.shopifyInstalledAt||classified.eventAt<liveOwner.shopifyInstalledAt)return 'ignored';
    if(!input.inboxContactId)return 'ignored';
    const exactContacts=await tx.select({id:contacts.id,whatsappId:contacts.whatsappId,customFields:contacts.customFields,
      sourceDetails:contacts.sourceDetails,automationsPaused:contacts.automationsPaused,tag:contacts.tag,pipelineStage:contacts.pipelineStage}).from(contacts).where(and(
-     eq(contacts.userId,input.accountId),eq(contacts.phone,currentPhone)
+     eq(contacts.userId,input.accountId),sql`(regexp_replace(COALESCE(${contacts.phone},''),'[^0-9]','','g')=${candidate.from}
+      OR regexp_replace(COALESCE(${contacts.whatsappId},''),'[^0-9]','','g')=${candidate.from})`
    )).for('share');
    const qualified=exactContacts.filter(c=>c.id===input.inboxContactId &&
      c.whatsappId===candidate.from && customerIdentity(c,shop));
-   if(qualified.length!==1)return 'ignored';
+   if(qualified.length!==1||exactContacts.length!==1)return 'ignored';
    const c=qualified[0],customer=customerIdentity(c,shop)!;
    if(exactContacts.filter(v=>customerIdentity(v,shop)===customer).length!==1)
      return 'ignored';

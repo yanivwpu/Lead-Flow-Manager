@@ -36,7 +36,7 @@ test("Shopify connects before merchant activation, preserving explicit user inte
   assert.ok(!onboarding.includes("ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED"));
   assert.ok(!onboarding.includes("sendRecoveryViaMeta"));
   assert.ok(onboarding.includes("After activating your engine, choose and configure the customer journeys you want"));
-  assert.ok(onboarding.includes("approved templates and delivery approval"));
+  assert.ok(onboarding.includes("approved templates and your explicit activation"));
   assert.ok(onboarding.includes('mode === "setup" && <p'));
   assert.ok(onboarding.includes('data-testid="ecommerce-setup-delivery-guidance"'));
   for (const lang of ["en:", "es:", "he:"]) assert.ok(onboarding.includes(lang));

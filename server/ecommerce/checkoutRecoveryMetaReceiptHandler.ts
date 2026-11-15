@@ -1,3 +1,4 @@
+import {merchantProductionAvailable} from './merchantRelease';
 import { and,eq,sql } from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {users} from '@shared/schema';
@@ -11,7 +12,7 @@ export async function recordRecoveryReceiptFromVerifiedMeta(input:{
  accountId:string;candidate:MetaRecoveryReceiptCandidate;secret:string;
  env:Parameters<typeof metaRecoveryReceiptCaptureEnabled>[0];
 }):Promise<'disabled'|'ignored'|'recorded'>{
- if(!metaRecoveryReceiptCaptureEnabled(input.env))return 'disabled';
+ if(!metaRecoveryReceiptCaptureEnabled(input.env)&&!merchantProductionAvailable(input.env,input.accountId))return 'disabled';
  const receipt=parseSignedRecoveryReceipt(input.candidate,input.secret);
  if(!receipt||!input.accountId)return 'ignored';
  return db.transaction(async tx=>{
@@ -21,7 +22,7 @@ export async function recordRecoveryReceiptFromVerifiedMeta(input:{
       owner.metaPhoneNumberId!==input.candidate.phoneNumberId ||
       !shop || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop))
      return 'ignored';
-   if(input.env.RAILWAY_ENVIRONMENT_NAME==='production'){
+   if(input.env.RAILWAY_ENVIRONMENT_NAME==='production'&&!merchantProductionAvailable(input.env,input.accountId,shop)){
      const scope=productionRecoveryEvidenceScope(input.env);
      if(!scope||scope.accountId!==input.accountId||scope.shop!==shop||scope.recipientHmac!==receipt.recipientDigest)return 'ignored';
    }

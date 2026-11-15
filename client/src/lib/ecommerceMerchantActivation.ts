@@ -8,7 +8,7 @@ export type EcommerceMerchantActivationStatus = {
   connected: boolean;
   planEligible: boolean;
   cartExecutionEnabled: false;
-  outboundMessagingEnabled: false;
+  outboundMessagingEnabled: boolean;
   /** Read-only infrastructure schema check. Not permission to send. */
   recoverySchemaReady?: boolean | null;
   /** Merchant-scoped observation counts only; never a delivery/sending claim. */

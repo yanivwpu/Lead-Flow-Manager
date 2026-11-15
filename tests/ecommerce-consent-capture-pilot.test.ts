@@ -16,7 +16,7 @@ import { postPurchaseDeliveryEnabled } from '../server/ecommerce/postPurchaseDel
 import { CONSENT_PURPOSES, WHATSAPP_CONSENT_PHRASES } from '../shared/shopifyConsentEnrollment';
 
 const account = '10000000-0000-4000-8000-000000000001', other = '20000000-0000-4000-8000-000000000002';
-const shop = 'pilot.myshopify.com', clock = Math.floor(Date.now()/1000)*1000, secret = 'fixture-only-key'.repeat(3);
+const shop = 'whachatcrm-live-test.myshopify.com', clock = Math.floor(Date.now()/1000)*1000, secret = 'fixture-only-key'.repeat(3);
 const current = { accountId: account, shop, installationId: 'install', wabaId: '111111', phoneId: '111112', installedAt: clock-86400000 };
 const connection = commerceConnectionFingerprint(current);
 const configuration = () => ({ RAILWAY_ENVIRONMENT_NAME: 'production', APP_URL: 'https://app.whachatcrm.com',
@@ -91,14 +91,14 @@ test('real capture handlers: exact signed purpose only, verified Shopify identit
         assert.equal(await capture('checkoutRecovery',candidate(text)), 'ignored');
         assert.equal(await capture('orderConfirmation',candidate(text)), 'ignored');
       }
-      await post.tick(); assert.equal(await post.ingest(shop,'orders/create','unused',{}), 'disabled');
+      await post.tick(); assert.equal(await post.ingest(shop,'orders/create','unused',{}), 'ignored');
       for (const table of ['ecommerce_post_purchase_intents','ecommerce_post_purchase_orders','ecommerce_growth_event_inbox','ecommerce_checkout_recovery_outbox'])
         assert.equal((await pg.query<{n:number}>(`SELECT count(*)::int n FROM ${table}`)).rows[0].n, 0);
     });
     await t.test('default/paused gate, forged signature/body/type, stale YES, foreign phone or tenant do not grant', async () => {
       for (const purpose of ['orderConfirmation','checkoutRecovery'] as const) {
         await reset(); env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED = 'false';
-        assert.equal(await capture(purpose), 'disabled'); env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED = 'true';
+        assert.equal(await capture(purpose), 'ignored'); env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED = 'true';
         for (const patch of [{signatureValid:false},{hasRawBody:false},{type:'interactive'},{phoneNumberId:'222222'},
           {timestamp:String((clock-3600000)/1000)},{from:'15557654321'}])
           assert.equal(await capture(purpose,candidate(WHATSAPP_CONSENT_PHRASES[purpose],clock,patch)), 'ignored');

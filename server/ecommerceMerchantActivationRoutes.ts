@@ -12,7 +12,7 @@ import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { getEffectivePlanForUser } from "@shared/trialEntitlements";
 import { recoveryRuntimeSchemaReadyQuery } from "./ecommerce/checkoutRecoverySchema";
 import { shopifyTemplateProvisioner } from "./ecommerce/shopifyTemplateProvisioningRuntime";
-import { parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
+import { SHOPIFY_GROWTH_TEMPLATES,parseShopifyTemplateSetupAuthorization } from "../shared/shopifyGrowthTemplates";
 import {parsePostPurchasePlanChange} from "../shared/postPurchase";
 import { registerConsentEnrollmentRoutes } from './ecommerce/shopifyConsentEnrollmentRoutes';
 import { registerConsentThemeRoutes } from './ecommerce/shopifyConsentStorefrontRoutes';
@@ -82,6 +82,22 @@ router.post("/journey-activation",merchantSetupWriteLimiter,async(req:Request,re
     if(!await shopifyTemplateProvisioner.setDelivery(accountId,body.journey,body.enabled))return res.status(409).json({error:"Activation prerequisites are incomplete"});
     return res.json({ok:true,merchantEnabled:body.enabled});
   }catch{return res.status(503).json({error:"Journey activation unavailable"});}
+});
+
+router.post('/template-selection',merchantSetupWriteLimiter,async(req:Request,res:Response)=>{
+  res.set({'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow'});
+  const accountId=(req.user as {id?:string}|undefined)?.id;if(!accountId)return res.status(401).json({error:'Unauthorized'});
+  const origin=(process.env.APP_URL||'https://app.whachatcrm.com').replace(/\/$/,'');
+  if(!isMerchantActivationPost(req.get('origin'),req.get('content-type'),{},origin))return res.status(403).json({error:'Invalid request'});
+  const body=req.body;
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==3||body.action!=='select_journey_template'||
+    !SHOPIFY_GROWTH_TEMPLATES.some(t=>t.journey===body.journey)||
+    !(body.templateId===null||typeof body.templateId==='string'&&body.templateId.length>0&&body.templateId.length<=128))
+    return res.status(400).json({error:'Invalid template selection'});
+  try{
+    if(!await shopifyTemplateProvisioner.setTemplate(accountId,body.journey,body.templateId))return res.status(409).json({error:'Pause the journey and choose a compatible approved message'});
+    return res.json({ok:true});
+  }catch{return res.status(503).json({error:'Template selection unavailable'});}
 });
 
 router.get("/template-setup", async (req: Request, res: Response) => {
@@ -208,10 +224,11 @@ router.get("/status", async (req: Request, res: Response) => {
         recoveryObservations = null;
       }
     }
+    const journeys=state.activated?(await shopifyTemplateProvisioner.view(accountId)).delivery:undefined;
     return res.json({
       activated: state.activated, eligible: state.eligible,
       connected: state.connected, planEligible: state.planEligible,
-      cartExecutionEnabled: false, outboundMessagingEnabled: false,
+      cartExecutionEnabled: false, outboundMessagingEnabled: journeys?.postPurchase.deliveryEnabled===true||journeys?.checkoutRecovery.deliveryEnabled===true,
       recoverySchemaReady, recoveryObservations,
     });
   } catch {

@@ -1,3 +1,4 @@
+import {merchantProductionAvailable} from './merchantRelease';
 import { db } from "../../drizzle/db";
 import { getMetaMessageTemplates, createMetaShopifyMessageTemplate } from "../userMeta";
 import { createShopifyTemplateProvisioner, shopifyTemplateSetupAllowed,dueShopifyTemplateSetupsQuery } from "./shopifyTemplateProvisioning";
@@ -15,7 +16,7 @@ export const shopifyTemplateProvisioner = createShopifyTemplateProvisioner({
  * Committed leases protect replicas. No import-time work or customer sender.
  */
 export function startShopifyTemplateReconciliation(): null | (() => void) {
-  if (process.env.ECOMMERCE_TEMPLATE_PROVISIONING_ENABLED !== "true") return null;
+  if (process.env.ECOMMERCE_TEMPLATE_PROVISIONING_ENABLED !== "true"&&!merchantProductionAvailable(process.env)) return null;
   let busy = false, stopped = false;
   const tick = async () => {
     if (busy || stopped) return;
@@ -23,7 +24,7 @@ export function startShopifyTemplateReconciliation(): null | (() => void) {
     try {
       const ids=(process.env.ECOMMERCE_TEMPLATE_PROVISIONING_ACCOUNT_IDS??'').split(',');
       const general=process.env.ECOMMERCE_TEMPLATE_PROVISIONING_STAGE==='general'&&process.env.ECOMMERCE_TEMPLATE_PUBLIC_RELEASE_APPROVED==='true';
-      const due = await db.execute(dueShopifyTemplateSetupsQuery(Date.now(),ids,general));
+      const due = await db.execute(dueShopifyTemplateSetupsQuery(Date.now(),ids,general,merchantProductionAvailable(process.env),process.env.ECOMMERCE_PILOT_WORKSPACE_ID));
       for (const row of due.rows) {
         if (stopped) break;
         const accountId = String(row.user_id);

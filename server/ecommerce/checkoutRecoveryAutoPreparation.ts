@@ -1,7 +1,8 @@
+import {merchantProductionAvailable} from './merchantRelease';
 import type {AbandonedCheckoutSnapshot,CheckoutSourcePage} from './abandonedCheckoutSource';
 import type {FreshRecoveryResult} from './checkoutFreshRecheck';
 
-export type RecoveryAutoPrepEnvironment={
+export type RecoveryAutoPrepEnvironment=Record<string,string|undefined>&{
  RAILWAY_ENVIRONMENT_NAME?:string;APP_URL?:string;
  ECOMMERCE_CHECKOUT_OBSERVATION_ENABLED?:string;
  ECOMMERCE_CHECKOUT_RECOVERY_PREP_ENABLED?:string;
@@ -50,7 +51,7 @@ export function recoveryAutoPrepEnabled(env:RecoveryAutoPrepEnvironment):boolean
  return staging||productionPrep||productionObservationOnly;
 }
 export type AutoPrepMerchant={
- accountId:string;shop:string;accessToken:string;
+ accountId:string;shop:string;accessToken:string;selfService?:boolean;
 };
 export type DueRecoveryObservation={checkoutId:string;lastActivityAt:string};
 export type PreparedRecoveryIdentity={
@@ -71,15 +72,15 @@ export type AutoPrepDeps={
  * Only first page and at most 3 due checkouts per 90-second tick.
  */
 export async function runAutoRecoveryPreparationTick(
- env:RecoveryAutoPrepEnvironment,deps:AutoPrepDeps
+ env:RecoveryAutoPrepEnvironment,deps:AutoPrepDeps,merchantAccountId?:string
 ):Promise<{disabled?:true;observed:number;checked:number;queued:number;suppressed:number;skipped:number}>{
  const stats={observed:0,checked:0,queued:0,suppressed:0,skipped:0};
- if(!recoveryAutoPrepEnabled(env))return {disabled:true,...stats};
- const accountId=env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID!;
+ if(!recoveryAutoPrepEnabled(env)&&!(merchantAccountId&&merchantProductionAvailable(env as Record<string,string|undefined>,merchantAccountId)))return {disabled:true,...stats};
+ const accountId=merchantAccountId??env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_ACCOUNT_ID!;
  const merchant=await deps.merchant(accountId);
  if(!merchant||merchant.accountId!==accountId ||
    !SHOP.test(merchant.shop) ||
-   (env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+   (!merchantAccountId&&env.RAILWAY_ENVIRONMENT_NAME==='production' &&
      merchant.shop!==env.ECOMMERCE_RECOVERY_WORKER_ALLOWED_SHOP) ||
    !merchant.accessToken)return stats;
  const page=await deps.observePage(merchant);
@@ -90,7 +91,7 @@ export async function runAutoRecoveryPreparationTick(
  }
  // Observation-only production pilot never inspects recipients, consent or
  // templates, never creates intents/outbox records, and cannot invoke Meta.
- if(env.RAILWAY_ENVIRONMENT_NAME==='production' &&
+ if(!merchantAccountId&&env.RAILWAY_ENVIRONMENT_NAME==='production' &&
     env.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only')
    return stats;
  const due=await deps.due(merchant);

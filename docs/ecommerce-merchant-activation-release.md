@@ -34,3 +34,7 @@ Roll back application code/image without dropping, truncating or rewriting the a
 ## Current boundary
 
 Merchant activation only opens the workspace; order-support task opt-in remains pilot-scoped and must be promoted through a separate authorization and acceptance milestone. Do not describe recovery messaging or checkout/cart execution as active.
+
+The subsequent general-merchant automation release is documented separately in
+[Shopify merchant self-service activation](shopify-merchant-self-service-release.md).
+The workspace-only milestone and its accepted evidence above remain unchanged.
