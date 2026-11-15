@@ -1,3 +1,4 @@
+import { CommerceWelcome } from "@/components/ecommerce/CommerceWelcome";
 import { InboxWorkspaceSelector } from "@/components/InboxWorkspaceSelector";
 import { ShopifySupportContact } from "@/components/ShopifySupportContact";
 import { useState, useEffect, lazy, Suspense, useMemo, useRef } from "react";
@@ -260,6 +261,7 @@ function AppContent() {
               <Route path="/app/settings" component={Settings} />
               <Route path="/app/help" component={HelpCenter} />
             </Switch>
+            <CommerceWelcome/>
             <ShopifySuccessfulRender isShopify={!!subscription?.subscription?.isShopify} />
             </AuthenticatedAppErrorBoundary>
           </Suspense>

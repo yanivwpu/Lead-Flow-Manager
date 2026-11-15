@@ -8,6 +8,7 @@ import { ShopifyConsentEnrollment } from './ShopifyConsentEnrollment';
 
 const copy = {
   en: {
+    readyActivate: "Ready to activate", needsSetup: "Needs setup",
     title: "Automatic WhatsApp message setup", detail: "We check your connected WhatsApp Business Account, reuse compatible approved messages, and submit missing English messages to Meta for review.",
     permission: "Set up order confirmations, shipping updates, cancellations and checkout reminders. This authorizes template setup only. Choose and enable your journeys separately; customers need consent for each message purpose.",
     authorize: "Set up my messages", working: "Saving…", connect: "Connect WhatsApp", refresh: "Refresh template status", refreshing:"Checking Meta status…", refreshed:"Status updated", lastChecked:"Last checked", pendingHint:"Meta approval may take additional time. You can leave this page while we keep checking.", error: "Setup status is unavailable. Try again.",
@@ -15,8 +16,8 @@ const copy = {
     safe: "Template approval does not turn on customer messages. Each journey needs your permission and must pass its delivery checks.",
     labels: ["Order confirmation", "Shipping update", "Order cancellation", "Checkout reminder"],
     statuses: { ready: "Ready", awaiting_approval: "Awaiting Meta approval", action_required: "Action required", unavailable: "Unavailable", active: "Active", paused: "Paused" },
-    reasons: { consent_setup_required: "Configure and save consent collection for the selected purposes below.", merchant_template_paused: "You cleared this message selection. Select an approved message in Post-Purchase to resume.", connect_whatsapp: "Connect your WhatsApp Business Account to continue.", authorize_template_setup: "Allow automatic message setup to begin.",
-      operator_release_required: "Sending is awaiting a controlled release.", verification_required: "We need to check the current Meta status.",
+    reasons: { merchant_activation_required: "Enable this journey when you are ready.", journeys_and_templates_required: "Select journeys and assign compatible approved messages.", journey_not_selected: "Select a journey below.", controlled_journey_release_required: "This journey is not available for this store. Contact support.", schema_required: "Message setup needs attention from support.", consent_setup_required: "Configure and save consent collection for the selected purposes below.", merchant_template_paused: "You cleared this message selection. Select an approved message in Post-Purchase to resume.", connect_whatsapp: "Connect your WhatsApp Business Account to continue.", authorize_template_setup: "Allow automatic message setup to begin.",
+      operator_release_required: "Sending is not yet available for this store. Contact support.", verification_required: "We need to check the current Meta status.",
       approved_and_bound: "Approved in your account and assigned to this journey.", meta_review_pending: "Meta is reviewing this message.", setup_queued: "Automatic setup is queued.", submission_pending: "Submitting this message for review.",
       meta_template_paused: "Meta paused or disabled this message. Sending is blocked.", meta_template_rejected: "Meta rejected this message. Review it in your WhatsApp Library.",
       meta_category_changed: "Meta changed the message category. This journey needs a matching category.",
@@ -33,6 +34,7 @@ const copy = {
     message:"Approved message",none:"No message selected",selected:"Selected post-purchase purposes",extraLabels:["Review request","Repeat-purchase offer","Customer win-back"],
   },
   es: {
+    readyActivate: "Listo para activar", needsSetup: "Requiere configuración",
     title: "Configuración automática de mensajes WhatsApp", detail: "Comprobamos tu cuenta de WhatsApp Business, reutilizamos mensajes aprobados compatibles y enviamos los que faltan en inglés a Meta para su revisión.",
     permission: "Configura confirmaciones, envíos, cancelaciones y recordatorios de checkout. Esto autoriza solo las plantillas. Elige y activa los recorridos por separado; cada finalidad requiere consentimiento del cliente.",
     authorize: "Configurar mis mensajes", working: "Guardando…", connect: "Conectar WhatsApp", refresh: "Actualizar estado de plantillas", refreshing:"Consultando el estado de Meta…", refreshed:"Estado actualizado", lastChecked:"Última comprobación", pendingHint:"La aprobación de Meta puede tardar. Puedes salir de esta página mientras seguimos comprobando.", error: "Estado no disponible. Inténtalo de nuevo.",
@@ -40,8 +42,8 @@ const copy = {
     safe: "La aprobación no activa mensajes a clientes. Cada recorrido requiere tu permiso y las comprobaciones de envío.",
     labels: ["Confirmación de pedido", "Actualización de envío", "Cancelación de pedido", "Recordatorio de checkout"],
     statuses: { ready: "Listo", awaiting_approval: "Pendiente de aprobación de Meta", action_required: "Acción requerida", unavailable: "No disponible", active: "Activo", paused: "En pausa" },
-    reasons: { merchant_template_paused: "Eliminaste la selección de este mensaje. Elige un mensaje aprobado en Poscompra para continuar.", connect_whatsapp: "Conecta tu cuenta de WhatsApp Business.", authorize_template_setup: "Autoriza la configuración automática.",
-      operator_release_required: "El envío espera un lanzamiento controlado.", verification_required: "Debemos comprobar el estado actual en Meta.",
+    reasons: { merchant_activation_required: "Activa este recorrido cuando esté listo.", journeys_and_templates_required: "Selecciona recorridos y asigna mensajes aprobados compatibles.", journey_not_selected: "Selecciona un recorrido.", controlled_journey_release_required: "Este recorrido no está disponible para la tienda. Contacta con soporte.", schema_required: "La configuración de mensajes requiere atención de soporte.", consent_setup_required: "Configura y guarda el consentimiento para las finalidades seleccionadas.", merchant_template_paused: "Eliminaste la selección de este mensaje. Elige un mensaje aprobado en Poscompra para continuar.", connect_whatsapp: "Conecta tu cuenta de WhatsApp Business.", authorize_template_setup: "Autoriza la configuración automática.",
+      operator_release_required: "El envío aún no está disponible para esta tienda. Contacta con soporte.", verification_required: "Debemos comprobar el estado actual en Meta.",
       approved_and_bound: "Aprobado en tu cuenta y asignado a este recorrido.", meta_review_pending: "Meta está revisando el mensaje.", setup_queued: "Configuración en cola.", submission_pending: "Enviando a revisión.",
       meta_template_paused: "Meta pausó o desactivó el mensaje. Envío bloqueado.", meta_template_rejected: "Meta rechazó el mensaje. Revísalo en tu biblioteca WhatsApp.",
       meta_category_changed: "Meta cambió la categoría. Este recorrido necesita una categoría compatible.",
@@ -56,6 +58,7 @@ const copy = {
     message:"Mensaje aprobado",none:"Sin mensaje seleccionado",selected:"Finalidades poscompra seleccionadas",extraLabels:["Solicitud de reseña","Oferta de nueva compra","Recuperación de clientes"],
   },
   he: {
+    readyActivate: "מוכן להפעלה", needsSetup: "נדרשת הגדרה",
     title: "הגדרה אוטומטית של הודעות WhatsApp", detail: "נבדוק את חשבון WhatsApp Business המחובר, נשתמש בהודעות מאושרות מתאימות ונגיש ל-Meta הודעות חסרות באנגלית לבדיקה.",
     permission: "הגדרת אישורי הזמנה, עדכוני משלוח, ביטולים ותזכורות תשלום. האישור מתייחס להגדרת תבניות בלבד. בוחרים ומפעילים מסעות בנפרד; נדרשת הסכמת הלקוח לכל מטרת הודעה.",
     authorize: "הגדרת ההודעות שלי", working: "שומרים…", connect: "חיבור WhatsApp", refresh: "רענון מצב התבניות", refreshing:"בודקים את המצב מול Meta…", refreshed:"המצב עודכן", lastChecked:"נבדק לאחרונה", pendingHint:"אישור Meta עשוי להימשך זמן נוסף. ניתן לצאת מהדף בזמן שאנו ממשיכים לבדוק.", error: "מצב ההגדרה אינו זמין. יש לנסות שוב.",
@@ -63,7 +66,7 @@ const copy = {
     safe: "אישור תבנית אינו מפעיל שליחה ללקוחות. כל מסע דורש את אישורכם ואת בדיקות הזכאות לשליחה.",
     labels: ["אישור הזמנה", "עדכון משלוח", "ביטול הזמנה", "תזכורת לתשלום"],
     statuses: { ready: "מוכן", awaiting_approval: "ממתין לאישור Meta", action_required: "נדרשת פעולה", unavailable: "לא זמין", active: "פעיל", paused: "מושהה" },
-    reasons: { merchant_template_paused: "בחירת ההודעה הוסרה. להמשך יש לבחור הודעה מאושרת באזור לאחר רכישה.", connect_whatsapp: "יש לחבר את חשבון WhatsApp Business.", authorize_template_setup: "יש לאשר הגדרה אוטומטית.", operator_release_required: "השליחה ממתינה לפתיחה מבוקרת.",
+    reasons: { merchant_activation_required: "הפעילו את המסע כשאתם מוכנים.", journeys_and_templates_required: "בחרו מסעות ושייכו הודעות מאושרות מתאימות.", journey_not_selected: "בחרו מסע.", controlled_journey_release_required: "המסע אינו זמין לחנות זו. פנו לתמיכה.", schema_required: "הגדרת ההודעות דורשת טיפול של התמיכה.", consent_setup_required: "הגדירו ושמרו איסוף הסכמה למטרות שנבחרו.", merchant_template_paused: "בחירת ההודעה הוסרה. להמשך יש לבחור הודעה מאושרת באזור לאחר רכישה.", connect_whatsapp: "יש לחבר את חשבון WhatsApp Business.", authorize_template_setup: "יש לאשר הגדרה אוטומטית.", operator_release_required: "השליחה עדיין אינה זמינה לחנות זו. פנו לתמיכה.",
       verification_required: "נדרשת בדיקת המצב העדכני ב-Meta.", approved_and_bound: "אושר בחשבון שלכם ושויך למסע.", meta_review_pending: "Meta בודקת את ההודעה.", setup_queued: "ההגדרה ממתינה בתור.", submission_pending: "מגישים את ההודעה לבדיקה.",
       meta_template_paused: "Meta השהתה או השביתה את ההודעה. השליחה חסומה.", meta_template_rejected: "Meta דחתה את ההודעה. יש לבדוק אותה בספריית WhatsApp.",
       meta_category_changed: "Meta שינתה את קטגוריית ההודעה. נדרשת קטגוריה מתאימה למסע.", meta_credentials_expired: "יש לחדש את חיבור WhatsApp.",
@@ -138,7 +141,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
             className="rounded border px-3 py-2 font-medium disabled:opacity-50" onClick={()=>onDelivery(kind,!state.merchantEnabled)}>
             {kind==='postPurchase'?(state.merchantEnabled?t.pausePost:t.enablePost):(state.merchantEnabled?t.pauseRecovery:t.enableRecovery)}
           </button>
-          <span role="status">{state.deliveryEnabled?t.statuses.active:state.merchantEnabled?t.statuses.paused:state.canActivate?t.statuses.ready:t.statuses.unavailable}</span>
+          <span role="status">{state.deliveryEnabled?t.statuses.active:state.merchantEnabled?t.statuses.paused:state.canActivate?t.readyActivate:t.needsSetup}</span>
           {!state.deliveryEnabled&&!state.canActivate&&<span className="text-xs text-slate-600">{(t.reasons as Record<string,string>)[state.reason]??t.safe}</span>}
         </div>;
       })}

@@ -1,3 +1,4 @@
+import { CommerceGuideLink } from "@/components/ecommerce/CommerceGuide";
 import { ShoppingSettings } from "@/components/ShoppingSettings";
 import { Link, useLocation } from "wouter";
 import { useEffect } from "react";
@@ -120,6 +121,7 @@ export function EcommerceGrowthEngineOnboarding({ mode }: { mode: Mode }) {
       <Link href="/app/templates?tab=growth-engines" className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-blue-700">
         <ArrowLeft className="h-4 w-4 rtl:rotate-180"/>{t.back}
       </Link>
+      <CommerceGuideLink/>
       {mode === "setup" && <header className="rounded-2xl border border-blue-100 bg-white p-6 sm:p-8">
         <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-blue-700">
           <ShoppingBag className="h-4 w-4"/>{t.engine}

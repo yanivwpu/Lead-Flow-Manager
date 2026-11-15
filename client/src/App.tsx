@@ -1,3 +1,4 @@
+import { rememberCommerceWelcome } from "@/lib/commerceWelcome";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -350,6 +351,7 @@ function Router() {
 
     // GA4: shopify_connected (+ sign_up once for new Shopify-created accounts)
     if (bootstrap.shopifyInstalled) {
+      try { rememberCommerceWelcome(user.id, window.sessionStorage); } catch { /* Browser state is optional. */ }
       void import("@/lib/ga4Events").then(({ trackShopifyConnected, trackSignUp }) => {
         // Deduped by userId — existing email users who already fired sign_up won't double-count.
         trackSignUp({

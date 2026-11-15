@@ -1,3 +1,4 @@
+import { CommerceGuide, CommerceGuideLink } from "@/components/ecommerce/CommerceGuide";
 import { EcommerceWorkspaceBoundary, useEcommercePilot } from "@/lib/ecommercePilot";
 import { useTranslation } from "react-i18next";
 import { Link, useSearch } from "wouter";
@@ -58,7 +59,7 @@ export function EcommerceGrowthEngineDashboardContent() {
    <header className="rounded-2xl border border-blue-100 bg-white p-5 sm:p-6">
      <div className="flex flex-wrap items-start justify-between gap-3">
        <div><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-700"><ShoppingBag className="h-4 w-4"/> Shopify</div><h1 className="text-2xl font-bold text-slate-950">{t.title}</h1><p className="mt-1 text-sm text-slate-600">{t.subtitle}</p></div>
-       <span data-testid="ecommerce-journey-status" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{journeyLabel}</span>
+       <CommerceGuideLink/><span data-testid="ecommerce-journey-status" className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{journeyLabel}</span>
      </div>
      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-slate-600">
        {!isLoading && !isError && data?.connected ? <CheckCircle2 className="h-4 w-4 text-emerald-600"/>:null}
@@ -123,6 +124,7 @@ export function EcommerceGrowthEngineDashboard(){
  const requestedView = new URLSearchParams(useSearch()).get("view");
  // Pre-install setup and details are available to signed-in merchants.
  // All operational pages still require the existing pilot/activation boundary.
+ if(requestedView === "guide") return <CommerceGuide/>;
  if(requestedView === "setup" || requestedView === "about")
    return <EcommerceGrowthEngineOnboarding mode={requestedView}/>;
  return <EcommerceWorkspaceBoundary><EcommerceGrowthEngineDashboardContent/></EcommerceWorkspaceBoundary>;
