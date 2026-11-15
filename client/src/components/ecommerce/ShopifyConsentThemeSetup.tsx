@@ -52,7 +52,7 @@ export function ConsentThemePanel({ locale, setup, blocked, blockedReason, busy,
     <details className="text-sm" data-testid="consent-theme-help">
       <summary className="cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700">{t.help}</summary>
       <p className="my-2">{t.detail}</p>
-      {setup?.verificationReason && <p data-testid="consent-verification-reason">{t.diagnostic}: <code dir="ltr">{setup.verificationReason}</code></p>}
+      {setup?.verificationReason && <p data-testid="consent-verification-reason">{t.diagnostic}: {state === 'disabled_verified' ? t.notEnabled : state === 'enabled_verified' ? t.live : t.unverified}</p>}
       {state === 'permission_required' && setup?.approvalUrl && <a className={`${base} border-slate-300`} target="_blank" rel="noopener noreferrer" href={setup.approvalUrl}>{t.approve} ↗</a>}
       <button type="button" className={`${base} border-slate-300`} disabled={busy || checking} onClick={() => action('verify')}>{t.retry}</button>
       {setup?.checkedAt && <time className="block text-xs" dateTime={setup.checkedAt}>{new Date(setup.checkedAt).toLocaleString(lang)}</time>}

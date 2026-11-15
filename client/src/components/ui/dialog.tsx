@@ -33,12 +33,13 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 type DialogContentProps = ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   /** Appended to the shared modal overlay (override tint/blur only if needed). */
   overlayClassName?: string;
+  closeLabel?: string;
 };
 
 const DialogContent = forwardRef<
   ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, overlayClassName, ...props }, ref) => (
+>(({ className, children, overlayClassName, closeLabel = "Close", ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
@@ -53,7 +54,7 @@ const DialogContent = forwardRef<
       {children}
       <DialogPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
+        <span className="sr-only">{closeLabel}</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

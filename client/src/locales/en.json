@@ -1544,7 +1544,7 @@
     "fallback": "Transfer to a person when products cannot be verified",
     "checkoutDisabled": "Checkout assistance is awaiting review and remains disabled.",
     "checkoutEnable": "Enable checkout assistance",
-    "checkoutAuthorization": {"catalog_permission_required": "Authorize product and inventory access in the existing Shopify catalog settings.", "catalog_unavailable": "Wait for the Shopify catalog to finish syncing or ask your team for help.", "awaiting_review": "Checkout assistance is OFF while awaiting review. No Storefront token setup is needed for the proposed tokenless flow.", "pro_required": "Pro with AI Brain is required for checkout assistance.", "connect_shopify": "Connect Shopify and authorize the existing product and inventory access.", "ready": "Checkout assistance is available. Products must be published and purchasable in Shopify."},
+    "checkoutAuthorization": {"catalog_permission_required": "Authorize product and inventory access in the existing Shopify catalog settings.", "catalog_unavailable": "Wait for the Shopify catalog to finish syncing or ask your team for help.", "awaiting_review": "Help shoppers complete purchases with AI guidance. This feature is not available yet. Your assistant can still answer product questions and recommend products.", "pro_required": "Pro with AI Brain is required for checkout assistance.", "connect_shopify": "Connect Shopify and authorize the existing product and inventory access.", "ready": "Checkout assistance is available. Products must be published and purchasable in Shopify."},
     "checkoutStatus": {"ready": "Shopify checkout prepared · payment not confirmed", "pending": "Checkout pending · selection saved", "expired": "Checkout expired · ask a team member", "changed": "Selection changed · confirmation required", "unavailable": "Checkout unavailable · human assistance available", "setup_required": "Checkout setup or permission review required"},
     "save": "Save",
     "saveError": "Could not save shopping settings.",
@@ -1557,6 +1557,22 @@
       "confirmed": "Selection confirmed",
       "handoff": "Needs human assistance",
       "cancelled": "Cancelled"
+    },
+    "benefit": "Answer product questions and help shoppers find the right products.",
+    "checkoutUnavailable": "Checkout assistance — Unavailable",
+    "checkoutSoon": "Checkout assistance — Not available yet",
+    "saved": "Settings saved.",
+    "saving": "Saving…",
+    "loading": "Loading shopping settings…",
+    "loadError": "Shopping settings are unavailable. Try again.",
+    "retry": "Try again",
+    "channelsLabels": {
+      "webchat": "Website chat",
+      "whatsapp": "WhatsApp",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "sms": "SMS",
+      "telegram": "Telegram"
     }
   },
   "testChat": {
@@ -1675,5 +1691,119 @@
     "active": "Active",
     "inactive": "Inactive",
     "revoked": "Workspace access is unavailable. Select an authorized workspace."
-  }
+  },
+  "commerceEducation": {
+    "guide": "How It Works / User Guide",
+    "back": "Back to the Growth Engine",
+    "intro": "Help shoppers choose products, recover eligible abandoned checkouts and keep customers informed after purchase. This guide is for Shopify merchants using WhachatCRM. Start with the features your business needs; installing the app does not enable customer messages.",
+    "setup": "Open activation and setup",
+    "sections": [
+        {
+            "id": "introduction",
+            "title": "Your Shopify growth tools",
+            "paragraphs": [
+                "AI Shopping answers product questions and recommends products. Checkout Recovery reconnects with eligible shoppers. Post-Purchase keeps customers informed through approved WhatsApp messages.",
+                "Your Shopify catalog, customer purchase records, Unified Inbox, AI Brain and Follow-ups are shared with the rest of WhachatCRM. You do not need a second catalog or another onboarding wizard."
+            ]
+        },
+        {
+            "id": "getting-started",
+            "title": "Getting started",
+            "paragraphs": [
+                "1. Open Settings in the engine, connect Shopify and complete the Shopify approval screen. Return to WhachatCRM and confirm that the store is connected.",
+                "2. Open activation and setup. Activate the engine after your Shopify connection and eligible Pro plan or trial are verified. If your plan is ineligible, use Review plan. Engine activation alone does not start messages.",
+                "3. Connect your WhatsApp Business account in Settings → Channels. Use the business number you want customers to contact and complete the requested permissions.",
+                "4. In AI Shopping, enable the assistant, choose connected channels, set the recommendation limit and human handoff preference, then Save. Review business knowledge in AI Brain.",
+                "5. In Cart Recovery or Post-Purchase, choose the customer consent purposes, business name and notice language. Save changes before adding the notices to Shopify. Use Set up in Shopify, enable the consent section and save the published theme, or place the supplied notices and opt-in links on the store page you specified.",
+                "6. Choose Set up my messages to reuse compatible approved templates or submit missing English templates for Meta review. Review or customize messages in WhatsApp Library; select a compatible approved message for each journey. The interface language does not change a message template’s language.",
+                "7. Select the post-purchase journeys you need and enable them. Enable checkout reminders separately. If activation is blocked, follow the reason shown beside that journey. Approval of a template or saving consent settings alone does not enable sending.",
+                "8. Return to the engine to review current activity, template approval and message results. Refresh template status when needed. Saved settings are loaded again when you revisit or refresh."
+            ]
+        },
+        {
+            "id": "shopping",
+            "title": "AI Shopping Assistant",
+            "paragraphs": [
+                "The assistant uses synced Shopify products, variants, prices and available inventory to answer questions and recommend suitable products. Review the Shopify products page if an item or price looks wrong; check the connection and catalog sync before trying again.",
+                "Add store policies, delivery information and FAQs in AI Brain. Keep this business knowledge accurate; product data does not replace your policies. Enable only the connected channels you want: website chat, WhatsApp, Instagram, Facebook, SMS or Telegram. Selecting a channel does not connect it.",
+                "Choose the maximum number of recommendations and enable human handoff when the assistant cannot help. Continue customer conversations in the Unified Inbox. Save changes and check the confirmation before leaving.",
+                "Checkout assistance has its own availability check. If it is unavailable, product questions and recommendations can still work. Do not assume the assistant can create carts, complete payments or change orders. If answers are incomplete, check synced products, AI Brain knowledge, selected channels and your plan."
+            ]
+        },
+        {
+            "id": "recovery",
+            "title": "Cart and checkout recovery",
+            "paragraphs": [
+                "Recovery sends an approved WhatsApp reminder for an eligible abandoned checkout, helping shoppers return to their purchase. A detected checkout is an observation, not a sent reminder or a recovered sale.",
+                "Current recovery checks start after the existing 60-minute eligibility delay and require a checkout observed after activation. This is not a guarantee of sending at exactly 60 minutes. Completed purchases, missing purpose-specific consent, opt-outs, contact restrictions or unavailable templates can prevent sending.",
+                "Open Cart Recovery, save consent collection, select an approved checkout reminder and choose Enable checkout reminders when ready. Pause checkout reminders to stop further sending. Review detected checkout counts and messaging activity; these counts do not prove delivery or revenue."
+            ]
+        },
+        {
+            "id": "post-purchase",
+            "title": "Post-purchase assistance",
+            "paragraphs": [
+                "Supported order messages include order confirmations, shipping/fulfillment updates and order cancellations. Choose only the supported purposes you need, assign approved WhatsApp templates and enable selected post-purchase journeys.",
+                "Customers need permission for each message purpose. An order or shipping event alone is not permission. Events before activation are not sent retrospectively. Other offers or follow-ups shown in your account remain subject to their own availability and setup; do not assume every order update is automated.",
+                "Use Pause post-purchase journeys before changing a live message selection. Review the selected message and status, then enable again when ready. A template awaiting approval, paused or rejected by Meta cannot be used for sending."
+            ]
+        },
+        {
+            "id": "consent",
+            "title": "Consent and WhatsApp requirements",
+            "paragraphs": [
+                "Connect WhatsApp Business so messages come from your business number. Meta must approve compatible message templates for these automations. Select an approved message in the correct language and purpose; automatic setup currently submits missing templates in English.",
+                "Customers choose each purpose freely. Display the saved notice and opt-in link in Shopify. The customer must send the exact WhatsApp text shown with that purpose from their own number. Clicking a link, saving a merchant setting or checking a Shopify email/SMS box does not grant WhatsApp permission.",
+                "After saving notices, open the Shopify theme setup, enable the consent section and save the published theme. Return and check its status. If your theme is unsupported, use the supplied notice/link on the specified Shopify page. A theme status confirms setup, not any individual customer’s consent.",
+                "Customers can send STOP to opt out. Missing consent, opt-outs, contact restrictions, a changed connection or a completed purchase can make a message ineligible. Never send an unsolicited WhatsApp message to ask for permission."
+            ]
+        },
+        {
+            "id": "results",
+            "title": "Understand your results",
+            "paragraphs": [
+                "Active: the feature is enabled; each customer and message still needs to qualify. Ready to activate: required setup is verified, but you must enable the journey. Needs setup: complete the displayed connection, consent or template step. Paused: sending is stopped. Unavailable: the feature cannot be used under the current conditions. Coming soon: the feature is not released yet.",
+                "Queued: a message is waiting to be processed. Accepted by Meta: the provider accepted the request; this does not mean it reached the customer. Delivered: a delivery receipt confirms arrival. Read: a read receipt confirms opening when available. The current summary groups delivered and read together.",
+                "Failed: the attempt did not complete successfully. Needs review: the outcome is uncertain; acceptance or delivery is not confirmed. Suppressed or ineligible: a required condition was not met, so sending was skipped. These messages may not appear in the aggregate counters. Never treat activated, queued or accepted as delivered."
+            ]
+        },
+        {
+            "id": "faq",
+            "title": "Troubleshooting and FAQs",
+            "paragraphs": [
+                "Why can’t I activate a feature? Check Shopify connection, eligible plan/trial, WhatsApp connection, saved consent purposes and approved message selection. Follow the specific reason next to the control; contact support if availability still blocks setup.",
+                "Why isn’t WhatsApp connected? Open Settings → Channels, finish the connection and permissions, or renew the existing connection. Return and refresh template status.",
+                "Why is my template missing? Review its approval, language and category in WhatsApp Library. Only compatible approved messages appear. Meta review may take time; use Refresh template status. Pause the journey before changing its selected message.",
+                "Why didn’t a customer receive an order confirmation? Confirm the journey was active before the order, its purpose was selected, the template is approved and the customer gave that specific permission. Check whether the message is queued, accepted, failed or needs review. Accepted alone is not delivery.",
+                "Why wasn’t a checkout reminder sent? A detected checkout must still meet the delay, consent and eligibility checks. A completed purchase or opt-out prevents reminders. Check the journey status and selected checkout template.",
+                "How do I update AI knowledge? Open AI Brain and review your store policies, FAQs and business information. Review Shopify products separately for catalog issues.",
+                "How do I pause automation? Use Pause checkout reminders or Pause post-purchase journeys. To stop AI Shopping, clear its enable option and Save. Pausing does not recall messages already accepted by the provider.",
+                "Why aren’t settings saving? Look for an error or unsaved changes, complete required fields and check your connection. Retry Save and wait for confirmation. Reopen the page to verify before enabling journeys; keep a copy of unsaved text before refreshing.",
+                "How do I reconnect Shopify? Open the engine Settings or Integrations → Shopify and complete the existing connect flow. Review consent, templates and activation again after reconnecting.",
+                "Where can I get help? Open Help from the app navigation. Include the affected feature, displayed status and time of the issue; do not include customer message contents or credentials."
+            ]
+        }
+    ],
+    "welcomeTitle": "Turn more Shopify visitors into customers",
+    "welcomeBody": "Meet your E-Commerce Growth Engine. Help shoppers find products, recover eligible abandoned checkouts and keep customers informed after purchase — all from WhachatCRM.",
+    "benefits": [
+        [
+            "AI shopping assistance",
+            "Answer product questions and recommend products before a purchase."
+        ],
+        [
+            "Abandoned checkout recovery",
+            "Reconnect with eligible shoppers using approved reminders."
+        ],
+        [
+            "Order updates and customer care",
+            "Send eligible order confirmations and shipping updates through WhatsApp."
+        ]
+    ],
+    "explore": "Explore the Growth Engine",
+    "later": "Maybe later",
+    "learn": "Learn how it works",
+    "close": "Close",
+    "welcomeSafe": "Explore first. Messages and automations only start after you configure and explicitly enable them."
+}
 }

@@ -44,8 +44,9 @@ export function Sidebar() {
   const { categories, allItems } = useAppNavCategories();
   const commerceSearch = useSearch();
   const commerceViewParam = new URLSearchParams(commerceSearch).get("view");
-  const selectedCommerceView = ["products", "orders", "shopping", "recovery", "post", "settings"].includes(commerceViewParam || "") ? commerceViewParam : "overview";
+  const selectedCommerceView = ["products", "orders", "shopping", "recovery", "post", "settings", "guide"].includes(commerceViewParam || "") ? commerceViewParam : "overview";
   const commerceSubnav = [
+    {id:"guide", en:"User Guide", es:"Guía de uso", he:"מדריך שימוש", href:"/app/ecommerce-growth-engine?view=guide"},
     {id:"overview", en:"Overview", es:"Resumen", he:"סקירה", href:"/app/ecommerce-growth-engine"},
     {id:"products", en:"Products", es:"Productos", he:"מוצרים", href:"/app/ecommerce-growth-engine?view=products"},
     {id:"orders", en:"Orders", es:"Pedidos", he:"הזמנות", href:"/app/ecommerce-growth-engine?view=orders"},

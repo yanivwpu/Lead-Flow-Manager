@@ -96,7 +96,7 @@ test("first-install setup and details load as authenticated documents before act
   assert.ok(server.includes("isEcommerceOnboardingDocumentRequest(req.method, req.path, req.query.view)"));
   assert.ok(server.includes("if (!owner || owner.id !== accountId || owner.deletionRequestedAt)"));
   assert.ok(server.includes("if (state?.activated) { next(); return; }"));
-  for (const view of ["setup","about"]) {
+  for (const view of ["setup","about","guide"]) {
     assert.equal(isEcommerceOnboardingDocumentRequest("GET","/",view),true);
     assert.equal(isEcommerceOnboardingDocumentRequest("HEAD","/",view),true);
     assert.equal(isEcommerceOnboardingDocumentRequest("GET","",view),true);
@@ -107,6 +107,7 @@ test("first-install setup and details load as authenticated documents before act
   for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
     assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","setup"),false,method);
     assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","about"),false,method);
+    assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","guide"),false,method);
   }
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/internal","setup"),false);
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/products","about"),false);
