@@ -84,9 +84,9 @@ for (const locale of ['en', 'es', 'he'] as const) {
     assert.ok(save.hasAttribute('disabled')); assert.ok(!save.className.includes('bg-green-700'));
     assert.ok(document.querySelector('[data-testid="consent-save-bar"]')!.className.includes('sticky'));
     assert.ok(document.querySelector('[data-testid="storefront"]')!.hasAttribute('disabled'));
-    const connectionCopy = {en:'Your Shopify or WhatsApp connection needs pilot approval again. Contact support.',
-      es:'Tu conexión Shopify o WhatsApp requiere nueva aprobación piloto. Contacta con soporte.',
-      he:'חיבור Shopify או WhatsApp דורש אישור פיילוט מחדש. יש לפנות לתמיכה.'};
+    const connectionCopy = {en:'Review your Shopify and WhatsApp connections with support.',
+      es:'Revisa las conexiones Shopify y WhatsApp con soporte.',
+      he:'בדקו את חיבורי Shopify ו-WhatsApp עם התמיכה.'};
     assert.equal(reason, connectionCopy[locale]);
     document = render({data:{...data,draft:null}});
     assert.ok(!document.querySelector('button[type="submit"]')!.hasAttribute('disabled'));

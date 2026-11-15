@@ -57,7 +57,9 @@ for (const locale of ['en', 'es', 'he']) test(`${locale} setup preserves gates, 
   const disabled=render('disabled_verified',{setup:{...setup('disabled_verified'),verificationReason:'block_missing'}});
   assert.equal(disabled.querySelector('[role="status"]')!.textContent,{en:'Not enabled on published theme',es:'No activado en el tema publicado',he:'לא מופעל בערכת העיצוב שפורסמה'}[locale]);
   assert.ok(!disabled.querySelector('[role="status"]')!.textContent.includes(ready!));
-  assert.ok(disabled.querySelector('details [data-testid="consent-verification-reason"]')!.textContent.includes('block_missing'));
+  const diagnostic = disabled.querySelector('details [data-testid="consent-verification-reason"]')!;
+  assert.ok(diagnostic.textContent.includes({en:'Not enabled on published theme',es:'No activado en el tema publicado',he:'לא מופעל בערכת העיצוב שפורסמה'}[locale]!));
+  assert.ok(!diagnostic.textContent.includes('block_missing'), 'merchant help must explain the result without internal reason codes');
   for (const state of ['unreleased','not_supported'] as const) assert.ok(button(render(state)).hasAttribute('disabled'));
   assert.ok(!button(render('proxy_permission_required',{setup:{...setup('proxy_permission_required'),editorUrl:null,approvalUrl:'https://admin.shopify.com/store/first/oauth/install'}})).hasAttribute('disabled'));
   const optional = render('permission_required');
