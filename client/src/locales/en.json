@@ -1692,6 +1692,24 @@
     "inactive": "Inactive",
     "revoked": "Workspace access is unavailable. Select an authorized workspace."
   },
+  "commerceFeedback": {
+    "heading": "Help us improve the Growth Engine",
+    "intro": "Have an idea, a feature request, or something that isn't working? Share it with our team.",
+    "kind": "What would you like to share?",
+    "suggestion": "Suggest an improvement",
+    "feature": "Request a new feature",
+    "issue": "Report a problem",
+    "name": "Your name",
+    "email": "Email address",
+    "message": "Your feedback",
+    "placeholder": "Tell us what you would like improved…",
+    "send": "Send feedback",
+    "sending": "Sending…",
+    "sent": "Thank you! Your feedback has been sent.",
+    "failed": "We couldn't send your feedback. Please try again.",
+    "required": "Please enter your name, a valid email address and a message.",
+    "privacy": "Don't include passwords, customer messages or sensitive information."
+  },
   "commerceEducation": {
     "guide": "How It Works / User Guide",
     "back": "Back to the Growth Engine",
