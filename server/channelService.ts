@@ -1896,6 +1896,7 @@ class ChannelService {
         markJourneyStatus,
         readActiveJourney,
         resolveCurrentTurnJourney,
+        startFindSolutionJourney,
         startPricingCompareJourney,
         startPricingSavingsJourney,
       } = await import("@shared/webchatActiveJourney");
@@ -1905,6 +1906,13 @@ class ChannelService {
         detectSavingsFollowUpFromCompare,
       } = await import("@shared/webchatPricingCompare");
       const visitorId = String(contact.webchatId || channelContactId || "");
+      const { resolveCurrentTurnStructuredAskIntent } = await import("@shared/chatbotAskQuestion");
+      const latestContactForJourney = (await storage.getContact(contact.id)) || contact;
+      const askJourney = resolveCurrentTurnStructuredAskIntent({
+        customFields: latestContactForJourney.customFields, inboundMessageId: message.id,
+        sourceEventId: externalMessageId,
+      });
+
       if (validatedPageRuleAction?.kind === "calculate_savings") {
         nextJourney = startPricingSavingsJourney({
           userId,
@@ -1933,6 +1941,20 @@ class ChannelService {
         });
         if (chatbotWillFire || bookingIntent) {
           nextJourney = markJourneyStatus(nextJourney, "paused");
+        }
+      } else if (validatedPageRuleAction?.kind === "find_solution" ||
+        (askJourney.trusted && askJourney.kind === "find_solution")) {
+        nextJourney = startFindSolutionJourney({
+          userId, visitorId, conversationId: conversation.id,
+          ruleKey: validatedPageRuleAction?.ruleKey || "structured_ask:visitor_intent",
+          actionIndex: validatedPageRuleAction?.actionIndex ?? 0,
+          originInboundId: message.id, locale: conversationLanguage,
+        });
+        // The initiating chatbot may deliver the qualification question itself.
+        // Ownership still suppresses AI on this turn, without losing the next answer.
+        if (bookingIntent) {
+          const solution = readActiveJourney(nextJourney);
+          if (solution) nextJourney = markJourneyStatus(solution, "paused");
         }
       } else if (validatedPageRuleAction) {
         const existing = readActiveJourney(turnControl.activeJourney);

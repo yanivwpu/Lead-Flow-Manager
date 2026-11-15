@@ -267,7 +267,16 @@ export function evaluateFullAutoSend(params: {
     params.currentTurnPageAction.provenanceCurrentInbound === true;
   const explicitUserChoice = pageActionValidated;
   const journeyTrusted = params.currentTurnJourney?.trusted === true;
-  const journeyContinuation = journeyTrusted && params.currentTurnJourney?.continuation === true;
+  // Solution qualification trust also requires a delivered assistant question.
+  // A stale action or an arbitrary short inbound alone is never enough.
+  const solutionJourney = params.currentTurnJourney?.kind === "find_solution";
+  const lastAssistant = conversationHistory.filter((m) => m.role === "assistant").at(-1)?.content || "";
+  const solutionAnswer = !solutionJourney || (
+    /[?？]/u.test(lastAssistant) &&
+    isSubstantiveTextForAiAutoSend(conversationHistory.filter((m) => m.role === "user").at(-1)?.content) &&
+    /[\p{L}\p{N}]/u.test(conversationHistory.filter((m) => m.role === "user").at(-1)?.content || "")
+  );
+  const journeyContinuation = journeyTrusted && params.currentTurnJourney?.continuation === true && solutionAnswer;
   const contextuallyClear = explicitUserChoice || journeyContinuation;
   const pageActionDiagnostics = {
     pageActionValidated,
@@ -395,7 +404,7 @@ export function evaluateFullAutoSend(params: {
       !isCasualWebchatGreeting(lastInbound) &&
       ((knowledgeQuestion && grounded) ||
         (bookingRequest && grounded) ||
-        ((explicitUserChoice || journeyContinuation) &&
+        ((explicitUserChoice || (journeyContinuation && !solutionJourney)) &&
           !bookingRequest &&
           (grounded || !draftHasCurrencyAmount(suggestion))));
     if (!mayDefault) {
@@ -444,14 +453,6 @@ export function evaluateFullAutoSend(params: {
     };
   }
 
-  if (!strongIntent && !bookingRequest && !contextuallyClear && inboundCount < 2 && !knowledgeQuestion) {
-    return none("conversation_too_short", inboundCount, missingLen);
-  }
-
-  if (!strongIntent && !bookingRequest && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
-    return none("last_message_greeting_only", inboundCount, missingLen);
-  }
-
   if (
     webchat &&
     isWebchatGenerationRecovery(suggestion) &&
@@ -474,6 +475,16 @@ export function evaluateFullAutoSend(params: {
       ...pageActionDiagnostics,
     };
   }
+
+  if (!strongIntent && !bookingRequest && !contextuallyClear && inboundCount < 2 && !knowledgeQuestion) {
+    return none("conversation_too_short", inboundCount, missingLen);
+  }
+
+  if (!strongIntent && !bookingRequest && !contextuallyClear && GREETING_ONLY.test(lastInbound)) {
+    return none("last_message_greeting_only", inboundCount, missingLen);
+  }
+
+  if (solutionJourney && journeyTrusted && !solutionAnswer) return none("intent_unclear", inboundCount, missingLen);
 
   const signals = getStageSignals(msgs, businessKnowledge);
   const intentClear =

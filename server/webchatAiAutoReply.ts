@@ -22,6 +22,7 @@ import {
   WEBCHAT_AI_GENERATION_TIMEOUT_MS,
   webchatAutoSendIdempotencyKey,
 } from "@shared/webchatAiPolicy";
+import { isPublicWebchatMessageVisible } from "@shared/webchatPublicMessages";
 import { pendingAskFromAiControl } from "@shared/chatbotAskQuestion";
 import { logAiReplyDecision, outcomeForReasonCode } from "@shared/aiReplyDecisionLog";
 import { consumeRateLimit } from "./rateLimitMiddleware";
@@ -666,7 +667,7 @@ export async function maybeRunWebchatServerAi(
   }
 
   const joinedInbound = joinLatestVisitorTurn(messages, params.inboundText);
-  const history = messages.map((m) => ({
+  const history = messages.filter(isPublicWebchatMessageVisible).map((m) => ({
     role: m.direction === "inbound" ? "user" : "assistant",
     content: m.content || "",
   }));
@@ -871,7 +872,7 @@ export async function maybeRunWebchatServerAi(
     return { decision, sent: false };
   }
 
-  const persistDraft = async (reasonCode: string) => {
+  const persistDraft = async (reasonCode: string, keepLease = false) => {
     const prior = await storage.getActivityEvents(contact.id, 40);
     const already = prior.some(
       (event) =>
@@ -910,7 +911,7 @@ export async function maybeRunWebchatServerAi(
         /* inbox still hydrates on next timeline fetch */
       }
     }
-    await storage.updateConversation(conv.id, {
+    if (!keepLease) await storage.updateConversation(conv.id, {
       aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
     });
   };
@@ -941,7 +942,8 @@ export async function maybeRunWebchatServerAi(
     conversationId: conv.id,
     inboundMessageId: params.inboundMessageId,
   });
-  const gate = evaluateFullAutoSend({
+  let heldRecovery = false;
+  let gate = evaluateFullAutoSend({
     businessMode: "auto",
     channel: "webchat",
     conversationHistory: history,
@@ -969,13 +971,37 @@ export async function maybeRunWebchatServerAi(
   };
   if (!gate.allowed) {
     const reasonCode = `send_auto:held:${gate.reason}`;
-    await persistDraft(reasonCode);
+    // Preserve the rejected draft for review. Never send it as a fallback.
+    // Reuse fact-free generation recovery only for conversational/model holds;
+    // disqualifiers, opt-outs, ownership and mode checks remain authoritative.
+    const recoverable = gate.reason === "intent_unclear" ||
+      gate.reason === "conversation_too_short" || gate.reason === "low_confidence" ||
+      gate.reason === "confidence_not_provided" || gate.reason === "missing_required_gt_one" ||
+      gate.reason === "ungrounded_pricing" || gate.reason.startsWith("grounding_violation:");
+    await persistDraft(reasonCode, recoverable);
     report(reasonCode, {
       hasDraft: true,
       confidenceSource: gate.confidenceSource,
       ...gateDiagnostics,
     });
-    return { decision: reasonCode, sent: false };
+    if (!recoverable) return { decision: reasonCode, sent: false };
+    const { webchatGenerationRecoveryMessage } = await import("@shared/webchatGenerationRecovery");
+    text = webchatGenerationRecoveryMessage(generateLocale);
+    // The fallback has no product claims, links, assets or model-provided facts.
+    // It still goes through the existing lease, automation guard and delivery path.
+    suggestion.sendApprovedAssetId = undefined;
+    gate = evaluateFullAutoSend({
+      businessMode: "auto", channel: "webchat", conversationHistory: history,
+      suggestion: text, confidence: 0, confidenceProvided: false,
+    });
+    if (!gate.allowed) {
+      await storage.updateConversation(conv.id, {
+        aiControl: completeWebchatGenerationLease(conv.aiControl, leaseId),
+      });
+      return { decision: reasonCode, sent: false };
+    }
+    gate.reason = "ok_held_recovery";
+    heldRecovery = true;
   }
 
   conv = (await storage.getConversation(conv.id)) || conv;
@@ -1008,7 +1034,7 @@ export async function maybeRunWebchatServerAi(
         confidence: suggestion.confidence ?? 0,
         inboundMessageId: params.inboundMessageId,
         leaseId,
-        modelGenerationSucceeded: suggestion.modelGenerationSucceeded === true,
+        modelGenerationSucceeded: !heldRecovery && suggestion.modelGenerationSucceeded === true,
         approvedAssetId,
       },
     });
@@ -1103,7 +1129,7 @@ export async function maybeRunWebchatServerAi(
           confidence: suggestion.confidence ?? 0,
           inboundMessageId: params.inboundMessageId,
           leaseId,
-          modelGenerationSucceeded: suggestion.modelGenerationSucceeded === true,
+          modelGenerationSucceeded: !heldRecovery && suggestion.modelGenerationSucceeded === true,
         },
       }),
   );
@@ -1148,9 +1174,9 @@ export async function maybeRunWebchatServerAi(
     sent: true,
     confidenceSource: gate.confidenceSource,
     stage: "outbound",
-    generationOutcome: suggestion.modelGenerationSucceeded ? "model" : "recovered",
-    fallbackAttempted: suggestion.modelGenerationSucceeded !== true,
-    fallbackSucceeded: suggestion.modelGenerationSucceeded !== true,
+    generationOutcome: !heldRecovery && suggestion.modelGenerationSucceeded ? "model" : "recovered",
+    fallbackAttempted: heldRecovery || suggestion.modelGenerationSucceeded !== true,
+    fallbackSucceeded: heldRecovery || suggestion.modelGenerationSucceeded !== true,
     outboundPersisted: true,
     publicPollingEligible: true,
     ...gateDiagnostics,

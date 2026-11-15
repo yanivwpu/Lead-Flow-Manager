@@ -122,10 +122,10 @@ test("clear Auto question sends recovery; invented amounts and URLs stay held", 
   assert.equal(unsafeUrl.allowed, false);
 });
 
-test("ambiguous first inbound is held as a review draft, not silent empty", () => {
+test("ambiguous first inbound may receive fact-free recovery without approving a model draft", () => {
   const held = gate({ inbound: "ok", suggestion: RECOVERY_EN });
-  assert.equal(held.allowed, false);
-  assert.equal(held.reason, "conversation_too_short");
+  assert.equal(held.allowed, true);
+  assert.equal(held.reason, WEBCHAT_GENERATION_RECOVERY_REASON);
 });
 
 test("Manual, Suggest, takeover, and pending chatbot stay suppressed", () => {
