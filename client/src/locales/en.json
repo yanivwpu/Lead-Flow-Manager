@@ -1769,36 +1769,155 @@
         {
             "id": "consent",
             "title": "Consent and WhatsApp requirements",
-            "paragraphs": [
-                "Connect WhatsApp Business so messages come from your business number. Meta must approve compatible message templates for these automations. Select an approved message in the correct language and purpose; automatic setup currently submits missing templates in English.",
+            "steps": [
+                {
+                    "title": "Connect WhatsApp Business",
+                    "instruction": "Open Settings → Channels, choose Connect for WhatsApp and complete the requested connection and permissions using your business number.",
+                    "success": "Your business number shows as connected in Channels. If it does not, finish or renew the connection.",
+                    "action": "Open Channels"
+                },
+                {
+                    "title": "Set up consent in Shopify",
+                    "instruction": "In Cart Recovery or Post-Purchase, choose the consent purposes, business name and notice language, then Save changes. Choose Set up in Shopify, enable the consent section and save the published theme. If your theme is unsupported, place the supplied notice and opt-in link on the Shopify page you specified.",
+                    "success": "The notices are saved. Return from Shopify and check for Live on store; if verification is unavailable, follow the displayed setup instructions. Theme setup does not prove any customer has consented.",
+                    "action": "Open consent setup"
+                },
+                {
+                    "title": "Choose approved templates",
+                    "instruction": "Choose Set up my messages. Review approval, language and purpose in WhatsApp Library, then select a compatible approved message for each journey. Missing templates are currently submitted in English; interface language does not translate customer messages.",
+                    "success": "The selected message is approved and assigned to the journey. If Meta review is pending, wait and use Refresh template status. Approval alone does not start sending.",
+                    "action": "Open message setup"
+                },
+                {
+                    "title": "Activate the features you need",
+                    "instruction": "Select your post-purchase purposes and choose Enable selected post-purchase journeys. Enable checkout reminders separately in Cart Recovery. Follow any missing-setup reason beside the control.",
+                    "success": "The journey shows Active. Each customer still needs permission for that purpose and must qualify. Use the corresponding Pause action to stop further sending.",
+                    "action": "Open activation and setup"
+                }
+            ],
+            "notes": [
                 "Customers choose each purpose freely. Display the saved notice and opt-in link in Shopify. The customer must send the exact WhatsApp text shown with that purpose from their own number. Clicking a link, saving a merchant setting or checking a Shopify email/SMS box does not grant WhatsApp permission.",
-                "After saving notices, open the Shopify theme setup, enable the consent section and save the published theme. Return and check its status. If your theme is unsupported, use the supplied notice/link on the specified Shopify page. A theme status confirms setup, not any individual customer’s consent.",
                 "Customers can send STOP to opt out. Missing consent, opt-outs, contact restrictions, a changed connection or a completed purchase can make a message ineligible. Never send an unsolicited WhatsApp message to ask for permission."
             ]
         },
         {
             "id": "results",
             "title": "Understand your results",
-            "paragraphs": [
-                "Active: the feature is enabled; each customer and message still needs to qualify. Ready to activate: required setup is verified, but you must enable the journey. Needs setup: complete the displayed connection, consent or template step. Paused: sending is stopped. Unavailable: the feature cannot be used under the current conditions. Coming soon: the feature is not released yet.",
-                "Queued: a message is waiting to be processed. Accepted by Meta: the provider accepted the request; this does not mean it reached the customer. Delivered: a delivery receipt confirms arrival. Read: a read receipt confirms opening when available. The current summary groups delivered and read together.",
-                "Failed: the attempt did not complete successfully. Needs review: the outcome is uncertain; acceptance or delivery is not confirmed. Suppressed or ineligible: a required condition was not met, so sending was skipped. These messages may not appear in the aggregate counters. Never treat activated, queued or accepted as delivered."
+            "statuses": [
+                {
+                    "id": "active",
+                    "label": "Active",
+                    "description": "The feature is enabled. Each customer and message still needs to qualify."
+                },
+                {
+                    "id": "ready",
+                    "label": "Ready to activate",
+                    "description": "Required setup is verified. You must still enable the journey."
+                },
+                {
+                    "id": "setup",
+                    "label": "Needs setup",
+                    "description": "Complete the displayed connection, consent or template step."
+                },
+                {
+                    "id": "paused",
+                    "label": "Paused",
+                    "description": "Sending is stopped."
+                },
+                {
+                    "id": "unavailable",
+                    "label": "Unavailable",
+                    "description": "The feature cannot be used under the current conditions."
+                },
+                {
+                    "id": "coming",
+                    "label": "Coming soon",
+                    "description": "The feature is not released yet."
+                },
+                {
+                    "id": "queued",
+                    "label": "Queued",
+                    "description": "The message is waiting to be processed."
+                },
+                {
+                    "id": "accepted",
+                    "label": "Accepted by Meta",
+                    "description": "Meta accepted the request. This does not confirm delivery to the customer."
+                },
+                {
+                    "id": "delivered",
+                    "label": "Delivered",
+                    "description": "A delivery receipt confirms the message reached the customer."
+                },
+                {
+                    "id": "read",
+                    "label": "Read",
+                    "description": "A read receipt confirms opening, when available."
+                },
+                {
+                    "id": "failed",
+                    "label": "Failed",
+                    "description": "The attempt did not complete successfully."
+                },
+                {
+                    "id": "review",
+                    "label": "Needs review",
+                    "description": "The outcome is uncertain. Acceptance or delivery is not confirmed."
+                },
+                {
+                    "id": "suppressed",
+                    "label": "Suppressed or ineligible",
+                    "description": "A required condition was not met, so sending was skipped."
+                }
+            ],
+            "notes": [
+                "Activated, queued and accepted do not mean delivered. The current summary groups delivered and read together. Suppressed or ineligible messages may not appear in the aggregate counters."
             ]
         },
         {
             "id": "faq",
             "title": "Troubleshooting and FAQs",
-            "paragraphs": [
-                "Why can’t I activate a feature? Check Shopify connection, eligible plan/trial, WhatsApp connection, saved consent purposes and approved message selection. Follow the specific reason next to the control; contact support if availability still blocks setup.",
-                "Why isn’t WhatsApp connected? Open Settings → Channels, finish the connection and permissions, or renew the existing connection. Return and refresh template status.",
-                "Why is my template missing? Review its approval, language and category in WhatsApp Library. Only compatible approved messages appear. Meta review may take time; use Refresh template status. Pause the journey before changing its selected message.",
-                "Why didn’t a customer receive an order confirmation? Confirm the journey was active before the order, its purpose was selected, the template is approved and the customer gave that specific permission. Check whether the message is queued, accepted, failed or needs review. Accepted alone is not delivery.",
-                "Why wasn’t a checkout reminder sent? A detected checkout must still meet the delay, consent and eligibility checks. A completed purchase or opt-out prevents reminders. Check the journey status and selected checkout template.",
-                "How do I update AI knowledge? Open AI Brain and review your store policies, FAQs and business information. Review Shopify products separately for catalog issues.",
-                "How do I pause automation? Use Pause checkout reminders or Pause post-purchase journeys. To stop AI Shopping, clear its enable option and Save. Pausing does not recall messages already accepted by the provider.",
-                "Why aren’t settings saving? Look for an error or unsaved changes, complete required fields and check your connection. Retry Save and wait for confirmation. Reopen the page to verify before enabling journeys; keep a copy of unsaved text before refreshing.",
-                "How do I reconnect Shopify? Open the engine Settings or Integrations → Shopify and complete the existing connect flow. Review consent, templates and activation again after reconnecting.",
-                "Where can I get help? Open Help from the app navigation. Include the affected feature, displayed status and time of the issue; do not include customer message contents or credentials."
+            "items": [
+                {
+                    "question": "Why can’t I activate a feature?",
+                    "answer": "Check Shopify connection, eligible plan/trial, WhatsApp connection, saved consent purposes and approved message selection. Follow the specific reason next to the control; contact support if availability still blocks setup."
+                },
+                {
+                    "question": "Why isn’t WhatsApp connected?",
+                    "answer": "Open Settings → Channels, finish the connection and permissions, or renew the existing connection. Return and refresh template status."
+                },
+                {
+                    "question": "Why is my template missing?",
+                    "answer": "Review its approval, language and category in WhatsApp Library. Only compatible approved messages appear. Meta review may take time; use Refresh template status. Pause the journey before changing its selected message."
+                },
+                {
+                    "question": "Why didn’t a customer receive an order confirmation?",
+                    "answer": "Confirm the journey was active before the order, its purpose was selected, the template is approved and the customer gave that specific permission. Check whether the message is queued, accepted, failed or needs review. Accepted alone is not delivery."
+                },
+                {
+                    "question": "Why wasn’t a checkout reminder sent?",
+                    "answer": "A detected checkout must still meet the delay, consent and eligibility checks. A completed purchase or opt-out prevents reminders. Check the journey status and selected checkout template."
+                },
+                {
+                    "question": "How do I update AI knowledge?",
+                    "answer": "Open AI Brain and review your store policies, FAQs and business information. Review Shopify products separately for catalog issues."
+                },
+                {
+                    "question": "How do I pause automation?",
+                    "answer": "Use Pause checkout reminders or Pause post-purchase journeys. To stop AI Shopping, clear its enable option and Save. Pausing does not recall messages already accepted by the provider."
+                },
+                {
+                    "question": "Why aren’t settings saving?",
+                    "answer": "Look for an error or unsaved changes, complete required fields and check your connection. Retry Save and wait for confirmation. Reopen the page to verify before enabling journeys; keep a copy of unsaved text before refreshing."
+                },
+                {
+                    "question": "How do I reconnect Shopify?",
+                    "answer": "Open the engine Settings or Integrations → Shopify and complete the existing connect flow. Review consent, templates and activation again after reconnecting."
+                },
+                {
+                    "question": "Where can I get help?",
+                    "answer": "Open Help from the app navigation. Include the affected feature, displayed status and time of the issue; do not include customer message contents or credentials."
+                }
             ]
         }
     ],
@@ -1822,6 +1941,7 @@
     "later": "Maybe later",
     "learn": "Learn how it works",
     "close": "Close",
-    "welcomeSafe": "Explore first. Messages and automations only start after you configure and explicitly enable them."
+    "welcomeSafe": "Explore first. Messages and automations only start after you configure and explicitly enable them.",
+    "successLabel": "What success looks like"
 }
 }
