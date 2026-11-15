@@ -1699,36 +1699,155 @@
         {
             "id": "consent",
             "title": "Consentimiento y requisitos de WhatsApp",
-            "paragraphs": [
-                "Conecta WhatsApp Business para enviar desde el número de tu negocio. Meta debe aprobar las plantillas compatibles con estas automatizaciones. Elige el mensaje aprobado con el idioma y la finalidad adecuados; la configuración automática envía actualmente las plantillas que faltan en inglés.",
+            "steps": [
+                {
+                    "title": "Conecta WhatsApp Business",
+                    "instruction": "Abre Configuración → Canales, pulsa Conectar en WhatsApp y completa la conexión y los permisos solicitados con el número de tu negocio.",
+                    "success": "Tu número aparece conectado en Canales. Si no es así, termina o renueva la conexión.",
+                    "action": "Abrir Canales"
+                },
+                {
+                    "title": "Configura el consentimiento en Shopify",
+                    "instruction": "En Recuperación o Poscompra, elige las finalidades del consentimiento, el nombre del negocio y el idioma del aviso; pulsa Guardar cambios. Elige Configurar en Shopify, activa la sección de consentimiento y guarda el tema publicado. Si el tema no es compatible, coloca el aviso y el enlace proporcionados en la página Shopify indicada.",
+                    "success": "Los avisos están guardados. Vuelve de Shopify y comprueba que aparezca Activo en la tienda; si no se puede verificar, sigue las instrucciones mostradas. Configurar el tema no demuestra el consentimiento de ningún cliente.",
+                    "action": "Abrir configuración del consentimiento"
+                },
+                {
+                    "title": "Elige plantillas aprobadas",
+                    "instruction": "Pulsa Configurar mis mensajes. Revisa aprobación, idioma y finalidad en la biblioteca WhatsApp; después selecciona un mensaje aprobado compatible para cada recorrido. Las plantillas que faltan se envían actualmente en inglés; el idioma de la interfaz no traduce los mensajes a clientes.",
+                    "success": "El mensaje seleccionado está aprobado y asignado al recorrido. Si Meta aún lo está revisando, espera y actualiza el estado. La aprobación por sí sola no activa los envíos.",
+                    "action": "Abrir configuración de mensajes"
+                },
+                {
+                    "title": "Activa las funciones que necesitas",
+                    "instruction": "Selecciona las finalidades poscompra y pulsa Activar recorridos poscompra seleccionados. Activa los recordatorios de checkout por separado en Recuperación. Sigue el motivo que aparezca junto al control si falta algún paso.",
+                    "success": "El recorrido muestra Activo. Cada cliente aún debe dar permiso para esa finalidad y cumplir los requisitos. Usa la acción Pausar correspondiente para detener nuevos envíos.",
+                    "action": "Abrir activación y configuración"
+                }
+            ],
+            "notes": [
                 "El cliente elige libremente cada finalidad. Muestra el aviso guardado y su enlace en Shopify. El cliente debe enviar desde su número el texto exacto de WhatsApp indicado para esa finalidad. Pulsar un enlace, guardar una opción o marcar una casilla de email/SMS en Shopify no concede permiso para WhatsApp.",
-                "Tras guardar los avisos, abre la configuración del tema Shopify, activa la sección de consentimiento y guarda el tema publicado. Vuelve y comprueba el estado. Si el tema no es compatible, coloca el aviso y enlace en la página Shopify indicada. El estado del tema verifica la instalación, no el consentimiento de un cliente.",
                 "Los clientes pueden enviar STOP para darse de baja. La falta de consentimiento, una baja, restricciones de contacto, una conexión cambiada o una compra completada pueden impedir el envío. Nunca envíes un WhatsApp no solicitado para pedir permiso."
             ]
         },
         {
             "id": "results",
             "title": "Cómo interpretar los resultados",
-            "paragraphs": [
-                "Activo: la función está habilitada, pero cada cliente y mensaje debe cumplir los requisitos. Listo para activar: la configuración está verificada y falta tu activación. Requiere configuración: completa el paso indicado de conexión, consentimiento o plantilla. En pausa: los envíos están detenidos. No disponible: no se puede usar en las condiciones actuales. Próximamente: todavía no se ha publicado.",
-                "En cola: el mensaje espera su procesamiento. Aceptado por Meta: el proveedor aceptó la solicitud; no confirma que el cliente lo haya recibido. Entregado: un recibo confirma la entrega. Leído: un recibo de lectura confirma la apertura cuando está disponible. El resumen actual agrupa entregados y leídos.",
-                "Fallido: el intento no se completó correctamente. Requiere revisión: el resultado es incierto; no se confirma aceptación ni entrega. Omitido o no elegible: faltaba un requisito y no se envió. Esos casos pueden no aparecer en los contadores agregados. Activado, en cola y aceptado no significan entregado."
+            "statuses": [
+                {
+                    "id": "active",
+                    "label": "Activo",
+                    "description": "La función está habilitada. Cada cliente y mensaje aún debe cumplir los requisitos."
+                },
+                {
+                    "id": "ready",
+                    "label": "Listo para activar",
+                    "description": "La configuración está verificada. Todavía debes activar el recorrido."
+                },
+                {
+                    "id": "setup",
+                    "label": "Requiere configuración",
+                    "description": "Completa el paso indicado de conexión, consentimiento o plantilla."
+                },
+                {
+                    "id": "paused",
+                    "label": "En pausa",
+                    "description": "Los envíos están detenidos."
+                },
+                {
+                    "id": "unavailable",
+                    "label": "No disponible",
+                    "description": "La función no se puede usar en las condiciones actuales."
+                },
+                {
+                    "id": "coming",
+                    "label": "Próximamente",
+                    "description": "La función todavía no se ha publicado."
+                },
+                {
+                    "id": "queued",
+                    "label": "En cola",
+                    "description": "El mensaje espera su procesamiento."
+                },
+                {
+                    "id": "accepted",
+                    "label": "Aceptado por Meta",
+                    "description": "Meta aceptó la solicitud. Esto no confirma la entrega al cliente."
+                },
+                {
+                    "id": "delivered",
+                    "label": "Entregado",
+                    "description": "Un recibo de entrega confirma que el mensaje llegó al cliente."
+                },
+                {
+                    "id": "read",
+                    "label": "Leído",
+                    "description": "Un recibo de lectura confirma la apertura, cuando está disponible."
+                },
+                {
+                    "id": "failed",
+                    "label": "Fallido",
+                    "description": "El intento no se completó correctamente."
+                },
+                {
+                    "id": "review",
+                    "label": "Requiere revisión",
+                    "description": "El resultado es incierto. No se confirma aceptación ni entrega."
+                },
+                {
+                    "id": "suppressed",
+                    "label": "Omitido o no elegible",
+                    "description": "Faltaba un requisito, por lo que no se envió el mensaje."
+                }
+            ],
+            "notes": [
+                "Activado, en cola y aceptado no significan entregado. El resumen actual agrupa entregados y leídos. Los mensajes omitidos o no elegibles pueden no aparecer en los contadores agregados."
             ]
         },
         {
             "id": "faq",
             "title": "Solución de problemas y preguntas frecuentes",
-            "paragraphs": [
-                "¿Por qué no puedo activar una función? Revisa Shopify, plan o prueba elegible, WhatsApp, finalidades del consentimiento guardadas y mensaje aprobado. Sigue el motivo junto al control; contacta con soporte si la disponibilidad sigue bloqueada.",
-                "¿Por qué no está conectado WhatsApp? Abre Configuración → Canales y completa la conexión y permisos, o renueva la conexión existente. Vuelve y actualiza las plantillas.",
-                "¿Por qué no aparece mi plantilla? Revisa aprobación, idioma y categoría en la biblioteca WhatsApp. Solo aparecen mensajes aprobados compatibles. La revisión puede tardar; actualiza su estado. Pausa el recorrido antes de cambiar la selección.",
-                "¿Por qué no llegó la confirmación del pedido? Comprueba que el recorrido estaba activo antes del pedido, la finalidad estaba seleccionada, la plantilla está aprobada y el cliente dio ese permiso específico. Revisa si está en cola, aceptado, fallido o pendiente de revisión. Aceptado no confirma entrega.",
-                "¿Por qué no se envió el recordatorio de pago? Un pago detectado aún debe cumplir el plazo, el consentimiento y la elegibilidad. Una compra completada o una baja impiden recordatorios. Revisa el estado y la plantilla seleccionada.",
-                "¿Cómo actualizo los conocimientos de IA? Abre AI Brain y revisa políticas, preguntas frecuentes e información del negocio. Para problemas del catálogo, revisa los productos Shopify por separado.",
-                "¿Cómo pauso la automatización? Pulsa Pausar recordatorios de checkout o Pausar recorridos poscompra. Para detener Compras con IA, desactiva su casilla y guarda. Pausar no retira mensajes ya aceptados por el proveedor.",
-                "¿Por qué no se guardan los cambios? Busca errores o cambios sin guardar, completa campos obligatorios y comprueba la conexión. Guarda de nuevo y espera confirmación. Reabre la página para verificar antes de activar; copia el texto sin guardar antes de actualizar.",
-                "¿Cómo reconecto Shopify? Abre Configuración del motor o Integraciones → Shopify y completa la conexión existente. Revisa consentimiento, plantillas y activación después de reconectar.",
-                "¿Dónde consigo ayuda? Abre Ayuda en la navegación de la app. Indica función, estado mostrado y hora del problema; no incluyas contenido de mensajes de clientes ni credenciales."
+            "items": [
+                {
+                    "question": "¿Por qué no puedo activar una función?",
+                    "answer": "Revisa Shopify, plan o prueba elegible, WhatsApp, finalidades del consentimiento guardadas y mensaje aprobado. Sigue el motivo junto al control; contacta con soporte si la disponibilidad sigue bloqueada."
+                },
+                {
+                    "question": "¿Por qué no está conectado WhatsApp?",
+                    "answer": "Abre Configuración → Canales y completa la conexión y permisos, o renueva la conexión existente. Vuelve y actualiza las plantillas."
+                },
+                {
+                    "question": "¿Por qué no aparece mi plantilla?",
+                    "answer": "Revisa aprobación, idioma y categoría en la biblioteca WhatsApp. Solo aparecen mensajes aprobados compatibles. La revisión puede tardar; actualiza su estado. Pausa el recorrido antes de cambiar la selección."
+                },
+                {
+                    "question": "¿Por qué no llegó la confirmación del pedido?",
+                    "answer": "Comprueba que el recorrido estaba activo antes del pedido, la finalidad estaba seleccionada, la plantilla está aprobada y el cliente dio ese permiso específico. Revisa si está en cola, aceptado, fallido o pendiente de revisión. Aceptado no confirma entrega."
+                },
+                {
+                    "question": "¿Por qué no se envió el recordatorio de pago?",
+                    "answer": "Un pago detectado aún debe cumplir el plazo, el consentimiento y la elegibilidad. Una compra completada o una baja impiden recordatorios. Revisa el estado y la plantilla seleccionada."
+                },
+                {
+                    "question": "¿Cómo actualizo los conocimientos de IA?",
+                    "answer": "Abre AI Brain y revisa políticas, preguntas frecuentes e información del negocio. Para problemas del catálogo, revisa los productos Shopify por separado."
+                },
+                {
+                    "question": "¿Cómo pauso la automatización?",
+                    "answer": "Pulsa Pausar recordatorios de checkout o Pausar recorridos poscompra. Para detener Compras con IA, desactiva su casilla y guarda. Pausar no retira mensajes ya aceptados por el proveedor."
+                },
+                {
+                    "question": "¿Por qué no se guardan los cambios?",
+                    "answer": "Busca errores o cambios sin guardar, completa campos obligatorios y comprueba la conexión. Guarda de nuevo y espera confirmación. Reabre la página para verificar antes de activar; copia el texto sin guardar antes de actualizar."
+                },
+                {
+                    "question": "¿Cómo reconecto Shopify?",
+                    "answer": "Abre Configuración del motor o Integraciones → Shopify y completa la conexión existente. Revisa consentimiento, plantillas y activación después de reconectar."
+                },
+                {
+                    "question": "¿Dónde consigo ayuda?",
+                    "answer": "Abre Ayuda en la navegación de la app. Indica función, estado mostrado y hora del problema; no incluyas contenido de mensajes de clientes ni credenciales."
+                }
             ]
         }
     ],
@@ -1752,6 +1871,7 @@
     "later": "Más tarde",
     "learn": "Descubrir cómo funciona",
     "close": "Cerrar",
-    "welcomeSafe": "Explora primero. Los mensajes y automatizaciones empiezan solo cuando los configuras y activas expresamente."
+    "welcomeSafe": "Explora primero. Los mensajes y automatizaciones empiezan solo cuando los configuras y activas expresamente.",
+    "successLabel": "Cómo saber que está listo"
 }
 }
