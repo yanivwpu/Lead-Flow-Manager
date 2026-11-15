@@ -168,6 +168,7 @@ function currentTurnVisitorKind(input: {
   if (input.journeyKind === "pricing_savings" || input.journeyKind === "calculate_savings") {
     return "calculate_savings";
   }
+  if (input.journeyKind === "find_solution") return "find_solution";
   if (input.journeyKind === "pricing_compare") {
     return "compare_plans";
   }
@@ -343,6 +344,9 @@ export function chatbotCompletionPromptRules(input: {
       lines.push("- The visitor wants a savings estimate. On this first turn, ask for the minimum missing inputs: their current platform and approximate monthly cost. Do not invent a calculation or savings amount. Do not add a booking CTA.");
     }
   } else if (kind === "find_solution") {
+    if (input.journeyKind === "find_solution" && input.journeyContinuation) {
+      lines.push("- This is a continuation of solution qualification. Interpret short natural English, Spanish, or Hebrew answers using the assistant's previous question. Acknowledge the supplied answer and ask only for the next missing detail; do not repeat answered questions. Use published facts only; never infer budget, capabilities, or promises from an industry name.");
+    }
     lines.push("- The visitor wants help choosing. Ask about their business type and primary goal or problem. Do not pitch everything at once. Do not treat the action label as their name.");
   } else if (kind === "book_demo") {
     if (input.bookingUrl) {

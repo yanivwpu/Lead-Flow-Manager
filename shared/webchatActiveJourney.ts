@@ -11,7 +11,8 @@ export const WEBCHAT_ACTIVE_JOURNEY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type WebchatActiveJourneyKind =
   | typeof WEBCHAT_SAVINGS_JOURNEY_KIND
-  | typeof WEBCHAT_COMPARE_JOURNEY_KIND;
+  | typeof WEBCHAT_COMPARE_JOURNEY_KIND
+  | "find_solution";
 
 export type WebchatActiveJourneyStatus =
   | "collecting"
@@ -159,11 +160,15 @@ export function startPricingCompareJourney(input: {
   });
 }
 
+export function startFindSolutionJourney(input: Parameters<typeof startPricingCompareJourney>[0]): WebchatActiveJourney {
+  return { ...startPricingCompareJourney(input), kind: "find_solution" };
+}
+
 export function readActiveJourney(raw: unknown): WebchatActiveJourney | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const o = raw as Record<string, unknown>;
   if (o.source !== WEBCHAT_ACTIVE_JOURNEY_SOURCE) return null;
-  if (o.kind !== WEBCHAT_SAVINGS_JOURNEY_KIND && o.kind !== WEBCHAT_COMPARE_JOURNEY_KIND) return null;
+  if (o.kind !== WEBCHAT_SAVINGS_JOURNEY_KIND && o.kind !== WEBCHAT_COMPARE_JOURNEY_KIND && o.kind !== "find_solution") return null;
   const status = o.status;
   if (
     status !== "collecting" &&
