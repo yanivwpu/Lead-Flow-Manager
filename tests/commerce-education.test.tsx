@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
@@ -40,6 +40,7 @@ test('welcome waits for a fresh successful install, isolates workspaces/stores a
 });
 
 test('guide renders all eight sections and navigation in EN/ES/HE and switches language and RTL',async()=>{
+ await mkdir("work", {recursive:true});
  const dir=await mkdtemp(resolve('work/commerce-guide-'));
  try {
   await build({entryPoints:['client/src/components/ecommerce/CommerceGuide.tsx'],outfile:join(dir,'guide.mjs'),bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic'});
@@ -58,10 +59,41 @@ test('guide renders all eight sections and navigation in EN/ES/HE and switches l
    for(const section of source.sections){
     const rendered=main.querySelector(`#${section.id}`)!;
     assert.equal(rendered.querySelector('h2')?.textContent,section.title);
-    assert.equal(rendered.querySelectorAll('p').length,section.paragraphs.length);
-    for(const [i,p] of section.paragraphs.entries())assert.equal(rendered.querySelectorAll('p')[i].textContent,p);
+    if(section.paragraphs){
+     assert.equal(rendered.querySelectorAll('p').length,section.paragraphs.length);
+     for(const [i,p] of section.paragraphs.entries())assert.equal(rendered.querySelectorAll('p')[i].textContent,p);
+    }
    }
-   assert.equal(main.querySelectorAll('#faq p').length,10);
+   const faq=source.sections.find(section=>section.id==='faq');
+   const triggers=main.querySelectorAll('#faq button[aria-expanded]');
+   assert.equal(triggers.length,10);
+   for(const [index,trigger] of [...triggers].entries()){
+    assert.equal(trigger.textContent,faq.items[index].question);
+    assert.equal(trigger.getAttribute('aria-expanded'),'false');
+    assert.ok(trigger.className.includes('font-bold'));
+    assert.ok(trigger.getAttribute('aria-controls'));
+   }
+   assert.equal(main.querySelectorAll('#faq [role="region"]:not([hidden])').length,0);
+   const results=source.sections.find(section=>section.id==='results');
+   assert.equal(main.querySelectorAll('#results dl dt').length,13);
+   for(const status of results.statuses){
+    const card=main.querySelector(`[data-status="${status.id}"]`)!;
+    assert.equal(card.querySelector('dt')?.textContent,status.label);
+    assert.equal(card.querySelector('dd')?.textContent,status.description);
+    assert.ok(card.querySelector('svg[aria-hidden="true"]'));
+   }
+   assert.notEqual(main.querySelector('[data-status="accepted"] dd')?.textContent,main.querySelector('[data-status="delivered"] dd')?.textContent);
+   const consent=source.sections.find(section=>section.id==='consent');
+   const steps=main.querySelectorAll('#consent ol > li');
+   assert.equal(steps.length,4);
+   for(const [index,step] of [...steps].entries()){
+    assert.equal(step.querySelector('h3')?.textContent,consent.steps[index].title);
+    assert.ok(step.textContent.includes(consent.steps[index].instruction));
+    assert.ok(step.textContent.includes(consent.steps[index].success));
+    assert.ok(step.textContent.includes(source.successLabel));
+    assert.equal(step.querySelector('a')?.textContent,consent.steps[index].action);
+   }
+   assert.equal(main.querySelectorAll('#consent img').length,0);
    assert.ok(main.querySelector('a[href="/app/ecommerce-growth-engine?view=setup"]'));
    assert.ok(document.querySelector('a[href="/app/ecommerce-growth-engine?view=guide"]'));
    assert.ok(main.querySelector('bdi[dir="ltr"]'));
@@ -83,7 +115,17 @@ test('all new locale keys and guide content are complete without English fallbac
   for(const section of locale.commerceEducation.sections){
    const english=base.commerceEducation.sections.find(s=>s.id===section.id)!;
    assert.notEqual(section.title,english.title);
-   for(const [i,p] of section.paragraphs.entries())assert.notEqual(p,english.paragraphs[i]);
+   for(const [i,p] of (section.paragraphs??[]).entries())assert.notEqual(p,english.paragraphs[i]);
+   for(const field of ['items','steps','statuses']){
+    for(const [index,item] of (section[field]??[]).entries()){
+     for(const [key,value] of Object.entries(item)){
+      if(key==='id')continue;
+      assert.ok(typeof value==='string'&&value.trim());
+      assert.notEqual(value,english[field][index][key]);
+     }
+    }
+   }
+   for(const [index,note] of (section.notes??[]).entries())assert.notEqual(note,english.notes[index]);
   }
  }
 });
