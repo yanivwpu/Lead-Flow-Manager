@@ -12,8 +12,11 @@ export function useEcommercePilot() {
     queryKey: withUserQueryScope(["/api/shopify/ecommerce/capabilities"], user?.id),
     enabled: !!user?.id && sessionAligned,
     retry: false,
-    staleTime: 0,
-    refetchOnMount: "always",
+    // Denied private-pilot access is expected for ordinary merchants. Avoid
+    // repeated 404 probes while navigating, without changing the server grant.
+    staleTime: 60_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const response = await fetch("/api/shopify/ecommerce/capabilities", { credentials: "include" });
       if (response.status === 401 || response.status === 404) return { available: false };
