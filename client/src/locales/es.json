@@ -393,7 +393,7 @@
       "whatsappWebchat": "WhatsApp + Chat Web",
       "websiteWidget": "Chat del sitio web",
       "oneUser": "1 usuario",
-      "activeConversations50": "Conversaciones activas limitadas",
+      "activeConversations50": "50 sesiones Meta al mes",
       "autoRouting": "Enrutamiento automático de canales",
       "tagsNotes": "Etiquetas y notas internas",
       "tasksReminders": "Tareas y recordatorios",
@@ -417,7 +417,7 @@
       "everythingStarter": "Todo en Starter, más:",
       "fiveNumbers": "Hasta 5 números WhatsApp Business",
       "unlimitedTeam": "Miembros del equipo ilimitados",
-      "activeConversations2000": "Mayor capacidad de conversaciones",
+      "activeConversations2000": "2.000 sesiones Meta al mes",
       "dripSequences": "Secuencias drip y campañas",
       "workflowAutomation": "Automatización de flujos de trabajo",
       "templateMessaging": "Mensajes con plantilla y retargeting",
@@ -443,7 +443,7 @@
     "faq": {
       "title": "Preguntas Frecuentes",
       "q1": "¿Qué es una 'conversación activa'?",
-      "a1": "Una conversación activa es cualquier chat que tuvo al menos un mensaje (entrante o saliente) en los últimos 30 días. Las conversaciones archivadas o cerradas no cuentan.",
+      "a1": "Una sesión empieza con un mensaje entrante de WhatsApp, Facebook Messenger o Instagram DM y dura 24 horas fijas. Los mensajes y las respuestas durante esa sesión cuentan una sola vez. Las plantillas sin respuesta, el chat web, el chatbot de IA del sitio, SMS, Telegram, correo y los eventos de Shopify no cuentan. Gratis incluye 50 y Pro 2.000 sesiones por período mensual de uso. Los cargos de Meta son independientes.",
       "q2": "¿Cobran por cada mensaje de WhatsApp?",
       "a2": "No. Nunca agregamos recargo sobre los precios de la API de WhatsApp de Meta. Pagas directamente las tarifas de Meta. Nuestra suscripción solo cubre las funciones del CRM.",
       "q3": "¿Puedo actualizar o degradar después?",
@@ -1225,7 +1225,7 @@
         "price": "$0",
         "period": "/mes",
         "desc": "Ideal para empezar",
-        "f1": "Conversaciones activas limitadas",
+        "f1": "50 sesiones Meta al mes",
         "f2": "1 usuario",
         "f3": "1 número de WhatsApp",
         "f4": "Bandeja de entrada unificada",
@@ -1259,7 +1259,7 @@
         "price": "$49",
         "period": "/mes",
         "desc": "Para equipos listos para automatizar el seguimiento, identificar leads calientes y escalar conversaciones",
-        "f1": "Mayor capacidad de conversaciones",
+        "f1": "2.000 sesiones Meta al mes",
         "f2": "Usuarios ilimitados",
         "f3": "Hasta 5 números de WhatsApp",
         "f4": "Automatizaciones avanzadas con disparadores de IA",
@@ -1303,7 +1303,7 @@
     "compare": {
       "title": "Comparar planes",
       "feature": "Característica",
-      "activeConversations": "Conversaciones activas",
+      "activeConversations": "Sesiones Meta de 24 horas",
       "users": "Usuarios",
       "whatsappNumbers": "Números de WhatsApp",
       "unifiedInbox": "Bandeja de entrada unificada",
@@ -1335,7 +1335,7 @@
     "faq": {
       "title": "Preguntas frecuentes",
       "q1": "¿Qué son las conversaciones activas?",
-      "a1": "Las conversaciones activas son los contactos con los que interactúas durante tu ciclo de facturación, no los mensajes individuales.",
+      "a1": "Una sesión empieza con un mensaje entrante de WhatsApp, Facebook Messenger o Instagram DM y dura 24 horas fijas. Los mensajes y las respuestas durante esa sesión cuentan una sola vez. Las plantillas sin respuesta, el chat web, el chatbot de IA del sitio, SMS, Telegram, correo y los eventos de Shopify no cuentan. Gratis incluye 50 y Pro 2.000 sesiones por período mensual de uso. Los cargos de Meta son independientes.",
       "q2": "¿Cobran por mensaje?",
       "a2": "No. Pagas las tarifas de conversación de Meta/WhatsApp directamente según el modelo de precios de Meta. WhachatCRM no agrega recargos por mensaje.",
       "q3": "¿Puedo actualizar más adelante?",
@@ -1873,5 +1873,12 @@
     "close": "Cerrar",
     "welcomeSafe": "Explora primero. Los mensajes y automatizaciones empiezan solo cuando los configuras y activas expresamente.",
     "successLabel": "Cómo saber que está listo"
+}
+,
+  "metaQuota": {
+  "policy": "Una sesión empieza con un mensaje entrante de WhatsApp, Facebook Messenger o Instagram DM y dura 24 horas fijas. Los mensajes y las respuestas durante esa sesión cuentan una sola vez. Las plantillas sin respuesta, el chat web, el chatbot de IA del sitio, SMS, Telegram, correo y los eventos de Shopify no cuentan. Gratis incluye 50 y Pro 2.000 sesiones por período mensual de uso. Los cargos de Meta son independientes.",
+  "label": "Sesiones Meta de 24 horas",
+  "free": "50 sesiones Meta al mes",
+  "pro": "2.000 sesiones Meta al mes"
 }
 }

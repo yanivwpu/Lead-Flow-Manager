@@ -1,3 +1,4 @@
+import { getMetaQuotaSummary } from "./metaQuota";
 import type Stripe from "stripe";
 import { storage } from "./storage";
 import { PLAN_LIMITS, type SubscriptionPlan, type User } from "@shared/schema";
@@ -49,6 +50,7 @@ export interface UserLimits {
   planName: string;
   conversationsLimit: number;
   conversationsUsed: number;
+  metaQuota?: Awaited<ReturnType<typeof getMetaQuotaSummary>>;
   conversationsRemaining: number;
   isLifetimeLimit: boolean;
   maxUsers: number;
@@ -142,13 +144,8 @@ class SubscriptionService {
       conversationsLimit: planLimits.conversationsPerMonth,
     });
     let conversationsUsed = usageDecision.conversationsUsed;
-    if (usageDecision.persistPeriodStart || usageDecision.resetCounter) {
-      await storage.updateUser(userId, {
-        conversationUsagePeriodStart: usagePeriod.periodStart,
-        ...(usageDecision.resetCounter ? { monthlyConversations: 0 } : {}),
-      });
-    }
-    
+    const metaQuota = await getMetaQuotaSummary(userId, usagePeriod.periodStart);
+    if (metaQuota.enforced && metaQuota.sessions !== null) conversationsUsed = metaQuota.sessions;
     const conversationsLimit = planLimits.conversationsPerMonth;
     const conversationsRemaining = Math.max(0, conversationsLimit - conversationsUsed);
     const isAtLimit = conversationsRemaining <= 0;
@@ -176,11 +173,13 @@ class SubscriptionService {
       planName: isInTrial ? "Pro trial" : planLimits.name,
       conversationsLimit: planLimits.conversationsPerMonth,
       conversationsUsed,
+      metaQuota,
       conversationsRemaining,
       isLifetimeLimit: false,
       maxUsers: planLimits.maxUsers,
       maxWhatsappNumbers: planLimits.maxWhatsappNumbers,
-      canSendMessages: !isAtLimit,
+      // Quota is accounting, never permission to reply. Meta windows remain authoritative.
+      canSendMessages: true,
       followUpsEnabled: planLimits.followUpsEnabled,
       emailNotifications: planLimits.emailNotifications,
       pushNotifications: planLimits.pushNotifications,
@@ -319,6 +318,7 @@ class SubscriptionService {
     return { has: resolved.hasAIBrain, source: resolved.source };
   }
 
+  /** Legacy API name: thread creation is never quota admission or consumption. */
   async checkAndDecrementConversation(userId: string): Promise<{ 
     allowed: boolean; 
     remaining: number;
@@ -328,16 +328,6 @@ class SubscriptionService {
   }> {
     const limits = await this.getUserLimits(userId);
     if (!limits) return { allowed: false, remaining: 0, limit: 0, used: 0, planName: "free" };
-
-    if (limits.isAtLimit) {
-      return { 
-        allowed: false, 
-        remaining: 0, 
-        limit: limits.conversationsLimit, 
-        used: limits.conversationsUsed, 
-        planName: limits.planName 
-      };
-    }
 
     return { 
       allowed: true, 
@@ -505,18 +495,12 @@ class SubscriptionService {
   async canSendMessage(userId: string): Promise<{ allowed: boolean; reason?: string }> {
     const limits = await this.getUserLimits(userId);
     if (!limits) return { allowed: false, reason: "User not found" };
-    if (limits.isAtLimit) {
-      return { allowed: false, reason: "You have reached your conversation limit. Please upgrade your plan." };
-    }
     return { allowed: true };
   }
 
   async canStartConversation(userId: string, _whatsappPhone: string): Promise<{ allowed: boolean; reason?: string }> {
     const limits = await this.getUserLimits(userId);
     if (!limits) return { allowed: false, reason: "User not found" };
-    if (limits.isAtLimit) {
-      return { allowed: false, reason: "You have reached your conversation limit. Please upgrade your plan." };
-    }
     return { allowed: true };
   }
 
@@ -525,13 +509,6 @@ class SubscriptionService {
   }
 
   async trackConversationWindow(userId: string, _chatId: string | number, _whatsappPhone: string): Promise<void> {
-  }
-
-  async incrementConversationUsage(userId: string): Promise<void> {
-    // Apply period reset first so trial-only Free accounts cannot stay locked.
-    await this.getUserLimits(userId);
-    // Atomic increment — never read-modify-write (avoids lost updates and double-set races).
-    await storage.incrementMonthlyConversations(userId);
   }
 }
 

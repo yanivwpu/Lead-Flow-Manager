@@ -37,8 +37,21 @@ export function resolveUsagePeriodFromDates(
 ): ResolvedUsagePeriod {
   const start = asValidDate(currentPeriodStart ?? null);
   const end = asValidDate(currentPeriodEnd ?? null);
-  if (start && end && now <= end) {
-    return { periodStart: start, periodEnd: end, source: "billing_period" };
+  if (start && end && start < end && start <= now && now < end) {
+    // Keep the original billing day: Jan 31 -> Feb 28 -> Mar 31, in UTC.
+    const anchoredMonth = (months: number) => {
+      const n = new Date(start);
+      const day = n.getUTCDate();
+      n.setUTCDate(1); n.setUTCMonth(n.getUTCMonth() + months);
+      const last = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 0)).getUTCDate();
+      n.setUTCDate(Math.min(day, last));
+      return n;
+    };
+    let offset = (now.getUTCFullYear() - start.getUTCFullYear()) * 12 + now.getUTCMonth() - start.getUTCMonth();
+    if (anchoredMonth(offset) > now) offset--;
+    const monthlyStart = anchoredMonth(offset);
+    const monthlyEnd = anchoredMonth(offset + 1);
+    return { periodStart: monthlyStart, periodEnd: monthlyEnd < end ? monthlyEnd : end, source: "billing_period" };
   }
   const utcStart = startOfUtcMonth(now);
   return {

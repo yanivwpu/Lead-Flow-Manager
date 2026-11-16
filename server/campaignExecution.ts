@@ -123,7 +123,6 @@ async function ensureConversationForCampaign(
       channel,
       status: "open",
     });
-    await subscriptionService.incrementConversationUsage(userId);
   }
   return conv;
 }

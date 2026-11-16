@@ -89,24 +89,13 @@ test("lifecycle vocabularies distinguish every required state", () => {
   ]);
 });
 
-test("active-conversation copy matches the actual metered creation paths", () => {
-  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /WhatsApp, Instagram, Facebook Messenger, SMS, Website Chat, or Telegram/);
-  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /Calendly booking event/);
-  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /WhatsApp campaign or template send/);
-  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /legacy chat is created or imported/);
-  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /Email mailbox threads, GoHighLevel sync conversations, and Shopify or WooCommerce event conversations do not increment/);
-
+test("quota copy describes only fixed inbound Meta sessions", () => {
+  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /fixed 24 hours/);
+  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /Free includes 50 and Pro 2,000/);
+  assert.match(ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION, /Templates alone/);
   const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
-  assert.match(read("server/channelService.ts"), /incrementConversationUsage\(userId\)/);
-  assert.match(read("server/campaignExecution.ts"), /incrementConversationUsage\(userId\)/);
-  assert.match(read("server/routes/templates.ts"), /incrementConversationUsage\(userId\)/);
-  assert.match(read("server/routes.ts"), /incrementConversationUsage\(req\.user\.id\)/);
-  for (const unmetered of [
-    "server/emailChannel/persistInbound.ts",
-    "server/emailChannel/sendService.ts",
-    "server/ghlRoutes.ts",
-    "server/commerceEventPipeline.ts",
-  ]) {
-    assert.doesNotMatch(read(unmetered), /incrementConversationUsage/, unmetered);
+  for (const file of ["server/channelService.ts", "server/campaignExecution.ts", "server/routes/templates.ts", "server/routes.ts"]) {
+    assert.doesNotMatch(read(file), /incrementConversationUsage/);
   }
+  assert.match(read("migrations/20261116_meta_quota_sessions.sql"), /NEW.direction <> 'inbound'/);
 });

@@ -1,3 +1,4 @@
+import { resolveWebchatProductionReadiness } from "./webchatWidgetSettings";
 import { isEmailMailboxUiConnected } from "./emailMailboxAvailability";
 
 /** Admin users table — compact WA / FB / IG / Email connection indicators from canonical fields. */
@@ -14,6 +15,8 @@ export type AdminUserChannelConnections = {
   facebook: AdminChannelIndicator;
   instagram: AdminChannelIndicator;
   email: AdminChannelIndicator;
+  website?: AdminChannelIndicator;
+  aiChatbot?: AdminChannelIndicator;
   hasAnyChannel: boolean;
   noChannelsConnected: boolean;
   whatsappConnected: boolean;
@@ -22,6 +25,8 @@ export type AdminUserChannelConnections = {
 };
 
 export type AdminWhatsAppUserFields = {
+  widgetSettings?: any;
+  widgetPublicId?: string | null;
   whatsappProvider?: string | null;
   metaConnected?: boolean | null;
   metaIntegrationStatus?: string | null;
@@ -250,17 +255,22 @@ export function deriveAdminUserChannelConnections(input: {
   const instagram = deriveAdminInstagramIndicator(instagramRow);
   const email = deriveAdminEmailIndicator(input.emailMailbox);
 
+  const readiness = resolveWebchatProductionReadiness(input.user.widgetSettings, input.user.widgetPublicId);
+  const website: AdminChannelIndicator = {
+    state: readiness.effectivePublic ? "connected" : "disconnected",
+    tooltip: `Website Chat: ${readiness.reason}`,
+  };
   const hasAnyChannel =
     whatsapp.state === "connected" ||
     facebook.state === "connected" ||
     instagram.state === "connected" ||
-    email.state === "connected";
+    email.state === "connected" || website.state === "connected";
 
   const noChannelsConnected =
     whatsapp.state === "disconnected" &&
     facebook.state === "disconnected" &&
     instagram.state === "disconnected" &&
-    email.state === "disconnected";
+    email.state === "disconnected" && website.state === "disconnected";
 
   const needsAttention =
     whatsapp.state === "attention" ||
@@ -273,6 +283,7 @@ export function deriveAdminUserChannelConnections(input: {
     email.state === "error";
 
   return {
+    website,
     whatsapp,
     facebook,
     instagram,

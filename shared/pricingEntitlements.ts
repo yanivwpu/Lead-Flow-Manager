@@ -145,7 +145,7 @@ export function getPlanPricingHighlights(plan: SubscriptionPlan): string[] {
   const discoveries = PROSPECT_AI_MONTHLY_QUOTAS[plan];
   const lines = [
     `${discoveries} Prospect AI discoveries/month`,
-    `${formatConversations(limits.conversationsPerMonth)} active conversations`,
+    `${formatConversations(limits.conversationsPerMonth)} Meta 24-hour sessions per month`,
     `${formatUsers(limits.maxUsers)} ${limits.maxUsers === 1 ? "user" : "users"}`,
     limits.maxWhatsappNumbers === 1
       ? "1 WhatsApp Business account"

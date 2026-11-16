@@ -1,3 +1,7 @@
+import { extractWidgetSettingsRecord } from "./webchatInboundUserSettings";
+import { resolveAIBrainAccess } from "@shared/aiBrainEntitlement";
+import { resolveWebchatProductionReadiness } from "@shared/webchatWidgetSettings";
+import { isWebchatServerAiUnattendedEligible } from "./webchatServerAiRollout";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import {
@@ -119,6 +123,8 @@ export type ActivationAccountRow = {
   instagramConnected: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
+  websiteConnected: boolean;
+  aiChatbotEnabled: boolean;
   emailConnected: boolean;
   ghlDetails: ActivationGhlDetails | null;
   conversationsCount: number;
@@ -704,6 +710,7 @@ async function loadActivationAccounts(
     rgeRows,
     agentPageRows,
     inventoryRows,
+    aiConfigRows,
   ] = await Promise.all([
     loadGhlActivationConnectionState(),
     getGhlMarketplacePaidUserIds(),
@@ -738,6 +745,7 @@ async function loadActivationAccounts(
       .from(aiBusinessKnowledge)
       .where(eq(aiBusinessKnowledge.agentPageEnabled, true)),
     db.select({ userId: inventorySources.userId }).from(inventorySources),
+    db.select({ userId: aiSettings.userId, mode: aiSettings.aiMode }).from(aiSettings),
   ]);
 
   const ghlUserIds = ghlConnectionState.connectedUserIds;
@@ -757,6 +765,7 @@ async function loadActivationAccounts(
 
   let accountsWithOrphanMessages = 0;
 
+  const aiModeByUser = new Map(aiConfigRows.map(r => [r.userId, r.mode]));
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
     const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser);
     const plan = getEffectivePlanForUser(user, now, {
@@ -792,6 +801,8 @@ async function loadActivationAccounts(
       shopifyConnected: activation.shopifyConnected,
       ghlConnected: activation.ghlConnected,
       emailConnected: activation.emailConnected,
+      websiteConnected: resolveWebchatProductionReadiness(extractWidgetSettingsRecord(user.widgetSettings), user.widgetPublicId).effectivePublic,
+      aiChatbotEnabled: resolveWebchatProductionReadiness(extractWidgetSettingsRecord(user.widgetSettings), user.widgetPublicId).effectivePublic && plan === "pro" && resolveAIBrainAccess(user, { now, ghlMarketplaceProActive: ghlMarketplacePaidUserIds.has(user.id) }).hasAIBrain && (aiModeByUser.get(user.id) === "full_auto" || aiModeByUser.get(user.id) === "auto") && isWebchatServerAiUnattendedEligible(user.id),
       ghlDetails: activation.ghlConnected ? ghlDetailsByUser.get(user.id) ?? null : null,
       conversationsCount,
       messagesSent: msgStats.messagesSent,
