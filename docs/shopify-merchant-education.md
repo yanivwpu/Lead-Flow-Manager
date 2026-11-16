@@ -25,8 +25,9 @@ Prior UX work (#268, #279, #283, #284, #289–291, #294, #296–297) remains in 
   automatic template submission still creates missing **English** messages; the
   guide makes clear that interface language does not translate customer templates.
 - Checkout assistance is source-approved for merchant opt-in (`CHECKOUT_ROLLOUT_APPROVED=true`), contingent on verified production journal tables, the sealed server-side receipt key, and the existing owned store/catalog/entitlement checks. A source-approved gate does not activate merchants or prove a completed Shopify cart; production deployment is a separate release step.
-  It shows **Not available yet**, with the actual prerequisite explanation, instead
-  of an unusable checkbox or implementation details. No release date is promised.
+  The deployed production gate remains OFF until the release prerequisites are verified.
+  While it is OFF, merchants see **Not available yet** with a prerequisite explanation;
+  after deployment, entitled merchants can opt in using the existing setting.
 - AI Shopping leads with its benefit, translates channel labels, shows loading,
   errors, saving and saved feedback, and reloads committed preferences from the
   existing API. Editing is disabled while saving to avoid losing a later edit.
