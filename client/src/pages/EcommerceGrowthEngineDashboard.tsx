@@ -89,7 +89,7 @@ export function EcommerceGrowthEngineDashboardContent() {
        <ShoppingSettings showDiagnostics={privatePilot}/>
        <div className="flex flex-wrap gap-5"><Link href="/app/ai-brain" className="font-semibold text-blue-700">{t.seeBrain} →</Link><Link href={catalog} className="font-semibold text-blue-700">{t.seeCatalog} →</Link></div>
      </div>}
-     {view==="recovery" && <div className="rounded-xl border bg-white p-6 space-y-3 text-sm text-slate-600">
+     {view==="recovery" && <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/40 p-4 text-sm text-slate-600 sm:p-6">
        <ShopifyTemplateSetup locale={locale}/>
        {privatePilot && <p data-testid="ecommerce-recovery-readiness" role="status" className="font-medium text-slate-700">
          {activation.isLoading || activation.isError || !activation.data || activation.data.recoverySchemaReady == null
