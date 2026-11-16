@@ -91,7 +91,7 @@ export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved, act
   return <section dir={lang === "he" ? "rtl" : "ltr"} lang={locale} data-testid="post-purchase-plans" className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
     <h3 className="text-base font-semibold text-slate-950">{t.title}</h3>
     <p className="text-sm text-slate-600">{t.pause}</p>
-    <div className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3 sm:grid-cols-2 sm:p-4">
+    <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 sm:p-4">
       {POST_PURCHASE_JOURNEYS.map((journey, index) => <PlanRow key={journey}
         journey={journey} initial={plans?.[journey] ?? readPostPurchasePlans(null)[journey]}
         label={t.labels[index]} example={t.examples[index]} t={t} onSaved={onSaved}
@@ -182,7 +182,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       setStatus("saved");
     } catch { setStatus("error"); }
   }
-  return <form className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-slate-100/90'}`} onSubmit={e => { e.preventDefault(); if (valid && status !== "saving") void save(); }}>
+  return <form className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-white'}`} onSubmit={e => { e.preventDefault(); if (valid && status !== "saving") void save(); }}>
     <h4 className="text-sm font-semibold text-slate-950">{label}</h4>
     <label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected} disabled={status === "saving"}
       onChange={e => { setSelected(e.target.checked); setStatus("idle"); }}/>{t.choose}</label>
