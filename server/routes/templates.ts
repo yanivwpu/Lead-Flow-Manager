@@ -268,7 +268,6 @@ async function ensureWhatsAppConversationForContact(
     channel: "whatsapp",
     status: "open",
   });
-  await subscriptionService.incrementConversationUsage(userId);
   return { conversationId: created.id, created: true };
 }
 
