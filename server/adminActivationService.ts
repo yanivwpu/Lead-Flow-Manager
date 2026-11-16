@@ -4,6 +4,7 @@ import {
   aiBusinessKnowledge,
   aiMessageLog,
   aiSettings,
+  chatbotFlows,
   channelSettings,
   contacts,
   conversations,
@@ -120,6 +121,8 @@ export type ActivationAccountRow = {
   shopifyConnected: boolean;
   ghlConnected: boolean;
   emailConnected: boolean;
+  webchatConfigured: boolean;
+  chatbotConfigured: boolean;
   ghlDetails: ActivationGhlDetails | null;
   conversationsCount: number;
   /** Real customer-channel messages only (excludes webchat/sms/test) */
@@ -336,6 +339,7 @@ function deriveUserConnections(
   channelByUser: Map<string, (typeof channelSettings.$inferSelect)[]>,
   ghlUserIds: Set<string>,
   mailboxByUser: Map<string, Array<{ syncStatus: string | null; provider: string | null; isPrimary: boolean | null; createdAt: Date | null }>>,
+  chatbotSignals?: { activeFlowCount: number; aiMode: string | null },
 ) {
   const meta = deriveAdminUserChannelConnections({
     user,
@@ -346,6 +350,8 @@ function deriveUserConnections(
       config: row.config,
     })),
     emailMailbox: pickAdminEmailMailbox(mailboxByUser.get(user.id) ?? []),
+    activeChatbotFlowCount: chatbotSignals?.activeFlowCount ?? 0,
+    aiMode: chatbotSignals?.aiMode ?? null,
   });
 
   return {
@@ -704,6 +710,8 @@ async function loadActivationAccounts(
     rgeRows,
     agentPageRows,
     inventoryRows,
+    activeChatbotFlowRows,
+    aiModeRows,
   ] = await Promise.all([
     loadGhlActivationConnectionState(),
     getGhlMarketplacePaidUserIds(),
@@ -738,6 +746,8 @@ async function loadActivationAccounts(
       .from(aiBusinessKnowledge)
       .where(eq(aiBusinessKnowledge.agentPageEnabled, true)),
     db.select({ userId: inventorySources.userId }).from(inventorySources),
+    db.select({ userId: chatbotFlows.userId }).from(chatbotFlows).where(eq(chatbotFlows.isActive, true)),
+    db.select({ userId: aiSettings.userId, aiMode: aiSettings.aiMode }).from(aiSettings),
   ]);
 
   const ghlUserIds = ghlConnectionState.connectedUserIds;
@@ -754,11 +764,19 @@ async function loadActivationAccounts(
   const rgeUserIds = new Set(rgeRows.map((r) => r.userId));
   const agentPageUserIds = new Set(agentPageRows.map((r) => r.userId));
   const inventoryUserIds = new Set(inventoryRows.map((r) => r.userId));
+  const activeFlowCounts = new Map<string, number>();
+  for (const row of activeChatbotFlowRows) {
+    activeFlowCounts.set(row.userId, (activeFlowCounts.get(row.userId) ?? 0) + 1);
+  }
+  const aiModeByUserId = new Map(aiModeRows.map((r) => [r.userId, r.aiMode]));
 
   let accountsWithOrphanMessages = 0;
 
   let rows: ActivationAccountRow[] = allUsers.map((user) => {
-    const { activation } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser);
+    const { activation, meta } = deriveUserConnections(user, channelByUser, ghlUserIds, mailboxByUser, {
+      activeFlowCount: activeFlowCounts.get(user.id) ?? 0,
+      aiMode: aiModeByUserId.get(user.id) ?? null,
+    });
     const plan = getEffectivePlanForUser(user, now, {
       ghlMarketplaceProActive: ghlMarketplacePaidUserIds.has(user.id),
     });
@@ -792,6 +810,8 @@ async function loadActivationAccounts(
       shopifyConnected: activation.shopifyConnected,
       ghlConnected: activation.ghlConnected,
       emailConnected: activation.emailConnected,
+      webchatConfigured: meta.webchat.state === "connected",
+      chatbotConfigured: meta.chatbot.state === "connected",
       ghlDetails: activation.ghlConnected ? ghlDetailsByUser.get(user.id) ?? null : null,
       conversationsCount,
       messagesSent: msgStats.messagesSent,
