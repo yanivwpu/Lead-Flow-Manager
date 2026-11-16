@@ -25,7 +25,6 @@ import {
 import { buildMetaLibraryTemplateSendComponents, type TemplateRowForMetaSend } from "@shared/metaTemplateSend";
 import { storage } from "./storage";
 import { channelService } from "./channelService";
-import { subscriptionService } from "./subscriptionService";
 import { getWhatsAppAvailability } from "./whatsappService";
 import { sendMetaWhatsAppTemplate } from "./userMeta";
 import { prepareMetaTemplateComponentsForGraph } from "./metaTemplateMediaPipeline";
@@ -123,7 +122,6 @@ async function ensureConversationForCampaign(
       channel,
       status: "open",
     });
-    await subscriptionService.incrementConversationUsage(userId);
   }
   return conv;
 }
