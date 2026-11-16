@@ -79,6 +79,8 @@ type ActivationAccount = {
   whatsappConnected: boolean;
   facebookConnected: boolean;
   instagramConnected: boolean;
+  websiteConnected: boolean;
+  aiChatbotEnabled: boolean;
   emailConnected: boolean;
   shopifyConnected: boolean;
   ghlConnected: boolean;
@@ -239,6 +241,8 @@ function ChannelBadges({ row }: { row: ActivationAccount }) {
     { key: "FB", on: row.facebookConnected, label: "Facebook Messenger" },
     { key: "IG", on: row.instagramConnected, label: "Instagram" },
     { key: "EM", on: row.emailConnected, label: "Email / Gmail" },
+    { key: "Web", on: row.websiteConnected, label: "Website widget configured" },
+    { key: "AI", on: row.aiChatbotEnabled, label: "Website AI Chatbot enabled" },
     { key: "Shop", on: row.shopifyConnected, label: "Shopify" },
     { key: CRM_CHANNEL_LABEL, on: row.ghlConnected, label: row.ghlConnected ? "CRM linked (usable GHL integration)" : "CRM not connected" },
   ];

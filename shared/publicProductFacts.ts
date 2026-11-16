@@ -165,13 +165,9 @@ export const PUBLIC_PRODUCT_FACTS = {
 /** Public requirement text imported from the existing entitlement source. */
 export const PUBLIC_REALTOR_GROWTH_ENGINE_REQUIREMENT = REALTOR_GROWTH_ENGINE_REQUIRES_PRO;
 
-/**
- * Matches enforcement: quota increments when a new conversation thread is
- * created, not for later messages in that thread. The counter uses an active
- * billing period when available and otherwise the UTC calendar month.
- */
+/** Subscription quota sessions are independent of historical threads and Meta charges. */
 export const ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION =
-  "Active-conversation usage increases when WhachatCRM creates a new WhatsApp, Instagram, Facebook Messenger, SMS, Website Chat, or Telegram messaging thread; when a Calendly booking event creates a new thread through the same inbox handler; when a WhatsApp campaign or template send creates its thread; or when a legacy chat is created or imported. Additional messages in an existing thread do not add another conversation. Email mailbox threads, GoHighLevel sync conversations, and Shopify or WooCommerce event conversations do not increment this usage. The usage period follows your active billing period when available; otherwise it follows the UTC calendar month.";
+  "A qualifying session starts with an inbound WhatsApp, Facebook Messenger or Instagram DM and lasts a fixed 24 hours. Repeated messages and AI/workflow replies within it do not increment usage. Templates alone, Website Chat, AI website chatbot, SMS, Telegram, email, Shopify events and other channels do not consume this allowance. A template reply starts a session only if none is open. Free includes 50 and Pro 2,000 sessions per monthly usage period. Meta messaging charges are billed separately. Threads, message history and Meta reply windows are unchanged.";
 
 export function isGenerallyAvailableProduct(fact: PublicProductFact): boolean {
   return fact.implementation === "implemented" && fact.availability === "public";

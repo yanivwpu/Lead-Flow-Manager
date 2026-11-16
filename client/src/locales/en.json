@@ -391,7 +391,7 @@
       "whatsappWebchat": "WhatsApp + Web Chat",
       "websiteWidget": "Website Chat Widget",
       "oneUser": "1 user",
-      "activeConversations50": "50 active conversations / month",
+      "activeConversations50": "50 Meta sessions per month",
       "autoRouting": "Auto channel routing",
       "tagsNotes": "Tags & internal notes",
       "tasksReminders": "Tasks & reminders",
@@ -415,7 +415,7 @@
       "everythingStarter": "Everything in Starter, plus:",
       "fiveNumbers": "Up to 5 WhatsApp Business numbers",
       "unlimitedTeam": "Unlimited users",
-      "activeConversations2000": "2,000 active conversations / month",
+      "activeConversations2000": "2,000 Meta sessions per month",
       "dripSequences": "Drip sequences & campaigns",
       "workflowAutomation": "Workflow automation",
       "templateMessaging": "Template messaging & retargeting",
@@ -1298,7 +1298,7 @@
         "price": "$0",
         "period": "/mo",
         "desc": "Best for testing WhachatCRM",
-        "f1": "50 active conversations",
+        "f1": "50 Meta sessions per month",
         "f2": "1 user",
         "f3": "1 WhatsApp number",
         "f4": "Basic unified inbox",
@@ -1332,7 +1332,7 @@
         "price": "$49",
         "period": "/mo",
         "desc": "For teams ready to scale conversations and advanced workflows",
-        "f1": "2,000 active conversations",
+        "f1": "2,000 Meta sessions per month",
         "f2": "Unlimited users",
         "f3": "Up to 5 WhatsApp numbers",
         "f4": "Advanced automations",
@@ -1376,7 +1376,7 @@
     "compare": {
       "title": "Compare plans",
       "feature": "Feature",
-      "activeConversations": "Active conversations",
+      "activeConversations": "24-hour Meta sessions",
       "users": "Users",
       "whatsappNumbers": "WhatsApp numbers",
       "unifiedInbox": "Unified inbox",
@@ -1405,7 +1405,7 @@
     "faq": {
       "title": "Common questions",
       "q1": "What are active conversations?",
-      "a1": "Active conversations are contacts you interact with during your billing cycle — not individual messages.",
+      "a1": "A session starts with an inbound WhatsApp, Facebook Messenger or Instagram DM and lasts a fixed 24 hours. Repeated messages and replies within it count once. Templates alone, Website Chat, AI website chatbot, SMS, Telegram, email and Shopify events do not count. Free includes 50 and Pro 2,000 sessions per monthly usage period. Meta messaging charges are separate.",
       "q2": "Do you charge per message?",
       "a2": "No. You pay Meta/WhatsApp conversation fees directly based on Meta's pricing model. WhachatCRM does not add per-message markups.",
       "q3": "Can I upgrade later?",
@@ -1943,5 +1943,12 @@
     "close": "Close",
     "welcomeSafe": "Explore first. Messages and automations only start after you configure and explicitly enable them.",
     "successLabel": "What success looks like"
+}
+,
+  "metaQuota": {
+  "policy": "A session starts with an inbound WhatsApp, Facebook Messenger or Instagram DM and lasts a fixed 24 hours. Repeated messages and replies within it count once. Templates alone, Website Chat, AI website chatbot, SMS, Telegram, email and Shopify events do not count. Free includes 50 and Pro 2,000 sessions per monthly usage period. Meta messaging charges are separate.",
+  "label": "24-hour Meta sessions",
+  "free": "50 Meta sessions per month",
+  "pro": "2,000 Meta sessions per month"
 }
 }

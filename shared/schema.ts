@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -3566,3 +3566,23 @@ export const marketingSuppressions = pgTable("marketing_suppressions", {
   source: text("source").notNull(),
   suppressedAt: timestamp("suppressed_at").notNull().defaultNow(),
 }, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.emailNormalized] }), validScope: check("marketing_suppressions_scope_check", sql`${t.scope} IN ('email','all')`) }));
+
+// Quota ledger is independent of CRM threads and Meta reply-window tracking.
+export const metaQuotaRollout = pgTable("meta_quota_rollout", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  trackingStartedAt: timestamp("tracking_started_at").notNull().defaultNow(),
+  enforceFrom: timestamp("enforce_from"), reviewedAt: timestamp("reviewed_at"),
+});
+export const metaQuotaSessions = pgTable("meta_quota_sessions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(), customerKey: text("customer_key").notNull(),
+  startedAt: timestamp("started_at").notNull(), expiresAt: timestamp("expires_at").notNull(),
+  periodStart: timestamp("period_start").notNull(),
+});
+export const metaQuotaEvents = pgTable("meta_quota_events", {
+  messageId: varchar("message_id").primaryKey(),
+  externalMessageId: text("external_message_id"),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: bigint("session_id", { mode: "number" }).notNull().references(() => metaQuotaSessions.id, { onDelete: "cascade" }),
+});

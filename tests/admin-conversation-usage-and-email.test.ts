@@ -62,44 +62,14 @@ run("Users table X / limit = plan conversation usage for the current period", ()
 
   const admin = read("client/src/pages/Admin.tsx");
   assert.match(admin, /Conversation usage/);
-  assert.match(admin, /Plan conversation usage for the current billing period/);
+  assert.match(admin, /Current-period subscription usage/);
   assert.match(admin, /\$\{used\} \/ \$\{limit\}/);
 });
 
-run("B: increment only after a successful new conversation create", () => {
-  const templates = read("server/routes/templates.ts");
-  const ensure = sliceBetween(
-    templates,
-    "async function ensureWhatsAppConversationForContact",
-    "export function registerTemplateRoutes",
-  );
-  const createAt = ensure.indexOf("storage.createConversation");
-  const incrementAt = ensure.indexOf("subscriptionService.incrementConversationUsage");
-  assert.ok(createAt >= 0 && incrementAt > createAt, "templates: create then increment");
-
-  const channel = read("server/channelService.ts");
-  const inbound = sliceBetween(channel, "let isNewConversation = false;", "Existing conversation found");
-  assert.match(inbound, /createConversation/);
-  assert.match(inbound, /incrementConversationUsage/);
-  const outbound = sliceBetween(channel, "let conversation = await storage.getConversationByContactAndChannel", "enforceWhatsAppCustomerServiceWindow");
-  const outCreate = outbound.indexOf("createConversation");
-  const outInc = outbound.indexOf("incrementConversationUsage");
-  assert.ok(outCreate >= 0 && outInc > outCreate, "outbound: create then increment");
-
-  const campaign = read("server/campaignExecution.ts");
-  const camp = sliceBetween(campaign, "async function ensureConversationForCampaign", "async function sendCampaignWhatsApp");
-  assert.ok(
-    camp.indexOf("createConversation") < camp.indexOf("incrementConversationUsage"),
-    "campaign: create then increment",
-  );
-
-  const chatsRoute = read("server/routes.ts");
-  const createChatRoute = sliceBetween(chatsRoute, "// Create a new chat", "// Update a chat");
-  assert.ok(
-    createChatRoute.indexOf("storage.createChat") < createChatRoute.indexOf("incrementConversationUsage"),
-    "legacy /api/chats: create then increment",
-  );
-  assert.doesNotMatch(createChatRoute, /checkAndDecrementConversation/);
+run("B: outbound, campaign, legacy threads never charge subscription usage", () => {
+  for (const file of ["server/routes/templates.ts", "server/channelService.ts", "server/campaignExecution.ts", "server/routes.ts"]) {
+    assert.doesNotMatch(read(file), /incrementConversationUsage|trackLegacyThreadUsage/);
+  }
 });
 
 run("C: duplicate inbound webhook returns before usage increment", () => {
@@ -124,9 +94,10 @@ run("D: Gmail poll + Pub/Sub share persist; persist never increments usage; dupl
   assert.ok(persistCalls >= 3, "poll and push both persist through the same helper");
 });
 
-run("E: a second genuinely new conversation still has an increment path", () => {
-  const channel = read("server/channelService.ts");
-  assert.match(channel, /if \(!conversation\) \{[\s\S]*?incrementConversationUsage/);
+run("E: durable quota accounting is owned by the inbound message transaction", () => {
+  const migration = read("migrations/20261116_meta_quota_sessions.sql");
+  assert.match(migration, /AFTER INSERT ON messages/);
+  assert.match(migration, /pg_advisory_xact_lock/);
 });
 
 run("F: usage resets according to canonical period helper", () => {
@@ -154,15 +125,8 @@ run("F: usage resets according to canonical period helper", () => {
 
   const sub = read("server/subscriptionService.ts");
   assert.match(sub, /nextConversationUsageAfterPeriodCheck/);
-  assert.match(sub, /storage\.incrementMonthlyConversations/);
-  assert.doesNotMatch(
-    sub,
-    /monthlyConversations:\s*\(user\.monthlyConversations\s*\|\|\s*0\)\s*\+\s*1/,
-  );
-
-  const incrementFn = sliceBetween(sub, "async incrementConversationUsage", "export const subscriptionService");
-  assert.match(incrementFn, /storage\.incrementMonthlyConversations/);
-  assert.doesNotMatch(incrementFn, /updateUser/);
+  assert.doesNotMatch(sub, /incrementMonthlyConversations/);
+  assert.match(sub, /getMetaQuotaSummary/);
 
   const storage = read("server/storage.ts");
   assert.match(storage, /monthlyConversations: sql`coalesce\(\$\{users\.monthlyConversations\}, 0\) \+ 1`/);

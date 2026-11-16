@@ -599,19 +599,6 @@ export function Chats() {
       return;
     }
     
-    if (isAtLimit) {
-      setUpgradeReason("conversation_limit");
-      if (subscription?.limits) {
-        setUpgradeLimitInfo({ 
-          limit: subscription.limits.conversationsLimit, 
-          used: subscription.limits.conversationsUsed, 
-          planName: subscription.limits.planName,
-          resetDate: subscription.limits.conversationUsagePeriodEnd || subscription.subscription?.currentPeriodEnd || null,
-        });
-      }
-      setUpgradeModalOpen(true);
-      return;
-    }
 
     try {
       const response = await fetch(`/api/chats/${selectedChat.id}/send`, {
@@ -709,19 +696,6 @@ export function Chats() {
       return;
     }
 
-    if (isAtLimit) {
-      setUpgradeReason("conversation_limit");
-      if (subscription?.limits) {
-        setUpgradeLimitInfo({
-          limit: subscription.limits.conversationsLimit,
-          used: subscription.limits.conversationsUsed,
-          planName: subscription.limits.planName,
-          resetDate: subscription.limits.conversationUsagePeriodEnd || subscription.subscription?.currentPeriodEnd || null,
-        });
-      }
-      setUpgradeModalOpen(true);
-      return;
-    }
 
     try {
       const response = await fetch(`/api/chats/${selectedChat.id}/send`, {

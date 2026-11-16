@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, X } from "lucide-react";
 import { useState } from "react";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
@@ -12,6 +13,7 @@ interface UsageWarningBannerProps {
 }
 
 export function UsageWarningBanner({ conversationsUsed, conversationsLimit, planName }: UsageWarningBannerProps) {
+  const { t } = useTranslation();
   const [dismissed, setDismissed] = useState(false);
   const { data: subscription } = useSubscription();
   const shopHint = useShopifyShopHint();
@@ -31,6 +33,7 @@ export function UsageWarningBanner({ conversationsUsed, conversationsLimit, plan
           ? "bg-red-50 border-b border-red-200" 
           : "bg-amber-50 border-b border-amber-200"
       }`}
+      title={t("metaQuota.policy")}
       data-testid="banner-usage-warning"
     >
       <div className="flex items-center gap-3">

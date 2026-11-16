@@ -786,7 +786,6 @@ export async function registerRoutes(
             unread: 0,
             messages: [],
           });
-          await subscriptionService.incrementConversationUsage(req.user.id);
           imported++;
         } catch (err) {
           console.error("Error importing contact:", err);
@@ -899,7 +898,6 @@ export async function registerRoutes(
       }
 
       const chat = await storage.createChat(validated);
-      await subscriptionService.incrementConversationUsage(req.user.id);
       res.status(201).json(chat);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -9213,6 +9211,8 @@ export async function registerRoutes(
 
         const channelConnections = deriveAdminUserChannelConnections({
           user: {
+            widgetSettings: user.widgetSettings,
+            widgetPublicId: user.widgetPublicId,
             whatsappProvider: user.whatsappProvider,
             metaConnected: user.metaConnected,
             metaIntegrationStatus: user.metaIntegrationStatus,
@@ -9234,6 +9234,13 @@ export async function registerRoutes(
           emailMailbox: pickAdminEmailMailbox(mailboxesByUserId.get(user.id) ?? []),
         });
 
+        const settings = await storage.getAiSettings(user.id);
+        const { isWebchatServerAiUnattendedEligible } = await import("./webchatServerAiRollout");
+        const aiConfigured = settings?.aiMode === "full_auto" || settings?.aiMode === "auto";
+        channelConnections.aiChatbot = {
+          state: aiConfigured && !!limits?.hasAIBrain && channelConnections.website?.state === "connected" && isWebchatServerAiUnattendedEligible(user.id) ? "connected" : "disconnected",
+          tooltip: `Website AI Chatbot: mode=${settings?.aiMode || "off"}; access=${!!limits?.hasAIBrain}; rollout=${isWebchatServerAiUnattendedEligible(user.id)}`,
+        };
         return {
           id: user.id,
           name: user.name,
@@ -9264,6 +9271,8 @@ export async function registerRoutes(
           openTicketCount: openTickets.length,
           totalTicketCount: userTickets.length,
           latestTicket: openTickets[0] || null,
+          // Historical threads and shadow session counts are deliberately distinct.
+          metaQuota: limits?.metaQuota,
           // Usage
           conversationsUsed,
           conversationsLimit,

@@ -177,6 +177,7 @@ interface AdminUser {
   totalTicketCount: number;
   latestTicket: any | null;
   // Conversation usage (same definition as plan limits)
+  metaQuota?: { available: boolean; sessions: number | null; threads: number | null; websiteLastInbound: string | null; enforced: boolean };
   conversationsUsed?: number;
   conversationsLimit?: number;
   // AI Brain / Growth Engine / Stripe (same source-of-truth as /api/subscription/debug)
@@ -243,6 +244,8 @@ function AdminChannelIndicators({
     { key: "FB", ...connections.facebook },
     { key: "IG", ...connections.instagram },
     { key: "EM", ...connections.email },
+    { key: "Web", ...(connections.website || { state: "disconnected" as const, tooltip: "Website Chat not configured" }) },
+    { key: "AI", ...(connections.aiChatbot || { state: "disconnected" as const, tooltip: "AI Chatbot off" }) },
   ] as const;
 
   return (
@@ -1583,7 +1586,7 @@ export function Admin() {
                       </TableHead>
                       <TableHead
                         className="w-[8%] px-1.5"
-                        title="Plan conversation usage for the current billing period (not thread count)"
+                        title="Current-period subscription usage; qualifying Meta 24-hour sessions after reviewed cutover (not thread count)"
                       >
                         Usage
                       </TableHead>
@@ -1973,6 +1976,14 @@ export function Admin() {
 
                     <div className="rounded-lg border p-3 space-y-2">
                       <div className="text-sm font-semibold text-gray-900">Usage</div>
+                      <p>Historical conversation threads: {selectedAdminUser.metaQuota?.threads ?? "Unavailable"}</p>
+                      <p>Qualifying 24-hour quota sessions: {selectedAdminUser.metaQuota?.sessions ?? "Unavailable"} ({selectedAdminUser.metaQuota?.enforced ? "current-period accounting" : "shadow — partial coverage"})</p>
+                      <p>Website widget last inbound: {selectedAdminUser.metaQuota?.websiteLastInbound || "No recorded activity"}</p>
+                      <p>Meta messaging charges are billed separately. Templates without a customer reply do not consume subscription sessions.</p>
+                      <p>Historical conversation threads: {selectedAdminUser.metaQuota?.threads ?? "Unavailable"}</p>
+                      <p>Qualifying 24-hour quota sessions: {selectedAdminUser.metaQuota?.sessions ?? "Unavailable"} ({selectedAdminUser.metaQuota?.enforced ? "current-period accounting" : "shadow — partial coverage"})</p>
+                      <p>Website widget last inbound: {selectedAdminUser.metaQuota?.websiteLastInbound || "No recorded activity"}</p>
+                      <p>Meta messaging charges are separate. Templates without replies do not consume subscription sessions.</p>
                       <div className="text-sm text-gray-700">
                         Conversation usage:{" "}
                         <span className="font-medium">

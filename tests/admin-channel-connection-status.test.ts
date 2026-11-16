@@ -117,6 +117,17 @@ function run() {
   assert(waFbIgUnchanged.instagram.state === "connected", "IG still green");
   assert(waFbIgUnchanged.email.state === "disconnected", "disconnected mailbox is not EM-connected");
 
+  const website = deriveAdminUserChannelConnections({
+    user: { widgetSettings: { enabled:true, allowedOrigins:['https://example.test'] }, widgetPublicId:'wgt_'+'a'.repeat(48) },
+    channelSettings: [],
+  });
+  assert(website.website?.state === 'connected', 'website readiness is independent of Meta credentials');
+  assert(website.hasAnyChannel && !website.noChannelsConnected, 'website-only accounts have a configured channel');
+  const noOrigin = deriveAdminUserChannelConnections({
+    user: { widgetSettings: { enabled:true }, widgetPublicId:'wgt_'+'a'.repeat(48) }, channelSettings: [],
+  });
+  assert(noOrigin.website?.state === 'disconnected', 'enabled flag alone is not public widget readiness');
+
   console.log("admin-channel-connection-status.test.ts OK");
 }
 

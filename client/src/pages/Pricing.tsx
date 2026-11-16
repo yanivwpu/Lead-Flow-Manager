@@ -1014,6 +1014,7 @@ export function Pricing() {
         />
 
       </div>
+      <p className="mx-auto max-w-4xl px-6 py-4 text-sm text-muted-foreground" data-testid="meta-quota-policy">{t("metaQuota.policy")}</p>
       <SiteFooter />
     </div>
   );

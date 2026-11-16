@@ -1,0 +1,38 @@
+name: Meta quota ledger validation
+on:
+  pull_request:
+    paths:
+      - 'server/metaQuota.ts'
+      - 'server/subscriptionService.ts'
+      - 'shared/usagePeriod.ts'
+      - 'migrations/20261116_meta_quota_sessions.sql'
+      - 'tests/meta-quota-sessions.test.ts'
+      - '.github/workflows/meta-quota-validation.yml'
+permissions:
+  contents: read
+jobs:
+  postgres-ledger:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: quota-local-only
+          POSTGRES_DB: meta_quota_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsx tests/meta-quota-sessions.test.ts
+        env:
+          META_QUOTA_TEST_DATABASE_URL: postgresql://postgres:quota-local-only@127.0.0.1:5432/meta_quota_test
+      - run: npx tsx tests/admin-conversation-usage-and-email.test.ts
+      - run: npx tsx --test tests/public-product-facts.test.ts tests/admin-channel-connection-status.test.ts tests/webchat-ai-auto-reply-race.test.ts tests/webchat-ai-generation-guard.test.ts tests/trial-downgrade-entitlement-enforcement.test.ts
+        env:
+          DATABASE_URL: postgresql://postgres:quota-local-only@127.0.0.1:5432/meta_quota_test
