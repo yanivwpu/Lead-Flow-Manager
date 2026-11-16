@@ -50,6 +50,7 @@ export class InventoryMatchesFetchError extends Error {
 export async function fetchInventoryMatches(
   contactId: string,
   options?: InventoryMatchesFetchOptions,
+  signal?: AbortSignal,
 ): Promise<InventoryMatchesResponse> {
   const params = new URLSearchParams();
   const offset = options?.offset ?? 0;
@@ -66,6 +67,7 @@ export async function fetchInventoryMatches(
   const res = await fetch(
     `/api/contacts/${contactId}/inventory-matches?${params.toString()}`,
     {
+      signal,
       credentials: "include",
       cache: "no-store",
     },

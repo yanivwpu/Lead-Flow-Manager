@@ -209,6 +209,8 @@ const originals = {
 
 (subscriptionService as any).getUserLimits = async () => ({ workflowsEnabled: true });
 (storage as any).getContact = async () => ({
+  userId: "user-1",
+  buyerPreferenceProfile: { schemaVersion: 1, profileStatus: "empty", agentConfirmedAt: "2026-11-16T00:00:00Z" },
   id: "contact-1",
   pipelineStage: "New Lead",
   lastIncomingAt,

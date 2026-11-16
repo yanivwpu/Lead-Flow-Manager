@@ -77,11 +77,11 @@ assert(
 );
 
 assert(
-  shouldShowCopilotInventoryForContact({
+  !shouldShowCopilotInventoryForContact({
     inventoryStatus: { canUse: true, rgeInstalled: true } as any,
     customFields: { leadType: "buyer" },
   }),
-  "inventory for buyer lead",
+  "inferred buyer label alone does not enable inventory",
 );
 assert(
   !shouldShowCopilotInventoryForContact({
@@ -97,11 +97,11 @@ const pompanoPrefs = {
 } as const;
 
 assert(
-  shouldShowCopilotInventoryForContact({
+  !shouldShowCopilotInventoryForContact({
     inventoryStatus: { canUse: true, rgeInstalled: true } as any,
     buyerPreferenceProfile: pompanoPrefs,
   }),
-  "inventory when prefs have match criteria",
+  "unsupported preferences alone do not enable inventory",
 );
 assert(
   !shouldShowCopilotInventoryForContact({

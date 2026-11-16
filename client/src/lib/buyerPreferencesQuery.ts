@@ -1,3 +1,4 @@
+import { hasVerifiedContactEligibilityResponse } from "@shared/inventoryContactEligibility";
 import { useQuery } from "@tanstack/react-query";
 import type { BuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import type { BuyerPreferenceChip } from "@shared/buyerPreferenceDisplay";
@@ -6,6 +7,7 @@ import { setBuyerMatchingTraceId } from "./buyerMatchingTraceStore";
 
 export type BuyerPreferencesApiResponse = {
   eligible: boolean;
+  eligibilityVersion?: number;
   reason?: string;
   profile: BuyerPreferenceProfile;
   rawProfile?: unknown;
@@ -47,7 +49,7 @@ export function usePersistedBuyerPreferences(contactId: string | null | undefine
     data,
     profile,
     chips: data?.chips ?? [],
-    eligible: data?.eligible ?? false,
+    eligible: hasVerifiedContactEligibilityResponse(data),
     buyerMatchingTraceId: data?.buyerMatchingTraceId,
     isLoading,
     isFetched,

@@ -65,6 +65,8 @@ export const buyerPreferenceProfileSchema = z
   .object({
     schemaVersion: z.literal(BUYER_PREFERENCE_SCHEMA_VERSION),
     profileStatus: z.enum(["empty", "partial", "ready"]).default("empty"),
+    /** Set only by the authenticated manual preference-edit path. */
+    agentConfirmedAt: z.string().optional(),
     lastExtractedAt: z.string().optional(),
     lastInboundAt: z.string().optional(),
     targetAreas: preferenceFieldSchema(z.array(z.string())).optional(),
@@ -100,6 +102,7 @@ export type BuyerPreferenceProfile = z.infer<typeof buyerPreferenceProfileSchema
 
 export const buyerPreferenceExtractionPatchSchema = buyerPreferenceProfileSchema
   .omit({
+    agentConfirmedAt: true,
     schemaVersion: true,
     profileStatus: true,
     lastExtractedAt: true,

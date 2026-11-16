@@ -1,3 +1,4 @@
+import { isInventoryContactEligible } from "./inventoryContactEligibility";
 import type { InventoryListing } from "@shared/schema";
 import type { InventoryMatchesResponse, InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
 import {
@@ -183,6 +184,9 @@ export async function findMatchingListingsForContact(
     };
   }
 
+  if (!(await isInventoryContactEligible(contact, readBuyerPreferenceProfile(contact)))) {
+    return { eligible: false, reason: "contact_intent_ineligible", matchCount: 0, matches: [] };
+  }
   const savedListingIds = await listSavedListingIdsForContact(userId, contactId);
   const profile =
     (await loadPersistedBuyerPreferenceProfile(contactId)) ??
