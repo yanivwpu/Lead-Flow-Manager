@@ -66,7 +66,7 @@ export interface UserLimits {
   chatbotEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean;
-  /** Start of the current subscription quota period (Stripe or UTC month). */
+  /** Meta customer-service sessions in the current subscription quota period (Stripe or UTC month). */
   conversationUsagePeriodStart: Date;
   /** Exclusive end of the current conversation usage window. */
   conversationUsagePeriodEnd: Date;
