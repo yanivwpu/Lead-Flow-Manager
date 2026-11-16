@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 const dashboard=readFileSync("client/src/pages/EcommerceGrowthEngineDashboard.tsx","utf8");
 const catalog=readFileSync("client/src/components/ShopifyCatalog.tsx","utf8");
 const activation=readFileSync("server/ecommerceMerchantActivationRoutes.ts","utf8");
+const privatePilot=readFileSync("client/src/lib/ecommercePilot.tsx","utf8");
+const consent=readFileSync("client/src/components/ecommerce/ShopifyConsentEnrollment.tsx","utf8");
 
 test("merchant dashboard reuses existing authenticated catalog and shopping components, without new sending",()=>{
  assert.match(dashboard,/import \{ ShopifyCatalog \} from "@\/components\/ShopifyCatalog"/);
@@ -70,4 +72,13 @@ test("cart recovery displays only existing owner-scoped checkout observation agg
  assert.ok(dashboard.includes("activation.data?.recoveryObservations"));
  for(const label of ["Detected checkouts","Checkouts detectados","תשלומים שזוהו"])
    assert.ok(dashboard.includes(label));
+});
+
+
+test("denied Shopify private setup requests do not produce repeated background 404/409 polling",()=>{
+ assert.match(privatePilot,/staleTime: 60_000/);
+ assert.match(privatePilot,/refetchOnWindowFocus: false/);
+ assert.match(privatePilot,/response.status === 401 \|\| response.status === 404/);
+ assert.match(consent,/current\.state\.status === 'error' \? false : 15_000/);
+ assert.match(consent,/retry: false/);
 });
