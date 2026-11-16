@@ -84,11 +84,11 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
           onChange={e => setDraft({ ...draft, locale: e.target.value as ConsentLocale })}>
           <option value="en">English</option><option value="es">Español</option><option value="he">עברית</option>
         </select></label>
-        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-100/70 p-3 md:grid-cols-2 sm:p-4">{CONSENT_PURPOSES.map((purpose, i) => {
+        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-2 sm:p-4">{CONSENT_PURPOSES.map((purpose, i) => {
           const row = draft.purposes[purpose], committed = data.rows.find(r => r.purpose === purpose);
           const shareable = !dirty && committed?.link && committed.notice;
           const asset = `${committed?.notice}\n${WHATSAPP_CONSENT_PHRASES[purpose]}\n${committed?.link}`;
-          return <fieldset key={purpose} className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${row.selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-slate-100'}`} data-testid={`enroll-${purpose}`}>
+          return <fieldset key={purpose} className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${row.selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-white'}`} data-testid={`enroll-${purpose}`}>
             <legend className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-950">{CONSENT_LABELS[lang][i]}</legend>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={row.selected} disabled={saving}
               onChange={e => setDraft({ ...draft, purposes: { ...draft.purposes, [purpose]: { ...row, selected: e.target.checked } } })}/>{t.select}</label>
