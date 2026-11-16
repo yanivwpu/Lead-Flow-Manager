@@ -166,12 +166,15 @@ export const PUBLIC_PRODUCT_FACTS = {
 export const PUBLIC_REALTOR_GROWTH_ENGINE_REQUIREMENT = REALTOR_GROWTH_ENGINE_REQUIRES_PRO;
 
 /**
- * Matches enforcement: quota increments when a new conversation thread is
- * created, not for later messages in that thread. The counter uses an active
- * billing period when available and otherwise the UTC calendar month.
+ * The WhachatCRM 50/2,000 subscription quota is NOT Meta's provider billing:
+ * only a new customer-initiated WhatsApp, Facebook Messenger, or Instagram
+ * 24-hour service window counts. Customer inbound messages extend a still-open
+ * window. Sending a template alone, continuing a thread inside an open window,
+ * Website Chat/AI bot, SMS, Telegram, email, Shopify events, and CRM sync do
+ * not consume a unit. Meta's own template fees remain separate.
  */
 export const ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION =
-  "Active-conversation usage increases when WhachatCRM creates a new WhatsApp, Instagram, Facebook Messenger, SMS, Website Chat, or Telegram messaging thread; when a Calendly booking event creates a new thread through the same inbox handler; when a WhatsApp campaign or template send creates its thread; or when a legacy chat is created or imported. Additional messages in an existing thread do not add another conversation. Email mailbox threads, GoHighLevel sync conversations, and Shopify or WooCommerce event conversations do not increment this usage. The usage period follows your active billing period when available; otherwise it follows the UTC calendar month.";
+  "One plan conversation is a customer-initiated 24-hour WhatsApp, Facebook Messenger, or Instagram messaging session. Another unit is counted only after the previous customer-service window has closed and the customer messages again, even inside an existing Inbox thread. New inbound messages within an open window, outgoing messages, and template sends alone do not add units. Website Chat and website AI chatbot conversations, email, SMS, Telegram, Shopify events, and CRM sync do not use this quota. Meta provider messaging fees are separate. The plan quota resets on the active billing period, or on the UTC month if there is no billing period.";
 
 export function isGenerallyAvailableProduct(fact: PublicProductFact): boolean {
   return fact.implementation === "implemented" && fact.availability === "public";

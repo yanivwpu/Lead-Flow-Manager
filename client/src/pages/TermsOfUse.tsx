@@ -96,8 +96,8 @@ export function TermsOfUse() {
           <ul className="list-disc list-inside text-gray-600 mb-4 space-y-2">
             <li>Subscription fees are billed monthly via Stripe</li>
             <li>An "active conversation" follows this rule: {ACTIVE_CONVERSATION_PUBLIC_DESCRIPTION}</li>
-            <li>Unlimited messages can be sent within a conversation — the count stays the same</li>
-            <li>When you reach your conversation limit, outbound messages are paused until you upgrade</li>
+            <li>Customer messages inside an open Meta 24-hour customer-service window do not increase the subscription count; a new window may count even within the same Inbox thread.</li>
+            <li>Eligible Meta messaging is subject to plan usage limits. Approved templates and provider messaging fees are separately governed by Meta and connected providers.</li>
             <li>Plans can be upgraded or downgraded at any time</li>
             <li>Prices are subject to change with 30 days notice</li>
             <li>All fees are non-refundable unless required by law</li>

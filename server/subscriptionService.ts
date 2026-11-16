@@ -26,7 +26,7 @@ import {
   type StripeBillingInterval,
 } from "./stripePlanPriceIds";
 import { resolveUsagePeriodFromDates } from "@shared/usagePeriod";
-import { nextConversationUsageAfterPeriodCheck } from "@shared/conversationUsagePeriod";
+import { countMetaCustomerServiceWindows } from "./metaConversationQuota";
 import {
   growthEngineEligibleForPlan,
   resolveAIBrainAccess,
@@ -66,7 +66,7 @@ export interface UserLimits {
   chatbotEnabled: boolean;
   isAtLimit: boolean;
   isAtWarning: boolean;
-  /** Start of the current conversation usage window (Stripe or UTC month). */
+  /** Meta customer-service sessions in the current subscription quota period (Stripe or UTC month). */
   conversationUsagePeriodStart: Date;
   /** Exclusive end of the current conversation usage window. */
   conversationUsagePeriodEnd: Date;
@@ -133,22 +133,14 @@ class SubscriptionService {
       user.currentPeriodEnd ? new Date(user.currentPeriodEnd) : null,
       now,
     );
-    const usageDecision = nextConversationUsageAfterPeriodCheck({
-      storedPeriodStart: user.conversationUsagePeriodStart
-        ? new Date(user.conversationUsagePeriodStart)
-        : null,
-      canonicalPeriodStart: usagePeriod.periodStart,
-      conversationsUsed: user.monthlyConversations || 0,
-      conversationsLimit: planLimits.conversationsPerMonth,
-    });
-    let conversationsUsed = usageDecision.conversationsUsed;
-    if (usageDecision.persistPeriodStart || usageDecision.resetCounter) {
-      await storage.updateUser(userId, {
-        conversationUsagePeriodStart: usagePeriod.periodStart,
-        ...(usageDecision.resetCounter ? { monthlyConversations: 0 } : {}),
-      });
-    }
-    
+    // Only new customer-initiated Meta 24-hour windows consume a plan unit.
+    // Templates, outgoing messages, website chat and other channels do not.
+    const conversationsUsed = await countMetaCustomerServiceWindows(
+      userId,
+      usagePeriod.periodStart,
+      usagePeriod.periodEnd,
+    );
+
     const conversationsLimit = planLimits.conversationsPerMonth;
     const conversationsRemaining = Math.max(0, conversationsLimit - conversationsUsed);
     const isAtLimit = conversationsRemaining <= 0;
@@ -527,12 +519,6 @@ class SubscriptionService {
   async trackConversationWindow(userId: string, _chatId: string | number, _whatsappPhone: string): Promise<void> {
   }
 
-  async incrementConversationUsage(userId: string): Promise<void> {
-    // Apply period reset first so trial-only Free accounts cannot stay locked.
-    await this.getUserLimits(userId);
-    // Atomic increment — never read-modify-write (avoids lost updates and double-set races).
-    await storage.incrementMonthlyConversations(userId);
-  }
 }
 
 export const subscriptionService = new SubscriptionService();

@@ -786,7 +786,6 @@ export async function registerRoutes(
             unread: 0,
             messages: [],
           });
-          await subscriptionService.incrementConversationUsage(req.user.id);
           imported++;
         } catch (err) {
           console.error("Error importing contact:", err);
@@ -882,24 +881,7 @@ export async function registerRoutes(
         userId: req.user.id,
       });
 
-      // Enforce monthly conversation limit before creating
-      const limitCheck = await subscriptionService.checkAndDecrementConversation(req.user.id);
-      if (!limitCheck.allowed) {
-        const limits = await subscriptionService.getUserLimits(req.user.id);
-        return res.status(429).json({ 
-          code: "CONVERSATION_LIMIT",
-          error: "You've reached your monthly conversation limit",
-          message: `Your ${limits?.planName || "current"} plan includes ${limits?.conversationsLimit ?? 0} conversations per month. Upgrade your plan or wait until your next billing cycle.`,
-          limit: limits?.conversationsLimit ?? 0,
-          used: limits?.conversationsUsed ?? 0,
-          planName: limits?.planName || "current",
-          remaining: 0,
-          upgradeRequired: true 
-        });
-      }
-
       const chat = await storage.createChat(validated);
-      await subscriptionService.incrementConversationUsage(req.user.id);
       res.status(201).json(chat);
     } catch (error) {
       if (error instanceof z.ZodError) {

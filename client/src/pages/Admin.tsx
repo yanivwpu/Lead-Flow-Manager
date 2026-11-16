@@ -1583,7 +1583,7 @@ export function Admin() {
                       </TableHead>
                       <TableHead
                         className="w-[8%] px-1.5"
-                        title="Plan conversation usage for the current billing period (not thread count)"
+                        title="Customer-initiated 24-hour WhatsApp, Facebook Messenger and Instagram service windows during the current billing period. Website Chat and template sends alone do not count."
                       >
                         Usage
                       </TableHead>
