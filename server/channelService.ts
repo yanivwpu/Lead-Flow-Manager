@@ -657,7 +657,6 @@ class ChannelService {
         channel: targetChannel,
         status: 'open',
       });
-      await subscriptionService.incrementConversationUsage(userId);
     }
 
     if (enforceWhatsAppCustomerServiceWindow === true && targetChannel === 'whatsapp') {
@@ -894,7 +893,6 @@ class ChannelService {
           channel: fallbackChannel,
           status: 'open',
         });
-        await subscriptionService.incrementConversationUsage(userId);
       }
 
       const fallbackResult = await this.dispatchMessage(userId, fallbackChannel, {
@@ -1449,7 +1447,6 @@ class ChannelService {
       });
       isNewConversation = true;
       console.log(`[Inbox Worker] Conversation created — conversationId: ${conversation.id}`);
-      await subscriptionService.incrementConversationUsage(userId);
     } else {
       console.log(`[Inbox Worker] Existing conversation found — conversationId: ${conversation.id}`);
       const priorRe = parseConversationReEngagement(conversation.reEngagement);
@@ -2436,7 +2433,6 @@ class ChannelService {
         channelAccountId: phoneNumberId,
         status: "open",
       });
-      await subscriptionService.incrementConversationUsage(userId);
     }
 
     let persistedMedia: {
