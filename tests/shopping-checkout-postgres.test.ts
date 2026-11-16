@@ -81,16 +81,16 @@ test("durable duplicate suppression across workers; encrypted reuse; no automati
   assert.deepEqual(await other.run(safe,async()=>receipt),receipt);
  }finally{await f.cleanup();}
 });
-test("runtime rollout stays locked; private Test Chat has only a pure preview",()=>{
+test("runtime rollout requires merchant opt-in; private Test Chat has only a pure preview",()=>{
  assert.equal(shoppingSettingsSchema.parse({}).checkoutEnabled,false);
- assert.equal(CHECKOUT_ROLLOUT_APPROVED,false);
+ assert.equal(CHECKOUT_ROLLOUT_APPROVED,true);
  assert.doesNotMatch(readFileSync("server/aiTestChat/generate.ts","utf8"),/checkout\/|cartCreate|createShopifyCheckoutProvider/);
 });
 
 test("tokenless merchant authorization depends on owned active installation and Pro; no credentials disclosed or subscriptions changed",async()=>{
  const f=await fixture();try {
   const before=await f.db.select().from(schema.users);
-  assert.equal((await checkoutAuthorization(f.db,"tenant-a",true)).status,"awaiting_review");
+  assert.equal((await checkoutAuthorization(f.db,"tenant-a",true)).status,"ready");
   assert.equal((await checkoutAuthorization(f.db,"tenant-a",false,true)).status,"pro_required");
   assert.equal((await checkoutAuthorization(f.db,"missing",true,true)).status,"connect_shopify");
   const ready=await checkoutAuthorization(f.db,"tenant-a",true,true);
