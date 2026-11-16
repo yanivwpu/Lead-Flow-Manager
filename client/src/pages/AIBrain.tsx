@@ -1,4 +1,5 @@
 import { AiTestChat } from "@/components/AiTestChat";
+import { useEcommercePilot } from "@/lib/ecommercePilot";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -190,6 +191,8 @@ function LockedFeatureTeaser({
 function AIBrainContent() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  // Keep internal test conversations out of merchant-facing AI Brain.
+  const { available: privatePilot } = useEcommercePilot();
   const shopHint = useShopifyShopHint();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
   const aiBrainHighlights = useMemo(
@@ -625,7 +628,7 @@ function AIBrainContent() {
             <div className="min-w-0 space-y-2 pt-0.5">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-violet-600/90">WhachatCRM</p>
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-[1.65rem]">AI workspace</h1>
-              {effectiveHasAIBrain && <AiTestChat/>}
+              {effectiveHasAIBrain && privatePilot && <AiTestChat/>}
               <div className="max-w-lg text-sm leading-relaxed text-slate-600">
                 <p>
                   <span className="font-medium text-slate-900">AI Assist</span> is included with your plan — smart
