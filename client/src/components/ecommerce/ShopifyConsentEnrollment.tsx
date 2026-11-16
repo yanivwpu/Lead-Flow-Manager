@@ -62,8 +62,8 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
     !data.phoneAvailable ? t.phone : !captureRows.length ? t.selectPurpose :
     !captureRows.some(row => row.link && row.captureReady) ?
       (captureReason ? (blockerCopy[lang] as Record<string, string>)[captureReason] : undefined) ?? t.captureBlocked : undefined;
-  return <section lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} data-testid="shopify-consent-enrollment" className="space-y-4 rounded-xl border bg-white p-5">
-    <h2 className="font-semibold">{t.title}</h2>
+  return <section lang={lang} dir={lang === 'he' ? 'rtl' : 'ltr'} data-testid="shopify-consent-enrollment" className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 shadow-sm sm:p-6">
+    <h2 className="text-base font-semibold text-slate-950">{t.title}</h2>
     <p className="text-sm text-slate-600">{t.intro}</p>
     {!data ? <p role="status">{t.unavailable}</p> : <>
       {!data.connectionCurrent && data.draft && <p role="status">{t.stale}</p>}
@@ -84,22 +84,22 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
           onChange={e => setDraft({ ...draft, locale: e.target.value as ConsentLocale })}>
           <option value="en">English</option><option value="es">Español</option><option value="he">עברית</option>
         </select></label>
-        <div className="grid gap-3 md:grid-cols-2">{CONSENT_PURPOSES.map((purpose, i) => {
+        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-100/70 p-3 md:grid-cols-2 sm:p-4">{CONSENT_PURPOSES.map((purpose, i) => {
           const row = draft.purposes[purpose], committed = data.rows.find(r => r.purpose === purpose);
           const shareable = !dirty && committed?.link && committed.notice;
           const asset = `${committed?.notice}\n${WHATSAPP_CONSENT_PHRASES[purpose]}\n${committed?.link}`;
-          return <fieldset key={purpose} className="space-y-2 rounded border p-3" data-testid={`enroll-${purpose}`}>
-            <legend className="px-1 font-medium">{CONSENT_LABELS[lang][i]}</legend>
-            <label className="flex gap-2 text-sm"><input type="checkbox" checked={row.selected} disabled={saving}
+          return <fieldset key={purpose} className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${row.selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-slate-100'}`} data-testid={`enroll-${purpose}`}>
+            <legend className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-950">{CONSENT_LABELS[lang][i]}</legend>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={row.selected} disabled={saving}
               onChange={e => setDraft({ ...draft, purposes: { ...draft.purposes, [purpose]: { ...row, selected: e.target.checked } } })}/>{t.select}</label>
             {row.selected && <>
-              <label className="block text-sm">{t.extra}<textarea maxLength={500} className="mt-1 w-full rounded border p-2" value={row.additionalText} disabled={saving}
+              <label className="block text-sm">{t.extra}<textarea maxLength={500} className="mt-2 min-h-20 w-full rounded-md border border-slate-300 bg-white p-2.5 text-sm" value={row.additionalText} disabled={saving}
                 onChange={e => setDraft({ ...draft, purposes: { ...draft.purposes, [purpose]: { ...row, additionalText: e.target.value } } })}/></label>
-              <p lang={draft.locale} dir={draft.locale === 'he' ? 'rtl' : 'ltr'} className="whitespace-pre-wrap text-sm">{enrollmentNotice(data.shop, purpose, draft)}</p>
-              <code dir="ltr" className="block break-words text-xs">{WHATSAPP_CONSENT_PHRASES[purpose]}</code>
+              <p lang={draft.locale} dir={draft.locale === 'he' ? 'rtl' : 'ltr'} className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-white/85 p-3 text-sm leading-relaxed text-slate-700">{enrollmentNotice(data.shop, purpose, draft)}</p>
+              <code dir="ltr" className="block break-words rounded-md bg-slate-200/70 px-2 py-1 text-xs text-slate-700">{WHATSAPP_CONSENT_PHRASES[purpose]}</code>
               {shareable ? <>
-                <input aria-label={t.share} readOnly dir="ltr" className="w-full rounded border p-2 text-xs" value={committed.link!}/>
-                <button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => {
+                <input aria-label={t.share} readOnly dir="ltr" className="w-full rounded-md border border-slate-300 bg-white p-2 text-xs" value={committed.link!}/>
+                <button type="button" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50" onClick={() => {
                   setCopyFailed(false); void navigator.clipboard.writeText(asset).then(() => setCopied(purpose)).catch(() => setCopyFailed(true));
                 }}>{copied === purpose ? t.copied : t.share}</button>
               </> : <p className="text-xs text-amber-800">{t.notShared}</p>}
@@ -108,10 +108,10 @@ export function ShopifyConsentEnrollmentPanel({ locale, data, onSave, saving = f
         })}</div>
       </form>
       {copyFailed && <p role="alert">{t.copyError}</p>}
-      <h3 className="font-semibold">{t.readiness}</h3>
-      <div className="overflow-x-auto"><table className="w-full text-start text-sm" data-testid="consent-readiness"><thead><tr>
+      <h3 className="pt-2 text-base font-semibold text-slate-950">{t.readiness}</h3>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm"><table className="w-full text-start text-sm" data-testid="consent-readiness"><thead className="bg-slate-100 text-slate-700"><tr>
         {[t.purpose, t.templates, t.merchant, t.consent, t.release].map(label => <th key={label} className="p-2 text-start">{label}</th>)}
-      </tr></thead><tbody>{data.rows.map(row => <tr key={row.purpose} data-testid={`readiness-${row.purpose}`} className="border-t">
+      </tr></thead><tbody>{data.rows.map(row => <tr key={row.purpose} data-testid={`readiness-${row.purpose}`} className="border-t border-slate-200 hover:bg-slate-50">
         <th scope="row" className="p-2 text-start">{CONSENT_LABELS[lang][CONSENT_PURPOSES.indexOf(row.purpose)]}<span className="block text-xs font-normal">{row.selected ? t.selected : t.notSelected}</span>
           <details className="mt-1 text-xs font-normal"><summary>{blockerCopy[lang].title}</summary><ul className="list-inside list-disc">{[...new Set(row.blockers)].map(reason =>
             <li key={reason}>{(blockerCopy[lang] as Record<string, string>)[reason] ?? t.blocked}</li>)}</ul></details></th>
