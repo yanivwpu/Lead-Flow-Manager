@@ -1,5 +1,7 @@
 # RGE matches on unrelated Inbox contacts
 
+Follow-up review and corrections are documented in `rge-focused-regression-review.md`; its workflow scope and usable confirmation UI supersede the initial implementation description below.
+
 Investigation: 2026-11-16. Local review only; no production writes, messages, global setting changes, push or deployment.
 
 ## Confirmed production evidence

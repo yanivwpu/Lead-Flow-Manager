@@ -188,6 +188,7 @@ export function registerContactRoutes(app: Express): void {
 
       res.json({
         eligible: gate.ok,
+        eligibilityVersion: 2,
         reason: gate.reason,
         profile,
         rawProfile,
@@ -224,7 +225,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       const patch = buildExplicitPatchFromSimpleBody(req.body || {});
-      if (!Object.keys(patch).length) {
+      if (!Object.keys(patch).length && req.body?.confirmRealEstateEnrollment !== true) {
         return res.status(400).json({ error: "No valid preference fields in body" });
       }
 

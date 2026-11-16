@@ -1,3 +1,4 @@
+import { hasVerifiedContactEligibilityResponse } from "@shared/inventoryContactEligibility";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { scheduleInventoryMatchesRefetch } from "@/lib/inventoryMatchesQuery";
@@ -34,10 +35,13 @@ interface BuyerPreferencesPanelProps {
   compact?: boolean;
   /** When true, hide refresh/edit controls (chips only). */
   readOnly?: boolean;
+  /** Explicit agent setup action, with no inferred preference cards shown. */
+  manualSetupOnly?: boolean;
 }
 
 type BuyerPreferencesApiResponse = {
   eligible?: boolean;
+  eligibilityVersion?: number;
   reason?: string;
   profile?: unknown;
   rawProfile?: unknown;
@@ -77,6 +81,7 @@ export function BuyerPreferencesPanel({
   onUpdated,
   compact = false,
   readOnly = false,
+  manualSetupOnly = false,
 }: BuyerPreferencesPanelProps) {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
@@ -126,9 +131,9 @@ export function BuyerPreferencesPanel({
   const displayChips =
     resolvedChips.length > 0 ? resolvedChips : stickyChipsRef.current;
 
-  const eligible = data?.eligible ?? false;
+  const eligible = hasVerifiedContactEligibilityResponse(data);
 
-  const profileForEdit = rawForDisplay;
+  const profileForEdit = manualSetupOnly ? undefined : rawForDisplay;
 
   const openEdit = useCallback(() => {
     const p = profileForEdit as Record<string, { value?: unknown }> | undefined;
@@ -144,7 +149,7 @@ export function BuyerPreferencesPanel({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = {};
+      const body: Record<string, unknown> = { confirmRealEstateEnrollment: true };
       const areaList = areas.split(",").map((s) => s.trim()).filter(Boolean);
       if (areaList.length) body.targetAreas = areaList;
       const max = Number(budgetMax.replace(/[^0-9.]/g, ""));
@@ -205,9 +210,9 @@ export function BuyerPreferencesPanel({
 
   const hasKnownChips = displayChips.length > 0;
   const showEligible = isFetched ? eligible : hasKnownChips;
-  const showControls = !readOnly && !compact;
+  const showControls = !readOnly;
 
-  if (isFetched && !eligible) return null;
+  if (isFetched && !eligible && !manualSetupOnly) return null;
   if (!contactId) return null;
 
   const showListening = isFetched && showEligible && !hasKnownChips && !isLoading;
@@ -217,6 +222,11 @@ export function BuyerPreferencesPanel({
       className={cn(compact ? "mt-0" : "mt-3")}
       data-testid="buyer-preferences-panel"
     >
+      {manualSetupOnly ? (
+        <button type="button" className="text-xs text-gray-500 hover:text-violet-700" onClick={openEdit} data-testid="button-setup-property-matching">
+          Set up property matching…
+        </button>
+      ) : <>
       <div className={cn("flex items-center justify-between", compact ? "mb-0.5" : "mb-1")}>
         <span
           className={cn(
@@ -278,10 +288,13 @@ export function BuyerPreferencesPanel({
         <p className={cn("text-gray-400 italic", compact ? "text-[10px]" : "text-[11px]")}>Loading…</p>
       ) : null}
 
+      </>}
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-sm">Edit buyer preferences</DialogTitle>
+            <DialogTitle className="text-sm">{manualSetupOnly ? "Set up property matching" : "Edit buyer preferences"}</DialogTitle>
+            <p className="text-xs text-gray-500">Saving confirms this contact is seeking real estate and enables property matching for this contact.</p>
           </DialogHeader>
           <div className="space-y-3 py-1">
             <div>
@@ -350,6 +363,7 @@ export function BuyerPreferencesPanel({
               <Input className="h-8 text-xs mt-1" value={mustHaves} onChange={(e) => setMustHaves(e.target.value)} />
             </div>
           </div>
+          {saveMutation.error && <p role="alert" className="text-xs text-red-600">{saveMutation.error.message}</p>}
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(false)}>
               Cancel
@@ -359,7 +373,7 @@ export function BuyerPreferencesPanel({
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
             >
-              {saveMutation.isPending ? "Saving…" : "Save"}
+              {saveMutation.isPending ? "Saving…" : "Save and enable matching"}
             </Button>
           </DialogFooter>
         </DialogContent>

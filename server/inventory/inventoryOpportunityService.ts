@@ -353,6 +353,10 @@ export async function updateInventoryOpportunityStatus(
     };
   }
 
+  if (status === "saved" && !(await isInventoryContactEligible(contact))) {
+    return { ok: false, status: 403, error: "Contact has no verified property intent" };
+  }
+
   const allowed: InventoryOpportunityStatus[] = ["viewed", "saved", "dismissed"];
   if (!allowed.includes(status)) {
     return { ok: false, status: 400, error: "Invalid status" };

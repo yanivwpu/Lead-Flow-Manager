@@ -13,3 +13,8 @@ export function inventoryContactEligibility(input: AiDomainEligibilityInput & { 
     buyerIntentVerified: hasConfirmedBuyerEnrollment(input.buyerPreferenceProfile),
   }).injectInventoryContext;
 }
+
+/** Reject cached eligibility from the older workspace-only API contract. */
+export function hasVerifiedContactEligibilityResponse(data?: { eligible?: boolean; eligibilityVersion?: number } | null): boolean {
+  return data?.eligibilityVersion === 2 && data.eligible === true;
+}

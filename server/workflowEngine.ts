@@ -1,4 +1,4 @@
-import { isInventoryContactEligible, isRgeContactEligible, isRgeWorkflow } from "./inventory/inventoryContactEligibility";
+import { isInventoryContactEligible, isRgeContactEligible, requiresRgeContactIntent, requiresBuyerPropertyIntent } from "./inventory/inventoryContactEligibility";
 import { storage } from "./storage";
 import { type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
 import { subscriptionService } from "./subscriptionService";
@@ -641,8 +641,9 @@ export async function executeWorkflowActions(
   blockedReason?: string;
   sendOutcome?: WorkflowSendOutcome;
 }> {
-  if (isRgeWorkflow(workflow)) {
-    if (!contact || contact.userId !== workflow.userId || !(await isRgeContactEligible(contact))) {
+  if (requiresRgeContactIntent(workflow) || requiresBuyerPropertyIntent(workflow)) {
+    contact = contact ? await storage.getContact(contact.id) : undefined;
+    if (!contact || contact.userId !== workflow.userId || !(await (requiresBuyerPropertyIntent(workflow) ? isInventoryContactEligible(contact) : isRgeContactEligible(contact)))) {
       return { success: false, actionsExecuted: [], blockedReason: "contact_intent_ineligible", sendOutcome: "guard_skipped" };
     }
   }
@@ -1701,7 +1702,6 @@ export async function runServiceRoutingEngine(
   contact?: Contact
 ): Promise<ServiceRoutingResult> {
   const empty: ServiceRoutingResult = { offerMessage: null, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: null };
-  if (!contact || contact.userId !== userId || !(await isRgeContactEligible(contact))) return empty;
 
   try {
     const services = await getServiceRoutingConfig(userId);

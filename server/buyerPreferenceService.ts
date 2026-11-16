@@ -385,7 +385,7 @@ export async function mergeAndPersistBuyerPreferences(
   },
 ): Promise<BuyerPreferenceProfile> {
   const patchKeys = patchFieldCount(patch);
-  if (patchKeys === 0) {
+  if (patchKeys === 0 && !meta?.agentConfirmed) {
     debugBuyerPreferenceLog("llm_patch_empty", { contactId: contact.id, skipped: true });
     return (
       (await loadPersistedBuyerPreferenceProfile(contact.id)) ??

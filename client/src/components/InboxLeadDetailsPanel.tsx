@@ -2956,14 +2956,14 @@ export function InboxLeadDetailsPanel({
                   })()}
 
                   {/* C. Buyer preferences — RGE / real-estate workspace only */}
-                  {showCopilotBuyerPreferences && (
+                  {(showCopilotBuyerPreferences || (!hideGrowthEngine && inventoryStatus?.canUse)) && (
                     <div className="rounded-lg border border-violet-100 bg-violet-50/40 px-2.5 py-2">
                       <BuyerPreferencesPanel
                         contactId={contact.id}
                         initialProfile={persistedBuyerProfile}
                         onUpdated={() => onUpdateContact({})}
                         compact
-                        readOnly
+                        manualSetupOnly={!showCopilotBuyerPreferences}
                       />
                     </div>
                   )}

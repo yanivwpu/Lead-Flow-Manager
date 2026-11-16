@@ -1,6 +1,6 @@
 import { classifySellerIntent } from "@shared/sellerIntent";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
-import { hasStrongRealEstateLeadEvidence, hasVehicleContext } from "@shared/aiDomainEligibility";
+import { hasVehicleContext } from "@shared/aiDomainEligibility";
 import type { Contact } from "@shared/schema";
 import { hasConfirmedBuyerEnrollment, inventoryContactEligibility } from "@shared/inventoryContactEligibility";
 import { storage } from "../storage";
@@ -19,39 +19,50 @@ export async function isInventoryContactEligible(contact: Contact, profile?: unk
     if (!message || message.direction !== "inbound") continue;
     const conversation = await storage.getConversation(message.conversationId);
     if (conversation?.contactId === contact.id && conversation.userId === contact.userId &&
-        hasStrongRealEstateLeadEvidence(message.content)) return true;
+        inventoryContactEligibility({rgeInstalled: true, inboundText: message.content})) return true;
   }
-  const bundle = await storage.getContactWithConversations(contact.id);
-  const conversations = bundle?.conversations ?? [];
-  const histories = await Promise.all(conversations.map(async (conversation) => {
-    if (conversation.userId !== contact.userId) return [];
-    return (await storage.getMessages(conversation.id, 100))
-      .filter((message) => message.direction === "inbound")
-      .map((message) => message.content || "");
+  return contactHistoryHasEvidence(contact, (text) => inventoryContactEligibility({
+    rgeInstalled: true,
+    inboundText: text,
   }));
-  return inventoryContactEligibility({
-    rgeInstalled: true, // capability is checked separately by each entry point
-    conversationText: histories.flat().join("\n"),
-    buyerPreferenceProfile: profile,
-  });
+}
+
+async function contactHistoryHasEvidence(contact: Contact, accepts: (text: string) => boolean): Promise<boolean> {
+  const bundle = await storage.getContactWithConversations(contact.id);
+  for (const conversation of bundle?.conversations ?? []) {
+    if (conversation.userId !== contact.userId) continue;
+    // Search older pages too: legacy profiles need no new enrollment field or message reference.
+    for (let offset = 0; ; offset += 100) {
+      const page = await storage.getMessages(conversation.id, 100, offset);
+      if (page.some((m) => m.direction === "inbound" && accepts(m.content || ""))) return true;
+      if (page.length < 100) break;
+    }
+  }
+  return false;
 }
 
 /** RGE workflows also serve sellers; inventory remains buyer-only. */
 export async function isRgeContactEligible(contact: Contact): Promise<boolean> {
   if (await isInventoryContactEligible(contact, contact.buyerPreferenceProfile)) return true;
-  const bundle = await storage.getContactWithConversations(contact.id);
-  for (const conversation of bundle?.conversations ?? []) {
-    if (conversation.userId !== contact.userId) continue;
-    const messages = await storage.getMessages(conversation.id, 100);
-    if (messages.some((m) => m.direction === "inbound" &&
-      !hasVehicleContext(m.content || "") &&
-      /\b(?:home|house|property|condo|apartment|real estate|cma|listing consultation)\b/i.test(m.content || "") &&
-      classifySellerIntent({ inboundText: m.content || "" }) != null)) return true;
-  }
-  return false;
+  return contactHistoryHasEvidence(contact, (text) =>
+    !hasVehicleContext(text) && (
+      (/\b(?:home|house|property|condo|apartment|real estate|cma|listing consultation)\b/i.test(text) &&
+        classifySellerIntent({ inboundText: text }) != null) ||
+      /\b(?:connect|refer|referral|introduce)\b.{0,60}\b(?:mortgage|lender|real estate|realtor|title company)\b/i.test(text)
+    ));
 }
 
-export function isRgeWorkflow(workflow: { triggerConditions?: unknown }): boolean {
-  const conditions = workflow.triggerConditions as { templateId?: string } | null;
-  return conditions?.templateId === "realtor-growth-engine";
+/** Only automatic real-estate lead enrollment/nurture, not every workflow installed by RGE. */
+export function requiresRgeContactIntent(workflow: { triggerConditions?: unknown; actions?: unknown }): boolean {
+  const conditions = workflow.triggerConditions as { templateId?: string; templateKey?: string } | null;
+  if (conditions?.templateId !== "realtor-growth-engine") return false;
+  return ["W1", "W4", "W5", "W6"].includes(conditions.templateKey || "") ||
+    (Array.isArray(workflow.actions) && workflow.actions.some((action) =>
+      action.type === "send_message_template" && action.templateKey === "re_engagement"));
+}
+
+export function requiresBuyerPropertyIntent(workflow: { triggerConditions?: unknown; actions?: unknown }): boolean {
+  if ((workflow.triggerConditions as { templateId?: string } | null)?.templateId !== "realtor-growth-engine") return false;
+  return Array.isArray(workflow.actions) && workflow.actions.some((action) =>
+    action.type === "send_message_template" && action.templateKey === "re_engagement");
 }

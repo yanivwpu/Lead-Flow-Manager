@@ -1,3 +1,4 @@
+import { isInventoryContactEligible } from "./inventoryContactEligibility";
 import { canUseInventoryConnector } from "./inventoryGate";
 import {
   listSavedListingIdsForContact,
@@ -15,7 +16,7 @@ export async function getSavedListingIdsForContact(
   const contact = await storage.getContact(contactId);
   if (!contact || contact.userId !== userId) return null;
   const gate = await canUseInventoryConnector(userId);
-  if (!gate.ok) return [];
+  if (!gate.ok || !(await isInventoryContactEligible(contact))) return [];
   return listSavedListingIdsForContact(userId, contactId);
 }
 
@@ -30,6 +31,8 @@ export async function saveListingMatchForContact(
 
   const gate = await canUseInventoryConnector(userId);
   if (!gate.ok) return { ok: false, status: gate.reason === "feature_disabled" ? 404 : 403, error: "Inventory connector unavailable" };
+
+  if (!(await isInventoryContactEligible(contact))) return { ok: false, status: 403, error: "Contact has no verified property intent" };
 
   const listing = await getInventoryListing(userId, body.listingId);
   if (!listing) return { ok: false, status: 404, error: "Listing not found" };

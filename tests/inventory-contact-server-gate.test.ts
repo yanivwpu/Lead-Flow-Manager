@@ -32,7 +32,7 @@ try {
   assert.equal((await shouldRunBuyerPreferencePipeline("tenant-a", contact())).ok, false);
   assert.equal(await isRgeContactEligible(contact()), false);
   assert.deepEqual((await runW2QualificationEngine("tenant-a", {} as any, message, contact())).fieldUpdates, {}, "no buyer classification from unrelated thread");
-  const workflow = { userId: "tenant-a", triggerConditions: { templateId: "realtor-growth-engine" }, actions: [{type: "send_message", value: "Never send"}] } as any;
+  const workflow = { userId: "tenant-a", triggerConditions: { templateId: "realtor-growth-engine", templateKey: "W1" }, actions: [{type: "send_message", value: "Never send"}] } as any;
   assert.equal((await executeWorkflowActions(workflow, null, {}, contact())).blockedReason, "contact_intent_ineligible");
   await scheduleW2FollowUpTimers({userId: "tenant-a", contactId: "car-rental", qualificationText: "Never send", routingText: null, snapshotInboundAt: null});
   assert.equal((await processInventoryOpportunitiesAfterSync("tenant-a", [{ listingId: "listing", syncAlertStatus: "new", previousPriceCents: null, currentPriceCents: 50000000, priceReduced: false }])).createdOrUpdated, 0);

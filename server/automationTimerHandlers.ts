@@ -1,4 +1,4 @@
-import { isRgeContactEligible } from "./inventory/inventoryContactEligibility";
+import { isInventoryContactEligible } from "./inventory/inventoryContactEligibility";
 import type { AutomationTimerJob } from "@shared/schema";
 import { storage } from "./storage";
 import { sendUserWhatsAppMessage } from "./userTwilio";
@@ -32,9 +32,12 @@ export async function scheduleW2FollowUpTimers(params: {
   metaFrom?: string;
   snapshotInboundAt: Date | null;
 }): Promise<void> {
-  const { userId, contactId, qualificationText, routingText, twilioDigits, metaFrom, snapshotInboundAt } = params;
+  const { userId, contactId, routingText, twilioDigits, metaFrom, snapshotInboundAt } = params;
+  let qualificationText = params.qualificationText;
   const contact = await storage.getContact(contactId);
-  if (!contact || contact.userId !== userId || !(await isRgeContactEligible(contact))) return;
+  if (!contact || contact.userId !== userId) return;
+  if (qualificationText && !(await isInventoryContactEligible(contact))) qualificationText = null;
+  if (!qualificationText?.trim() && !routingText?.trim()) return;
   await storage.cancelPendingAutomationTimerJobsForUserContactKinds(userId, contactId, [
     "w2_qualification",
     "w2_routing",
@@ -95,7 +98,8 @@ async function sendW2Outbound(
   dedupKind: string,
 ): Promise<{ sent: boolean; skipReason?: string }> {
   const contact = await storage.getContact(payload.contactId);
-  if (!contact || contact.userId !== payload.userId || !(await isRgeContactEligible(contact))) {
+  if (!contact || contact.userId !== payload.userId ||
+      (dedupKind === "w2_qual" && !(await isInventoryContactEligible(contact)))) {
     return { sent: false, skipReason: "contact_intent_ineligible" };
   }
   const dedupKey = `${dedupKind}:${payload.userId}:${payload.contactId}:${payload.text.slice(0, 120)}`;
