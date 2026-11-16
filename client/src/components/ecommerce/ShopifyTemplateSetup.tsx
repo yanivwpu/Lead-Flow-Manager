@@ -91,8 +91,8 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
   const language = locale.split("-")[0], t = copy[language as keyof typeof copy] ?? copy.en;
   const connectionAttention=data?.rows.find(row=>['meta_credentials_expired','meta_management_permission_required','meta_connection_changed'].includes(row.reason));
   return <section lang={language} dir={language === "he" ? "rtl" : "ltr"} data-testid="shopify-template-setup"
-    className="space-y-4 rounded-xl border border-blue-100 bg-white p-5">
-    <h2 className="font-semibold text-slate-950">{t.title}</h2>
+    className="space-y-5 rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6">
+    <h2 className="text-base font-semibold text-slate-950">{t.title}</h2>
     <p className="text-sm text-slate-600">{t.detail}</p>
     {!data && <p role="status" className="text-sm text-slate-600">{t.error}</p>}
     {data && !data.available && <p role="status" className="text-sm text-slate-600">{t.rollout}</p>}
@@ -103,17 +103,17 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
       <button type="button" disabled={saving} onClick={onAuthorize} data-testid="authorize-template-setup"
         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t.working : t.authorize}</button>
     </div>}
-    {data?.authorized && <ul className="grid gap-3 sm:grid-cols-2" aria-live="polite">
+    {data?.authorized && <ul className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 sm:grid-cols-2 sm:p-4" aria-live="polite">
       {SHOPIFY_GROWTH_TEMPLATES.map((template, index) => {
         const row = data.rows.find(item => item.journey === template.journey);
         const status: ShopifySetupStatus = row?.status ?? "unavailable";
         const reasons = t.reasons as Record<string, string>;
-        return <li key={template.journey} className="space-y-1 rounded-lg border p-3" data-testid={`template-progress-${template.journey}`}>
-          <h3 className="text-sm font-medium">{t.labels[index]}</h3>
-          <p className={"text-sm font-semibold " + (status === "ready" ? "text-emerald-700" : "text-slate-700")}>{t.statuses[status]}</p>
+        return <li key={template.journey} className="min-w-0 space-y-2 rounded-xl border border-slate-300 bg-slate-100/90 p-4 shadow-sm" data-testid={`template-progress-${template.journey}`}>
+          <h3 className="text-sm font-semibold text-slate-950">{t.labels[index]}</h3>
+          <p className={"inline-flex max-w-full rounded-full border px-2 py-0.5 text-xs font-semibold " + (status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : status === "awaiting_approval" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-700")}>{t.statuses[status]}</p>
           <p className="text-xs text-slate-600">{reasons[row?.reason ?? ""] ?? t.error}</p>
           {onTemplate&&<label className="block pt-2 text-sm">{t.message}
-            <select className="mt-1 block w-full rounded border p-2" value={row?.templateId??''}
+            <select className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-2 text-sm" value={row?.templateId??''}
               disabled={saving||data.delivery?.[template.journey==='checkoutRecovery'?'checkoutRecovery':'postPurchase'].merchantEnabled}
               onChange={event=>onTemplate(template.journey,event.target.value||null)}>
               <option value="">{t.none}</option>
@@ -129,7 +129,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
       })}
     </ul>}
     {data?.authorized && data.rows.some(row => row.status === "awaiting_approval") && <p className="text-sm text-slate-600">{t.waiting}</p>}
-    {data?.delivery&&onDelivery&&<div className="space-y-3 rounded-lg border p-3">
+    {data?.delivery&&onDelivery&&<div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-sm text-slate-600">{t.release}</p>
       <p className="text-sm">{t.selected}: {POST_PURCHASE_JOURNEYS.filter(j=>data.postPurchasePlans?.[j]?.selected).map(j=>
         j==='reviewRequest'?t.extraLabels[0]:j==='repeatPurchase'?t.extraLabels[1]:j==='winBack'?t.extraLabels[2]:
@@ -138,7 +138,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
         const state=data.delivery![kind];
         return <div key={kind} className="flex flex-wrap items-center gap-3 text-sm">
           <button type="button" data-testid={`activate-${kind}`} disabled={saving||(!state.merchantEnabled&&!state.canActivate)}
-            className="rounded border px-3 py-2 font-medium disabled:opacity-50" onClick={()=>onDelivery(kind,!state.merchantEnabled)}>
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 font-medium hover:bg-slate-50 disabled:opacity-50" onClick={()=>onDelivery(kind,!state.merchantEnabled)}>
             {kind==='postPurchase'?(state.merchantEnabled?t.pausePost:t.enablePost):(state.merchantEnabled?t.pauseRecovery:t.enableRecovery)}
           </button>
           <span role="status">{state.deliveryEnabled?t.statuses.active:state.merchantEnabled?t.statuses.paused:state.canActivate?t.readyActivate:t.needsSetup}</span>
@@ -146,7 +146,7 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
         </div>;
       })}
     </div>}
-    {data?.messaging&&<div className="rounded-lg border p-3 text-sm" aria-live="polite">
+    {data?.messaging&&<div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm" aria-live="polite">
       <p className="font-medium">{t.messaging}</p>
       <p>{t.pending}: {data.messaging.pending} · {t.accepted}: {data.messaging.accepted} · {t.delivered}: {data.messaging.delivered} · {t.uncertain}: {data.messaging.uncertain} · {t.failed}: {data.messaging.failed}</p>
     </div>}
