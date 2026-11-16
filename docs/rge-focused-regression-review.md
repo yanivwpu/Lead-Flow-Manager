@@ -12,7 +12,7 @@ Validation renders the setup action for an ineligible contact, checks that infer
 
 ## 2. Existing buyers
 
-The new metadata is optional. Eligibility uses actual inbound property intent, rather than merely saved criteria. The original 100-message window could disable older genuine leads whose profiles lacked message references. The correction pages through the contact’s conversation history until valid evidence is found or history ends; each message is assessed separately. It also resolves existing message references to actual inbound messages and validates contact/workspace ownership. Saved evidence strings are never treated as proof. System notifications cannot authorize intent through the referenced-message path.
+The new metadata is optional. Eligibility uses actual inbound property intent, rather than merely saved criteria. The original 100-message window could disable older genuine leads whose profiles lacked message references. The correction pages through the contact’s conversation history until valid evidence is found or history ends; each message is assessed separately, with coherent windows of adjacent inbound turns for fragmented requirements. It also resolves existing message references to actual inbound messages and validates contact/workspace ownership. Saved evidence strings are never treated as proof. System notifications cannot authorize intent through the referenced-message path.
 
 Passing cases, all without `agentConfirmedAt`: established condo-buyer intent followed by “Hi!”, “Thanks, talk tomorrow”, weather small talk, vehicle-maintenance small talk, and a CRM integration question. Another case puts the property intent on page two, after 100 greetings, with no message references. Buyer matching remains eligible in all cases. A current system/product message can still suppress real-estate AI reply context under the existing domain policy; that does not erase established buyer matching eligibility.
 
@@ -53,3 +53,12 @@ These are code and controlled-fixture guarantees for an ineligible contact. They
 Remaining operational limit: the complete-history fallback can scan multiple message pages for legacy contacts without verified references. This preserves correctness; production query load has not been measured. No repair is required to make unsupported criteria non-authorizing, and no targeted data repair was performed or proposed.
 
 Final validation of the corrected working tree: production build PASS; full TypeScript check reports the same 97 diagnostics as the exact pre-change base, with zero additional diagnostic messages. Generated hero AVIF files were restored and are excluded from the review changes. All four affected/focused test files listed above pass. These results supplement, rather than repeat, the retained broader-suite results.
+
+
+## Pre-merge automated-review corrections
+
+The release gate recheck found a separate failed CodeQL result despite all six workflow runs passing. GitHub marked the PR unstable. The merge and deployment were held. Two polynomial-regex alerts concerned the vehicle/property exception and the redundant whitespace-heavy rental alternatives. The correction replaces the exception with token-based intent/object checks and reduces rental detection to its equivalent rent/rental/renting/lease/leasing tokens. Car-count garage amenities and property maintenance no longer imply vehicle intent.
+
+Two code-review regressions are corrected: genuine property searches mentioning a garage or low maintenance remain eligible, and requirements supplied over adjacent inbound replies are evaluated coherently, including across history pagination boundaries. Combined evidence must include a direct property-search intent/object relationship, so removing the first car-rental turn cannot promote remaining residence/budget fragments into a property search. Foreign-tenant conversations are excluded.
+
+`rge-review-search-evidence.test.ts` covers these cases plus whitespace-heavy input. It and the seven affected eligibility/server/workflow/domain/email regression files pass locally. No security alerts were dismissed and no branch protection or CI policy was bypassed. Fresh CI/CodeQL validation is required on the correction before merge.

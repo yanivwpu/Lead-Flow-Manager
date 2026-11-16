@@ -1,6 +1,6 @@
 import { classifySellerIntent } from "@shared/sellerIntent";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
-import { hasVehicleContext } from "@shared/aiDomainEligibility";
+import { hasVehicleContext, hasDirectPropertySearchEvidence } from "@shared/aiDomainEligibility";
 import type { Contact } from "@shared/schema";
 import { hasConfirmedBuyerEnrollment, inventoryContactEligibility } from "@shared/inventoryContactEligibility";
 import { storage } from "../storage";
@@ -31,10 +31,18 @@ async function contactHistoryHasEvidence(contact: Contact, accepts: (text: strin
   const bundle = await storage.getContactWithConversations(contact.id);
   for (const conversation of bundle?.conversations ?? []) {
     if (conversation.userId !== contact.userId) continue;
-    // Search older pages too: legacy profiles need no new enrollment field or message reference.
+    // Search older pages too, retaining context across adjacent inbound turns and page boundaries.
+    let newerTurns: string[] = [];
     for (let offset = 0; ; offset += 100) {
       const page = await storage.getMessages(conversation.id, 100, offset);
-      if (page.some((m) => m.direction === "inbound" && accepts(m.content || ""))) return true;
+      const turns = page.filter((m) => m.direction === "inbound").map((m) => m.content || "");
+      if (turns.some(accepts)) return true;
+      const adjacentTurns = [...turns, ...newerTurns];
+      for (let i = 0; i < adjacentTurns.length; i++) {
+        const coherentSearch = adjacentTurns.slice(i, i + 8).join(" ");
+        if (hasDirectPropertySearchEvidence(coherentSearch) && accepts(coherentSearch)) return true;
+      }
+      newerTurns = adjacentTurns.slice(0, 7);
       if (page.length < 100) break;
     }
   }

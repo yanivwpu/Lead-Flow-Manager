@@ -56,7 +56,7 @@ export type AiDomainEligibilityInput = {
 };
 
 const RENTAL_INTENT_RE =
-  /\b(?:rent(?:al|ing)?|lease|leasing|for\s+rent|looking\s+to\s+rent|need\s+(?:a|an)\s+\d*\s*(?:bed|br|bedroom)?\s*rental)\b/i;
+  /\b(?:rent(?:al|ing)?|lease|leasing)\b/i;
 
 const BUY_INTENT_RE =
   /\b(?:looking\s+to\s+buy|ready\s+to\s+buy|want\s+to\s+buy|buy(?:ing)?\s+(?:a|an|the)|for\s+sale|make\s+an\s+offer)\b/i;
@@ -223,22 +223,58 @@ export function isRealtorWorkspaceForCopilot(input: {
   return Boolean(input.rgeInstalled) || isRealEstateIndustry(input.industry);
 }
 
-/** Vehicle rental/payment language must not become property intent via budget/location. */
+const VEHICLE_WORDS = new Set([
+  "car", "cars", "vehicle", "vehicles", "auto", "autos", "automobile", "automobiles",
+  "coche", "coches", "carro", "carros", "vehículo", "vehículos", "רכב", "מכונית",
+]);
+const PROPERTY_WORDS = new Set([
+  "property", "house", "houses", "home", "homes", "condo", "condos", "apartment", "apartments",
+  "townhouse", "townhouses", "sfh", "casa", "apartamento", "vivienda", "inmueble", "דירה", "דירות", "בית",
+]);
+const SEARCH_WORDS = new Set(["buy", "buying", "rent", "renting", "lease", "purchase", "need", "want", "looking", "show", "find", "לקנות", "לרכוש", "לשכור", "comprar", "alquilar", "rentar"]);
+function intentWords(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+}
+function isVehicleWord(words: string[], index: number): boolean {
+  if (!VEHICLE_WORDS.has(words[index])) return false;
+  // A car-count garage amenity is property criteria, not a vehicle transaction.
+  if (["car", "cars"].includes(words[index]) && ["garage", "garages"].includes(words[index + 1])) return false;
+  return true;
+}
+
+/** Vehicle rental/payment language; property maintenance and car garages are not vehicle intent. */
 export function hasVehicleContext(text: string): boolean {
-  return /\b(?:cars?|vehicles?|auto(?:mobile)?s?|car rental|maintenance|alquiler de (?:coches|autos|carros)|coche|carro|vehículo)\b|רכב|מכונית|השכרת רכב|טיפול לרכב/iu.test(text);
+  const words = intentWords(text);
+  return words.some((_word, index) => isVehicleWord(words, index)) || /רכב|מכונית/u.test(text);
+}
+
+function hasDirectPropertySearch(words: string[]): boolean {
+  return words.some((word, index) => {
+    if (!PROPERTY_WORDS.has(word)) return false;
+    const start = Math.max(0, index - 10);
+    const before = words.slice(start, index);
+    return before.some((w) => SEARCH_WORDS.has(w)) &&
+      !before.some((_w, i) => isVehicleWord(words, start + i));
+  });
+}
+
+export function hasDirectPropertySearchEvidence(text: string): boolean {
+  return hasDirectPropertySearch(intentWords(text));
 }
 
 /** Strong property search evidence; budget/location alone do not establish the domain. */
 export function hasStrongRealEstateLeadEvidence(text: string | null | undefined): boolean {
   const t = String(text || "").trim();
   if (t.length < 8) return false;
-  if (hasVehicleContext(t) && !/\b(?:buy|rent|lease|purchase|need|want|looking for)(?:\s+(?:a|an|the|to|\d+|bedroom|bed|br|bath|new|small|large|single-family)){0,6}\s+(?:property|house|home|condo|apartment|townhouse)\b|(?:לקנות|לשכור).*(?:דירה|בית)|\b(?:comprar|alquilar|rentar)\s+(?:un|una)?\s*(?:casa|apartamento|vivienda)\b/iu.test(t)) return false;
+  if (hasVehicleContext(t) && !hasDirectPropertySearchEvidence(t)) return false;
   if (hasPropertyShowingIntent(t)) return true;
   const propertyAnchor = hasPropertyTypeSignalInMessage(t) ||
     /\b(?:property|real estate|realtor|bedrooms?|beds?|br|baths?|mortgage|apartamento|casa|vivienda|inmueble)\b|דירה|דירות|בית|נדל״ן|נדלן/iu.test(t) ||
     /\b\d+\s*\/\s*\d+\b/.test(t);
   if (!propertyAnchor) return false;
-  if (/(?:דירה|דירות|בית).*(?:לקנות|לרכוש|לשכור|להשכרה)|(?:לקנות|לרכוש|לשכור).*(?:דירה|דירות|בית)|\b(?:comprar|alquilar|rentar)\b.*\b(?:casa|apartamento|vivienda|inmueble)\b/iu.test(t)) return true;
+  const words = intentWords(t);
+  if (words.some((word) => ["לקנות", "לרכוש", "לשכור", "להשכרה", "comprar", "alquilar", "rentar"].includes(word)) &&
+      words.some((word) => PROPERTY_WORDS.has(word))) return true;
   if (hasStrongStructuredSearchSignals(t)) return true;
 
   const rental = RENTAL_INTENT_RE.test(t);
