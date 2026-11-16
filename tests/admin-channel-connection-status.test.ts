@@ -1,5 +1,7 @@
 import {
   deriveAdminEmailIndicator,
+  deriveAdminWebchatIndicator,
+  deriveAdminChatbotIndicator,
   deriveAdminUserChannelConnections,
   deriveAdminWhatsAppIndicator,
   pickAdminEmailMailbox,
@@ -117,7 +119,40 @@ function run() {
   assert(waFbIgUnchanged.instagram.state === "connected", "IG still green");
   assert(waFbIgUnchanged.email.state === "disconnected", "disconnected mailbox is not EM-connected");
 
-  console.log("admin-channel-connection-status.test.ts OK");
+  const webchatReady = deriveAdminUserChannelConnections({
+    user: {
+      widgetSettings: { enabled: true, allowedOrigins: ["https://example.com"] },
+      widgetPublicId: "wgt_fixture",
+    },
+    channelSettings: [],
+  });
+  assert(webchatReady.webchat.state === "connected", "widget with allowed origins and public ID is configured");
+  assert(!webchatReady.noChannelsConnected, "configured WC is a channel");
+  assert(webchatReady.chatbot.state === "disconnected", "WC does not imply chatbot is configured");
+  assert(webchatReady.webchat.tooltip.includes("not verified"), "never claim embed installation verified");
+
+  const webchatNoOrigin = deriveAdminWebchatIndicator(
+    { enabled: true, allowedOrigins: [] }, "wgt_fixture",
+  );
+  assert(webchatNoOrigin.state === "attention", "enabled WC without safe domain needs attention");
+  const webchatMissingId = deriveAdminWebchatIndicator(
+    { enabled: true, allowedOrigins: ["https://example.com"] }, null,
+  );
+  assert(webchatMissingId.state === "attention", "public ID required");
+  assert(deriveAdminWebchatIndicator({ enabled: false }, "wgt_fixture").state === "disconnected", "disabled WC gray");
+
+  const botFlow = deriveAdminUserChannelConnections({
+    user: {},
+    channelSettings: [],
+    activeChatbotFlowCount: 2,
+  });
+  assert(botFlow.chatbot.state === "connected", "active flow makes BOT visible");
+  assert(botFlow.noChannelsConnected, "BOT capability alone is not a messaging channel");
+  assert(botFlow.webchat.state === "disconnected", "flow does not imply WC ready");
+  assert(deriveAdminChatbotIndicator({ aiMode: "full_auto" }).state === "connected", "AI Auto configuration visible");
+  assert(deriveAdminChatbotIndicator({ aiMode: "suggest_only" }).state === "disconnected", "AI suggest-only is not an automatic chatbot");
+
+    console.log("admin-channel-connection-status.test.ts OK");
 }
 
 run();
