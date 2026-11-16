@@ -1,5 +1,4 @@
 import { ShopifyCheckoutTest } from "@/components/ShopifyCheckoutTest";
-import { AiTestChat } from "@/components/AiTestChat";
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +17,6 @@ export function ShoppingSettings({showDiagnostics=true}:{showDiagnostics?:boolea
  return <section dir={i18n.dir()} className="rounded-lg border p-4 space-y-3">
   <h3 className="font-semibold">{t("shopping.title")}</h3>
   <p className="text-sm text-muted-foreground">{t("shopping.benefit")}</p>
-  {showDiagnostics&&<AiTestChat/>}
   {showDiagnostics&&<ShopifyCheckoutTest key={user?.id}/>}
   <fieldset disabled={save.isPending} className="space-y-3">
   <label className="flex items-center gap-2"><input type="checkbox" checked={value.enabled} disabled={!query.data.entitled} onChange={e=>{save.reset();setDraft({...value,enabled:e.target.checked});}}/>{t("shopping.enable")}</label>
