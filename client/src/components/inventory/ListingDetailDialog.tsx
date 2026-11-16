@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Home, Link2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -138,7 +138,7 @@ export function ListingDetailDialog({
   contactFirstName,
 }: ListingDetailDialogProps) {
   const { toast } = useToast();
-  const [draftKey, setDraftKey] = useState("");
+  const draftKey = open && listingId ? `${contactId}:${listingId}:${matchReasons.join("|")}:${opportunityType ?? ""}` : "";
 
   const { data: listingData, isLoading: listingLoading } = useQuery({
     queryKey: ["/api/inventory/listings", listingId],
@@ -149,12 +149,6 @@ export function ListingDetailDialog({
     enabled: open && !!listingId,
     staleTime: 60_000,
   });
-
-  useEffect(() => {
-    if (open && listingId) {
-      setDraftKey(`${contactId}:${listingId}:${matchReasons.join("|")}:${opportunityType ?? ""}`);
-    }
-  }, [open, listingId, contactId, matchReasons, opportunityType]);
 
   const {
     data: draftData,

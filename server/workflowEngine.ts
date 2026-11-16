@@ -1,3 +1,4 @@
+import { isInventoryContactEligible, isRgeContactEligible, isRgeWorkflow } from "./inventory/inventoryContactEligibility";
 import { storage } from "./storage";
 import { type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
 import { subscriptionService } from "./subscriptionService";
@@ -640,6 +641,11 @@ export async function executeWorkflowActions(
   blockedReason?: string;
   sendOutcome?: WorkflowSendOutcome;
 }> {
+  if (isRgeWorkflow(workflow)) {
+    if (!contact || contact.userId !== workflow.userId || !(await isRgeContactEligible(contact))) {
+      return { success: false, actionsExecuted: [], blockedReason: "contact_intent_ineligible", sendOutcome: "guard_skipped" };
+    }
+  }
   const actions = workflow.actions as any[];
   const executedActions: WorkflowAction[] = [];
   let sendOutcome: WorkflowSendOutcome = "none";
@@ -1271,6 +1277,9 @@ export async function runW2QualificationEngine(
   message: string,
   contact?: Contact
 ): Promise<W2Result> {
+  if (!contact || contact.userId !== userId || !(await isInventoryContactEligible(contact, contact.buyerPreferenceProfile))) {
+    return { scoreAdjustment: 0, qualificationQuestion: null, fieldUpdates: {}, signalsDetected: [] };
+  }
   const prefs = await getTemplatePreferences(userId);
   const def = {
     financialKeywords: "pre approved, preapproved, mortgage, lender, financing, loan, down payment, credit score, cash buyer, cash, fha, va, conventional",
@@ -1692,6 +1701,7 @@ export async function runServiceRoutingEngine(
   contact?: Contact
 ): Promise<ServiceRoutingResult> {
   const empty: ServiceRoutingResult = { offerMessage: null, routingMessage: null, taskNote: null, tagsToApply: [], serviceType: null };
+  if (!contact || contact.userId !== userId || !(await isRgeContactEligible(contact))) return empty;
 
   try {
     const services = await getServiceRoutingConfig(userId);

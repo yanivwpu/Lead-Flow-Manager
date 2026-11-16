@@ -1,3 +1,4 @@
+import { isInventoryContactEligible } from "./inventoryContactEligibility";
 import type { Contact } from "@shared/schema";
 import type { InventoryMatchDraftResponse } from "@shared/inventory/inventoryDraftTypes";
 import { buildListingComposerMessage } from "@shared/inventory/inventoryComposerDraft";
@@ -201,6 +202,10 @@ export async function generateInventoryMatchDraft(
   const gate = await canUseInventoryConnector(userId);
   if (!gate.ok) {
     return { error: "Inventory connector unavailable", httpStatus: gate.reason === "feature_disabled" ? 404 : 403 };
+  }
+
+  if (!(await isInventoryContactEligible(contact, contact.buyerPreferenceProfile))) {
+    return { error: "Contact has no verified property intent", httpStatus: 403 };
   }
 
   const listingRow = await getInventoryListing(userId, listingId);

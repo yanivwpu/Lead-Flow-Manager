@@ -11755,7 +11755,9 @@ export async function registerRoutes(
               const cfLead = (contactForPrefs.customFields || {}) as Record<string, unknown>;
               const rgeInstalled = await isRgeInstalledForUser(userId);
               const bkIndustry = (await storage.getAiBusinessKnowledge(userId))?.industry ?? null;
+              const { hasConfirmedBuyerEnrollment } = await import("@shared/inventoryContactEligibility");
               const domainDecision = resolveAiDomainEligibility({
+                buyerIntentVerified: prefGate.ok || hasConfirmedBuyerEnrollment(buyerProfilePreview),
                 inboundText: lastUserInbound,
                 conversationText: historyTurns
                   .filter((m) => m.role === "user")

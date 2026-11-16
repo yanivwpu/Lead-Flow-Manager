@@ -210,12 +210,15 @@ export function registerContactRoutes(app: Express): void {
       if (contact.userId !== req.user.id) return res.status(404).json({ error: "Not found" });
 
       const {
-        shouldRunBuyerPreferencePipeline,
         buildExplicitPatchFromSimpleBody,
         applyManualBuyerPreferencePatch,
       } = await import("../buyerPreferenceService");
 
-      const gate = await shouldRunBuyerPreferencePipeline(req.user.id, contact);
+      // An authenticated manual preference edit is explicit agent confirmation.
+      // Automatic extraction and matching still require contact intent.
+      const { isRgeInstalledForUser, isRealEstateIndustry } = await import("../buyerPreferenceService");
+      const knowledge = await storage.getAiBusinessKnowledge(req.user.id);
+      const gate = { ok: await isRgeInstalledForUser(req.user.id) || isRealEstateIndustry(knowledge?.industry), reason: "workspace_not_capable" };
       if (!gate.ok) {
         return res.status(403).json({ error: "Buyer preferences not enabled for this workspace", reason: gate.reason });
       }

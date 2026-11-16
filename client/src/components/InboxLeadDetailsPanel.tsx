@@ -1633,18 +1633,20 @@ export function InboxLeadDetailsPanel({
     [inventorySources],
   );
 
-  const { profile: persistedBuyerProfile, chips: persistedBuyerChips, buyerMatchingTraceId } =
+  const { profile: persistedBuyerProfile, chips: persistedBuyerChips, buyerMatchingTraceId, eligible: persistedBuyerEligible } =
     usePersistedBuyerPreferences(contact.id);
 
   const showCopilotInventoryPanels = useMemo(
     () =>
       shouldShowCopilotInventoryForContact({
+        verifiedContactIntent: persistedBuyerEligible,
+        conversationText: messages.filter((m) => m.direction === "inbound").map((m) => m.content).join("\n"),
         inventoryStatus,
         customFields: contact.customFields,
         buyerPreferenceProfile: persistedBuyerProfile,
         hideGrowthEngineForShopify: hideGrowthEngine,
       }),
-    [inventoryStatus, contact.customFields, persistedBuyerProfile, hideGrowthEngine],
+    [inventoryStatus, contact.customFields, persistedBuyerProfile, persistedBuyerEligible, hideGrowthEngine, messages],
   );
 
   const customerInsights = useMemo(
@@ -1868,6 +1870,7 @@ export function InboxLeadDetailsPanel({
   const showCopilotBuyerPreferences = useMemo(
     () =>
       shouldShowCopilotBuyerPreferences({
+        verifiedContactIntent: persistedBuyerEligible,
         inventoryStatus,
         industry: businessKnowledge?.industry,
         customFields: contact.customFields,
@@ -1888,6 +1891,7 @@ export function InboxLeadDetailsPanel({
       lastInboundText,
       inboundText,
       persistedBuyerProfile,
+      persistedBuyerEligible,
       currentInboundForIntent,
       lastInboundFromAddress,
       conversationChannel,

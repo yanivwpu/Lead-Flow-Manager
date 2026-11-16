@@ -1,3 +1,4 @@
+import { hasConfirmedBuyerEnrollment, inventoryContactEligibility } from "@shared/inventoryContactEligibility";
 import type { InventoryConnectorStatus } from "@/lib/inventoryApi";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { extractBuyerMatchCriteria } from "@shared/inventory/inventoryMatchScoring";
@@ -37,6 +38,7 @@ export function shouldShowCopilotBuyerPreferences(input: {
   industry?: string | null;
   customFields?: Record<string, unknown> | null;
   hideGrowthEngineForShopify?: boolean;
+  verifiedContactIntent?: boolean;
   inboundText?: string | null;
   conversationText?: string | null;
   contactEmail?: string | null;
@@ -47,6 +49,7 @@ export function shouldShowCopilotBuyerPreferences(input: {
 }): boolean {
   if (input.hideGrowthEngineForShopify) return false;
   const domainInput: AiDomainEligibilityInput = {
+    buyerIntentVerified: input.verifiedContactIntent || hasConfirmedBuyerEnrollment(input.buyerPreferenceProfile),
     inboundText: input.inboundText,
     conversationText: input.conversationText,
     sellerIntent: input.sellerIntent ?? null,
@@ -78,19 +81,25 @@ export function contactHasInventoryMatchCriteria(buyerPreferenceProfile?: unknow
 }
 
 /**
- * Per-contact inventory UI — workspace connector must be on AND the contact must
- * be a buyer lead or have inventory-relevant saved preferences (hasAnyCriteria).
- * A non-empty profile alone is not enough (avoids health UI on automation leads).
+ * Per-contact inventory UI shares the API/AI intent decision. Installation,
+ * lead labels and unsupported saved criteria alone never authorize matching.
  */
 export function shouldShowCopilotInventoryForContact(input: {
   inventoryStatus?: InventoryConnectorStatus | null;
   customFields?: Record<string, unknown> | null;
   buyerPreferenceProfile?: unknown;
   hideGrowthEngineForShopify?: boolean;
+  conversationText?: string | null;
+  /** Contact-scoped eligibility verified by the buyer-preferences API. */
+  verifiedContactIntent?: boolean;
 }): boolean {
   if (!shouldShowCopilotInventoryPanels(input.inventoryStatus, input.hideGrowthEngineForShopify)) return false;
-  if (isBuyerLeadContact(input.customFields)) return true;
-  return contactHasInventoryMatchCriteria(input.buyerPreferenceProfile);
+  if (input.verifiedContactIntent) return true;
+  return inventoryContactEligibility({
+    rgeInstalled: input.inventoryStatus?.rgeInstalled === true,
+    conversationText: input.conversationText,
+    buyerPreferenceProfile: input.buyerPreferenceProfile,
+  });
 }
 
 /**

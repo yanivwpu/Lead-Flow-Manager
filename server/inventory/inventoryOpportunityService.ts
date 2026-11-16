@@ -1,3 +1,4 @@
+import { isInventoryContactEligible } from "./inventoryContactEligibility";
 import type { InventoryListing } from "@shared/schema";
 import type {
   InventoryOpportunitiesResponse,
@@ -64,18 +65,20 @@ async function processAlertResults(
   userId: string,
   alertResults: ListingUpsertResult[],
 ): Promise<number> {
+  const contacts = await storage.getContacts(userId, 5000);
+  const contactsWithCriteria = [];
+  for (const contact of contacts) {
+    const profile = readBuyerPreferenceProfile(contact);
+    const criteria = extractBuyerMatchCriteria(profile);
+    if (contact.userId === userId && profile.profileStatus !== "empty" && criteria.hasAnyCriteria &&
+        await isInventoryContactEligible(contact, profile)) contactsWithCriteria.push(contact);
+  }
+
+  if (contactsWithCriteria.length === 0) return 0;
+
   const listingIds = [...new Set(alertResults.map((r) => r.listingId))];
   const listings = await getInventoryListingsByIds(userId, listingIds);
   const listingById = new Map(listings.map((l) => [l.id, l]));
-
-  const contacts = await storage.getContacts(userId, 5000);
-  const contactsWithCriteria = contacts.filter((contact) => {
-    const profile = readBuyerPreferenceProfile(contact);
-    const criteria = extractBuyerMatchCriteria(profile);
-    return profile.profileStatus !== "empty" && criteria.hasAnyCriteria;
-  });
-
-  if (contactsWithCriteria.length === 0) return 0;
 
   let createdOrUpdated = 0;
 
@@ -288,6 +291,9 @@ export async function findInventoryOpportunitiesForContact(
   }
 
   const profile = readBuyerPreferenceProfile(contact);
+  if (!(await isInventoryContactEligible(contact, profile))) {
+    return { eligible: false, reason: "contact_intent_ineligible", opportunityCount: 0, opportunities: [] };
+  }
   const criteria = extractBuyerMatchCriteria(profile);
   if (!criteria.hasAnyCriteria) {
     return {
