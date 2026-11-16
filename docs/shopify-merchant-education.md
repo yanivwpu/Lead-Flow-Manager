@@ -24,7 +24,7 @@ Prior UX work (#268, #279, #283, #284, #289–291, #294, #296–297) remains in 
   preference and RTL direction; brand names/commands use bidi isolation. Existing
   automatic template submission still creates missing **English** messages; the
   guide makes clear that interface language does not translate customer templates.
-- Checkout assistance is verified as gated off (`CHECKOUT_ROLLOUT_APPROVED=false`).
+- Checkout assistance is source-approved for merchant opt-in (`CHECKOUT_ROLLOUT_APPROVED=true`), contingent on verified production journal tables, the sealed server-side receipt key, and the existing owned store/catalog/entitlement checks. A source-approved gate does not activate merchants or prove a completed Shopify cart; production deployment is a separate release step.
   It shows **Not available yet**, with the actual prerequisite explanation, instead
   of an unusable checkbox or implementation details. No release date is promised.
 - AI Shopping leads with its benefit, translates channel labels, shows loading,
