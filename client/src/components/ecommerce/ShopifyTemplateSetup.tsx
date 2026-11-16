@@ -103,12 +103,12 @@ export function ShopifyTemplateSetupPanel({ locale, data, saving = false, failed
       <button type="button" disabled={saving} onClick={onAuthorize} data-testid="authorize-template-setup"
         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving ? t.working : t.authorize}</button>
     </div>}
-    {data?.authorized && <ul className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 sm:grid-cols-2 sm:p-4" aria-live="polite">
+    {data?.authorized && <ul className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-3 sm:grid-cols-2 sm:p-4" aria-live="polite">
       {SHOPIFY_GROWTH_TEMPLATES.map((template, index) => {
         const row = data.rows.find(item => item.journey === template.journey);
         const status: ShopifySetupStatus = row?.status ?? "unavailable";
         const reasons = t.reasons as Record<string, string>;
-        return <li key={template.journey} className="min-w-0 space-y-2 rounded-xl border border-slate-300 bg-slate-100/90 p-4 shadow-sm" data-testid={`template-progress-${template.journey}`}>
+        return <li key={template.journey} className="min-w-0 space-y-2 rounded-xl border border-slate-300 bg-white p-4 shadow-sm" data-testid={`template-progress-${template.journey}`}>
           <h3 className="text-sm font-semibold text-slate-950">{t.labels[index]}</h3>
           <p className={"inline-flex max-w-full rounded-full border px-2 py-0.5 text-xs font-semibold " + (status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : status === "awaiting_approval" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-300 bg-white text-slate-700")}>{t.statuses[status]}</p>
           <p className="text-xs text-slate-600">{reasons[row?.reason ?? ""] ?? t.error}</p>
