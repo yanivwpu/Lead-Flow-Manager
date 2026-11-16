@@ -130,7 +130,9 @@ export function ShopifyConsentEnrollment({ locale }: { locale: string }) {
   const [saving, setSaving] = useState(false), [saved, setSaved] = useState(false), [failed, setFailed] = useState(false);
   const endpoint = '/api/shopify/merchant-engine/consent-enrollment';
   const query = useQuery<EnrollmentView>({ queryKey: withUserQueryScope([endpoint], user?.id), enabled: !!user?.id && sessionAligned,
-    retry: false, refetchInterval: 15_000, queryFn: async () => {
+    // A missing Meta/WhatsApp prerequisite returns 409. Show the existing
+    // unavailable state instead of repeating that failed request every 15s.
+    retry: false, refetchInterval: current => current.state.status === 'error' ? false : 15_000, queryFn: async () => {
       const response = await fetch(endpoint, { credentials: 'include', cache: 'no-store' });
       if (!response.ok) throw Error('enrollment_unavailable'); return response.json();
     } });
