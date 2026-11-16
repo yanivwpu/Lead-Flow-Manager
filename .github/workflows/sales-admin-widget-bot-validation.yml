@@ -1,0 +1,32 @@
+name: Sales Admin Website Chat and Bot indicators
+on:
+  pull_request:
+    paths:
+      - "shared/adminChannelConnectionStatus.ts"
+      - "client/src/pages/Admin.tsx"
+      - "client/src/components/admin/AdminActivationTab.tsx"
+      - "server/routes.ts"
+      - "server/adminActivationService.ts"
+      - "tests/admin-channel-connection-status.test.ts"
+      - ".github/workflows/sales-admin-widget-bot-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  admin-indicator-regression:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Derive channel and bot indicators independently
+        run: npx tsx tests/admin-channel-connection-status.test.ts
+      - name: Existing Admin and Activation regressions
+        run: npx tsx --test tests/admin-activation-collapsible.test.ts tests/admin-user-status.test.ts tests/admin-conversation-usage-and-email.test.ts
+      - name: Validate client/server build
+        run: npm run build
