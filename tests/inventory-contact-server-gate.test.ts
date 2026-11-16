@@ -10,7 +10,7 @@ import { isInventoryContactEligible, isRgeContactEligible } from "../server/inve
 
 const stale = {schemaVersion: 1, profileStatus: "partial", bedsMin: {value: 11, source: "inferred", confidence: .9, updatedAt: "2026-01-01"}};
 let owner = "tenant-a";
-let message = "היי יניב כמה תוכל לשלם ביום חמישי ? עשית את הטיפול שמנים לרכב ? תשלח לי בבקשה תמונה";
+let message = "החוב שלך כרגע $1000\nכולל החידוש עד 11/21\nוהדוח"; // Production false-positive wording; amount anonymized.
 const contact = () => ({id: "car-rental", userId: owner, customFields: {leadType: "buyer"}, buyerPreferenceProfile: stale}) as any;
 const originals = {getMessage: storage.getMessage, getConversation: storage.getConversation, getContacts: storage.getContacts, getContact: storage.getContact, getContactWithConversations: storage.getContactWithConversations, getMessages: storage.getMessages, getTemplateInstall: storage.getTemplateInstall};
 const pool = db.$client;

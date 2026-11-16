@@ -1,3 +1,4 @@
+import { customerAuthoredText, matchPropertyBedBath } from "./buyerPreferenceEvidence";
 /**
  * Shared AI domain / context eligibility.
  *
@@ -259,18 +260,18 @@ function hasDirectPropertySearch(words: string[]): boolean {
 }
 
 export function hasDirectPropertySearchEvidence(text: string): boolean {
-  return hasDirectPropertySearch(intentWords(text));
+  return hasDirectPropertySearch(intentWords(customerAuthoredText(text)));
 }
 
 /** Strong property search evidence; budget/location alone do not establish the domain. */
 export function hasStrongRealEstateLeadEvidence(text: string | null | undefined): boolean {
-  const t = String(text || "").trim();
+  const t = customerAuthoredText(text);
   if (t.length < 8) return false;
   if (hasVehicleContext(t) && !hasDirectPropertySearchEvidence(t)) return false;
   if (hasPropertyShowingIntent(t)) return true;
   const propertyAnchor = hasPropertyTypeSignalInMessage(t) ||
     /\b(?:property|real estate|realtor|bedrooms?|beds?|br|baths?|mortgage|apartamento|casa|vivienda|inmueble)\b|דירה|דירות|בית|נדל״ן|נדלן/iu.test(t) ||
-    /\b\d+\s*\/\s*\d+\b/.test(t);
+    Boolean(matchPropertyBedBath(t));
   if (!propertyAnchor) return false;
   const words = intentWords(t);
   if (words.some((word) => ["לקנות", "לרכוש", "לשכור", "להשכרה", "comprar", "alquilar", "rentar"].includes(word)) &&

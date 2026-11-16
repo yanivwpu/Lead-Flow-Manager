@@ -2,6 +2,8 @@
  * Inventory-related buyer message signals — fast-path extraction (Phase A).
  */
 
+import { customerAuthoredText, matchPropertyBedBath } from "./buyerPreferenceEvidence";
+
 import { detectShowMeAllPropertyTypeRelaxation } from "./buyerPreferencePropertyTypeRelax";
 
 const PROPERTY_TYPE_SIGNAL_RE =
@@ -27,7 +29,7 @@ const LOCATION_SIGNAL_RE =
 
 const POOL_SIGNAL_RE = /\bpool\b/i;
 const WATERFRONT_SIGNAL_RE = /\bwaterfront\b/i;
-const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed|\b\d+\s*\/\s*\d+/i;
+const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed/i;
 const BED_CORRECTION_SIGNAL_RE =
   /\b(too big|too many bed|instead|only|is better|show me\s+\d+\s*\/\s*\d+)/i;
 const BATH_SIGNAL_RE = /\b\d+(?:\.\d+)?\s*[- ]?\s*bath/i;
@@ -36,7 +38,7 @@ const BUDGET_SIGNAL_RE =
 
 /** Property type mention including real-estate-context "apparent" typo. */
 export function hasPropertyTypeSignalInMessage(text: string): boolean {
-  const t = (text || "").trim();
+  const t = customerAuthoredText(text);
   if (!t) return false;
   if (PROPERTY_TYPE_SIGNAL_RE.test(t)) return true;
   if (GENERIC_DWELLING_RE.test(t) && REAL_ESTATE_SEARCH_CONTEXT_RE.test(t)) return true;
@@ -45,14 +47,14 @@ export function hasPropertyTypeSignalInMessage(text: string): boolean {
 
 /** True when inbound text looks like a listing search / criteria change. */
 export function hasInventoryPreferenceSignals(text: string): boolean {
-  const t = (text || "").trim();
+  const t = customerAuthoredText(text);
   if (t.length < 8) return false;
   return (
     hasPropertyTypeSignalInMessage(t) ||
     LOCATION_SIGNAL_RE.test(t) ||
     POOL_SIGNAL_RE.test(t) ||
     WATERFRONT_SIGNAL_RE.test(t) ||
-    BED_SIGNAL_RE.test(t) ||
+    BED_SIGNAL_RE.test(t) || Boolean(matchPropertyBedBath(t)) ||
     BED_CORRECTION_SIGNAL_RE.test(t) ||
     BATH_SIGNAL_RE.test(t) ||
     BUDGET_SIGNAL_RE.test(t) ||
@@ -65,12 +67,12 @@ export function hasInventoryPreferenceSignals(text: string): boolean {
  * Requires intent + criteria, or budget paired with beds/type.
  */
 export function hasStrongStructuredSearchSignals(text: string): boolean {
-  const t = (text || "").trim();
+  const t = customerAuthoredText(text);
   if (t.length < 8 || !hasInventoryPreferenceSignals(t)) return false;
 
   const hasIntent = TRANSACTION_INTENT_SIGNAL_RE.test(t);
   const hasBudget = STRONG_BUDGET_SIGNAL_RE.test(t);
-  const hasBeds = BED_SIGNAL_RE.test(t) || BED_CORRECTION_SIGNAL_RE.test(t);
+  const hasBeds = BED_SIGNAL_RE.test(t) || Boolean(matchPropertyBedBath(t)) || BED_CORRECTION_SIGNAL_RE.test(t);
   const hasType = hasPropertyTypeSignalInMessage(t);
   const hasArea = LOCATION_SIGNAL_RE.test(t);
   const hasAmenity =
@@ -92,7 +94,7 @@ export type PreferenceArrayReplaceKey = "propertyTypes" | "targetAreas";
 
 /** When inbound explicitly states type or area, replace arrays instead of union-merge. */
 export function detectPreferenceArrayReplacements(text: string): PreferenceArrayReplaceKey[] {
-  const t = (text || "").trim();
+  const t = customerAuthoredText(text);
   if (!t) return [];
   const out: PreferenceArrayReplaceKey[] = [];
   if (PROPERTY_TYPE_SIGNAL_RE.test(t)) out.push("propertyTypes");

@@ -1,3 +1,4 @@
+import { customerAuthoredText } from "@shared/buyerPreferenceEvidence";
 import { classifySellerIntent } from "@shared/sellerIntent";
 import { normalizeBuyerPreferenceProfile } from "@shared/buyerPreferenceSchema";
 import { hasVehicleContext, hasDirectPropertySearchEvidence } from "@shared/aiDomainEligibility";
@@ -16,7 +17,7 @@ export async function isInventoryContactEligible(contact: Contact, profile?: unk
   ));
   for (const messageId of messageIds) {
     const message = await storage.getMessage(messageId);
-    if (!message || message.direction !== "inbound") continue;
+    if (!message || message.direction !== "inbound" || (message.generatedBy && message.generatedBy !== "human")) continue;
     const conversation = await storage.getConversation(message.conversationId);
     if (conversation?.contactId === contact.id && conversation.userId === contact.userId &&
         inventoryContactEligibility({rgeInstalled: true, inboundText: message.content})) return true;
@@ -35,7 +36,7 @@ async function contactHistoryHasEvidence(contact: Contact, accepts: (text: strin
     let newerTurns: string[] = [];
     for (let offset = 0; ; offset += 100) {
       const page = await storage.getMessages(conversation.id, 100, offset);
-      const turns = page.filter((m) => m.direction === "inbound").map((m) => m.content || "");
+      const turns = page.filter((m) => m.direction === "inbound" && (!m.generatedBy || m.generatedBy === "human")).map((m) => customerAuthoredText(m.content));
       if (turns.some(accepts)) return true;
       const adjacentTurns = [...turns, ...newerTurns];
       for (let i = 0; i < adjacentTurns.length; i++) {
