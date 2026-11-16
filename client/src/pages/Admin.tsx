@@ -206,7 +206,7 @@ interface AdminUser {
   channelConnections?: AdminUserChannelConnections;
 }
 
-type ChannelConnectionFilter = "all" | "none" | "whatsapp" | "needs_attention";
+type ChannelConnectionFilter = "all" | "none" | "whatsapp" | "webchat" | "chatbot" | "needs_attention";
 
 function adminChannelDotClass(state: AdminChannelIndicator["state"]): string {
   switch (state) {
@@ -226,6 +226,8 @@ const EMPTY_CHANNEL_CONNECTIONS: AdminUserChannelConnections = {
   facebook: { state: "disconnected", tooltip: "Facebook not connected" },
   instagram: { state: "disconnected", tooltip: "Instagram not connected" },
   email: { state: "disconnected", tooltip: "Email not connected" },
+  webchat: { state: "disconnected", tooltip: "Website Chat widget disabled" },
+  chatbot: { state: "disconnected", tooltip: "No active chatbot flow or AI auto-reply mode" },
   hasAnyChannel: false,
   noChannelsConnected: true,
   whatsappConnected: false,
@@ -243,6 +245,8 @@ function AdminChannelIndicators({
     { key: "FB", ...connections.facebook },
     { key: "IG", ...connections.instagram },
     { key: "EM", ...connections.email },
+    { key: "WC", ...connections.webchat },
+    { key: "BOT", ...connections.chatbot },
   ] as const;
 
   return (
@@ -662,6 +666,8 @@ export function Admin() {
         const ch = u.channelConnections ?? EMPTY_CHANNEL_CONNECTIONS;
         if (channelFilter === "none") return ch.noChannelsConnected;
         if (channelFilter === "whatsapp") return ch.whatsappConnected;
+        if (channelFilter === "webchat") return ch.webchat.state === "connected";
+        if (channelFilter === "chatbot") return ch.chatbot.state === "connected";
         if (channelFilter === "needs_attention") return ch.needsAttention;
         return true;
       })
@@ -1543,6 +1549,8 @@ export function Admin() {
                       <option value="all">Channels (all)</option>
                       <option value="none">No channels connected</option>
                       <option value="whatsapp">WhatsApp connected</option>
+                      <option value="webchat">Website Chat configured</option>
+                      <option value="chatbot">Chatbot enabled</option>
                       <option value="needs_attention">Needs attention</option>
                     </select>
                     <select
@@ -1573,11 +1581,11 @@ export function Admin() {
                 <Table className="w-full table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[22%] px-2">User</TableHead>
+                      <TableHead className="w-[19%] px-2">User</TableHead>
                       <TableHead className="w-[9%] px-1.5">Plan</TableHead>
                       <TableHead
-                        className="w-[8%] px-1.5"
-                        title="WA = WhatsApp · FB = Facebook Messenger · IG = Instagram · EM = Email / Gmail"
+                        className="w-[13%] px-1.5"
+                        title="WA = WhatsApp · FB = Facebook Messenger · IG = Instagram · EM = Email/Gmail · WC = Website Chat configured · BOT = Active chatbot flow or AI full-auto mode"
                       >
                         Channels
                       </TableHead>
@@ -1591,7 +1599,7 @@ export function Admin() {
                       <TableHead className="w-[5%] px-1.5">AI</TableHead>
                       <TableHead className="w-[11%] px-1.5">Status</TableHead>
                       <TableHead className="w-[8%] px-1.5">Signup</TableHead>
-                      <TableHead className="w-[15%] min-w-0 px-1.5">Acquisition</TableHead>
+                      <TableHead className="w-[13%] min-w-0 px-1.5">Acquisition</TableHead>
                       <TableHead
                         title="Actions"
                         className={cn(
@@ -1960,6 +1968,8 @@ export function Admin() {
                         <p>{selectedAdminUser.channelConnections?.facebook.tooltip ?? "Facebook not connected"}</p>
                         <p>{selectedAdminUser.channelConnections?.instagram.tooltip ?? "Instagram not connected"}</p>
                         <p>{selectedAdminUser.channelConnections?.email.tooltip ?? "Email not connected"}</p>
+                        <p>{selectedAdminUser.channelConnections?.webchat.tooltip ?? "Website Chat widget disabled"}</p>
+                        <p>{selectedAdminUser.channelConnections?.chatbot.tooltip ?? "Chatbot not active"}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {selectedAdminUser.twilioConnected ? (
