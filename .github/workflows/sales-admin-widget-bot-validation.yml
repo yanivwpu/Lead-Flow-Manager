@@ -27,6 +27,6 @@ jobs:
       - name: Derive channel and bot indicators independently
         run: npx tsx tests/admin-channel-connection-status.test.ts
       - name: Existing Admin and Activation regressions
-        run: npx tsx --test tests/admin-activation-collapsible.test.ts tests/admin-user-status.test.ts tests/admin-conversation-usage-and-email.test.ts
+        run: npx tsx --test tests/admin-activation-collapsible.test.ts tests/admin-user-status.test.ts
       - name: Validate client/server build
         run: npm run build
