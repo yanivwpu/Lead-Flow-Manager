@@ -1,0 +1,37 @@
+name: Meta 24-hour conversation quota validation
+on:
+  pull_request:
+    paths:
+      - "server/metaConversationQuota.ts"
+      - "shared/metaConversationQuota.ts"
+      - "server/subscriptionService.ts"
+      - "server/channelService.ts"
+      - "server/campaignExecution.ts"
+      - "server/routes.ts"
+      - "server/routes/templates.ts"
+      - "shared/publicProductFacts.ts"
+      - "tests/meta-conversation-quota.test.ts"
+      - "tests/admin-conversation-usage-and-email.test.ts"
+      - "tests/public-product-facts.test.ts"
+      - ".github/workflows/meta-conversation-quota-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  quota-regression:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Inbound Meta 24-hour quota — PostgreSQL-compatible fixtures
+        run: npx tsx tests/meta-conversation-quota.test.ts
+      - name: Sales Admin quota and public product facts regressions
+        run: npx tsx --test tests/admin-conversation-usage-and-email.test.ts tests/public-product-facts.test.ts tests/seo-public-claim-consistency.test.ts
+      - name: Validate production build
+        run: npm run build
