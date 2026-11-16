@@ -142,7 +142,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
     { title: t.cancelled, count: data.journeys?.orderCancelled ?? 0, journey: "orderCancelled" }
   ];
   return <section data-testid="shopify-post-purchase-preview" dir={dir} lang={locale} className="space-y-4">
-    <div className="rounded-xl border border-blue-100 bg-white p-4 sm:p-5">
+    <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-6">
       <h3 className="font-semibold text-slate-900">{t.title}</h3>
       <p className="mt-1 text-sm text-slate-600">{deliveryEnabled?t.activeIntro:t.intro}</p>
       <p data-testid="post-purchase-schema-readiness" role="status" className="mt-2 text-xs text-slate-600">{data.postPurchaseSchemaReady === true ? (deliveryEnabled?t.activeSchema:t.schemaReady) : data.postPurchaseSchemaReady === false ? t.schemaMissing : t.schemaUnknown}</p>
@@ -150,7 +150,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {rows.map(({ title, count, journey }) => {
           const prepared = journey ? data.workflowDrafts?.[journey] === true : false;
-          return <div key={title} className="rounded-xl border border-slate-200 p-4">
+          return <div key={title} className="rounded-xl border border-slate-300 bg-slate-100/80 p-4 shadow-sm">
             <p className="text-sm font-medium text-slate-800">{title}</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{count}</p>
             <p className="text-xs text-slate-500">{t.recorded}</p>
@@ -172,7 +172,7 @@ export function ShopifyPostPurchasePreview({ connected }: { connected: boolean }
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
       {[{ title: t.review, description: t.reviewDescription }, { title: t.repeat, description: t.repeatDescription }]
-        .map(item => <div key={item.title} className="rounded-xl border border-slate-200 bg-white p-4">
+        .map(item => <div key={item.title} className="rounded-xl border border-slate-300 bg-slate-100/80 p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2"><h4 className="font-semibold text-slate-900">{item.title}</h4>
             <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">{t.planned}</span>
           </div>
