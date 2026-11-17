@@ -70,6 +70,17 @@ async function buildAll() {
     outfile: "dist/shopify-privacy-smoke.cjs", external: externals, logLevel: "info",
   });
 
+  // Explicit one-store operator CLI: never registered as an app/worker startup hook.
+  // Bundled with Railway production dependencies so no tsx, token files or local
+  // database credentials are needed in an SSH session.
+  await esbuild({
+    entryPoints: ["scripts/shopify-offline-one-store-operator.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-offline-operator.cjs",
+    external: externals,
+    logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],
