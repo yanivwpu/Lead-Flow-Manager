@@ -29,10 +29,10 @@ const LOCATION_SIGNAL_RE =
 
 const POOL_SIGNAL_RE = /\bpool\b/i;
 const WATERFRONT_SIGNAL_RE = /\bwaterfront\b/i;
-const BED_SIGNAL_RE = /\b\d+\s*[- ]?\s*bed/i;
+const BED_SIGNAL_RE = /\b\d+[\s-]*bed/i;
 const BED_CORRECTION_SIGNAL_RE =
   /\b(too big|too many bed|instead|only|is better|show me\s+\d+\s*\/\s*\d+)/i;
-const BATH_SIGNAL_RE = /\b\d+(?:\.\d+)?\s*[- ]?\s*bath/i;
+const BATH_SIGNAL_RE = /\b\d+(?:\.\d+)?[\s-]*bath/i;
 const BUDGET_SIGNAL_RE =
   /\$\s*[\d,.]+|\bbudget\b|\bbetween\s+\d|\d+\s*-\s*\d+\s+dollars?|\d+\s+dollars?\b|\b(?:up\s+to|under)\s+[\d,.]+\s*(?:k|m|mil|million)?/i;
 

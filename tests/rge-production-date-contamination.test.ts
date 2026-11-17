@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { performance } from "node:perf_hooks";
+import { hasInventoryPreferenceSignals, hasStrongStructuredSearchSignals } from "../shared/buyerPreferenceInventorySignals";
 import { inventoryContactEligibility } from "../shared/inventoryContactEligibility";
 import { resolveAiDomainEligibility } from "../shared/aiDomainEligibility";
 import { heuristicPatchFromInboundText, heuristicPatchFromTranscript } from "../shared/buyerPreferenceExtractionNormalize";
@@ -16,10 +18,17 @@ for (const text of [renewal, "החידוש שלך הוא ב11/21", "Your debt is
   assert.equal(heuristicPatchFromInboundText(text).bedsMin, undefined, text);
   assert.equal(heuristicPatchFromInboundText(text).bathsMin, undefined, text);
 }
-for (const text of ["Show me 3/2 under $500k", "Looking for a 3/2.5 condo in Miami", "11 beds and 21 baths house under $5m"]) {
+for (const text of ["Looking to rent a 3/2 for $3000", "I want to buy a 3/2 for $500k", "Can you send information on a 3/2 condo under $500k?", "Information on 3/2 condos under $500k", "Show me 3/2 under $500k", "Looking for a 3/2.5 condo in Miami", "11 beds and 21 baths house under $5m"]) {
   assert.equal(inventoryContactEligibility({rgeInstalled: true, inboundText: text}), true, text);
   assert.ok(heuristicPatchFromInboundText(text).bedsMin, text);
+  assert.ok(heuristicPatchFromInboundText(text).bathsMin, text);
 }
+// Hostile whitespace must not trigger overlapping room-count quantifiers.
+const started = performance.now();
+const whitespace = "3" + " ".repeat(100_000) + "unrelated";
+assert.equal(hasInventoryPreferenceSignals(whitespace), false);
+assert.equal(hasStrongStructuredSearchSignals(whitespace), false);
+assert.ok(performance.now() - started < 1500, "room signals handle long whitespace promptly");
 const listing = "Show me a 3/2 condo under $500k in Miami";
 for (const quoted of [`Thanks\n> ${listing}`, `Thanks\nOn Monday agent wrote:\n${listing}`, `Thanks\n---------- Forwarded message ---------\n${listing}`]) {
   assert.equal(inventoryContactEligibility({rgeInstalled: true, inboundText: quoted}), false, quoted);

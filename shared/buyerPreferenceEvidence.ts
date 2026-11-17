@@ -21,10 +21,12 @@ export function matchPropertyBedBath(text: string): RegExpMatchArray | null {
     const start = match.index!;
     const before = text.slice(Math.max(0, start - 60), start);
     const after = text.slice(start + match[0].length, start + match[0].length + 20);
-    if (/\b(?:renewal|renew|until|date|due|payment|paid|invoice|on|by|before|through|vence|fecha|hasta|renovaci[oó]n)\s*(?:\w{1,12}\s+){0,2}$/iu.test(before) ||
+    const explicitRoomsAfter = /^\s*(?:bed(?:room)?s?|baths?|br|condos?|houses?|homes?|apartments?|townhouses?)\b/i.test(after);
+    if (/\b(?:renewal|renew|until|date|due|payment|paid|invoice|vence|fecha|hasta|renovaci[oó]n)\s*(?:\w{1,12}\s+){0,2}$/iu.test(before) ||
+        (!explicitRoomsAfter && /\b(?:on|by|before|through)\s*$/iu.test(before)) ||
         /(?:חידוש|תאריך|בתאריך|עד|ב)\s*$/u.test(before) || /^\s*\/\s*\d/.test(after)) continue;
     const context = text.slice(Math.max(0, start - 100), start + match[0].length + 100);
-    if (/\b(?:bed(?:room)?s?|baths?|br|house|home|condo|apartment|townhouse|property|sfh|pool|show\s+me|looking\s+for|instead|only|better|too\s+(?:big|many)|budget|under|up\s+to|in|near|around)\b|דירה|דירות|בית|חדרים/iu.test(context)) return match;
+    if (/\b(?:bed(?:room)?s?|baths?|br|house|home|condo|apartment|townhouse|property|sfh|pool|show\s+me|looking\s+for|(?:looking|want|ready)\s+to\s+(?:buy|rent|purchase)|(?:buy|rent)\s+(?:a|an)|instead|only|better|too\s+(?:big|many)|budget|under|up\s+to|in|near|around)\b|דירה|דירות|בית|חדרים/iu.test(context)) return match;
   }
   return null;
 }
