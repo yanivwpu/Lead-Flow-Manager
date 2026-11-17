@@ -1,3 +1,4 @@
+import { consumeInvitationReturn } from "@/lib/teamInvitationReturn";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -69,7 +70,7 @@ export function VerifyEmailPage() {
         if (cancelled) return;
         const nextFollowUp = decideVerificationLinkFollowUp(originalTabPresent);
         const sessionReady = Boolean(userId);
-        setContinueHref(sanitizeClientRedirectPath(verificationContinuePath(sessionReady)));
+        setContinueHref(sanitizeClientRedirectPath(consumeInvitationReturn() || verificationContinuePath(sessionReady)));
         setFollowUp(nextFollowUp);
         setStatus("success");
         setMessage(

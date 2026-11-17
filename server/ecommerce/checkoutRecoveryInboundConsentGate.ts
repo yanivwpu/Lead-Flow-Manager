@@ -3,6 +3,7 @@
  * X-Hub-Signature-256 over captured raw bytes. No SMS/email preference or
  * outbound CRM message can create consent.
  */
+import { WHATSAPP_CONSENT_PHRASES } from '../../shared/shopifyConsentEnrollment';
 export type RecoveryConsentAction='grant'|'revoke';
 export type VerifiedInboundConsentCandidate={
   signatureValid:boolean;hasRawBody:boolean;type:string;
@@ -46,7 +47,7 @@ export function classifyRecoveryConsentInbound(event:VerifiedInboundConsentCandi
   if(!verified)return null;
   const {normalized,eventAt}=verified;
   const action:RecoveryConsentAction|null=
-    normalized==='YES WHATSAPP CHECKOUT REMINDERS'?'grant':
+    normalized===WHATSAPP_CONSENT_PHRASES.checkoutRecovery?'grant':
     ['STOP','STOP CHECKOUT REMINDERS','UNSUBSCRIBE'].includes(normalized)?'revoke':null;
   return action?{action,eventAt}:null;
 }

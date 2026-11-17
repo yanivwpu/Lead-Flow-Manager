@@ -102,7 +102,8 @@ export function useAppNavCategories(): {
 } {
   const { t, i18n } = useTranslation();
   const activation = useEcommerceMerchantActivationStatus();
-  const ecommerceGrowthEngineActivated = activation.data?.activated === true && activation.data?.eligible === true;
+  // Discovery is available before activation; operational access still uses the existing boundary.
+  const ecommerceGrowthEngineVisible = activation.data?.connected === true && activation.data?.eligible === true;
   const locale = (i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
   const ecommerceLabel = locale === "he" ? "מנוע הצמיחה למסחר אלקטרוני" :
     locale === "es" ? "Motor de comercio electrónico" : "E-Commerce Growth Engine";
@@ -136,7 +137,7 @@ export function useAppNavCategories(): {
 
   return useMemo(() => {
     const sections = resolveAppNavSections({
-      ecommerceGrowthEngineActivated,
+      ecommerceGrowthEngineActivated: ecommerceGrowthEngineVisible,
       hasPresetCampaigns,
       prospectAiActivated,
       realtorGrowthEngineActivated,
@@ -144,6 +145,7 @@ export function useAppNavCategories(): {
 
     const toItem = (id: AppNavItemId): AppNavLinkItem => {
       let href = APP_NAV_HREFS[id];
+      if (id === "ecommerceGrowthEngine" && activation.data?.activated !== true) href = "/app/ecommerce-growth-engine?view=setup";
       if (id === "prospectAi") href = PROSPECT_AI_PATH;
       if (id === "realtorGrowthEngine") {
         href = getRgeHubPath(rgePayload?.entitlement?.status, rgePayload?.entitlement);
@@ -180,7 +182,8 @@ export function useAppNavCategories(): {
   }, [
     t,
     location,
-    ecommerceGrowthEngineActivated,
+    ecommerceGrowthEngineVisible,
+    activation.data?.activated,
     ecommerceLabel,
     hasPresetCampaigns,
     prospectAiActivated,

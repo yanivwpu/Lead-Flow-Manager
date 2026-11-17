@@ -88,10 +88,10 @@ export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved, act
     },
   });
   const templates = Array.isArray(library.data) ? library.data : [];
-  return <section dir={lang === "he" ? "rtl" : "ltr"} lang={locale} data-testid="post-purchase-plans" className="space-y-3 rounded-xl border bg-white p-4">
-    <h3 className="font-semibold">{t.title}</h3>
+  return <section dir={lang === "he" ? "rtl" : "ltr"} lang={locale} data-testid="post-purchase-plans" className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+    <h3 className="text-base font-semibold text-slate-950">{t.title}</h3>
     <p className="text-sm text-slate-600">{t.pause}</p>
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 sm:p-4">
       {POST_PURCHASE_JOURNEYS.map((journey, index) => <PlanRow key={journey}
         journey={journey} initial={plans?.[journey] ?? readPostPurchasePlans(null)[journey]}
         label={t.labels[index]} example={t.examples[index]} t={t} onSaved={onSaved}
@@ -99,7 +99,7 @@ export function ShopifyPostPurchasePlans({ plans, bindings, locale, onSaved, act
     </div>
     <p className="text-sm text-slate-600">{t.readiness}</p>
     {!activation?.canActivate&&<p role="status" className="text-sm text-amber-800">{t.blocked}</p>}
-    <button type="button" data-testid="post-purchase-activation" className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+    <button type="button" data-testid="post-purchase-activation" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
       disabled={!sessionAligned||activationState==='saving'||(!activation?.merchantEnabled&&!activation?.canActivate)}
       onClick={()=>void updateActivation()}>{activation?.merchantEnabled?t.pauseDelivery:t.activate}</button>
     {activationState==='saved'&&<p role="status" className="text-xs">{t.activationSaved}</p>}
@@ -182,18 +182,18 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
       setStatus("saved");
     } catch { setStatus("error"); }
   }
-  return <form className="space-y-2 rounded-lg border p-3" onSubmit={e => { e.preventDefault(); if (valid && status !== "saving") void save(); }}>
-    <h4 className="font-medium">{label}</h4>
-    <label className="flex gap-2 text-sm"><input type="checkbox" checked={selected} disabled={status === "saving"}
+  return <form className={`min-w-0 space-y-3 rounded-xl border p-4 shadow-sm transition-colors ${selected ? 'border-blue-300 bg-blue-50/80' : 'border-slate-300 bg-white'}`} onSubmit={e => { e.preventDefault(); if (valid && status !== "saving") void save(); }}>
+    <h4 className="text-sm font-semibold text-slate-950">{label}</h4>
+    <label className="flex items-center gap-2 text-sm font-medium text-slate-800"><input type="checkbox" checked={selected} disabled={status === "saving"}
       onChange={e => { setSelected(e.target.checked); setStatus("idle"); }}/>{t.choose}</label>
-    <label className="block text-sm">{t.delay}<input className="ms-2 w-28 rounded border px-2" type="number"
+    <label className="block text-sm">{t.delay}<input className="ms-2 w-28 rounded-md border border-slate-300 bg-white px-2 py-1.5" type="number"
       min={0} max={259200} step={1} value={delay} disabled={status === "saving"}
       onChange={e => { setDelay(e.target.value); setStatus("idle"); }}/></label>
     <p className="text-xs text-slate-600">{JOURNEY_POLICY[journey].category === "UTILITY" ? t.utility : t.marketing}</p>
-    <details className="text-sm"><summary>{t.preview}</summary><p className="mt-2">{example}</p></details>
-    <div className="space-y-2 rounded-md border border-slate-100 bg-slate-50/50 p-3" data-testid={`post-purchase-message-${journey}`}>
+    <details className="rounded-lg border border-slate-200 bg-white/85 p-3 text-sm"><summary className="cursor-pointer font-medium text-slate-700">{t.preview}</summary><p className="mt-2 text-slate-600">{example}</p></details>
+    <div className="space-y-3 rounded-lg border border-blue-200 bg-white p-3 shadow-sm" data-testid={`post-purchase-message-${journey}`}>
       <label className="block text-sm font-medium">{t.chooseMessage}
-        <select aria-label={t.chooseMessage} className="mt-1 w-full rounded border bg-white p-2 text-sm"
+        <select aria-label={t.chooseMessage} className="mt-2 w-full rounded-md border border-slate-300 bg-white p-2 text-sm"
           value={selectedTemplate} disabled={messageStatus === "saving"}
           onChange={e => { const nextTemplateId = e.target.value; setSelectedTemplate(nextTemplateId); void saveTemplate(nextTemplateId); }}>
           <option value="">{t.noMessage}</option>
@@ -202,7 +202,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
           </option>)}
         </select>
       </label>
-      {currentTemplate && <p className="whitespace-pre-wrap text-xs text-slate-700">{currentTemplate.bodyText}</p>}
+      {currentTemplate && <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">{currentTemplate.bodyText}</p>}
       {approved.length === 0 && <p className="text-xs text-slate-600">{t.noApproved}</p>}
       <a href="/app/templates?tab=templates" className="inline-block text-xs text-blue-700 underline">{t.editMessage}</a>
       <p className="text-xs text-slate-500">{t.messageHint}</p>
@@ -214,7 +214,7 @@ function PlanRow({ journey, initial, label, example, t, onSaved, templates, init
           onClick={() => void saveTemplate(selectedTemplate)}>{t.retryMessage}</button>
       </div>}
     </div>
-    <button type="submit" disabled={!valid || status === "saving"} className="rounded border px-3 py-1 text-sm text-blue-700 disabled:opacity-50">{t.save}</button>
+    <button type="submit" disabled={!valid || status === "saving"} className="rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50">{t.save}</button>
     {status === "saved" && <p role="status" className="text-xs">{t.saved}</p>}
     {status === "error" && <p role="alert" className="text-xs text-red-700">{t.error}</p>}
   </form>;

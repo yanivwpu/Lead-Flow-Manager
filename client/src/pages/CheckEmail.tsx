@@ -1,3 +1,4 @@
+import { consumeInvitationReturn } from "@/lib/teamInvitationReturn";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
@@ -46,7 +47,7 @@ export function CheckEmailPage() {
     if (isLoading || (user && !sessionAligned)) return;
     if (user && user.emailVerifiedAt !== null) {
       clearPendingVerificationEmail();
-      navigateAfterAuth("/app/inbox");
+      navigateAfterAuth(consumeInvitationReturn() || "/app/inbox");
       return;
     }
     if (user && user.emailVerifiedAt === null) {

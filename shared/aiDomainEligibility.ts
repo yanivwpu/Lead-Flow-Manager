@@ -46,6 +46,8 @@ export type AiDomainEligibilityInput = {
   industry?: string | null;
   buyerProfileHasCriteria?: boolean;
   sellerProfileHasData?: boolean;
+  /** Property intent verified against contact history, or agent-confirmed enrollment. */
+  buyerIntentVerified?: boolean;
   /** Contact email local-part / address for system mail detection. */
   contactEmail?: string | null;
   /** Current inbound Email From — preferred over contactEmail for system detection. */
@@ -54,7 +56,7 @@ export type AiDomainEligibilityInput = {
 };
 
 const RENTAL_INTENT_RE =
-  /\b(?:rent(?:al|ing)?|lease|leasing|for\s+rent|looking\s+to\s+rent|need\s+(?:a|an)\s+\d*\s*(?:bed|br|bedroom)?\s*rental)\b/i;
+  /\b(?:rent(?:al|ing)?|lease|leasing)\b/i;
 
 const BUY_INTENT_RE =
   /\b(?:looking\s+to\s+buy|ready\s+to\s+buy|want\s+to\s+buy|buy(?:ing)?\s+(?:a|an|the)|for\s+sale|make\s+an\s+offer)\b/i;
@@ -221,15 +223,58 @@ export function isRealtorWorkspaceForCopilot(input: {
   return Boolean(input.rgeInstalled) || isRealEstateIndustry(input.industry);
 }
 
-/**
- * Strong real-estate transactional evidence in message text.
- * Deliberately stricter than hasInventoryPreferenceSignals (which false-positives
- * on legal/ToS language like "purchase" / "in the").
- */
+const VEHICLE_WORDS = new Set([
+  "car", "cars", "vehicle", "vehicles", "auto", "autos", "automobile", "automobiles",
+  "coche", "coches", "carro", "carros", "vehículo", "vehículos", "רכב", "מכונית",
+]);
+const PROPERTY_WORDS = new Set([
+  "property", "house", "houses", "home", "homes", "condo", "condos", "apartment", "apartments",
+  "townhouse", "townhouses", "sfh", "casa", "apartamento", "vivienda", "inmueble", "דירה", "דירות", "בית",
+]);
+const SEARCH_WORDS = new Set(["buy", "buying", "rent", "renting", "lease", "purchase", "need", "want", "looking", "show", "find", "לקנות", "לרכוש", "לשכור", "comprar", "alquilar", "rentar"]);
+function intentWords(text: string): string[] {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+}
+function isVehicleWord(words: string[], index: number): boolean {
+  if (!VEHICLE_WORDS.has(words[index])) return false;
+  // A car-count garage amenity is property criteria, not a vehicle transaction.
+  if (["car", "cars"].includes(words[index]) && ["garage", "garages"].includes(words[index + 1])) return false;
+  return true;
+}
+
+/** Vehicle rental/payment language; property maintenance and car garages are not vehicle intent. */
+export function hasVehicleContext(text: string): boolean {
+  const words = intentWords(text);
+  return words.some((_word, index) => isVehicleWord(words, index)) || /רכב|מכונית/u.test(text);
+}
+
+function hasDirectPropertySearch(words: string[]): boolean {
+  return words.some((word, index) => {
+    if (!PROPERTY_WORDS.has(word)) return false;
+    const start = Math.max(0, index - 10);
+    const before = words.slice(start, index);
+    return before.some((w) => SEARCH_WORDS.has(w)) &&
+      !before.some((_w, i) => isVehicleWord(words, start + i));
+  });
+}
+
+export function hasDirectPropertySearchEvidence(text: string): boolean {
+  return hasDirectPropertySearch(intentWords(text));
+}
+
+/** Strong property search evidence; budget/location alone do not establish the domain. */
 export function hasStrongRealEstateLeadEvidence(text: string | null | undefined): boolean {
   const t = String(text || "").trim();
   if (t.length < 8) return false;
+  if (hasVehicleContext(t) && !hasDirectPropertySearchEvidence(t)) return false;
   if (hasPropertyShowingIntent(t)) return true;
+  const propertyAnchor = hasPropertyTypeSignalInMessage(t) ||
+    /\b(?:property|real estate|realtor|bedrooms?|beds?|br|baths?|mortgage|apartamento|casa|vivienda|inmueble)\b|דירה|דירות|בית|נדל״ן|נדלן/iu.test(t) ||
+    /\b\d+\s*\/\s*\d+\b/.test(t);
+  if (!propertyAnchor) return false;
+  const words = intentWords(t);
+  if (words.some((word) => ["לקנות", "לרכוש", "לשכור", "להשכרה", "comprar", "alquilar", "rentar"].includes(word)) &&
+      words.some((word) => PROPERTY_WORDS.has(word))) return true;
   if (hasStrongStructuredSearchSignals(t)) return true;
 
   const rental = RENTAL_INTENT_RE.test(t);
@@ -250,7 +295,8 @@ export function hasStrongRealEstateLeadEvidence(text: string | null | undefined)
 
 export function detectRentalLeadEvidence(text: string | null | undefined): boolean {
   const t = String(text || "").trim();
-  if (!RENTAL_INTENT_RE.test(t)) return false;
+  if (!hasStrongRealEstateLeadEvidence(t)) return false;
+  if (!RENTAL_INTENT_RE.test(t) && !/לשכור|להשכרה|\b(?:alquilar|rentar)\b/iu.test(t)) return false;
   return (
     hasStrongStructuredSearchSignals(t) ||
     BED_OR_BUDGET_RE.test(t) ||
@@ -312,6 +358,11 @@ export function resolveAiConversationDomain(
   } else {
     if (detectRentalLeadEvidence(history)) return "real_estate_rental";
     if (hasStrongRealEstateLeadEvidence(history)) return "real_estate_buyer";
+  }
+
+  // Verified contact history survives greetings and small talk; saved criteria alone do not.
+  if (input.buyerIntentVerified || hasStrongRealEstateLeadEvidence(history)) {
+    return detectRentalLeadEvidence(history) ? "real_estate_rental" : "real_estate_buyer";
   }
 
   // Continuity only after current-message eligibility allows it.

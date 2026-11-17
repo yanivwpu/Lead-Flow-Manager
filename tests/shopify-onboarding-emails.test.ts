@@ -80,11 +80,11 @@ test("B: users.email remains synthetic identity", () => {
   );
 });
 
-test("C: no new Shopify scope required", () => {
+test("C: merchant email uses no extra identity scope; storefront adds only proxy permission", () => {
   const shopifyTs = src("server/shopify.ts");
-  assert.ok(shopifyTs.includes("export const SHOPIFY_SCOPES = ['read_customers', 'read_orders']"));
+  assert.ok(shopifyTs.includes("export const SHOPIFY_SCOPES = ['read_customers', 'read_orders', 'write_app_proxy']"));
   const toml = src("shopify.app.whachatcrm.toml");
-  assert.match(toml, /scopes = "read_customers,read_orders"/);
+  assert.match(toml, /scopes = "read_customers,read_orders,write_app_proxy"/);
   assert.ok(!shopifyTs.includes("'read_users'"));
   assert.ok(!shopifyTs.includes('"read_users"'));
 });

@@ -1,3 +1,4 @@
+import { inboxWorkspaceId } from "./inboxWorkspaceContext";
 import type { RequestHandler } from "express";
 import type { Contact, Conversation, ActivityEvent } from "@shared/schema";
 import { contactDetailsSuppressed, projectShopifyOrder, shopifyContactContext } from "@shared/contactDetails";
@@ -14,14 +15,14 @@ export function createContactDetailsHandler(deps: {
   return async (req, res) => {
     try {
       if (!req.user) { res.status(401).json({ error: "Unauthorized" }); return; }
-      const contact = await deps.getContact(req.params.id, req.user.id);
-      if (!contact || contact.userId !== req.user.id) { res.status(404).json({ error: "Not found" }); return; }
+      const contact = await deps.getContact(req.params.id, inboxWorkspaceId(req));
+      if (!contact || contact.userId !== inboxWorkspaceId(req)) { res.status(404).json({ error: "Not found" }); return; }
       if (contactDetailsSuppressed(contact) || await deps.isPrivacyLocked(contact)) {
         res.status(410).json({ error: "Customer data is unavailable following a privacy request." }); return;
       }
-      const conversations = await deps.getConversations(contact.id, req.user.id);
-      const events = await deps.getActivityEvents(contact.id, req.user.id, 200);
-      const ownedEvents = events.filter(event => event.userId === req.user!.id);
+      const conversations = await deps.getConversations(contact.id, inboxWorkspaceId(req));
+      const events = await deps.getActivityEvents(contact.id, inboxWorkspaceId(req), 200);
+      const ownedEvents = events.filter(event => event.userId === inboxWorkspaceId(req));
       const orders = ownedEvents.filter(event => event.eventType === "shopify_order_created")
         .map(event => ({ id: event.id, ...projectShopifyOrder(event.eventData as Record<string, unknown>, event.createdAt) }));
       const context = shopifyContactContext(contact);
@@ -34,7 +35,7 @@ export function createContactDetailsHandler(deps: {
           leadScore: contact.leadScore, followUp: contact.followUp, followUpDate: contact.followUpDate,
           createdAt: contact.createdAt, updatedAt: contact.updatedAt,
         },
-        conversations: conversations.filter(item => item.userId === req.user!.id)
+        conversations: conversations.filter(item => item.userId === inboxWorkspaceId(req))
           .map(item => ({ id: item.id, channel: item.channel })),
         displayChannel: getContactDisplayChannel(contact, conversations),
         orders, shopify: context.linked || orders.length > 0,

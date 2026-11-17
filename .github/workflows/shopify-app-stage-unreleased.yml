@@ -59,9 +59,10 @@ jobs:
           assert config.get("application_url") == "https://app.whachatcrm.com", "Unexpected app URL"
           assert config.get("embedded") is False, "Unexpected embedded setting"
           assert config.get("webhooks", {}).get("api_version") == "2026-01", "Webhook API version changed"
-          assert config.get("access_scopes", {}).get("scopes") == "read_customers,read_orders", "Required scopes changed"
-          assert config.get("access_scopes", {}).get("optional_scopes") == ["read_products", "read_inventory"], "Optional scopes changed"
+          assert config.get("access_scopes", {}).get("scopes") == "read_customers,read_orders,write_app_proxy", "Required scopes changed"
+          assert config.get("access_scopes", {}).get("optional_scopes") == ["read_products", "read_inventory", "read_themes"], "Optional scopes changed"
           assert config.get("auth", {}).get("redirect_urls") == ["https://app.whachatcrm.com/api/shopify/callback"], "OAuth callback changed"
+          assert config.get("app_proxy") == {"url": "/api/shopify/consent-storefront", "prefix": "apps", "subpath": "whachat-consent"}, "Consent proxy changed"
           found, found_privacy = {}, {}
           for sub in config["webhooks"]["subscriptions"]:
               for topic in sub.get("topics", []):

@@ -1,0 +1,37 @@
+name: Shopify pilot read-only identity preview
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopify-pilot-read-only-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Read-only production pair inspection
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: shopify-pilot-operator
+    steps:
+      - name: Checkout dispatched main commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Read-only exact-pair preview
+        env:
+          PILOT_IDENTITY_READ_ONLY_DATABASE_URL: ${{ secrets.PILOT_IDENTITY_READ_ONLY_DATABASE_URL }}
+          PILOT_IDENTITY_CANONICAL_CONTACT_ID: ${{ secrets.PILOT_IDENTITY_CANONICAL_CONTACT_ID }}
+          PILOT_IDENTITY_SOURCE_CONTACT_ID: ${{ secrets.PILOT_IDENTITY_SOURCE_CONTACT_ID }}
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+        run: node --import tsx scripts/shopify-pilot/previewIdentity.ts

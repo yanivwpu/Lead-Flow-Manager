@@ -12,11 +12,11 @@ export function postPurchaseOperatorReady(env:Record<string,string|undefined>,ac
     (env.ECOMMERCE_WHATSAPP_RECOVERY_CONSENT_HMAC_KEY?.length??0)>=32;
 }
 /** Workspace activation configures future delivery; it never creates customer consent. */
-export function postPurchaseActivationReadiness(env:Record<string,string|undefined>,accountId:string,config:Record<string,unknown>,schemaReady:boolean){
+export function postPurchaseActivationReadiness(env:Record<string,string|undefined>,accountId:string,config:Record<string,unknown>,schemaReady:boolean,merchantReleased=false){
   const selected=Object.entries(readPostPurchasePlans(config)).filter(([,p])=>p.selected);
   const bindings=readPostPurchaseTemplateBindings(config);
   const configured=selected.length>0&&selected.every(([j])=>!!bindings[j as keyof typeof bindings]);
-  const operatorReady=postPurchaseOperatorReady(env,accountId);
+  const operatorReady=merchantReleased||postPurchaseOperatorReady(env,accountId);
   return {canActivate:operatorReady&&schemaReady&&configured,
     merchantEnabled:config.ecommercePostPurchaseDeliveryEnabled===true,
     deliveryEnabled:operatorReady&&schemaReady&&config.ecommercePostPurchaseDeliveryEnabled===true,

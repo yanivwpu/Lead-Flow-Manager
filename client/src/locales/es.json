@@ -1474,7 +1474,7 @@
     "fallback": "Transferir a una persona si no se pueden verificar los productos",
     "checkoutDisabled": "La asistencia de pago está pendiente de revisión y sigue desactivada.",
     "checkoutEnable": "Activar asistencia de pago",
-    "checkoutAuthorization": {"catalog_permission_required": "Autoriza productos e inventario en la configuración existente del catálogo de Shopify.", "catalog_unavailable": "Espera a que termine la sincronización del catálogo de Shopify o pide ayuda.", "awaiting_review": "La asistencia de pago está desactivada y pendiente de revisión. El flujo propuesto no requiere configurar un token Storefront.", "pro_required": "Se requiere Pro con AI Brain para la asistencia de pago.", "connect_shopify": "Conecta Shopify y autoriza el acceso existente a productos e inventario.", "ready": "Asistencia de pago disponible. Los productos deben estar publicados y disponibles en Shopify."},
+    "checkoutAuthorization": {"catalog_permission_required": "Autoriza productos e inventario en la configuración existente del catálogo de Shopify.", "catalog_unavailable": "Espera a que termine la sincronización del catálogo de Shopify o pide ayuda.", "awaiting_review": "Ayuda a completar compras con IA. Esta función aún no está disponible. Tu asistente puede seguir respondiendo preguntas y recomendando productos.", "pro_required": "Se requiere Pro con AI Brain para la asistencia de pago.", "connect_shopify": "Conecta Shopify y autoriza el acceso existente a productos e inventario.", "ready": "Asistencia de pago disponible. Los productos deben estar publicados y disponibles en Shopify."},
     "checkoutStatus": {"ready": "Pago de Shopify preparado · pago no confirmado", "pending": "Pago pendiente · selección guardada", "expired": "Pago caducado · pide ayuda", "changed": "Selección cambiada · confirma de nuevo", "unavailable": "Pago no disponible · ayuda humana disponible", "setup_required": "Se requiere revisar configuración o permisos"},
     "save": "Guardar",
     "saveError": "No se pudo guardar la configuración.",
@@ -1487,6 +1487,22 @@
       "confirmed": "Selección confirmada",
       "handoff": "Necesita ayuda humana",
       "cancelled": "Cancelado"
+    },
+    "benefit": "Responde preguntas y ayuda a cada cliente a encontrar los productos adecuados.",
+    "checkoutUnavailable": "Asistencia para completar la compra — No disponible",
+    "checkoutSoon": "Asistencia para completar la compra — Aún no disponible",
+    "saved": "Configuración guardada.",
+    "saving": "Guardando…",
+    "loading": "Cargando configuración de compras…",
+    "loadError": "La configuración no está disponible. Inténtalo de nuevo.",
+    "retry": "Reintentar",
+    "channelsLabels": {
+      "webchat": "Chat del sitio web",
+      "whatsapp": "WhatsApp",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "sms": "SMS",
+      "telegram": "Telegram"
     }
   },
   "testChat": {
@@ -1582,5 +1598,280 @@
     "confirmDnc": "¿Bloquear permanentemente el contacto en todos los canales? Se cancelarán los envíos pendientes, flujos de trabajo e inscripciones en campañas. No se puede deshacer aquí.",
     "setDnc": "Bloquear contacto en todos los canales",
     "missingIdentity": "Añade un correo válido o un teléfono internacional antes de bloquear el contacto."
-  }
+  },
+  "teamInvite": {
+    "title": "Invitación al espacio de trabajo",
+    "instructions": "Inicia sesión o regístrate con el correo que recibió esta invitación. Verifica tu correo y luego revisa y acepta la invitación.",
+    "signIn": "Iniciar sesión o registrarse",
+    "accept": "Aceptar invitación",
+    "verify": "Verificar tu correo",
+    "switchAccount": "Usar otra cuenta",
+    "invalid": "Esta invitación ha caducado, fue revocada o ya se usó. Pide al propietario que la reenvíe.",
+    "identityError": "Usa el correo verificado que recibió esta invitación.",
+    "loading": "Cargando…",
+    "workspace": "Espacio de trabajo",
+    "role": "Rol",
+    "owner": "Propietario",
+    "admin": "Administrador",
+    "member": "Miembro",
+    "sent": "Invitación enviada",
+    "deliveryFailed": "No se pudo enviar el correo. La invitación está pendiente; pulsa Reenviar para intentarlo de nuevo.",
+    "resend": "Reenviar",
+    "pending": "Pendiente",
+    "active": "Activo",
+    "inactive": "Inactivo",
+    "revoked": "El acceso no está disponible. Selecciona un espacio autorizado."
+  },
+  "commerceFeedback": {
+    "heading": "Ayúdanos a mejorar el motor de crecimiento",
+    "intro": "¿Tienes una idea, una solicitud de función o algo que no funciona? Compártelo con nuestro equipo.",
+    "kind": "¿Qué te gustaría compartir?",
+    "suggestion": "Sugerir una mejora",
+    "feature": "Solicitar una nueva función",
+    "issue": "Informar de un problema",
+    "name": "Tu nombre",
+    "email": "Correo electrónico",
+    "message": "Tus comentarios",
+    "placeholder": "Cuéntanos qué te gustaría mejorar…",
+    "send": "Enviar comentarios",
+    "sending": "Enviando…",
+    "sent": "¡Gracias! Hemos recibido tus comentarios.",
+    "failed": "No pudimos enviar tus comentarios. Inténtalo de nuevo.",
+    "required": "Escribe tu nombre, un correo válido y un mensaje.",
+    "privacy": "No incluyas contraseñas, mensajes de clientes ni información confidencial."
+  },
+  "commerceEducation": {
+    "guide": "Cómo funciona / Guía de uso",
+    "back": "Volver al motor de crecimiento",
+    "intro": "Ayuda a tus clientes a elegir productos, recupera pagos abandonados que cumplan los requisitos y mantén a tus compradores informados después de la compra. Esta guía está dirigida a comercios Shopify que usan WhachatCRM. Empieza por las funciones que necesitas; instalar la app no activa mensajes a clientes.",
+    "setup": "Abrir activación y configuración",
+    "sections": [
+        {
+            "id": "introduction",
+            "title": "Tus herramientas de crecimiento para Shopify",
+            "paragraphs": [
+                "Compras con IA responde preguntas y recomienda productos. Recuperación de pagos ayuda a retomar compras pendientes. Poscompra mantiene informados a los clientes mediante mensajes de WhatsApp aprobados.",
+                "El catálogo Shopify, el historial de compras, la bandeja unificada, AI Brain y Seguimientos se comparten con WhachatCRM. No necesitas otro catálogo ni otro asistente de instalación."
+            ]
+        },
+        {
+            "id": "getting-started",
+            "title": "Primeros pasos",
+            "paragraphs": [
+                "1. Abre Configuración en el motor, conecta Shopify y completa la autorización en Shopify. Vuelve a WhachatCRM y comprueba que la tienda esté conectada.",
+                "2. Abre activación y configuración. Activa el motor cuando se verifiquen la conexión y tu plan Pro o prueba elegible. Si tu plan no cumple los requisitos, pulsa Revisar plan. Activar el motor no inicia los mensajes.",
+                "3. Conecta WhatsApp Business en Configuración → Canales. Usa el número de tu negocio con el que atenderás a los clientes y completa los permisos solicitados.",
+                "4. En Compras con IA, activa el asistente, elige los canales conectados, el límite de recomendaciones y la derivación a una persona. Guarda los cambios y revisa la información del negocio en AI Brain.",
+                "5. En Recuperación o Poscompra, elige las finalidades del consentimiento, el nombre del negocio y el idioma del aviso. Guarda antes de añadir los avisos a Shopify. Usa Configurar en Shopify, activa la sección de consentimiento y guarda el tema publicado, o coloca los avisos y enlaces proporcionados en la página de tu tienda indicada.",
+                "6. Pulsa Configurar mis mensajes para reutilizar plantillas aprobadas compatibles o enviar las que falten en inglés a Meta. Revisa o personaliza los mensajes en la biblioteca WhatsApp y selecciona uno aprobado para cada recorrido. El idioma de la interfaz no cambia el idioma de la plantilla.",
+                "7. Selecciona y activa los recorridos poscompra que necesites. Activa los recordatorios de pago por separado. Si no puedes activarlos, sigue el motivo mostrado. Aprobar una plantilla o guardar el consentimiento no activa el envío.",
+                "8. Vuelve al motor para consultar la actividad, las aprobaciones y los resultados. Actualiza el estado de las plantillas cuando lo necesites. La configuración guardada se vuelve a cargar al regresar o actualizar la página."
+            ]
+        },
+        {
+            "id": "shopping",
+            "title": "Asistente de compras con IA",
+            "paragraphs": [
+                "El asistente utiliza los productos, variantes, precios e inventario disponibles sincronizados desde Shopify para responder y recomendar. Si falta un producto o un precio es incorrecto, revisa los productos Shopify, la conexión y la sincronización antes de probar de nuevo.",
+                "Añade políticas, información de envíos y preguntas frecuentes en AI Brain. Mantén estos datos al día: el catálogo no sustituye las políticas. Selecciona solo los canales conectados que quieras usar: chat web, WhatsApp, Instagram, Facebook, SMS o Telegram. Seleccionar un canal no lo conecta.",
+                "Elige cuántas recomendaciones mostrar y activa la derivación a una persona si el asistente no puede ayudar. Continúa las conversaciones en la bandeja unificada. Guarda y espera la confirmación antes de salir.",
+                "La asistencia para completar la compra tiene su propia comprobación de disponibilidad. Aunque no esté disponible, las preguntas y recomendaciones pueden seguir funcionando. No des por hecho que el asistente crea carritos, realiza pagos o modifica pedidos. Si faltan respuestas, revisa catálogo, AI Brain, canales y plan."
+            ]
+        },
+        {
+            "id": "recovery",
+            "title": "Recuperación de carritos y pagos",
+            "paragraphs": [
+                "La recuperación envía un recordatorio aprobado por WhatsApp cuando un pago abandonado cumple los requisitos. Un pago detectado es una observación, no un mensaje enviado ni una venta recuperada.",
+                "Las comprobaciones actuales comienzan tras el plazo de elegibilidad de 60 minutos y requieren un pago detectado después de la activación. No se garantiza el envío exactamente a los 60 minutos. Una compra completada, falta de consentimiento específico, baja del cliente, restricciones de contacto o plantillas no disponibles pueden impedirlo.",
+                "Abre Recuperación, guarda el consentimiento, selecciona un recordatorio aprobado y pulsa Activar recordatorios de checkout cuando esté listo. Usa Pausar recordatorios para detener nuevos envíos. Revisa los pagos detectados y la actividad de mensajes; estos contadores no confirman entregas ni ingresos."
+            ]
+        },
+        {
+            "id": "post-purchase",
+            "title": "Asistencia poscompra",
+            "paragraphs": [
+                "Los mensajes de pedidos disponibles incluyen confirmaciones, actualizaciones de envío y cancelaciones. Elige las finalidades compatibles que necesites, asigna plantillas aprobadas y activa los recorridos poscompra seleccionados.",
+                "Cada finalidad necesita permiso del cliente. Un pedido o un envío no equivalen a consentimiento. Los eventos anteriores a la activación no se envían retroactivamente. Otras ofertas o seguimientos mostrados tienen sus propios requisitos y disponibilidad; no todas las actualizaciones están automatizadas.",
+                "Pausa los recorridos poscompra antes de cambiar un mensaje en uso. Revisa la selección y el estado y vuelve a activar cuando esté listo. Una plantilla pendiente, pausada o rechazada por Meta no permite enviar mensajes."
+            ]
+        },
+        {
+            "id": "consent",
+            "title": "Consentimiento y requisitos de WhatsApp",
+            "steps": [
+                {
+                    "title": "Conecta WhatsApp Business",
+                    "instruction": "Abre Configuración → Canales, pulsa Conectar en WhatsApp y completa la conexión y los permisos solicitados con el número de tu negocio.",
+                    "success": "Tu número aparece conectado en Canales. Si no es así, termina o renueva la conexión.",
+                    "action": "Abrir Canales"
+                },
+                {
+                    "title": "Configura el consentimiento en Shopify",
+                    "instruction": "En Recuperación o Poscompra, elige las finalidades del consentimiento, el nombre del negocio y el idioma del aviso; pulsa Guardar cambios. Elige Configurar en Shopify, activa la sección de consentimiento y guarda el tema publicado. Si el tema no es compatible, coloca el aviso y el enlace proporcionados en la página Shopify indicada.",
+                    "success": "Los avisos están guardados. Vuelve de Shopify y comprueba que aparezca Activo en la tienda; si no se puede verificar, sigue las instrucciones mostradas. Configurar el tema no demuestra el consentimiento de ningún cliente.",
+                    "action": "Abrir configuración del consentimiento"
+                },
+                {
+                    "title": "Elige plantillas aprobadas",
+                    "instruction": "Pulsa Configurar mis mensajes. Revisa aprobación, idioma y finalidad en la biblioteca WhatsApp; después selecciona un mensaje aprobado compatible para cada recorrido. Las plantillas que faltan se envían actualmente en inglés; el idioma de la interfaz no traduce los mensajes a clientes.",
+                    "success": "El mensaje seleccionado está aprobado y asignado al recorrido. Si Meta aún lo está revisando, espera y actualiza el estado. La aprobación por sí sola no activa los envíos.",
+                    "action": "Abrir configuración de mensajes"
+                },
+                {
+                    "title": "Activa las funciones que necesitas",
+                    "instruction": "Selecciona las finalidades poscompra y pulsa Activar recorridos poscompra seleccionados. Activa los recordatorios de checkout por separado en Recuperación. Sigue el motivo que aparezca junto al control si falta algún paso.",
+                    "success": "El recorrido muestra Activo. Cada cliente aún debe dar permiso para esa finalidad y cumplir los requisitos. Usa la acción Pausar correspondiente para detener nuevos envíos.",
+                    "action": "Abrir activación y configuración"
+                }
+            ],
+            "notes": [
+                "El cliente elige libremente cada finalidad. Muestra el aviso guardado y su enlace en Shopify. El cliente debe enviar desde su número el texto exacto de WhatsApp indicado para esa finalidad. Pulsar un enlace, guardar una opción o marcar una casilla de email/SMS en Shopify no concede permiso para WhatsApp.",
+                "Los clientes pueden enviar STOP para darse de baja. La falta de consentimiento, una baja, restricciones de contacto, una conexión cambiada o una compra completada pueden impedir el envío. Nunca envíes un WhatsApp no solicitado para pedir permiso."
+            ]
+        },
+        {
+            "id": "results",
+            "title": "Cómo interpretar los resultados",
+            "statuses": [
+                {
+                    "id": "active",
+                    "label": "Activo",
+                    "description": "La función está habilitada. Cada cliente y mensaje aún debe cumplir los requisitos."
+                },
+                {
+                    "id": "ready",
+                    "label": "Listo para activar",
+                    "description": "La configuración está verificada. Todavía debes activar el recorrido."
+                },
+                {
+                    "id": "setup",
+                    "label": "Requiere configuración",
+                    "description": "Completa el paso indicado de conexión, consentimiento o plantilla."
+                },
+                {
+                    "id": "paused",
+                    "label": "En pausa",
+                    "description": "Los envíos están detenidos."
+                },
+                {
+                    "id": "unavailable",
+                    "label": "No disponible",
+                    "description": "La función no se puede usar en las condiciones actuales."
+                },
+                {
+                    "id": "coming",
+                    "label": "Próximamente",
+                    "description": "La función todavía no se ha publicado."
+                },
+                {
+                    "id": "queued",
+                    "label": "En cola",
+                    "description": "El mensaje espera su procesamiento."
+                },
+                {
+                    "id": "accepted",
+                    "label": "Aceptado por Meta",
+                    "description": "Meta aceptó la solicitud. Esto no confirma la entrega al cliente."
+                },
+                {
+                    "id": "delivered",
+                    "label": "Entregado",
+                    "description": "Un recibo de entrega confirma que el mensaje llegó al cliente."
+                },
+                {
+                    "id": "read",
+                    "label": "Leído",
+                    "description": "Un recibo de lectura confirma la apertura, cuando está disponible."
+                },
+                {
+                    "id": "failed",
+                    "label": "Fallido",
+                    "description": "El intento no se completó correctamente."
+                },
+                {
+                    "id": "review",
+                    "label": "Requiere revisión",
+                    "description": "El resultado es incierto. No se confirma aceptación ni entrega."
+                },
+                {
+                    "id": "suppressed",
+                    "label": "Omitido o no elegible",
+                    "description": "Faltaba un requisito, por lo que no se envió el mensaje."
+                }
+            ],
+            "notes": [
+                "Activado, en cola y aceptado no significan entregado. El resumen actual agrupa entregados y leídos. Los mensajes omitidos o no elegibles pueden no aparecer en los contadores agregados."
+            ]
+        },
+        {
+            "id": "faq",
+            "title": "Solución de problemas y preguntas frecuentes",
+            "items": [
+                {
+                    "question": "¿Por qué no puedo activar una función?",
+                    "answer": "Revisa Shopify, plan o prueba elegible, WhatsApp, finalidades del consentimiento guardadas y mensaje aprobado. Sigue el motivo junto al control; contacta con soporte si la disponibilidad sigue bloqueada."
+                },
+                {
+                    "question": "¿Por qué no está conectado WhatsApp?",
+                    "answer": "Abre Configuración → Canales y completa la conexión y permisos, o renueva la conexión existente. Vuelve y actualiza las plantillas."
+                },
+                {
+                    "question": "¿Por qué no aparece mi plantilla?",
+                    "answer": "Revisa aprobación, idioma y categoría en la biblioteca WhatsApp. Solo aparecen mensajes aprobados compatibles. La revisión puede tardar; actualiza su estado. Pausa el recorrido antes de cambiar la selección."
+                },
+                {
+                    "question": "¿Por qué no llegó la confirmación del pedido?",
+                    "answer": "Comprueba que el recorrido estaba activo antes del pedido, la finalidad estaba seleccionada, la plantilla está aprobada y el cliente dio ese permiso específico. Revisa si está en cola, aceptado, fallido o pendiente de revisión. Aceptado no confirma entrega."
+                },
+                {
+                    "question": "¿Por qué no se envió el recordatorio de pago?",
+                    "answer": "Un pago detectado aún debe cumplir el plazo, el consentimiento y la elegibilidad. Una compra completada o una baja impiden recordatorios. Revisa el estado y la plantilla seleccionada."
+                },
+                {
+                    "question": "¿Cómo actualizo los conocimientos de IA?",
+                    "answer": "Abre AI Brain y revisa políticas, preguntas frecuentes e información del negocio. Para problemas del catálogo, revisa los productos Shopify por separado."
+                },
+                {
+                    "question": "¿Cómo pauso la automatización?",
+                    "answer": "Pulsa Pausar recordatorios de checkout o Pausar recorridos poscompra. Para detener Compras con IA, desactiva su casilla y guarda. Pausar no retira mensajes ya aceptados por el proveedor."
+                },
+                {
+                    "question": "¿Por qué no se guardan los cambios?",
+                    "answer": "Busca errores o cambios sin guardar, completa campos obligatorios y comprueba la conexión. Guarda de nuevo y espera confirmación. Reabre la página para verificar antes de activar; copia el texto sin guardar antes de actualizar."
+                },
+                {
+                    "question": "¿Cómo reconecto Shopify?",
+                    "answer": "Abre Configuración del motor o Integraciones → Shopify y completa la conexión existente. Revisa consentimiento, plantillas y activación después de reconectar."
+                },
+                {
+                    "question": "¿Dónde consigo ayuda?",
+                    "answer": "Abre Ayuda en la navegación de la app. Indica función, estado mostrado y hora del problema; no incluyas contenido de mensajes de clientes ni credenciales."
+                }
+            ]
+        }
+    ],
+    "welcomeTitle": "Convierte más visitantes de Shopify en clientes",
+    "welcomeBody": "Descubre tu motor de comercio electrónico. Ayuda a encontrar productos, recupera pagos abandonados elegibles y mantén informados a tus clientes después de la compra desde WhachatCRM.",
+    "benefits": [
+        [
+            "Asistencia de compras con IA",
+            "Responde preguntas y recomienda productos antes de la compra."
+        ],
+        [
+            "Recuperación de pagos abandonados",
+            "Retoma el contacto con compradores elegibles mediante recordatorios aprobados."
+        ],
+        [
+            "Actualizaciones y atención al cliente",
+            "Envía confirmaciones y novedades de envío elegibles por WhatsApp."
+        ]
+    ],
+    "explore": "Explorar el motor",
+    "later": "Más tarde",
+    "learn": "Descubrir cómo funciona",
+    "close": "Cerrar",
+    "welcomeSafe": "Explora primero. Los mensajes y automatizaciones empiezan solo cuando los configuras y activas expresamente.",
+    "successLabel": "Cómo saber que está listo"
+}
 }

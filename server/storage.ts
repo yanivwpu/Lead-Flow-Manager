@@ -186,6 +186,8 @@ export type UpdateContactOptions = {
   skipAutomationHooks?: boolean;
   /** When set, UPDATE ... WHERE id AND user_id — foreign rows are a no-op. */
   expectedWorkspaceUserId?: string;
+  /** Authenticated Inbox actor; SQL rechecks membership and assignment permission at write time. */
+  expectedActorUserId?: string;
   /** Optimistic identity edit: never overwrite a newer synchronized customer snapshot. */
   expectedUpdatedAt?: Date;
   requireUnsyncedIdentity?: boolean;
@@ -2619,8 +2621,24 @@ export class DbStorage implements IStorage {
     updates: Partial<Contact>,
     options?: UpdateContactOptions
   ): Promise<Contact | undefined> {
+    const actor = options?.expectedActorUserId;
+    const assigning = actor && Object.prototype.hasOwnProperty.call(updates, "assignedTo");
+    const assignee = updates.assignedTo ?? null;
     const writeScope = and(eq(contacts.id, id),
       options?.expectedWorkspaceUserId ? eq(contacts.userId, options.expectedWorkspaceUserId) : undefined,
+      actor ? sql`(${contacts.userId} = ${actor} OR EXISTS (
+        SELECT 1 FROM team_members tm WHERE tm.owner_id = ${contacts.userId}
+          AND tm.member_id = ${actor} AND tm.status = 'active' AND tm.role IN ('admin', 'member')
+      ))` : undefined,
+      assigning && assignee !== null ? sql`(${contacts.userId} = ${assignee} OR EXISTS (
+        SELECT 1 FROM team_members target WHERE target.owner_id = ${contacts.userId}
+          AND target.member_id = ${assignee} AND target.status = 'active' AND target.role IN ('admin', 'member')
+      ))` : undefined,
+      assigning ? sql`(${contacts.userId} = ${actor} OR EXISTS (
+        SELECT 1 FROM team_members editor WHERE editor.owner_id = ${contacts.userId}
+          AND editor.member_id = ${actor} AND editor.status = 'active' AND editor.role = 'admin'
+      ) OR ((${contacts.assignedTo} IS NULL OR ${contacts.assignedTo} = ${actor})
+        AND (${assignee}::varchar IS NULL OR ${assignee} = ${actor})))` : undefined,
       options?.expectedUpdatedAt ? sql`date_trunc('milliseconds', ${contacts.updatedAt}) = ${options.expectedUpdatedAt.toISOString()}::timestamp` : undefined,
       options?.requireUnsyncedIdentity ? sql`coalesce(${contacts.source}, '') <> 'shopify' AND coalesce(${contacts.customFields}->>'lastCommerceSource', '') <> 'shopify' AND ${contacts.customFields}->>'shopifyCustomerId' IS NULL AND ${contacts.sourceDetails}->>'shopifyCustomerId' IS NULL` : undefined);
     const hasBuyerPref = Object.prototype.hasOwnProperty.call(updates, "buyerPreferenceProfile");
@@ -3082,7 +3100,7 @@ export class DbStorage implements IStorage {
       const allConvs = await db
         .select()
         .from(conversations)
-        .where(inArray(conversations.contactId, contactIds))
+        .where(and(inArray(conversations.contactId, contactIds), eq(conversations.userId, userId)))
         .orderBy(desc(conversations.lastMessageAt));
       for (const conv of allConvs) {
         const list = convsByContact.get(conv.contactId);
@@ -3300,7 +3318,7 @@ export class DbStorage implements IStorage {
     if (!contact) return undefined;
 
     const convs = await db.select().from(conversations)
-      .where(eq(conversations.contactId, contactId))
+      .where(and(eq(conversations.contactId, contactId), eq(conversations.userId, contact.userId)))
       .orderBy(desc(conversations.lastMessageAt));
 
     return { contact, conversations: convs };

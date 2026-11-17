@@ -36,7 +36,7 @@ test("Shopify connects before merchant activation, preserving explicit user inte
   assert.ok(!onboarding.includes("ECOMMERCE_POST_PURCHASE_DELIVERY_ENABLED"));
   assert.ok(!onboarding.includes("sendRecoveryViaMeta"));
   assert.ok(onboarding.includes("After activating your engine, choose and configure the customer journeys you want"));
-  assert.ok(onboarding.includes("approved templates and delivery approval"));
+  assert.ok(onboarding.includes("approved templates and your explicit activation"));
   assert.ok(onboarding.includes('mode === "setup" && <p'));
   assert.ok(onboarding.includes('data-testid="ecommerce-setup-delivery-guidance"'));
   for (const lang of ["en:", "es:", "he:"]) assert.ok(onboarding.includes(lang));
@@ -96,7 +96,7 @@ test("first-install setup and details load as authenticated documents before act
   assert.ok(server.includes("isEcommerceOnboardingDocumentRequest(req.method, req.path, req.query.view)"));
   assert.ok(server.includes("if (!owner || owner.id !== accountId || owner.deletionRequestedAt)"));
   assert.ok(server.includes("if (state?.activated) { next(); return; }"));
-  for (const view of ["setup","about"]) {
+  for (const view of ["setup","about","guide"]) {
     assert.equal(isEcommerceOnboardingDocumentRequest("GET","/",view),true);
     assert.equal(isEcommerceOnboardingDocumentRequest("HEAD","/",view),true);
     assert.equal(isEcommerceOnboardingDocumentRequest("GET","",view),true);
@@ -107,6 +107,7 @@ test("first-install setup and details load as authenticated documents before act
   for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
     assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","setup"),false,method);
     assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","about"),false,method);
+    assert.equal(isEcommerceOnboardingDocumentRequest(method,"/","guide"),false,method);
   }
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/internal","setup"),false);
   assert.equal(isEcommerceOnboardingDocumentRequest("GET","/products","about"),false);

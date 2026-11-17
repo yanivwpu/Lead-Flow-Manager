@@ -8,8 +8,9 @@ application_url = "https://app.whachatcrm.com"
 embedded = false
 
 [access_scopes]
+optional_scopes = ["read_themes"]
 # Kept in sync with server/shopify.ts — see SHOPIFY_SCOPES comment there.
-scopes = "read_customers,read_orders"
+scopes = "read_customers,read_orders,write_app_proxy"
 
 [auth]
 redirect_urls = ["https://app.whachatcrm.com/api/shopify/callback"]
@@ -21,3 +22,9 @@ api_version = "2026-01"
 customer_deletion_url = "https://app.whachatcrm.com/api/shopify/webhooks/customers/redact"
 customer_data_request_url = "https://app.whachatcrm.com/api/shopify/webhooks/customers/data_request"
 shop_deletion_url = "https://app.whachatcrm.com/api/shopify/webhooks/shop/redact"
+
+# Storefront notices only. Shopify signs requests; no customer grants here.
+[app_proxy]
+url = "/api/shopify/consent-storefront"
+prefix = "apps"
+subpath = "whachat-consent"

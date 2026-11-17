@@ -1,3 +1,4 @@
+import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
@@ -1368,6 +1369,10 @@ class ChannelService {
       }
       // If this contact was matched via the phone fallback (whatsappId was null),
       // backfill the whatsappId now so subsequent inbound lookups hit the fast path.
+      if(channel==='whatsapp'){
+        const canonicalPhone=canonicalMatchedShopifyPhone(contact,channelContactId);
+        if(canonicalPhone)contactUpdates.phone=canonicalPhone;
+      }
       if (channel === 'whatsapp' && !contact.whatsappId) {
         contactUpdates.whatsappId = channelContactId;
         console.log(`[Inbox Worker] Backfilling whatsappId=${channelContactId} on contact ${contact.id} (matched via phone fallback)`);
@@ -1891,6 +1896,7 @@ class ChannelService {
         markJourneyStatus,
         readActiveJourney,
         resolveCurrentTurnJourney,
+        startFindSolutionJourney,
         startPricingCompareJourney,
         startPricingSavingsJourney,
       } = await import("@shared/webchatActiveJourney");
@@ -1900,6 +1906,13 @@ class ChannelService {
         detectSavingsFollowUpFromCompare,
       } = await import("@shared/webchatPricingCompare");
       const visitorId = String(contact.webchatId || channelContactId || "");
+      const { resolveCurrentTurnStructuredAskIntent } = await import("@shared/chatbotAskQuestion");
+      const latestContactForJourney = (await storage.getContact(contact.id)) || contact;
+      const askJourney = resolveCurrentTurnStructuredAskIntent({
+        customFields: latestContactForJourney.customFields, inboundMessageId: message.id,
+        sourceEventId: externalMessageId,
+      });
+
       if (validatedPageRuleAction?.kind === "calculate_savings") {
         nextJourney = startPricingSavingsJourney({
           userId,
@@ -1928,6 +1941,20 @@ class ChannelService {
         });
         if (chatbotWillFire || bookingIntent) {
           nextJourney = markJourneyStatus(nextJourney, "paused");
+        }
+      } else if (validatedPageRuleAction?.kind === "find_solution" ||
+        (askJourney.trusted && askJourney.kind === "find_solution")) {
+        nextJourney = startFindSolutionJourney({
+          userId, visitorId, conversationId: conversation.id,
+          ruleKey: validatedPageRuleAction?.ruleKey || "structured_ask:visitor_intent",
+          actionIndex: validatedPageRuleAction?.actionIndex ?? 0,
+          originInboundId: message.id, locale: conversationLanguage,
+        });
+        // The initiating chatbot may deliver the qualification question itself.
+        // Ownership still suppresses AI on this turn, without losing the next answer.
+        if (bookingIntent) {
+          const solution = readActiveJourney(nextJourney);
+          if (solution) nextJourney = markJourneyStatus(solution, "paused");
         }
       } else if (validatedPageRuleAction) {
         const existing = readActiveJourney(turnControl.activeJourney);

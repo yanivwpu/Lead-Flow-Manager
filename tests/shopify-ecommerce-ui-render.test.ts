@@ -8,11 +8,21 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
 import { Router } from "wouter";
+import i18next from "i18next";
+
+const translator = i18next.createInstance();
+await translator.init({
+  resources: Object.fromEntries(["en", "es", "he"].map(locale => [locale, {
+    translation: JSON.parse(readFileSync(`client/src/locales/${locale}.json`, "utf8")),
+  }])),
+  lng: "en", fallbackLng: false, interpolation: { escapeValue: false },
+});
 
 mkdirSync("work", { recursive: true });
 const scratch = mkdtempSync(resolve("work/ecommerce-render-"));
 after(() => rmSync(scratch, { recursive: true, force: true }));
-const state = { locale: "en", user: { id: "fixture" } as { id: string } | null,
+const state = { locale: "en",
+  t: (key: string) => translator.getFixedT(state.locale)(key), user: { id: "fixture" } as { id: string } | null,
   aligned: true, available: true, grantFailed: false,
   activation: { eligible: false, activated: false, connected: false, planEligible: false },
   support: { data: { internalTasks: { schemaReady: true, operatorEnabled: true, merchantEnabled: false, openCount: 0, completedCount: 0 } }, isLoading: false, isFetching: false, isError: false },
@@ -22,7 +32,7 @@ const state = { locale: "en", user: { id: "fixture" } as { id: string } | null,
 after(() => delete (globalThis as any).__ecommerceRender);
 
 const stubs: Record<string, string> = {
-  "react-i18next": "export const useTranslation=()=>({i18n:{resolvedLanguage:globalThis.__ecommerceRender.locale}})",
+  "react-i18next": "export const useTranslation=()=>({t:globalThis.__ecommerceRender.t,i18n:{resolvedLanguage:globalThis.__ecommerceRender.locale}})",
   "@tanstack/react-query": `export const useQuery=(options)=>{
     const s=globalThis.__ecommerceRender;
     if(options.queryKey.includes('/api/shopify/ecommerce/capabilities'))return {data:{available:s.available},isError:s.grantFailed};
@@ -119,8 +129,8 @@ test("dashboard keeps Shopify setup out of overview and links to existing settin
   assert.ok(source.includes("<ShopifySimpleSetup"));
   assert.ok(source.includes('view==="recovery"'));
   assert.ok(source.includes('view==="post"'));
-  assert.ok(source.includes("t.recoveryDetail"));
-  assert.ok(source.includes("t.postDetail"));
+  assert.match(source,/view==="recovery"[\s\S]*?<ShopifyTemplateSetup locale=\{locale\}/);
+  assert.match(source,/view==="post"[\s\S]*?<ShopifyTemplateSetup locale=\{locale\}/);
 });
 
 test("actual dashboard pilot boundary denies missing grant, failed grant and stale sessions", () => {

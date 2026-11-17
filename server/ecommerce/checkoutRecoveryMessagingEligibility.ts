@@ -32,6 +32,15 @@ export function recoveryPhoneDigest(secret:string,phone:string):string{
  return createHmac('sha256',secret).update('whachat/ecommerce/whatsapp-recovery/phone/v1:')
    .update(phone).digest('hex');
 }
+export function commerceContactSuppressed(contact: Pick<RecoveryContact,'automationsPaused'|'customFields'|'tag'|'pipelineStage'>): boolean {
+ const fields=contact.customFields&&typeof contact.customFields==='object'&&!Array.isArray(contact.customFields)
+   ? contact.customFields as Record<string,unknown>:{};
+ if(contact.automationsPaused || fields.marketingOptIn===false || FIELDS.some(k=>fields[k]===true) ||
+   /\b(do not contact|dnc|stop|unsubscribe|unsubscribed|opt\s*out|remove me)\b/i.test(
+     (contact.tag||'')+' '+(contact.pipelineStage||'')))
+   return true;
+ return false;
+}
 export function evaluateCommerceMessagingEligibility(input:{
  purpose:string;category:'UTILITY'|'MARKETING';
  accountId:string;shop:string;shopifyCustomerId:string;
@@ -50,12 +59,7 @@ export function evaluateCommerceMessagingEligibility(input:{
  if(!contact.whatsappId || !/^[1-9][0-9]{7,14}$/.test(contact.whatsappId) ||
     '+'+contact.whatsappId!==contact.phone)
    return denied('whatsapp_recipient_unverified');
- const fields=contact.customFields&&typeof contact.customFields==='object'&&!Array.isArray(contact.customFields)
-   ? contact.customFields as Record<string,unknown>:{};
- if(contact.automationsPaused || fields.marketingOptIn===false || FIELDS.some(k=>fields[k]===true) ||
-   /\b(do not contact|dnc|stop|unsubscribe|unsubscribed|opt\s*out|remove me)\b/i.test(
-     (contact.tag||'')+' '+(contact.pipelineStage||'')))
-   return denied('contact_suppressed');
+ if(commerceContactSuppressed(contact))return denied('contact_suppressed');
  if(!consent||consent.accountId!==accountId||consent.shop!==shop ||
     consent.contactId!==contact.id||consent.shopifyCustomerId!==shopifyCustomerId ||
     consent.purpose!==input.purpose||consent.channel!=='whatsapp'||

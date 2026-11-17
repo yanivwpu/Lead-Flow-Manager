@@ -1,3 +1,4 @@
+import { rememberCommerceWelcome } from "@/lib/commerceWelcome";
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -28,6 +29,7 @@ import { syncDocumentLanguage } from "@/lib/documentLanguage";
 import { hideStaticMarketingShell, isMarketingHomepagePath } from "@/lib/marketingShell";
 import { WidgetFrameErrorBoundary } from "@/components/webchat/WidgetFrameErrorBoundary";
 
+const TeamInvitationPage = lazy(() => import("@/pages/TeamInvitation").then(m => ({ default: m.TeamInvitationPage })));
 const AuthPage = lazy(() => import("@/pages/Auth").then(m => ({ default: m.AuthPage })));
 const CheckEmailPage = lazy(() =>
   import("@/pages/CheckEmail").then((m) => ({ default: m.CheckEmailPage })),
@@ -217,6 +219,7 @@ function MarketingRoutes() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/check-email" component={CheckEmailPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
+      <Route path="/team-invitation" component={TeamInvitationPage} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy">
         <Redirect to="/privacy-policy" />
@@ -348,6 +351,7 @@ function Router() {
 
     // GA4: shopify_connected (+ sign_up once for new Shopify-created accounts)
     if (bootstrap.shopifyInstalled) {
+      try { rememberCommerceWelcome(user.id, window.sessionStorage); } catch { /* Browser state is optional. */ }
       void import("@/lib/ga4Events").then(({ trackShopifyConnected, trackSignUp }) => {
         // Deduped by userId — existing email users who already fired sign_up won't double-count.
         trackSignUp({

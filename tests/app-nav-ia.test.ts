@@ -308,7 +308,7 @@ test("Inbox channel name Web Chat and widget page title are preserved", () => {
 });
 
 
-test("E-Commerce sidebar is hidden until a merchant explicitly activates its workspace", () => {
+test("Eligible connected merchants can discover E-Commerce setup before activation", () => {
   const flags = { hasPresetCampaigns: false, prospectAiActivated: false, realtorGrowthEngineActivated: false };
   const absent = resolveAppNavSections({ ...flags, ecommerceGrowthEngineActivated: false });
   assert.equal(flattenAppNavItemIds(absent).includes("ecommerceGrowthEngine"), false);
@@ -316,6 +316,7 @@ test("E-Commerce sidebar is hidden until a merchant explicitly activates its wor
   assert.equal(flattenAppNavItemIds(activated).filter(id => id === "ecommerceGrowthEngine").length, 1);
   assert.equal(flattenAppNavItemIds(activated).includes("prospectAi"), false);
   const navHook = read("client/src/lib/useAppNav.ts");
-  assert.match(navHook, /activation\.data\?\.activated === true && activation\.data\?\.eligible === true/);
+  assert.match(navHook, /activation\.data\?\.connected === true && activation\.data\?\.eligible === true/);
+  assert.match(navHook, /activation\.data\?\.activated !== true\) href = "\/app\/ecommerce-growth-engine\?view=setup"/);
   assert.doesNotMatch(navHook, /useEcommercePilot|ecommercePilotEnabled/);
 });

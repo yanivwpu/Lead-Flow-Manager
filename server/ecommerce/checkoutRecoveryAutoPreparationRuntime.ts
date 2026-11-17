@@ -1,3 +1,4 @@
+import {loadMerchantRelease} from './merchantRelease';
 import {timingSafeEqual} from 'node:crypto';
 import {and,eq,sql} from 'drizzle-orm';
 import {db} from '../../drizzle/db';
@@ -33,6 +34,7 @@ function safeConfig(v:unknown):Record<string,unknown>{
  return v && typeof v==='object' && !Array.isArray(v)?v as Record<string,unknown>:{};
 }
 async function ownerStillActive(tx:typeof db,merchant:AutoPrepMerchant):Promise<boolean>{
+ if(merchant.selfService&&!await loadMerchantRelease(tx,process.env,merchant.accountId,'checkoutRecovery'))return false;
  const [owner]=await tx.select().from(users).where(and(
    eq(users.id,merchant.accountId),eq(users.shopifyShop,merchant.shop)
  )).limit(1);
@@ -55,12 +57,12 @@ function withShopLock<T>(merchant:AutoPrepMerchant,fn:(tx:typeof db)=>Promise<T>
    return fn(tx as unknown as typeof db);
  });
 }
-async function getMerchant(accountId:string):Promise<AutoPrepMerchant|null>{
+async function getMerchant(accountId:string,selfService=false):Promise<AutoPrepMerchant|null>{
  const [merchant]=await db.select().from(users).where(eq(users.id,accountId)).limit(1);
  if(!merchant||!merchant.shopifyShop||!merchant.shopifyAccessToken||
    !isShopifyContactInstallationActive(merchant)||!merchant.metaConnected)return null;
  if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(merchant.shopifyShop))return null;
- const scope={accountId,shop:merchant.shopifyShop,accessToken:merchant.shopifyAccessToken};
+ const scope={accountId,shop:merchant.shopifyShop,accessToken:merchant.shopifyAccessToken,selfService};
  return await withShopLock(scope,async tx=>
    await ownerStillActive(tx,scope)?scope:null);
 }
@@ -175,28 +177,7 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
        console.warn('[EcommerceRecoveryAutoPrep] schema_not_ready');
        return;
      }
-     const summary=await runAutoRecoveryPreparationTick(configuration,{
-       merchant:getMerchant,
-       observePage:merchant=>fetchShopifyAbandonedCheckoutPage({
-         shop:merchant.shop,accessToken:merchant.accessToken
-       }),
-       persistObservation:(merchant,item)=>persist(
-         merchant,item,
-         configuration.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only',
-       ),
-       due:async merchant=>{
-         const rows=await db.execute(dueCheckoutObservationsQuery(
-           merchant.accountId,merchant.shop));
-         return rows.rows.map(r=>({
-           checkoutId:String(r.checkout_gid),
-           lastActivityAt:new Date(String(r.last_activity_at)).toISOString()
-         }));
-       },
-       recheck:(merchant,checkoutId)=>recheckShopifyCheckoutForRecovery({
-         shop:merchant.shop,accessToken:merchant.accessToken,checkoutId
-       }),
-       suppress,resolveIdentity:resolve,prepareAndEnqueue:prepare,
-     });
+     const summary=await runAutoRecoveryPreparationTick(configuration,preparationDeps(configuration));
      // Aggregate diagnostics only. Never log shop, customer, checkout IDs,
      // tokens, recovery links or raw Shopify responses.
      console.info('[EcommerceRecoveryAutoPrep] tick_summary', {
@@ -219,4 +200,34 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
  const timer=setInterval(()=>{void tick()},90_000);
  timer.unref?.();
  return ()=>{stopped=true;clearInterval(timer)};
+}
+
+function preparationDeps(configuration:RecoveryAutoPrepEnvironment,selfService=false):import('./checkoutRecoveryAutoPreparation').AutoPrepDeps{
+ return {
+       merchant:id=>getMerchant(id,selfService),
+       observePage:merchant=>fetchShopifyAbandonedCheckoutPage({
+         shop:merchant.shop,accessToken:merchant.accessToken
+       }),
+       persistObservation:(merchant,item)=>persist(
+         merchant,item,
+         !selfService&&configuration.ECOMMERCE_RECOVERY_WORKER_MODE==='production-pilot-observe-only',
+       ),
+       due:async merchant=>{
+         const rows=await db.execute(dueCheckoutObservationsQuery(
+           merchant.accountId,merchant.shop));
+         return rows.rows.map(r=>({
+           checkoutId:String(r.checkout_gid),
+           lastActivityAt:new Date(String(r.last_activity_at)).toISOString()
+         }));
+       },
+       recheck:(merchant,checkoutId)=>recheckShopifyCheckoutForRecovery({
+         shop:merchant.shop,accessToken:merchant.accessToken,checkoutId
+       }),
+       suppress,resolveIdentity:resolve,prepareAndEnqueue:prepare,
+     };
+}
+/** Same bounded preparation pipeline; fresh merchant action replaces only the legacy operator scope. */
+export async function runMerchantRecoveryPreparation(accountId:string){
+ if(!await ensureSchema())return;
+ return runAutoRecoveryPreparationTick(process.env,preparationDeps(process.env,true),accountId);
 }

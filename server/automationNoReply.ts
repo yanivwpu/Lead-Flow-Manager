@@ -1,3 +1,4 @@
+import { isInventoryContactEligible, isRgeContactEligible, requiresRgeContactIntent, requiresBuyerPropertyIntent } from "./inventory/inventoryContactEligibility";
 import type { NoReplyJob, Workflow } from "@shared/schema";
 import { noReplyStageConditionsAllow as evaluateNoReplyStageRules } from "@shared/rgeNoReplyWorkflows";
 import {
@@ -170,6 +171,8 @@ async function scheduleLastInboundNoReplyJobs(params: {
   let scheduled = 0;
   for (const wf of workflows) {
     if (workflowAnchor(wf) !== "last_inbound") continue;
+    if ((requiresRgeContactIntent(wf) || requiresBuyerPropertyIntent(wf)) &&
+        (contact.userId !== userId || !(await (requiresBuyerPropertyIntent(wf) ? isInventoryContactEligible(contact) : isRgeContactEligible(contact))))) continue;
     if (!noReplyWorkflowMatchesConversation(wf, channel)) continue;
     if (!noReplyStageConditionsAllow(wf, contact)) continue;
 
@@ -219,6 +222,8 @@ async function scheduleLastOutboundNoReplyJobs(params: {
   let scheduled = 0;
 
   for (const wf of outboundWorkflows) {
+    if ((requiresRgeContactIntent(wf) || requiresBuyerPropertyIntent(wf)) &&
+        (contact.userId !== userId || !(await (requiresBuyerPropertyIntent(wf) ? isInventoryContactEligible(contact) : isRgeContactEligible(contact))))) continue;
     if (!noReplyWorkflowMatchesConversation(wf, channel)) continue;
     if (!noReplyStageConditionsAllow(wf, contact)) continue;
 

@@ -81,7 +81,7 @@ export function MatchingListingsPanel({
   const { data, isLoading, isFetched, isError, error, isFetching, refetch, isPlaceholderData } =
     useQuery({
       queryKey: inventoryMatchesQueryKey(contactId, fetchOptions),
-      queryFn: () => fetchInventoryMatches(contactId, fetchOptions),
+      queryFn: ({ signal }) => fetchInventoryMatches(contactId, fetchOptions, signal),
       enabled,
       staleTime: INVENTORY_MATCHES_STALE_MS,
       placeholderData: (previousData, previousQuery) =>

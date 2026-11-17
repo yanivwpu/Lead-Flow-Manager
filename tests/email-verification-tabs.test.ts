@@ -130,7 +130,7 @@ function src(rel: string): string {
   const waiting = src("client/src/pages/CheckEmail.tsx");
   assert.match(waiting, /startEmailVerificationWaiter/);
   assert.match(waiting, /CHECK_EMAIL_SESSION_POLL_MS/);
-  assert.match(waiting, /navigateAfterAuth\("\/app\/inbox"\)/);
+  assert.match(waiting, /navigateAfterAuth\(consumeInvitationReturn\(\) \|\| "\/app\/inbox"\)/);
   assert.match(waiting, /refreshSession/);
 
   const sync = src("client/src/lib/emailVerificationTabSync.ts");

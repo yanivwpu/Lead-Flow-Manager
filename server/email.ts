@@ -68,7 +68,7 @@ interface EmailOptions {
   html: string;
   text?: string;
   replyTo?: string;
-  privacyContext?: "shopify";
+  privacyContext?: "shopify" | "team";
   idempotencyKey?: string;
 }
 
@@ -109,7 +109,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, privacyConte
 }
 
 export async function sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext, idempotencyKey, from }: EmailOptions): Promise<EmailDispatchResult> {
-  const privateShopify = privacyContext === "shopify";
+  const privateShopify = privacyContext === "shopify" || privacyContext === "team";
   const recipientLog = privateShopify ? "[redacted]" : maskEmailForLogs(to);
   const subjectLog = privateShopify ? "[redacted]" : subject;
   if (isShopifySyntheticMerchantEmail(to)) {
@@ -1462,5 +1462,19 @@ export async function sendDailyHotListEmail(
       bodyHtml: body,
       footerHtml: footer,
     }),
+  });
+}
+
+/** Uses the existing transactional mail transport; never includes a capability in logs. */
+export async function sendTeamInvitationEmail(email: string, token: string): Promise<boolean> {
+  const href = `${APP_URL.replace(/\/+$/, "")}/team-invitation#${token}`;
+  return sendEmail({
+    to: email,
+    subject: "Your WhachatCRM workspace invitation",
+    privacyContext: "team",
+    text: `You have been invited to a shared WhachatCRM Inbox. Sign in or register with this email address, then accept the invitation. This link expires in 7 days: ${href}`,
+    html: renderBrandedEmail({ title: "Join your team", bodyHtml:
+      emailParagraph("You have been invited to a shared WhachatCRM Inbox. Sign in or register with this email address, then accept the invitation. This link expires in 7 days.") +
+      emailButton(href, "Review invitation") }),
   });
 }

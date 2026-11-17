@@ -2,11 +2,9 @@ import {sql} from 'drizzle-orm';
 import {POST_PURCHASE_JOURNEYS,type PostPurchaseJourney} from '../../shared/postPurchase';
 import {verifiedCommerceConsentText,validRecoveryWamid,type VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
 import {recoveryPhoneDigest} from './checkoutRecoveryMessagingEligibility';
-export const POST_PURCHASE_CONSENT_PHRASES:Record<PostPurchaseJourney,string>={
-  orderConfirmation:'YES WHATSAPP ORDER CONFIRMATIONS',fulfillmentUpdate:'YES WHATSAPP SHIPPING UPDATES',
-  cancellation:'YES WHATSAPP CANCELLATION NOTICES',reviewRequest:'YES WHATSAPP REVIEW REQUESTS',
-  repeatPurchase:'YES WHATSAPP REPEAT PURCHASE OFFERS',winBack:'YES WHATSAPP WIN BACK OFFERS',
-};
+import { WHATSAPP_CONSENT_PHRASES } from '../../shared/shopifyConsentEnrollment';
+const { checkoutRecovery: _checkoutRecovery, ...postPurchasePhrases } = WHATSAPP_CONSENT_PHRASES;
+export const POST_PURCHASE_CONSENT_PHRASES:Record<PostPurchaseJourney,string>=postPurchasePhrases;
 export function classifyPostPurchaseConsent(candidate:VerifiedInboundConsentCandidate,now=Date.now()){
   const proof=verifiedCommerceConsentText(candidate,now);if(!proof)return null;
   if(['STOP','UNSUBSCRIBE','STOP POST PURCHASE MESSAGES'].includes(proof.normalized))return {...proof,action:'revoke' as const};

@@ -38,13 +38,14 @@ def validate(config, verified_client_id=None):
     require(verified_client_id not in PRODUCTION_IDS and verified_client_id == STAGING_CLIENT_ID,
             'Verified identity must match the installed staging app ending in 4fc')
     require(set(config) == {'client_id', 'name', 'application_url', 'embedded',
-                            'access_scopes', 'auth', 'webhooks'}, 'Unexpected app configuration or credentials')
+                            'access_scopes', 'auth', 'webhooks', 'app_proxy'}, 'Unexpected app configuration or credentials')
     require(config.get('name') == 'WhachatCRM Staging', 'Wrong app name')
     require(config.get('embedded') is False, 'Staging must be non-embedded')
     require(config.get('application_url') == ORIGIN, 'Wrong staging application URL')
     require(config.get('auth') == {'redirect_urls': [ORIGIN + '/api/shopify/callback']}, 'Wrong OAuth callback')
-    require(config.get('access_scopes') == {'scopes': 'read_customers,read_orders', 'optional_scopes': [],
+    require(config.get('access_scopes') == {'scopes': 'read_customers,read_orders,write_app_proxy', 'optional_scopes': ['read_themes'],
                                           'use_legacy_install_flow': False}, 'Wrong scopes/install flow')
+    require(config.get('app_proxy') == {'url': '/api/shopify/consent-storefront', 'prefix': 'apps', 'subpath': 'whachat-consent'}, 'Wrong signed consent proxy')
     webhooks = config.get('webhooks', {})
     require(webhooks.get('api_version') == '2026-10', 'Wrong webhook API version')
     require(set(webhooks) == {'api_version', 'subscriptions'}, 'Unexpected webhook configuration')

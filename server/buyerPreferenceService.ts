@@ -1,3 +1,4 @@
+import { isInventoryContactEligible } from "./inventory/inventoryContactEligibility";
 /**
  * RGE Inventory Intelligence — buyer preference memory (Phase 1).
  */
@@ -18,7 +19,7 @@ import {
   logBuyerPreferenceFastPath,
   type PreferenceArrayReplaceKey,
 } from "@shared/buyerPreferenceInventorySignals";
-import { looksLikeSystemOrNotificationEmail } from "@shared/aiDomainEligibility";
+import { hasStrongRealEstateLeadEvidence, looksLikeSystemOrNotificationEmail } from "@shared/aiDomainEligibility";
 import {
   applyInboundSearchCommandOverrides,
   isFullReplacementSearch,
@@ -178,6 +179,9 @@ export async function shouldRunBuyerPreferencePipeline(
   userId: string,
   contact: Contact,
 ): Promise<{ ok: boolean; reason: string; debug?: Record<string, unknown> }> {
+  if (contact.userId !== userId || !(await isInventoryContactEligible(contact, readBuyerPreferenceProfile(contact)))) {
+    return { ok: false, reason: "contact_intent_ineligible" };
+  }
   const rgeInstalled = await isRgeInstalledForUser(userId);
   if (rgeInstalled) {
     return { ok: true, reason: "rge_installed", debug: { rgeInstalled: true } };
@@ -377,10 +381,11 @@ export async function mergeAndPersistBuyerPreferences(
     clearUnmentionedHardGates?: boolean;
     currentMessagePatch?: BuyerPreferenceExtractionPatch;
     triggerInventoryRefresh?: boolean;
+    agentConfirmed?: boolean;
   },
 ): Promise<BuyerPreferenceProfile> {
   const patchKeys = patchFieldCount(patch);
-  if (patchKeys === 0) {
+  if (patchKeys === 0 && !meta?.agentConfirmed) {
     debugBuyerPreferenceLog("llm_patch_empty", { contactId: contact.id, skipped: true });
     return (
       (await loadPersistedBuyerPreferenceProfile(contact.id)) ??
@@ -409,6 +414,8 @@ export async function mergeAndPersistBuyerPreferences(
     },
     mergeOptions,
   );
+
+  if (meta?.agentConfirmed) merged.agentConfirmedAt = new Date().toISOString();
 
   const traceId = resolveBuyerMatchingTraceId(contact.id, meta?.messageId, meta?.conversationId);
 
@@ -515,6 +522,8 @@ export async function syncBuyerPreferencesForInboundMessage(input: {
     });
     return priorProfile;
   }
+  if (!hasStrongRealEstateLeadEvidence(input.inboundText) &&
+      !(await isInventoryContactEligible(freshContact, priorProfile))) return priorProfile;
   const command = parseBuyerSearchCommand(input.inboundText, priorProfile);
   const fullReplacement = isFullReplacementSearch(
     input.inboundText,
@@ -1334,5 +1343,5 @@ export async function applyManualBuyerPreferencePatch(
     } as never;
   }
 
-  return mergeAndPersistBuyerPreferences(contact, explicitPatch, { logActivity: true });
+  return mergeAndPersistBuyerPreferences(contact, explicitPatch, { logActivity: true, agentConfirmed: true });
 }

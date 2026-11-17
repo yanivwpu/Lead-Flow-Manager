@@ -1,3 +1,7 @@
+import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
+import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";
+import { requireInboxWorkspace, inboxWorkspaceId } from "./inboxWorkspaceAccess";
+import { revokePresenceMembership } from "./presence";
 import { createSecondCartReview } from "./aiTestChat/secondCartReview";
 import { registerMarketingComplianceRoutes } from "./marketingCompliance/routes";
 import { aiService } from "./aiService";
@@ -233,6 +237,7 @@ import {
 import { DEFAULT_SALES_TASK_PAYOUT_DOLLARS, getEffectiveTaskPayoutDollars } from "./salespersonTaskPayout";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import shopifyRoutes from "./shopifyRoutes";
+import { consentProxyRouter } from './ecommerce/shopifyConsentStorefrontRuntime';
 import ecommercePilotRoutes from "./ecommercePilotRoutes";
 import ecommerceMerchantActivationRoutes, { requireEcommerceWorkspace, currentForAccount } from "./ecommerceMerchantActivationRoutes";
 import ghlRoutes, { handleGhlWebhook } from "./ghlRoutes";
@@ -549,6 +554,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerInboxWorkspaceRoutes(app);
+  registerTeamInvitationRoutes(app);
   registerMarketingComplianceRoutes(app);
   registerSeoIntelligenceRoutes(app, requireSalesAdmin);
 
@@ -563,6 +570,7 @@ export async function registerRoutes(
   app.use('/ecommerce-growth-engine', (req, res, next) => req.user ? next() : res.status(401).end());
   app.use('/app/ecommerce-growth-engine', requireEcommerceWorkspace);
   app.use('/api/shopify', shopifyRoutes);
+  app.use('/api/shopify', consentProxyRouter);
 
   // LeadConnector integration routes
   app.use('/api/ext', ghlRoutes);
@@ -2153,13 +2161,13 @@ export async function registerRoutes(
   // ============ TEAM MEMBER ROUTES ============
 
   // Get team members
-  app.get("/api/team", async (req, res) => {
+  app.get("/api/team", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const members = await storage.getTeamMembers(req.user.id);
-      const user = await storage.getUser(req.user.id);
+      const members = await storage.getTeamMembers(inboxWorkspaceId(req));
+      const user = await storage.getUser(inboxWorkspaceId(req));
       
       // Filter out any owner entries from database (owner is added dynamically)
       const nonOwnerMembers = members.filter(m => m.role !== 'owner');
@@ -2167,8 +2175,8 @@ export async function registerRoutes(
       // Include the owner as the first team member
       const ownerMember = {
         id: "owner",
-        ownerId: req.user.id,
-        memberId: req.user.id,
+        ownerId: inboxWorkspaceId(req),
+        memberId: inboxWorkspaceId(req),
         email: user?.email || "",
         name: user?.name || "You",
         role: "owner",
@@ -2185,58 +2193,9 @@ export async function registerRoutes(
   });
 
   // Invite a team member
-  app.post("/api/team", async (req, res) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const { email, name, role = "member" } = req.body;
-      
-      if (!email) {
-        return res.status(400).json({ error: "Email is required" });
-      }
-
-      // Check subscription limits
-      const limits = await subscriptionService.getUserLimits(req.user.id);
-      if (!limits) {
-        return res.status(400).json({ error: "Could not fetch subscription limits" });
-      }
-
-      const currentCount = await storage.getTeamMemberCount(req.user.id);
-      // -1 = unlimited (Pro). Same seat math as GET /api/subscription usersCount + limits.usersLimit.
-      if (limits.maxUsers !== -1 && currentCount >= limits.maxUsers) {
-        return res.status(403).json({
-          error:
-            limits.plan === "free"
-              ? "Your Free plan includes 1 user. Upgrade to Pro to invite team members."
-              : limits.plan === "starter"
-                ? "Starter includes up to 3 users. Upgrade to Pro for unlimited team members."
-                : `Your ${limits.planName} plan does not allow more team members right now.`,
-          upgradeRequired: true,
-          plan: limits.plan,
-        });
-      }
-
-      // Check if already invited
-      const existing = await storage.getTeamMembers(req.user.id);
-      if (existing.some(m => m.email.toLowerCase() === email.toLowerCase())) {
-        return res.status(400).json({ error: "This email has already been invited" });
-      }
-
-      const member = await storage.createTeamMember({
-        ownerId: req.user.id,
-        email: email.toLowerCase(),
-        name: name || null,
-        role,
-        status: "pending",
-      });
-
-      res.json(member);
-    } catch (error) {
-      console.error("Error inviting team member:", error);
-      res.status(500).json({ error: "Failed to invite team member" });
-    }
+  app.post("/api/team", teamInvitationLimiter, requireTeamInvitationActor, async (req, res) => {
+    try { res.json(await deliverTeamInvitation(await issueTeamInvitation(req.user!.id, req.body))); }
+    catch (error) { invitationFailure(res, error); }
   });
 
   // Remove a team member
@@ -2257,6 +2216,7 @@ export async function registerRoutes(
       }
 
       await storage.deleteTeamMember(req.params.id);
+      revokePresenceMembership(member.ownerId, member.memberId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error removing team member:", error);
@@ -2281,12 +2241,18 @@ export async function registerRoutes(
       }
 
       const { role, status, name } = req.body;
+      if (role !== undefined && role !== "member" && role !== "admin") return res.status(400).json({ error: "Invalid team role" });
+      if (status !== undefined && !["pending", "active", "inactive"].includes(status)) return res.status(400).json({ error: "Invalid membership status" });
+      // Acceptance is the only path that can activate an unlinked invitation.
+      if (status === "active" && !member.memberId) return res.status(409).json({ error: "The invitee must accept the invitation first" });
+      if (status === "pending" && (member.status !== "pending" || member.memberId || member.joinedAt)) return res.status(409).json({ error: "Remove this membership before inviting again" });
       const updated = await storage.updateTeamMember(req.params.id, { 
         ...(role && { role }),
         ...(status && { status }),
         ...(name !== undefined && { name }),
       });
 
+      revokePresenceMembership(member.ownerId, member.memberId);
       res.json(updated);
     } catch (error) {
       console.error("Error updating team member:", error);
@@ -10593,13 +10559,13 @@ export async function registerRoutes(
   // ============= UNIFIED INBOX API (Multi-Channel CRM) =============
 
   // Lightweight sidebar badge — new inbound since last visible Inbox check (not total unread).
-  app.get("/api/inbox/activity", async (req, res) => {
+  app.get("/api/inbox/activity", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const { getInboxNewActivity } = await import("./inboxNewActivity");
-      const payload = await getInboxNewActivity(req.user.id);
+      const payload = await getInboxNewActivity(inboxWorkspaceId(req));
       res.json(payload);
     } catch (error) {
       console.error("Error fetching inbox activity:", error);
@@ -10607,13 +10573,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/inbox/activity/ack", async (req, res) => {
+  app.post("/api/inbox/activity/ack", requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const { ackInboxNewActivity } = await import("./inboxNewActivity");
-      const payload = await ackInboxNewActivity(req.user.id);
+      const payload = await ackInboxNewActivity(inboxWorkspaceId(req));
       res.json(payload);
     } catch (error) {
       console.error("Error acknowledging inbox activity:", error);
@@ -10622,7 +10588,7 @@ export async function registerRoutes(
   });
 
   // Get unified inbox - recent page, or server-side search via ?q= (min 2 chars).
-  app.get("/api/inbox", async (req, res) => {
+  app.get("/api/inbox", requireInboxWorkspace, async (req, res) => {
     const t0 = Date.now();
     const userId = req.user?.id ?? null;
     const rawQ = typeof req.query.q === "string" ? req.query.q : "";
@@ -10644,13 +10610,13 @@ export async function registerRoutes(
       let inbox;
       if (searchQ) {
         inbox = await storage.searchUnifiedInbox(
-          req.user.id,
+          inboxWorkspaceId(req),
           searchQ,
           INBOX_SEARCH_RESULT_LIMIT,
         );
       } else {
         const limit = parseInt(req.query.limit as string) || 100;
-        inbox = await storage.getUnifiedInbox(req.user.id, limit);
+        inbox = await storage.getUnifiedInbox(inboxWorkspaceId(req), limit);
       }
       const ms = Date.now() - t0;
       const rowCount = Array.isArray(inbox) ? inbox.length : -1;
@@ -10658,7 +10624,7 @@ export async function registerRoutes(
         rowCount,
       });
       devLog("[InboxEvidence:GET /api/inbox] end", {
-        userId: req.user.id,
+        userId: inboxWorkspaceId(req),
         rowCount,
         returnedZero: rowCount === 0,
         ms,
@@ -11747,7 +11713,9 @@ export async function registerRoutes(
               const cfLead = (contactForPrefs.customFields || {}) as Record<string, unknown>;
               const rgeInstalled = await isRgeInstalledForUser(userId);
               const bkIndustry = (await storage.getAiBusinessKnowledge(userId))?.industry ?? null;
+              const { hasConfirmedBuyerEnrollment } = await import("@shared/inventoryContactEligibility");
               const domainDecision = resolveAiDomainEligibility({
+                buyerIntentVerified: prefGate.ok || hasConfirmedBuyerEnrollment(buyerProfilePreview),
                 inboundText: lastUserInbound,
                 conversationText: historyTurns
                   .filter((m) => m.role === "user")

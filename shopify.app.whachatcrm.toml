@@ -52,9 +52,15 @@ uri = "https://app.whachatcrm.com/api/shopify/webhooks/orders-cancelled"
 [access_scopes]
 # Required install scopes stay in sync with server/shopify.ts.
 # Catalog access is approved explicitly through the existing optional-scope flow.
-scopes = "read_customers,read_orders"
-optional_scopes = [ "read_products", "read_inventory" ]
+scopes = "read_customers,read_orders,write_app_proxy"
+optional_scopes = [ "read_products", "read_inventory", "read_themes" ]
 use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ "https://app.whachatcrm.com/api/shopify/callback" ]
+
+# Storefront notices only. Shopify signs requests; no customer grants here.
+[app_proxy]
+url = "/api/shopify/consent-storefront"
+prefix = "apps"
+subpath = "whachat-consent"

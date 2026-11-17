@@ -141,7 +141,7 @@
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
     "wouter": "^3.3.5",
-    "ws": "^8.18.0",
+    "ws": "^8.23.0",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },
@@ -168,6 +168,7 @@
     "drizzle-kit": "^0.31.8",
     "esbuild": "^0.27.2",
     "linkedom": "^0.18.13",
+    "playwright": "1.62.1",
     "postcss": "^8.5.6",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.14",

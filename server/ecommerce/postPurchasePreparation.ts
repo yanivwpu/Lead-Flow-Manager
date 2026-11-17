@@ -1,3 +1,6 @@
+import {merchantActivationTime,record,merchantProductionAvailable,loadMerchantRelease} from './merchantRelease';
+import { consentCaptureSchemaQuery } from './consentCaptureSchema';
+import { productionConsentCaptureAllowed } from './consentCaptureGate';
 import {eligiblePostPurchaseLibraryTemplate} from './postPurchaseTemplateBinding';
 import {commerceConnectionFingerprint} from './checkoutRecoveryProductionRelease';
 import {isEcommercePilotOwner} from './pilotAccess';
@@ -15,7 +18,7 @@ import {postPurchaseTablesQuery,postPurchaseTables,upsertPostPurchaseOrderQuery,
 import {eligiblePostPurchaseRecipient,matchPostPurchaseTemplate} from './postPurchaseEligibility';
 import {classifyPostPurchaseConsent,grantPostPurchaseConsentQuery,revokePostPurchaseConsentQuery} from './postPurchaseConsent';
 import type {VerifiedInboundConsentCandidate} from './checkoutRecoveryInboundConsentGate';
-import {recoveryPhoneDigest,type RecoveryContact,type WhatsAppRecoveryConsent} from './checkoutRecoveryMessagingEligibility';
+import {recoveryPhoneDigest,commerceContactSuppressed,type RecoveryContact,type WhatsAppRecoveryConsent} from './checkoutRecoveryMessagingEligibility';
 import type {ShopifyOrderTopic} from '../shopifyOrderWebhookHandler';
 export type PostPurchaseTx={execute:(query:SQL)=>Promise<{rows:Record<string,unknown>[]}>};
 export type PostPurchaseDatabase={transaction:<T>(fn:(tx:PostPurchaseTx)=>Promise<T>)=>Promise<T>};
@@ -29,13 +32,17 @@ export function createPostPurchasePreparation(deps:{
   recheck?:typeof recheckPostPurchaseOrder;templates:(accountId:string)=>Promise<unknown[]>;
 }){
   const now=deps.now??Date.now;
-  async function merchant(tx:PostPurchaseTx,shop:string,stopOnly=false):Promise<Merchant|null>{
+  async function merchant(tx:PostPurchaseTx,shop:string,stopOnly=false,consentOnly=false):Promise<Merchant|null>{
     const rows=await tx.execute(sql`SELECT id,email,shopify_shop,shopify_access_token,shopify_subscription_status,
-      deletion_requested_at,shopify_installed_at,meta_connected,meta_phone_number_id FROM users WHERE shopify_shop=${shop} LIMIT 2 FOR SHARE`);
+      deletion_requested_at,shopify_installed_at,meta_connected,meta_phone_number_id,
+      to_jsonb(users)->>'meta_business_account_id' AS waba_id FROM users WHERE shopify_shop=${shop} LIMIT 2 FOR SHARE`);
     if(rows.rows.length!==1)return null;const user=rows.rows[0],accountId=String(user.id);
-    if(!postPurchasePreparationEnabled({...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return null;
-    if(deps.env.RAILWAY_ENVIRONMENT_NAME==='production'&&
-      !isEcommercePilotOwner({id:accountId,email:typeof user.email==='string'?user.email:null},stopOnly?{...deps.env,ECOMMERCE_PILOT_ENABLED:'true'}:deps.env))return null;
+    const legacyEnv={...deps.env,...(stopOnly?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})};
+    const selfService=await loadMerchantRelease(tx,deps.env,accountId);
+    const preparationAllowed=!!selfService||postPurchasePreparationEnabled(legacyEnv,accountId)&&
+      (deps.env.RAILWAY_ENVIRONMENT_NAME!=='production'||isEcommercePilotOwner({id:accountId,
+        email:typeof user.email==='string'?user.email:null},legacyEnv));
+    if(!consentOnly&&!preparationAllowed)return null;
     if(!stopOnly&&!isShopifyContactInstallationActive({shopifyShop:shop,shopifyAccessToken:user.shopify_access_token as string|null,
       shopifySubscriptionStatus:user.shopify_subscription_status as string|null,deletionRequestedAt:user.deletion_requested_at as Date|null}))return null;
     if(user.deletion_requested_at)return null;
@@ -43,6 +50,9 @@ export function createPostPurchasePreparation(deps:{
     if(active.rows.length!==1)return null;const config=object(active.rows[0].config);
     for(const key of ['shop','shopUrl'])if(config[key]!=null&&normalizeShopifyShopDomain(String(config[key]))!==shop)return null;
     const installedAt=date(user.shopify_installed_at);if(!Number.isFinite(installedAt))return null;
+    if(consentOnly&&!stopOnly&&!preparationAllowed&&!productionConsentCaptureAllowed(deps.env,{accountId,shop,
+      installationId:String(active.rows[0].id),wabaId:String(user.waba_id||''),phoneId:String(user.meta_phone_number_id||''),
+      installedAt:new Date(installedAt)}))return null;
     return {accountId,shop,installationId:String(active.rows[0].id),accessToken:String(user.shopify_access_token||''),config,installedAt,
       metaConnected:user.meta_connected===true,metaPhoneId:String(user.meta_phone_number_id||'')};
   }
@@ -66,7 +76,8 @@ export function createPostPurchasePreparation(deps:{
       if(data[idKey]!=null&&String(data[idKey])!==customerId.slice('gid://shopify/Customer/'.length))return null;
       if(data[shopKey]!=null&&data[shopKey]!==m.shop)return null;
     }
-    const duplicates=await tx.execute(sql`SELECT id FROM contacts WHERE user_id=${m.accountId} AND phone=${row.phone} AND id<>${row.id} LIMIT 1`);
+    const duplicates=await tx.execute(sql`SELECT id FROM contacts WHERE user_id=${m.accountId} AND id<>${row.id} AND (regexp_replace(COALESCE(phone,''),'[^0-9]','','g')=regexp_replace(${row.phone}::text,'[^0-9]','','g')
+      OR regexp_replace(COALESCE(whatsapp_id,''),'[^0-9]','','g')=regexp_replace(${row.phone}::text,'[^0-9]','','g')) LIMIT 1`);
     if(duplicates.rows.length)return null;
     return {id:String(row.id),userId:String(row.user_id),phone:row.phone as string|null,whatsappId:row.whatsapp_id as string|null,
       shopifyCustomerId:customerId,automationsPaused:row.automations_paused!==false,tag:row.tag as string|null,
@@ -100,6 +111,8 @@ export function createPostPurchasePreparation(deps:{
           grantedAt:iso(proof.granted_at),revokedAt:proof.revoked_at==null?null:iso(proof.revoked_at)};
       }
     }
+    if(merchantProductionAvailable(deps.env,m.accountId,m.shop)&&consent?.grantedAt&&
+      Date.parse(consent.grantedAt)<Date.parse(String(record(m.config.ecommerceMerchantRelease).authorizedAt)))consent=null;
     const eligible=eligiblePostPurchaseRecipient({journey,accountId:m.accountId,shop:m.shop,customerId:event.customerId,
       contact:c,consent,template,live:liveTemplate,secret:deps.secret(),now:now()});
     const matched=matchPostPurchaseTemplate(template,liveTemplate,journey);
@@ -133,10 +146,13 @@ export function createPostPurchasePreparation(deps:{
   }
   /** Called ONLY from existing raw-body HMAC verifier. No request route accepts trusted snapshots. */
   async function ingest(shop:string,topic:ShopifyOrderTopic,deliveryId:string,body:unknown){
-    if(!postPurchasePreparationEnabled(deps.env))return 'disabled';
+    if(!postPurchasePreparationEnabled(deps.env)&&!merchantProductionAvailable(deps.env))return 'disabled';
     const event=parsePostPurchaseOrderEvent(topic,deliveryId,body,now());if(!event)return 'ignored';
     return locked(shop,async tx=>{
-      const m=await merchant(tx,shop);if(!m||event.occurredAt<m.installedAt)return 'ignored';await schema(tx);
+      const m=await merchant(tx,shop);if(!m||event.occurredAt<m.installedAt)return 'ignored';
+      const release=await loadMerchantRelease(tx,deps.env,m.accountId,'postPurchase');
+      if(merchantProductionAvailable(deps.env,m.accountId,m.shop)&&(!release||!Number.isFinite(merchantActivationTime(m.config,'postPurchase'))||event.occurredAt<merchantActivationTime(m.config,'postPurchase')))return 'ignored';
+      await schema(tx);
       if(await deps.privacyLocked(tx,shop,event.customerId))return 'suppressed';
       const fresh=await (deps.recheck??recheckPostPurchaseOrder)({shop,accessToken:m.accessToken,orderId:event.orderId,customerId:event.customerId,now:now()});
       if(!fresh||fresh.orderId!==event.orderId||fresh.customerId!==event.customerId||fresh.updatedAt<event.occurredAt)throw Error('post_purchase_fresh_order_unavailable');
@@ -163,9 +179,9 @@ export function createPostPurchasePreparation(deps:{
   /** Bounded cross-instance preparation. Shop lock + row lock + next_review_at prevent overlapping work.
    * A crash rolls back the review; there is no provider attempt or send capability.
    */
-  async function tick(){
-    if(!postPurchasePreparationEnabled(deps.env))return;
-    const scope=await deps.database.transaction(tx=>tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${deps.env.ECOMMERCE_POST_PURCHASE_ACCOUNT_ID}`));
+  async function tick(merchantAccountId?:string){
+    if(!postPurchasePreparationEnabled(deps.env)&&!(merchantAccountId&&merchantProductionAvailable(deps.env,merchantAccountId)))return;
+    const scope=await deps.database.transaction(tx=>tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${merchantAccountId??deps.env.ECOMMERCE_POST_PURCHASE_ACCOUNT_ID}`));
     const shop=scope.rows[0]?.shopify_shop;if(typeof shop!=='string')return;
     await locked(shop,async tx=>{
       const m=await merchant(tx,shop);if(!m)return;await schema(tx);
@@ -193,12 +209,15 @@ export function createPostPurchasePreparation(deps:{
   async function captureConsent(accountId:string,contactId:string|null,candidate:VerifiedInboundConsentCandidate){
     const proof=classifyPostPurchaseConsent(candidate,now());if(!proof)return 'ignored';
     const stop=proof.action==='revoke';
-    if(!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return 'disabled';
+    const production=deps.env.RAILWAY_ENVIRONMENT_NAME==='production'&&deps.env.APP_URL?.replace(/\/$/,'')==='https://app.whachatcrm.com';
+    const captureOnly=production&&(stop||deps.env.ECOMMERCE_CONSENT_CAPTURE_PRODUCTION_APPROVED==='true'||merchantProductionAvailable(deps.env,accountId));
+    if(!captureOnly&&!postPurchasePreparationEnabled({...deps.env,...(stop?{ECOMMERCE_POST_PURCHASE_PREP_ENABLED:'true',ECOMMERCE_POST_PURCHASE_PRODUCTION_RELEASE_APPROVED:'true',ECOMMERCE_PILOT_ENABLED:'true'}:{})},accountId))return 'disabled';
     const owner=await deps.database.transaction(tx=>tx.execute(sql`SELECT shopify_shop FROM users WHERE id=${accountId}`));
     const shop=owner.rows[0]?.shopify_shop;if(typeof shop!=='string'||deps.secret().length<32)return 'ignored';
     return locked(shop,async tx=>{
-      const m=await merchant(tx,shop,stop);if(!m||m.accountId!==accountId||!m.metaConnected||m.metaPhoneId!==candidate.phoneNumberId)return 'ignored';
+      const m=await merchant(tx,shop,stop,captureOnly);if(!m||m.accountId!==accountId||!m.metaConnected||m.metaPhoneId!==candidate.phoneNumberId)return 'ignored';
       await schema(tx);
+      if(captureOnly&&(await tx.execute(consentCaptureSchemaQuery)).rows[0]?.post_purchase!==true)throw Error('post_purchase_consent_schema_missing');
       if(proof.eventAt.valueOf()<m.installedAt)return 'ignored';
       const base={accountId,shop,phone:'+'+candidate.from,secret:deps.secret(),at:proof.eventAt,wamid:candidate.messageId};
       if(stop){
@@ -214,7 +233,7 @@ export function createPostPurchasePreparation(deps:{
       if(typeof numeric!=='string'||!/^[1-9][0-9]{0,19}$/.test(numeric))return 'ignored';
       const customerId='gid://shopify/Customer/'+numeric;
       const c=await contact(tx,m,customerId);
-      if(!c||c.id!==contactId||c.phone!==base.phone||c.whatsappId!==candidate.from||c.automationsPaused||
+      if(!c||c.id!==contactId||c.phone!==base.phone||c.whatsappId!==candidate.from||commerceContactSuppressed(c)||
         await deps.privacyLocked(tx,shop,customerId))return 'ignored';
       const saved=await tx.execute(grantPostPurchaseConsentQuery({...base,journey:proof.journey,contactId,customerId}));
       return saved.rows.length?'granted':'ignored';
@@ -232,6 +251,7 @@ export function createPostPurchasePreparation(deps:{
       if(m.config.ecommercePostPurchaseDeliveryConnection!==commerceConnectionFingerprint({accountId:m.accountId,shop:m.shop,
         installationId:m.installationId,wabaId:String(owner?.waba_id||''),phoneId:m.metaPhoneId,installedAt:new Date(m.installedAt)}))return null;
     }
+    if(merchantProductionAvailable(deps.env,m.accountId,m.shop)&&!await loadMerchantRelease(tx,deps.env,m.accountId,'postPurchase'))return null;
     await schema(tx);
     const found=await tx.execute(sql`SELECT i.*,e.delivery_id FROM ecommerce_post_purchase_intents i
       JOIN ecommerce_growth_event_inbox e ON e.id=i.event_id AND e.account_id=i.account_id AND e.shop=i.shop
@@ -240,6 +260,8 @@ export function createPostPurchasePreparation(deps:{
     const row=found.rows[0];if(!row)return null;
     const event={topic:row.topic as ShopifyOrderTopic,deliveryId:String(row.delivery_id),orderId:String(row.order_gid),
       customerId:String(row.customer_gid),occurredAt:date(row.occurred_at)};
+    if(merchantProductionAvailable(deps.env,m.accountId,m.shop)&&
+      (!Number.isFinite(merchantActivationTime(m.config,'postPurchase'))||event.occurredAt<merchantActivationTime(m.config,'postPurchase')))return null;
     if(event.occurredAt<m.installedAt||await deps.privacyLocked(tx,m.shop,event.customerId))return null;
     const checkedAt=now();
     const fresh=await (deps.recheck??recheckPostPurchaseOrder)({shop:m.shop,accessToken:m.accessToken,
