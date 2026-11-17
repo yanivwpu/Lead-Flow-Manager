@@ -30,6 +30,12 @@ export function ShopifyCatalogView(props: {
 }) {
   const { t, i18n } = useTranslation();
   const s = props.status;
+  // The first product import is a distinct action, not a retry.
+  const firstSyncLabel = i18n.language.startsWith("he")
+    ? "סנכרון מוצרים"
+    : i18n.language.startsWith("es")
+      ? "Sincronizar productos"
+      : "Sync products";
   return (
     <div className="space-y-4">
       <section className="rounded-xl border bg-white p-4 sm:p-5">
@@ -45,7 +51,7 @@ export function ShopifyCatalogView(props: {
             disabled={props.syncing || s?.connection !== "connected"}
             onClick={props.onSync}
           >
-            {t("salesCatalog.commerce.retry")}
+            {s?.lastSyncAt ? t("salesCatalog.commerce.retry") : firstSyncLabel}
           </Button>
         </div>
         {s?.missingScopes.length ? (
