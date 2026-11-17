@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { requestOfflinePair, parseOfflinePair, sealOfflinePair, openOfflinePair, classifyShopifyAdminFailure } from '../server/shopifyOfflineGrant';
@@ -123,4 +124,23 @@ test('SDK and HTTP auth errors retain only sanitized status and token code', asy
     const transport = createOfflineAdminFetch(async () => secret, async () => new Response(secret, { status }));
     await assert.rejects(transport(`https://${shop}/admin/api/2026-10/graphql.json`), verify);
   }
+});
+
+
+test('One-store operator remains explicit, pinned, and never automatically migrates a merchant', () => {
+  const source = readFileSync('scripts/shopify-offline-one-store-operator.ts', 'utf8');
+  const build = readFileSync('script/build.ts', 'utf8');
+  assert.match(source, /whachatcrm-live-test\.myshopify\.com/);
+  assert.match(source, /51f64011-eb3a-48a4-bb10-031abd3c0cdc/);
+  assert.match(source, /RAILWAY_ENVIRONMENT_ID !== EXPECTED_ENVIRONMENT/);
+  assert.match(source, /RAILWAY_SERVICE_ID !== EXPECTED_SERVICE/);
+  assert.match(source, /args\.length === 1 && args\[0\] === "--preflight"/);
+  assert.match(source, /args\.length === 2 && args\[0\] === "--convert" && args\[1\] === ACK/);
+  assert.match(source, /previous_attempt_requires_manual_review/);
+  assert.match(source, /currentAppInstallation \{ app \{ apiKey \}/);
+  assert.match(source, /migrateAuthorizedLegacyInstallation\(\{/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(source, /console\.log\(.*(?:token|secret|raw|error\.message)/i);
+  assert.match(build, /dist\/shopify-offline-operator\.cjs/);
+  assert.doesNotMatch(build, /entryPoints:\s*\["scripts\/shopify-offline-one-store-operator\.ts"\][\s\S]*?outfile:\s*"dist\/index\.cjs"/);
 });
