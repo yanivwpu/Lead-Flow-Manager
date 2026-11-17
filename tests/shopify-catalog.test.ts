@@ -731,3 +731,71 @@ test("daily reconciliation stays idle between passes, targeted events never list
     await f.cleanup();
   }
 });
+
+test('offline auth failures reach catalog permission state without transient retries or credential leakage', async t => {
+  const { offlineGraphqlClient } = await import('../server/shopifyAdminClient');
+  const { ShopifyTokenError } = await import('../server/shopifyOfflineGrant');
+  const { createCatalogRequest } = await import('../server/salesCatalog/shopify/api');
+  const { inspect } = await import('node:util');
+  const f = await catalogFixture();
+  const secret = 'private-token-never-serialize';
+  const source = (await ensureCatalogSource(f.database, 'tenant-a'))!;
+  const cases = [
+    { label: '401', status: 401, code: 'access_denied', state: 'permission_required', delay: 600_000 },
+    { label: '403 scope', status: 403, code: 'access_denied', state: 'permission_required', delay: 600_000 },
+    { label: '403 legacy', status: 403, legacy: true, code: 'access_denied', state: 'permission_required', delay: 600_000 },
+    { label: 'terminal refresh', terminal: true, code: 'access_denied', state: 'permission_required', delay: 600_000 },
+    { label: '503', status: 503, code: 'unavailable', state: 'error', delay: 30_000 },
+    { label: 'network', code: 'unavailable', state: 'error', delay: 30_000 },
+    { label: '429', status: 429, code: 'throttled', state: 'error', delay: 60_000 },
+  ];
+  try {
+    for (const c of cases) await t.test(c.label, async () => {
+      let calls = 0, resolutions = 0;
+      const log: string[] = [];
+      const original = console.error;
+      console.error = (...args) => { log.push(inspect(args)); };
+      try {
+        const client = offlineGraphqlClient('fixture-a.myshopify.com', 'fixture-token-a', {
+          resolve: async () => {
+            resolutions++;
+            if ('terminal' in c) throw new ShopifyTokenError('reauthorization_required');
+            return secret;
+          },
+          client: async () => ({ request: async (_query: string, options: any) => {
+            calls++;
+            assert.equal(options.retries, 0);
+            throw { status: 'status' in c ? c.status : undefined,
+              response: { headers: { authorization: secret } },
+              body: { errors: ('legacy' in c ? 'Non-expiring access tokens are no longer accepted for the Admin API ' : '') + secret },
+              message: secret, cause: Error(secret) };
+          } }) as any,
+        });
+        const request = createCatalogRequest(client);
+        await assert.rejects(request('query CatalogMeta'), (error: any) => {
+          assert.equal(error.code, c.code);
+          assert.equal(error.retryMs, c.delay);
+          assert.ok(!inspect(error, { showHidden: true }).includes(secret));
+          return true;
+        });
+        resolutions = 0; calls = 0;
+        await f.database.update(tables.catalogSources).set({ status: source.status,
+          attempts: 0, nextAttemptAt: new Date(0), checkpoint: {}, leaseToken: null, leaseExpiresAt: null,
+        }).where(eq(tables.catalogSources.id, source.id));
+        const sync = createShopifyCatalogSync(f.database, () => request);
+        const started = Date.now();
+        await sync.tick();
+        const [failed] = await f.database.select().from(tables.catalogSources).where(eq(tables.catalogSources.id, source.id));
+        assert.equal(failed.status, c.state);
+        assert.equal(failed.errorCode, c.code);
+        assert.equal(failed.attempts, 1);
+        assert.ok(failed.nextAttemptAt!.getTime() >= started + c.delay);
+        assert.equal(await sync.tick(), false, 'no immediate retry after failure');
+        assert.equal(resolutions, 1);
+        assert.equal(calls, 'terminal' in c ? 0 : 1);
+        assert.ok(!inspect(failed, { showHidden: true }).includes(secret));
+        assert.ok(!log.join('\n').includes(secret));
+      } finally { console.error = original; }
+    });
+  } finally { await f.cleanup(); }
+});

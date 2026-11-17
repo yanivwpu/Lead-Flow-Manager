@@ -1,6 +1,6 @@
+import { offlineGraphqlClient } from './shopifyAdminClient';
 import { registerVerifiedShopWebhooks } from "./shopifyWebhookRegistration";
 import { and, isNotNull } from "drizzle-orm";
-import type { Session } from "@shopify/shopify-api";
 import { db } from "../drizzle/db";
 import { users } from "../shared/schema";
 import {
@@ -21,7 +21,7 @@ export { buildShopWebhookHealthReport } from "./shopifyWebhookHealthAudit";
 function clientFor(shop: string, accessToken: string) {
   const shopify = getShopifyApi();
   if (!shopify) throw new Error("Shopify API not configured");
-  return new shopify.clients.Graphql({ session: { shop, accessToken } as Session });
+  return offlineGraphqlClient(shop, accessToken);
 }
 
 export async function fetchShopGrantedScopes(shop: string, accessToken: string) {

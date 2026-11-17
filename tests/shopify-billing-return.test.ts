@@ -24,6 +24,7 @@ test("real billing returns verify provider state, recover missing shop, fence ow
     getUserByShopifyShop: storage.getUserByShopifyShop,
     updateUser: storage.updateUser,
     update: db.update,
+    transaction: db.transaction,
     request: api.clients.Graphql.prototype.request,
   };
   const read = async (id = "tenant-a") =>
@@ -36,6 +37,7 @@ test("real billing returns verify provider state, recover missing shop, fence ow
   storage.updateUser = async () => {
     throw Error("unfenced writes forbidden");
   };
+  (db as any).transaction = (...args: any[]) => (f.database.transaction as any)(...args);
   (db as any).update = (...args: any[]) => (f.database.update as any)(...args);
   let actor: string | undefined = "tenant-a",
     calls = 0;
@@ -218,6 +220,7 @@ test("real billing returns verify provider state, recover missing shop, fence ow
     storage.getUserByShopifyShop = original.getUserByShopifyShop;
     storage.updateUser = original.updateUser;
     db.update = original.update;
+    db.transaction = original.transaction;
     api.clients.Graphql.prototype.request = original.request;
     await f.cleanup();
   }
