@@ -36,8 +36,7 @@ function logSafe(result: Record<string, unknown>) {
 
 function validateTargetEnvironment() {
   if (process.env.RAILWAY_ENVIRONMENT_ID !== EXPECTED_ENVIRONMENT ||
-      process.env.RAILWAY_SERVICE_ID !== EXPECTED_SERVICE ||
-      process.env.NODE_ENV !== "production") {
+      process.env.RAILWAY_SERVICE_ID !== EXPECTED_SERVICE) {
     throw new SafeStop("wrong_environment_or_service");
   }
   if (!process.env.SHOPIFY_API_KEY || !process.env.SHOPIFY_API_SECRET)
