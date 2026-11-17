@@ -21,7 +21,8 @@ test("merchant dashboard reuses existing authenticated catalog and shopping comp
 
 test("overview only shows authenticated catalog-source metrics, never fabricated sales or inferred purchase eligibility",()=>{
  assert.match(dashboard,/withUserQueryScope\(\["\/api\/sales-catalog\/commerce\/status"\],user\?\.id\)/);
- assert.match(dashboard,/enabled:privatePilot && !!user\?\.id && sessionAligned && data\?\.connected===true && view==="overview"/);
+ assert.match(dashboard,/enabled:\(privatePilot \|\| activation\.data\?\.activated === true\) && !!user\?\.id && sessionAligned && data\?\.connected===true && view==="overview"/);
+ assert.match(dashboard,/activation\.data\?\.activated === true && commerceStatus\.data && commerceStatus\.data\.initialSyncCompleted !== true/);
  assert.match(dashboard,/data-testid="ecommerce-catalog-summary"/);
  assert.match(dashboard,/publishedProductCount/);
  assert.match(dashboard,/eligibleProductCount/);

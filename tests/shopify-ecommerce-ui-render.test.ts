@@ -209,3 +209,25 @@ test("E-Commerce solutions page centers the benefits heading and keeps its intro
   // Do not impose nowrap on narrow phones or alter the layout of other solutions.
   assert.ok(!src.includes('isEcommerceSolution && "whitespace-nowrap"'));
 });
+
+
+test("activated merchant with unsynced catalog sees a localized first-sync action, not an automatic sync",()=>{
+  state.user={id:"fixture"};state.aligned=true;state.available=true;
+  state.activation={eligible:true,activated:true,connected:true,planEligible:true};
+  state.query.data={connected:true,shop:"fixture.myshopify.com",syncEnabled:true,sourceId:null,initialSyncCompleted:false};
+  for(const [locale,heading] of [["en","Your Shopify product catalog needs a first sync"],["es","Tu catálogo de Shopify necesita una primera sincronización"],["he","יש לסנכרן את מוצרי Shopify בפעם הראשונה"]]){
+    state.locale=locale;
+    const {document}=parseHTML(renderDashboard());
+    const banner=document.querySelector('[data-testid="ecommerce-first-catalog-sync"]');
+    assert.ok(banner,`Missing first-sync banner for ${locale}`);
+    assert.ok(banner.textContent.includes(heading));
+    assert.equal(banner.querySelector("a")?.getAttribute("href"),"/app/ecommerce-growth-engine?view=products");
+    assert.equal(document.querySelector('[data-testid="ecommerce-growth-engine-dashboard"]')?.getAttribute("dir"),locale==="he"?"rtl":"ltr");
+  }
+  state.query.data={...state.query.data,sourceId:"source-1",initialSyncCompleted:true};
+  assert.equal(parseHTML(renderDashboard()).document.querySelector('[data-testid="ecommerce-first-catalog-sync"]'),null);
+  const component=readFileSync("client/src/components/ShopifyCatalogView.tsx","utf8");
+  assert.match(component,/s\?\.lastSyncAt \? t\("salesCatalog\.commerce\.retry"\) : firstSyncLabel/);
+  state.query.data={connected:true,shop:"fixture.myshopify.com",syncEnabled:true};
+  state.activation={eligible:false,activated:false,connected:false,planEligible:false};
+});
