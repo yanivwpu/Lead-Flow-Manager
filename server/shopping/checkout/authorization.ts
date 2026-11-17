@@ -2,8 +2,9 @@ import { resolveCatalogInstallation } from "../../salesCatalog/shopify/installat
 import type { CatalogDb } from "../../salesCatalog/commerceStore";
 import { catalogSources } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
-// Deliberately requires a reviewed source change. No environment variable can activate checkout.
-export const CHECKOUT_ROLLOUT_APPROVED: boolean = false;
+// Source-reviewed checkout release: still requires merchant opt-in, Pro/AI entitlement, an active Shopify installation,
+// current catalog scopes and completed synchronization. Runtime journal tables and receipt key must be provisioned before deployment.
+export const CHECKOUT_ROLLOUT_APPROVED: boolean = true;
 export async function checkoutAuthorization(database: CatalogDb, userId: string, entitled: boolean, approved = CHECKOUT_ROLLOUT_APPROVED) {
   if (!entitled) return { ready: false, status: "pro_required" as const, method: "tokenless" as const };
   const install = await resolveCatalogInstallation(database, userId);
