@@ -81,6 +81,14 @@ async function buildAll() {
     logLevel: "info",
   });
 
+  // Explicit merchant-by-merchant operator, never invoked by runtime/worker startup.
+  await esbuild({
+    entryPoints: ["scripts/shopify-offline-merchant-operator.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-offline-merchant-operator.cjs",
+    external: externals, logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],
