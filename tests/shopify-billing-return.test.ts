@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
+import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { catalogFixture } from "./shopify-catalog-fixture";
 import { users } from "../shared/schema";
@@ -8,11 +9,23 @@ import { getEffectivePlanForUser } from "../shared/trialEntitlements";
 
 process.env.SHOPIFY_API_KEY = "billing-fixture-key";
 process.env.SHOPIFY_API_SECRET = "billing-fixture-secret";
+process.env.SHOPIFY_OFFLINE_TOKEN_KEY = "ab".repeat(32);
 process.env.DATABASE_URL ||=
   "postgres://fixture:fixture@127.0.0.1:1/catalog_fixture";
 
 test("real billing returns verify provider state, recover missing shop, fence ownership, preserve trials and replay safely", async () => {
   const f = await catalogFixture();
+  // Billing verification must use the production-compatible renewable-token path.
+  // Populate only this isolated fixture, not the global catalog fixtures.
+  await f.pg.exec(readFileSync("migrations/0119_shopify_offline_tokens.sql", "utf8"));
+  const { persistOfflineInstallation } = await import("../server/shopifyOfflineTokens");
+  await persistOfflineInstallation("tenant-a", "fixture-a.myshopify.com", {
+    accessToken: "fixture-expiring-access-a",
+    refreshToken: "fixture-expiring-refresh-a",
+    accessExpiresAt: new Date(Date.now() + 3_600_000),
+    refreshExpiresAt: new Date(Date.now() + 90 * 86_400_000),
+    scope: "read_orders",
+  }, {}, f.database as any);
   const { storage } = await import("../server/storage");
   const { db } = await import("../drizzle/db");
   const { getShopifyApi, syncShopifyBillingToUser } =
