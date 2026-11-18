@@ -61,14 +61,18 @@ export async function resolveOfflineAccessToken(shop: string, ref: string, optio
       AND NOT EXISTS (SELECT 1 FROM users other WHERE other.shopify_shop=${shop} AND other.id<>u.id AND other.shopify_access_token IS NOT NULL)
       FOR SHARE OF u`);
     if (owner.rows.length !== 1) throw new ShopifyTokenError('installation_changed');
-    // Existing installations remain untouched; no legacy exchange occurs on reads/startup.
+    // Production Admin API calls must never send a non-expiring offline token.
+    // Dormant/closed or expired-trial installations may retain historical DB references;
+    // a returning merchant must reauthorize to receive an encrypted, expiring pair.
+    // Explicitly requested one-time legacy token exchanges remain separate in
+    // migrateAuthorizedLegacyInstallation; ordinary API reads never exchange.
     if (!ref.startsWith(OFFLINE_REF_PREFIX)) {
       const available = await tx.execute(sql`SELECT to_regclass('shopify_offline_migration_attempts') AS attempts`);
       if (available.rows[0]?.attempts) {
         const pending = await tx.execute(sql`SELECT user_id FROM shopify_offline_migration_attempts WHERE shop=${shop}`);
         if (pending.rows.length) throw new ShopifyTokenError('retry_later');
       }
-      return { token: ref };
+      throw new ShopifyTokenError('reauthorization_required');
     }
     const userId = String(owner.rows[0].id);
     const rows = await tx.execute(sql`SELECT * FROM shopify_offline_tokens WHERE user_id=${userId}
