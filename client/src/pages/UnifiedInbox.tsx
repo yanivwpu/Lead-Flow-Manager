@@ -3725,7 +3725,7 @@ export function UnifiedInbox() {
                         {rowPreview}
                       </p>
                     </div>
-                    <div className={INBOX_ROW_LINE3}>
+                    {(showFollowUpBadge && ["overdue", "today", "upcoming"].includes(fuStatus)) || crmTag || bookedAppt ? <div className={INBOX_ROW_LINE3}>
                       {showFollowUpBadge && fuStatus === 'overdue' ? (
                         <span
                           className={cn(INBOX_ROW_CHIP, "border-red-200 bg-red-50 font-semibold text-red-600")}
@@ -3769,7 +3769,7 @@ export function UnifiedInbox() {
                           Booked
                         </span>
                       ) : null}
-                    </div>
+                    </div> : null}
                   </div>
                 </div>
                 <span
