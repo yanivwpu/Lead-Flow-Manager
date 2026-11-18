@@ -1,3 +1,4 @@
+import { customerAuthoredText, matchPropertyBedBath } from "./buyerPreferenceEvidence";
 /**
  * Normalize raw LLM / legacy JSON into BuyerPreferenceExtractionPatch.
  * Field-level parsing so one bad field does not drop the entire patch.
@@ -559,6 +560,7 @@ export function heuristicPatchFromTranscript(
     }
   }
 
+  text = customerAuthoredText(text);
   const lower = text.toLowerCase();
   const now = nowIso();
   const inf = (confidence: number, evidence: string) => ({
@@ -590,7 +592,7 @@ export function heuristicPatchFromTranscript(
     patch.geoPreferences = { value: softAreaPrefs, ...inf(0.85, "geo preference in message") };
   }
 
-  const bedBathSlash = lower.match(/(\d+)\s*\/\s*(\d+(?:\.\d+)?)/);
+  const bedBathSlash = matchPropertyBedBath(lower);
   const isBedBathCorrection =
     /\b(too big|too many bed|instead|only|is better|better|rather than|too large)\b/i.test(lower);
   const tooBigBedM = lower.match(/(\d+)\s*beds?\s+(?:is|are)\s+too\s+big/i);

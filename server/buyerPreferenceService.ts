@@ -1,3 +1,4 @@
+import { buyerPreferenceEvidenceTranscript } from "@shared/buyerPreferenceEvidence";
 import { isInventoryContactEligible } from "./inventory/inventoryContactEligibility";
 /**
  * RGE Inventory Intelligence — buyer preference memory (Phase 1).
@@ -821,8 +822,8 @@ async function loadConversationForExtraction(
   }
   const messages = await storage.getMessages(primary.id, limit);
   return {
-    history: messages.map((m) => ({
-      role: m.direction === "inbound" ? "user" : "assistant",
+    history: messages.filter(m => m.direction === "inbound" && (!m.generatedBy || m.generatedBy === "human")).map((m) => ({
+      role: "user",
       content: m.content || "",
     })),
     conversationId: primary.id,
@@ -833,13 +834,9 @@ async function loadConversationForExtraction(
 async function extractPreferencesWithLlm(
   contact: Contact,
   conversation: Array<{ role: string; content: string }>,
-  existing: BuyerPreferenceProfile,
 ): Promise<BuyerPreferenceExtractionPatch> {
-  const transcript = conversation
-    .filter((m) => (m.content || "").trim().length > 0)
-    .slice(-14)
-    .map((m) => `${m.role}: ${m.content}`)
-    .join("\n");
+  const transcript = buyerPreferenceEvidenceTranscript(conversation);
+  if (!transcript) return {};
 
   const system = `You extract structured home-buyer preferences for a real estate CRM.
 Return JSON only matching this shape (omit unknown fields):
@@ -866,9 +863,12 @@ Return JSON only matching this shape (omit unknown fields):
 Rules:
 - explicit = clearly stated; inferred = weak implication only (confidence <= 0.65).
 - Do not invent fields. evidence required when adding a field.
+- Extract only preferences stated by the customer for a property search.
+- Dates, invoices, vehicle payments and maintenance are not property criteria.
+- Never interpret a calendar date as bed/bath counts.
 - Prefer updating only fields supported by the latest messages.`;
 
-  const user = `Existing profile JSON:\n${JSON.stringify(existing)}\n\nConversation:\n${transcript}`;
+  const user = `Customer-authored inbound messages (the only extraction evidence):\n${transcript}`;
 
   const response = await aiProvider.complete(
     "extraction",
@@ -1032,7 +1032,7 @@ export async function runBuyerPreferenceExtraction(
   try {
     const freshForExisting = (await storage.getContact(contactId)) || contact;
     const existing = readBuyerPreferenceProfile(freshForExisting);
-    let patch = await extractPreferencesWithLlm(freshForExisting, history, existing);
+    let patch = await extractPreferencesWithLlm(freshForExisting, history);
     if (text) {
       const command = applyInboundSearchCommandOverrides(patch, text, existing);
       debugBuyerPreferenceLog("search_command_applied", {

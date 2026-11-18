@@ -1,0 +1,39 @@
+name: RGE contact eligibility
+on:
+  pull_request:
+    paths:
+      - 'shared/aiDomainEligibility.ts'
+      - 'shared/buyerPreference*.ts'
+      - 'shared/inventoryContactEligibility.ts'
+      - 'server/buyerPreferenceService.ts'
+      - 'server/inventory/**'
+      - 'server/workflowEngine.ts'
+      - 'server/automationTimerHandlers.ts'
+      - 'tests/rge-*.test.ts'
+      - 'tests/inventory-contact-*.test.ts'
+      - 'tests/ai-domain-eligibility.test.ts'
+      - '.github/workflows/rge-contact-eligibility.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Property intent, production date contamination and workflow boundaries
+        run: >-
+          node --import tsx --test
+          tests/rge-production-date-contamination.test.ts
+          tests/rge-review-search-evidence.test.ts
+          tests/inventory-contact-eligibility.test.ts
+          tests/inventory-contact-server-gate.test.ts
+          tests/rge-focused-release-review.test.ts
+          tests/ai-domain-eligibility.test.ts
