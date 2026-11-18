@@ -6,6 +6,7 @@ interface ChatAvatarProps {
   name: string;
   size?: "sm" | "md" | "lg";
   className?: string;
+  fallbackClassName?: string;
 }
 
 function getInitials(name: string): string {
@@ -38,7 +39,7 @@ const sizeClasses = {
   lg: "h-11 w-11 text-sm",
 };
 
-export function ChatAvatar({ src, name, size = "md", className }: ChatAvatarProps) {
+export function ChatAvatar({ src, name, size = "md", className, fallbackClassName }: ChatAvatarProps) {
   const initials = getInitials(name);
   const hasImage = isImageUrl(src);
 
@@ -51,7 +52,7 @@ export function ChatAvatar({ src, name, size = "md", className }: ChatAvatarProp
           className="object-cover"
         />
       )}
-      <AvatarFallback className="bg-brand-green/10 text-brand-green font-semibold">
+      <AvatarFallback className={cn("bg-brand-green/10 text-brand-green font-semibold", fallbackClassName)}>
         {initials}
       </AvatarFallback>
     </Avatar>

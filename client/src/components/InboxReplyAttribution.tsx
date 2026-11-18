@@ -11,13 +11,29 @@ export type InboxAttributionMessage = {
   sentAt?: string | null;
 };
 
+/** Deterministic, muted fallback colors: each agent retains the same color across messages. */
+const TEAM_AVATAR_COLORS = [
+  "bg-sky-100 text-sky-800",
+  "bg-amber-100 text-amber-800",
+  "bg-violet-100 text-violet-800",
+  "bg-teal-100 text-teal-800",
+  "bg-rose-100 text-rose-800",
+  "bg-indigo-100 text-indigo-800",
+] as const;
+
+export function teammateAvatarColor(identity: string): string {
+  let hash = 0;
+  for (const char of identity) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) | 0;
+  return TEAM_AVATAR_COLORS[(hash >>> 0) % TEAM_AVATAR_COLORS.length];
+}
+
 /** A visible teammate avatar beside the bubble, rather than a tiny icon inside it. */
 export function InboxReplyAvatar({ message }: { message: InboxAttributionMessage }) {
   const { t } = useTranslation();
   const identity = replyIdentity(message);
   const name = identity.sender?.name || t(`inboxTeam.${identity.kind === "unknown" ? "sent" : identity.kind}`);
   return <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center" title={name} aria-label={name} data-testid="reply-sender-avatar">
-    {identity.sender ? <ChatAvatar src={identity.sender.avatarUrl} name={name} size="sm" className="h-8 w-8 ring-1 ring-slate-200" /> :
+    {identity.sender ? <ChatAvatar src={identity.sender.avatarUrl} name={name} size="sm" className="h-8 w-8 ring-1 ring-slate-200" fallbackClassName={teammateAvatarColor(message.sentByUserId || name)} /> :
       <span className={`flex h-8 w-8 items-center justify-center rounded-full ${identity.kind === "ai" ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-600"}`}>
         {identity.kind === "ai" ? <Bot className="h-4 w-4" /> : identity.kind === "automation" ? <Workflow className="h-4 w-4" /> : <UserRound className="h-4 w-4" />}
       </span>}
