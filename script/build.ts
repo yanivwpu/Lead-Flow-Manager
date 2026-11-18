@@ -97,6 +97,14 @@ async function buildAll() {
     external: externals, logLevel: "info",
   });
 
+  // Operator-only read-only report across legacy shops; never attached to runtime.
+  await esbuild({
+    entryPoints: ["scripts/shopify-legacy-identity-audit.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-legacy-identity-audit.cjs",
+    external: externals, logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],
