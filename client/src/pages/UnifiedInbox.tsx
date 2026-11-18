@@ -1,4 +1,4 @@
-import { InboxAssignmentControl, AssigneeAvatar } from "@/components/InboxAssignmentControl";
+import { AssigneeAvatar } from "@/components/InboxAssignmentControl";
 import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
 import { belongsInInboxTab, inboxEmptyKind, type ReplySender } from "@shared/inboxTeam";
 import { SafeMessageText } from "@/components/SafeMessageText";
@@ -3702,7 +3702,7 @@ export function UnifiedInbox() {
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
-                      <span className="ml-auto shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>
+                      {item.contact.assignedTo && <span className="ml-auto shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>}
                     </div>
                     <div className={INBOX_ROW_LINE2}>
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
@@ -3893,7 +3893,6 @@ export function UnifiedInbox() {
                 </div>
               </div>
               <div className="flex w-full sm:w-auto items-center justify-end gap-1.5 flex-shrink-0">
-                <InboxAssignmentControl assignedTo={contact.assignedTo} members={teamMembers} actorId={user?.id} pending={updateContactMutation.isPending} onAssign={id => updateContact({ assignedTo: id })} />
                 {/* Mobile: open CRM details sheet */}
                 <Button
                   variant="ghost"
@@ -4173,7 +4172,7 @@ export function UnifiedInbox() {
                         data-message-direction={isOut ? "outbound" : "inbound"}
                         data-testid={`chat-bubble-${msg.id}`}
                       >
-                        <div className={cn("flex min-w-0 max-w-full flex-col", isOut && "items-end")}>
+                        <div className={cn("flex w-full min-w-0 flex-1 flex-col", isOut ? "items-end" : "items-start")}>
                         <div
                           className={chatBubbleShellClassName(activeChannel, {
                             isOutbound: isOut,
