@@ -574,6 +574,7 @@ async function sendChatbotReply(
       idempotencyKey: `chatbot:text:${ctx.conversationId}:${content.slice(0, 160)}`,
     }, async () =>
       channelService.sendMessage({
+        generatedBy: "chatbot",
         userId: ctx.userId,
         contactId: ctx.contactId,
         content,
@@ -630,6 +631,7 @@ async function sendChatbotMedia(
       idempotencyKey: `chatbot:media:${ctx.conversationId}:${normalisedType}:${mediaUrl}`,
     }, async () =>
       channelService.sendMessage({
+        generatedBy: "chatbot",
         userId: ctx.userId,
         contactId: ctx.contactId,
         content: caption || "",
@@ -735,6 +737,7 @@ async function sendChatbotButtonsMeta(
         contactId: ctx.contactId,
         userId: ctx.userId,
         direction: "outbound",
+            generatedBy: "chatbot",
         content: promptText,
         contentType: "buttons",
         status: "sent",
@@ -784,6 +787,7 @@ async function sendChatbotButtonsWebchat(
       idempotencyKey: `chatbot:webchat_buttons:${ctx.conversationId}:${promptText.slice(0, 160)}`,
     }, async () =>
       channelService.sendMessage({
+        generatedBy: "chatbot",
         userId: ctx.userId,
         contactId: ctx.contactId,
         content: promptText,
@@ -834,6 +838,7 @@ async function sendChatbotFormWebchat(
       idempotencyKey: `chatbot:webchat_form:${ctx.conversationId}:${form.id}`,
     }, async () =>
       channelService.sendMessage({
+        generatedBy: "chatbot",
         userId: ctx.userId,
         contactId: ctx.contactId,
         content: promptText || form.title,

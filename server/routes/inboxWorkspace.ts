@@ -1,11 +1,33 @@
+import { storage } from "../storage";
+import { getWhatsAppAvailability, isCanonicalWhatsAppFullyConnected } from "../whatsappService";
+import { requireInboxWorkspace, inboxWorkspaceId } from "../inboxWorkspaceAccess";
 import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import { db } from "../../drizzle/db";
-import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { users, emailMailboxes } from "@shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Express } from "express";
 import { getInboxWorkspaceAccess, listInboxWorkspaces, resolveInboxWorkspace } from "../inboxWorkspaceAccess";
 
 export function registerInboxWorkspaceRoutes(app: Express): void {
+  // Read-only status for the selected Inbox. Never return channel config or credentials.
+  app.get("/api/inbox/channel-status", inboxContentReadLimiter, requireInboxWorkspace, async (req, res, next) => {
+    try {
+      const workspaceId = inboxWorkspaceId(req);
+      const [owner, settings, mailboxes] = await Promise.all([
+        storage.getUserForSession(workspaceId), storage.getChannelSettings(workspaceId),
+        db.select({ id: emailMailboxes.id }).from(emailMailboxes).where(and(eq(emailMailboxes.workspaceUserId, workspaceId), inArray(emailMailboxes.syncStatus, ["connected", "syncing", "error"]))),
+      ]);
+      const whatsappConnected = !!(owner && isCanonicalWhatsAppFullyConnected(owner)) || settings.some(s => s.channel === "whatsapp" && s.isConnected);
+      const hasAnyMessagingChannel = whatsappConnected || mailboxes.length > 0 || settings.some(s => s.isConnected && ["sms", "instagram", "facebook", "telegram", "webchat", "email"].includes(s.channel));
+      res.json({ workspaceId, hasAnyMessagingChannel });
+    } catch (error) { next(error); }
+  });
+  app.get("/api/inbox/whatsapp-availability", inboxContentReadLimiter, requireInboxWorkspace, async (req, res, next) => {
+    try {
+      const result = await getWhatsAppAvailability(inboxWorkspaceId(req));
+      res.json({ available: result.available, provider: result.provider, reason: result.reason, message: result.message, fullyReady: result.fullyReady, setupIncomplete: result.setupIncomplete, bannerText: result.bannerText, readiness: result.readiness });
+    } catch (error) { next(error); }
+  });
   app.get("/api/inbox/workspaces", inboxContentReadLimiter, async (req, res, next) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });

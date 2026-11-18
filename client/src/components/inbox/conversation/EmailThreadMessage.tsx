@@ -1,3 +1,5 @@
+import { InboxReplyAttribution } from "@/components/InboxReplyAttribution";
+import type { ReplySender } from "@shared/inboxTeam";
 /**
  * Document-style email message card for Unified Inbox (Gmail/Outlook-like).
  * Full center-pane width — never uses chat-bubble max-width.
@@ -20,6 +22,10 @@ export type EmailThreadMessageModel = {
   direction: "inbound" | "outbound" | string;
   content?: string | null;
   createdAt: string | Date;
+  sentAt?: string | null;
+  sentByUserId?: string | null;
+  generatedBy?: string | null;
+  sender?: ReplySender | null;
   status?: string | null;
   sentViaFallback?: boolean | null;
   fallbackChannel?: string | null;
@@ -59,6 +65,7 @@ export function EmailThreadMessage({
           data-testid="email-document-header"
         >
           <div className="min-w-0 flex-1 space-y-0.5">
+            {isOut && <InboxReplyAttribution message={{ ...message, createdAt: new Date(message.createdAt).toISOString() }} />}
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={cn(

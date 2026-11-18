@@ -1873,5 +1873,22 @@
     "close": "Cerrar",
     "welcomeSafe": "Explora primero. Los mensajes y automatizaciones empiezan solo cuando los configuras y activas expresamente.",
     "successLabel": "Cómo saber que está listo"
-}
+},
+  "inboxTeam": {
+    "assignedTo": "Asignado a",
+    "unassigned": "Sin asignar",
+    "teammate": "Miembro del equipo",
+    "human": "Miembro del equipo",
+    "ai": "IA",
+    "automation": "Automatización",
+    "sent": "Enviado",
+    "all": "Todos",
+    "unread": "No leídos",
+    "mine": "Míos",
+    "empty_mine": "Todavía no tienes conversaciones asignadas",
+    "empty_unread": "No hay conversaciones sin leer",
+    "empty_filtered": "No hay conversaciones coincidentes",
+    "empty_empty": "Todavía no hay conversaciones",
+    "assignmentFailed": "No se pudo actualizar la asignación. Actualiza e inténtalo de nuevo."
+  }
 }

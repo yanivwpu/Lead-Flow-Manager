@@ -1,3 +1,4 @@
+import { InboxAssignmentControl } from "@/components/InboxAssignmentControl";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -188,6 +189,7 @@ interface Conversation {
 }
 
 interface TeamMember {
+  avatarUrl?: string | null;
   id: string;
   memberId: string | null;
   email: string;
@@ -1556,7 +1558,6 @@ export function InboxLeadDetailsPanel({
     }
   }, []);
 
-  const activeMembers  = teamMembers.filter(m => m.status === 'active');
   const currentWorkspaceMember = teamMembers.find(
     (m) => (m.memberId || m.id) === currentUserId,
   );
@@ -1564,10 +1565,6 @@ export function InboxLeadDetailsPanel({
   const isWorkspaceAdmin =
     currentWorkspaceMember?.role === "owner" ||
     currentWorkspaceMember?.role === "admin";
-  const assignedMember = activeMembers.find(m => (m.memberId || m.id) === contact.assignedTo);
-  const assignedLabel  = assignedMember
-    ? (assignedMember.name || assignedMember.email.split('@')[0])
-    : null;
 
   // ─── Copilot computed values ───────────────────────────────────────────────
   const AI_STATE_LABELS: Record<string, string> = {
@@ -2503,62 +2500,7 @@ export function InboxLeadDetailsPanel({
             </PopoverContent>
           </Popover>
 
-          {/* ── ASSIGN ── */}
-          <Popover open={assignOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("assign", open)}>
-            <PopoverTrigger asChild>
-              <button
-                className={cn(
-                  "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
-                  assignedLabel
-                    ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
-                    : "border-gray-200 bg-white hover:bg-gray-50"
-                )}
-                data-testid="button-ai-assign"
-                title={assignedLabel ? `Assigned: ${assignedLabel}` : "Assign agent"}
-              >
-                <UserCheck className={cn("w-3 h-3", assignedLabel ? "text-emerald-600" : "text-gray-500")} />
-                <span className={cn("text-[9px] font-medium truncate max-w-[44px] text-center leading-tight",
-                  assignedLabel ? "text-emerald-700" : "text-gray-500"
-                )}>
-                  {assignedLabel ? assignedLabel.split(' ')[0] : "Assign"}
-                </span>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[220px] p-1.5" align="start" side="bottom" sideOffset={4}>
-              <CopilotPopoverHeader title="Assign to" onClose={() => setAssignOpen(false)} />
-              <button
-                onClick={() => { onUpdateContact({ assignedTo: null }); setAssignOpen(false); }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
-                  !contact.assignedTo ? "bg-gray-100 text-gray-600 font-medium" : "text-gray-500 hover:bg-gray-50"
-                )}
-                data-testid="assign-option-unassigned"
-              >
-                <User className="w-3 h-3 text-gray-400" />
-                Unassigned
-              </button>
-              {activeMembers.map(m => {
-                const val      = m.memberId || m.id;
-                const name     = m.name || m.email.split('@')[0];
-                const isActive = contact.assignedTo === val;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => { onUpdateContact({ assignedTo: val }); setAssignOpen(false); }}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] transition-colors",
-                      isActive ? "bg-emerald-50 text-emerald-700 font-medium" : "text-gray-700 hover:bg-gray-50"
-                    )}
-                    data-testid={`assign-option-${val}`}
-                  >
-                    <UserCheck className={cn("w-3 h-3", isActive ? "text-emerald-500" : "text-gray-400")} />
-                    {name}
-                    {isActive && <CheckCircle2 className="w-3 h-3 ml-auto text-emerald-500" />}
-                  </button>
-                );
-              })}
-            </PopoverContent>
-          </Popover>
+          <InboxAssignmentControl compact assignedTo={contact.assignedTo} members={teamMembers} actorId={currentUserId} onAssign={id => onUpdateContact({ assignedTo: id })} open={assignOpen} onOpenChange={open => handleCopilotPopoverOpenChange("assign", open)} />
 
           {/* ── FOLLOW: opens popover with quick opts + custom picker ── */}
           <Popover open={followOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("follow", open)}>

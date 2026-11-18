@@ -225,6 +225,7 @@ export const emailProspectOutreachSender: ProspectOutreachSender = {
     try {
       const outgoingBody = normalizeProspectOutreachEmailText(input.messageSnapshot);
       const result = await channelService.sendMessage({
+        generatedBy: "auto_reply",
         userId: input.workspaceUserId,
         contactId: input.contactId,
         content: outgoingBody,

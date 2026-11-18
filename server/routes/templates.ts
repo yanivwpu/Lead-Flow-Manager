@@ -1,5 +1,7 @@
+import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
+import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import { withGlobalDncPhoneBoundary } from "../marketingCompliance/store";
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { Channel, MessageTemplate, PresetCampaign } from "@shared/schema";
 import {
   buildMetaCloudTemplateSendComponents,
@@ -133,6 +135,7 @@ function formatFriendlyMetaTemplateUserMessage(metaErr: unknown): string {
 }
 
 async function persistFailedOutboundTemplateMessage(args: {
+  sentByUserId?: string;
   userId: string;
   contactId: string;
   template: MessageTemplate;
@@ -228,6 +231,8 @@ async function persistFailedOutboundTemplateMessage(args: {
     conversationId,
     contactId: args.contactId,
     userId: args.userId,
+    sentByUserId: args.sentByUserId,
+    generatedBy: args.sentByUserId ? "human" : undefined,
     direction: "outbound",
     content: displayContent,
     contentType: "template",
@@ -962,19 +967,19 @@ export function registerTemplateRoutes(app: Express): void {
   // ============= Message Templates =============
 
   // Get user's message templates
-  app.get("/api/templates", async (req, res) => {
+  const listInboxTemplates = async (req: Request, res: Response) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const limits = await subscriptionService.getUserLimits(req.user.id);
+      const limits = await subscriptionService.getUserLimits(inboxWorkspaceId(req));
       if (!limitsAllowBasicTemplateMessaging(limits)) {
         return res.status(403).json({ error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE });
       }
 
-      const templates = await storage.getMessageTemplates(req.user.id);
-      const defaultsRows = await storage.listTemplateCarouselMediaDefaultsByUser(req.user.id);
+      const templates = await storage.getMessageTemplates(inboxWorkspaceId(req));
+      const defaultsRows = await storage.listTemplateCarouselMediaDefaultsByUser(inboxWorkspaceId(req));
       const defaultsByTemplateId = new Map<string, ReturnType<typeof coerceTemplateCarouselDefaultMediaMap>>();
       for (const row of defaultsRows) {
         defaultsByTemplateId.set(row.templateId, coerceTemplateCarouselDefaultMediaMap(row.cardMedia));
@@ -990,7 +995,7 @@ export function registerTemplateRoutes(app: Express): void {
       ).length;
       console.log(
         `[TEMPLATE_LIBRARY_QUERY] ${JSON.stringify({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           rowCount: templates.length,
           approvedNormalized: approvedNorm,
           metaTwilioSidPrefix: metaRows,
@@ -1027,7 +1032,9 @@ export function registerTemplateRoutes(app: Express): void {
       console.error("Error fetching templates:", error);
       res.status(500).json({ error: "Failed to fetch templates" });
     }
-  });
+  };
+  app.get("/api/templates", inboxContentReadLimiter, listInboxTemplates);
+  app.get("/api/inbox/templates", inboxContentReadLimiter, requireInboxWorkspace, listInboxTemplates);
 
   /**
    * Save per-card carousel header media defaults for a library template (https URLs only).
@@ -1758,7 +1765,7 @@ export function registerTemplateRoutes(app: Express): void {
   });
 
   // Send a template message via the active WhatsApp provider
-  app.post("/api/templates/send", async (req, res) => {
+  const sendInboxTemplate = async (req: Request, res: Response) => {
     const sendRouteId = "POST /api/templates/send";
     const sendFinal = {
       routeReached: false,
@@ -1839,10 +1846,10 @@ export function registerTemplateRoutes(app: Express): void {
         return reply(401, { error: "Unauthorized" }, "unauthorized");
       }
 
-      const limits = await subscriptionService.getUserLimits(req.user.id);
+      const limits = await subscriptionService.getUserLimits(inboxWorkspaceId(req));
       if (!limitsAllowBasicTemplateMessaging(limits)) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=templates_disabled userId=${req.user.id}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=templates_disabled userId=${inboxWorkspaceId(req)}`
         );
         return reply(403, { error: BASIC_TEMPLATE_MESSAGING_UNAVAILABLE_MESSAGE }, "templates_required");
       }
@@ -1910,7 +1917,7 @@ export function registerTemplateRoutes(app: Express): void {
             : "quick_send";
       if (!templateId || (!chatId && !contactId)) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=missing_template_or_recipient userId=${req.user.id} templateId=${templateId ?? "null"}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=missing_template_or_recipient userId=${inboxWorkspaceId(req)} templateId=${templateId ?? "null"}`
         );
         return reply(
           400,
@@ -1920,9 +1927,9 @@ export function registerTemplateRoutes(app: Express): void {
       }
 
       const template = await storage.getMessageTemplate(templateId);
-      if (!template || template.userId !== req.user.id) {
+      if (!template || template.userId !== inboxWorkspaceId(req)) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=template_not_found userId=${req.user.id} templateId=${templateId}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=template_not_found userId=${inboxWorkspaceId(req)} templateId=${templateId}`
         );
         return reply(404, { error: "Template not found" }, "template_not_found");
       }
@@ -1942,16 +1949,16 @@ export function registerTemplateRoutes(app: Express): void {
 
       if (contactId) {
         const contact = await storage.getContact(contactId);
-        if (!contact || contact.userId !== req.user.id) {
+        if (!contact || contact.userId !== inboxWorkspaceId(req)) {
           console.warn(
-            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=contact_not_found userId=${req.user.id} contactId=${contactId}`
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=contact_not_found userId=${inboxWorkspaceId(req)} contactId=${contactId}`
           );
           return reply(404, { error: "Contact not found" }, "contact_not_found");
         }
         const phone = contact.whatsappId || contact.phone;
         if (!phone) {
           console.warn(
-            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_no_whatsapp userId=${req.user.id} contactId=${contactId}`
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_no_whatsapp userId=${inboxWorkspaceId(req)} contactId=${contactId}`
           );
           return reply(
             400,
@@ -1967,15 +1974,15 @@ export function registerTemplateRoutes(app: Express): void {
           return reply(400, { error: "chatId or contactId is required" }, "missing_recipient");
         }
         const chat = await storage.getChat(chatId);
-        if (!chat || chat.userId !== req.user.id) {
+        if (!chat || chat.userId !== inboxWorkspaceId(req)) {
           console.warn(
-            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=chat_not_found userId=${req.user.id} chatId=${chatId}`
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=chat_not_found userId=${inboxWorkspaceId(req)} chatId=${chatId}`
           );
           return reply(404, { error: "Chat not found" }, "chat_not_found");
         }
         if (!chat.whatsappPhone) {
           console.warn(
-            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=chat_no_whatsapp userId=${req.user.id} chatId=${chatId}`
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=chat_no_whatsapp userId=${inboxWorkspaceId(req)} chatId=${chatId}`
           );
           return reply(400, { error: "Chat does not have a WhatsApp number" }, "chat_no_whatsapp");
         }
@@ -1984,20 +1991,20 @@ export function registerTemplateRoutes(app: Express): void {
         const channelKey =
           chat.whatsappPhone.replace(/\D/g, "") || chat.whatsappPhone || "";
         const matched = channelKey
-          ? await storage.getContactByChannelId(req.user.id, "whatsapp", channelKey)
+          ? await storage.getContactByChannelId(inboxWorkspaceId(req), "whatsapp", channelKey)
           : undefined;
         crmContactId = matched?.id ?? null;
       }
 
       let waConversationIdForReEngagement: string | null = null;
       if (crmContactId) {
-        const ensured = await ensureWhatsAppConversationForContact(req.user.id, crmContactId);
+        const ensured = await ensureWhatsAppConversationForContact(inboxWorkspaceId(req), crmContactId);
         waConversationIdForReEngagement = ensured.conversationId;
       }
 
       if (!crmContactId) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_required_for_guarded_template userId=${req.user.id}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=contact_required_for_guarded_template userId=${inboxWorkspaceId(req)}`
         );
         return reply(
           400,
@@ -2009,10 +2016,10 @@ export function registerTemplateRoutes(app: Express): void {
       const templateGuardKey =
         typeof idempotencyKey === "string" && idempotencyKey.trim()
           ? idempotencyKey.trim()
-          : `template:${sendSourceTag}:${req.user.id}:${crmContactId}:${template.id}:${JSON.stringify(variables || {}).slice(0, 240)}:${Math.floor(Date.now() / 60_000)}`;
+          : `template:${sendSourceTag}:${inboxWorkspaceId(req)}:${crmContactId}:${template.id}:${JSON.stringify(variables || {}).slice(0, 240)}:${Math.floor(Date.now() / 60_000)}`;
       const isReEngagementCampaignSend = sendSourceTag === "templates_campaign";
       const templateGuard = await withAutomationSendGuard({
-        userId: req.user.id,
+        userId: inboxWorkspaceId(req),
         contactId: crmContactId,
         conversationId: waConversationIdForReEngagement,
         channel: "whatsapp",
@@ -2066,18 +2073,18 @@ export function registerTemplateRoutes(app: Express): void {
       };
 
       // Full session row — auth-core `getUser` omits whatsappProvider / Meta fields (defaults wrongly to Twilio).
-      const user = await storage.getUserForSession(req.user.id);
+      const user = await storage.getUserForSession(inboxWorkspaceId(req));
       if (!user) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=user_session_not_found userId=${req.user.id}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=404 reason=user_session_not_found userId=${inboxWorkspaceId(req)}`
         );
         return reply(404, { error: "User not found" }, "user_session_not_found");
       }
 
-      const waAvailability = await getWhatsAppAvailability(req.user.id);
+      const waAvailability = await getWhatsAppAvailability(inboxWorkspaceId(req));
       if (!waAvailability.available) {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=whatsapp_not_available userId=${req.user.id} provider=${waAvailability.provider} waReason=${waAvailability.reason ?? "null"}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=403 reason=whatsapp_not_available userId=${inboxWorkspaceId(req)} provider=${waAvailability.provider} waReason=${waAvailability.reason ?? "null"}`
         );
         return reply(
           403,
@@ -2131,7 +2138,7 @@ export function registerTemplateRoutes(app: Express): void {
       let persistedHeaderDefaultOriginalFilename: string | null = null;
       if (metaSendPath === "library_full") {
         try {
-          const defRow = await storage.getTemplateCarouselMediaDefaults(req.user.id, template.id);
+          const defRow = await storage.getTemplateCarouselMediaDefaults(inboxWorkspaceId(req), template.id);
           const cm = defRow?.cardMedia as Record<string, unknown> | undefined;
           const hdr = cm?.header;
           if (hdr && typeof hdr === "object") {
@@ -2188,7 +2195,7 @@ export function registerTemplateRoutes(app: Express): void {
 
       if (resolvedProvider === "none") {
         console.warn(
-          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=no_whatsapp_provider userId=${req.user.id}`
+          `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=no_whatsapp_provider userId=${inboxWorkspaceId(req)}`
         );
         return reply(
           400,
@@ -2200,7 +2207,7 @@ export function registerTemplateRoutes(app: Express): void {
       if (resolvedProvider === "meta") {
         if (!user.metaConnected || !phoneNumberId) {
           console.warn(
-            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=meta_not_connected userId=${req.user.id} metaConnected=${!!user.metaConnected} hasPhoneNumberId=${!!phoneNumberId}`
+            `[SEND_ROUTE_EARLY_EXIT] ${sendRouteId} status=400 reason=meta_not_connected userId=${inboxWorkspaceId(req)} metaConnected=${!!user.metaConnected} hasPhoneNumberId=${!!phoneNumberId}`
           );
           return reply(
             400,
@@ -2305,7 +2312,7 @@ export function registerTemplateRoutes(app: Express): void {
         components = built.components as any[] | undefined;
 
         const norm = await normalizeTemplatePayloadMediaUrls({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           components: components as Record<string, unknown>[] | undefined,
           carouselMode: resolvedShape === "carousel",
           templateName: template.name,
@@ -2425,7 +2432,8 @@ export function registerTemplateRoutes(app: Express): void {
               if (crmContactId) {
                 try {
                   await persistFailedOutboundTemplateMessage({
-                    userId: req.user.id,
+                    sentByUserId: req.user.id,
+                    userId: inboxWorkspaceId(req),
                     contactId: crmContactId,
                     template,
                     templateLang,
@@ -2510,7 +2518,7 @@ export function registerTemplateRoutes(app: Express): void {
         try {
           sendFinal.graphCalled = true;
           const result = await sendMetaWhatsAppTemplate(
-            req.user.id,
+            inboxWorkspaceId(req),
             recipientPhone,
             template.name,
             templateLang,
@@ -2580,7 +2588,8 @@ export function registerTemplateRoutes(app: Express): void {
           if (crmContactId) {
             try {
               await persistFailedOutboundTemplateMessage({
-                userId: req.user.id,
+                sentByUserId: req.user.id,
+                userId: inboxWorkspaceId(req),
                 contactId: crmContactId,
                 template,
                 templateLang,
@@ -2634,7 +2643,7 @@ export function registerTemplateRoutes(app: Express): void {
           );
         }
       } else if (resolvedProvider === "twilio") {
-        const twilioClient = await getUserTwilioClient(req.user.id);
+        const twilioClient = await getUserTwilioClient(inboxWorkspaceId(req));
         if (!twilioClient) {
           console.warn(
             `[WA_TEMPLATE_SEND] ${JSON.stringify({
@@ -2678,7 +2687,7 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         try {
-          const msg = await withGlobalDncPhoneBoundary<{sid: string; status: string}>(req.user.id, recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
+          const msg = await withGlobalDncPhoneBoundary<{sid: string; status: string}>(inboxWorkspaceId(req), recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
           messageId = msg.sid;
           sendStatus = msg.status;
           console.log(
@@ -2729,7 +2738,7 @@ export function registerTemplateRoutes(app: Express): void {
       if (crmContactId) {
         try {
           const { conversationId } = await ensureWhatsAppConversationForContact(
-            req.user.id,
+            inboxWorkspaceId(req),
             crmContactId
           );
           persistedConversationId = conversationId;
@@ -2818,8 +2827,10 @@ export function registerTemplateRoutes(app: Express): void {
           const persisted = await storage.createMessage({
             conversationId,
             contactId: crmContactId,
-            userId: req.user.id,
+            userId: inboxWorkspaceId(req),
             direction: "outbound",
+            sentByUserId: req.user.id,
+            generatedBy: "human",
             content: displayContent,
             contentType: "template",
             templateId: template.id,
@@ -2854,8 +2865,8 @@ export function registerTemplateRoutes(app: Express): void {
 
           if (carouselCardMediaNormalized.length > 0) {
             try {
-              await storage.upsertTemplateCarouselMediaDefaults(
-                req.user.id,
+              if (isInboxAdmin(req)) await storage.upsertTemplateCarouselMediaDefaults(
+                inboxWorkspaceId(req),
                 template.id,
                 runtimeCarouselRowsToDefaultMediaMap(carouselCardMediaNormalized) as unknown as Record<
                   string,
@@ -2899,7 +2910,7 @@ export function registerTemplateRoutes(app: Express): void {
             !headerHostTransient
           ) {
             try {
-              const existing = await storage.getTemplateCarouselMediaDefaults(req.user.id, template.id);
+              const existing = await storage.getTemplateCarouselMediaDefaults(inboxWorkspaceId(req), template.id);
               const prev =
                 existing && existing.cardMedia && typeof existing.cardMedia === "object"
                   ? (existing.cardMedia as Record<string, unknown>)
@@ -2913,7 +2924,7 @@ export function registerTemplateRoutes(app: Express): void {
                   headerFormat: htLower,
                 },
               };
-              await storage.upsertTemplateCarouselMediaDefaults(req.user.id, template.id, merged);
+              if (isInboxAdmin(req)) await storage.upsertTemplateCarouselMediaDefaults(inboxWorkspaceId(req), template.id, merged);
             } catch (headerDefErr: unknown) {
               console.warn(
                 `[WA_TEMPLATE_SEND_HEADER_DEFAULTS] ${JSON.stringify({
@@ -2949,7 +2960,7 @@ export function registerTemplateRoutes(app: Express): void {
       let sendId: string | undefined;
       if (legacyChatId) {
         const templateSend = await storage.createTemplateSend({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           chatId: legacyChatId,
           templateId,
           variableValues: variableValues,
@@ -2994,6 +3005,18 @@ export function registerTemplateRoutes(app: Express): void {
       );
       res.status(500).json({ error: error.message || "Failed to send template" });
     }
+  };
+  app.post("/api/templates/send", inboxContentReadLimiter, sendInboxTemplate);
+  app.post("/api/inbox/templates/send", inboxContentReadLimiter, requireInboxWorkspace, async (req, res, next) => {
+    try {
+    // Shared Inbox sends are contact-bound quick sends, not campaign/configuration operations.
+    const { templateId, contactId, variables } = req.body || {};
+    if (typeof contactId !== "string" || !contactId) return res.status(400).json({ error: "Contact required" });
+    const contact = await storage.getContact(contactId);
+    if (!contact || contact.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
+    req.body = { templateId, contactId, variables, sendSource: "inbox_picker" };
+    return await sendInboxTemplate(req, res);
+    } catch (error) { next(error); }
   });
 
   console.log(

@@ -28,8 +28,9 @@ function read(rel: string): string {
 {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   assert.match(inbox, /effectiveHasAIBrain/);
-  assert.match(inbox, /text-ai-generated-message/);
-  assert.match(inbox, /generatedBy === "ai_brain"/);
+  assert.match(inbox, /InboxReplyAttribution message=\{msg\}/);
+  assert.match(read("client/src/components/InboxReplyAttribution.tsx"), /text-ai-generated-message/);
+  assert.match(read("shared/inboxTeam.ts"), /generatedBy === "ai_brain"/);
   const panel = read("client/src/components/InboxLeadDetailsPanel.tsx");
   assert.match(panel, /section-conversation-ai-control/);
   assert.match(panel, /section-ai-suggestion/);
