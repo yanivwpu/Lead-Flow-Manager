@@ -1,6 +1,7 @@
 import { offlineGraphqlClient } from './shopifyAdminClient';
 import { registerVerifiedShopWebhooks } from "./shopifyWebhookRegistration";
-import { and, isNotNull } from "drizzle-orm";
+import { and, isNotNull, isNull, like } from "drizzle-orm";
+import { OFFLINE_REF_PREFIX } from "./shopifyOfflineTokens";
 import { db } from "../drizzle/db";
 import { users } from "../shared/schema";
 import {
@@ -92,7 +93,15 @@ export async function auditAllShopifyShopsWebhookHealth(): Promise<ShopifyShopWe
       accessToken: users.shopifyAccessToken,
     })
     .from(users)
-    .where(and(isNotNull(users.shopifyShop), isNotNull(users.shopifyAccessToken)));
+    // Never send deprecated Admin API tokens during startup or a webhook-health audit.
+    // Only the seven migrated shops with renewable opaque refs are eligible;
+    // a legacy/closed/deletion-pending shop must reauthorize rather than be probed.
+    .where(and(
+      isNotNull(users.shopifyShop),
+      isNotNull(users.shopifyAccessToken),
+      like(users.shopifyAccessToken, `${OFFLINE_REF_PREFIX}%`),
+      isNull(users.deletionRequestedAt),
+    ));
 
   const summaries: ShopifyShopWebhookSummary[] = [];
 
