@@ -1,5 +1,5 @@
 import { InboxAssignmentControl, AssigneeAvatar } from "@/components/InboxAssignmentControl";
-import { InboxReplyAttribution } from "@/components/InboxReplyAttribution";
+import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
 import { belongsInInboxTab, inboxEmptyKind, type ReplySender } from "@shared/inboxTeam";
 import { SafeMessageText } from "@/components/SafeMessageText";
 import { ShoppingActivity } from "@/components/inbox/ShoppingActivity";
@@ -3690,7 +3690,6 @@ export function UnifiedInbox() {
                   />
                   <div className={INBOX_ROW_BODY}>
                     <div className={INBOX_ROW_LINE1}>
-                      <span className="shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>
                       <span
                         className={cn(
                           INBOX_ROW_NAME,
@@ -3703,6 +3702,7 @@ export function UnifiedInbox() {
                       {rowUnread > 0 ? (
                         <span className={INBOX_ROW_UNREAD_BADGE}>{rowUnread}</span>
                       ) : null}
+                      <span className="ml-auto shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>
                     </div>
                     <div className={INBOX_ROW_LINE2}>
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
@@ -4168,11 +4168,12 @@ export function UnifiedInbox() {
                     return (
                       <div
                         key={msg.id || i}
-                        className={cn("flex min-w-0 animate-msg-in", isOut ? "justify-end" : "justify-start")}
+                        className={cn("flex min-w-0 items-start gap-2 animate-msg-in", isOut ? "justify-end" : "justify-start")}
                         data-conversation-layout="chat-bubbles"
                         data-message-direction={isOut ? "outbound" : "inbound"}
                         data-testid={`chat-bubble-${msg.id}`}
                       >
+                        <div className={cn("flex min-w-0 max-w-full flex-col", isOut && "items-end")}>
                         <div
                           className={chatBubbleShellClassName(activeChannel, {
                             isOutbound: isOut,
@@ -4180,7 +4181,6 @@ export function UnifiedInbox() {
                             sending: isSending,
                           })}
                         >
-                          {isOut && <InboxReplyAttribution message={msg} />}
                           <div className="min-w-0 max-w-full [overflow-wrap:anywhere] break-words">
                             {(() => {
                             if (
@@ -4662,6 +4662,9 @@ export function UnifiedInbox() {
                             </div>
                           )}
                         </div>
+                        {isOut && <InboxReplyAttribution message={msg} />}
+                        </div>
+                        {isOut && <InboxReplyAvatar message={msg} />}
                       </div>
                     );
                   })
