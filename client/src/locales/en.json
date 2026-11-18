@@ -1943,5 +1943,22 @@
     "close": "Close",
     "welcomeSafe": "Explore first. Messages and automations only start after you configure and explicitly enable them.",
     "successLabel": "What success looks like"
-}
+},
+  "inboxTeam": {
+    "assignedTo": "Assigned to",
+    "unassigned": "Unassigned",
+    "teammate": "Team member",
+    "human": "Team member",
+    "ai": "AI",
+    "automation": "Automation",
+    "sent": "Sent",
+    "all": "All",
+    "unread": "Unread",
+    "mine": "Mine",
+    "empty_mine": "No conversations assigned to you yet",
+    "empty_unread": "No unread conversations",
+    "empty_filtered": "No matching conversations",
+    "empty_empty": "No conversations yet",
+    "assignmentFailed": "Could not update assignment. Refresh and try again."
+  }
 }

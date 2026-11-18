@@ -171,7 +171,9 @@ export function setupAuth(app: Express, options: { store?: session.Store } = {})
   const isProduction = process.env.NODE_ENV === 'production';
   const sessionMiddleware = session({
       secret: process.env.SESSION_SECRET || 'whatsapp-crm-secret-key-change-in-production',
-      resave: true,
+      // Read-only parallel requests must not overwrite a newer workspace selection.
+      // Both supported stores implement touch for cookie/session expiry.
+      resave: false,
       saveUninitialized: true, // Changed to true to help with session persistence
       store: options.store ?? new PgStore({
         conString: process.env.DATABASE_URL,

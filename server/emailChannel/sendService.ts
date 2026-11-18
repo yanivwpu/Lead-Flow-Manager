@@ -57,7 +57,9 @@ export type EmailOutboundResult = {
  */
 export async function sendEmailViaMailbox(params: {
   workspaceUserId: string;
-  sentByUserId: string;
+  sentByUserId?: string;
+  generatedBy?: string;
+  generationMeta?: Record<string, unknown>;
   contactId: string;
   mailboxId: string;
   content: string;
@@ -200,6 +202,8 @@ export async function sendEmailViaMailbox(params: {
     contentType: htmlBody ? "email_html" : "text",
     status: "pending",
     sentByUserId: params.sentByUserId,
+    generatedBy: params.generatedBy || (params.sentByUserId ? "human" : undefined),
+    generationMeta: params.generationMeta,
   } as any);
 
   const sanitized = sanitizeEmailHtml(htmlBody, { purpose: "outbound" });
@@ -348,8 +352,8 @@ export async function sendEmailViaMailbox(params: {
         preview: textBody.slice(0, 100),
         sentByUserId: params.sentByUserId,
       },
-      actorType: "user",
-      actorId: params.sentByUserId,
+      actorType: params.sentByUserId ? "user" : params.generatedBy === "ai_brain" ? "ai" : "system",
+      actorId: params.sentByUserId || null,
     });
 
     notifyUser(params.workspaceUserId, {

@@ -139,13 +139,13 @@ test("ChannelSettings scopes channel/integration keys and does not render while 
   assert.doesNotMatch(src, /whachat_ig_account_id_hint/);
 });
 
-test("Inbox activation-status is user-scoped and agrees with Settings empty state", () => {
+test("Inbox channel status is scoped to the active workspace; onboarding retains account scope", () => {
   const inbox = read("client/src/pages/UnifiedInbox.tsx");
   const layout = read("client/src/pages/AppLayout.tsx");
-  assert.match(inbox, /withUserQueryScope\(\["\/api\/activation-status"\]/);
+  assert.match(inbox, /withUserQueryScope\(\["\/api\/inbox\/channel-status"\]/);
   assert.match(layout, /withUserQueryScope\(\["\/api\/activation-status"\]/);
   assert.match(inbox, /showInboxEmptyNoChannels/);
-  assert.match(inbox, /!activationStatus\.hasAnyMessagingChannel/);
+  assert.match(inbox, /hasAnyChannel: activationStatus\?\.hasAnyMessagingChannel/);
   assert.doesNotMatch(inbox, /127\.0\.0\.1:7693/);
 });
 

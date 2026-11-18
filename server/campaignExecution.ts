@@ -143,6 +143,7 @@ async function sendCampaignWhatsApp(params: {
 
   if (allowFreeform) {
     const result = await channelService.sendMessage({
+      generatedBy: "campaign",
       userId,
       contactId,
       content: body,
@@ -245,6 +246,7 @@ async function sendCampaignWhatsApp(params: {
     contactId,
     userId,
     direction: "outbound",
+    generatedBy: "campaign",
     content: body,
     contentType: "template",
     templateId: tplName,
@@ -306,6 +308,7 @@ async function sendCampaignChannelMessage(params: {
   const { userId, contactId, campaign, body } = params;
   const ch = campaign.channel as Channel;
   const result = await channelService.sendMessage({
+        generatedBy: "campaign",
     userId,
     contactId,
     content: body,

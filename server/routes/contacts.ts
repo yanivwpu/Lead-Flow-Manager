@@ -1,3 +1,4 @@
+import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
@@ -659,6 +660,9 @@ export function registerContactRoutes(app: Express): void {
       });
       if (!updated && !identityVersion) return res.status(403).json({ error: "Workspace or assignment permission changed" });
       if (identityVersion && !updated) return res.status(409).json({ error: "Customer information changed. Refresh before editing." });
+      if (updated && Object.prototype.hasOwnProperty.call(body, "assignedTo") && contact.assignedTo !== updated.assignedTo) {
+        notifyUser(inboxWorkspaceId(req), { type: "contact_updated", contactId: updated.id });
+      }
       if (clearingFollowUp) await clearActiveAppointmentsForContact(inboxWorkspaceId(req), req.params.id);
 
       if (
@@ -1118,6 +1122,7 @@ export function registerContactRoutes(app: Express): void {
           enforceWhatsAppCustomerServiceWindow: true,
           emailRich: resolvedEmailRich,
           sentByUserId: req.user!.id,
+          generatedBy: sourceString === "ai_auto" ? "ai_brain" : "human",
         });
       const guarded = guardedSource
         ? await withAutomationSendGuard(

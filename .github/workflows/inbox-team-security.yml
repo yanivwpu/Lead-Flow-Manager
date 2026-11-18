@@ -3,6 +3,15 @@ on:
   pull_request:
     paths:
       - 'server/auth.ts'
+      - 'shared/inboxTeam.ts'
+      - 'server/inboxTeamProfiles.ts'
+      - 'server/channelService.ts'
+      - 'server/emailChannel/sendService.ts'
+      - 'server/routes/templates.ts'
+      - 'client/src/pages/UnifiedInbox.tsx'
+      - 'client/src/components/Inbox*.tsx'
+      - 'client/src/components/inbox/conversation/EmailThreadMessage.tsx'
+      - 'tests/inbox-team-ownership.test.ts'
       - 'server/teamInvitations.ts'
       - 'server/email.ts'
       - 'client/src/pages/TeamInvitation.tsx'
@@ -57,7 +66,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Session-backed HTTP, WebSocket and SQL authorization regressions
-        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts tests/team-invitation-return.test.ts
+        run: node --import tsx --test tests/inbox-team-security.test.ts tests/inbox-content-rate-limit.test.ts tests/team-invitation-return.test.ts tests/inbox-team-ownership.test.ts
       - name: Existing ownership, auth and Inbox contracts
         run: >-
           node --import tsx --test
@@ -70,6 +79,8 @@ jobs:
           tests/email-verification-flow.test.ts tests/email-verification-tabs.test.ts
           tests/check-email-verification-ux.test.ts tests/auth-signup-hardening.test.ts tests/http-access-log-redaction.test.ts
           tests/webchat-ui-controls.test.ts tests/native-email-channel-1a.test.ts
+          tests/inbox-channel-health-bar.test.ts tests/inbox-list-loading.test.ts tests/inbox-list-merge.test.ts
+          tests/automation-send-guard.test.ts tests/booking-fast-path.test.ts tests/chatbot-ai-completion-context.test.ts
       - name: Reject new TypeScript diagnostics
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

@@ -7,7 +7,7 @@ import { once } from "node:events";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WebSocket } from "ws";
 import { rateLimit } from "express-rate-limit";
 import * as schema from "../shared/schema";
@@ -19,6 +19,7 @@ process.env.SESSION_SECRET = "inbox-security-test-session-secret";
 process.env.EMAIL_IMAGE_PROXY_SECRET = "synthetic-inbox-email-image-secret-00000";
 process.env.STRIPE_SECRET_KEY = "sk_test_synthetic";
 process.env.NODE_ENV = "test";
+process.env.EMAIL_ENCRYPTION_KEY = "synthetic-mail-key-0000000000000000000";
 process.env.RESEND_API_KEY = "synthetic-team-mail-key";
 
 async function fixture() {
@@ -29,7 +30,7 @@ async function fixture() {
   for (const table of [schema.users, schema.teamMembers, schema.contacts, schema.conversations,
     schema.messages, schema.activityEvents, schema.channelSettings, schema.chats, schema.contactNotes,
     schema.prospectIntelligence, schema.prospectOutreachQueueItems, schema.campaignEnrollments,
-    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails]) {
+    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults]) {
     const config = getTableConfig(table);
     const columns = config.columns.map(column => {
       let value = quote(column.name) + " " + column.getSQLType();
@@ -83,6 +84,10 @@ async function fixture() {
     delete (req.session as any).passport;
     req.session.save(() => res.sendStatus(204));
   });
+  const heldRead = { started: false, release: () => {} };
+  app.get("/__hold-session", rateLimit({windowMs:60_000,limit:10,legacyHeaders:false}), (_req,res) => {
+    heldRead.started=true;heldRead.release=()=>res.json({ok:true});
+  });
   const server = createServer(app);
   await registerRoutes(server, app);
   const wss = setupPresenceServer(server, authenticatePresenceRequest);
@@ -107,7 +112,7 @@ async function fixture() {
     await once(ws, "open");
     return { ws, messages, send: (x: any) => ws.send(JSON.stringify(x)) };
   }
-  return { database, storage, request, login, cookies, socket, origin, notifyUser,
+  return { database, storage, request, login, cookies, socket, origin, notifyUser, heldRead,
     async close() {
       sockets.forEach(ws => ws.terminate());
       await new Promise<void>(resolve => wss.close(() => resolve()));
@@ -137,6 +142,135 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       }
       assert.equal((await f.request("owner-a", "/api/contacts/contact-a/details")).status, 200);
       assert.equal((await f.request("agent", "/api/contacts/contact-a/details")).status, 200);
+    });
+    await t.test("Owner assigns Support, Mine uses actor identity before recent limit, reassignment reaches both sessions", async () => {
+      const ownerSocket=await f.socket("owner-a"), agentSocket=await f.socket("agent");
+      assert.deepEqual(await (await f.request("agent","/api/inbox?mine=true")).json(),[]);
+      assert.equal((await f.request("owner-a","/api/contacts/contact-a","PATCH",{assignedTo:"agent"})).status,200);
+      await until(()=>ownerSocket.messages.some(m=>m.type==="contact_updated"&&m.contactId==="contact-a")&&agentSocket.messages.some(m=>m.type==="contact_updated"&&m.contactId==="contact-a"));
+      assert.equal((await (await f.request("agent","/api/inbox?mine=true&assignedTo=owner-b")).json())[0].contact.id,"contact-a");
+      assert.deepEqual(await (await f.request("owner-a","/api/inbox?mine=true")).json(),[]);
+      assert.equal((await f.request("agent","/api/conversations/conv-a/messages")).status,200);
+      // A newer unassigned contact cannot hide an older assignment under the recent limit.
+      await f.database.insert(schema.contacts).values({id:"newer-unassigned",userId:"owner-a",name:"Newer",primaryChannel:"sms",updatedAt:new Date(Date.now()+86400000)});
+      assert.equal((await (await f.request("agent","/api/inbox?mine=true&limit=1")).json())[0].contact.id,"contact-a");
+      assert.equal((await (await f.request("agent","/api/inbox?mine=true&q=Customer")).json())[0].contact.id,"contact-a");
+      assert.equal((await f.request("owner-a","/api/contacts/contact-a","PATCH",{assignedTo:"admin"})).status,200);
+      assert.deepEqual(await (await f.request("agent","/api/inbox?mine=true")).json(),[]);
+      assert.equal((await (await f.request("admin","/api/inbox?mine=true")).json())[0].contact.id,"contact-a");
+      assert.equal((await f.request("owner-a","/api/contacts/contact-a","PATCH",{assignedTo:null})).status,200);
+      await f.database.delete(schema.contacts).where(eq(schema.contacts.id,"newer-unassigned"));
+      ownerSocket.ws.terminate();agentSocket.ws.terminate();
+    });
+    await t.test("shared channel status uses owner's connections and never returns credentials", async () => {
+      await f.database.insert(schema.channelSettings).values({userId:"owner-a",channel:"sms",isEnabled:true,isConnected:true,config:{authToken:"SECRET_OWNER_TOKEN"}});
+      await f.database.insert(schema.channelSettings).values({userId:"owner-b",channel:"telegram",isEnabled:true,isConnected:true,config:{botToken:"SECRET_FOREIGN_TOKEN"}});
+      const status=await (await f.request("agent","/api/inbox/channel-status")).json();
+      assert.equal(status.workspaceId,"owner-a");assert.equal(status.hasAnyMessagingChannel,true);
+      assert.ok(!JSON.stringify(status).includes("TOKEN"));
+      const health=await (await f.request("agent","/api/inbox/channel-health")).json();
+      assert.equal(health.find((r:any)=>r.channel==="sms").isConnected,true);
+      assert.ok(!health.some((r:any)=>r.channel==="telegram"&&r.isConnected));
+      assert.ok(!JSON.stringify(health).includes("SECRET_"));
+      const originalSettings=f.storage.getChannelSettings;
+      f.storage.getChannelSettings=async()=>{throw new Error("SECRET_PROVIDER_FAILURE");};
+      try {
+        const failed=await f.request("agent","/api/inbox/channel-health");
+        assert.equal(failed.status,500);assert.ok(!(await failed.text()).includes("SECRET_"));
+      } finally {f.storage.getChannelSettings=originalSettings;}
+      await f.database.update(schema.users).set({twilioConnected:true}).where(eq(schema.users.id,"owner-a"));
+      assert.equal((await (await f.request("agent","/api/inbox/whatsapp-availability")).json()).available,true);
+      await f.database.update(schema.users).set({twilioConnected:false}).where(eq(schema.users.id,"owner-a"));
+      // Returning to personal context replaces channel and assignment data.
+      assert.equal((await f.request("agent","/api/inbox/workspace","POST",{workspaceId:"agent"})).status,200);
+      assert.equal((await (await f.request("agent","/api/inbox/channel-status")).json()).hasAnyMessagingChannel,false);
+      assert.deepEqual(await (await f.request("agent","/api/inbox?mine=true")).json(),[]);
+      assert.equal((await f.request("agent","/api/inbox/workspace","POST",{workspaceId:"owner-a"})).status,200);
+    });
+    await t.test("reply profiles require recorded actor and same-workspace membership evidence", async () => {
+      await f.database.update(schema.users).set({avatarUrl:"/avatars/support.png"}).where(eq(schema.users.id,"agent"));
+      const team=await (await f.request("agent","/api/team")).json();
+      assert.equal(team.find((m:any)=>m.memberId==="agent").avatarUrl,"/avatars/support.png");
+      for(const [id,actor,origin] of [["known-human","agent","human"],["known-ai",null,"ai_brain"],["historical",null,null],["foreign-actor","owner-b","human"]]) {
+        await f.database.insert(schema.messages).values({id:String(id),conversationId:"conv-a",contactId:"contact-a",userId:"owner-a",direction:"outbound",content:"Unchanged customer content",sentByUserId:actor,generatedBy:origin});
+      }
+      const replies=await (await f.request("agent","/api/conversations/conv-a/messages")).json();
+      assert.equal(replies.find((m:any)=>m.id==="known-human").sender.id,"agent");
+      assert.equal(replies.find((m:any)=>m.id==="known-human").sender.avatarUrl,"/avatars/support.png");
+      for(const id of ["known-ai","historical","foreign-actor"]) assert.equal(replies.find((m:any)=>m.id===id).sender,null);
+      assert.equal((await f.request("owner-b","/api/conversations/conv-a/messages")).status,404);
+      await f.database.delete(schema.messages).where(inArray(schema.messages.id,["known-human","known-ai","historical","foreign-actor"]));
+    });
+    await t.test("actual persistence keeps teammate/AI metadata across all seven channel paths", async () => {
+      const { channelService }=await import("../server/channelService");
+      const { gmailEmailProvider }=await import("../server/emailChannel/gmailProvider");
+      const { encryptEmailCredential }=await import("../server/emailChannel/credentials");
+      const service=channelService as any;
+      const originalDispatch=service.dispatchMessage;
+      const originalGmail=gmailEmailProvider.sendNewEmail;
+      const deliveries:any[]=[];
+      service.dispatchMessage=async(workspace:string,channel:string,params:any)=>{deliveries.push({workspace,channel,params});return {success:true,externalMessageId:`fixture-${channel}-${Date.now()}`};};
+      gmailEmailProvider.sendNewEmail=async params=>{deliveries.push({workspace:"owner-a",channel:"email",params});return {success:true,providerMessageId:`fixture-email-${Date.now()}`,providerThreadId:`fixture-thread-${Date.now()}`};};
+      await f.database.insert(schema.contacts).values({id:"send-target",userId:"owner-a",name:"Send target",email:"customer@example.com",phone:"+15555550101",whatsappId:"15555550101",instagramId:"ig",facebookId:"fb",telegramId:"tg",webchatId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",primaryChannel:"sms"});
+      await f.database.insert(schema.emailMailboxes).values({id:"shared-mailbox",workspaceUserId:"owner-a",connectedByUserId:"owner-a",emailAddress:"owner@example.com",provider:"gmail",accessTokenEncrypted:encryptEmailCredential("fixture-access-token"),tokenExpiresAt:new Date(Date.now()+3600000),syncStatus:"connected",isPrimary:true});
+      try {
+        // Actual registered route supplies actor; owner connection is used without personal setup.
+        const response=await f.request("agent","/api/contacts/send-target/send","POST",{content:"SMS via shared workspace",channel:"sms",sentByUserId:"owner-b",generatedBy:"ai_brain"});
+        assert.equal(response.status,200);
+        const sms=await f.database.select().from(schema.messages).where(eq(schema.messages.contactId,"send-target"));
+        assert.equal(sms[0].sentByUserId,"agent");assert.equal(sms[0].generatedBy,"human");
+        assert.equal(deliveries[0].workspace,"owner-a");
+        for(const channel of ["whatsapp","sms","instagram","facebook","telegram","webchat","email"] as const) {
+          const result=await channelService.sendMessage({userId:"owner-a",contactId:"send-target",content:`Human reply ${channel}`,forceChannel:channel,sentByUserId:"agent",...(channel==="email"?{emailRich:{mailboxId:"shared-mailbox",replyMode:"new" as const,subject:"Team reply"}}:{})});
+          assert.equal(result.success,true,`${channel}: ${result.error}`);
+          const [row]=await f.database.select().from(schema.messages).where(eq(schema.messages.id,result.messageId!));
+          assert.equal(row.userId,"owner-a");assert.equal(row.sentByUserId,"agent",channel);assert.equal(row.generatedBy,"human",channel);
+          const payload=await (await f.request("agent",`/api/conversations/${row.conversationId}/messages`)).json();
+          assert.equal(payload.find((m:any)=>m.id===row.id).sender.id,"agent");
+        }
+        // Native email automation must not invent the workspace owner as the human sender.
+        const ai=await channelService.sendMessage({userId:"owner-a",contactId:"send-target",forceChannel:"email",content:"AI email",generatedBy:"ai_brain",emailRich:{mailboxId:"shared-mailbox",replyMode:"new",subject:"AI reply"}});
+        assert.equal(ai.success,true,ai.error);
+        const [row]=await f.database.select().from(schema.messages).where(eq(schema.messages.id,ai.messageId!));
+        assert.equal(row.sentByUserId,null);assert.equal(row.generatedBy,"ai_brain");
+      } finally {
+        service.dispatchMessage=originalDispatch;gmailEmailProvider.sendNewEmail=originalGmail;
+        const convs=await f.database.select().from(schema.conversations).where(eq(schema.conversations.contactId,"send-target"));
+        const ids=convs.map(c=>c.id);
+        const msgs=await f.database.select().from(schema.messages).where(eq(schema.messages.contactId,"send-target"));
+        if(msgs.length) await f.database.delete(schema.emailMessageDetails).where(inArray(schema.emailMessageDetails.messageId,msgs.map(m=>m.id)));
+        await f.database.delete(schema.activityEvents).where(eq(schema.activityEvents.contactId,"send-target"));
+        await f.database.delete(schema.messages).where(eq(schema.messages.contactId,"send-target"));
+        if(ids.length) await f.database.delete(schema.conversations).where(inArray(schema.conversations.id,ids));
+        await f.database.delete(schema.contacts).where(eq(schema.contacts.id,"send-target"));
+        await f.database.delete(schema.emailMailboxes).where(eq(schema.emailMailboxes.id,"shared-mailbox"));
+      }
+    });
+    await t.test("shared WhatsApp template picker uses workspace library and rejects foreign contacts/templates", async () => {
+      const { subscriptionService }=await import("../server/subscriptionService");
+      const original=subscriptionService.getUserLimits;
+      const checked:string[]=[];
+      subscriptionService.getUserLimits=async id=>{checked.push(id);return {templatesEnabled:true} as any;};
+      try {
+        for(const owner of ["owner-a","owner-b"]) await f.database.insert(schema.messageTemplates).values({id:`template-${owner}`,userId:owner,twilioSid:`HX-${owner}`,name:`Template ${owner}`,bodyText:"Hello",category:"utility",status:"approved"});
+        const templates=await (await f.request("agent","/api/inbox/templates")).json();
+        assert.deepEqual(templates.map((t:any)=>t.id),["template-owner-a"]);
+        assert.equal(checked.at(-1),"owner-a");
+        assert.equal((await f.request("agent","/api/inbox/templates/send","POST",{templateId:"template-owner-a",contactId:"contact-b"})).status,404);
+        assert.equal((await f.request("agent","/api/inbox/templates/send","POST",{templateId:"template-owner-a",chatId:"legacy-foreign",phone:"+15555550101"})).status,400);
+        assert.equal((await f.request("agent","/api/inbox/templates/send","POST",{templateId:"template-owner-b",contactId:"contact-a"})).status,404);
+        // Existing owner template management stays on the account's own library.
+        assert.deepEqual(await (await f.request("agent","/api/templates")).json(),[]);
+      } finally {subscriptionService.getUserLimits=original;}
+    });
+    await t.test("a stale read response cannot overwrite a newer workspace selection", async () => {
+      assert.equal((await f.request("agent","/api/inbox/workspace","POST",{workspaceId:"agent"})).status,200);
+      const slowRead=f.request("agent","/__hold-session");
+      await until(()=>f.heldRead.started);
+      try {
+        assert.equal((await f.request("agent","/api/inbox/workspace","POST",{workspaceId:"owner-a"})).status,200);
+      } finally {f.heldRead.release();await slowRead;}
+      assert.equal((await (await f.request("agent","/api/inbox/workspaces")).json()).currentWorkspaceId,"owner-a");
     });
     await t.test("pending, inactive, unlinked email matches and outsiders confer no access", async () => {
       for (const actor of ["pending", "inactive", "unlinked", "owner-b"]) {
@@ -371,6 +505,7 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
         await f.database.delete(schema.teamMembers).where(eq(schema.teamMembers.id,"legacy-conflict"));
         const results = await Promise.all([accept("employee",newToken),accept("employee",newToken)]);
         assert.deepEqual(results.map(r=>r.status).sort(),[200,410]);
+        assert.equal((await (await f.request("employee","/api/inbox/workspaces")).json()).currentWorkspaceId,"owner-a");
         assert.equal((await f.request("owner-a",`/api/team/${reissued.id}`,"PATCH",{status:"pending"})).status,409);
         assert.equal((await f.request("owner-a",`/api/team/${reissued.id}`,"PATCH",{status:"inactive"})).status,200);
         assert.equal((await f.request("employee","/api/inbox")).status,403);

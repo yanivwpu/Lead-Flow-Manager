@@ -133,6 +133,13 @@ function AppContent() {
     });
   }, [toast, t]);
 
+  const isInboxRoute = location.startsWith("/app/inbox");
+  const { data: inboxConnectionStatus } = useQuery<{ workspaceId: string; hasAnyMessagingChannel: boolean }>({
+    queryKey: withUserQueryScope(["/api/inbox/channel-status"], user?.id),
+    enabled: isInboxRoute && !!user?.id && sessionAligned,
+    staleTime: 15_000,
+  });
+  const allowAccountSetupInInbox = !isInboxRoute || inboxConnectionStatus?.workspaceId === user?.id;
   const showActivationIntroModal = shouldAutoOpenActivationSetupModal({
     activationPending,
     activation,
@@ -192,7 +199,7 @@ function AppContent() {
             <TrialSetupCluster />
           </div>
         <ActivationSetupModal
-          open={showActivationIntroModal}
+          open={showActivationIntroModal && allowAccountSetupInInbox}
           shopifyConnected={!!subscription?.subscription?.isShopify}
           onOpenChange={(open) => {
             if (!open) {

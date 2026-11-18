@@ -1,3 +1,4 @@
+import { inboxTeamProfiles } from "../inboxTeamProfiles";
 import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import type { Express } from "express";
@@ -111,7 +112,7 @@ function enrichConversationMessagesForClient(rows: unknown[]): unknown[] {
 
 export function registerConversationRoutes(app: Express): void {
   // Get conversation messages
-  app.get("/api/conversations/:id/messages", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/conversations/:id/messages", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     const conversationId = req.params.id;
     const userId = req.user?.id ?? null;
     const t0 = Date.now();
@@ -148,6 +149,11 @@ export function registerConversationRoutes(app: Express): void {
       const messages = (await storage.getMessages(conversationId, limit, offset))
         .filter(message => message.userId === inboxWorkspaceId(req) && message.contactId === conversation.contactId);
       const payload = enrichConversationMessagesForClient(messages);
+      const profiles = await inboxTeamProfiles(inboxWorkspaceId(req), messages.filter(m => m.direction === "outbound").map(m => m.sentByUserId || ""));
+      for (const row of payload) {
+        const record = row as Record<string, unknown>;
+        record.sender = record.direction === "outbound" && typeof record.sentByUserId === "string" ? profiles.get(record.sentByUserId) || null : null;
+      }
       if (String(conversation.channel || "").toLowerCase() === "email") {
         const { getEmailFromAddressesByMessageIds } = await import("../emailChannel/mailboxStore");
         const ids = payload

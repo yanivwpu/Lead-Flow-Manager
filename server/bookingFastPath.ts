@@ -236,6 +236,7 @@ export async function tryBookingFastPathReply(params: BookingFastPathParams): Pr
     },
     async () =>
       channelService.sendMessage({
+        generatedBy: "auto_reply",
         userId,
         contactId: contact.id,
         content,

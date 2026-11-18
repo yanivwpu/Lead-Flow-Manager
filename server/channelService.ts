@@ -564,7 +564,9 @@ class ChannelService {
       }
       const result = await sendEmailViaMailbox({
         workspaceUserId: userId,
-        sentByUserId: sentByUserId || userId,
+        sentByUserId,
+        generatedBy,
+        generationMeta,
         contactId,
         mailboxId,
         content: content || emailRich?.textBody || '',
@@ -674,6 +676,8 @@ class ChannelService {
           contactId,
           userId,
           direction: "outbound",
+          sentByUserId: sentByUserId || undefined,
+          generatedBy: generatedBy || (sentByUserId ? "human" : undefined),
           content,
           contentType,
           mediaUrl,

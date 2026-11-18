@@ -417,8 +417,8 @@ export interface IStorage {
   deleteMessage(id: string): Promise<void>;
   
   // Unified inbox methods
-  getUnifiedInbox(userId: string, limit?: number): Promise<InboxItem[]>;
-  searchUnifiedInbox(userId: string, query: string, limit?: number): Promise<InboxItem[]>;
+  getUnifiedInbox(userId: string, limit?: number, assignedTo?: string): Promise<InboxItem[]>;
+  searchUnifiedInbox(userId: string, query: string, limit?: number, assignedTo?: string): Promise<InboxItem[]>;
   getContactWithConversations(contactId: string): Promise<{ contact: Contact; conversations: Conversation[] } | undefined>;
   
   // Activity event methods
@@ -3255,14 +3255,14 @@ export class DbStorage implements IStorage {
     return sorted;
   }
 
-  async getUnifiedInbox(userId: string, limit: number = 100): Promise<InboxItem[]> {
+  async getUnifiedInbox(userId: string, limit: number = 100, assignedTo?: string): Promise<InboxItem[]> {
     const { recordInboxTiming } = await import("@shared/inboxListMerge");
     const t0 = Date.now();
     // Contact-scoped fetch; email threads expand to one row each below.
     const userContacts = await db.select().from(contacts)
-      .where(eq(contacts.userId, userId))
+      .where(and(eq(contacts.userId, userId), assignedTo ? eq(contacts.assignedTo, assignedTo) : undefined))
       .orderBy(desc(contacts.updatedAt))
-      .limit(limit);
+      .limit(Math.min(Math.max(1, limit), 500));
     recordInboxTiming("inbox_phase_contacts", Date.now() - t0, {
       contactCount: userContacts.length,
       limit,
@@ -3279,6 +3279,7 @@ export class DbStorage implements IStorage {
     userId: string,
     query: string,
     limit: number = 50,
+    assignedTo?: string,
   ): Promise<InboxItem[]> {
     const {
       sanitizeInboxSearchQuery,
@@ -3306,7 +3307,7 @@ export class DbStorage implements IStorage {
     const matched = await db
       .select()
       .from(contacts)
-      .where(and(eq(contacts.userId, userId), or(...predicates)))
+      .where(and(eq(contacts.userId, userId), assignedTo ? eq(contacts.assignedTo, assignedTo) : undefined, or(...predicates)))
       .orderBy(desc(contacts.updatedAt))
       .limit(cappedLimit);
 

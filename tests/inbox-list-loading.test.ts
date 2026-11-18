@@ -190,6 +190,6 @@ test("query budget stays bounded as contact count grows (documented phases)", ()
 
 test("workspace isolation: build filters contacts by userId", () => {
   const storage = fs.readFileSync(path.join(process.cwd(), "server/storage.ts"), "utf8");
-  assert.ok(storage.includes("userContacts.filter((c) => c.userId === userId)"));
+  assert.match(storage, /userContacts\.filter\(\(c\) => c\.userId === userId(?:\s*&&|\))/);
   assert.ok(storage.includes("eq(contacts.userId, userId)"));
 });

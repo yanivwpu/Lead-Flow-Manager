@@ -1,3 +1,5 @@
+import { inboxTeamProfiles } from "./inboxTeamProfiles";
+import { inboxContentReadLimiter } from "./inboxContentRateLimit";
 import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
 import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";
 import { requireInboxWorkspace, inboxWorkspaceId } from "./inboxWorkspaceAccess";
@@ -2161,16 +2163,16 @@ export async function registerRoutes(
   // ============ TEAM MEMBER ROUTES ============
 
   // Get team members
-  app.get("/api/team", requireInboxWorkspace, async (req, res) => {
+  app.get("/api/team", inboxContentReadLimiter, requireInboxWorkspace, async (req, res) => {
     try {
       if (!req.user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const members = await storage.getTeamMembers(inboxWorkspaceId(req));
       const user = await storage.getUser(inboxWorkspaceId(req));
-      
+      const profiles = await inboxTeamProfiles(inboxWorkspaceId(req), members.map(m => m.memberId || ""));
       // Filter out any owner entries from database (owner is added dynamically)
-      const nonOwnerMembers = members.filter(m => m.role !== 'owner');
+      const nonOwnerMembers = members.filter(m => m.role !== 'owner').map(m => ({ ...m, name: profiles.get(m.memberId || '')?.name || m.name, avatarUrl: profiles.get(m.memberId || '')?.avatarUrl || null }));
       
       // Include the owner as the first team member
       const ownerMember = {
@@ -2179,6 +2181,7 @@ export async function registerRoutes(
         memberId: inboxWorkspaceId(req),
         email: user?.email || "",
         name: user?.name || "You",
+        avatarUrl: user?.avatarUrl || null,
         role: "owner",
         status: "active",
         invitedAt: user?.createdAt,
@@ -6101,22 +6104,22 @@ export async function registerRoutes(
   // Deep health check for all connected channels. For Meta (FB/IG) channels,
   // verifies token (debug_token), page probe, and webhook subscription with retries.
   // Transient Meta timeouts do not mark the integration disconnected; see `warnings` + `healthState`.
-  app.get("/api/channel-health", async (req, res) => {
+  const inboxChannelHealthHandler = async (req: Request, res: Response) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-      const userSession = await storage.getUserForSession(req.user.id);
-      const legacyWaRow = await storage.getChannelSetting(req.user.id, "whatsapp");
+      const userSession = await storage.getUserForSession(inboxWorkspaceId(req));
+      const legacyWaRow = await storage.getChannelSetting(inboxWorkspaceId(req), "whatsapp");
       const legacyChannelConnected = !!legacyWaRow?.isConnected;
-      await syncWhatsAppChannelRowFromCanonicalMeta(req.user.id);
-      const settings = await storage.getChannelSettings(req.user.id);
+      await syncWhatsAppChannelRowFromCanonicalMeta(inboxWorkspaceId(req));
+      const settings = await storage.getChannelSettings(inboxWorkspaceId(req));
       const waCanon = userSession ? isCanonicalWhatsAppFullyConnected(userSession) : false;
 
       let rows = [...settings];
       if (!rows.some((r) => r.channel === "whatsapp")) {
         rows.push({
           id: "__synthetic_whatsapp__",
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           channel: "whatsapp",
           isEnabled: waCanon,
           isConnected: waCanon,
@@ -6201,7 +6204,7 @@ export async function registerRoutes(
                     url: `${GRAPH_LOCAL}/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`,
                     logTag: "debug_token",
                     tokenSource,
-                    extraLog: { userId: req.user.id, channel: s.channel, pageId },
+                    extraLog: { userId: inboxWorkspaceId(req), channel: s.channel, pageId },
                   })
                 : Promise.resolve({
                     ok: false,
@@ -6215,13 +6218,13 @@ export async function registerRoutes(
                 url: `${GRAPH_LOCAL}/${pageId}?fields=id,name&access_token=${encodeURIComponent(accessToken)}`,
                 logTag: "page_probe",
                 tokenSource,
-                extraLog: { userId: req.user.id, channel: s.channel, pageId },
+                extraLog: { userId: inboxWorkspaceId(req), channel: s.channel, pageId },
               }),
               fetchMetaGraphJsonWithRetries({
                 url: `${GRAPH_LOCAL}/${pageId}/subscribed_apps?access_token=${encodeURIComponent(accessToken)}`,
                 logTag: "subscribed_apps",
                 tokenSource,
-                extraLog: { userId: req.user.id, channel: s.channel, pageId },
+                extraLog: { userId: inboxWorkspaceId(req), channel: s.channel, pageId },
               }),
             ]);
 
@@ -6326,7 +6329,7 @@ export async function registerRoutes(
             // Operational failure log only — avoid noisy success spam on every Inbox poll.
             if (!pageRes.ok || entry.checks.pageAccessible === false || entry.checks.subscriptionOk === false) {
               logFacebookReconnectDiag("channel_health_failure", {
-                userId: req.user.id,
+                userId: inboxWorkspaceId(req),
                 channel: s.channel,
                 storedPageId: pageId,
                 storedPageName: cfg?.pageName ?? null,
@@ -6362,7 +6365,7 @@ export async function registerRoutes(
               console.log(
                 `[META_TOKEN_VERIFY] ${JSON.stringify({
                   phase: "inferred_valid_from_page",
-                  userId: req.user.id,
+                  userId: inboxWorkspaceId(req),
                   channel: s.channel,
                   pageId,
                   tokenSource,
@@ -6400,7 +6403,7 @@ export async function registerRoutes(
               console.warn(
                 `[META_HEALTHCHECK] ${JSON.stringify({
                   severity: "definitive_integration_failure",
-                  userId: req.user.id,
+                  userId: inboxWorkspaceId(req),
                   channel: s.channel,
                   pageId,
                   tokenSource,
@@ -6415,7 +6418,7 @@ export async function registerRoutes(
             console.warn(
               `[META_HEALTHCHECK] ${JSON.stringify({
                 phase: "unexpected_catch",
-                userId: req.user.id,
+                userId: inboxWorkspaceId(req),
                 channel: s.channel,
                 error: err instanceof Error ? err.message : String(err),
               })}`
@@ -6551,7 +6554,7 @@ export async function registerRoutes(
           emailStatusToChannelHealthEntry,
           INBOX_CHANNEL_HEALTH_ORDER,
         } = await import("@shared/inboxChannelHealthBar");
-        const emailStatus = await getWorkspaceEmailStatus(req.user.id);
+        const emailStatus = await getWorkspaceEmailStatus(inboxWorkspaceId(req));
         const emailEntry = emailStatusToChannelHealthEntry(emailStatus);
         const withoutEmail = result.filter((r) => r.channel !== "email");
         withoutEmail.push(emailEntry);
@@ -6628,7 +6631,7 @@ export async function registerRoutes(
         const finalConnected =
           waCanon || !!row?.isConnected;
         logWhatsAppChannelState({
-          userId: req.user.id,
+          userId: inboxWorkspaceId(req),
           activeProvider: (userSession.whatsappProvider as WhatsAppProvider) || "twilio",
           metaConnected: !!userSession.metaConnected,
           webhookSubscribed: !!userSession.metaWebhookSubscribed,
@@ -6640,9 +6643,11 @@ export async function registerRoutes(
       res.json(result);
     } catch (err: any) {
       console.error('[ChannelHealth] Error:', err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: req.inboxWorkspace ? "Unable to check workspace channel status" : err.message });
     }
-  });
+  };
+  app.get("/api/channel-health", inboxContentReadLimiter, inboxChannelHealthHandler);
+  app.get("/api/inbox/channel-health", inboxContentReadLimiter, requireInboxWorkspace, inboxChannelHealthHandler);
 
   // ─── Telegram Connect ─────────────────────────────────────────────────────
   // Validates a bot token via Telegram's getMe API, auto-sets the webhook,
@@ -10613,10 +10618,11 @@ export async function registerRoutes(
           inboxWorkspaceId(req),
           searchQ,
           INBOX_SEARCH_RESULT_LIMIT,
+          req.query.mine === "true" ? req.user.id : undefined,
         );
       } else {
         const limit = parseInt(req.query.limit as string) || 100;
-        inbox = await storage.getUnifiedInbox(inboxWorkspaceId(req), limit);
+        inbox = await storage.getUnifiedInbox(inboxWorkspaceId(req), limit, req.query.mine === "true" ? req.user.id : undefined);
       }
       const ms = Date.now() - t0;
       const rowCount = Array.isArray(inbox) ? inbox.length : -1;

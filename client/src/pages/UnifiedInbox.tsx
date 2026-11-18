@@ -1,3 +1,6 @@
+import { InboxAssignmentControl, AssigneeAvatar } from "@/components/InboxAssignmentControl";
+import { InboxReplyAttribution } from "@/components/InboxReplyAttribution";
+import { belongsInInboxTab, inboxEmptyKind, type ReplySender } from "@shared/inboxTeam";
 import { SafeMessageText } from "@/components/SafeMessageText";
 import { ShoppingActivity } from "@/components/inbox/ShoppingActivity";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, type ComponentProps } from "react";
@@ -154,7 +157,6 @@ import { getConversationStatusRow } from "@/lib/conversationStatusUi";
 import { useToast } from "@/hooks/use-toast";
 import { InboxLeadDetailsPanel } from "@/components/InboxLeadDetailsPanel";
 import { useAICapabilities } from "@/lib/useAICapabilities";
-import type { ActivationStatusPayload } from "@/lib/activationStatus";
 import { settingsChannelsHref } from "@/lib/settingsChannelsNavigation";
 import { analyzeConversation } from "@/lib/conversationIntelligence";
 import { WHATSAPP_SETUP_INCOMPLETE_BANNER } from "@shared/whatsappSetupMessages";
@@ -310,6 +312,9 @@ interface Message {
   /** Actual inbound Email From — used for Copilot system/notification detection. */
   fromAddress?: string | null;
   generatedBy?: string | null;
+  sentByUserId?: string | null;
+  sender?: ReplySender | null;
+  sentAt?: string | null;
 }
 
 /** Prefer direct <img src> for permanent URLs (R2, app uploads); never use expiring provider CDNs. */
@@ -365,6 +370,7 @@ interface InboxItem {
 const EMPTY_PIN_CANDIDATES: InboxItem[] = [];
 
 interface TeamMember {
+  avatarUrl?: string | null;
   id: string;
   memberId: string | null;
   email: string;
@@ -535,7 +541,8 @@ export function UnifiedInbox() {
   const { t } = useTranslation();
 
   const queryClient = useQueryClient();
-  const inboxRecentKey = withUserQueryScope(INBOX_RECENT_QUERY_KEY, user?.id);
+  const [filterTab, setFilterTab] = useState<FilterTab>('all');
+  const inboxRecentKey = withUserQueryScope(filterTab === "mine" ? [...INBOX_RECENT_QUERY_KEY, "mine"] : INBOX_RECENT_QUERY_KEY, user?.id);
   const { toast } = useToast();
   const { ackIfVisible } = useAckInboxActivityWhenVisible();
   /** Set after `replyWindowNow` exists; WS handler bumps clock when inbound pushes so UI doesn’t wait for the 1m tick. */
@@ -740,7 +747,6 @@ export function UnifiedInbox() {
     }
   }, [user?.id]);
 
-  const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const allChannels: Channel[] = ['whatsapp', 'instagram', 'facebook', 'sms', 'webchat', 'telegram', 'email', 'tiktok', 'calendly', 'shopify', 'woocommerce'];
   const [selectedChannels, setSelectedChannels] = useState<Set<Channel>>(new Set(allChannels));
   const [messageInput, setMessageInput] = useState("");
@@ -940,7 +946,7 @@ export function UnifiedInbox() {
       recordInboxTiming("inbox_recent_client_start", 0, {
         aborted: signal.aborted,
       });
-      const res = await fetch("/api/inbox", {
+      const res = await fetch(filterTab === "mine" ? "/api/inbox?mine=true" : "/api/inbox", {
         credentials: "include",
         cache: "no-store",
         signal,
@@ -971,13 +977,13 @@ export function UnifiedInbox() {
     data: searchInboxData,
     isPending: searchInboxPending,
   } = useQuery<InboxItem[]>({
-    queryKey: withUserQueryScope(inboxSearchQueryKey(sanitizedSearch || ""), user?.id),
+    queryKey: withUserQueryScope([...inboxSearchQueryKey(sanitizedSearch || ""), ...(filterTab === "mine" ? ["mine"] : [])], user?.id),
     enabled: isServerSearching && !!user?.id && sessionAligned,
     staleTime: 10_000,
     queryFn: async ({ signal }) => {
       const q = sanitizedSearch!;
       const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-      const res = await fetch(`/api/inbox?q=${encodeURIComponent(q)}`, {
+      const res = await fetch(`/api/inbox?q=${encodeURIComponent(q)}${filterTab === "mine" ? "&mine=true" : ""}`, {
         credentials: "include",
         cache: "no-store",
         signal,
@@ -1717,7 +1723,7 @@ export function UnifiedInbox() {
   }, [replyWindowDerived]);
 
   const { data: whatsappAvailability } = useQuery<WhatsAppAvailability>({
-    queryKey: withUserQueryScope(["/api/channels/whatsapp/availability"], user?.id),
+    queryKey: withUserQueryScope(["/api/inbox/whatsapp-availability"], user?.id),
     enabled: isWhatsAppContact && !!selectedContactId && !!user?.id && sessionAligned,
     refetchInterval: 30000,
   });
@@ -1728,13 +1734,15 @@ export function UnifiedInbox() {
     !whatsappAvailability.available;
 
   const { data: inboxTemplates = [] } = useQuery<MessageTemplate[]>({
-    queryKey: ["/api/templates"],
+    queryKey: withUserQueryScope(["/api/inbox/templates"], user?.id),
     enabled: isWhatsAppContact,
     retry: false,
   });
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
-    queryKey: ["/api/team"],
+    queryKey: withUserQueryScope(["/api/team"], user?.id),
+    enabled: !!user?.id && sessionAligned,
+    refetchInterval: 30_000,
   });
 
   const { data: timeline = [] } = useQuery<TimelineEvent[]>({
@@ -1822,14 +1830,14 @@ export function UnifiedInbox() {
     };
   };
   const { data: channelHealth = [] } = useQuery<ChannelHealthEntry[]>({
-    queryKey: withUserQueryScope(["/api/channel-health"], user?.id),
+    queryKey: withUserQueryScope(["/api/inbox/channel-health"], user?.id),
     enabled: inboxSettledOnce && !!user?.id && sessionAligned,
     refetchInterval: 5 * 60 * 1000, // re-check every 5 minutes
     staleTime: 4 * 60 * 1000,
   });
 
-  const { data: activationStatus } = useQuery<ActivationStatusPayload>({
-    queryKey: withUserQueryScope(["/api/activation-status"], user?.id),
+  const { data: activationStatus } = useQuery<{ workspaceId: string; hasAnyMessagingChannel: boolean }>({
+    queryKey: withUserQueryScope(["/api/inbox/channel-status"], user?.id),
     staleTime: 15_000,
     refetchOnWindowFocus: true,
     enabled: !!user?.id && sessionAligned,
@@ -2138,6 +2146,9 @@ export function UnifiedInbox() {
           mediaType: data.mediaType,
           mediaFilename: data.mediaFilename,
           status: 'sending',
+          sentByUserId: user?.id,
+          generatedBy: data.source === "ai_auto" ? "ai_brain" : "human",
+          sender: user ? { id: user.id, name: user.name, avatarUrl: user.avatarUrl || null } : null,
           createdAt: now,
         };
         queryClient.setQueryData<Message[]>(messagesKey, (old) => [
@@ -2396,7 +2407,7 @@ export function UnifiedInbox() {
 
       if (previousInbox) {
         queryClient.setQueryData<InboxItem[]>(
-          ["/api/inbox"],
+          inboxRecentKey,
           previousInbox.map((item) =>
             item.contact.id === contactId
               ? { ...item, contact: patchContact(item.contact) }
@@ -2408,11 +2419,12 @@ export function UnifiedInbox() {
       return { previousContact, previousInbox, contactId };
     },
     onError: (_err, _data, context) => {
+      toast({ title: t("inboxTeam.assignmentFailed"), variant: "destructive" });
       if (context?.previousContact) {
         queryClient.setQueryData(["/api/contacts", context.contactId], context.previousContact);
       }
       if (context?.previousInbox) {
-        queryClient.setQueryData(["/api/inbox"], context.previousInbox);
+        queryClient.setQueryData(inboxRecentKey, context.previousInbox);
       }
     },
     onSuccess: (updatedContact, variables) => {
@@ -2421,7 +2433,7 @@ export function UnifiedInbox() {
         ["/api/contacts", contactId],
         (old) => (old ? { ...old, contact: { ...old.contact, ...updatedContact } } : old),
       );
-      queryClient.setQueryData<InboxItem[]>(["/api/inbox"], (old) =>
+      queryClient.setQueryData<InboxItem[]>(inboxRecentKey, (old) =>
         old?.map((item) =>
           item.contact.id === contactId
             ? { ...item, contact: { ...item.contact, ...updatedContact } }
@@ -2938,7 +2950,7 @@ export function UnifiedInbox() {
           components: "(built server-side from template row + variables)",
         })}`
       );
-      const res = await apiRequest("POST", "/api/templates/send", payload);
+      const res = await apiRequest("POST", "/api/inbox/templates/send", payload);
       return res.json();
     },
     onSuccess: async (data) => {
@@ -3037,11 +3049,8 @@ export function UnifiedInbox() {
         formId?.subjectLine?.toLowerCase().includes(q)
       );
     });
-    // Per-row unread (email threads are separate rows — do not use contact aggregate).
-    if (filterTab === "unread") {
-      result = result.filter((item) => item.unreadCount > 0);
-    }
-    if (filterTab === "mine") result = result.filter((item) => item.contact.assignedTo === user?.id);
+    // Assignment is workspace-owned, while Mine always compares the actual login.
+    result = result.filter(item => belongsInInboxTab(filterTab, item, user?.id));
     if (selectedChannels.size < allChannels.length) {
       result = result.filter((item) => selectedChannels.has(item.channel as Channel));
     }
@@ -3057,10 +3066,8 @@ export function UnifiedInbox() {
     primaryConversation?.id,
   ]);
 
-  const showInboxEmptyNoChannels =
-    filteredInbox.length === 0 &&
-    !!activationStatus &&
-    !activationStatus.hasAnyMessagingChannel;
+  const emptyKind = inboxEmptyKind({ tab: filterTab, searching: !!searchQuery.trim(), channelFiltered: selectedChannels.size < allChannels.length, rawCount: inbox.length, hasAnyChannel: activationStatus?.hasAnyMessagingChannel });
+  const showInboxEmptyNoChannels = filteredInbox.length === 0 && emptyKind === "noChannels";
 
   const prevRawInboxRowCountRef = useRef(0);
   useEffect(() => {
@@ -3367,7 +3374,7 @@ export function UnifiedInbox() {
                 )}
                 data-testid={`filter-tab-${tab}`}
               >
-                {tab === 'all' ? 'All' : tab === 'unread' ? 'Unread' : 'Mine'}
+                {t(`inboxTeam.${tab}`)}
               </button>
             ))}
           </div>
@@ -3601,7 +3608,7 @@ export function UnifiedInbox() {
               <div className="p-6 text-center text-muted-foreground">
                 <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">
-                  {isServerSearching ? "No matching conversations" : "No conversations"}
+                  {t(`inboxTeam.empty_${emptyKind}`)}
                 </p>
               </div>
             )
@@ -3683,6 +3690,7 @@ export function UnifiedInbox() {
                   />
                   <div className={INBOX_ROW_BODY}>
                     <div className={INBOX_ROW_LINE1}>
+                      <span className="shrink-0" data-testid={`inbox-row-assignee-${rowId}`}><AssigneeAvatar assignedTo={item.contact.assignedTo} members={teamMembers} /></span>
                       <span
                         className={cn(
                           INBOX_ROW_NAME,
@@ -3817,7 +3825,7 @@ export function UnifiedInbox() {
         {selectedContactId && contact ? (
           <>
             {/* Conversation Header */}
-            <div className="p-3 border-b border-gray-200 flex items-center gap-2 flex-shrink-0 bg-white">
+            <div className="p-3 border-b border-gray-200 flex flex-wrap items-center gap-2 flex-shrink-0 bg-white">
               <button onClick={() => setLocation('/app/inbox')} className="md:hidden p-1 text-gray-500" data-testid="button-back-inbox">
                 <ChevronDown className="w-5 h-5 rotate-90" />
               </button>
@@ -3826,7 +3834,7 @@ export function UnifiedInbox() {
                 name={formDisplayContact?.name || contact.name}
                 size="md"
               />
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-[8rem]">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">
                     {formDisplayContact?.name || contact.name}
@@ -3881,18 +3889,11 @@ export function UnifiedInbox() {
                     </span>
                   ) : null}
                   {contact.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{contact.phone}</span>}
-                  {contact.assignedTo && (() => {
-                    const assignee = teamMembers.find((m: TeamMember) => (m.memberId || m.id) === contact.assignedTo);
-                    const name = assignee?.name || assignee?.email?.split('@')[0];
-                    return name ? (
-                      <span className="flex items-center gap-1 text-gray-500 hidden sm:flex">
-                        <UserCheck className="w-3 h-3" />{name}
-                      </span>
-                    ) : null;
-                  })()}
+
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
+              <div className="flex w-full sm:w-auto items-center justify-end gap-1.5 flex-shrink-0">
+                <InboxAssignmentControl assignedTo={contact.assignedTo} members={teamMembers} actorId={user?.id} pending={updateContactMutation.isPending} onAssign={id => updateContact({ assignedTo: id })} />
                 {/* Mobile: open CRM details sheet */}
                 <Button
                   variant="ghost"
@@ -4179,6 +4180,7 @@ export function UnifiedInbox() {
                             sending: isSending,
                           })}
                         >
+                          {isOut && <InboxReplyAttribution message={msg} />}
                           <div className="min-w-0 max-w-full [overflow-wrap:anywhere] break-words">
                             {(() => {
                             if (
@@ -4613,15 +4615,10 @@ export function UnifiedInbox() {
                             })()}
                           </div>
                           <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">
-                            {msg.generatedBy === "ai_brain" && (
-                              <span className="text-[10px] text-violet-700" data-testid="text-ai-generated-message">
-                                AI
-                              </span>
-                            )}
                             {msg.sentViaFallback && (
                               <span className="text-[10px] text-amber-600 [overflow-wrap:anywhere] break-words">via {msg.fallbackChannel}</span>
                             )}
-                            <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>{format(new Date(msg.createdAt), 'h:mm a')}</span>
+                            {!isOut && <span className={chatBubbleMetaTextClass(activeChannel, isOut)}>{format(new Date(msg.createdAt), 'h:mm a')}</span>}
                             {isOut && (
                               isSending
                                 ? <Loader2 className="w-2.5 h-2.5 text-gray-400 animate-spin" />

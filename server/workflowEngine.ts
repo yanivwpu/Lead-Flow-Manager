@@ -517,6 +517,7 @@ async function executeSendMessageTemplateAction(params: {
             contactId: contact.id,
             userId: workflow.userId,
             direction: "outbound",
+            generatedBy: "workflow",
             content,
             contentType: "template",
             templateId: policy.whatsappTemplateName,
@@ -580,6 +581,7 @@ async function executeSendMessageTemplateAction(params: {
     // Window already checked via evaluateAutomationChannelSendPolicy; still leave
     // inbox-style enforcement off so we own the skip/template decision above.
     return channelService.sendMessage({
+        generatedBy: "workflow",
       userId: workflow.userId,
       contactId: contact.id,
       content,
