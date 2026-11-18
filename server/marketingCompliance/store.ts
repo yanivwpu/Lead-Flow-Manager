@@ -1,3 +1,4 @@
+import { assertInboxFence } from "../inboxDispatchFence";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone } from "./policy";
@@ -133,7 +134,8 @@ async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{us
       // Phone/adapter callers enter only after credentials and payload validation.
       // Gmail signals its own dispatch after MIME validation.
       if (!email) dispatched = true;
-      const result = await send(() => { dispatched = true; });
+      assertInboxFence();
+      const result = await send(() => { assertInboxFence(); dispatched = true; });
       accepted = !(result instanceof Response ? !result.ok : result && typeof result === "object" && "success" in result && result.success === false);
       return result;
     };

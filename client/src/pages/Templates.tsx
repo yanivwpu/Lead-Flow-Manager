@@ -1,3 +1,4 @@
+import { useInboxDraftClaim, type ReplySnapshot } from "@/lib/useInboxCollaboration";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 
@@ -731,6 +732,7 @@ function GrowthEnginesTab() {
 }
 
 export function Templates() {
+  const { t }=useTranslation();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const hideGrowthEngine = useHideGrowthEngineForShopify();
@@ -777,6 +779,17 @@ export function Templates() {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Chat | RetargetableChat | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
+  const [templateReplySnapshot,setTemplateReplySnapshot]=useState<(ReplySnapshot&{scope:string;conversationId?:string;latestReply?:{content:string}})|null>(null);
+  const templateClaim=useInboxDraftClaim({actorId:user?.id,scope:selectedChat?`template:${selectedChat.id}`:null,text:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?JSON.stringify({templateId:selectedTemplate?.id,variableValues}):"",conversationId:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot.conversationId:undefined,getSnapshot:()=>templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot:undefined});
+  const [reviewReply,setReviewReply]=useState<string|null>(null);
+  async function loadTemplateReplyState(review=false){
+    if(!selectedChat)return;
+    const res=await fetch("/api/templates/reply-state",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify("contactId" in selectedChat&&selectedChat.contactId?{contactId:selectedChat.contactId}:{chatId:selectedChat.id})});
+    if(!res.ok)return;
+    const state=await res.json();setTemplateReplySnapshot({scope:selectedChat.id,revision:state.revision,aiEpoch:state.aiEpoch,conversationId:state.conversationId,latestReply:state.latestReply});
+    if(review){setReviewReply(state.latestReply?.content||"");templateClaim.reviewed({revision:state.revision,aiEpoch:state.aiEpoch});}
+  }
+  useEffect(()=>{setTemplateReplySnapshot(null);if(sendDialogOpen&&selectedChat)void loadTemplateReplyState();},[sendDialogOpen,selectedChat?.id]);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [libraryModalTemplate, setLibraryModalTemplate] = useState<MessageTemplate | null>(null);
   const [contactSearch, setContactSearch] = useState("");
@@ -1144,6 +1157,7 @@ export function Templates() {
       const mime = data.optionalHeaderMediaMimeType?.trim();
       const sizeB = data.optionalHeaderMediaSizeBytes;
       const payload = {
+        ...templateClaim.prepare(JSON.stringify(data)),
         templateId: data.templateId,
         variables: data.variables,
         sendSource: data.sendSource,
@@ -1172,10 +1186,11 @@ export function Templates() {
           optionalHeaderMediaUrl: trimmedOpt ?? null,
         })}`
       );
-      const res = await apiRequest("POST", "/api/templates/send", payload);
-      return res.json();
+      const res=await fetch("/api/templates/send",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const result=await res.json();if(!res.ok||!result.success){if(result.code)templateClaim.setConflict(result.code);throw new Error(result.code||result.error||"Send failed");}return result;
     },
     onSuccess: (data: any) => {
+      templateClaim.sent();setReviewReply(null);
       queryClient.invalidateQueries({ queryKey: ["/api/templates/retargetable-chats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/recent-media"] });
       queryClient.invalidateQueries({ queryKey: ["/api/templates/template-send-defaults"] });
@@ -1937,7 +1952,12 @@ export function Templates() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             {selectedTemplate && (
               <>
-                <DialogHeader>
+                {templateClaim.conflict&&<div role="alert" className="rounded border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p>{t(templateClaim.conflict==="delivery_unknown"?"inboxCollaboration.unknown":templateClaim.conflict==="send_in_progress"?"inboxCollaboration.busy":templateClaim.conflict==="reviewed"?"inboxCollaboration.reviewed":"inboxCollaboration.conflict")}</p>
+              {reviewReply&&<p className="mt-2 whitespace-pre-wrap">{reviewReply}</p>}
+              {!["send_in_progress","reviewed"].includes(templateClaim.conflict)&&<Button size="sm" variant="outline" onClick={()=>void loadTemplateReplyState(true)}>{t("inboxCollaboration.review")}</Button>}
+            </div>}
+            <DialogHeader>
                   <DialogTitle className="text-left leading-snug pr-6">{selectedTemplate.name}</DialogTitle>
                   <DialogDescription className="text-left">
                     {selectedChat ? (
@@ -2324,7 +2344,7 @@ export function Templates() {
                       });
                     }}
                     disabled={
-                      !selectedChat ||
+                      !selectedChat || templateReplySnapshot?.scope!==selectedChat.id ||
                       sendTemplateMutation.isPending ||
                       missingPlaceholders.length > 0 ||
                       !!sendStructureBlockReason ||

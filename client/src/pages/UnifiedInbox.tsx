@@ -1,3 +1,5 @@
+import { InboxReplyConflict } from "@/components/InboxReplyConflict";
+import { useInboxDraftClaim, type ReplySnapshot } from "@/lib/useInboxCollaboration";
 import { AssigneeAvatar } from "@/components/InboxAssignmentControl";
 import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
 import { belongsInInboxTab, inboxEmptyKind, type ReplySender } from "@shared/inboxTeam";
@@ -539,6 +541,11 @@ export function UnifiedInbox() {
   const searchString = useSearch();
   const { user, sessionAligned } = useAuth();
   const { t } = useTranslation();
+  const replySnapshots=useRef(new Map<string,ReplySnapshot>());
+  const presenceSocket=useRef<WebSocket|null>(null);
+  const presenceRoom=useRef<string|null>(null);
+  const activityTimers=useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const [teammateActivity,setTeammateActivity]=useState<Array<{userId:string;userName:string;avatarUrl?:string;isTyping:boolean}>>([]);
 
   const queryClient = useQueryClient();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
@@ -565,8 +572,10 @@ export function UnifiedInbox() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       ws = new WebSocket(`${protocol}//${window.location.host}/ws/presence`);
 
+      presenceSocket.current=ws;
       ws.onopen = () => {
         ws!.send(JSON.stringify({ type: "auth", userId: user.id, userName: user.name || "Agent" }));
+        if(presenceRoom.current)ws!.send(JSON.stringify({type:"join_chat",chatId:presenceRoom.current}));
         heartbeat = setInterval(() => {
           if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "heartbeat" }));
@@ -577,6 +586,19 @@ export function UnifiedInbox() {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          if(msg.type==="presence_update"&&msg.chatId===presenceRoom.current){
+            for(const timer of activityTimers.current)clearTimeout(timer);
+            setTeammateActivity(Array.isArray(msg.viewers)?msg.viewers.filter((v:any)=>v.userId!==user.id):[]);
+            activityTimers.current=[setTimeout(()=>setTeammateActivity(current=>current.map(v=>({...v,isTyping:false}))),6500),setTimeout(()=>setTeammateActivity([]),46000)];
+          }
+          if(msg.type==="inbox_resync"){
+            queryClient.invalidateQueries({queryKey:["/api/inbox"]});queryClient.invalidateQueries({queryKey:["/api/conversations"]});queryClient.invalidateQueries({queryKey:["/api/contacts"]});
+          }
+          if(["note_changed","ai_control_changed","reply_state_changed"].includes(msg.type)){
+            if(typeof msg.contactId==="string")queryClient.invalidateQueries({queryKey:["/api/contacts",msg.contactId]});
+            if(typeof msg.conversationId==="string")queryClient.invalidateQueries({queryKey:["/api/conversations",msg.conversationId]});
+            queryClient.invalidateQueries({queryKey:["/api/inbox"]});
+          }
           if (msg.type === "auth_success") {
             /* no-op */
           } else if (msg.type === "contact_updated") {
@@ -672,6 +694,7 @@ export function UnifiedInbox() {
       };
 
       ws.onclose = (evt) => {
+        setTeammateActivity([]);presenceSocket.current=null;for(const timer of activityTimers.current)clearTimeout(timer);
         clearInterval(heartbeat);
         if (!destroyed) {
           reconnectTimer = setTimeout(connect, 3000);
@@ -938,7 +961,7 @@ export function UnifiedInbox() {
     enabled: !!user?.id && sessionAligned,
     staleTime: 10_000,
     refetchInterval: () =>
-      typeof document !== "undefined" && document.hidden ? false : 15_000,
+      typeof document !== "undefined" && document.hidden ? false : presenceSocket.current?.readyState===WebSocket.OPEN ? 60_000 : 15_000,
     refetchIntervalInBackground: true,
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
@@ -1527,10 +1550,18 @@ export function UnifiedInbox() {
     isFetching: messagesFetching,
   } = useQuery<Message[]>({
     queryKey: ["/api/conversations", activeConversationId, "messages"],
+    queryFn: async({signal})=>{
+      const id=activeConversationId!;
+      const res=await fetch(`/api/conversations/${id}/messages`,{credentials:"include",cache:"no-store",signal});
+      if(!res.ok)throw new Error("Could not load conversation");
+      const revision=res.headers.get("X-Inbox-Reply-Revision");
+      if(revision)replySnapshots.current.set(id,{revision,aiEpoch:Number(res.headers.get("X-Inbox-Ai-Epoch")||0)});
+      return res.json();
+    },
     enabled: messagesEnabled,
     staleTime: 8_000,
     refetchInterval: () =>
-      typeof document !== "undefined" && document.hidden ? false : 10_000,
+      typeof document !== "undefined" && document.hidden ? false : presenceSocket.current?.readyState===WebSocket.OPEN ? 30_000 : 10_000,
     refetchIntervalInBackground: true,
     // CRITICAL: do not keepPreviousData — contact-only records must never show
     // the previous contact's messages while conversationId is null/disabled.
@@ -1541,6 +1572,31 @@ export function UnifiedInbox() {
     if (!messagesEnabled || !activeConversationId) return [];
     return messagesQueryData ?? [];
   }, [forceNewEmailCompose, messagesEnabled, activeConversationId, messagesQueryData]);
+
+  const collaborationScope=activeChannel==="email"?`${composerScopeKey}:email:${forceNewEmailCompose?"new":selectedConversationId||"primary"}`:composerScopeKey;
+  const collaboration=useInboxDraftClaim({actorId:user?.id,scope:collaborationScope,text:messageInput,conversationId:forceNewEmailCompose?null:activeConversationId,getSnapshot:()=>activeConversationId?replySnapshots.current.get(activeConversationId):{revision:"0/-",aiEpoch:0}});
+  useEffect(()=>{
+    const id=activeConversationId||null;presenceRoom.current=id;setTeammateActivity([]);
+    const ws=presenceSocket.current;if(ws?.readyState===WebSocket.OPEN&&id)ws.send(JSON.stringify({type:"join_chat",chatId:id}));
+    return()=>{if(ws?.readyState===WebSocket.OPEN&&id)ws.send(JSON.stringify({type:"leave_chat",chatId:id}));};
+  },[activeConversationId]);
+  useEffect(()=>{if(showTemplatePicker)collaboration.prepare("");},[showTemplatePicker]);
+  const typingLastSent=useRef(0);
+  useEffect(()=>{
+    const ws=presenceSocket.current,id=activeConversationId;
+    if(!id||ws?.readyState!==WebSocket.OPEN)return;
+    if(messageInput.trim()&&Date.now()-typingLastSent.current>1500){ws.send(JSON.stringify({type:"typing",chatId:id}));typingLastSent.current=Date.now();}
+    const stop=setTimeout(()=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:"stop_typing",chatId:id}));},3000);
+    if(!messageInput.trim())ws.send(JSON.stringify({type:"stop_typing",chatId:id}));
+    return()=>clearTimeout(stop);
+  },[messageInput,activeConversationId]);
+  async function reviewLatestReply(){
+    if(!selectedContactId||!activeChannel)return;
+    const res=await fetch(`/api/contacts/${selectedContactId}/reply-state`,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({conversationId:forceNewEmailCompose?undefined:activeConversationId,newEmail:forceNewEmailCompose,channel:activeChannel})});
+    if(!res.ok)return;
+    const state=await res.json();await queryClient.refetchQueries({queryKey:["/api/conversations",activeConversationId,"messages"]});
+    collaboration.reviewed({revision:state.revision,aiEpoch:state.aiEpoch});scrollToBottom();
+  }
 
   const latestInboundEmailMessageId = useMemo(() => {
     if (primaryConversation?.channel !== "email") return null;
@@ -2049,6 +2105,7 @@ export function UnifiedInbox() {
       mediaFilename?: string;
       contentType?: string;
       source?: string;
+      coordination?: ReturnType<typeof collaboration.prepare>;
       idempotencyKey?: string;
       emailSubject?: string;
     }) => {
@@ -2066,6 +2123,7 @@ export function UnifiedInbox() {
             : undefined
           : undefined;
       const body: Record<string, unknown> = {
+        ...data.coordination,
         content: data.content,
         contentType: data.contentType || (data.mediaType || 'text'),
         mediaUrl: data.mediaUrl,
@@ -2116,7 +2174,7 @@ export function UnifiedInbox() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok) {
+      if (!res.ok || json?.success !== true) {
         const msg = (typeof json?.error === "string" && json.error.trim()) || "Failed to send message";
         const err = new Error(msg) as Error & { sendPayload?: unknown };
         err.sendPayload = json;
@@ -2125,6 +2183,7 @@ export function UnifiedInbox() {
       return json;
     },
     onMutate: async (data) => {
+      if(!data.coordination)data.coordination=collaboration.prepare(JSON.stringify({content:data.content,mediaUrl:data.mediaUrl,mediaType:data.mediaType,mediaFilename:data.mediaFilename,contentType:data.contentType,emailSubject:data.emailSubject}));
       const now = new Date().toISOString();
       const conversationId = primaryConversation?.id;
       const messagesKey = ["/api/conversations", conversationId, "messages"];
@@ -2184,9 +2243,6 @@ export function UnifiedInbox() {
         return list;
       });
 
-      setMessageInput("");
-      if (composerScopeKey) clearComposerDraft(composerScopeKey, "manual");
-      setPendingFile(null);
 
       // Flag that a send just happened — forces scroll even if user somehow
       // wasn't pinned. Also ensures the ResizeObserver keeps scrolling while
@@ -2209,7 +2265,17 @@ export function UnifiedInbox() {
 
       return { previousMessages, previousInbox, conversationId, content: data.content };
     },
+    onSuccess: (_result,data)=>{
+      if(data.source!=="ai_auto")collaboration.sent(data.coordination);
+      if(data.source!=="ai_auto"&&data.coordination?.storageKey===collaboration.storageKey&&messageInputRef.current===data.content){setMessageInput("");if(composerScopeKey)clearComposerDraft(composerScopeKey,"manual");setPendingFile(null);}
+    },
     onError: (error: Error, data, context) => {
+      const code=(error as any).sendPayload?.code;
+      if(code){
+        if(data.coordination?.storageKey===collaboration.storageKey||data.source==="ai_auto"&&data.coordination?.conversationId===activeConversationId)collaboration.setConflict(code);
+        if(context?.conversationId&&context.previousMessages!==undefined)queryClient.setQueryData(["/api/conversations",context.conversationId,"messages"],context.previousMessages);
+        return;
+      }
       const errMsg = error.message || "";
       const isReplyWindow = isMetaReplyWindowExpiredError(errMsg);
       const isMediaValidation = isMediaChannelValidationError(errMsg);
@@ -2779,8 +2845,9 @@ export function UnifiedInbox() {
     });
   };
 
-  const handleAutoSend = useCallback((message: string, meta?: { idempotencyKey?: string }) => {
+  const handleAutoSend = useCallback((message: string, meta?: { idempotencyKey?: string; sendAttemptId?:string; replyRevision?:string; aiEpoch?:number }) => {
     if (!message.trim() || !selectedContactId) return;
+    if(!meta?.sendAttemptId||typeof meta.replyRevision!=="string"||typeof meta.aiEpoch!=="number")return;
     if (contactReachableChannels.length === 0) {
       toast({
         title: 'Cannot send',
@@ -2799,6 +2866,7 @@ export function UnifiedInbox() {
         contactId: selectedContactId,
         content: message,
         source: "ai_auto" as any,
+        coordination:{sendAttemptId:meta.sendAttemptId,replyRevision:meta.replyRevision,aiEpoch:meta.aiEpoch,storageKey:"",conversationId:activeConversationId||undefined},
         idempotencyKey: meta?.idempotencyKey,
       },
       {
@@ -2809,7 +2877,7 @@ export function UnifiedInbox() {
           console.warn("[AI-AUTO-SEND]", "failed", err instanceof Error ? err.message : err),
       },
     );
-  }, [selectedContactId, sendMessageMutation, contactReachableChannels.length, toast]);
+  }, [selectedContactId, activeConversationId, sendMessageMutation, contactReachableChannels.length, toast]);
 
   const ACCEPTED_TYPES: Record<string, string> = {
     "image/jpeg": "image", "image/jpg": "image", "image/png": "image", "image/webp": "image",
@@ -2940,7 +3008,7 @@ export function UnifiedInbox() {
       data: { templateId: string; contactId: string; variables: Record<string, string>; templateName?: string }
     ) => {
       const { templateName, ...sendPayload } = data;
-      const payload = { ...sendPayload, sendSource: "inbox_picker" as const };
+      const payload = { ...sendPayload, ...collaboration.prepare(JSON.stringify(sendPayload)), sendSource: "inbox_picker" as const };
       console.log(
         `[WA_TEMPLATE_SEND_CLIENT] ${JSON.stringify({
           source: "inbox_picker",
@@ -2950,10 +3018,11 @@ export function UnifiedInbox() {
           components: "(built server-side from template row + variables)",
         })}`
       );
-      const res = await apiRequest("POST", "/api/inbox/templates/send", payload);
-      return res.json();
+      const res=await fetch("/api/inbox/templates/send",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const result=await res.json();if(!res.ok||!result.success){if(result.code)collaboration.setConflict(result.code);throw new Error(result.code||result.error||"Send failed");}return result;
     },
     onSuccess: async (data) => {
+      collaboration.sent();
       setShowTemplatePicker(false);
       setSelectedInboxTemplate(null);
       setVarValues({});
@@ -4789,6 +4858,10 @@ export function UnifiedInbox() {
             )}
 
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
+            <div className="px-3" aria-live="polite">
+              {teammateActivity.length>0&&<div className="flex flex-wrap items-center gap-2 py-1 text-xs text-slate-500" data-testid="inbox-teammate-activity">{teammateActivity.map(v=><span key={v.userId} className="inline-flex items-center gap-1"><ChatAvatar src={v.avatarUrl} name={v.userName} size="sm" className="h-5 w-5 text-[9px]" />{t(v.isTyping?"inboxCollaboration.replying":"inboxCollaboration.viewing",{name:v.userName})}</span>)}</div>}
+              <InboxReplyConflict code={collaboration.conflict} onReview={()=>void reviewLatestReply()} />
+            </div>
             <AIComposer
               key={
                 hasConversation && primaryConversation?.id
@@ -5149,6 +5222,7 @@ export function UnifiedInbox() {
               </p>
             ) : null}
           </DialogHeader>
+          <InboxReplyConflict code={collaboration.conflict} onReview={()=>void reviewLatestReply()} />
           {!selectedInboxTemplate ? (
             <div className="flex flex-col gap-3">
               <Input

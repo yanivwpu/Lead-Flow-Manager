@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
@@ -14,6 +15,7 @@ import * as schema from "../shared/schema";
 
 // All database calls below use isolated in-memory PostgreSQL. No provider is invoked.
 process.env.DATABASE_URL ||= "postgresql://fixture:fixture@127.0.0.1:1/unused";
+process.env.DATABASE_URL_UNPOOLED = process.env.DATABASE_URL;
 process.env.AI_INTEGRATIONS_OPENAI_API_KEY = "synthetic-test-key";
 process.env.SESSION_SECRET = "inbox-security-test-session-secret";
 process.env.EMAIL_IMAGE_PROXY_SECRET = "synthetic-inbox-email-image-secret-00000";
@@ -30,7 +32,7 @@ async function fixture() {
   for (const table of [schema.users, schema.teamMembers, schema.contacts, schema.conversations,
     schema.messages, schema.activityEvents, schema.channelSettings, schema.chats, schema.contactNotes,
     schema.prospectIntelligence, schema.prospectOutreachQueueItems, schema.campaignEnrollments,
-    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults]) {
+    schema.appointments, schema.integrations, schema.emailMailboxes, schema.emailMessageDetails, schema.marketingSuppressions, schema.messageTemplates, schema.templateCarouselMediaDefaults, schema.inboxSendAttempts, schema.inboxPresenceSessions]) {
     const config = getTableConfig(table);
     const columns = config.columns.map(column => {
       let value = quote(column.name) + " " + column.getSQLType();
@@ -51,6 +53,9 @@ async function fixture() {
     original.set(method, (db as any)[method]);
     (db as any)[method] = (database as any)[method].bind(database);
   }
+  const { inboxSendRuntime }=await import("../server/inboxDispatchFence");
+  const originalFence=inboxSendRuntime.withFence;
+  inboxSendRuntime.withFence=async(_key,work)=>work();
   const { storage } = await import("../server/storage");
   const { setupAuth, authenticatePresenceRequest } = await import("../server/auth");
   const { setupPresenceServer, notifyUser } = await import("../server/presence");
@@ -102,6 +107,12 @@ async function fixture() {
   };
   const request = async (actor: string, path: string, method = "GET", body?: any, extra: Record<string, string> = {}) => {
     const cookie = cookies.get(actor) ?? await login(actor);
+    if(method==="POST"&&body&&!body.sendAttemptId&&(path.match(/^\/api\/contacts\/[^/]+\/send$/)||path==="/api/inbox/templates/send")){
+      const id=path.startsWith("/api/contacts/")?path.split("/")[3]:body.contactId;
+      let state:any={revision:"0/-",aiEpoch:0};
+      if(id){const response=await fetch(origin+`/api/contacts/${id}/reply-state`,{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify({channel:body.channel||"whatsapp"})});if(response.ok)state=await response.json();}
+      body={...body,sendAttemptId:randomUUID(),replyRevision:state.revision,aiEpoch:state.aiEpoch,...(body.channel!=="email"&&state.conversationId?{conversationId:state.conversationId}:{})};
+    }
     return fetch(origin + path, { method, headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
   };
   async function socket(actor?: string, extra: Record<string, string> = {}) {
@@ -117,6 +128,7 @@ async function fixture() {
       sockets.forEach(ws => ws.terminate());
       await new Promise<void>(resolve => wss.close(() => resolve()));
       await new Promise<void>(resolve => server.close(() => resolve()));
+      inboxSendRuntime.withFence=originalFence;
       for (const [method, value] of original) (db as any)[method] = value;
       await pg.close();
     },
@@ -127,7 +139,7 @@ async function until(predicate: () => boolean) {
   while (!predicate()) { if (Date.now() > deadline) throw new Error("Timed out waiting for server result"); await new Promise(r => setTimeout(r, 5)); }
 }
 
-test("Inbox team security through real session-backed HTTP, WebSockets and SQL", { timeout: 60_000 }, async t => {
+test("Inbox team security through real session-backed HTTP, WebSockets and SQL", { timeout: 120_000 }, async t => {
   const f = await fixture();
   try {
     await t.test("owner access and a linked active teammate share the Inbox without foreign tenant rows", async () => {
@@ -201,6 +213,14 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.equal((await f.request("owner-b","/api/conversations/conv-a/messages")).status,404);
       await f.database.delete(schema.messages).where(inArray(schema.messages.id,["known-human","known-ai","historical","foreign-actor"]));
     });
+    await t.test("HTTP sends require a draft revision and reject stale or foreign reply context", async () => {
+      const cookie=await f.login("agent");
+      const send=async(body:any)=>fetch(f.origin+"/api/contacts/contact-a/send",{method:"POST",headers:{Cookie:cookie,"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const missing=await send({content:"Unsynchronized reply",channel:"sms"});assert.equal(missing.status,428);assert.equal((await missing.json()).code,"reply_context_required");
+      const stale=await send({content:"Preserved draft",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"stale",conversationId:"conv-a"});assert.equal(stale.status,409);assert.equal((await stale.json()).code,"reply_conflict");
+      const foreign=await send({content:"Wrong room",channel:"sms",sendAttemptId:randomUUID(),replyRevision:"0/-",conversationId:"conv-b"});assert.equal(foreign.status,404);
+      assert.equal((await f.request("owner-b","/api/contacts/contact-a/reply-state","POST",{channel:"sms",conversationId:"conv-a"})).status,404);
+    });
     await t.test("actual persistence keeps teammate/AI metadata across all seven channel paths", async () => {
       const { channelService }=await import("../server/channelService");
       const { gmailEmailProvider }=await import("../server/emailChannel/gmailProvider");
@@ -229,6 +249,8 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
           assert.equal(payload.find((m:any)=>m.id===row.id).sender.id,"agent");
         }
         // Native email automation must not invent the workspace owner as the human sender.
+        const emailConv=await f.storage.getConversationByContactAndChannel("send-target","email");
+        if(emailConv)await f.storage.updateConversation(emailConv.id,{aiControl:{paused:false,generationEpoch:100,generationLease:null}});
         const ai=await channelService.sendMessage({userId:"owner-a",contactId:"send-target",forceChannel:"email",content:"AI email",generatedBy:"ai_brain",emailRich:{mailboxId:"shared-mailbox",replyMode:"new",subject:"AI reply"}});
         assert.equal(ai.success,true,ai.error);
         const [row]=await f.database.select().from(schema.messages).where(eq(schema.messages.id,ai.messageId!));
@@ -330,6 +352,10 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       assert.ok(!contact.conversations.some((c: any)=>c.id==="foreign-child"));
       const messages=await (await f.request("agent","/api/conversations/conv-a/messages")).json();
       assert.ok(!messages.some((m: any)=>m.id==="foreign-message"));
+      await f.database.insert(schema.messages).values({id:"foreign-outbound",userId:"owner-b",contactId:"contact-a",conversationId:"conv-a",direction:"outbound",content:"Private foreign reply"});
+      const state=await (await f.request("agent","/api/contacts/contact-a/reply-state","POST",{channel:"sms",conversationId:"conv-a"})).json();
+      assert.ok(!JSON.stringify(state).includes("Private foreign reply"));
+      assert.notEqual(state.latestMessageId,"foreign-outbound");
       assert.equal((await f.request("agent","/api/media/proxy?messageId=foreign-message")).status,404);
       const inbox=await (await f.request("agent","/api/inbox")).json();
       assert.ok(!JSON.stringify(inbox).includes("foreign-child"));
@@ -407,6 +433,24 @@ test("Inbox team security through real session-backed HTTP, WebSockets and SQL",
       forged.send({type:"auth",userId:"owner-b"}); assert.equal((await closed)[0],1008);
       const workspaceForgery=await f.socket("agent");const workspaceClosed=once(workspaceForgery.ws,"close");
       workspaceForgery.send({type:"auth",workspaceId:"owner-b"});assert.equal((await workspaceClosed)[0],1008);
+    });
+    await t.test("presence aggregates tabs and typing expires without a stop frame", async () => {
+      await f.database.insert(schema.conversations).values({id:"conv-presence",userId:"owner-a",contactId:"contact-a",channel:"sms"});
+      const owner=await f.socket("owner-a"), first=await f.socket("agent"),second=await f.socket("agent");
+      for(const socket of [owner,first,second])socket.send({type:"join_chat",chatId:"conv-presence"});
+      const viewers=()=>owner.messages.filter(m=>m.type==="presence_update"&&m.chatId==="conv-presence").at(-1)?.viewers||[];
+      await until(()=>viewers().length===2);
+      assert.equal(viewers().filter((v:any)=>v.userId==="agent").length,1);
+      first.send({type:"typing",chatId:"conv-presence"});second.send({type:"typing",chatId:"conv-presence"});
+      await until(()=>viewers().find((v:any)=>v.userId==="agent")?.isTyping===true);
+      first.send({type:"stop_typing",chatId:"conv-presence"});first.send({type:"heartbeat"});await until(()=>first.messages.some(m=>m.type==="heartbeat_ack"));
+      assert.equal(viewers().find((v:any)=>v.userId==="agent")?.isTyping,true);
+      await new Promise(resolve=>setTimeout(resolve,5700));
+      await until(()=>viewers().find((v:any)=>v.userId==="agent")?.isTyping===false);
+      first.ws.close();await once(first.ws,"close");
+      assert.equal(viewers().filter((v:any)=>v.userId==="agent").length,1);
+      second.ws.close();await once(second.ws,"close");await until(()=>!viewers().some((v:any)=>v.userId==="agent"));
+      owner.ws.close();await once(owner.ws,"close");
     });
     await t.test("socket sessions cannot retain the old user after Passport identity is removed", async () => {
       const socket=await f.socket("admin");const closed=once(socket.ws,"close");

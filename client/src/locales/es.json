@@ -1890,5 +1890,14 @@
     "empty_filtered": "No hay conversaciones coincidentes",
     "empty_empty": "Todavía no hay conversaciones",
     "assignmentFailed": "No se pudo actualizar la asignación. Actualiza e inténtalo de nuevo."
+  },
+  "inboxCollaboration": {
+    "replying": "{{name}} está respondiendo…",
+    "viewing": "{{name}} está viendo la conversación",
+    "review": "Revisar la última respuesta",
+    "conflict": "Llegó o comenzó otra respuesta mientras escribías. Tu borrador está guardado. Revisa la actividad reciente antes de enviar.",
+    "busy": "Se está enviando otra respuesta. Tu borrador está guardado. Espera el resultado y revisa la conversación.",
+    "unknown": "No se puede confirmar la entrega. Tu borrador está guardado. No reenvíes esta respuesta hasta verificar la entrega. Revisa la conversación antes de enviar otra respuesta distinta.",
+    "reviewed": "Actividad reciente revisada. Puedes enviar cuando estés listo; una respuesta más reciente detendrá el envío."
   }
 }

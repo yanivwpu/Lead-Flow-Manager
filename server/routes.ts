@@ -1,3 +1,5 @@
+import { replyState } from "./inboxSendCoordination";
+import { registerInboxSendStateRoutes } from "./routes/inboxSendState";
 import { inboxTeamProfiles } from "./inboxTeamProfiles";
 import { inboxContentReadLimiter } from "./inboxContentRateLimit";
 import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
@@ -557,6 +559,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerInboxWorkspaceRoutes(app);
+  registerInboxSendStateRoutes(app);
   registerTeamInvitationRoutes(app);
   registerMarketingComplianceRoutes(app);
   registerSeoIntelligenceRoutes(app, requireSalesAdmin);
@@ -11381,6 +11384,7 @@ export async function registerRoutes(
       let contactCustomFieldsForGate: unknown = null;
       let contactWebchatContextForGate: unknown = null;
       let conversationAiControlForGate: unknown = null;
+      let autoSendContext: {sendAttemptId:string;replyRevision:string;aiEpoch:number}|undefined;
       let contactWebchatIdForGate = "";
       const resolvedConversationId =
         typeof chatId === "string" && chatId.trim() ? chatId.trim() : null;
@@ -11392,6 +11396,10 @@ export async function registerRoutes(
         }
         resolvedContactId = convOwned.contactId;
         conversationAiControlForGate = convOwned.aiControl;
+        if(requestedMode==="auto"&&autoDispatch===true){
+          const state=await replyState({workspaceId:userId,contactId:convOwned.contactId,channel:convOwned.channel,conversationId:convOwned.id});
+          autoSendContext={sendAttemptId:crypto.randomUUID(),replyRevision:state.revision,aiEpoch:Number((convOwned.aiControl as any)?.generationEpoch||0)};
+        }
       }
       if (resolvedContactId) {
         const contactOwned = await getContactForWorkspace(userId, resolvedContactId);
@@ -12250,6 +12258,7 @@ export async function registerRoutes(
         autoSendAllowed,
         autoSendReason,
         autoSendIdempotencyKey,
+        autoSendContext,
         requiresPaymentLinkApproval: Boolean(suggestion.requiresPaymentLinkApproval),
         paymentLinkApprovalReason: suggestion.paymentLinkApprovalReason,
         contactId: resolvedContactId,

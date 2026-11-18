@@ -1,3 +1,4 @@
+import { coordinatedSend, insideCoordinatedSend, beforeInboxProviderDispatch } from "./inboxSendCoordination";
 import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
@@ -662,6 +663,9 @@ class ChannelService {
       await subscriptionService.incrementConversationUsage(userId);
     }
 
+    if (!insideCoordinatedSend()) {
+      return coordinatedSend({ workspaceId:userId,contactId,channel:targetChannel,conversationId:conversation.id,actorId:sentByUserId,ai:generatedBy==="ai_brain",leaseId:typeof generationMeta?.leaseId==="string"?generationMeta.leaseId:undefined,payload:{content,contentType,mediaUrl,templateVariables,emailRich} },()=>this.sendMessage(params));
+    }
     if (enforceWhatsAppCustomerServiceWindow === true && targetChannel === 'whatsapp') {
       const waWin = this.assertWhatsAppInboxCustomerServiceWindow(conversation);
       if (!waWin.ok) {
@@ -772,14 +776,20 @@ class ChannelService {
       ...(templateVariables ? { templateVariables } : {}),
     });
 
-    const sendResult = await this.dispatchMessage(userId, targetChannel, {
+    let sendResult: Awaited<ReturnType<ChannelService["dispatchMessage"]>>;
+    try {
+      sendResult = await this.dispatchMessage(userId, targetChannel, {
       contactId,
       conversationId: conversation.id,
       content,
       contentType,
       mediaUrl,
       mediaFilename,
-    });
+      });
+    } catch(error) {
+      await storage.updateMessage(message.id,{status:"failed",errorMessage:"Send stopped before completion"});
+      throw error;
+    }
 
     const preview = content || (mediaUrl ? mediaPreviewLabel(contentType) : '');
 
@@ -999,6 +1009,7 @@ class ChannelService {
     if (contactHasDoNotContact(freshContact).blocked || await isContactDurablySuppressed(freshContact, channel)) return { success: false, error: "Recipient opted out" };
     const adapter = this.adapters.get(channel);
     if (adapter) {
+      await beforeInboxProviderDispatch();
       return adapter.send(params);
     }
 
