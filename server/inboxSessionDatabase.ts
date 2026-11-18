@@ -1,10 +1,7 @@
 /** Session locks and LISTEN must bypass Neon's transaction pooler. Normal ORM
  * traffic continues to use DATABASE_URL. No new database or credential is created. */
 export function inboxSessionDatabaseUrl(
-  env: Pick<
-    NodeJS.ProcessEnv,
-    "DATABASE_URL" | "DATABASE_URL_UNPOOLED"
-  > = process.env,
+  env: NodeJS.ProcessEnv = process.env,
 ): string {
   const configured =
     env.DATABASE_URL_UNPOOLED?.trim() || env.DATABASE_URL?.trim();

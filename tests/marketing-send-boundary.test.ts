@@ -11,6 +11,9 @@ const state = { durableGlobal: false, calls: [] as any[], contact: { id: "c", us
 try {
   const output = join(scratch, "send.mjs");
   await build({ entryPoints: ["server/emailChannel/sendService.ts"], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", plugins: [{ name: "fixtures", setup(b) {
+    // Dispatch coordination is exercised with actual PostgreSQL in inbox-collaboration-postgres.
+    // This fixture isolates email compliance/storage/provider behavior and must never open a socket.
+    b.onLoad({filter:/[/\\]inboxSendCoordination\.ts$/},()=>({loader:"ts",contents:"export function insideCoordinatedSend(){return true};export async function beforeInboxProviderDispatch(){};export async function coordinatedSend(input,send){return send()}"}));
     b.onLoad({ filter: /[/\\]server[/\\]storage\.ts$/ }, () => ({ loader: "ts", contents: `export const storage={getContact:async()=>globalThis.__sendBoundary.contact,createConversation:async()=>({id:'conv'}),createMessage:async()=>({id:'msg'}),updateMessage:async()=>{},updateConversation:async()=>{},createActivityEvent:async()=>{}};` }));
     b.onLoad({ filter: /[/\\]presence\.ts$/ }, () => ({ loader: "ts", contents: "export function notifyUser(){}" }));
     b.onLoad({ filter: /[/\\]mailboxStore\.ts$/ }, () => ({ loader: "ts", contents: `export async function getEmailMailboxById(){return {id:'m',workspaceUserId:'w',emailAddress:'sender@example.com',provider:'gmail'}};export async function insertEmailMessageDetail(){};export async function updateEmailMailbox(){};export async function incrementEmailSendCounters(){};export async function getEmailMessageDetail(){return null};export async function updateEmailMessageBodies(){}` }));

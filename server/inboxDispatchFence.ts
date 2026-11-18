@@ -2,12 +2,15 @@ import { inboxSessionDatabaseUrl } from "./inboxSessionDatabase";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool } from "pg";
 
-const locks = new Pool({
-  connectionString: inboxSessionDatabaseUrl(),
-  max: 4,
-  connectionTimeoutMillis: 3000,
-  idleTimeoutMillis: 10000,
-});
+let locks: Pool | undefined;
+function lockPool() {
+  return (locks ||= new Pool({
+    connectionString: inboxSessionDatabaseUrl(),
+    max: 4,
+    connectionTimeoutMillis: 3000,
+    idleTimeoutMillis: 10000,
+  }));
+}
 const held = new AsyncLocalStorage<{ key: string; alive: boolean }>();
 export class InboxCoordinationError extends Error {
   constructor(
@@ -27,7 +30,7 @@ async function postgresFence<T>(
     assertInboxFence();
     return work();
   }
-  const client = await locks.connect();
+  const client = await lockPool().connect();
   let acquired = false;
   const state = { key, alive: true };
   const lost = () => {
@@ -83,5 +86,5 @@ export function inboxScope(input: {
     : `contact:${input.contactId}:${input.channel}`;
 }
 export function closeInboxDispatchPool() {
-  return locks.end();
+  return locks?.end() || Promise.resolve();
 }
