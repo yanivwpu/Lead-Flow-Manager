@@ -1,5 +1,45 @@
 # Shopify expiring offline tokens — issue #269
 
+> **Nov 18, 2026 closeout update (post-implementation; this section supersedes the historical
+> pre-pilot compatibility notes below):** Sixteen past test/release steps have already been
+> accepted; do not rerun commerce or customer messaging tests to validate token migration.
+> Seven actual token-bearing installations now hold encrypted expiring offline pairs
+> (5 external, 2 internal). New installs acquire expiring pairs. Four legacy references
+> remain: `jackson-k21cqkg3.myshopify.com`, `nq3edt-00.myshopify.com`, and
+> `pawpetshop-3zywwhm0.myshopify.com` failed read-only provider identity preflight
+> and have expired WhachatCRM trials; `1upnji-5b.myshopify.com` requested account
+> deletion. Shopify dashboard lists Jackson on Basic, My Store 3 as Frozen,
+> Pawpetshop's plan as —, and Frosch Chile on Basic; **plan/trial status alone is not proof
+> of Shopify app uninstall or store closure**. No forced exchange or credential deletion.
+>
+> **Source of lingering deprecation traffic:** Shopify's last-seven-day log (filtered
+> GraphQL request / Offline, non-expiring) shows repeated
+> `shopifyAppInstallationScopes` and `listWebhookSubscriptions` calls for blocked
+> shops, matching `runShopifyWebhookStartupAudit()` which historically enumerated
+> all token-bearing user rows. Other background routes also used the shared
+> `resolveOfflineAccessToken` legacy-pass-through. This focused remediation:
+> (1) startup/dashboard webhook-health audit selects only migrated opaque references
+> with no account deletion, and (2) the shared production Admin SDK/HTTP resolver
+> **fails closed** with `reauthorization_required` instead of returning a legacy
+> non-expiring token. It does not alter token rows, access/refresh rotation, billing,
+> customer data, installs, scopes, WhatsApp messages or send gates. Returning older
+> merchants need a fresh expiring authorization before Admin API operations.
+>
+> **Manual operators after this safety release:** Legacy identity preflight helpers
+> that use the ordinary resolver will also fail closed; do not run them as a
+> workaround. A new/manual legacy exchange, if ever needed, requires separate
+> narrowly reviewed authorization/tooling and a verified Shopify app identity.
+>
+> **Acceptance evidence:** GitHub CI native PostgreSQL tests + Shopify onboarding,
+> privacy and e-commerce build; successful Railway deploy; existing seven active
+> pairs intact; inspect Shopify GraphQL and REST logs **after the deploy time** for
+> `Offline, non-expiring` requests, excluding deliberate past migrations/preflights.
+> Shopify documentation says deprecation warnings clear 14 days after the app's last
+> non-expiring Admin API request. Do not enable Shopify's stricter
+> `Expiring tokens only` switch or close #269 until these checks pass.
+> Source: https://shopify.dev/docs/apps/build/dev-dashboard/monitoring-and-logs .
+>
+
 This PR is code and review material only. It does not apply a production schema migration, exchange a merchant token, reconnect a store, change an app version/subscription, merge, deploy, or enable WhatsApp/customer delivery.
 
 ## Audit and evidence
