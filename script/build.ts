@@ -89,6 +89,14 @@ async function buildAll() {
     external: externals, logLevel: "info",
   });
 
+  // Explicit operator for small, owner-approved merchant cohorts. Never run on startup.
+  await esbuild({
+    entryPoints: ["scripts/shopify-offline-merchant-cohort.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-offline-merchant-cohort.cjs",
+    external: externals, logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],
