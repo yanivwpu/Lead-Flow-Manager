@@ -9,7 +9,7 @@ function ensure(ok,reason){if(!ok){const e=new Error(reason);e.safeReason=reason
 (async()=>{
  try{
   ensure(env.RAILWAY_PROJECT_ID==='2adeea49-431c-4ddf-8815-9ce89af66f32' && env.RAILWAY_ENVIRONMENT_ID==='fa2e8c30-72ea-4688-877f-4a68e24198bc' && env.RAILWAY_SERVICE_ID==='a7b75139-5bf8-4a02-b4ab-b7d12e17e770' && !!env.RAILWAY_DEPLOYMENT_ID,'wrong_or_unattested_runtime');
-  ensure(env.RAILWAY_GIT_COMMIT_SHA==='6f3212fd4340803cb15ca6412a145349f82acc6d','production_commit_changed_recheck_required');
+  ensure(/^[a-f0-9]{40}$/.test(env.RAILWAY_GIT_COMMIT_SHA||''),'unattested_runtime_commit');
   result.deploymentId=env.RAILWAY_DEPLOYMENT_ID;result.commit=env.RAILWAY_GIT_COMMIT_SHA;result.replicaId=env.RAILWAY_REPLICA_ID||null;
   ensure(!!env.REDIS_URL,'redis_url_absent');
   const Redis=req('ioredis');

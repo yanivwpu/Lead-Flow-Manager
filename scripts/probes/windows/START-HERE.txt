@@ -5,6 +5,6 @@ This is a NEW queue inventory, not a repeat of the passing database probe.
 3. Use your usual Railway browser sign-in if requested.
 4. Wait about 10 seconds, then paste the result line into the chat.
 
-Uses the same official Railway v5.75.0 utility and SHA-256 pins as the reviewed probe. No install, new SSH keys, deployments, production settings, customer data or queue changes. It reads only queue sizes twice. Credentials stay inside Railway. Strict project/environment/service AND current production commit checks apply. If production changed, it stops.
+Uses the same official Railway v5.75.0 utility and SHA-256 pins as the reviewed probe. No install, new SSH keys, deployments, production settings, customer data or queue changes. It reads only queue sizes twice. Credentials stay inside Railway. Strict project/environment/service checks apply. A valid Railway deployment and commit are required and reported, so this read-only check also works after the preparation release. Verify the reported deployment before using the counts.
 
 READ_COMPLETE means the inventory succeeded, NOT that Gate 2 passed. In-memory work and global draining still need verification. If ACCESS_NEEDED appears, stop and return that message.

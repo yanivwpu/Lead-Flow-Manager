@@ -16,10 +16,13 @@ async function probe(env:Record<string,string>){
 test('queue inventory uses only atomic read commands, exposes no credential, and changes no queues',async()=>{
  const r=await probe(safeEnv);assert.equal(r.value.result,'READ_COMPLETE');assert.equal(r.value.samples.length,2);assert.equal(r.commands.length,18);assert.equal(r.connections,1);assert.ok(!JSON.stringify(r.value).includes('never-print-this'));
 });
-test('wrong service or unexpected production commit fails before Redis connects',async()=>{
- for(const env of [{...safeEnv,RAILWAY_SERVICE_ID:'other'},{...safeEnv,RAILWAY_GIT_COMMIT_SHA:'changed'}]){
+test('wrong service or missing runtime commit fails before Redis connects',async()=>{
+ for(const env of [{...safeEnv,RAILWAY_SERVICE_ID:'other'},{...safeEnv,RAILWAY_GIT_COMMIT_SHA:''}]){
   const r=await probe(env);assert.equal(r.value.result,'FAIL');assert.equal(r.connections,0);assert.equal(r.commands.length,0);
  }
+});
+test('the same read-only probe supports a verified preparation deployment without stale commit pins',async()=>{
+ const r=await probe({...safeEnv,RAILWAY_GIT_COMMIT_SHA:'a'.repeat(40)});assert.equal(r.value.result,'READ_COMPLETE');assert.equal(r.value.commit,'a'.repeat(40));
 });
 test('Windows launcher keeps official release checksums and strict runtime/result guards',async()=>{
  const ps=await readFile(new URL('../scripts/probes/windows/Run-Probe.ps1',import.meta.url),'utf8');
