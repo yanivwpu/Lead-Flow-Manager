@@ -71,7 +71,7 @@ export async function replyState(
     .orderBy(desc(inboxSendAttempts.sequence))
     .limit(1);
   const [last] = await db
-    .select({ id: messages.id })
+    .select({ id: messages.id, createdAt: messages.createdAt, generatedBy: messages.generatedBy })
     .from(messages)
     .where(
       and(
@@ -92,6 +92,7 @@ export async function replyState(
     revision: `${attempt?.sequence || 0}/${last?.id || "-"}`,
     uncertain: attempt?.state === "unknown",
     latestMessageId: last?.id || null,
+    latestReply: last || null,
   };
 }
 async function currentConversation(target: SendTarget) {
@@ -225,7 +226,7 @@ export async function coordinatedSend<
         throw new InboxCoordinationError("conversation_unavailable", 404);
       const state = await replyState(input, scope);
       if (input.revision !== undefined && input.revision !== state.revision)
-        throw new InboxCoordinationError("reply_conflict", 409, state);
+        throw new InboxCoordinationError(input.revision === "unobserved" ? "reply_state_unavailable" : "reply_conflict", 409, state);
       await db
         .update(inboxSendAttempts)
         .set({ state: "unknown", updatedAt: new Date() })

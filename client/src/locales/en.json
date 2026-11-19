@@ -1962,6 +1962,10 @@
     "assignmentFailed": "Could not update assignment. Refresh and try again."
   },
   "inboxCollaboration": {
+    "stateUnavailable": "The reply state was not available when this draft started. Your draft is saved. Review the conversation before sending.",
+    "latestReply": "Latest {{kind}}: {{time}}",
+    "aiReply": "AI reply",
+    "reply": "reply",
     "replying": "{{name}} is replying…",
     "viewing": "{{name}} is viewing",
     "review": "Review latest reply",

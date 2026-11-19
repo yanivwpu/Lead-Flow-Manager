@@ -160,6 +160,24 @@ test(
         ...extra,
       });
       let sent: any, first: any;
+      await t.test('historical Web Chat reply and teammate typing do not collide; missing baseline is identified separately', async()=>{
+        await pool.query("INSERT INTO contacts(id,user_id,name,primary_channel) VALUES ('history-customer','owner','History fixture','webchat')");
+        await pool.query("INSERT INTO conversations(id,user_id,contact_id,channel) VALUES ('history-chat','owner','history-customer','webchat')");
+        await pool.query("INSERT INTO messages(id,user_id,contact_id,conversation_id,direction,status,content,generated_by,created_at) VALUES ('historical-reply','owner','history-customer','history-chat','outbound','sent','Historical fixture','human',now()-interval '1 day')");
+        const history={workspaceId:'owner',contactId:'history-customer',channel:'webchat',conversationId:'history-chat'};
+        const baseline=await replyState(history);
+        assert.equal(baseline.revision,'0/historical-reply');
+        await pool.query("INSERT INTO inbox_presence_sessions(id,workspace_id,actor_id,room_id,expires_at,typing_until) VALUES ('view-owner','owner','owner','history-chat',now()+interval '45 seconds',null),('typing-support','owner','support','history-chat',now()+interval '45 seconds',now()+interval '5 seconds')");
+        assert.deepEqual(await replyState(history),baseline);
+        const {coordinatedSend}=await import('../server/inboxSendCoordination');
+        let dispatches=0;
+        await assert.rejects(coordinatedSend({...history,actorId:'support',attemptId:randomUUID(),revision:'unobserved',payload:{content:'Retained draft'}},async()=>{dispatches++;return {success:true};}), (error:any)=>{
+          assert.equal(error.code,'reply_state_unavailable');assert.equal(error.details.latestReply.id,'historical-reply');return true;
+        });
+        assert.equal(dispatches,0);
+        await coordinatedSend({...history,actorId:'support',attemptId:randomUUID(),revision:baseline.revision,payload:{content:'Retained draft'}},async()=>{dispatches++;return {success:true};});
+        assert.equal(dispatches,1);
+      });
       await t.test(
         "PostgreSQL transactions enforce one active claim even without the application fence",
         async () => {
@@ -543,6 +561,7 @@ test(
           const owner = await socket(sa.port, "owner"),
             support = await socket(sb.port, "support"),
             outsider = await socket(sb.port, "outsider");
+          const presenceBaseline = await replyState(target);
           try {
             owner.ws.send(JSON.stringify({ type: "join_chat", chatId: "sms" }));
             support.ws.send(
@@ -583,6 +602,7 @@ test(
               );
               throw error;
             }
+            assert.deepEqual(await replyState(target), presenceBaseline);
             outsider.ws.send(
               JSON.stringify({ type: "join_chat", chatId: "sms" }),
             );

@@ -1969,6 +1969,10 @@
     "assignmentFailed": "לא ניתן לעדכן את ההקצאה. יש לרענן ולנסות שוב."
   },
   "inboxCollaboration": {
+    "stateUnavailable": "מצב התשובות לא היה זמין בתחילת כתיבת הטיוטה. הטיוטה נשמרה. יש לבדוק את השיחה לפני השליחה.",
+    "latestReply": "{{kind}} אחרונה: {{time}}",
+    "aiReply": "תשובת AI",
+    "reply": "תשובה",
     "replying": "{{name}} משיב/ה…",
     "viewing": "{{name}} צופה בשיחה",
     "review": "בדיקת התשובה האחרונה",

@@ -1,5 +1,5 @@
 import { InboxReplyConflict } from "@/components/InboxReplyConflict";
-import { useInboxDraftClaim, type ReplySnapshot } from "@/lib/useInboxCollaboration";
+import { useInboxDraftClaim, useInboxReplySnapshot, replySnapshotKey } from "@/lib/useInboxCollaboration";
 import { AssigneeAvatar } from "@/components/InboxAssignmentControl";
 import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
 import { belongsInInboxTab, inboxEmptyKind, type ReplySender } from "@shared/inboxTeam";
@@ -541,7 +541,6 @@ export function UnifiedInbox() {
   const searchString = useSearch();
   const { user, sessionAligned } = useAuth();
   const { t } = useTranslation();
-  const replySnapshots=useRef(new Map<string,ReplySnapshot>());
   const presenceSocket=useRef<WebSocket|null>(null);
   const presenceRoom=useRef<string|null>(null);
   const activityTimers=useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -1555,11 +1554,13 @@ export function UnifiedInbox() {
       const res=await fetch(`/api/conversations/${id}/messages`,{credentials:"include",cache:"no-store",signal});
       if(!res.ok)throw new Error("Could not load conversation");
       const revision=res.headers.get("X-Inbox-Reply-Revision");
-      if(revision)replySnapshots.current.set(id,{revision,aiEpoch:Number(res.headers.get("X-Inbox-Ai-Epoch")||0)});
-      return res.json();
+      const payload = await res.json();
+      if(revision)queryClient.setQueryData(replySnapshotKey(id),{revision,aiEpoch:Number(res.headers.get("X-Inbox-Ai-Epoch")||0)});
+      return payload;
     },
     enabled: messagesEnabled,
     staleTime: 8_000,
+    refetchOnMount: "always",
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : presenceSocket.current?.readyState===WebSocket.OPEN ? 30_000 : 10_000,
     refetchIntervalInBackground: true,
@@ -1574,13 +1575,15 @@ export function UnifiedInbox() {
   }, [forceNewEmailCompose, messagesEnabled, activeConversationId, messagesQueryData]);
 
   const collaborationScope=activeChannel==="email"?`${composerScopeKey}:email:${forceNewEmailCompose?"new":selectedConversationId||"primary"}`:composerScopeKey;
-  const collaboration=useInboxDraftClaim({actorId:user?.id,scope:collaborationScope,text:messageInput,conversationId:forceNewEmailCompose?null:activeConversationId,getSnapshot:()=>activeConversationId?replySnapshots.current.get(activeConversationId):{revision:"0/-",aiEpoch:0}});
+  const replySnapshot = useInboxReplySnapshot(activeConversationId);
+  const replyStateReady = forceNewEmailCompose || !activeConversationId || Boolean(replySnapshot);
+  const collaboration=useInboxDraftClaim({actorId:user?.id,scope:collaborationScope,text:messageInput,conversationId:forceNewEmailCompose?null:activeConversationId,snapshot:forceNewEmailCompose?undefined:replySnapshot});
   useEffect(()=>{
     const id=activeConversationId||null;presenceRoom.current=id;setTeammateActivity([]);
     const ws=presenceSocket.current;if(ws?.readyState===WebSocket.OPEN&&id)ws.send(JSON.stringify({type:"join_chat",chatId:id}));
     return()=>{if(ws?.readyState===WebSocket.OPEN&&id)ws.send(JSON.stringify({type:"leave_chat",chatId:id}));};
   },[activeConversationId]);
-  useEffect(()=>{if(showTemplatePicker)collaboration.prepare("");},[showTemplatePicker]);
+  useEffect(()=>{if(showTemplatePicker&&replyStateReady)collaboration.prepare("");},[showTemplatePicker,replyStateReady]);
   const typingLastSent=useRef(0);
   useEffect(()=>{
     const ws=presenceSocket.current,id=activeConversationId;
@@ -2272,7 +2275,7 @@ export function UnifiedInbox() {
     onError: (error: Error, data, context) => {
       const code=(error as any).sendPayload?.code;
       if(code){
-        if(data.coordination?.storageKey===collaboration.storageKey||data.source==="ai_auto"&&data.coordination?.conversationId===activeConversationId)collaboration.setConflict(code);
+        if(data.coordination?.storageKey===collaboration.storageKey||!data.coordination&&code==="reply_state_unavailable"||data.source==="ai_auto"&&data.coordination?.conversationId===activeConversationId)collaboration.setConflict(code,(error as any).sendPayload?.latestReply);
         if(context?.conversationId&&context.previousMessages!==undefined)queryClient.setQueryData(["/api/conversations",context.conversationId,"messages"],context.previousMessages);
         return;
       }
@@ -3019,7 +3022,7 @@ export function UnifiedInbox() {
         })}`
       );
       const res=await fetch("/api/inbox/templates/send",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      const result=await res.json();if(!res.ok||!result.success){if(result.code)collaboration.setConflict(result.code);throw new Error(result.code||result.error||"Send failed");}return result;
+      const result=await res.json();if(!res.ok||!result.success){if(result.code)collaboration.setConflict(result.code,result.latestReply);throw new Error(result.code||result.error||"Send failed");}return result;
     },
     onSuccess: async (data) => {
       collaboration.sent();
@@ -4860,7 +4863,7 @@ export function UnifiedInbox() {
             {/* Composer — Meta reply-window + AI notices merge into one chip bar inside AIComposer */}
             <div className="px-3" aria-live="polite">
               {teammateActivity.length>0&&<div className="flex flex-wrap items-center gap-2 py-1 text-xs text-slate-500" data-testid="inbox-teammate-activity">{teammateActivity.map(v=><span key={v.userId} className="inline-flex items-center gap-1"><ChatAvatar src={v.avatarUrl} name={v.userName} size="sm" className="h-5 w-5 text-[9px]" />{t(v.isTyping?"inboxCollaboration.replying":"inboxCollaboration.viewing",{name:v.userName})}</span>)}</div>}
-              <InboxReplyConflict code={collaboration.conflict} onReview={()=>void reviewLatestReply()} />
+              <InboxReplyConflict code={collaboration.conflict} latestReply={collaboration.latestReply} onReview={()=>void reviewLatestReply()} />
             </div>
             <AIComposer
               key={
@@ -4882,6 +4885,7 @@ export function UnifiedInbox() {
               contactContext={contactContext}
               conversationId={hasConversation ? (primaryConversation?.id ?? null) : null}
               messagesReady={Boolean(hasConversation && !messagesLoading)}
+              replyStateReady={replyStateReady}
               channel={isEmailChannel ? "email" : activeChannel}
               className={isEmailChannel ? "border-t border-gray-200 data-[composer-layout=email]:bg-white" : undefined}
               messages={
@@ -5222,7 +5226,7 @@ export function UnifiedInbox() {
               </p>
             ) : null}
           </DialogHeader>
-          <InboxReplyConflict code={collaboration.conflict} onReview={()=>void reviewLatestReply()} />
+          <InboxReplyConflict code={collaboration.conflict} latestReply={collaboration.latestReply} onReview={()=>void reviewLatestReply()} />
           {!selectedInboxTemplate ? (
             <div className="flex flex-col gap-3">
               <Input

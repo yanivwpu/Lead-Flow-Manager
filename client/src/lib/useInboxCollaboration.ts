@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+export type ReplyActivity = { id: string; createdAt: string; generatedBy?: string | null };
 export type ReplySnapshot = { revision: string; aiEpoch: number };
+export const replySnapshotKey = (id: string | null | undefined) => ["/api/conversations", id, "reply-snapshot"];
+export function useInboxReplySnapshot(id: string | null | undefined) {
+  return useQuery<ReplySnapshot>({ queryKey: replySnapshotKey(id), enabled: false }).data;
+}
 interface DraftClaim {
   sendAttemptId: string;
   replyRevision: string;
@@ -13,10 +19,15 @@ export function useInboxDraftClaim(input: {
   scope: string | null;
   text: string;
   conversationId?: string | null;
-  getSnapshot: () => ReplySnapshot | undefined;
+  snapshot: ReplySnapshot | undefined;
 }) {
   const claim = useRef<DraftClaim | null>(null);
-  const [conflict, setConflict] = useState<string | null>(null);
+  const [conflict, updateConflict] = useState<string | null>(null);
+  const [latestReply, setLatestReply] = useState<ReplyActivity | null>(null);
+  function setConflict(code: string | null, latest?: ReplyActivity) {
+    updateConflict(code);
+    setLatestReply(latest || null);
+  }
   const key =
     input.scope && input.actorId
       ? `inbox-claim:${input.actorId}:${input.scope}`
@@ -28,6 +39,12 @@ export function useInboxDraftClaim(input: {
         : null;
     } catch {
       claim.current = null;
+    }
+    // An abandoned, never-submitted claim is not a draft after an empty reload.
+    // Submitted claims retain their retry ID/revision even after an uncertain send.
+    if (!input.text && claim.current?.submittedText === undefined) {
+      claim.current = null;
+      if (key) try { sessionStorage.removeItem(key); } catch {}
     }
     setConflict(null);
   }, [key]);
@@ -43,12 +60,15 @@ export function useInboxDraftClaim(input: {
     if (!key) throw new Error("reply_context_required");
     let next = claim.current;
     if (!next || next.storageKey !== key) {
-      const snapshot = input.getSnapshot();
+      const snapshot = input.snapshot;
+      if (input.conversationId && !snapshot) {
+        throw Object.assign(new Error("reply_state_unavailable"), { sendPayload: { code: "reply_state_unavailable" } });
+      }
       next = {
         storageKey: key,
         sendAttemptId: crypto.randomUUID(),
         replyRevision:
-          snapshot?.revision || (input.conversationId ? "unobserved" : "0/-"),
+          snapshot?.revision || "0/-",
         aiEpoch: snapshot?.aiEpoch || 0,
       };
     }
@@ -65,16 +85,17 @@ export function useInboxDraftClaim(input: {
   }
   useEffect(() => {
     if (input.text && !claim.current && key) {
-      const snapshot = input.getSnapshot();
+      const snapshot = input.snapshot;
+      if (input.conversationId && !snapshot) return;
       save({
         storageKey: key,
         sendAttemptId: crypto.randomUUID(),
         replyRevision:
-          snapshot?.revision || (input.conversationId ? "unobserved" : "0/-"),
+          snapshot?.revision || "0/-",
         aiEpoch: snapshot?.aiEpoch || 0,
       });
     }
-  }, [input.text, key]);
+  }, [input.text, key, input.snapshot, input.conversationId]);
   function sent(attempt?: DraftClaim) {
     const k = attempt?.storageKey || key;
     if (k)
@@ -94,5 +115,5 @@ export function useInboxDraftClaim(input: {
     });
     setConflict("reviewed");
   }
-  return { prepare, sent, reviewed, conflict, setConflict, storageKey: key };
+  return { prepare, sent, reviewed, conflict, latestReply, setConflict, storageKey: key };
 }
