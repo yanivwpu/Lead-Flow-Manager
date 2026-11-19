@@ -1,5 +1,5 @@
-import { runTrackedWork } from '../runtimeDrain';
 import { sql, type SQL } from "drizzle-orm";
+import { runTrackedWork } from '../runtimeDrain';
 import { db } from "../../drizzle/db";
 import { normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone } from "./policy";
 

@@ -1,6 +1,6 @@
+import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
 import { runTrackedWork } from "./runtimeDrain";
 import { withInboundEvent, telegramInboundExternalId } from "./inboundDedup";
-import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";

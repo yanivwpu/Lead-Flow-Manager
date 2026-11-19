@@ -1,4 +1,3 @@
-import { runTrackedWork } from './runtimeDrain';
 /**
  * Unattended AI Brain replies for webchat (no Inbox client required).
  *
@@ -10,6 +9,7 @@ import { runTrackedWork } from './runtimeDrain';
  */
 
 import { randomUUID } from "crypto";
+import { runTrackedWork } from './runtimeDrain';
 import type { Contact, Conversation } from "@shared/schema";
 import { contactHasAutomationsPaused } from "@shared/contactAutomationsPause";
 import { isConversationHandoffActive } from "@shared/handoffActivity";

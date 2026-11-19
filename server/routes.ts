@@ -1,6 +1,6 @@
+import { inboxTeamProfiles } from "./inboxTeamProfiles";
 import { requireInboundPersistence } from './inboundAcknowledgment';
 import { withInboundEvent } from "./inboundDedup";
-import { inboxTeamProfiles } from "./inboxTeamProfiles";
 import { inboxContentReadLimiter } from "./inboxContentRateLimit";
 import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
 import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";

@@ -468,26 +468,6 @@ app.use((req, res, next) => {
   // land before workers or HTTP traffic SELECT contacts columns from shared/schema.
   const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
   const schemaPatches = await applyStartupSchemaPatches();
-  await ensureInboundDedupSchema(); // Fail closed before any worker can consume messages.
-  // Background BullMQ worker — only when REDIS_URL is configured (local may omit Redis).
-  if (isRedisUrlConfigured()) {
-    void runScheduledWork('startup-import', () => import("./worker")
-      .then((m) => m.startInboxWorker())
-      .catch((err) => {
-        console.error(
-          "[Worker] Failed to start background worker:",
-          err instanceof Error ? err.message : String(err),
-        );
-      }));
-  } else if (process.env.NODE_ENV === "production") {
-    console.error(
-      "[Worker] REDIS_URL not configured — background worker disabled (unexpected in production)",
-    );
-  } else {
-    console.warn("[Worker] REDIS_URL not configured — background worker disabled");
-  }
-
-
   try {
     const { backfillLegacyDefaultWidgetSettings } = await import("./widgetSettingsBackfill");
     await backfillLegacyDefaultWidgetSettings();
@@ -509,6 +489,26 @@ app.use((req, res, next) => {
       "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0102) — refusing to serve or schedule SEO automation",
     );
   }
+
+  await ensureInboundDedupSchema(); // Fail closed before any worker can consume messages.
+  // Background BullMQ worker — only when REDIS_URL is configured (local may omit Redis).
+  if (isRedisUrlConfigured()) {
+    void runScheduledWork('startup-import', () => import("./worker")
+      .then((m) => m.startInboxWorker())
+      .catch((err) => {
+        console.error(
+          "[Worker] Failed to start background worker:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }));
+  } else if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[Worker] REDIS_URL not configured — background worker disabled (unexpected in production)",
+    );
+  } else {
+    console.warn("[Worker] REDIS_URL not configured — background worker disabled");
+  }
+
 
   // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
   // Production always starts them. Local Inbox debugging skips unless opted in —

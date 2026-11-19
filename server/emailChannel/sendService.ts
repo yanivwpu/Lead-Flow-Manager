@@ -1,5 +1,5 @@
-import { runTrackedWork, runtimeDrain } from '../runtimeDrain';
 import { type EmailRichSendPayload, normalizeEmailAddress } from "@shared/emailChannel";
+import { runTrackedWork, runtimeDrain } from '../runtimeDrain';
 import { contactHasDoNotContact } from "../automationSendGuard";
 import { storage } from "../storage";
 import { notifyUser } from "../presence";
