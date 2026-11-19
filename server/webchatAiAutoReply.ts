@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 /**
  * Unattended AI Brain replies for webchat (no Inbox client required).
  *
@@ -321,6 +322,7 @@ export async function maybeRunWebchatServerAi(
   },
   deps: WebchatAiAutoReplyDeps = {},
 ): Promise<{ decision: string; sent: boolean }> {
+ return runTrackedWork("server/webchatAiAutoReply.ts:maybeRunWebchatServerAi", async () => {
   const timeoutMs = deps.timeoutMs ?? WEBCHAT_AI_GENERATION_TIMEOUT_MS;
   const generate = deps.generate ?? defaultGenerate;
   const leaseId = (deps.randomId ?? randomUUID)();
@@ -1184,4 +1186,6 @@ export async function maybeRunWebchatServerAi(
     ...gateDiagnostics,
   });
   return { decision, sent: true };
+
+ });
 }

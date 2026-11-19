@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from "../runtimeDrain";
 import {db} from '../../drizzle/db';
 import {customerPrivacyLocked} from '../shopifyPrivacyRequests';
 import {getMetaMessageTemplates} from '../userMeta';
@@ -12,8 +13,8 @@ export const postPurchasePreparation=createPostPurchasePreparation({
 export function startPostPurchasePreparation():null|(()=>void){
   if(!postPurchasePreparationEnabled(process.env))return null;
   let busy=false,stopped=false;
-  const timer=setInterval(()=>{if(busy||stopped)return;busy=true;
-    void postPurchasePreparation.tick().catch(()=>console.error('[PostPurchase] preparation_tick_failed')).finally(()=>{busy=false;});
+  const timer=setInterval(()=>{if(busy||stopped||runtimeDrain.isDraining)return;busy=true;
+    void runScheduledWork("postPurchasePreparation", () => postPurchasePreparation.tick()).catch(()=>console.error('[PostPurchase] preparation_tick_failed')).finally(()=>{busy=false;});
   },90_000);timer.unref?.();
   return ()=>{stopped=true;clearInterval(timer);};
 }

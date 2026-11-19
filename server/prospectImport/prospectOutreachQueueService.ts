@@ -1,3 +1,4 @@
+import { runtimeDrain } from "../runtimeDrain";
 import { queueDraftPreviewRevision } from "@shared/prospectBulkOutreach";
 /**
  * Durable channel-agnostic prospect outreach queue.
@@ -1369,6 +1370,7 @@ export async function retryFailedQueueItem(params: {
 export async function claimNextDueQueueItem(
   workspaceUserId: string,
 ): Promise<ProspectOutreachQueueItemRow | null> {
+    if (runtimeDrain.isDraining) return null;
   const settings = await getOutreachSettings(workspaceUserId);
   // Fail-closed: queueing alone must never send; Start arms queueRunning.
   if (!isProspectOutreachQueueArmed(settings)) return null;

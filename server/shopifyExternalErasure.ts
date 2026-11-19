@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import type { Pool } from "pg";
 import { randomUUID } from "node:crypto";
 import { db } from "../drizzle/db";
@@ -149,6 +150,7 @@ export function configuredPrivacyAlertSender(env = process.env) {
 }
 let tickRunning = false;
 export async function runShopifyPrivacyTick() {
+ return runTrackedWork("server/shopifyExternalErasure.ts:runShopifyPrivacyTick", async () => {
   if (tickRunning) return { ok: true, skipped: true };
   tickRunning = true;
   try {
@@ -161,6 +163,8 @@ export async function runShopifyPrivacyTick() {
     return { ok: true, skipped: false };
   } catch { console.error("[ShopifyPrivacy] worker_tick_failed"); return { ok: false, skipped: false }; }
   finally { tickRunning = false; }
+
+ });
 }
 export async function readPrivacyOperationsStatus() {
   const counts = await pool.query(`SELECT

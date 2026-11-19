@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain } from './runtimeDrain';
 import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError, readProviderDeliveryJson } from "./marketingCompliance/store";
 import crypto from "crypto";
 import { eq,sql } from "drizzle-orm";
@@ -477,6 +478,7 @@ export async function sendMetaWhatsAppMessage(
   toPhone: string,
   message: string
 ): Promise<{ messageId: string; status: string }> {
+ return runTrackedWork("server/userMeta.ts:sendMetaWhatsAppMessage", async () => {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
 
@@ -517,6 +519,8 @@ export async function sendMetaWhatsAppMessage(
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 
   };
+
+ });
 }
 
 export async function sendMetaWhatsAppMedia(
@@ -527,6 +531,7 @@ export async function sendMetaWhatsAppMedia(
   caption?: string,
   filename?: string
 ): Promise<{ messageId: string; status: string }> {
+ return runTrackedWork("server/userMeta.ts:sendMetaWhatsAppMedia", async () => {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
 
@@ -588,6 +593,8 @@ export async function sendMetaWhatsAppMedia(
     ` messageId=${messageId}`
   );
   return { messageId, status: "sent" };
+
+ });
 }
 
 function classifyGraphFetchFailure(err: unknown): "timeout" | "dns" | "connection" | "unknown_network" {
@@ -609,6 +616,7 @@ export async function sendMetaWhatsAppTemplate(
   components?: any[],
   options?: { signal?: AbortSignal; suppressionExecutor?: import("./marketingCompliance/store").MarketingBoundaryExecutor; authorizeDispatch?: () => boolean }
 ): Promise<{ messageId: string; status: string; httpStatus: number }> {
+ return runTrackedWork("server/userMeta.ts:sendMetaWhatsAppTemplate", async () => {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
 
@@ -777,6 +785,8 @@ export async function sendMetaWhatsAppTemplate(
     status: "sent",
     httpStatus,
   };
+
+ });
 }
 
 export async function sendMetaInteractiveMessage(
@@ -785,6 +795,7 @@ export async function sendMetaInteractiveMessage(
   interactiveType: "button" | "list" | "product" | "product_list",
   interactive: any
 ): Promise<{ messageId: string; status: string }> {
+ return runTrackedWork("server/userMeta.ts:sendMetaInteractiveMessage", async () => {
   const accessToken = await getMetaAccessToken(userId);
   const phoneNumberId = await getMetaPhoneNumberId(userId);
 
@@ -825,6 +836,8 @@ export async function sendMetaInteractiveMessage(
     messageId: result.messages?.[0]?.id || "", 
     status: "sent" 
   };
+
+ });
 }
 
 export async function markMessageAsRead(

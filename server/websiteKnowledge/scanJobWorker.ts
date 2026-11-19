@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 /**
  * DB-polled worker for AI Brain knowledge scan jobs.
  * Production entrypoint: `server/index.ts` calls `startKnowledgeScanWorker()` during boot.
@@ -18,6 +19,7 @@ let workerTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
 async function tick(): Promise<void> {
+ return runScheduledWork("server/websiteKnowledge/scanJobWorker.ts:tick", async () => {
   if (isRunning) return;
   isRunning = true;
   try {
@@ -33,6 +35,7 @@ async function tick(): Promise<void> {
       );
     }
 
+    if (runtimeDrain.isDraining) return;
     const job = await claimNextScanJob(workerId);
     if (!job) return;
 
@@ -57,15 +60,20 @@ async function tick(): Promise<void> {
   } finally {
     isRunning = false;
   }
+
+ });
 }
 
 function scheduleNext(): void {
+  if (runtimeDrain.isDraining) return;
   workerTimer = setTimeout(() => {
     void tick().finally(scheduleNext);
   }, POLL_INTERVAL_MS);
 }
 
 export function startKnowledgeScanWorker(): void {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register("startKnowledgeScanWorker", stopKnowledgeScanWorker);
   if (workerTimer) return;
   console.info("[KnowledgeScan] worker started", { workerId, pollIntervalMs: POLL_INTERVAL_MS });
   void tick().finally(scheduleNext);

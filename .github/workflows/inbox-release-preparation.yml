@@ -1,0 +1,75 @@
+name: Inbox release preparation
+on:
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'shared/schema.ts'
+      - 'client/src/lib/webchatOutbox.ts'
+      - 'client/src/pages/WidgetFrame.tsx'
+      - 'migrations/0028_messages_external_message_id_unique.sql'
+      - 'migrations/0113_inbound_receipt_keys.sql'
+      - 'tests/inbound-*'
+      - 'tests/runtime-drain*'
+      - 'tests/webchat-outbox*'
+      - 'tests/queue-inventory*'
+      - 'scripts/probes/**'
+      - 'scripts/build-queue-inventory-package.py'
+      - '.github/workflows/inbox-release-preparation.yml'
+permissions:
+  contents: read
+jobs:
+  preparation:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: inbox_preparation
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U fixture -d inbox_preparation"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:5432/inbox_preparation
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:5432/inbox_preparation
+      AI_INTEGRATIONS_OPENAI_API_KEY: synthetic-test-key
+      STRIPE_SECRET_KEY: sk_test_synthetic
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: PostgreSQL concurrency, HTTP acknowledgment, process drain and read-only probe
+        run: >-
+          node --import tsx --test
+          tests/inbound-release-postgres.test.ts tests/inbound-webhook-ack.test.ts
+          tests/runtime-drain.test.ts tests/queue-inventory-safety.test.ts
+      - name: Existing affected channel, retry and authorization regressions
+        run: >-
+          node --import tsx --test
+          tests/worker-redis-gate.test.ts tests/automation-send-guard.test.ts
+          tests/marketing-inbound-retry.test.ts tests/webchat-tenant-isolation.test.ts
+          tests/webchat-media.test.ts tests/webchat-ui-controls.test.ts
+          tests/gmail-push-phase-1b.test.ts tests/gmail-inbound-poll-schedule.test.ts
+      - name: Reject new TypeScript diagnostics
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Browser reload, media durability, English/Spanish/Hebrew and responsive widget
+        run: node --import tsx --test tests/webchat-outbox-browser.test.ts
+      - name: Downloadable read-only Windows inventory
+        run: python3 scripts/build-queue-inventory-package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WhachatCRM-Queue-Inventory-Windows
+          path: work/queue-inventory/Windows/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Production dependency critical vulnerability gate
+        run: npm audit --omit=dev --audit-level=critical
+      - run: git diff --check

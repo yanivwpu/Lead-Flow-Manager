@@ -1,3 +1,4 @@
+import { runtimeDrain, runTrackedWork, installDrainSignals } from "./runtimeDrain";
 import { Worker, Job } from "bullmq";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +10,7 @@ import { logMetaCredentialEncryptionBootDiag } from "./metaCredentialCrypto";
 async function processMessage(job: Job<InboxJobPayload>): Promise<void> {
   const { userId, channel, channelContactId, contactName, content, contentType, mediaUrl, externalMessageId } = job.data;
   console.log(`[Worker] Processing queued job ${job.id} (channel: ${channel}, user: ${userId}, attempt: ${job.attemptsMade + 1})`);
-  await channelService.processIncomingMessage({
+  const result = await channelService.processIncomingMessage({
     userId,
     channel,
     channelContactId,
@@ -19,6 +20,7 @@ async function processMessage(job: Job<InboxJobPayload>): Promise<void> {
     mediaUrl,
     externalMessageId,
   });
+  if (!result.success) throw new Error("Inbound processing incomplete; retry delivery");
   console.log(`[Worker] Job ${job.id} completed successfully`);
 }
 
@@ -39,7 +41,7 @@ export function startInboxWorker(): void {
 
   const worker = new Worker<InboxJobPayload>(
     QUEUE_NAME,
-    processMessage,
+    job => runTrackedWork("bullmq", () => processMessage(job)),
     {
       connection,
       concurrency: WORKER_CONCURRENCY,
@@ -81,16 +83,12 @@ export function startInboxWorker(): void {
 
   console.log(`[Worker] Background job worker started (concurrency: ${WORKER_CONCURRENCY}, circuit-breaker: ${MAX_ERRORS} errors) — core inbox uses direct DB path`);
 
-  async function shutdown() {
-    console.log("[Worker] Shutting down...");
+  runtimeDrain.register("bullmq", async () => {
+    await worker.pause(true); // Local acquisition only. Waiting/delayed/failed jobs remain intact.
     await worker.close();
     await connection.quit();
-    console.log("[Worker] Shutdown complete");
-    process.exit(0);
-  }
+  });
 
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
 }
 
 function isWorkerEntrypoint(): boolean {
@@ -108,5 +106,6 @@ function isWorkerEntrypoint(): boolean {
 
 // Standalone worker process (e.g. `node dist/worker.cjs`) — always start.
 if (isWorkerEntrypoint()) {
+  installDrainSignals();
   startInboxWorker();
 }

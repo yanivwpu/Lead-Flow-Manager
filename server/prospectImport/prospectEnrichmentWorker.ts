@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 /**
  * DB-polled durable worker for Prospect website enrichment jobs (Phase 2).
  */
@@ -16,10 +17,12 @@ let workerTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
 async function tick(): Promise<void> {
+ return runScheduledWork("server/prospectImport/prospectEnrichmentWorker.ts:tick", async () => {
   if (isRunning) return;
   isRunning = true;
   try {
     await recoverStaleEnrichmentJobs();
+    if (runtimeDrain.isDraining) return;
     const job = await claimNextEnrichmentJob(workerId);
     if (job) {
       await processClaimedEnrichmentJob(job, workerId);
@@ -29,15 +32,20 @@ async function tick(): Promise<void> {
   } finally {
     isRunning = false;
   }
+
+ });
 }
 
 function scheduleNext(): void {
+  if (runtimeDrain.isDraining) return;
   workerTimer = setTimeout(() => {
     void tick().finally(scheduleNext);
   }, POLL_INTERVAL_MS);
 }
 
 export function startProspectEnrichmentWorker(): void {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register("startProspectEnrichmentWorker", stopProspectEnrichmentWorker);
   if (workerTimer) return;
   console.info(
     JSON.stringify({

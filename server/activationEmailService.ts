@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { eq, isNull, or, isNotNull, and } from "drizzle-orm";
@@ -117,6 +118,7 @@ export async function runActivationEmails(): Promise<{
   /** @deprecated Alias of day5Sent for admin callers. */
   day3Sent: number;
 }> {
+ return runTrackedWork("server/activationEmailService.ts:runActivationEmails", async () => {
   console.log("[Cron] Starting onboarding activation email job...");
 
   const now = new Date();
@@ -269,4 +271,6 @@ export async function runActivationEmails(): Promise<{
     console.error("[Cron] Error in activation email job:", error);
     throw error;
   }
+
+ });
 }

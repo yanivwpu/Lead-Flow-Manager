@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from './runtimeDrain';
 import { storage } from "./storage";
 import { executeFlowFromJob } from "./chatbotEngine";
 import { processNoReplyJob } from "./automationNoReply";
@@ -12,6 +13,7 @@ let workerTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
 async function processDueJobs(): Promise<void> {
+ return runScheduledWork("server/flowJobWorker.ts:processDueJobs", async () => {
   if (isRunning) return; // prevent overlap if processing takes > poll interval
   isRunning = true;
 
@@ -233,9 +235,12 @@ async function processDueJobs(): Promise<void> {
   } finally {
     isRunning = false;
   }
+
+ });
 }
 
 function scheduleNext(): void {
+  if (runtimeDrain.isDraining) return;
   workerTimer = setTimeout(async () => {
     await processDueJobs();
     scheduleNext();
@@ -243,6 +248,8 @@ function scheduleNext(): void {
 }
 
 export function startFlowJobWorker(): void {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register("startFlowJobWorker", stopFlowJobWorker);
   console.log(`[FlowJobWorker] Started — polling every ${POLL_INTERVAL_MS / 1000}s`);
   scheduleNext();
 }

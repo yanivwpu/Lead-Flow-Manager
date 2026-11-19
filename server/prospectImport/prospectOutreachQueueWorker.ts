@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 /**
  * DB-polled worker for controlled prospect outreach queue.
  * Matches flowJobWorker pattern — gradual sends, pause-aware, crash-safe.
@@ -21,6 +22,7 @@ let workerTimer: ReturnType<typeof setTimeout> | null = null;
 let isRunning = false;
 
 async function processDueOutreach(): Promise<void> {
+ return runScheduledWork("server/prospectImport/prospectOutreachQueueWorker.ts:processDueOutreach", async () => {
   if (isRunning) return;
   isRunning = true;
   try {
@@ -50,15 +52,20 @@ async function processDueOutreach(): Promise<void> {
   } finally {
     isRunning = false;
   }
+
+ });
 }
 
 function scheduleNext(): void {
+  if (runtimeDrain.isDraining) return;
   workerTimer = setTimeout(() => {
     void processDueOutreach().finally(scheduleNext);
   }, POLL_INTERVAL_MS);
 }
 
 export function startProspectOutreachQueueWorker(): void {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register("startProspectOutreachQueueWorker", stopProspectOutreachQueueWorker);
   if (workerTimer) return;
   console.info(
     JSON.stringify(

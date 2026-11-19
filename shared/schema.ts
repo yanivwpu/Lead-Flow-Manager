@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1403,11 +1403,21 @@ export const messages = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({
-    userExternalMessageIdUq: uniqueIndex("messages_user_external_message_id_uq")
+    userExternalMessageIdLookup: index("messages_user_external_message_lookup_idx")
       .on(t.userId, t.externalMessageId)
       .where(sql`${t.externalMessageId} IS NOT NULL`),
   })
 );
+
+/** Additive receipt keys, independent of historical duplicate messages. */
+export const inboundMessageReceipts = pgTable("inbound_message_receipts", {
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channel: text("channel").notNull(),
+  externalMessageId: text("external_message_id").notNull(),
+  claimToken: uuid("claim_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  messageId: varchar("message_id").references(() => messages.id, { onDelete: "set null" }),
+}, table => [primaryKey({ columns: [table.userId, table.channel, table.externalMessageId] })]);
 
 /** Preset campaign enrollments — manual enrollment first; scheduler advances steps. */
 export const campaignEnrollments = pgTable("campaign_enrollments", {

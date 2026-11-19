@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain } from '../runtimeDrain';
 import { type EmailRichSendPayload, normalizeEmailAddress } from "@shared/emailChannel";
 import { contactHasDoNotContact } from "../automationSendGuard";
 import { storage } from "../storage";
@@ -65,6 +66,7 @@ export async function sendEmailViaMailbox(params: {
   content: string;
   rich: EmailRichSendPayload;
 }): Promise<EmailOutboundResult> {
+ return runTrackedWork("server/emailChannel/sendService.ts:sendEmailViaMailbox", async () => {
   const contact = await storage.getContact(params.contactId);
   if (!contact || contact.userId !== params.workspaceUserId) {
     return { success: false, channel: "email", error: "Contact not found" };
@@ -383,4 +385,6 @@ export async function sendEmailViaMailbox(params: {
       error: message,
     };
   }
+
+ });
 }
