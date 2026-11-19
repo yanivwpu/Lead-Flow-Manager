@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain } from './runtimeDrain';
 import type { User } from "@shared/schema";
 import {
   resolveWhatsAppActiveProvider,
@@ -284,6 +285,7 @@ export async function sendWhatsAppMessage(
   text: string,
   fromNumber?: string // override the from-number (Twilio multi-number support)
 ): Promise<SendResult> {
+ return runTrackedWork("server/whatsappService.ts:sendWhatsAppMessage", async () => {
   const availability = await getWhatsAppAvailability(userId);
 
   if (!availability.available) {
@@ -303,6 +305,8 @@ export async function sendWhatsAppMessage(
 
   const result = await sendUserWhatsAppMessage(userId, to, text, fromNumber);
   return { success: true, messageId: result.sid, provider: "twilio" };
+
+ });
 }
 
 /**
@@ -318,6 +322,7 @@ export async function sendWhatsAppMedia(
   fromNumber?: string, // override the from-number (Twilio multi-number support)
   filename?: string    // original filename — passed to Meta for document messages
 ): Promise<SendMediaResult> {
+ return runTrackedWork("server/whatsappService.ts:sendWhatsAppMedia", async () => {
   const availability = await getWhatsAppAvailability(userId);
 
   if (!availability.available) {
@@ -345,6 +350,8 @@ export async function sendWhatsAppMedia(
 
   const result = await sendUserWhatsAppMedia(userId, to, mediaUrl, caption, fromNumber);
   return { success: true, messageId: result.sid, provider: "twilio" };
+
+ });
 }
 
 /**

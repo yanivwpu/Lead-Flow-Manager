@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { runTrackedWork } from './runtimeDrain';
 import type { Contact, Conversation } from "@shared/schema";
 import { contactHasAutomationsPaused } from "@shared/contactAutomationsPause";
 import { isConversationHandoffActive } from "@shared/handoffActivity";
@@ -321,6 +322,7 @@ export async function maybeRunWebchatServerAi(
   },
   deps: WebchatAiAutoReplyDeps = {},
 ): Promise<{ decision: string; sent: boolean }> {
+ return runTrackedWork("server/webchatAiAutoReply.ts:maybeRunWebchatServerAi", async () => {
   const timeoutMs = deps.timeoutMs ?? WEBCHAT_AI_GENERATION_TIMEOUT_MS;
   const generate = deps.generate ?? defaultGenerate;
   const leaseId = (deps.randomId ?? randomUUID)();
@@ -1184,4 +1186,6 @@ export async function maybeRunWebchatServerAi(
     ...gateDiagnostics,
   });
   return { decision, sent: true };
+
+ });
 }

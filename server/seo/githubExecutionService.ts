@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from "../runtimeDrain";
 import { runSeoPublicationOnce, updateSeoPublicationMeasurements, reconcileAbandonedSeoPrOnce } from "./publicationService";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -79,14 +80,15 @@ export async function runSeoGithubExecutionWorkerOnce(deps:{claim?:typeof claimP
   await (deps.executeJob??executeClaimedSeoGithubJob)(claim);
   return true;
 }
-export function wakeSeoGithubExecutionWorker(){if(workerActive)return;workerActive=true;void (async()=>{await runSeoGithubExecutionWorkerOnce();await runSeoPublicationOnce();await reconcileAbandonedSeoPrOnce();await updateSeoPublicationMeasurements();})().catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
+export function wakeSeoGithubExecutionWorker(){if(workerActive||runtimeDrain.isDraining)return;workerActive=true;void runScheduledWork("seo-worker", async()=>{await runSeoGithubExecutionWorkerOnce();await runSeoPublicationOnce();await reconcileAbandonedSeoPrOnce();await updateSeoPublicationMeasurements();}).catch(error=>console.error("[SEO GitHub] worker error",{message:safeGithubExecutionError(error)})).finally(()=>{workerActive=false;});}
 export function startSeoGithubExecutionWorker(){
   if(workerTimer)return;
   wakeSeoGithubExecutionWorker();
   const runAutopilot=()=>{
-    void import("./autopilotService").then(m=>m.runSeoAutopilot())
+    if (runtimeDrain.isDraining) return;
+    void runScheduledWork("seo-autopilot", () => import("./autopilotService").then(m=>m.runSeoAutopilot()))
       .catch(error=>console.error("[SEO Autopilot] background cycle failed",{message:safeGithubExecutionError(error)}));
-    void import("./dailyShipping").then(m=>m.runDailySeoShippingSelection())
+    void runScheduledWork("seo-shipping", () => import("./dailyShipping").then(m=>m.runDailySeoShippingSelection()))
       .catch(error=>console.error("[SEO Shipping] daily selection failed",{message:safeGithubExecutionError(error)}));
   };
   const startupAutopilot=setTimeout(runAutopilot,45_000);startupAutopilot.unref?.();

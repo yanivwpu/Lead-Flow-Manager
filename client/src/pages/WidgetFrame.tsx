@@ -1,3 +1,4 @@
+import { saveWebchatPending, removeWebchatPending, listWebchatPending, webchatRetryDelay, type WebchatOutboxEntry } from "@/lib/webchatOutbox";
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRoute, useSearch } from "wouter";
 import { Loader2, Paperclip, Send, X } from "lucide-react";
@@ -457,8 +458,10 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (row.direction !== "inbound" && row.direction !== "outbound") return false;
         return row.direction !== "outbound" || row.status !== "failed";
       });
+      const pendingIds = new Set((await listWebchatPending(userId, visitorId).catch(() => [])).map(entry => entry.id));
       setMessages((prev) => {
-        const merged = mergeWebchatPolledMessages(prev, incoming);
+        const retained = prev.filter(row => pendingIds.has(row.id));
+        const merged = mergeWebchatPolledMessages(prev, [...incoming, ...retained]);
         if (merged !== prev) {
           const scroller = scrollerRef.current;
           if (scroller && webchatMessageIds(prev).join("\n") === webchatMessageIds(merged).join("\n")) {
@@ -654,6 +657,7 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     );
   }, []);
 
+  const sendingRef = useRef(false);
   const sendMessage = useCallback(async (
     text: string,
     retryId?: string,
@@ -661,12 +665,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
     meta?: { pageRuleActionIndex?: number },
   ) => {
     const file = fileOverride || (!retryId ? pendingFile : pendingUploadsRef.current.get(retryId) || null);
-    if ((!text.trim() && !file) || !userId || !visitorId || isSending || widgetUnavailable) return;
+    if ((!text.trim() && !file) || !userId || !visitorId || isSending || sendingRef.current || widgetUnavailable) return;
     const pageRuleActionKey =
       typeof meta?.pageRuleActionIndex === "number" ? `pr:${meta.pageRuleActionIndex}:${text}` : "";
     if (pageRuleActionKey && clickedButtons.has(pageRuleActionKey)) return;
+    sendingRef.current = true;
     setIsSending(true);
-    const optId = retryId || `opt_${Date.now()}`;
+    const optId = retryId || `opt_${crypto.randomUUID()}`;
     if (file) pendingUploadsRef.current.set(optId, file);
     userInitiatedScrollRef.current = true;
     if (retryId) {
@@ -683,8 +688,6 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, optimisticMsg]);
-      setInputText("");
-      setPendingFile(null);
       setAttachError(null);
     }
 
@@ -693,6 +696,19 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         urlLeadSource === "agent_page" ? "Agent Page Visitor" : "Website Visitor";
       const parentUrl = parentPageHref || (typeof window !== "undefined" ? window.location.href : undefined);
       const pageTitle = parentPageTitle || (!parentPageHref && typeof document !== "undefined" ? document.title : undefined);
+      const saved = retryId ? (await listWebchatPending(userId, visitorId)).find(row => row.id === optId) : undefined;
+      const entry: WebchatOutboxEntry = saved || {
+        id: optId, widgetId: userId, visitorId, text, file: file || undefined,
+        body: { visitorId, message: text, clientMessageId: optId, name: visitorLabel,
+          source: urlLeadSource || undefined, parentUrl, pageTitle,
+          referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+          locale: widgetLocale,
+          ...(typeof meta?.pageRuleActionIndex === "number" ? { pageRuleAction: { actionIndex: meta.pageRuleActionIndex } } : {}) },
+        createdAt: new Date().toISOString(), attempts: 0, nextAttemptAt: 0,
+      };
+      // Commit locally BEFORE sending. Quota/private-mode failure leaves a failed draft and performs no request.
+      await saveWebchatPending(entry);
+      if (!retryId) { setInputText(""); setPendingFile(null); }
       let res: Response;
       if (file) {
         const form = new FormData();
@@ -701,13 +717,13 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         if (text.trim()) form.append("caption", text.trim());
         form.append("uploadId", optId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80));
         form.append("name", visitorLabel);
-        if (urlLeadSource) form.append("source", urlLeadSource);
-        if (parentUrl) form.append("parentUrl", parentUrl);
+        if (entry.body.source) form.append("source", String(entry.body.source));
+        if (entry.body.parentUrl) form.append("parentUrl", String(entry.body.parentUrl));
         if (typeof document !== "undefined") {
-          if (pageTitle) form.append("pageTitle", pageTitle);
-          if (document.referrer) form.append("referrer", document.referrer);
+          if (entry.body.pageTitle) form.append("pageTitle", String(entry.body.pageTitle));
+          if (entry.body.referrer) form.append("referrer", String(entry.body.referrer));
         }
-        if (widgetLocale) form.append("locale", widgetLocale);
+        if (entry.body.locale) form.append("locale", String(entry.body.locale));
         res = await fetch(`/api/webchat/${userId}/${visitorId}/media`, {
           method: "POST",
           body: form,
@@ -716,25 +732,19 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
         res = await fetch(`/api/webchat/${userId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            visitorId,
-            message: text,
-            name: visitorLabel,
-            source: urlLeadSource || undefined,
-            parentUrl,
-            pageTitle,
-            referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
-            locale: widgetLocale,
-            ...(typeof meta?.pageRuleActionIndex === "number"
-              ? { pageRuleAction: { actionIndex: meta.pageRuleActionIndex } }
-              : {}),
-          }),
+          body: JSON.stringify(entry.body),
         });
       }
       if (!res.ok) {
+        entry.attempts += 1;
+        const retryable = res.status === 429 || res.status >= 500;
+        entry.nextAttemptAt = retryable ? Date.now() + webchatRetryDelay(entry.attempts - 1, Number(res.headers.get("Retry-After")) || 0) : Number.MAX_SAFE_INTEGER;
+        await saveWebchatPending(entry);
         markFailed(optId);
         return;
       }
+      await removeWebchatPending(userId, visitorId, optId);
+      setMessages(previous => previous.filter(message => message.id !== optId));
       if (pageRuleActionKey) {
         setClickedButtons((prev) => new Set([...prev, pageRuleActionKey]));
         if (pageRuleKey) markRuleShown(pageRuleKey);
@@ -744,12 +754,43 @@ export function WebchatWidget({ widgetId, resolvePageHref }: WebchatWidgetProps)
       await fetchMessages();
     } catch (e) {
       console.error("Send error", e);
+      try {
+        const pending = (await listWebchatPending(userId, visitorId)).find(row => row.id === optId);
+        if (pending) { pending.nextAttemptAt = Date.now() + webchatRetryDelay(pending.attempts++); await saveWebchatPending(pending); }
+      } catch { /* Keep the visible composer/draft; never send without durable storage. */ }
       markFailed(optId);
     } finally {
+      sendingRef.current = false;
       setIsSending(false);
       inputRef.current?.focus();
     }
   }, [userId, visitorId, isSending, widgetUnavailable, fetchMessages, urlLeadSource, parentPageHref, parentPageTitle, markFailed, pendingFile, widgetLocale, clickedButtons, pageRuleKey, markRuleShown]);
+
+  useEffect(() => {
+    if (!userId || !visitorId) return;
+    let disposed = false;
+    const restoreAndRetry = async () => {
+      try {
+        const entries = await listWebchatPending(userId, visitorId);
+        if (disposed) return;
+        for (const entry of entries) if (entry.file) pendingUploadsRef.current.set(entry.id, entry.file);
+        setMessages(previous => {
+          const ids = new Set(previous.map(message => message.id));
+          return [...previous, ...entries.filter(entry => !ids.has(entry.id)).map(entry => ({
+            id: entry.id, direction: "inbound" as const, content: entry.text,
+            contentType: entry.file ? "image" : "text", mediaUrl: entry.file ? URL.createObjectURL(entry.file) : null,
+            createdAt: entry.createdAt, status: "failed",
+          }))];
+        });
+        const next = entries.find(entry => entry.nextAttemptAt <= Date.now());
+        if (next && !isSending && !widgetUnavailable && navigator.onLine) await sendMessage(next.text, next.id, next.file || null);
+      } catch { /* Browser storage denied: composer remains usable and retains its unsent text. */ }
+    };
+    void restoreAndRetry();
+    const timer = window.setInterval(() => { void restoreAndRetry(); }, 15_000);
+    window.addEventListener("online", restoreAndRetry);
+    return () => { disposed = true; window.clearInterval(timer); window.removeEventListener("online", restoreAndRetry); };
+  }, [userId, visitorId, isSending, widgetUnavailable, sendMessage]);
 
   const handleButtonClick = useCallback(async (msgId: string, btn: ButtonOption) => {
     // Prevent duplicate clicks

@@ -134,6 +134,7 @@ export function parentUrlAllowed(
 }
 
 export type WebchatInboundBody = {
+  clientMessageId?: string;
   visitorId: string;
   message: string;
   name?: string;
@@ -157,6 +158,8 @@ export function matchWidgetPageRule(
 
 export function parseWebchatInboundBody(body: unknown): { ok: true; data: WebchatInboundBody } | { ok: false } {
   const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const clientMessageId = b.clientMessageId;
+  if (clientMessageId !== undefined && (typeof clientMessageId !== "string" || !/^[a-zA-Z0-9_-]{8,100}$/.test(clientMessageId))) return { ok: false };
   const message = typeof b.message === "string" ? b.message.trim() : "";
   if (!message || message.length > MAX_MESSAGE) return { ok: false };
   let visitorId = typeof b.visitorId === "string" ? b.visitorId.trim() : "";
@@ -181,7 +184,7 @@ export function parseWebchatInboundBody(body: unknown): { ok: true; data: Webcha
       : undefined;
   return {
     ok: true,
-    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer, locale, pageRuleActionIndex },
+    data: { visitorId, message, name, source, parentUrl, pageTitle, referrer, locale, pageRuleActionIndex, ...(typeof clientMessageId === "string" ? { clientMessageId } : {}) },
   };
 }
 

@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 import {loadMerchantRelease} from './merchantRelease';
 import {timingSafeEqual} from 'node:crypto';
 import {and,eq,sql} from 'drizzle-orm';
@@ -171,6 +172,7 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
  if(!recoveryAutoPrepEnabled(configuration))return null;
  let busy=false,stopped=false;
  const tick=async()=>{
+ return runScheduledWork("server/ecommerce/checkoutRecoveryAutoPreparationRuntime.ts:tick", async () => {
    if(busy||stopped)return;busy=true;
    try{
      if(!await ensureSchema()){
@@ -196,7 +198,9 @@ export function startCheckoutRecoveryAutoPreparation():null|(()=>void){
        reason:known.has(code)?code:'unavailable',
      });
    }finally{busy=false;}
- };
+
+ });
+};
  const timer=setInterval(()=>{void tick()},90_000);
  timer.unref?.();
  return ()=>{stopped=true;clearInterval(timer)};

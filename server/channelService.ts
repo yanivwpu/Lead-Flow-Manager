@@ -1,4 +1,6 @@
 import {canonicalMatchedShopifyPhone} from "@shared/shopifyContactPrivacy";
+import { runTrackedWork } from "./runtimeDrain";
+import { withInboundEvent, telegramInboundExternalId } from "./inboundDedup";
 import { storage } from "./storage";
 import { subscriptionService } from "./subscriptionService";
 import { notifyUser } from "./presence";
@@ -504,6 +506,7 @@ class ChannelService {
     generatedBy?: string;
     generationMeta?: Record<string, unknown>;
   }): Promise<SendMessageResult> {
+ return runTrackedWork("server/channelService.ts:sendMessage", async () => {
     const {
       userId,
       contactId,
@@ -978,7 +981,9 @@ class ChannelService {
       channel: targetChannel,
       error: coerceReplyWindowErrorToUserMessage(targetChannel, sendResult.error || "Message delivery failed"),
     };
-  }
+
+ });
+}
 
   private async dispatchMessage(
     userId: string,
@@ -1170,6 +1175,13 @@ class ChannelService {
     skipNewChatTrigger?: boolean;
     validatedPageRuleAction?: import("@shared/webchatPageRuleAction").TrustedPageRuleAction | null;
   }): Promise<InboundProcessingResult> {
+    const inbound = params.channel === "telegram" && params.externalMessageId
+      ? { ...params, externalMessageId: telegramInboundExternalId(params.channelContactId, params.externalMessageId) }
+      : params;
+    return runTrackedWork("inbound", () => withInboundEvent(inbound.userId, inbound.channel, inbound.externalMessageId, () => this.processIncomingMessageOnce(inbound)));
+  }
+
+  private async processIncomingMessageOnce(params: Parameters<ChannelService["processIncomingMessage"]>[0]): Promise<InboundProcessingResult> {
     const {
       userId,
       channel,
@@ -1210,7 +1222,7 @@ class ChannelService {
 
     // Deduplicate: skip if this external message ID was already processed
     if (externalMessageId) {
-      const existing = await storage.getMessageByUserExternalId(userId, externalMessageId);
+      const existing = await storage.getMessageByUserExternalId(userId, externalMessageId, channel);
       if (existing) {
         logInboundDuplicateIgnored(channel, externalMessageId);
         // Return existing data so callers can still ACK 200 safely
@@ -1529,7 +1541,7 @@ class ChannelService {
     } catch (err: unknown) {
       if (externalMessageId && isUniqueExternalMessageViolation(err)) {
         logInboundDuplicateIgnored(channel, externalMessageId);
-        const existing = await storage.getMessageByUserExternalId(userId, externalMessageId);
+        const existing = await storage.getMessageByUserExternalId(userId, externalMessageId, channel);
         if (existing) {
           const existingConversation = (await storage.getConversation(existing.conversationId)) || conversation;
           const existingContact = (await storage.getContact(existing.contactId)) || contact;
@@ -2173,6 +2185,7 @@ class ChannelService {
     /** Message rows in this conversation before the current inbound was inserted */
     priorMessageCount: number;
   }): Promise<void> {
+    return runTrackedWork("delayed-auto-reply", async () => {
     const { userId, contact, conversation, channel, inboundContent, priorMessageCount } = params;
 
     try {
@@ -2287,6 +2300,7 @@ class ChannelService {
       const self = this;
       const activityAfterSend = greetingActivityToLog;
 
+      await new Promise<void>(resolve => {
       setTimeout(async () => {
         try {
           const replyLog = source === "away_message" ? "[AwayReply]" : "[AutoReply]";
@@ -2313,11 +2327,13 @@ class ChannelService {
           }
         } catch (err) {
           console.error(`${source === "away_message" ? "[AwayReply]" : "[AutoReply]"} Send error:`, err);
-        }
+        } finally { resolve(); }
       }, delayMs);
+      });
     } catch (err) {
       console.error("[AwayReply] _scheduleAutoReply error:", err);
     }
+    });
   }
 
   private getChannelIdField(channel: Channel): string {

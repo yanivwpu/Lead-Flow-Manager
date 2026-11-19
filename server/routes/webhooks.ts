@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { requireInboundPersistence } from '../inboundAcknowledgment';
 import type { Express } from "express";
 import { storage } from "../storage";
 import {
@@ -86,8 +88,8 @@ export function registerWebhookRoutes(app: Express): void {
         const tgSetting = await storage.getChannelSetting(userId, "telegram");
         const botToken: string | undefined = (tgSetting?.config as { botToken?: string })?.botToken;
         if (!botToken) {
-          console.warn("[Inbound] Telegram bot token missing — skipping message");
-          return res.status(200).json({ ok: true });
+          console.warn("[Inbound] Telegram bot token missing — retry delivery");
+          return res.status(503).json({ ok: false });
         }
 
         let text = message.text || message.caption || "";
@@ -128,6 +130,7 @@ export function registerWebhookRoutes(app: Express): void {
           telegramMedia,
           externalMessageId: String(message.message_id),
         });
+      requireInboundPersistence(result);
 
         // Fire-and-forget avatar fetch — only if due for refresh
         const { shouldRefreshAvatar, fetchTelegramAvatar } = await import("../avatarService");
@@ -150,7 +153,7 @@ export function registerWebhookRoutes(app: Express): void {
       res.status(200).json({ ok: true });
     } catch (error) {
       console.error("[Inbound] Telegram webhook error:", error);
-      res.status(200).json({ ok: true });
+      if (!res.headersSent) res.status(503).json({ ok: false });
     }
   });
 
@@ -260,7 +263,9 @@ export function registerWebhookRoutes(app: Express): void {
         new Date().toISOString(),
       );
 
-      const webchatExternalId = `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const webchatExternalId = parsed.data.clientMessageId
+        ? `webchat_${visitorId}_${parsed.data.clientMessageId}`
+        : `webchat_${randomUUID()}`;
       const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
         "@shared/agent/webchatLeadContext"
       );
@@ -283,10 +288,11 @@ export function registerWebhookRoutes(app: Express): void {
         skipNewChatTrigger: Boolean(validatedAction),
         validatedPageRuleAction: validatedAction || undefined,
       });
+      requireInboundPersistence(result);
 
       if (result.success && result.contact && result.conversation && !result.deduped) {
         const { dispatchWebchatInboundWorkflows } = await import("../webchatInboundWorkflows");
-        void dispatchWebchatInboundWorkflows({
+        await dispatchWebchatInboundWorkflows({
           userId,
           contact: result.contact,
           conversation: result.conversation,
@@ -647,6 +653,7 @@ export function registerWebhookRoutes(app: Express): void {
           externalMessageId: uploadId ? `webchat_media_${visitorId}_${uploadId}` : undefined,
           webchatLeadSource,
         });
+      requireInboundPersistence(result);
         if (!result.success) {
           return sendWebchatPublicJson(res, 500, { error: "Failed to process message" });
         }
@@ -763,9 +770,10 @@ export function registerWebhookRoutes(app: Express): void {
         templateVariables: { webchatFormSubmission: submission },
         externalMessageId: `webchat_form_${visitorId}_${form.id}`,
       });
+      requireInboundPersistence(result);
       if (result.success && result.contact && result.conversation && !result.deduped) {
         const { dispatchWebchatInboundWorkflows } = await import("../webchatInboundWorkflows");
-        void dispatchWebchatInboundWorkflows({
+        await dispatchWebchatInboundWorkflows({
           userId: access.owner.userId,
           contact: result.contact,
           conversation: result.conversation,
@@ -812,7 +820,7 @@ export function registerWebhookRoutes(app: Express): void {
       const hasTwilioMedia = !!parsed.mediaUrl && parsed.numMedia > 0;
 
       const { channelService } = await import("../channelService");
-      await channelService.processIncomingMessage({
+      const result = await channelService.processIncomingMessage({
         userId: user.id,
         channel: channel as any,
         channelContactId: normalizedFrom,
@@ -825,11 +833,12 @@ export function registerWebhookRoutes(app: Express): void {
         externalMessageId: parsed.messageSid,
       });
 
+      requireInboundPersistence(result);
       console.log(`[Inbound] Webhook returned 200 — channel: ${channel}, messageSid: ${parsed.messageSid}`);
       res.status(200).send("");
     } catch (error) {
       console.error("[Inbound] Twilio inbox webhook error:", error);
-      res.status(200).send("");
+      if (!res.headersSent) res.status(503).send("");
     }
   });
 }

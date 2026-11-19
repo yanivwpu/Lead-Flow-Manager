@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain } from './runtimeDrain';
 import {
   SALESPERSON_GE_SETUP_PAYOUT_NOTE,
   SALESPERSON_PAYOUT_POLICY_DESCRIPTION,
@@ -109,6 +110,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, privacyConte
 }
 
 export async function sendEmailDetailed({ to, subject, html, text, replyTo, privacyContext, idempotencyKey, from }: EmailOptions): Promise<EmailDispatchResult> {
+ return runTrackedWork("server/email.ts:sendEmailDetailed", async () => {
   const privateShopify = privacyContext === "shopify" || privacyContext === "team";
   const recipientLog = privateShopify ? "[redacted]" : maskEmailForLogs(to);
   const subjectLog = privateShopify ? "[redacted]" : subject;
@@ -177,6 +179,8 @@ export async function sendEmailDetailed({ to, subject, html, text, replyTo, priv
     );
     return { ok: false, providerMessageId: null, error: sanitizeEmailProviderError(message), acceptanceUnknown: true };
   }
+
+ });
 }
 
 function firstNameFrom(name: string): string {

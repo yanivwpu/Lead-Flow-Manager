@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 import {sql} from 'drizzle-orm';
 import {db} from '../../drizzle/db';
 import {sendMetaWhatsAppTemplate} from '../userMeta';
@@ -15,6 +16,7 @@ export function startMerchantAutomations():null|(()=>void){
   if(!merchantProductionAvailable(process.env))return null;
   let busy=false,closed=false;
   const tick=async()=>{
+ return runScheduledWork("server/ecommerce/merchantRuntime.ts:tick", async () => {
     if(busy||closed)return;busy=true;
     try{
       const accounts=await db.transaction(async tx=>{
@@ -50,7 +52,9 @@ export function startMerchantAutomations():null|(()=>void){
       }
     }catch{console.error('[MerchantAutomations] tick_unavailable');}
     finally{busy=false;}
-  };
+
+ });
+};
   const timer=setInterval(()=>{void tick();},90_000);timer.unref?.();
   return()=>{closed=true;clearInterval(timer);};
 }
