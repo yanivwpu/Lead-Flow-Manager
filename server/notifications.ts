@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from './runtimeDrain';
 import webPush from 'web-push';
 import cron from 'node-cron';
 import { storage } from './storage';
@@ -63,11 +64,13 @@ async function notify(user: User, contactName: string, followUpText: string, lin
 }
 
 async function checkFollowUps() {
+ return runScheduledWork("server/notifications.ts:checkFollowUps", async () => {
   try {
     const dueChats = await storage.getDueFollowUps();
     if (dueChats.length > 0) {
       console.log(`[FollowUp] ${dueChats.length} due from chats`);
       for (const chat of dueChats) {
+        if (runtimeDrain.isDraining) break;
         const user = await storage.getUser(chat.userId);
         if (!user) continue;
         const entitlement = await resolveExecutionEntitlement(chat.userId);
@@ -90,6 +93,7 @@ async function checkFollowUps() {
     if (dueContacts.length > 0) {
       console.log(`[FollowUp] ${dueContacts.length} due from contacts`);
       for (const contact of dueContacts) {
+        if (runtimeDrain.isDraining) break;
         const user = await storage.getUser(contact.userId);
         if (!user) continue;
         const entitlement = await resolveExecutionEntitlement(contact.userId);
@@ -111,10 +115,13 @@ async function checkFollowUps() {
   } catch (error) {
     console.error('Error checking follow-ups:', error);
   }
+
+ });
 }
 
 // Process drip campaign enrollments
 export async function processDripEnrollments() {
+ return runScheduledWork("server/notifications.ts:processDripEnrollments", async () => {
   try {
     const dueEnrollments = await storage.getDueEnrollments();
     
@@ -233,10 +240,13 @@ export async function processDripEnrollments() {
   } catch (error) {
     console.error('Error processing drip enrollments:', error);
   }
+
+ });
 }
 
 export function startNotificationScheduler() {
-  cron.schedule('*/5 * * * *', checkFollowUps);
-  cron.schedule('*/5 * * * *', processDripEnrollments);
+  if (runtimeDrain.isDraining) return;
+  const tasks = [cron.schedule('*/5 * * * *', checkFollowUps), cron.schedule('*/5 * * * *', processDripEnrollments)];
+  runtimeDrain.register('notifications', async () => { await Promise.all(tasks.map(task => task.stop())); });
   console.log('Schedulers started');
 }

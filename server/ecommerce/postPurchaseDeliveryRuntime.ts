@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from "../runtimeDrain";
 import {db} from '../../drizzle/db';
 import {sendMetaWhatsAppTemplate} from '../userMeta';
 import {postPurchasePreparation} from './postPurchaseRuntime';
@@ -13,8 +14,8 @@ export function startPostPurchaseDelivery():null|(()=>void){
   const account=process.env.ECOMMERCE_POST_PURCHASE_DELIVERY_ACCOUNT_ID||'';
   if(!postPurchaseOperatorReady(process.env,account))return null;
   let busy=false;
-  const timer=setInterval(()=>{if(busy)return;busy=true;
-    void delivery.tick().catch(()=>console.error('[PostPurchase] delivery_tick_failed')).finally(()=>{busy=false;});
+  const timer=setInterval(()=>{if(busy||runtimeDrain.isDraining)return;busy=true;
+    void runScheduledWork("delivery", () => delivery.tick()).catch(()=>console.error('[PostPurchase] delivery_tick_failed')).finally(()=>{busy=false;});
   },90_000);
   timer.unref?.();return ()=>clearInterval(timer);
 }

@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
@@ -212,6 +213,7 @@ export async function runVerificationReminders(options?: {
   lookupDeliveryEvent?: VerificationReminderLookupDeliveryEvent;
   rolloutActiveAfter?: Date | null;
 }): Promise<VerificationReminderJobResult> {
+ return runTrackedWork("server/verificationReminderService.ts:runVerificationReminders", async () => {
   console.log("[Cron] Starting verification-reminder email job...");
 
   const now = options?.now ?? new Date();
@@ -300,4 +302,6 @@ export async function runVerificationReminders(options?: {
     console.error("[Cron] Error in verification-reminder email job:", error);
     throw error;
   }
+
+ });
 }

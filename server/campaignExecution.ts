@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import type {
   CampaignEnrollment,
   Contact,
@@ -542,6 +543,7 @@ export async function syncCampaignEnrollmentsForContactAutomationPause(params: {
 }
 
 export async function runCampaignSchedulerTick(limit = 30): Promise<{ ran: number }> {
+ return runTrackedWork("server/campaignExecution.ts:runCampaignSchedulerTick", async () => {
   const ids = await storage.listDueCampaignEnrollmentIds(limit);
   let ran = 0;
   for (const id of ids) {
@@ -553,4 +555,6 @@ export async function runCampaignSchedulerTick(limit = 30): Promise<{ ran: numbe
     }
   }
   return { ran };
+
+ });
 }

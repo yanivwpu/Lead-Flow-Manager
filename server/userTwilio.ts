@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain } from './runtimeDrain';
 import { withGlobalDncPhoneBoundary } from "./marketingCompliance/store";
 import twilio from "twilio";
 import crypto from "crypto";
@@ -98,6 +99,7 @@ export async function sendUserWhatsAppMessage(
   message: string,
   fromNumber?: string // optional override — used when conversation.channelAccountId is a secondary number
 ): Promise<{ sid: string; status: string }> {
+ return runTrackedWork("server/userTwilio.ts:sendUserWhatsAppMessage", async () => {
   const client = await getUserTwilioClient(userId);
   const defaultFromNumber = await getUserTwilioNumber(userId);
   const actualFrom = fromNumber || defaultFromNumber;
@@ -114,6 +116,8 @@ export async function sendUserWhatsAppMessage(
 
   console.log(`[TwilioSend] Sent from ${actualFrom} to ${toPhone}, sid: ${result.sid}`);
   return { sid: result.sid, status: result.status };
+
+ });
 }
 
 export async function sendUserWhatsAppMedia(
@@ -123,6 +127,7 @@ export async function sendUserWhatsAppMedia(
   caption?: string,
   fromNumber?: string // optional override — used when conversation.channelAccountId is a secondary number
 ): Promise<{ sid: string; status: string }> {
+ return runTrackedWork("server/userTwilio.ts:sendUserWhatsAppMedia", async () => {
   const client = await getUserTwilioClient(userId);
   const defaultFromNumber = await getUserTwilioNumber(userId);
   const actualFrom = fromNumber || defaultFromNumber;
@@ -144,6 +149,8 @@ export async function sendUserWhatsAppMedia(
   const result = await withGlobalDncPhoneBoundary(userId, toPhone, () => client.messages.create(messageOptions));
 
   return { sid: result.sid, status: result.status };
+
+ });
 }
 
 export interface TwilioCredentials {

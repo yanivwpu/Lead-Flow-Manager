@@ -1,3 +1,4 @@
+import { runTrackedWork } from '../runtimeDrain';
 /**
  * Gmail users.watch registration / renewal (Phase 1B).
  * Never overwrites syncCursor with watch historyId (would skip unprocessed mail).
@@ -143,6 +144,7 @@ export async function ensureGmailWatch(mailboxId: string): Promise<{
 
 /** Daily / startup-safe backfill: renew watch only when needed. */
 export async function runGmailWatchRenewalCron(): Promise<void> {
+ return runTrackedWork("server/emailChannel/gmailWatch.ts:runGmailWatchRenewalCron", async () => {
   const config = resolveGmailPubSubConfig();
   if (!config.configured) {
     logGmailWatchEvent("backfill_skipped_not_configured", { reason: config.reason });
@@ -167,4 +169,6 @@ export async function runGmailWatchRenewalCron(): Promise<void> {
       });
     }
   }
+
+ });
 }

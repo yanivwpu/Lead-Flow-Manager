@@ -105,6 +105,14 @@ async function buildAll() {
     external: externals, logLevel: "info",
   });
 
+  // Explicitly-invoked pinned internal development store operator, never used by cron/worker.
+  await esbuild({
+    entryPoints: ["scripts/shopify-offline-internal-dev-operator.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/shopify-offline-internal-dev-operator.cjs",
+    external: externals, logLevel: "info",
+  });
+
   console.log("building worker...");
   await esbuild({
     entryPoints: ["server/worker.ts"],

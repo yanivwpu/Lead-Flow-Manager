@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { and, isNull, isNotNull, lte, eq } from "drizzle-orm";
@@ -19,6 +20,7 @@ export async function runTrialExpirationEmails(): Promise<{
   skipped: number;
   errors: number;
 }> {
+ return runTrackedWork("server/trialExpirationEmailService.ts:runTrialExpirationEmails", async () => {
   console.log("[Cron] Starting trial-expiration email job...");
 
   const now = new Date();
@@ -101,4 +103,6 @@ export async function runTrialExpirationEmails(): Promise<{
     console.error("[Cron] Error in trial-expiration email job:", error);
     throw error;
   }
+
+ });
 }

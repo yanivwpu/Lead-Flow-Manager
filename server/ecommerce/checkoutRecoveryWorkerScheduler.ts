@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 import type {ClaimedRecoveryDelivery} from './checkoutRecoveryDeliveryWorker';
 import {processClaimedRecoveryDelivery,recoveryDeliveryExecutionEnabled} from './checkoutRecoveryDeliveryWorker';
 import {readProductionRecoveryScope} from './checkoutRecoveryProductionRelease';
@@ -56,6 +57,7 @@ function startGuardedRecoveryWorkerScheduler(
  if(!recoveryWorkerEnabled(env)&&!readProductionRecoveryScope(env))return null;
  let busy=false,closed=false;
  const tick=async()=>{
+ return runScheduledWork("server/ecommerce/checkoutRecoveryWorkerScheduler.ts:tick", async () => {
    if(busy||closed)return;
    busy=true;
    try{
@@ -67,7 +69,9 @@ function startGuardedRecoveryWorkerScheduler(
        clearInterval(timer);
      }
    }catch(e){onError(e);}finally{busy=false;}
- };
+
+ });
+};
  const timer=setInterval(()=>{void tick()},90_000);
  timer.unref?.();
  return ()=>{closed=true;clearInterval(timer)};

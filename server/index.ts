@@ -1,3 +1,5 @@
+import { drainHttpGate, trackHttpHandlers, installDrainSignals, runtimeDrain, runScheduledWork } from "./runtimeDrain";
+import { ensureInboundDedupSchema } from "./inboundDedup";
 import { registerShopifyWebhookBodyParser } from "./shopifyWebhookBodyParser";
 import { registerShopifyPrivacyAlertReceiver } from "./shopifyPrivacyAlertEmail";
 import express, { type Request, Response, NextFunction } from "express";
@@ -137,6 +139,8 @@ async function runStartupGhlCleanup() {
 
 const app = express();
 const httpServer = createServer(app);
+app.use(drainHttpGate);
+installDrainSignals(() => httpServer.close());
 
 // CORS first: credentialed SPA fetches (www ↔ app) + localhost dev; OPTIONS must not be redirected.
 app.use(corsMiddleware);
@@ -321,7 +325,11 @@ app.use(oidcRouter);
 
 // Setup authentication
 setupAuth(app);
-setupPresenceServer(httpServer, authenticatePresenceRequest);
+const presenceServer = setupPresenceServer(httpServer, authenticatePresenceRequest);
+runtimeDrain.register('presence', async () => {
+  for (const client of presenceServer.clients) client.terminate();
+  await new Promise<void>(resolve => presenceServer.close(() => resolve()));
+});
 
 // Conservative API rate limits for abuse-prone routes (Redis/Upstash when available).
 // Webhook paths are excluded — see rateLimitMiddleware.ts and comments above.
@@ -382,24 +390,6 @@ app.use((req, res, next) => {
   
   // Register channel adapters for unified inbox
   registerChannelAdapters();
-
-  // Background BullMQ worker — only when REDIS_URL is configured (local may omit Redis).
-  if (isRedisUrlConfigured()) {
-    void import("./worker")
-      .then((m) => m.startInboxWorker())
-      .catch((err) => {
-        console.error(
-          "[Worker] Failed to start background worker:",
-          err instanceof Error ? err.message : String(err),
-        );
-      });
-  } else if (process.env.NODE_ENV === "production") {
-    console.error(
-      "[Worker] REDIS_URL not configured — background worker disabled (unexpected in production)",
-    );
-  } else {
-    console.warn("[Worker] REDIS_URL not configured — background worker disabled");
-  }
 
   // Initialize BullMQ queue and Bull Board monitoring
   try {
@@ -501,6 +491,26 @@ app.use((req, res, next) => {
       "[StartupSchema] FATAL: SEO Intelligence tables are not ready (patches 0093–0102) — refusing to serve or schedule SEO automation",
     );
   }
+
+  await ensureInboundDedupSchema(); // Fail closed before any worker can consume messages.
+  // Background BullMQ worker — only when REDIS_URL is configured (local may omit Redis).
+  if (isRedisUrlConfigured()) {
+    void runScheduledWork('startup-import', () => import("./worker")
+      .then((m) => m.startInboxWorker())
+      .catch((err) => {
+        console.error(
+          "[Worker] Failed to start background worker:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }));
+  } else if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[Worker] REDIS_URL not configured — background worker disabled (unexpected in production)",
+    );
+  } else {
+    console.warn("[Worker] REDIS_URL not configured — background worker disabled");
+  }
+
 
   // Prospect bulk AI + KnowledgeScan are DB-polled (not Redis/BullMQ).
   // Production always starts them. Local Inbox debugging skips unless opted in —
@@ -609,25 +619,25 @@ app.use((req, res, next) => {
   // merchant enrollment and fresh per-delivery authorization.
   { // Template worker also reconciles explicit public merchant enrollments.
     const { startShopifyTemplateReconciliation } = await import("./ecommerce/shopifyTemplateProvisioningRuntime");
-    startShopifyTemplateReconciliation();
+    { const stop = startShopifyTemplateReconciliation(); if (stop) runtimeDrain.register("startShopifyTemplateReconciliation", stop); }
   }
   if (process.env.ECOMMERCE_POST_PURCHASE_PREP_ENABLED === 'true') {
     const { startPostPurchasePreparation } = await import("./ecommerce/postPurchaseRuntime");
-    startPostPurchasePreparation();
+    { const stop = startPostPurchasePreparation(); if (stop) runtimeDrain.register("startPostPurchasePreparation", stop); }
     const { startPostPurchaseDelivery } = await import("./ecommerce/postPurchaseDeliveryRuntime");
-    startPostPurchaseDelivery();
+    { const stop = startPostPurchaseDelivery(); if (stop) runtimeDrain.register("startPostPurchaseDelivery", stop); }
   }
   if (process.env.ECOMMERCE_RECOVERY_AUTOPREP_ENABLED === 'true') {
     const { startCheckoutRecoveryAutoPreparation } = await import("./ecommerce/checkoutRecoveryAutoPreparationRuntime");
-    startCheckoutRecoveryAutoPreparation();
+    { const stop = startCheckoutRecoveryAutoPreparation(); if (stop) runtimeDrain.register("startCheckoutRecoveryAutoPreparation", stop); }
   }
   if (process.env.ECOMMERCE_RECOVERY_WORKER_ENABLED === 'true') {
     const { startCheckoutRecoveryRuntime } = await import("./ecommerce/checkoutRecoveryWorkerRuntime");
-    startCheckoutRecoveryRuntime();
+    { const stop = startCheckoutRecoveryRuntime(); if (stop) runtimeDrain.register("startCheckoutRecoveryRuntime", stop); }
   }
 
   const { startMerchantAutomations } = await import("./ecommerce/merchantRuntime");
-  startMerchantAutomations();
+  { const stop = startMerchantAutomations(); if (stop) runtimeDrain.register("startMerchantAutomations", stop); }
 
   // Approved SEO proposals are claimed durably and can only create review-only GitHub PRs.
   const { startSeoGithubExecutionWorker } = await import("./seo/githubExecutionService");
@@ -666,13 +676,15 @@ app.use((req, res, next) => {
   // Runs only in production; in dev the state file persists so only genuine
   // new additions trigger submissions.
   if (process.env.NODE_ENV === "production") {
-    setTimeout(async () => {
+    setTimeout(() => {
+      void runScheduledWork("startup-indexnow", async () => {
       try {
         const { detectAndSubmitNewContent } = await import("./indexNow");
         await detectAndSubmitNewContent();
       } catch (err: any) {
         console.error("[IndexNow] Startup content detection failed:", err.message);
       }
+      });
     }, 10_000); // 10-second delay — lets server fully start before outbound requests
   }
 
@@ -699,6 +711,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  trackHttpHandlers((app as any)._router?.stack || []);
   httpServer.listen(
     {
       port,
@@ -728,15 +741,15 @@ app.use((req, res, next) => {
         `${appUrl || "(set APP_URL env)"}/api/webhooks/calendly/marketing-demo`,
       );
       runStartupGhlCleanup().catch(err => console.error('[GHL Startup Cleanup] Unhandled error:', err));
-      import("./inventory/inventoryDevSeedAudit")
+      void runScheduledWork('startup-import', () => import("./inventory/inventoryDevSeedAudit")
         .then(({ runInventoryDevSeedProductionAudit }) => runInventoryDevSeedProductionAudit())
-        .catch((err) => console.error("[inventory-dev-seed] Startup audit failed:", err));
-      import("./shopifyWebhookHealth")
+        .catch((err) => console.error("[inventory-dev-seed] Startup audit failed:", err)));
+      void runScheduledWork('startup-import', () => import("./shopifyWebhookHealth")
         .then(({ runShopifyWebhookStartupAudit }) => runShopifyWebhookStartupAudit())
-        .catch((err) => console.error("[shopify-webhooks] Startup audit failed:", err));
+        .catch((err) => console.error("[shopify-webhooks] Startup audit failed:", err)));
 
       setTimeout(() => {
-        (async () => {
+        runScheduledWork("startup-backfills", async () => {
           try {
             console.log("[Backfill] Starting startup backfills...");
             const backfillResult = await (app as any).locals.runBackfills?.();
@@ -760,7 +773,7 @@ app.use((req, res, next) => {
           } catch (err) {
             console.error("[Backfill] Startup backfills failed:", err);
           }
-        })().catch((err) => console.error("[Backfill] Startup backfills failed:", err));
+        }).catch((err) => console.error("[Backfill] Startup backfills failed:", err));
       }, 0);
     },
   );

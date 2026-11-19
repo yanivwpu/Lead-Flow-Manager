@@ -1,3 +1,5 @@
+import { runtimeDrain } from "./runtimeDrain";
+import { persistClaimedInbound, inboundMessageIdPredicate } from "./inboundDedup";
 import { safeDatabaseErrorDiagnostic } from "./startupSchemaDiagnostics";
 import {stripShopifyGrowthManagedConfig} from "@shared/shopifyGrowthTemplates";
 import {preserveShopifyGrowthManagedConfig} from "./ecommerce/postPurchaseTemplateBinding";
@@ -411,7 +413,7 @@ export interface IStorage {
   getMessages(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
   getMessage(id: string): Promise<Message | undefined>;
   getMessageByExternalId(externalMessageId: string): Promise<Message | undefined>;
-  getMessageByUserExternalId(userId: string, externalMessageId: string): Promise<Message | undefined>;
+  getMessageByUserExternalId(userId: string, externalMessageId: string, channel?: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
   deleteMessage(id: string): Promise<void>;
@@ -1141,6 +1143,13 @@ export class DbStorage implements IStorage {
 
   // Usage tracking methods
   async recordMessageUsage(usage: InsertMessageUsage): Promise<MessageUsage> {
+    // The inbound receipt serializes Twilio delivery/retry. Preserve its legacy usage row too.
+    if (usage.direction === "inbound" && usage.twilioSid) {
+      const [existing] = await db.select().from(messageUsage).where(and(
+        eq(messageUsage.userId, usage.userId), eq(messageUsage.twilioSid, usage.twilioSid), eq(messageUsage.direction, "inbound"),
+      )).limit(1);
+      if (existing) return existing;
+    }
     const result = await db.insert(messageUsage).values(usage).returning();
     return result[0];
   }
@@ -3009,14 +3018,17 @@ export class DbStorage implements IStorage {
     return result[0];
   }
 
-  async getMessageByUserExternalId(userId: string, externalMessageId: string): Promise<Message | undefined> {
+  async getMessageByUserExternalId(userId: string, externalMessageId: string, channel?: string): Promise<Message | undefined> {
     const result = await db.select().from(messages)
-      .where(and(eq(messages.userId, userId), eq(messages.externalMessageId, externalMessageId)))
+      .where(and(eq(messages.userId, userId), inboundMessageIdPredicate(userId, externalMessageId, channel), channel ? sql`${messages.direction}='inbound' AND ${messages.conversationId} IN (SELECT id FROM conversations WHERE channel=${channel} AND user_id=${userId})` : undefined))
+      .orderBy(asc(messages.createdAt), asc(messages.id))
       .limit(1);
     return result[0];
   }
 
   async createMessage(message: InsertMessage): Promise<Message> {
+    const claimed = await persistClaimedInbound(message);
+    if (claimed) return claimed;
     const result = await db.insert(messages).values(message).returning();
     return result[0];
   }
@@ -4556,6 +4568,7 @@ export class DbStorage implements IStorage {
   }
 
   async claimPendingFlowJobs(limit = 50): Promise<FlowJob[]> {
+    if (runtimeDrain.isDraining) return [];
     return await db.transaction(async (tx) => {
       const picked = await tx.execute(sql`
         SELECT id FROM flow_jobs
@@ -4745,6 +4758,7 @@ export class DbStorage implements IStorage {
   }
 
   async claimPendingNoReplyJobs(limit = 30): Promise<NoReplyJob[]> {
+    if (runtimeDrain.isDraining) return [];
     return await db.transaction(async (tx) => {
       const picked = await tx.execute(sql`
         SELECT id FROM no_reply_jobs
@@ -4891,6 +4905,7 @@ export class DbStorage implements IStorage {
   }
 
   async claimPendingAutomationTimerJobs(limit = 30): Promise<AutomationTimerJob[]> {
+    if (runtimeDrain.isDraining) return [];
     return await db.transaction(async (tx) => {
       const picked = await tx.execute(sql`
         SELECT id FROM automation_timer_jobs

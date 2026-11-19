@@ -71,6 +71,52 @@ listener per process, in addition to existing storage/session pools. Release old
 application instances during rollout: an older sender does not participate in the
 new dispatch fence. Existing browser tabs must reload for the new send protocol.
 
+### Controlled release after preparation #333
+
+Preparation #333 is already deployed at commit
+`1fd891065757818282eacb151438236da7b29a1d`. The verified Railway rollback
+deployment is `b9375c03-0514-4864-8ebf-07ab875dc9be` in
+luminous-transformation / production / Lead-Flow-Manager. Keep automatic
+deployments disabled while reviewing and merging #330. The completed production
+Neon and Redis checks need not be repeated for this integration.
+
+Before the approved cutover, read `/tmp/whachat-runtime-drain.json` inside the
+running preparation container and verify its deployment/commit identity and
+`state: running`. Reading the file is non-disruptive. Do not send a drain signal
+as a health test during ordinary production operation.
+
+After final-commit CI passes and the release window is approved:
+
+1. Merge #330 with automatic deployment still held. Record the resulting main
+   SHA; the later manual launch must use that exact release.
+2. In every existing preparation runtime, run
+   `node scripts/request-runtime-drain.cjs`. This intentionally fences new HTTP
+   work with retryable 503, stops acquisition and waits for admitted work. Require
+   `DRAIN_READY`, matching identity, `draining=true` and `active={}`. On failure or
+   timeout, do not force removal or start #330. This real cutover verifies the
+   drain without an additional rehearsal outage.
+3. Remove the old deployment, not the service. Wait for all old replicas to be
+   fully REMOVED. Preserve every waiting/delayed job, future no-reply job and
+   pending commerce event. Do not globally pause/purge Redis or bulk-toggle AI
+   or automation settings. Uncertain provider outcomes must be reconciled before
+   any retry or new dispatch startup.
+4. Use Railway's **Deploy latest commit** to start exactly one reviewed #330
+   runtime. Do not use Redeploy on the preparation build for this forward release.
+   Verify SHA, additive receipt/coordination schema, event listener, workers and
+   provider intake recovery before acceptance. Workers can start before HTTP
+   health, so replacing traffic alone does not prevent overlap. Public domains
+   can remain on 8080: #333's application fence replaces the one-time #332 port
+   workaround. If a temporary domain fence is used, restore its saved ports only
+   after local startup verification.
+
+Rollback: drain/remove the new runtime fully before redeploying the saved #333
+build as one instance. If startup failed before drain readiness, verify its
+termination explicitly. Keep additive receipt/coordination schema and all
+customer data; do not restore the database, remove indexes/tables or blindly
+replay `dispatching`/unknown deliveries. A quiesced preparation instance cannot
+be resumed by a documented control; abandoning a successful drain requires
+replacement without overlapping dispatchers.
+
 ## Verification
 
 CI runs signed-session HTTP/WebSocket and SQL authorization regressions, the
@@ -79,11 +125,14 @@ and presence tests against PostgreSQL 16. The database test requires an explicit
 `TEST_DATABASE_URL`, creates a unique isolated schema and removes only that schema.
 Providers remain synthetic; no test sends production customer messages.
 
-Production verification still requires two real logins across two application
-instances, reconnects, and provider-controlled test recipients for WhatsApp, SMS,
+Production acceptance uses two real logins in the same existing workspace on the
+single reviewed production deployment; cross-instance behavior remains covered
+by the existing separate-process PostgreSQL tests. Verify reconnects and
+provider-controlled test recipients for WhatsApp, SMS,
 Instagram, Messenger, Telegram, Web Chat and Gmail. Check provider delivery receipts,
 WhatsApp reply windows/templates, multipart media and delayed webhooks. Verify the
-production database connection supports session locks/LISTEN. No deployment or
+production database connection supports session locks/LISTEN if that evidence
+is not already available; that production gate passed before this release. No deployment or
 production schema change is performed by this PR's development checks.
 
 Local validation: **169 tests passed** (34 signed-session security/contract tests,

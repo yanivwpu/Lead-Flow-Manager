@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from './runtimeDrain';
 import { channelService } from "./channelService";
 import { db } from "../drizzle/db";
 import { channelSettings } from "@shared/schema";
@@ -50,6 +51,7 @@ export function startInstagramDevPolling() {
   console.log("[IG Poll] Enabled (dev mode)", { intervalMs });
 
   const tick = async () => {
+ return runScheduledWork("server/instagramPolling.ts:tick", async () => {
     if (running) return;
     running = true;
     try {
@@ -167,7 +169,9 @@ export function startInstagramDevPolling() {
     } finally {
       running = false;
     }
-  };
+
+ });
+};
 
   // Initial slight delay, then interval.
   setTimeout(() => tick().catch(() => {}), 1500);

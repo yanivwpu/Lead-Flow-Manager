@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
@@ -164,6 +165,7 @@ export async function processCustomerEffectEvent(id: string, database: Database 
 }
 let ticking = false;
 export async function runShopifyCustomerEffectsTick(): Promise<void> {
+ return runTrackedWork("server/shopifyCustomerEffects.ts:runShopifyCustomerEffectsTick", async () => {
   if (ticking) return;
   ticking = true;
   try {
@@ -175,4 +177,6 @@ export async function runShopifyCustomerEffectsTick(): Promise<void> {
     for (const row of rows) await processCustomerEffectEvent(row.id);
   } catch { console.error(JSON.stringify({ tag: "[CommerceIngest]", event: "customer_effect_tick_failed" })); }
   finally { ticking = false; }
+
+ });
 }

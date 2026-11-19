@@ -1,3 +1,4 @@
+import { runTrackedWork, runtimeDrain, runScheduledWork } from './runtimeDrain';
 import { runShopifyOfflineTokenTick } from './shopifyOfflineTokenMaintenance';
 import { runShopifyCustomerEffectsTick } from "./shopifyCustomerEffects";
 import { runShopifyPrivacyTick } from "./shopifyExternalErasure";
@@ -22,6 +23,7 @@ const GRAPH = "https://graph.facebook.com/v19.0";
 // that the page is still subscribed to the "messages" field.  If not, it
 // re-subscribes automatically so inbound messages keep flowing.
 export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; repaired: number; errors: number }> {
+ return runTrackedWork("server/cron.ts:runMetaWebhookHealthCheck", async () => {
   console.log('[WebhookHealth] Starting Meta webhook health check...');
   let checked = 0;
   let repaired = 0;
@@ -103,6 +105,8 @@ export async function runMetaWebhookHealthCheck(): Promise<{ checked: number; re
     console.error('[WebhookHealth] Fatal error in webhook health check:', err);
     throw err;
   }
+
+ });
 }
 
 let trialExpirationEmailsAllowed = false;
@@ -110,6 +114,7 @@ let verificationRemindersAllowed = false;
 
 /** Mark trial_status expired, then send Day 14 expiration email if still on Free. */
 export async function runTrialExpirySync(): Promise<number> {
+ return runTrackedWork("server/cron.ts:runTrialExpirySync", async () => {
   try {
     const result = await db.execute(sql`
       UPDATE users SET trial_status = 'expired'
@@ -124,9 +129,12 @@ export async function runTrialExpirySync(): Promise<number> {
     console.error('[Cron] Trial expiry sync failed:', e);
     return 0;
   }
+
+ });
 }
 
 async function runTrialExpiryThenExpirationEmails(): Promise<void> {
+ return runTrackedWork("server/cron.ts:runTrialExpiryThenExpirationEmails", async () => {
   await runTrialExpirySync();
   if (!trialExpirationEmailsAllowed) {
     console.log(
@@ -135,9 +143,12 @@ async function runTrialExpiryThenExpirationEmails(): Promise<void> {
     return;
   }
   await runTrialExpirationEmails();
+
+ });
 }
 
 async function runVerificationRemindersIfAllowed(): Promise<void> {
+ return runTrackedWork("server/cron.ts:runVerificationRemindersIfAllowed", async () => {
   if (!verificationRemindersAllowed) {
     console.log(
       "[Cron] Verification reminders deferred until schema patches 0085/0086 and a valid rollout boundary are ready",
@@ -145,11 +156,16 @@ async function runVerificationRemindersIfAllowed(): Promise<void> {
     return;
   }
   await runVerificationReminders();
+
+ });
 }
 
 async function runHourlyAccountEmailJobs(): Promise<void> {
+ return runTrackedWork("server/cron.ts:runHourlyAccountEmailJobs", async () => {
   await runTrialExpiryThenExpirationEmails();
   await runVerificationRemindersIfAllowed();
+
+ });
 }
 
 /** Enable Day 14 mail only after patch 0080 has added the column and backfilled expired trials. */
@@ -175,6 +191,7 @@ export async function enableVerificationRemindersAfterSchemaReady(): Promise<voi
 }
 
 export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: number }> {
+ return runTrackedWork("server/cron.ts:runTrialCheckinEmails", async () => {
   const result = await runActivationEmails();
   const shopify = await runShopifyOnboardingEmails();
   return {
@@ -187,11 +204,14 @@ export async function runTrialCheckinEmails(): Promise<{ sent: number; errors: n
       shopify.day10Sent,
     errors: result.errors + shopify.errors,
   };
+
+ });
 }
 
 export { runActivationEmails } from './activationEmailService';
 
 export async function runDailyHotListEmails(): Promise<{ sent: number; errors: number }> {
+ return runTrackedWork("server/cron.ts:runDailyHotListEmails", async () => {
   console.log('[Cron] Starting daily hot list email job...');
 
   let sent = 0;
@@ -286,6 +306,8 @@ export async function runDailyHotListEmails(): Promise<{ sent: number; errors: n
     console.error('[Cron/HotList] Error in daily hot list job:', error);
     throw error;
   }
+
+ });
 }
 
 let cronInterval: NodeJS.Timeout | null = null;
@@ -299,6 +321,8 @@ let emailPollInFlight = false;
 let lastGmailWatchRenewalDay = "";
 
 export function startCronJobs() {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register('cron', stopCronJobs);
   console.log('[Cron] Starting cron scheduler...');
   void runShopifyCustomerEffectsTick();
 
@@ -315,6 +339,7 @@ export function startCronJobs() {
   }, 30_000);
   
   cronInterval = setInterval(() => {
+    if (runtimeDrain.isDraining) return;
     void runShopifyOfflineTokenTick();
     void runShopifyPrivacyTick();
     void runShopifyCustomerEffectsTick();
@@ -325,7 +350,8 @@ export function startCronJobs() {
     // Read-only Search Console import, once daily. Never edits public content.
     const seoDay = now.toISOString().slice(0, 10);
     if (isWithinScheduledSeoRecoveryWindow(now)) {
-      Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]).then(async ([claims, service]) => {
+      runScheduledWork("seo-scheduled", async () => {
+        const [claims, service] = await Promise.all([import("./seo/scheduledSync"), import("./seo/seoService")]);
         let claim;
         try {
           claim = await claims.claimScheduledSeoSync(seoDay, now);
@@ -388,30 +414,30 @@ export function startCronJobs() {
     // Inventory reconciliation — every 6 hours at :30 UTC
     if (utcMin === 30 && utcHour % 6 === 0 && utcHour !== lastInventoryReconcileHour) {
       lastInventoryReconcileHour = utcHour;
-      import("./inventory/inventorySyncService")
+      void runScheduledWork('cron-import', () => import("./inventory/inventorySyncService")
         .then(({ runInventoryReconciliationCron }) => runInventoryReconciliationCron())
-        .catch((err) => console.error("[inventory-reconcile] cron error:", err));
+        .catch((err) => console.error("[inventory-reconcile] cron error:", err)));
     }
 
     runCampaignSchedulerTick(40).catch((err) =>
       console.error('[CampaignScheduler] tick error:', err)
     );
 
-    import("./demoAssignmentService")
+    void runScheduledWork('cron-import', () => import("./demoAssignmentService")
       .then(({ processExpiredDemoAcceptances }) => processExpiredDemoAcceptances())
-      .catch((err) => console.error("[DemoAssignment] cron error:", err));
+      .catch((err) => console.error("[DemoAssignment] cron error:", err)));
 
     // Calendly polling fallback — every 10 minutes for integrations without webhooks
     if (utcMin % 10 === 5 && utcMin !== lastCalendlyPollMinute) {
       lastCalendlyPollMinute = utcMin;
-      import("./calendlySyncService")
+      void runScheduledWork('cron-import', () => import("./calendlySyncService")
         .then(({ runCalendlyPollingCron }) => runCalendlyPollingCron())
-        .catch((err) => console.error("[CalendlyPoll] cron error:", err));
+        .catch((err) => console.error("[CalendlyPoll] cron error:", err)));
       // Marketing website demo bookings use a separate Calendly account flow.
       // Read-only API polling also works on Calendly Free (no webhooks required).
-      import("./marketingDemoCalendlyPoll")
+      void runScheduledWork('cron-import', () => import("./marketingDemoCalendlyPoll")
         .then(({ pollMarketingDemoCalendlyBookings }) => pollMarketingDemoCalendlyBookings())
-        .catch((err) => console.error("[MarketingDemoCalendlyPoll] cron error:", err));
+        .catch((err) => console.error("[MarketingDemoCalendlyPoll] cron error:", err)));
     }
 
     // Native email Gmail incremental sync — elapsed-time fallback (default 10 min).
@@ -424,12 +450,12 @@ export function startCronJobs() {
       ) {
         emailPollInFlight = true;
         lastEmailPollAtMs = nowMs;
-        import("./emailChannel/syncService")
+        void runScheduledWork('cron-import', () => import("./emailChannel/syncService")
           .then(({ runEmailPollingCron }) => runEmailPollingCron())
           .catch((err) => console.error("[EmailPoll] cron error:", err))
           .finally(() => {
             emailPollInFlight = false;
-          });
+          }));
       }
     }
 
@@ -438,15 +464,15 @@ export function startCronJobs() {
       const dayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
       if (dayKey !== lastGmailWatchRenewalDay && utcHour === 3 && utcMin === 15) {
         lastGmailWatchRenewalDay = dayKey;
-        import("./emailChannel/gmailWatch")
+        void runScheduledWork('cron-import', () => import("./emailChannel/gmailWatch")
           .then(({ runGmailWatchRenewalCron }) => runGmailWatchRenewalCron())
-          .catch((err) => console.error("[GmailWatch] renewal cron error:", err));
+          .catch((err) => console.error("[GmailWatch] renewal cron error:", err)));
       }
     }
   }, 60000);
   
   // Soft-warn once if Pub/Sub is not configured (polling still works).
-  void import("./emailChannel/gmailPushConfig").then(({ resolveGmailPubSubConfig, logGmailWatchEvent }) => {
+  void runScheduledWork('cron-import', () => import("./emailChannel/gmailPushConfig").then(({ resolveGmailPubSubConfig, logGmailWatchEvent }) => {
     const cfg = resolveGmailPubSubConfig();
     if (!cfg.configured) {
       logGmailWatchEvent("backfill_skipped_not_configured", { reason: cfg.reason, phase: "cron_start" });
@@ -458,7 +484,7 @@ export function startCronJobs() {
           .catch((err) => console.error("[GmailWatch] startup backfill error:", err));
       }, 45_000);
     }
-  });
+  }));
 
   console.log('[Cron] Cron scheduler started (activation emails: 10 AM EST, hot list: 9 AM EST, webhook health: hourly)');
 }

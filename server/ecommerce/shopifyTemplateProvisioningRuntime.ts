@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 import {merchantProductionAvailable} from './merchantRelease';
 import { db } from "../../drizzle/db";
 import { getMetaMessageTemplates, createMetaShopifyMessageTemplate } from "../userMeta";
@@ -19,6 +20,7 @@ export function startShopifyTemplateReconciliation(): null | (() => void) {
   if (process.env.ECOMMERCE_TEMPLATE_PROVISIONING_ENABLED !== "true"&&!merchantProductionAvailable(process.env)) return null;
   let busy = false, stopped = false;
   const tick = async () => {
+ return runScheduledWork("server/ecommerce/shopifyTemplateProvisioningRuntime.ts:tick", async () => {
     if (busy || stopped) return;
     busy = true;
     try {
@@ -35,7 +37,9 @@ export function startShopifyTemplateReconciliation(): null | (() => void) {
       }
     } catch { console.error("[ShopifyTemplateSetup] reconciliation_unavailable"); }
     finally { busy = false; }
-  };
+
+ });
+};
   const timer = setInterval(() => { void tick(); }, 60_000);
   timer.unref?.();
   return () => { stopped = true; clearInterval(timer); };

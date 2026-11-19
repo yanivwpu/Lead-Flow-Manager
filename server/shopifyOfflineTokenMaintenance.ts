@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { sql } from 'drizzle-orm';
 import { offlineTokenDatabase, resolveOfflineAccessToken, type TokenDatabase } from './shopifyOfflineTokens';
 import { ShopifyTokenError } from './shopifyOfflineGrant';
@@ -23,6 +24,7 @@ export async function maintainOfflineTokens(options: {
 }
 let inFlight = false;
 export async function runShopifyOfflineTokenTick() {
+ return runTrackedWork("server/shopifyOfflineTokenMaintenance.ts:runShopifyOfflineTokenTick", async () => {
   if (inFlight || !process.env.SHOPIFY_OFFLINE_TOKEN_KEY) return;
   inFlight = true;
   try {
@@ -31,4 +33,6 @@ export async function runShopifyOfflineTokenTick() {
   } catch (error) {
     console.warn('[ShopifyOfflineTokens]', { code: error instanceof ShopifyTokenError ? error.code : 'storage_unavailable' });
   } finally { inFlight = false; }
+
+ });
 }

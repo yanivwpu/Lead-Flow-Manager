@@ -10,7 +10,7 @@ import {
   resolveGmailPubSubConfig,
 } from "../emailChannel/gmailPushConfig";
 import { findActiveGmailMailboxByEmail } from "../emailChannel/mailboxStore";
-import { scheduleMailboxIncrementalSync } from "../emailChannel/gmailSyncTrigger";
+import { triggerMailboxIncrementalSync } from "../emailChannel/gmailSyncTrigger";
 
 type PubSubPushBody = {
   message?: {
@@ -100,11 +100,14 @@ export function registerGmailPubSubWebhookRoutes(app: Express): void {
     }
 
     // Durable pending flag + async sync; ACK immediately.
-    scheduleMailboxIncrementalSync({
+    const trigger = await triggerMailboxIncrementalSync({
       mailboxId: mailbox.id,
       source: "push",
+      wait: false,
       observedHistoryId: historyId,
     });
+
+    if (!trigger.accepted) return res.status(503).json({ error: "sync_not_accepted" });
 
     logGmailPushEvent("trigger_accepted", {
       mailboxId: mailbox.id,

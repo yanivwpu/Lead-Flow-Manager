@@ -35,8 +35,8 @@ test('durable offline lifecycle: concurrency, rotation, rollback, isolation and 
       INSERT INTO users VALUES ('owner','${shop}','legacy-fixture','active',NULL,'pro'),('other','${otherShop}','other-legacy','active',NULL,'free');
       INSERT INTO integrations VALUES ('owner','shopify',true,'{}'),('other','shopify',true,'{}');`);
     const migration=await readFile('migrations/0119_shopify_offline_tokens.sql','utf8');
-    await t.test('legacy installs work without new table/key; preflight rejects missing storage',async()=>{
-      assert.equal(await resolve(shop,'legacy-fixture'),'legacy-fixture');assert.equal(grants,0);
+    await t.test('legacy installations fail closed even without a new table/key; preflight rejects missing storage',async()=>{
+      await assert.rejects(resolve(shop,'legacy-fixture'),/reauthorization_required/);assert.equal(grants,0);
       await assert.rejects(assertOfflineTokenStorage(database));
     });
     await pool.query(migration);await pool.query(migration);
@@ -108,7 +108,7 @@ test('durable offline lifecycle: concurrency, rotation, rollback, isolation and 
       const barrier=new Promise<void>(r=>{release=r;}),ready=new Promise<void>(r=>{started=r;});
       const refreshing=resolve(racer,racerRef,{grant:async()=>{started();await barrier;return pair(21);}});
       await ready;
-      assert.equal(await resolve(otherShop,'other-legacy'),'other-legacy');
+      await assert.rejects(resolve(otherShop,'other-legacy'),/reauthorization_required/);
       let erased=false;
       const uninstall=pool.query("UPDATE users SET shopify_access_token=NULL,shopify_subscription_status='uninstalled' WHERE id='racer'").then(()=>{erased=true;});
       await new Promise(r=>setTimeout(r,30));assert.equal(erased,false);

@@ -1,3 +1,4 @@
+import { runTrackedWork } from './runtimeDrain';
 import { db } from "../drizzle/db";
 import { users } from "@shared/schema";
 import { and, eq, isNull, isNotNull } from "drizzle-orm";
@@ -104,6 +105,7 @@ export async function runShopifyOnboardingEmails(): Promise<{
   markedComplete: number;
   errors: number;
 }> {
+ return runTrackedWork("server/shopifyOnboardingEmailService.ts:runShopifyOnboardingEmails", async () => {
   console.log("[Cron] Starting Shopify onboarding email job...");
 
   const now = new Date();
@@ -235,4 +237,6 @@ export async function runShopifyOnboardingEmails(): Promise<{
     console.error("[ShopifyContact] onboarding_email_job_failed");
     throw error;
   }
+
+ });
 }

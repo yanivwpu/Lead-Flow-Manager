@@ -1,3 +1,4 @@
+import { runScheduledWork, runtimeDrain } from '../runtimeDrain';
 /**
  * DB-polled durable worker for prospect bulk AI analysis jobs.
  * Survives browser close and Railway/app restarts via lease + item_results resume.
@@ -40,6 +41,7 @@ let tickCount = 0;
 let workerStartBlocked = false;
 
 async function tick(): Promise<void> {
+ return runScheduledWork("server/prospectImport/prospectBulkAnalysisWorker.ts:tick", async () => {
   if (isRunning) {
     console.info(
       JSON.stringify(
@@ -189,9 +191,12 @@ async function tick(): Promise<void> {
   } finally {
     isRunning = false;
   }
+
+ });
 }
 
 function scheduleNext(): void {
+  if (runtimeDrain.isDraining) return;
   workerTimer = setTimeout(() => {
     void tick().finally(scheduleNext);
   }, POLL_INTERVAL_MS);
@@ -282,6 +287,8 @@ async function warnIfForeignDeploymentsActive(
 }
 
 export function startProspectBulkAnalysisWorker(): void {
+  if (runtimeDrain.isDraining) return;
+  runtimeDrain.register("startProspectBulkAnalysisWorker", stopProspectBulkAnalysisWorker);
   if (workerTimer || workerStartBlocked) return;
 
   const keyDiag = describeOpenAiKeyRuntimeDiagnostics();

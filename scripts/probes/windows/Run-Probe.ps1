@@ -1,0 +1,109 @@
+﻿# Windows PowerShell 5.1 and PowerShell 7 compatible.
+# Local portable utility only. No installs, deploys, migrations, service changes,
+# SSH-key registration, or customer-data writes are performed.
+$ErrorActionPreference = 'Stop'
+$TempFolder = $null
+$ExitCode = 1
+try {
+    Write-Host ''
+    Write-Host 'WhachatCRM - read-only queue inventory' -ForegroundColor Cyan
+    Write-Host 'Your production service and automations will stay running.'
+    Write-Host ''
+    if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) {
+        throw 'ACCESS_NEEDED: Windows OpenSSH Client is not available. Stop here and send this message back. No changes were made.'
+    }
+    $Architecture = $env:PROCESSOR_ARCHITEW6432
+    if (-not $Architecture) { $Architecture = $env:PROCESSOR_ARCHITECTURE }
+    switch ($Architecture.ToUpperInvariant()) {
+        'AMD64' { $Target = 'x86_64-pc-windows-msvc'; $ExpectedHash = '1f468573a544587a2c22e6262abc393dafaaf8627ae9f45a5ef2e7d96423c8b6' }
+        'ARM64' { $Target = 'aarch64-pc-windows-msvc'; $ExpectedHash = 'e733d050060ac069f1e37b6ae55bf1565878ee82241c5934820d90ffe47544e6' }
+        'X86'   { $Target = 'i686-pc-windows-msvc'; $ExpectedHash = '5458648ebd0cfe47f2da81eb3461d46e150d3f5ffbfa9179bb6d03869ace970e' }
+        default { throw 'UNSUPPORTED_WINDOWS: Send this message back. No production changes were made.' }
+    }
+    $TempFolder = Join-Path ([IO.Path]::GetTempPath()) ('WhachatCRM-Probe-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $TempFolder | Out-Null
+    $Archive = Join-Path $TempFolder 'railway.zip'
+    $Download = 'https://github.com/railwayapp/cli/releases/download/v5.75.0/railway-v5.75.0-' + $Target + '.zip'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Write-Host '1/3 Downloading and verifying the official Railway utility...'
+    Invoke-WebRequest -UseBasicParsing -Uri $Download -OutFile $Archive
+    $ActualHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($ActualHash -ne $ExpectedHash) {
+        throw 'DOWNLOAD_CHECK_FAILED: The download did not match the official checksum. Nothing was executed.'
+    }
+    Expand-Archive -LiteralPath $Archive -DestinationPath (Join-Path $TempFolder 'utility')
+    $Binaries = @(Get-ChildItem -Path (Join-Path $TempFolder 'utility') -Recurse -Filter 'railway.exe' -File)
+    if ($Binaries.Count -ne 1) { throw 'DOWNLOAD_FORMAT_ERROR: No unique official utility was found.' }
+    $Railway = $Binaries[0].FullName
+    $env:RAILWAY_CALLER = 'skill:use-railway@1.3.5'
+    $env:RAILWAY_AGENT_SESSION = 'pr330-queue-inventory'
+    Write-Host '2/3 Checking sign-in...'
+    $SignedIn = $false
+    $OldPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $WhoOutput = & $Railway whoami --json 2>$null
+        $SignedIn = ($LASTEXITCODE -eq 0)
+    } finally { $ErrorActionPreference = $OldPreference }
+    if (-not $SignedIn) {
+        Write-Host 'A Railway sign-in page will open in your browser.' -ForegroundColor Yellow
+        Write-Host 'Sign in with your usual Railway account, approve CLI login, then return here.'
+        & $Railway login
+        if ($LASTEXITCODE -ne 0) { throw 'LOGIN_NOT_COMPLETED: Sign-in did not finish. No production changes were made.' }
+    }
+    Write-Host '3/3 Running the check inside the existing WhachatCRM production service...'
+    Write-Host 'This will use existing authorized SSH access only. It cannot add an SSH key.'
+    $Payload = 'J3VzZSBzdHJpY3QnOwovLyBJbnZlbnRvcnkgb25seTogbm8gYXBwIGltcG9ydHMsIEJ1bGxNUSBvYmplY3RzLCBMdWEsIHF1ZXVlIHBhdXNlL3Jlc3VtZSBvciBqb2IgbXV0YXRpb25zLgpjb25zdCB7Y3JlYXRlUmVxdWlyZX09cmVxdWlyZSgnbm9kZTptb2R1bGUnKTsKY29uc3QgcmVxPWNyZWF0ZVJlcXVpcmUocHJvY2Vzcy5jd2QoKSsnL3BhY2thZ2UuanNvbicpOwpjb25zdCBlbnY9cHJvY2Vzcy5lbnY7CmNvbnN0IHJlc3VsdD17Y2hlY2s6J3F1ZXVlX2ludmVudG9yeScscHJvYmVWZXJzaW9uOjIscmVzdWx0OidGQUlMJyxvYnNlcnZlZEF0Om5ldyBEYXRlKCkudG9JU09TdHJpbmcoKX07CmxldCByZWRpcyxzdGFnZT0naWRlbnRpZnlfcnVudGltZScsbGFzdENvbm5lY3Rpb25GYWlsdXJlOwpjb25zdCBzYWZlUmVhc29ucz1uZXcgU2V0KFsKICd3cm9uZ19vcl91bmF0dGVzdGVkX3J1bnRpbWUnLCd1bmF0dGVzdGVkX3J1bnRpbWVfY29tbWl0JywncmVkaXNfdXJsX2Fic2VudCcsJ3JlZGlzX2NvbmZpZ19pbnZhbGlkJywKICd1bnN1cHBvcnRlZF9yZWRpc19wcm90b2NvbCcsJ3JlZGlzX21vZHVsZV9taXNzaW5nJywncmVkaXNfbW9kdWxlX2ludmFsaWQnLCdyZWRpc19tb2R1bGVfbG9hZF9mYWlsZWQnLAogJ3JlZGlzX2Ruc19mYWlsZWQnLCdyZWRpc19jb25uZWN0aW9uX3JlZnVzZWQnLCdyZWRpc19jb25uZWN0aW9uX2ZhaWxlZCcsJ3JlZGlzX2Nvbm5lY3Rpb25fY2xvc2VkJywKICdyZWRpc190aW1lb3V0JywncmVkaXNfdGxzX2ZhaWxlZCcsJ3JlZGlzX2F1dGhlbnRpY2F0aW9uX2ZhaWxlZCcsJ3JlZGlzX2F1dGhlbnRpY2F0aW9uX3JlcXVpcmVkJywKICdyZWRpc19wZXJtaXNzaW9uX2RlbmllZCcsJ3JlZGlzX3F1b3RhX2V4Y2VlZGVkJywncmVkaXNfcmF0ZV9saW1pdGVkJywncmVkaXNfY29tbWFuZF91bnN1cHBvcnRlZCcsCiAncmVkaXNfY29tbWFuZF9pbnZhbGlkJywncmVkaXNfa2V5X3R5cGVfbWlzbWF0Y2gnLCdyZWRpc190cmFuc2FjdGlvbl9hYm9ydGVkJywncmVkaXNfY29tbWFuZF9mYWlsZWQnLAogJ3JlZGlzX3Jlc3BvbnNlX2ludmFsaWQnLCdyZWRpc19jbGllbnRfaW5pdGlhbGl6YXRpb25fZmFpbGVkJywnaW52ZW50b3J5X3RpbWVvdXQnLCdwcm9iZV9pbnRlcm5hbF9lcnJvcicsCl0pOwpjb25zdCBzYWZlQ29kZXM9bmV3IFNldChbJ01PRFVMRV9OT1RfRk9VTkQnLCdFUlJfTU9EVUxFX05PVF9GT1VORCcsJ0VSUl9JTlZBTElEX1VSTCcsJ0VOT1RGT1VORCcsJ0VBSV9BR0FJTicsCiAnRUNPTk5SRUZVU0VEJywnRUNPTk5SRVNFVCcsJ0VIT1NUVU5SRUFDSCcsJ0VORVRVTlJFQUNIJywnRVBJUEUnLCdFVElNRURPVVQnLCdFUlJfVExTX0NFUlRfQUxUTkFNRV9JTlZBTElEJywKICdDRVJUX0hBU19FWFBJUkVEJywnREVQVEhfWkVST19TRUxGX1NJR05FRF9DRVJUJywnU0VMRl9TSUdORURfQ0VSVF9JTl9DSEFJTicsJ1VOQUJMRV9UT19WRVJJRllfTEVBRl9TSUdOQVRVUkUnLAogJ1VOQUJMRV9UT19HRVRfSVNTVUVSX0NFUlRfTE9DQUxMWScsJ0VSUl9TU0xfV1JPTkdfVkVSU0lPTl9OVU1CRVInLCdFUlJfVExTX0hBTkRTSEFLRV9USU1FT1VUJ10pOwpjbGFzcyBQcm9iZUZhaWx1cmUgZXh0ZW5kcyBFcnJvciB7CiBjb25zdHJ1Y3RvcihyZWFzb24sZGV0YWlscz17fSl7c3VwZXIocmVhc29uKTt0aGlzLnJlYXNvbj1yZWFzb247dGhpcy5kZXRhaWxzPWRldGFpbHM7fQp9CmZ1bmN0aW9uIGVuc3VyZShvayxyZWFzb24pe2lmKCFvayl0aHJvdyBuZXcgUHJvYmVGYWlsdXJlKHJlYXNvbik7fQovLyBJbnNwZWN0IHRleHQgcHJpdmF0ZWx5IGZvciBmaXhlZCBjYXRlZ29yaWVzOyBuZXZlciByZXR1cm4gdGV4dCwgc3RhY2ssIFVSTCwgaG9zdCBvciBjb21tYW5kIGFyZ3VtZW50cy4KZnVuY3Rpb24gY2xhc3NpZnkoZXJyb3IsYXQpewogY29uc3QgY29kZT10eXBlb2YgZXJyb3I/LmNvZGU9PT0nc3RyaW5nJyYmc2FmZUNvZGVzLmhhcyhlcnJvci5jb2RlKT9lcnJvci5jb2RlOnVuZGVmaW5lZDsKIGNvbnN0IG1lc3NhZ2U9dHlwZW9mIGVycm9yPy5tZXNzYWdlPT09J3N0cmluZyc/ZXJyb3IubWVzc2FnZTonJzsKIGxldCByZWFzb247CiAvLyBDb2RlcyB0YWtlIHByZWNlZGVuY2U6IGEgaG9zdG5hbWUvZXJyb3IgcGF5bG9hZCBjb250YWluaW5nICJUTFMiIGlzIG5vdCBhIFRMUyBmYWlsdXJlLgogaWYoY29kZT09PSdFTk9URk9VTkQnfHxjb2RlPT09J0VBSV9BR0FJTicpcmVhc29uPSdyZWRpc19kbnNfZmFpbGVkJzsKIGVsc2UgaWYoY29kZT09PSdFQ09OTlJFRlVTRUQnKXJlYXNvbj0ncmVkaXNfY29ubmVjdGlvbl9yZWZ1c2VkJzsKIGVsc2UgaWYoY29kZT09PSdFVElNRURPVVQnKXJlYXNvbj0ncmVkaXNfdGltZW91dCc7CiBlbHNlIGlmKGNvZGU9PT0nRUNPTk5SRVNFVCd8fGNvZGU9PT0nRVBJUEUnKXJlYXNvbj0ncmVkaXNfY29ubmVjdGlvbl9jbG9zZWQnOwogZWxzZSBpZihjb2RlJiYoL1RMU3xTU0x8Q0VSVHxTRUxGX1NJR05FRHxJU1NVRVJ8TEVBRl9TSUdOQVRVUkUvLnRlc3QoY29kZSkpKXJlYXNvbj0ncmVkaXNfdGxzX2ZhaWxlZCc7CiBlbHNlIGlmKGNvZGU9PT0nRVJSX0lOVkFMSURfVVJMJylyZWFzb249J3JlZGlzX2NvbmZpZ19pbnZhbGlkJzsKIGVsc2UgaWYoY29kZT09PSdNT0RVTEVfTk9UX0ZPVU5EJ3x8Y29kZT09PSdFUlJfTU9EVUxFX05PVF9GT1VORCcpcmVhc29uPSdyZWRpc19tb2R1bGVfbWlzc2luZyc7CiBlbHNlIGlmKC9cYldST05HUEFTU1xifGludmFsaWQgKD86dXNlcm5hbWV8cGFzc3dvcmQpfGF1dGhlbnRpY2F0aW9uIGZhaWxlZHxBVVRIIGZhaWxlZC9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19hdXRoZW50aWNhdGlvbl9mYWlsZWQnOwogZWxzZSBpZigvXGJOT0FVVEhcYnxhdXRoZW50aWNhdGlvbiByZXF1aXJlZC9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19hdXRoZW50aWNhdGlvbl9yZXF1aXJlZCc7CiBlbHNlIGlmKC9cYk5PUEVSTVxifHBlcm1pc3Npb24gZGVuaWVkfG5vdCBhbGxvd2VkIHRvICg/OnJ1bnxleGVjdXRlfGFjY2VzcykvaS50ZXN0KG1lc3NhZ2UpKXJlYXNvbj0ncmVkaXNfcGVybWlzc2lvbl9kZW5pZWQnOwogZWxzZSBpZigvbWF4IHJlcXVlc3RzIGxpbWl0IGV4Y2VlZGVkfHF1b3RhIGV4Y2VlZGVkfG1vbnRobHkuKmxpbWl0fGRhaWx5LipsaW1pdHxtYXggY29uY3VycmVudCBjb25uZWN0aW9ucy9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19xdW90YV9leGNlZWRlZCc7CiBlbHNlIGlmKC9yYXRlIGxpbWl0fHRvbyBtYW55IHJlcXVlc3RzfFxiVEhST1RUTEVEXGIvaS50ZXN0KG1lc3NhZ2UpKXJlYXNvbj0ncmVkaXNfcmF0ZV9saW1pdGVkJzsKIGVsc2UgaWYoL1RMU3xTU0wgaGFuZHNoYWtlfGNlcnRpZmljYXRlICg/OmhhcyBleHBpcmVkfHZlcmlmeXx2YWxpZGF0aW9uKXxzZWxmLnNpZ25lZCBjZXJ0aWZpY2F0ZS9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc190bHNfZmFpbGVkJzsKIGVsc2UgaWYoL3RpbWVkPyA/b3V0fHRpbWVvdXQvaS50ZXN0KG1lc3NhZ2UpKXJlYXNvbj0ncmVkaXNfdGltZW91dCc7CiBlbHNlIGlmKC9tYXggcmV0cmllcyBwZXIgcmVxdWVzdC9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19jb25uZWN0aW9uX2ZhaWxlZCc7CiBlbHNlIGlmKC9jb25uZWN0aW9uICg/OmlzICk/Y2xvc2VkfHNvY2tldCBjbG9zZWR8c3RyZWFtIGlzbi50IHdyaXRlYWJsZS9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19jb25uZWN0aW9uX2Nsb3NlZCc7CiBlbHNlIGlmKC91bmtub3duIGNvbW1hbmR8Y29tbWFuZC4qKD86bm90IHN1cHBvcnRlZHxkaXNhYmxlZCkvaS50ZXN0KG1lc3NhZ2UpKXJlYXNvbj0ncmVkaXNfY29tbWFuZF91bnN1cHBvcnRlZCc7CiBlbHNlIGlmKC93cm9uZyBudW1iZXIgb2YgYXJndW1lbnRzfHN5bnRheCBlcnJvci9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19jb21tYW5kX2ludmFsaWQnOwogZWxzZSBpZigvXGJXUk9OR1RZUEVcYi9pLnRlc3QobWVzc2FnZSkpcmVhc29uPSdyZWRpc19rZXlfdHlwZV9taXNtYXRjaCc7CiBlbHNlIGlmKC9cYkVYRUNBQk9SVFxiL2kudGVzdChtZXNzYWdlKSlyZWFzb249J3JlZGlzX3RyYW5zYWN0aW9uX2Fib3J0ZWQnOwogZWxzZSBpZihhdD09PSdsb2FkX21vZHVsZScpcmVhc29uPWNvZGU9PT0nTU9EVUxFX05PVF9GT1VORCd8fGNvZGU9PT0nRVJSX01PRFVMRV9OT1RfRk9VTkQnPydyZWRpc19tb2R1bGVfbWlzc2luZyc6J3JlZGlzX21vZHVsZV9sb2FkX2ZhaWxlZCc7CiBlbHNlIGlmKGF0PT09J3BhcnNlX2NvbmZpZycpcmVhc29uPSdyZWRpc19jb25maWdfaW52YWxpZCc7CiBlbHNlIGlmKGF0PT09J2NyZWF0ZV9jbGllbnQnKXJlYXNvbj0ncmVkaXNfY2xpZW50X2luaXRpYWxpemF0aW9uX2ZhaWxlZCc7CiBlbHNlIHJlYXNvbj1hdD09PSdjb25uZWN0Jz8ncmVkaXNfY29ubmVjdGlvbl9mYWlsZWQnOmF0PT09J3JlYWRfY291bnRzJz8ncmVkaXNfY29tbWFuZF9mYWlsZWQnOidwcm9iZV9pbnRlcm5hbF9lcnJvcic7CiByZXR1cm4ge3JlYXNvbiwuLi4oY29kZT97ZXJyb3JDb2RlOmNvZGV9Ont9KX07Cn0KZnVuY3Rpb24gcGFyc2VBZGRyZXNzKHJhdyl7CiBsZXQgdmFsdWU9U3RyaW5nKHJhd3x8JycpLnRyaW0oKTsKIGVuc3VyZSghIXZhbHVlLCdyZWRpc191cmxfYWJzZW50Jyk7CiBsZXQgZm9ybWF0PSd1cmwnOwogLy8gTWF0Y2ggdGhlIGFwcCdzIHN1cHBvcnRlZCBhc3NpZ25tZW50LXByZWZpeCBub3JtYWxpemF0aW9uLCB3aXRob3V0IGV4ZWN1dGluZyBhIENMSSBjb21tYW5kLgogaWYoL14oPzpleHBvcnRccyspP1JFRElTX1VSTFxzKj0vLnRlc3QodmFsdWUpKXsKICB2YWx1ZT12YWx1ZS5yZXBsYWNlKC9eKD86ZXhwb3J0XHMrKT9SRURJU19VUkxccyo9XHMqLywnJykudHJpbSgpO2Zvcm1hdD0nYXNzaWdubWVudCc7CiB9CiBpZigvXnJlZGlzLWNsaVxzKyg/Oi0tdGxzXHMrKT8oPzotdXwtLXVyaSlccysvLnRlc3QodmFsdWUpKXsKICB2YWx1ZT12YWx1ZS5yZXBsYWNlKC9ecmVkaXMtY2xpXHMrKD86LS10bHNccyspPyg/Oi11fC0tdXJpKVxzKy8sJycpLnRyaW0oKTtmb3JtYXQ9J2NsaV91cmknOwogfQogaWYoKHZhbHVlLnN0YXJ0c1dpdGgoJyInKSYmdmFsdWUuZW5kc1dpdGgoJyInKSl8fCh2YWx1ZS5zdGFydHNXaXRoKCInIikmJnZhbHVlLmVuZHNXaXRoKCInIikpKXsKICB2YWx1ZT12YWx1ZS5zbGljZSgxLC0xKS50cmltKCk7Zm9ybWF0PWZvcm1hdD09PSdhc3NpZ25tZW50Jz8ncXVvdGVkX2Fzc2lnbm1lbnQnOmZvcm1hdD09PSdjbGlfdXJpJz8nY2xpX3VyaSc6J3F1b3RlZF91cmwnOwogfQogY29uc3QgYWRkcmVzcz1uZXcgVVJMKHZhbHVlKTsKIGVuc3VyZShhZGRyZXNzLnByb3RvY29sPT09J3JlZGlzOid8fGFkZHJlc3MucHJvdG9jb2w9PT0ncmVkaXNzOicsJ3Vuc3VwcG9ydGVkX3JlZGlzX3Byb3RvY29sJyk7CiBlbnN1cmUoISFhZGRyZXNzLmhvc3RuYW1lJiYhYWRkcmVzcy5oYXNoLCdyZWRpc19jb25maWdfaW52YWxpZCcpOwogcmVzdWx0LnJlZGlzQ29uZmlnRm9ybWF0PWZvcm1hdDsKIHJldHVybiB7YWRkcmVzcyx2YWx1ZX07Cn0KKGFzeW5jKCk9PnsKIGxldCBleHBpcmVkOwogY29uc3QgZXhwaXJhdGlvbj1uZXcgUHJvbWlzZSgoXyxyZWplY3QpPT57ZXhwaXJlZD1yZWplY3Q7fSk7CiBleHBpcmF0aW9uLmNhdGNoKCgpPT57fSk7CiBjb25zdCBib3VuZGVkPW9wZXJhdGlvbj0+UHJvbWlzZS5yYWNlKFtvcGVyYXRpb24sZXhwaXJhdGlvbl0pOwogY29uc3QgZGVhZGxpbmU9c2V0VGltZW91dCgoKT0+ewogIHJlc3VsdC5yZWFzb249J2ludmVudG9yeV90aW1lb3V0JztyZXN1bHQuc3RhZ2U9c3RhZ2U7cHJvY2Vzcy5leGl0Q29kZT0xO2V4cGlyZWQobmV3IFByb2JlRmFpbHVyZSgnaW52ZW50b3J5X3RpbWVvdXQnKSk7CiAgdHJ5e3JlZGlzPy5kaXNjb25uZWN0KCk7fWNhdGNoe30KICAvLyBUaGUgbm9ybWFsIGNhdGNoL2ZpbmFsbHkgZW1pdHMgdGhlIHNpbmdsZSBzYWZlIHJlc3VsdCBhZnRlciB0aGUgY29ubmVjdGlvbiBjbG9zZXMuCiB9LDQ1MDAwKTsKIHRyeXsKICBlbnN1cmUoZW52LlJBSUxXQVlfUFJPSkVDVF9JRD09PScyYWRlZWE0OS00MzFjLTRkZGYtODgxNS05Y2U4OWFmNjZmMzInICYmIGVudi5SQUlMV0FZX0VOVklST05NRU5UX0lEPT09J2ZhMmU4YzMwLTcyZWEtNDY4OC04NzdmLTRhNjhlMjQxOThiYycgJiYgZW52LlJBSUxXQVlfU0VSVklDRV9JRD09PSdhN2I3NTEzOS01YmY4LTRhMDItYjRhYi1iN2QxMmUxN2U3NzAnICYmICEhZW52LlJBSUxXQVlfREVQTE9ZTUVOVF9JRCwnd3Jvbmdfb3JfdW5hdHRlc3RlZF9ydW50aW1lJyk7CiAgZW5zdXJlKC9eW2EtZjAtOV17NDB9JC8udGVzdChlbnYuUkFJTFdBWV9HSVRfQ09NTUlUX1NIQXx8JycpLCd1bmF0dGVzdGVkX3J1bnRpbWVfY29tbWl0Jyk7CiAgcmVzdWx0LmRlcGxveW1lbnRJZD1lbnYuUkFJTFdBWV9ERVBMT1lNRU5UX0lEO3Jlc3VsdC5jb21taXQ9ZW52LlJBSUxXQVlfR0lUX0NPTU1JVF9TSEE7cmVzdWx0LnJlcGxpY2FJZD1lbnYuUkFJTFdBWV9SRVBMSUNBX0lEfHxudWxsOwogIHN0YWdlPSdwYXJzZV9jb25maWcnOwogIGNvbnN0IHthZGRyZXNzLHZhbHVlfT1wYXJzZUFkZHJlc3MoZW52LlJFRElTX1VSTCk7CiAgY29uc3QgaG9zdG5hbWU9YWRkcmVzcy5ob3N0bmFtZS50b0xvd2VyQ2FzZSgpOwogIGNvbnN0IHVzZVRscz1hZGRyZXNzLnByb3RvY29sPT09J3JlZGlzczonfHxob3N0bmFtZT09PSd1cHN0YXNoLmlvJ3x8aG9zdG5hbWUuZW5kc1dpdGgoJy51cHN0YXNoLmlvJyk7CiAgcmVzdWx0LnJlZGlzVGxzPXVzZVRsczsKICBzdGFnZT0nbG9hZF9tb2R1bGUnOwogIGNvbnN0IGxvYWRlZD1yZXEoJ2lvcmVkaXMnKTsKICBjb25zdCBSZWRpcz10eXBlb2YgbG9hZGVkPT09J2Z1bmN0aW9uJz9sb2FkZWQ6bG9hZGVkPy5kZWZhdWx0fHxsb2FkZWQ/LlJlZGlzOwogIGVuc3VyZSh0eXBlb2YgUmVkaXM9PT0nZnVuY3Rpb24nLCdyZWRpc19tb2R1bGVfaW52YWxpZCcpOwogIHN0YWdlPSdjcmVhdGVfY2xpZW50JzsKICByZWRpcz1uZXcgUmVkaXModmFsdWUse2xhenlDb25uZWN0OnRydWUsZW5hYmxlUmVhZHlDaGVjazpmYWxzZSxlbmFibGVPZmZsaW5lUXVldWU6ZmFsc2UsbWF4UmV0cmllc1BlclJlcXVlc3Q6MCwKICAgcmV0cnlTdHJhdGVneTooKT0+bnVsbCxjb25uZWN0VGltZW91dDoxMDAwMCxjb21tYW5kVGltZW91dDoxMDAwMCxhdXRvUmVzdWJzY3JpYmU6ZmFsc2UsCiAgIGF1dG9SZXNlbmRVbmZ1bGZpbGxlZENvbW1hbmRzOmZhbHNlLHRsczp1c2VUbHM/e306dW5kZWZpbmVkfSk7CiAgbGV0IGNvbm5lY3Rpb25GYWlsZWQ7CiAgY29uc3QgY29ubmVjdGlvbkZhaWx1cmU9bmV3IFByb21pc2UoKF8scmVqZWN0KT0+e2Nvbm5lY3Rpb25GYWlsZWQ9cmVqZWN0O30pOwogIGNvbm5lY3Rpb25GYWlsdXJlLmNhdGNoKCgpPT57fSk7CiAgcmVkaXMub24oJ2Vycm9yJyxlcnJvcj0+ewogICBsYXN0Q29ubmVjdGlvbkZhaWx1cmU9Y2xhc3NpZnkoZXJyb3Isc3RhZ2UpOwogICBpZihzdGFnZT09PSdjb25uZWN0Jyljb25uZWN0aW9uRmFpbGVkKG5ldyBQcm9iZUZhaWx1cmUobGFzdENvbm5lY3Rpb25GYWlsdXJlLnJlYXNvbixsYXN0Q29ubmVjdGlvbkZhaWx1cmUpKTsKICB9KTsKICBzdGFnZT0nY29ubmVjdCc7YXdhaXQgYm91bmRlZChQcm9taXNlLnJhY2UoW3JlZGlzLmNvbm5lY3QoKSxjb25uZWN0aW9uRmFpbHVyZV0pKTsKICByZXN1bHQucXVldWU9J3VuaWZpZWQtaW5ib3gnO3Jlc3VsdC5zYW1wbGVzPVtdOwogIGNvbnN0IGs9J2J1bGw6dW5pZmllZC1pbmJveDonOwogIGNvbnN0IGNvbW1hbmRzPVtbJ2V4aXN0cycsaysnbWV0YSddLFsnbGxlbicsaysnYWN0aXZlJ10sWydsbGVuJyxrKyd3YWl0J10sWydsbGVuJyxrKydwYXVzZWQnXSwKICAgWyd6Y2FyZCcsaysnZGVsYXllZCddLFsnemNhcmQnLGsrJ2ZhaWxlZCddLFsnemNhcmQnLGsrJ3ByaW9yaXRpemVkJ10sWyd6Y2FyZCcsaysnd2FpdGluZy1jaGlsZHJlbiddLFsnaGdldCcsaysnbWV0YScsJ3BhdXNlZCddXTsKICBmb3IobGV0IGk9MDtpPDI7aSsrKXsKICAgc3RhZ2U9J3JlYWRfY291bnRzJztyZXN1bHQuc2FtcGxlTnVtYmVyPWkrMTsKICAgbGV0IHJvd3M7CiAgIHRyeXtyb3dzPWF3YWl0IGJvdW5kZWQocmVkaXMubXVsdGkoY29tbWFuZHMpLmV4ZWMoKSk7fQogICBjYXRjaChlcnJvcil7CiAgICAvLyBpb3JlZGlzIGV4cG9zZXMgcXVldWVkIGNvbW1hbmQgZmFpbHVyZXMgb24gRVhFQ0FCT1JULiBJbnNwZWN0IHRoZW0gd2l0aG91dCBlbWl0dGluZyB0aGVpciBhcmd1bWVudHMuCiAgICBpZihBcnJheS5pc0FycmF5KGVycm9yPy5wcmV2aW91c0Vycm9ycykpewogICAgIGNvbnN0IGNhdXNlPWVycm9yLnByZXZpb3VzRXJyb3JzLmZpbmQoZT0+Y2xhc3NpZnkoZSxzdGFnZSkucmVhc29uIT09J3JlZGlzX2NvbW1hbmRfZmFpbGVkJyk7CiAgICAgaWYoY2F1c2UpdGhyb3cgbmV3IFByb2JlRmFpbHVyZShjbGFzc2lmeShjYXVzZSxzdGFnZSkucmVhc29uLGNsYXNzaWZ5KGNhdXNlLHN0YWdlKSk7CiAgICB9CiAgICB0aHJvdyBlcnJvcjsKICAgfQogICBlbnN1cmUoQXJyYXkuaXNBcnJheShyb3dzKSYmcm93cy5sZW5ndGg9PT1jb21tYW5kcy5sZW5ndGgsJ3JlZGlzX3Jlc3BvbnNlX2ludmFsaWQnKTsKICAgZm9yKGxldCBpbmRleD0wO2luZGV4PHJvd3MubGVuZ3RoO2luZGV4KyspewogICAgZW5zdXJlKEFycmF5LmlzQXJyYXkocm93c1tpbmRleF0pJiZyb3dzW2luZGV4XS5sZW5ndGg+PTEsJ3JlZGlzX3Jlc3BvbnNlX2ludmFsaWQnKTsKICAgIGlmKHJvd3NbaW5kZXhdWzBdKXRocm93IG5ldyBQcm9iZUZhaWx1cmUoY2xhc3NpZnkocm93c1tpbmRleF1bMF0sc3RhZ2UpLnJlYXNvbiwKICAgICAgey4uLmNsYXNzaWZ5KHJvd3NbaW5kZXhdWzBdLHN0YWdlKSxjb21tYW5kOmNvbW1hbmRzW2luZGV4XVswXS50b1VwcGVyQ2FzZSgpLHF1ZXVlRmllbGQ6Y29tbWFuZHNbaW5kZXhdWzFdLnNsaWNlKGsubGVuZ3RoKX0pOwogICAgZW5zdXJlKHJvd3NbaW5kZXhdLmxlbmd0aD09PTIsJ3JlZGlzX3Jlc3BvbnNlX2ludmFsaWQnKTsKICAgfQogICBjb25zdCB2PXJvd3MubWFwKHJvdz0+cm93WzFdKTsKICAgZW5zdXJlKHYuc2xpY2UoMCw4KS5ldmVyeShuPT5OdW1iZXIuaXNTYWZlSW50ZWdlcihuKSYmbj49MCkmJnZbMF08PTEmJltudWxsLCcwJywnMSddLmluY2x1ZGVzKHZbOF0pLCdyZWRpc19yZXNwb25zZV9pbnZhbGlkJyk7CiAgIHJlc3VsdC5zYW1wbGVzLnB1c2goe2F0Om5ldyBEYXRlKCkudG9JU09TdHJpbmcoKSxtZXRhZGF0YVByZXNlbnQ6dlswXT09PTEsYWN0aXZlOnZbMV0sd2FpdGluZzp2WzJdLAogICAgcGF1c2VkV2FpdGluZzp2WzNdLGRlbGF5ZWQ6dls0XSxmYWlsZWQ6dls1XSxwcmlvcml0aXplZDp2WzZdLHdhaXRpbmdDaGlsZHJlbjp2WzddLHF1ZXVlUGF1c2VkOnZbOF09PT0nMSd9KTsKICAgaWYoaT09PTApewogICAgc3RhZ2U9J2JldHdlZW5fc2FtcGxlcyc7bGV0IHBhdXNlOwogICAgdHJ5e2F3YWl0IGJvdW5kZWQobmV3IFByb21pc2UocmVzb2x2ZT0+e3BhdXNlPXNldFRpbWVvdXQocmVzb2x2ZSwxMDAwMCk7fSkpO31maW5hbGx5e2NsZWFyVGltZW91dChwYXVzZSk7fQogICB9CiAgfQogIHJlc3VsdC5yZXN1bHQ9J1JFQURfQ09NUExFVEUnO2RlbGV0ZSByZXN1bHQuc2FtcGxlTnVtYmVyOwogIHJlc3VsdC5saW1pdGF0aW9uPSdJbnZlbnRvcnkgb25seTsgbm90IHByb29mIG9mIHN0b3BwZWQgd29ya2VycywgZHJhaW5lZCBIVFRQL0FJLCBvciBhIHJlbGVhc2UgYXBwcm92YWwuJzsKIH1jYXRjaChlcnJvcil7CiAgY29uc3QgZmFpbHVyZT1lcnJvciBpbnN0YW5jZW9mIFByb2JlRmFpbHVyZT97cmVhc29uOmVycm9yLnJlYXNvbiwuLi5lcnJvci5kZXRhaWxzfTpjbGFzc2lmeShlcnJvcixzdGFnZSk7CiAgLy8gUHJlZmVyIHRoZSBvcmlnaW5hbCBhdXRoZW50aWNhdGlvbi9UTFMvRE5TIGVycm9yIHdoZW4gY29ubmVjdCBsYXRlciByZXBvcnRzIG9ubHkgIkNvbm5lY3Rpb24gaXMgY2xvc2VkIi4KICBjb25zdCBjaG9zZW49bGFzdENvbm5lY3Rpb25GYWlsdXJlJiZbJ3JlZGlzX2Nvbm5lY3Rpb25fY2xvc2VkJywncmVkaXNfY29ubmVjdGlvbl9mYWlsZWQnXS5pbmNsdWRlcyhmYWlsdXJlLnJlYXNvbik/bGFzdENvbm5lY3Rpb25GYWlsdXJlOmZhaWx1cmU7CiAgaWYoIXJlc3VsdC5yZWFzb24pcmVzdWx0LnJlYXNvbj1zYWZlUmVhc29ucy5oYXMoY2hvc2VuLnJlYXNvbik/Y2hvc2VuLnJlYXNvbjoncHJvYmVfaW50ZXJuYWxfZXJyb3InOwogIGlmKGNob3Nlbi5lcnJvckNvZGUmJnNhZmVDb2Rlcy5oYXMoY2hvc2VuLmVycm9yQ29kZSkpcmVzdWx0LmVycm9yQ29kZT1jaG9zZW4uZXJyb3JDb2RlOwogIGlmKGNob3Nlbi5jb21tYW5kKXJlc3VsdC5jb21tYW5kPWNob3Nlbi5jb21tYW5kOwogIGlmKGNob3Nlbi5xdWV1ZUZpZWxkKXJlc3VsdC5xdWV1ZUZpZWxkPWNob3Nlbi5xdWV1ZUZpZWxkOwogIHJlc3VsdC5zdGFnZT1zdGFnZTtwcm9jZXNzLmV4aXRDb2RlPTE7CiB9ZmluYWxseXsKICBjbGVhclRpbWVvdXQoZGVhZGxpbmUpOwogIHRyeXtyZWRpcz8uZGlzY29ubmVjdCgpO31jYXRjaHt9CiAgY29uc29sZS5sb2coSlNPTi5zdHJpbmdpZnkocmVzdWx0KSk7CiB9Cn0pKCk7Cg=='
+    $RemoteCode = "eval(Buffer.from('$Payload','base64').toString('utf8'))"
+    $Arguments = @(
+        'ssh',
+        '--project', '2adeea49-431c-4ddf-8815-9ce89af66f32',
+        '--environment', 'fa2e8c30-72ea-4688-877f-4a68e24198bc',
+        '--service', 'a7b75139-5bf8-4a02-b4ab-b7d12e17e770',
+        '--', 'node', '-e', $RemoteCode
+    )
+    # Redirect stdin so Railway's SSH implementation cannot prompt to register a key.
+    # Existing authorized keys/agent identities are still supported by Railway.
+    $OldPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $Captured = @('' | & $Railway @Arguments 2>&1)
+        $NativeExit = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $OldPreference }
+    $ResultLine = $null
+    foreach ($Item in $Captured) {
+        $Line = [string]$Item
+        $Line = [regex]::Replace($Line, '\x1B\[[0-9;]*[A-Za-z]', '').Trim()
+        if ($Line.StartsWith('{')) {
+            try {
+                $Parsed = $Line | ConvertFrom-Json
+                if ($Parsed.check -eq 'queue_inventory' -and ($Parsed.result -eq 'READ_COMPLETE' -or $Parsed.result -eq 'FAIL')) {
+                    $ResultLine = $Line
+                }
+            } catch { }
+        }
+    }
+    if (-not $ResultLine) {
+        Write-Host ''
+        Write-Host 'ACCESS_NEEDED: The runtime probe could not start. No SSH key or production setting was changed.' -ForegroundColor Yellow
+        Write-Host 'Return that ACCESS_NEEDED message to the chat. Do not change Railway settings.'
+        Write-Host ('Railway connection exit code: ' + $NativeExit)
+        $ExitCode = 2
+    } else {
+        Write-Host ''
+        Write-Host 'RESULT - copy the line below into the chat:' -ForegroundColor Cyan
+        Write-Host $ResultLine
+        $ResultLine | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'Probe-Result.txt') -Encoding UTF8
+        try { Set-Clipboard -Value $ResultLine; Write-Host 'The result is also copied to your clipboard. Return to the chat and press Ctrl+V.' } catch { }
+        $ExitCode = $NativeExit
+    }
+} catch {
+    Write-Host ''
+    Write-Host 'The check stopped without deploying or changing production.' -ForegroundColor Yellow
+    Write-Host $_.Exception.Message
+} finally {
+    if ($TempFolder -and (Test-Path -LiteralPath $TempFolder)) {
+        Remove-Item -LiteralPath $TempFolder -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+exit $ExitCode

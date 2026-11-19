@@ -1,3 +1,4 @@
+import { runTrackedWork } from '../runtimeDrain';
 import {
   EMAIL_BOOTSTRAP_IN_PROGRESS_TOTAL,
   initialSyncModeToDays,
@@ -461,6 +462,7 @@ export async function runIncrementalEmailSync(mailboxId: string): Promise<void> 
 }
 
 export async function runEmailPollingCron(): Promise<void> {
+ return runTrackedWork("server/emailChannel/syncService.ts:runEmailPollingCron", async () => {
   const { triggerMailboxIncrementalSync } = await import("./gmailSyncTrigger");
   const mailboxes = await listConnectedMailboxesForPoll(40);
   for (const m of mailboxes) {
@@ -478,4 +480,6 @@ export async function runEmailPollingCron(): Promise<void> {
       );
     }
   }
+
+ });
 }

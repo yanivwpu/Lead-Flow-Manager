@@ -1,6 +1,8 @@
 import { replyState } from "./inboxSendCoordination";
 import { registerInboxSendStateRoutes } from "./routes/inboxSendState";
 import { inboxTeamProfiles } from "./inboxTeamProfiles";
+import { requireInboundPersistence } from './inboundAcknowledgment';
+import { withInboundEvent } from "./inboundDedup";
 import { inboxContentReadLimiter } from "./inboxContentRateLimit";
 import { registerTeamInvitationRoutes, teamInvitationLimiter, requireTeamInvitationActor, issueTeamInvitation, deliverTeamInvitation, invitationFailure } from "./teamInvitations";
 import { registerInboxWorkspaceRoutes } from "./routes/inboxWorkspace";
@@ -2353,6 +2355,9 @@ export async function registerRoutes(
       }
 
       const userId = user.id;
+      return await withInboundEvent(userId, channel, parsed.messageSid, async () => {
+      const existing = await storage.getMessageByUserExternalId(userId, parsed.messageSid, channel);
+      if (existing) return res.status(200).send("");
 
       // Normalize channelContactId: strip leading '+' so format matches Meta path (e.g. 15550001234)
       const normalizedFrom = parsed.from.replace(/^\+/, "");
@@ -2385,7 +2390,8 @@ export async function registerRoutes(
       };
 
       const messages = (chat.messages as WhatsAppMessage[]) || [];
-      messages.push(newMessage);
+      const alreadyMirrored = messages.some(message => message.id === newMessage.id);
+      if (!alreadyMirrored) messages.push(newMessage);
 
       const isNewChat = messages.length === 1;
       
@@ -2393,7 +2399,7 @@ export async function registerRoutes(
         messages,
         lastMessage: parsed.body,
         time: newMessage.time,
-        unread: (chat.unread || 0) + 1,
+        unread: (chat.unread || 0) + (alreadyMirrored ? 0 : 1),
       });
 
       // Process inbound message directly to DB — no queue dependency
@@ -2423,6 +2429,7 @@ export async function registerRoutes(
         mediaFilename: hasTwilioMedia ? `mms-${parsed.messageSid}` : undefined,
         externalMessageId: parsed.messageSid,
       });
+      requireInboundPersistence(inboxResult);
       const {
         isNewConversation: inboxIsNewConv,
         chatbotWillFire: inboxChatbotWillFire,
@@ -2444,7 +2451,7 @@ export async function registerRoutes(
       if (updatedChat) {
         const inboundBody = parsed.body || "";
         const bookingIntent = detectHighConfidenceBookingIntent(inboundBody);
-        dispatchInboundMessagingAutomation({
+        await dispatchInboundMessagingAutomation({
           userId,
           isNewChat,
           updatedChat,
@@ -2456,7 +2463,7 @@ export async function registerRoutes(
         // W2 Financial Qualification Engine (Realtor Growth Engine)
         // chatbotWillFire was determined once inside processIncomingMessage —
         // no extra DB round-trip needed here.
-        ;(async () => {
+        await (async () => {
           try {
             const install = await storage.getTemplateInstall(userId, "realtor-growth-engine");
             if (install?.installStatus === "installed") {
@@ -2512,9 +2519,10 @@ export async function registerRoutes(
       // channelService.processIncomingMessage for all channels.
 
       res.status(200).send("");
+      });
     } catch (error) {
       console.error("Webhook error:", error);
-      res.status(200).send("");
+      if (!res.headersSent) res.status(503).send("");
     }
   });
 
@@ -2947,7 +2955,7 @@ export async function registerRoutes(
 
       // Capture processIncomingMessage result so post-ACK handlers can read
       // chatbotWillFire and isNewConversation without extra DB round-trips.
-      let metaInboxResult: { chatbotWillFire: boolean; isNewConversation: boolean } | null = null;
+      let metaInboxResult: { chatbotWillFire: boolean; isNewConversation: boolean; deduped: boolean } | null = null;
       // Phase A: capture contact and conversationId from processIncomingMessage for Growth Engine
       let metaInboxContact: any = null;
       let metaInboxConversationId: string | null = null;
@@ -2975,7 +2983,8 @@ export async function registerRoutes(
               platformMediaId: incomingMessage.mediaId,
               externalMessageId: incomingMessage.messageId,
             }).then((result) => {
-              metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation };
+              requireInboundPersistence(result);
+              metaInboxResult = { chatbotWillFire: result.chatbotWillFire, isNewConversation: result.isNewConversation, deduped: result.deduped };
               metaInboxContact = result.contact;
               metaInboxConversationId = result.conversation?.id ?? null;
               if (!result.success || !result.contact || !result.conversation) {
@@ -3063,6 +3072,7 @@ export async function registerRoutes(
                     attachmentType,
                     externalMessageId: messageId,
                   }).then(async (result) => {
+                    requireInboundPersistence(result);
                     if (!result.success || !result.contact || !result.conversation || !result.message) {
                       console.error("[inbound-processing] Instagram processing returned incomplete state", {
                         messageId,
@@ -3254,6 +3264,7 @@ export async function registerRoutes(
                   attachmentType: firstAttachment?.type,
                   externalMessageId: messageId,
                 });
+      requireInboundPersistence(result);
                 if (!result.success || !result.contact || !result.conversation || !result.message) {
                   console.error("[inbound-processing] Facebook processing returned incomplete state", {
                     messageId,
@@ -3292,6 +3303,7 @@ export async function registerRoutes(
               })().catch((err: any) => {
                 console.error(`[FB-WEBHOOK] processIncomingMessage FAILED mid=${messageId}`, err?.message || err, err?.stack);
                 console.error(`[Inbound] [Stage 10-FB] processIncomingMessage FAILED — mid=${messageId}, error:`, err?.message || err);
+                throw err;
               })
             );
           }
@@ -3342,7 +3354,7 @@ export async function registerRoutes(
       res.status(200).send("EVENT_RECEIVED");
 
       // Process legacy chat write and other side effects asynchronously (non-critical)
-      if (incomingMessage) {
+      if (incomingMessage && !(metaInboxResult as { deduped: boolean } | null)?.deduped) {
         const user = await findUserByMetaPhoneNumberId(incomingMessage.phoneNumberId);
         if (user) {
           try {
@@ -3389,7 +3401,7 @@ export async function registerRoutes(
             if (messages.length === 1 || incomingMessage.text) {
               const metaInboundText = incomingMessage.text || "";
               const metaBookingIntent = detectHighConfidenceBookingIntent(metaInboundText);
-              dispatchInboundMessagingAutomation({
+              await dispatchInboundMessagingAutomation({
                 userId: user.id,
                 isNewChat: messages.length === 1,
                 updatedChat: chat,
@@ -3404,7 +3416,7 @@ export async function registerRoutes(
 
             if (incomingMessage.text) {
               // W2 Financial Qualification Engine (Realtor Growth Engine)
-              ;(async () => {
+              await (async () => {
                 try {
                   const install = await storage.getTemplateInstall(user.id, "realtor-growth-engine");
                   if (install?.installStatus === "installed") {
@@ -3596,6 +3608,7 @@ export async function registerRoutes(
       }
     } catch (error) {
       console.error("Meta webhook error:", error);
+      if (!res.headersSent) res.status(503).send("RETRY_DELIVERY");
     }
   });
 

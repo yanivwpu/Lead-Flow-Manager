@@ -1,5 +1,6 @@
 import { assertInboxFence } from "../inboxDispatchFence";
 import { sql, type SQL } from "drizzle-orm";
+import { runTrackedWork } from '../runtimeDrain';
 import { db } from "../../drizzle/db";
 import { normalizeMarketingEmail, normalizeMarketingPhone, normalizeStoredMarketingPhone } from "./policy";
 
@@ -122,6 +123,7 @@ export async function readProviderDeliveryJson(response: Response): Promise<any>
 }
 
 async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{userId: string; email?: string | null; phone?: string | null}>, send: (onDispatch: () => void) => Promise<T>, email = false, executor?:MarketingBoundaryExecutor): Promise<T> {
+ return runTrackedWork("server/marketingCompliance/store.ts:withGlobalDncBoundary", async () => {
   let accepted = false;
   let dispatched = false;
   try {
@@ -146,6 +148,8 @@ async function withGlobalDncBoundary<T>(workspace: string, identities: Array<{us
     if (accepted || (dispatched && !definiteRejection)) throw new AmbiguousProviderDeliveryError();
     throw error;
   }
+
+ });
 }
 
 /** Order manual/transactional email with global DNC, preserving email-only exemptions. */
