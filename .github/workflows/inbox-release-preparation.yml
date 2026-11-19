@@ -10,6 +10,7 @@ on:
       - 'migrations/0113_inbound_receipt_keys.sql'
       - 'tests/inbound-*'
       - 'tests/runtime-drain*'
+      - 'tests/inbox-draft-claim-browser.test.ts'
       - 'tests/webchat-outbox*'
       - 'tests/queue-inventory*'
       - 'scripts/probes/**'
@@ -61,7 +62,7 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Browser reload, media durability, English/Spanish/Hebrew and responsive widget
-        run: node --import tsx --test tests/webchat-outbox-browser.test.ts
+        run: node --import tsx --test tests/webchat-outbox-browser.test.ts tests/inbox-draft-claim-browser.test.ts
       - name: Downloadable read-only Windows inventory
         run: python3 scripts/build-queue-inventory-package.py
       - uses: actions/upload-artifact@v4

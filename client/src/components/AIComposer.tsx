@@ -96,6 +96,8 @@ export interface AIComposerProps {
   messages: AIComposerMessage[];
   /** False while the thread query is still loading. Refetch/polling must stay true. */
   messagesReady?: boolean;
+  /** Inbox reply baseline must load before a new human draft can begin. */
+  replyStateReady?: boolean;
   demoMode?: boolean;
   setTyping?: (typing: boolean) => void;
   typingTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
@@ -174,6 +176,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
   conversationId,
   messages,
   messagesReady = true,
+  replyStateReady = true,
   demoMode = false,
   setTyping,
   typingTimeoutRef,
@@ -893,7 +896,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
     }
   };
 
-  const canSend = value.trim().length > 0 || !!hasPendingAttachment;
+  const canSend = replyStateReady && (value.trim().length > 0 || !!hasPendingAttachment);
 
   const handleSendClick = () => {
     if (!canSend) return;
@@ -1118,7 +1121,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             onBlur={() => setTyping && setTyping(false)}
-            readOnly={isSuggestMode && isDrafting}
+            readOnly={!replyStateReady || (isSuggestMode && isDrafting)}
             aria-describedby={!isMobile ? keyboardHelperId : undefined}
             data-testid="input-message"
             data-composer-layout={isEmailComposer ? "email" : "chat"}

@@ -780,7 +780,7 @@ export function Templates() {
   const [selectedChat, setSelectedChat] = useState<Chat | RetargetableChat | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
   const [templateReplySnapshot,setTemplateReplySnapshot]=useState<(ReplySnapshot&{scope:string;conversationId?:string;latestReply?:{content:string}})|null>(null);
-  const templateClaim=useInboxDraftClaim({actorId:user?.id,scope:selectedChat?`template:${selectedChat.id}`:null,text:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?JSON.stringify({templateId:selectedTemplate?.id,variableValues}):"",conversationId:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot.conversationId:undefined,getSnapshot:()=>templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot:undefined});
+  const templateClaim=useInboxDraftClaim({actorId:user?.id,scope:selectedChat?`template:${selectedChat.id}`:null,text:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?JSON.stringify({templateId:selectedTemplate?.id,variableValues}):"",conversationId:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot.conversationId:undefined,snapshot:templateReplySnapshot && templateReplySnapshot.scope===selectedChat?.id?templateReplySnapshot:undefined});
   const [reviewReply,setReviewReply]=useState<string|null>(null);
   async function loadTemplateReplyState(review=false){
     if(!selectedChat)return;

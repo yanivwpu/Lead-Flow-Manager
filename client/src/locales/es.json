@@ -1892,6 +1892,10 @@
     "assignmentFailed": "No se pudo actualizar la asignación. Actualiza e inténtalo de nuevo."
   },
   "inboxCollaboration": {
+    "stateUnavailable": "El estado de las respuestas no estaba disponible al comenzar este borrador. Tu borrador está guardado. Revisa la conversación antes de enviar.",
+    "latestReply": "Última {{kind}}: {{time}}",
+    "aiReply": "respuesta de IA",
+    "reply": "respuesta",
     "replying": "{{name}} está respondiendo…",
     "viewing": "{{name}} está viendo la conversación",
     "review": "Revisar la última respuesta",
