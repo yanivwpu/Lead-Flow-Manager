@@ -81,6 +81,7 @@ test('missing modules, invalid exports and supported CJS/default exports are dis
 test('network, authentication, TLS and quota failures return fixed categories without raw error text',async()=>{
  for(const [error,reason]of [
   [failure('getaddrinfo sensitive-host.example','ENOTFOUND'),'redis_dns_failed'],
+  [failure('getaddrinfo tls-sensitive-host.example','ENOTFOUND'),'redis_dns_failed'],
   [failure('never-print-this','ECONNREFUSED'),'redis_connection_refused'],
   [failure('connect timeout sensitive-host.example','ETIMEDOUT'),'redis_timeout'],
   [failure('WRONGPASS never-print-this rediss://fixture:private-token@sensitive-host.example'),'redis_authentication_failed'],
