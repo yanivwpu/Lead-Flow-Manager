@@ -46,7 +46,7 @@ jobs:
         run: >-
           node --import tsx --test
           tests/inbound-release-postgres.test.ts tests/inbound-webhook-ack.test.ts
-          tests/runtime-drain.test.ts tests/queue-inventory-safety.test.ts
+          tests/runtime-drain.test.ts tests/queue-inventory-safety.test.ts tests/queue-inventory-transport.test.ts
       - name: Existing affected channel, retry and authorization regressions
         run: >-
           node --import tsx --test
