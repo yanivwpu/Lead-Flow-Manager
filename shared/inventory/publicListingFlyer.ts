@@ -979,9 +979,9 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     ? requestedShareUrl
     : buildListingShareUrl(rawListing.id, new URL(requestedShareUrl).origin);
   const allowSearchIndexing = allowIndexOverride === true;
-  const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
   // Provider image URLs may themselves contain a street address.
   const seoListing = allowStreetAddress ? listing : { ...listing, photos: [] };
+  const photos = pickFlyerHeroPhotos(parsePhotos(seoListing.photos));
   const openGraph = buildListingOpenGraphMeta({ listing: seoListing, agent, shareUrl });
   const structuredDataJson = buildListingStructuredDataJson({ listing: seoListing, agent, shareUrl });
   const listingLabel = resolveFlyerListingLabel(listing);

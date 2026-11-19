@@ -123,7 +123,7 @@ for (const internetAddressDisplay of [false, undefined]) {
   assert(!restrictedHead.includes('"streetAddress"'), "restricted JSON-LD masks the street");
   assert(!restrictedHead.includes("3503"), "restricted address absent from SEO metadata");
   assert(!restrictedHtml.includes("3503 Oaks Way"), "restricted remarks do not reintroduce the address");
-  assert(!restrictedHtml.includes(publicSlug), "restricted share script does not expose legacy slug");
+  assert(!restrictedHtml.includes("3503-oaks-way"), "restricted page omits the legacy slug and provider photo URL");
 
   const restrictedSitemap = renderUrlset([{ id: listingId, publicSlug, listingCompliance, lastmod: new Date("2026-06-01") }], origin);
   assert(restrictedSitemap.includes(`<loc>${uuidUrl}</loc>`), "restricted sitemap uses UUID");

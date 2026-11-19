@@ -79,7 +79,7 @@ export function inventoryListingToAgentPageCard(
       },
       appOrigin,
     ),
-    imageUrl: pickPrimaryPhotoUrl(flyerListing.photos),
+    imageUrl: allowStreet ? pickPrimaryPhotoUrl(flyerListing.photos) : null,
     street,
     fullAddress,
     metaSummary,
