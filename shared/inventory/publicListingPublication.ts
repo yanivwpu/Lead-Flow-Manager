@@ -39,11 +39,19 @@ export function hasPublicInternetDisplayPermission(
 
 /** Street address may be shown only when explicitly allowed. */
 export function canShowPublicStreetAddress(
-  compliance: InventoryListingCompliance | null | undefined,
+  compliance: unknown,
 ): boolean {
   const c = normalizeListingCompliance(compliance);
   if (!hasPublicInternetDisplayPermission(c)) return false;
   return c.internetAddressDisplay === true;
+}
+
+/** Stored SEO slugs contain street addresses, including slugs created under older permissions. */
+export function getPublicListingAddressSlug(
+  slug: string | null | undefined,
+  compliance: unknown,
+): string | null {
+  return canShowPublicStreetAddress(compliance) ? slug?.trim() || null : null;
 }
 
 /** Full compliance gate before a listing may be published publicly. */

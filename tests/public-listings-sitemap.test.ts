@@ -72,7 +72,7 @@ function testRootSitemapPlan() {
 
 function testRootSitemapBodyShape() {
   const urlset = renderUrlset(
-    [{ id: LISTING_ID, publicSlug: PUBLIC_SLUG, lastmod: new Date("2026-06-01") }],
+    [{ id: LISTING_ID, publicSlug: PUBLIC_SLUG, listingCompliance: COMPLIANT, lastmod: new Date("2026-06-01") }],
     ORIGIN,
   );
   assert(urlset.includes("<urlset"), "root urlset document");
@@ -102,13 +102,13 @@ function testShardPagination() {
 
 function testSitemapLocSlugPreference() {
   const slugUrl = sitemapLocForEntry(
-    { id: LISTING_ID, publicSlug: PUBLIC_SLUG, lastmod: new Date() },
+    { id: LISTING_ID, publicSlug: PUBLIC_SLUG, listingCompliance: COMPLIANT, lastmod: new Date() },
     ORIGIN,
   );
   assert(slugUrl === `${ORIGIN}/share/listings/${PUBLIC_SLUG}`, "sitemap uses public_slug when present");
 
   const uuidUrl = sitemapLocForEntry(
-    { id: LISTING_ID, publicSlug: null, lastmod: new Date() },
+    { id: LISTING_ID, publicSlug: null, listingCompliance: COMPLIANT, lastmod: new Date() },
     ORIGIN,
   );
   assert(uuidUrl === `${ORIGIN}/share/listings/${LISTING_ID}`, "sitemap uuid fallback when slug missing");

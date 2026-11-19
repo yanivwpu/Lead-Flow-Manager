@@ -2,13 +2,13 @@ import type { Express, Request, Response } from "express";
 import {
   buildListingSharePath,
   buildListingShareUrl,
-  type ListingShareRef,
 } from "@shared/inventory/listingViewUrl";
 import {
   countPublicShareableListings,
   fetchPublicListingSitemapEntries,
   type PublicListingSitemapEntry,
 } from "../inventory/inventoryDb";
+import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
 import { getAppOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
@@ -59,8 +59,10 @@ function formatSitemapLastmod(date: Date): string {
 }
 
 function sitemapLocForEntry(entry: PublicListingSitemapEntry, appOrigin: string): string {
-  const ref: ListingShareRef = { listingId: entry.id, publicSlug: entry.publicSlug };
-  return buildListingShareUrl(ref, appOrigin);
+  return buildListingShareUrl({
+    listingId: entry.id,
+    publicSlug: getPublicListingAddressSlug(entry.publicSlug, entry.listingCompliance),
+  }, appOrigin);
 }
 
 function renderUrlset(entries: PublicListingSitemapEntry[], appOrigin: string): string {
