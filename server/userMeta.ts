@@ -1,3 +1,5 @@
+import { assertInboxFence } from "./inboxDispatchFence";
+import { beforeInboxProviderDispatch } from "./inboxSendCoordination";
 import { withGlobalDncPhoneBoundary, MarketingSuppressionError, AmbiguousProviderDeliveryError, readProviderDeliveryJson } from "./marketingCompliance/store";
 import { runTrackedWork, runtimeDrain } from './runtimeDrain';
 import crypto from "crypto";
@@ -678,7 +680,9 @@ export async function sendMetaWhatsAppTemplate(
 
   let response: Response;
   try {
-    response = await withGlobalDncPhoneBoundary(userId, toPhone, () => {
+    await beforeInboxProviderDispatch();
+    response = await withGlobalDncPhoneBoundary(userId, toPhone, async () => {
+      assertInboxFence();
       if (options?.authorizeDispatch && !options.authorizeDispatch()) throw new Error("provider_dispatch_authorization_expired");
       return fetch(graphPath, {
       method: "POST",

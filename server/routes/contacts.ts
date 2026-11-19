@@ -1,3 +1,4 @@
+import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inboxSendCoordination";
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
@@ -1124,36 +1125,31 @@ export function registerContactRoutes(app: Express): void {
           sentByUserId: req.user!.id,
           generatedBy: sourceString === "ai_auto" ? "ai_brain" : "human",
         });
-      const guarded = guardedSource
-        ? await withAutomationSendGuard(
-            {
-              userId: inboxWorkspaceId(req),
-              contactId: req.params.id,
-              channel: requested,
-              source: guardedSource,
-              idempotencyKey:
-                typeof idempotencyKey === "string" && idempotencyKey.trim()
-                  ? idempotencyKey.trim()
-                  : `${guardedSource}:${inboxWorkspaceId(req)}:${req.params.id}:${String(content || "").slice(0, 160)}:${Math.floor(Date.now() / 60_000)}`,
-            },
-            send
-          )
-        : null;
-      if (guarded && !guarded.ok) {
-        return res.status(guarded.reason === "duplicate" ? 409 : 403).json({
-          success: false,
-          error: "Send blocked by automation safety checks",
-          reason: guarded.reason,
-          detail: guarded.detail,
-        });
+      const context=humanSendInput(req.body);
+      const contact=await storage.getContact(req.params.id);
+      if(!contact||contact.userId!==inboxWorkspaceId(req))return res.status(404).json({error:"Not found"});
+      const coordinatedChannel=requested||contact.primaryChannel;
+      const requestedConversation=typeof req.body.conversationId==="string"?await storage.getConversation(req.body.conversationId):null;
+      if(req.body.conversationId&&(!requestedConversation||requestedConversation.userId!==inboxWorkspaceId(req)||requestedConversation.contactId!==contact.id||requestedConversation.channel!==coordinatedChannel))return res.status(404).json({error:"Not found"});
+      const conversation=requestedConversation || (coordinatedChannel!=="email"?await storage.getConversationByContactAndChannel(contact.id,coordinatedChannel as any):null);
+      if(coordinatedChannel==="email"&&conversation){
+        if(resolvedEmailRich?.providerThreadId&&resolvedEmailRich.providerThreadId!==conversation.externalThreadId)return res.status(404).json({error:"Not found"});
+        if(resolvedEmailRich?.mailboxId&&resolvedEmailRich.mailboxId!==conversation.channelAccountId)return res.status(404).json({error:"Not found"});
       }
-      const result = guarded ? guarded.result : await send();
+      if(coordinatedChannel==="email"&&(resolvedEmailRich?.replyMode==="reply"||resolvedEmailRich?.providerThreadId)&&!conversation)return res.status(428).json({success:false,code:"reply_context_required"});
+      if(sourceString==="ai_auto"&&context.aiEpoch===undefined)return res.status(428).json({success:false,code:"reply_context_required"});
+      const result = await coordinatedSend({...context,workspaceId:inboxWorkspaceId(req),actorId:req.user.id,contactId:contact.id,channel:coordinatedChannel,conversationId:conversation?.id,ai:sourceString==="ai_auto",payload:{content:content||"",contentType:contentType||mediaType||(mediaUrl?"image":"text"),mediaUrl,mediaType,mediaFilename,channel:coordinatedChannel,emailRich:resolvedEmailRich}},async()=>{
+        const guarded = guardedSource ?await withAutomationSendGuard({userId:inboxWorkspaceId(req),contactId:contact.id,channel:requested,source:guardedSource,idempotencyKey:typeof idempotencyKey==="string"?idempotencyKey:`${guardedSource}:${context.attemptId}`},send):null;
+        if(guarded&&!guarded.ok)throw new InboxCoordinationError("automation_send_blocked",403,{reason:guarded.reason});
+        return guarded?guarded.result:send();
+      });
       if (result.success) {
         res.json(result);
       } else {
         res.status(400).json(result);
       }
     } catch (error) {
+      if(error instanceof InboxCoordinationError)return res.status(error.status).json({success:false,code:error.code,...error.details});
       console.error("[api/contacts/send] Error sending message:", {
         contactId: req.params.id,
         userId: req.user?.id,
@@ -1197,6 +1193,7 @@ export function registerContactRoutes(app: Express): void {
         createdByUserId: req.user.id,
         createdByName: req.user.name || req.user.email || "Team member",
       });
+      notifyUser(inboxWorkspaceId(req),{type:"note_changed",contactId:req.params.id});
       res.json(note);
     } catch (error) {
       console.error("Error adding contact note:", error);
@@ -1224,6 +1221,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       const updated = await storage.updateContactNote(noteId, content.trim());
+      notifyUser(inboxWorkspaceId(req),{type:"note_changed",contactId:req.params.id});
       res.json(updated);
     } catch (error) {
       console.error("Error updating contact note:", error);
@@ -1250,6 +1248,7 @@ export function registerContactRoutes(app: Express): void {
       }
 
       await storage.deleteContactNote(noteId);
+      notifyUser(inboxWorkspaceId(req),{type:"note_changed",contactId:req.params.id});
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting contact note:", error);

@@ -1,3 +1,5 @@
+import { assertInboxFence } from "../inboxDispatchFence";
+import { coordinatedSend, insideCoordinatedSend, beforeInboxProviderDispatch } from "../inboxSendCoordination";
 import { type EmailRichSendPayload, normalizeEmailAddress } from "@shared/emailChannel";
 import { runTrackedWork, runtimeDrain } from '../runtimeDrain';
 import { contactHasDoNotContact } from "../automationSendGuard";
@@ -195,6 +197,7 @@ export async function sendEmailViaMailbox(params: {
     } as any);
   }
 
+  if(!insideCoordinatedSend())return coordinatedSend({workspaceId:params.workspaceUserId,contactId:params.contactId,channel:"email",conversationId:conversation.id,actorId:params.sentByUserId,ai:params.generatedBy==="ai_brain",leaseId:typeof params.generationMeta?.leaseId==="string"?params.generationMeta.leaseId:undefined,payload:{content:params.content,rich:params.rich}},()=>sendEmailViaMailbox({...params,rich:{...params.rich,providerThreadId:conversation!.externalThreadId||undefined}}));
   const pending = await storage.createMessage({
     conversationId: conversation.id,
     contactId: contact.id,
@@ -248,6 +251,7 @@ export async function sendEmailViaMailbox(params: {
       if (bodies.unsubscribeUrl) {
         auditBodies.value = { text: bodies.text, html: bodies.html };
       }
+      assertInboxFence();
       const outcome = threadId && replyMode !== "new"
         ? await provider.replyToThread({
             accessToken,
@@ -272,6 +276,7 @@ export async function sendEmailViaMailbox(params: {
     };
 
     const marketing = params.rich.prospectOutreach === true || params.rich.messagePurpose === "marketing";
+    await beforeInboxProviderDispatch();
     const result = marketing
       ? await (await import("../marketingCompliance/service")).withCompliantMarketingEmail({
           workspace: params.workspaceUserId, mailbox: mailbox.id, contactId: contact.id,

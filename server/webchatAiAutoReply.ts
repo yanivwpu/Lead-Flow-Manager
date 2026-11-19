@@ -1,3 +1,4 @@
+import { inboxScope, inboxSendRuntime } from "./inboxDispatchFence";
 /**
  * Unattended AI Brain replies for webchat (no Inbox client required).
  *
@@ -579,16 +580,13 @@ export async function maybeRunWebchatServerAi(
     return { decision, sent: false };
   }
 
-  const acquired = acquireWebchatGenerationLease({
-    previous: conv.aiControl,
-    leaseId,
-    inboundMessageId: params.inboundMessageId,
+  const acquired = await inboxSendRuntime.withFence(`${params.userId}:${inboxScope({contactId:contact.id,channel:conv.channel,conversationId:conv.id})}`,async()=>{
+    const fresh=await storage.getConversation(conv.id);
+    const next=acquireWebchatGenerationLease({previous:fresh?.aiControl,leaseId,inboundMessageId:params.inboundMessageId});
+    if(next.ok)await storage.updateConversation(conv.id,{aiControl:next.control});
+    return next;
   });
-  if (!acquired.ok) {
-    report("skip_ai_paused");
-    return { decision: "skip_ai_paused", sent: false };
-  }
-  await storage.updateConversation(conv.id, { aiControl: acquired.control });
+  if(!acquired.ok){report("skip_ai_paused");return {decision:"skip_ai_paused",sent:false};}
 
   const messages = await storage.getMessages(conv.id, 40);
   if (inboundTurnAlreadyReplied(messages, params.inboundMessageId)) {

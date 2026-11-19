@@ -1,3 +1,6 @@
+import { replyState, InboxCoordinationError } from "../inboxSendCoordination";
+import { inboxScope, inboxSendRuntime } from "../inboxDispatchFence";
+import { notifyUser } from "../presence";
 import { inboxTeamProfiles } from "../inboxTeamProfiles";
 import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { inboxContentReadLimiter } from "../inboxContentRateLimit";
@@ -146,6 +149,10 @@ export function registerConversationRoutes(app: Express): void {
       const rawO = parseInt(String(req.query.offset ?? ""), 10);
       const limit = Number.isFinite(rawL) ? rawL : 100;
       const offset = Number.isFinite(rawO) ? rawO : 0;
+      // Snapshot precedes message retrieval: a concurrent newer reply can only cause a safe conflict.
+      const state=await replyState({workspaceId:inboxWorkspaceId(req),contactId:conversation.contactId,channel:conversation.channel,conversationId:conversation.id});
+      res.setHeader("X-Inbox-Reply-Revision",state.revision);
+      res.setHeader("X-Inbox-Ai-Epoch",String((conversation.aiControl as any)?.generationEpoch||0));
       const messages = (await storage.getMessages(conversationId, limit, offset))
         .filter(message => message.userId === inboxWorkspaceId(req) && message.contactId === conversation.contactId);
       const payload = enrichConversationMessagesForClient(messages);
@@ -252,12 +259,12 @@ export function registerConversationRoutes(app: Express): void {
       if (action === "pause") {
         const { abortWebchatGeneration } = await import("../webchatGenerationAbort");
         abortWebchatGeneration(conversation.id);
-        const next = pauseAiControl({
-          reason: "manual_takeover",
-          actor: "user",
-          userId: req.user.id,
-        }, conversation.aiControl);
-        const updated = await storage.updateConversation(conversation.id, { aiControl: next });
+        const updated = await inboxSendRuntime.withFence(`${inboxWorkspaceId(req)}:${inboxScope({contactId:conversation.contactId,channel:conversation.channel,conversationId:conversation.id})}`,async()=>{
+          const fresh=await storage.getConversation(conversation.id);
+          return storage.updateConversation(conversation.id,{aiControl:pauseAiControl({reason:"manual_takeover",actor:"user",userId:req.user!.id},fresh?.aiControl)});
+        });
+        if(!updated)throw new InboxCoordinationError("conversation_unavailable",404);
+        notifyUser(inboxWorkspaceId(req),{type:"ai_control_changed",conversationId:conversation.id,contactId:conversation.contactId});
         await storage.createActivityEvent({
           userId: inboxWorkspaceId(req),
           contactId: conversation.contactId,
@@ -267,13 +274,17 @@ export function registerConversationRoutes(app: Express): void {
           actorType: "user",
           actorId: req.user.id,
         });
-        return res.json({ aiControl: updated?.aiControl || next });
+        return res.json({ aiControl: updated.aiControl });
       }
       if (action === "resume") {
         const { abortWebchatGeneration } = await import("../webchatGenerationAbort");
         abortWebchatGeneration(conversation.id);
-        const next = resumeAiControl(conversation.aiControl);
-        const updated = await storage.updateConversation(conversation.id, { aiControl: next });
+        const updated = await inboxSendRuntime.withFence(`${inboxWorkspaceId(req)}:${inboxScope({contactId:conversation.contactId,channel:conversation.channel,conversationId:conversation.id})}`,async()=>{
+          const fresh=await storage.getConversation(conversation.id);
+          return storage.updateConversation(conversation.id,{aiControl:resumeAiControl(fresh?.aiControl)});
+        });
+        if(!updated)throw new InboxCoordinationError("conversation_unavailable",404);
+        notifyUser(inboxWorkspaceId(req),{type:"ai_control_changed",conversationId:conversation.id,contactId:conversation.contactId});
         await storage.createActivityEvent({
           userId: inboxWorkspaceId(req),
           contactId: conversation.contactId,
@@ -283,10 +294,11 @@ export function registerConversationRoutes(app: Express): void {
           actorType: "user",
           actorId: req.user.id,
         });
-        return res.json({ aiControl: updated?.aiControl || next });
+        return res.json({ aiControl: updated.aiControl });
       }
       return res.json({ aiControl: readConversationAiControl(conversation.aiControl) });
     } catch (error) {
+      if(error instanceof InboxCoordinationError)return res.status(error.status).json({error:error.code,code:error.code});
       console.error("Error updating AI control:", error);
       res.status(500).json({ error: "Failed to update AI control" });
     }

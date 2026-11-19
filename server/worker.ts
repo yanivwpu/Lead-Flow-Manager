@@ -31,6 +31,12 @@ let started = false;
  * Requires REDIS_URL — callers must gate on isRedisUrlConfigured() when embedding in the web process.
  */
 export function startInboxWorker(): void {
+  void import("./inboxCollaborationSchema").then(m=>m.ensureInboxCollaborationSchema()).then(async()=>{
+    (await import("./inboxRealtimeBus")).startInboxRealtimeBus();
+    startInboxWorkerReady();
+  }).catch(error=>{console.error("[Worker] Inbox coordination schema unavailable",error);process.exitCode=1;});
+}
+function startInboxWorkerReady(): void {
   if (started) return;
   started = true;
 

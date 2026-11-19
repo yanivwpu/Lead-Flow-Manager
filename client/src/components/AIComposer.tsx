@@ -79,7 +79,7 @@ export interface AIComposerProps {
   onChange: (val: string, meta?: ComposerDraftMeta) => void;
   onSend: () => void;
   /** Direct send callback for Auto mode — bypasses controlled state */
-  onAutoSend?: (message: string, meta?: { idempotencyKey?: string }) => void;
+  onAutoSend?: (message: string, meta?: { idempotencyKey?: string; sendAttemptId?:string; replyRevision?:string; aiEpoch?:number }) => void;
   aiEnabled: boolean;
   hasFullAIBrain?: boolean;
   /** Full capability object from useAICapabilities — drives gating & credit display */
@@ -515,7 +515,7 @@ export const AIComposer = forwardRef<AIComposerHandle, AIComposerProps>(function
         });
 
         if (willSend && onAutoSend) {
-          onAutoSend(suggestion, idempotencyKey ? { idempotencyKey } : undefined);
+          onAutoSend(suggestion, {idempotencyKey,...data.autoSendContext});
           setAutoPhase("replied");
           setTimeout(() => {
             if (generation === autoReplyGenerationRef.current) setAutoPhase("waiting");

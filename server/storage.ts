@@ -2897,6 +2897,7 @@ export class DbStorage implements IStorage {
       const result = await db.select().from(conversations)
         .where(and(
           eq(conversations.contactId, contactId),
+          sql`${conversations.userId} = (SELECT ${contacts.userId} FROM ${contacts} WHERE ${contacts.id}=${contactId})`,
           eq(conversations.channel, channel)
         ))
         .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt))
@@ -2908,6 +2909,7 @@ export class DbStorage implements IStorage {
     const result = await db.select().from(conversations)
       .where(and(
         eq(conversations.contactId, contactId),
+          sql`${conversations.userId} = (SELECT ${contacts.userId} FROM ${contacts} WHERE ${contacts.id}=${contactId})`,
         eq(conversations.channel, channel),
         or(
           eq(conversations.channelAccountId, channelAccountId),
@@ -2939,7 +2941,9 @@ export class DbStorage implements IStorage {
   async updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation | undefined> {
     const result = await db.update(conversations)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(conversations.id, id))
+      .where(and(eq(conversations.id, id),
+        updates.aiControl && typeof (updates.aiControl as any).generationEpoch === "number"
+          ? sql`coalesce((${conversations.aiControl}->>'generationEpoch')::integer,0) <= ${(updates.aiControl as any).generationEpoch}` : undefined))
       .returning();
     return result[0];
   }

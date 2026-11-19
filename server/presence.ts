@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { db } from "../drizzle/db";
+import { inboxPresenceSessions } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
+import { onInboxEvent, onInboxBusReady, publishInboxEvent } from "./inboxRealtimeBus";
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage, Server } from "http";
 import { storage } from "./storage";
@@ -7,6 +12,10 @@ import type { InboxWorkspaceAccess } from "./inboxWorkspaceAccess";
 type Identity = InboxWorkspaceAccess & { userName: string };
 type Authenticate = (req: IncomingMessage) => Promise<Identity>;
 interface ClientConnection extends Identity {
+  id: string;
+  typingAt: number;
+  frames: number;
+  frameWindow: number;
   ws: WebSocket;
   request: IncomingMessage;
   authenticate: Authenticate;
@@ -16,7 +25,7 @@ interface ClientConnection extends Identity {
   queue: Promise<void>;
 }
 const clients = new Map<WebSocket, ClientConnection>();
-const INBOX_EVENTS = new Set(["new_message", "contact_updated", "ai_review_draft", "appointment_booked", "booking_confirmed", "buyer_preferences_updated"]);
+const INBOX_EVENTS = new Set(["new_message", "contact_updated", "ai_review_draft", "appointment_booked", "booking_confirmed", "buyer_preferences_updated", "note_changed", "ai_control_changed", "reply_state_changed"]);
 
 export function presenceOriginAllowed(req: IncomingMessage): boolean {
   const origin = req.headers.origin;
@@ -45,11 +54,13 @@ export function setupPresenceServer(server: Server, authenticate: Authenticate) 
     const identity = authenticated.get(request);
     if (!identity) { ws.close(1008, "Unauthorized"); return; }
     const client: ClientConnection = {
-      ...identity, ws, request, authenticate, chatId: null, isTyping: false,
+      ...identity, id: randomUUID(), typingAt: 0, frames: 0, frameWindow: Date.now(), ws, request, authenticate, chatId: null, isTyping: false,
       lastSeen: Date.now(), queue: Promise.resolve(),
     };
     clients.set(ws, client);
     ws.on("message", data => enqueue(client, async () => {
+      if(Date.now()-client.frameWindow>10000){client.frameWindow=Date.now();client.frames=0;}
+      if(++client.frames>90){ws.close(1008,"Presence rate exceeded");return;}
       const message = JSON.parse(data.toString());
       if (!message || typeof message !== "object") return;
       // Legacy clients still send auth; the frame never establishes identity.
@@ -69,7 +80,8 @@ export function setupPresenceServer(server: Server, authenticate: Authenticate) 
             send(client, { type: "error", code: "forbidden_room" }); return;
           }
           const previous = client.chatId;
-          client.chatId = id; client.isTyping = false;
+          client.chatId = id; client.isTyping = false; client.typingAt=0;
+          await persistActivity(client);
           if (previous && previous !== id) await broadcastChatPresence(previous, client.workspaceUserId);
           await broadcastChatPresence(id, client.workspaceUserId);
           break;
@@ -77,6 +89,8 @@ export function setupPresenceServer(server: Server, authenticate: Authenticate) 
         case "leave_chat": {
           if (message.chatId !== client.chatId) return;
           const id = client.chatId; client.chatId = null; client.isTyping = false;
+          await db.delete(inboxPresenceSessions).where(eq(inboxPresenceSessions.id,client.id));
+          if(id)publishInboxEvent(client.workspaceUserId,{type:"presence_changed",chatId:id});
           if (id) await broadcastChatPresence(id, client.workspaceUserId);
           break;
         }
@@ -85,29 +99,50 @@ export function setupPresenceServer(server: Server, authenticate: Authenticate) 
           if (!client.chatId || message.chatId !== client.chatId) {
             send(client, { type: "error", code: "forbidden_room" }); return;
           }
-          client.isTyping = message.type === "typing";
+          client.isTyping = message.type === "typing"; client.typingAt=client.isTyping?Date.now():0;
+          await persistActivity(client);
           await broadcastChatPresence(client.chatId, client.workspaceUserId);
           break;
         }
-        case "heartbeat": send(client, { type: "heartbeat_ack" }); break;
+        case "heartbeat": if(client.chatId)await persistActivity(client);send(client, { type: "heartbeat_ack" }); break;
       }
       client.lastSeen = Date.now();
     }));
     ws.on("close", () => disconnect(client));
     ws.on("error", () => disconnect(client));
   });
+  const unsubscribeReady=onInboxBusReady(()=>{for(const client of clients.values())enqueue(client,async()=>send(client,{type:"inbox_resync"}));});
+  const typingTimers=new Map<string,ReturnType<typeof setTimeout>>();
+  const unsubscribe=onInboxEvent((workspaceId,payload)=>{
+    if(payload.type==="presence_changed"&&typeof payload.chatId==="string"){
+      const id=payload.chatId;void broadcastChatPresence(id,workspaceId).catch(()=>{});
+      const key=`${workspaceId}:${id}`;clearTimeout(typingTimers.get(key));
+      const timer=setTimeout(()=>{typingTimers.delete(key);void broadcastChatPresence(id,workspaceId).catch(()=>{});},5100);timer.unref();typingTimers.set(key,timer);
+    }
+    else deliverUserNotification(workspaceId,payload);
+  });
   const cleanup = setInterval(() => {
+    void db.delete(inboxPresenceSessions).where(sql`${inboxPresenceSessions.expiresAt}<now()-interval '5 minutes'`).catch(()=>{});
     for (const client of clients.values()) {
       if (Date.now() - client.lastSeen > 60000) client.ws.close(1008, "Session idle");
       else enqueue(client, async () => {}); // Detect expired sessions and revoked memberships while idle.
     }
   }, 30000);
   cleanup.unref();
-  wss.on("close", () => clearInterval(cleanup));
+  wss.on("close", () => {clearInterval(cleanup);for(const timer of typingTimers.values())clearTimeout(timer);unsubscribe();unsubscribeReady();});
   return wss;
 }
 
-async function validate(client: ClientConnection): Promise<boolean> {
+const validations=new WeakMap<ClientConnection,Promise<boolean>>();
+function validate(client:ClientConnection):Promise<boolean>{
+  const pending=validations.get(client);
+  if(pending)return pending;
+  // Snapshot broadcasts and incoming frames can overlap. Passport mutates the request
+  // while refreshing it, so share one authentication refresh per socket.
+  const next=validateFresh(client).finally(()=>validations.delete(client));
+  validations.set(client,next);return next;
+}
+async function validateFresh(client: ClientConnection): Promise<boolean> {
   if (clients.get(client.ws) !== client || client.ws.readyState !== WebSocket.OPEN) return false;
   try {
     const fresh = await client.authenticate(client.request);
@@ -138,7 +173,7 @@ function send(client: ClientConnection, payload: Record<string, unknown>) {
 }
 function disconnect(client: ClientConnection) {
   if (!clients.delete(client.ws)) return;
-  if (client.chatId) void broadcastChatPresence(client.chatId, client.workspaceUserId);
+  if (client.chatId) { const id=client.chatId;void db.delete(inboxPresenceSessions).where(eq(inboxPresenceSessions.id,client.id)).then(()=>publishInboxEvent(client.workspaceUserId,{type:"presence_changed",chatId:id})).catch(()=>{}); }
 }
 
 export function revokePresenceMembership(workspaceUserId: string, actorUserId: string | null) {
@@ -151,6 +186,10 @@ export function revokePresenceMembership(workspaceUserId: string, actorUserId: s
 
 /** Keep non-Inbox account notifications private to the account holder. */
 export function notifyUser(userId: string, payload: Record<string, unknown>) {
+  if(INBOX_EVENTS.has(String(payload.type))){publishInboxEvent(userId,payload);return;}
+  deliverUserNotification(userId,payload);
+}
+function deliverUserNotification(userId: string, payload: Record<string, unknown>) {
   for (const client of clients.values()) {
     const allowed = INBOX_EVENTS.has(String(payload.type))
       ? client.workspaceUserId === userId
@@ -163,11 +202,18 @@ async function broadcastChatPresence(chatId: string, workspaceUserId: string) {
   const room = [...clients.values()].filter(c => c.chatId === chatId && c.workspaceUserId === workspaceUserId);
   const valid: ClientConnection[] = [];
   for (const client of room) if (await validate(client)) valid.push(client);
-  const viewers = new Map<string, { userId: string; userName: string; isTyping: boolean }>();
-  for (const client of valid) {
-    const existing = viewers.get(client.actorUserId);
-    viewers.set(client.actorUserId, { userId: client.actorUserId, userName: client.userName,
-      isTyping: client.isTyping || existing?.isTyping === true });
-  }
-  for (const client of valid) send(client, { type: "presence_update", chatId, viewers: [...viewers.values()] });
+  const result=await db.execute(sql`
+    SELECT u.id AS "userId",u.name AS "userName",u.avatar_url AS "avatarUrl",coalesce(bool_or(p.typing_until > now()),false) AS "isTyping"
+    FROM inbox_presence_sessions p JOIN users u ON u.id=p.actor_id
+    WHERE p.workspace_id=${workspaceUserId} AND p.room_id=${chatId} AND p.expires_at>now() AND u.deletion_requested_at IS NULL
+      AND (u.id=${workspaceUserId} OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.owner_id=${workspaceUserId} AND tm.member_id=u.id AND tm.status='active' AND tm.role IN ('admin','member')))
+    GROUP BY u.id,u.name,u.avatar_url LIMIT 200`);
+  for (const client of valid) send(client, { type: "presence_update", chatId, viewers: result.rows });
+}
+async function persistActivity(client:ClientConnection){
+  if(!client.chatId)return;
+  await db.insert(inboxPresenceSessions).values({id:client.id,workspaceId:client.workspaceUserId,actorId:client.actorUserId,roomId:client.chatId,
+    expiresAt:sql`now()+interval '45 seconds'`,typingUntil:client.isTyping&&Date.now()-client.typingAt<5000?new Date(client.typingAt+5000):null,
+  }).onConflictDoUpdate({target:inboxPresenceSessions.id,set:{roomId:client.chatId,expiresAt:sql`now()+interval '45 seconds'`,typingUntil:client.isTyping&&Date.now()-client.typingAt<5000?new Date(client.typingAt+5000):null}});
+  publishInboxEvent(client.workspaceUserId,{type:"presence_changed",chatId:client.chatId});
 }

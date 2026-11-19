@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { uuid } from "drizzle-orm/pg-core";
@@ -3599,3 +3599,27 @@ export const marketingSuppressions = pgTable("marketing_suppressions", {
   source: text("source").notNull(),
   suppressedAt: timestamp("suppressed_at").notNull().defaultNow(),
 }, t => ({ identity: primaryKey({ columns: [t.workspaceUserId, t.emailNormalized] }), validScope: check("marketing_suppressions_scope_check", sql`${t.scope} IN ('email','all')`) }));
+
+// Durable manual/AI dispatch claims. Never store draft text or provider credentials here.
+export const inboxSendAttempts = pgTable("inbox_send_attempts", {
+  id: varchar("id", { length: 200 }).primaryKey(),
+  sequence: bigserial("sequence", { mode: "number" }).notNull(),
+  workspaceId: varchar("workspace_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: varchar("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: "set null" }),
+  scope: text("scope").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  state: text("state").notNull().default("reserved"),
+  result: jsonb("result").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ scopeIndex: index("inbox_send_attempt_scope_idx").on(t.workspaceId, t.scope, t.sequence), activeScope: uniqueIndex("inbox_send_active_scope_idx").on(t.workspaceId,t.scope).where(sql`${t.state} IN ('reserved','dispatching')`) }));
+export const inboxPresenceSessions = pgTable("inbox_presence_sessions", {
+  id: varchar("id").primaryKey(),
+  workspaceId: varchar("workspace_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  actorId: varchar("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  roomId: varchar("room_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  typingUntil: timestamp("typing_until", { withTimezone: true }),
+}, t => ({ roomIndex: index("inbox_presence_room_idx").on(t.workspaceId, t.roomId, t.expiresAt) }));

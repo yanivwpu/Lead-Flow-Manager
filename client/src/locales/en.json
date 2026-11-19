@@ -1960,5 +1960,14 @@
     "empty_filtered": "No matching conversations",
     "empty_empty": "No conversations yet",
     "assignmentFailed": "Could not update assignment. Refresh and try again."
+  },
+  "inboxCollaboration": {
+    "replying": "{{name}} is replying…",
+    "viewing": "{{name}} is viewing",
+    "review": "Review latest reply",
+    "conflict": "Another reply arrived or started while you were drafting. Your draft is saved. Review the latest activity before sending.",
+    "busy": "Another reply is being sent. Your draft is saved. Wait for the result, then review the conversation.",
+    "unknown": "Delivery is uncertain. Your draft is saved. Do not resend this reply until its delivery is verified. Review the conversation before sending a different reply.",
+    "reviewed": "Latest activity reviewed. Send deliberately when ready; a newer reply will still stop the send."
   }
 }

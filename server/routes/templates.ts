@@ -1,3 +1,5 @@
+import { assertInboxFence } from "../inboxDispatchFence";
+import { coordinatedSend, humanSendInput, beforeInboxProviderDispatch, InboxCoordinationError } from "../inboxSendCoordination";
 import { requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { inboxContentReadLimiter } from "../inboxContentRateLimit";
 import { withGlobalDncPhoneBoundary } from "../marketingCompliance/store";
@@ -1989,7 +1991,7 @@ export function registerTemplateRoutes(app: Express): void {
         recipientPhone = chat.whatsappPhone;
         recipientName = chat.name;
         const channelKey =
-          chat.whatsappPhone.replace(/\D/g, "") || chat.whatsappPhone || "";
+          (chat.whatsappPhone||"").replace(/\D/g, "") || chat.whatsappPhone || "";
         const matched = channelKey
           ? await storage.getContactByChannelId(inboxWorkspaceId(req), "whatsapp", channelKey)
           : undefined;
@@ -2687,7 +2689,8 @@ export function registerTemplateRoutes(app: Express): void {
         }
 
         try {
-          const msg = await withGlobalDncPhoneBoundary<{sid: string; status: string}>(inboxWorkspaceId(req), recipientPhone, () => (twilioClient as any).messages.create(msgOptions));
+          await beforeInboxProviderDispatch();
+          const msg = await withGlobalDncPhoneBoundary<{sid: string; status: string}>(inboxWorkspaceId(req), recipientPhone, async () => {assertInboxFence();return (twilioClient as any).messages.create(msgOptions);});
           messageId = msg.sid;
           sendStatus = msg.status;
           console.log(
@@ -3006,16 +3009,33 @@ export function registerTemplateRoutes(app: Express): void {
       res.status(500).json({ error: error.message || "Failed to send template" });
     }
   };
-  app.post("/api/templates/send", inboxContentReadLimiter, sendInboxTemplate);
+  const coordinatedTemplate: import("express").RequestHandler=async(req,res,next)=>{
+    try {
+      if(!req.user)return res.status(401).json({error:"Unauthorized"});
+      let contactId=req.body?.contactId;
+      if(!contactId&&req.body?.chatId){const chat=await storage.getChat(req.body.chatId);if(!chat||chat.userId!==inboxWorkspaceId(req))return res.status(404).json({error:"Not found"});contactId=(await storage.getContactByChannelId(inboxWorkspaceId(req),"whatsapp",(chat.whatsappPhone||"").replace(/\D/g,"")))?.id;}
+      const contact=contactId?await storage.getContact(contactId):null;
+      if(!contact||contact.userId!==inboxWorkspaceId(req))return res.status(404).json({error:"Not found"});
+      const conv=await storage.getConversationByContactAndChannel(contact.id,"whatsapp");
+      const protocol=humanSendInput(req.body);
+      const result=await coordinatedSend({...protocol,workspaceId:inboxWorkspaceId(req),actorId:req.user.id,contactId:contact.id,channel:"whatsapp",conversationId:conv?.id,payload:{templateId:req.body.templateId,variables:req.body.variables,optionalHeaderMediaUrl:req.body.optionalHeaderMediaUrl,carouselCardMedia:req.body.carouselCardMedia}},async()=>{
+        const original=res.json;let captured:Record<string,any>|undefined;
+        res.json=((value:any)=>{captured=value;return res;}) as typeof res.json;
+        try{await sendInboxTemplate(req,res);return {...captured,success:captured?.success===true,__httpStatus:res.statusCode};}finally{res.json=original;}
+      });
+      const {__httpStatus,...payload}=result as any;return res.status(__httpStatus||200).json(payload);
+    }catch(error){if(error instanceof InboxCoordinationError)return res.status(error.status).json({success:false,code:error.code,...error.details});next(error);}
+  };
+  app.post("/api/templates/send", inboxContentReadLimiter, coordinatedTemplate);
   app.post("/api/inbox/templates/send", inboxContentReadLimiter, requireInboxWorkspace, async (req, res, next) => {
     try {
     // Shared Inbox sends are contact-bound quick sends, not campaign/configuration operations.
-    const { templateId, contactId, variables } = req.body || {};
+    const { templateId, contactId, variables, sendAttemptId, replyRevision, aiEpoch, reviewedRevision } = req.body || {};
     if (typeof contactId !== "string" || !contactId) return res.status(400).json({ error: "Contact required" });
     const contact = await storage.getContact(contactId);
     if (!contact || contact.userId !== inboxWorkspaceId(req)) return res.status(404).json({ error: "Not found" });
-    req.body = { templateId, contactId, variables, sendSource: "inbox_picker" };
-    return await sendInboxTemplate(req, res);
+    req.body = { templateId, contactId, variables, sendAttemptId, replyRevision, aiEpoch, reviewedRevision, sendSource: "inbox_picker" };
+    return await coordinatedTemplate(req, res, next);
     } catch (error) { next(error); }
   });
 

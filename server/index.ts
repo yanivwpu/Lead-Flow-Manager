@@ -468,6 +468,8 @@ app.use((req, res, next) => {
   // land before workers or HTTP traffic SELECT contacts columns from shared/schema.
   const { applyStartupSchemaPatches } = await import("./startupSchemaPatches");
   const schemaPatches = await applyStartupSchemaPatches();
+  await (await import("./inboxCollaborationSchema")).ensureInboxCollaborationSchema();
+  (await import("./inboxRealtimeBus")).startInboxRealtimeBus();
   try {
     const { backfillLegacyDefaultWidgetSettings } = await import("./widgetSettingsBackfill");
     await backfillLegacyDefaultWidgetSettings();
