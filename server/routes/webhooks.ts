@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { requireInboundPersistence } from '../inboundAcknowledgment';
 import type { Express } from "express";
 import { storage } from "../storage";
@@ -264,7 +265,7 @@ export function registerWebhookRoutes(app: Express): void {
 
       const webchatExternalId = parsed.data.clientMessageId
         ? `webchat_${visitorId}_${parsed.data.clientMessageId}`
-        : `webchat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        : `webchat_${randomUUID()}`;
       const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
         "@shared/agent/webchatLeadContext"
       );

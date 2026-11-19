@@ -12,8 +12,13 @@ function ensure(ok,reason){if(!ok){const e=new Error(reason);e.safeReason=reason
   ensure(/^[a-f0-9]{40}$/.test(env.RAILWAY_GIT_COMMIT_SHA||''),'unattested_runtime_commit');
   result.deploymentId=env.RAILWAY_DEPLOYMENT_ID;result.commit=env.RAILWAY_GIT_COMMIT_SHA;result.replicaId=env.RAILWAY_REPLICA_ID||null;
   ensure(!!env.REDIS_URL,'redis_url_absent');
+  const address=new URL(env.REDIS_URL);
+  ensure(address.protocol==='redis:'||address.protocol==='rediss:','unsupported_redis_protocol');
+  const hostname=address.hostname.toLowerCase();
+  const useTls=address.protocol==='rediss:'||hostname==='upstash.io'||hostname.endsWith('.upstash.io');
+  result.redisTls=useTls;
   const Redis=req('ioredis');
-  redis=new Redis(env.REDIS_URL,{lazyConnect:true,enableReadyCheck:false,enableOfflineQueue:false,maxRetriesPerRequest:0,retryStrategy:()=>null,connectTimeout:5000,commandTimeout:5000,autoResubscribe:false,autoResendUnfulfilledCommands:false,tls:env.REDIS_URL.startsWith('rediss://')||env.REDIS_URL.includes('upstash.io')?{}:undefined});
+  redis=new Redis(env.REDIS_URL,{lazyConnect:true,enableReadyCheck:false,enableOfflineQueue:false,maxRetriesPerRequest:0,retryStrategy:()=>null,connectTimeout:5000,commandTimeout:5000,autoResubscribe:false,autoResendUnfulfilledCommands:false,tls:useTls?{}:undefined});
   redis.on('error',()=>{});await redis.connect();
   result.queue='unified-inbox';result.samples=[];
   for(let i=0;i<2;i++){
