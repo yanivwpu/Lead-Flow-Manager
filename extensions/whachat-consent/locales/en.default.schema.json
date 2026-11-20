@@ -1,9 +1,0 @@
-{
-  "consent": {
-    "name": "WhatsApp consent",
-    "placement": "Notice placement",
-    "content_end": "End of main content",
-    "original": "Original theme embed position",
-    "before_footer": "Above the footer (recommended)"
-  }
-}
