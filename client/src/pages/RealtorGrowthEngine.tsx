@@ -88,7 +88,7 @@ import {
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
-import { useToast } from "@/hooks/use-toast";
+import { toast, useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -963,7 +963,6 @@ function RGEOnboardingWizard({
 export function RealtorGrowthEngine() {
   const { i18n } = useTranslation();
   const [location, setLocation] = useLocation();
-  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const totalSteps = 5;
   const [checkingSubscription, setCheckingSubscription] = useState(false);
