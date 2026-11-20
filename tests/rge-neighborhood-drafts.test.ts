@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  EMPTY_NEIGHBORHOOD, NEW_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
+  EMPTY_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
   sameNeighborhoodContent, writeNeighborhoodDrafts,
 } from "../client/src/lib/neighborhoodDrafts";
 
@@ -22,7 +22,9 @@ test("unfinished new and existing neighborhood edits round-trip independently by
   assert.deepEqual(readNeighborhoodDrafts(storage, neighborhoodDraftKey("agent-b")), { active: null, entries: {} });
   assert.equal(sameNeighborhoodContent(restored.entries[existing].values, edit.values), true);
   assert.equal(sameNeighborhoodContent(restored.entries[existing].values, draft.values), false);
-  writeNeighborhoodDrafts(storage, owner, { active: NEW_NEIGHBORHOOD, entries: {} });
+  writeNeighborhoodDrafts(storage, owner, { active: existing, entries: {} });
+  assert.deepEqual(readNeighborhoodDrafts(storage, owner), { active: existing, entries: {} });
+  writeNeighborhoodDrafts(storage, owner, { active: null, entries: {} });
   assert.equal(storage.getItem(owner), null);
 });
 

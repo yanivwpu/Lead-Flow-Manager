@@ -42,7 +42,7 @@ export function readNeighborhoodDrafts(storage: Pick<Storage, "getItem">, key: s
 
 export function writeNeighborhoodDrafts(storage: Pick<Storage, "setItem" | "removeItem">, key: string, state: NeighborhoodDrafts): boolean {
   try {
-    if (Object.keys(state.entries).length) storage.setItem(key, JSON.stringify(state));
+    if (state.active || Object.keys(state.entries).length) storage.setItem(key, JSON.stringify(state));
     else storage.removeItem(key);
     return true;
   } catch {
