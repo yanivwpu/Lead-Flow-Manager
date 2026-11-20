@@ -107,13 +107,14 @@ describe("WhatsApp / chat bubble presentation preserved", () => {
   });
 });
 
-describe("Copilot visibility unchanged", () => {
+describe("Copilot column stability", () => {
   it("desktop Copilot/CRM column remains rendered beside conversation", () => {
     const inbox = read("client/src/pages/UnifiedInbox.tsx");
     assert.match(inbox, /InboxLeadDetailsPanel/);
     assert.match(inbox, /data-testid=\"inbox-copilot-column\"/);
-    assert.match(inbox, /data-copilot-visible=\"true\"/);
-    assert.match(inbox, /!isMobile && selectedContactId && contact/);
+    assert.match(inbox, /\{!isMobile && \(\s*<aside/);
+    assert.match(inbox, /data-copilot-visible=\{Boolean\(selectedContactId\)\}/);
+    assert.match(inbox, /selectedContactId && contact\?\.id === selectedContactId && \(\s*<InboxLeadDetailsPanel/);
   });
 });
 
