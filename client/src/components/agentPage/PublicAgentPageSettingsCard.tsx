@@ -1,3 +1,4 @@
+import { NeighborhoodPageSettings } from "./NeighborhoodPageSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
@@ -735,6 +736,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           </div>
         </div>
       </div>
+      <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
     </section>
   );
 }

@@ -22,6 +22,8 @@ export type WebchatPageActionContext = {
 
 export type WebchatPageContext = {
   landingUrl?: string;
+  agentNeighborhood?: string;
+  agentNeighborhoodName?: string;
   latestUrl?: string;
   pageTitle?: string;
   referrer?: string;
@@ -153,6 +155,7 @@ export function formatPageContextForAi(ctx: WebchatPageContext | null | undefine
     ctx.latestUrl ? `Current page: ${ctx.latestUrl}` : "",
     ctx.landingUrl && ctx.landingUrl !== ctx.latestUrl ? `Landing page: ${ctx.landingUrl}` : "",
     ctx.pageTitle ? `Page title: ${ctx.pageTitle}` : "",
+    ctx.agentNeighborhood ? "The neighborhood landing page is referral context. Confirm the visitor's desired area before matching." : "",
     ctx.matchedPageRule ? `Matched page rule: ${ctx.matchedPageRule}` : "",
     ctx.utm?.campaign ? `UTM campaign: ${ctx.utm.campaign}` : "",
     ctx.utm?.source ? `UTM source: ${ctx.utm.source}` : "",
