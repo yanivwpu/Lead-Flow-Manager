@@ -21,8 +21,8 @@ const fields = z.object({
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, content, slug, published } = page;
-  return { id, name, city, state, content, slug, published, publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, content, slug, published, updatedAt } = page;
+  return { id, name, city, state, content, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 
@@ -58,7 +58,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   }));
 
   router.put("/:id", run(async (req, res, userId) => {
-    const parsed = fields.extend({ published: z.boolean() }).safeParse(req.body);
+    const parsed = fields.extend({ published: z.boolean(), expectedUpdatedAt: z.string().datetime().optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
     let liveSlug: string | null = null;
     if (parsed.data.published) {
@@ -67,13 +67,27 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       if (!neighborhoodContentComplete(parsed.data.content)) return res.status(400).json({ error: "Write two distinct paragraphs of local information, with at least 240 characters total." });
       liveSlug = agent.agentPageSlug;
     }
-    const page = await updateNeighborhoodPage(userId, String(req.params.id), parsed.data);
-    if (!page) return res.sendStatus(404);
+    const id = String(req.params.id);
+    const { expectedUpdatedAt, ...content } = parsed.data;
+    const page = await updateNeighborhoodPage(userId, id, content, expectedUpdatedAt);
+    if (!page) {
+      if (expectedUpdatedAt && await getNeighborhoodPage(userId, id)) {
+        return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before editing again." });
+      }
+      return res.sendStatus(404);
+    }
     res.json(settings(page, liveSlug));
   }));
 
   router.delete("/:id", run(async (req, res, userId) => {
-    res.sendStatus(await deleteNeighborhoodPage(userId, String(req.params.id)) ? 204 : 404);
+    const version = z.string().datetime().optional().safeParse(req.query.expectedUpdatedAt);
+    if (!version.success) return res.sendStatus(400);
+    const id = String(req.params.id);
+    if (await deleteNeighborhoodPage(userId, id, version.data)) return res.sendStatus(204);
+    if (version.data && await getNeighborhoodPage(userId, id)) {
+      return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before deleting." });
+    }
+    res.sendStatus(404);
   }));
 
   router.get("/:id/preview", run(async (req, res, userId) => {

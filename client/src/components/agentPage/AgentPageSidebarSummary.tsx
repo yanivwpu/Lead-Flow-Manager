@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { fetchAgentPageSettings } from "@/lib/agentPageApi";
 
 export function AgentPageSidebarSummary() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["/api/agent-page"],
     queryFn: fetchAgentPageSettings,
   });
@@ -13,7 +13,7 @@ export function AgentPageSidebarSummary() {
   const pageIsPublic = Boolean(data?.publicPageUrl);
 
   const statusLabel = !data?.agentPageEnabled
-    ? "Off"
+    ? "Offline"
     : pageIsPublic
       ? "Live"
       : "Setup";
@@ -26,39 +26,23 @@ export function AgentPageSidebarSummary() {
 
   return (
     <Card data-testid="agent-page-sidebar-summary">
-      <CardHeader className="pb-2">
+      <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Globe className="w-4 h-4 text-brand-green" />
           Agent Page
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        {isLoading || !data ? (
+      <CardContent className="px-4 pb-4 text-sm">
+        {isError ? <p role="alert" className="text-slate-700">Status unavailable</p> : isLoading ? (
           <div className="flex items-center text-muted-foreground text-xs">
             <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
             Loading…
           </div>
         ) : (
-          <>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground text-xs">Status</span>
-              <span
-                className={cn(
-                  "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
-                  statusClass,
-                )}
-              >
-                {statusLabel}
-              </span>
-            </div>
-            {data.agentPageSlug ? (
-              <p className="text-xs text-gray-700 break-all font-mono" title={data.agentPageSlug}>
-                /agents/{data.agentPageSlug}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">No slug yet</p>
-            )}
-          </>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <a href="#agent-page-settings" className="font-medium text-slate-700 underline-offset-4 hover:underline">Manage page</a>
+            <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", statusClass)}>{statusLabel}</span>
+          </div>
         )}
       </CardContent>
     </Card>

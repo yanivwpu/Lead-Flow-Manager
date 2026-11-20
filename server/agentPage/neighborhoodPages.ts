@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import { agentNeighborhoodPages as pages } from "@shared/schema";
 import { slugifyListingText } from "@shared/inventory/listingPublicSlug";
@@ -35,14 +35,23 @@ export async function createNeighborhoodPage(userId: string, content: Neighborho
   return page;
 }
 
-export async function updateNeighborhoodPage(userId: string, id: string, content: NeighborhoodContent & { published: boolean }) {
-  const [page] = await db.update(pages).set({ ...content, slug: neighborhoodSlug(content.name), updatedAt: new Date() })
-    .where(ownedPage(userId, id)).returning();
+function ownedPageVersion(userId: string, id: string, expectedUpdatedAt?: string) {
+  return and(ownedPage(userId, id), expectedUpdatedAt === undefined ? undefined
+    : sql`date_trunc('milliseconds', ${pages.updatedAt}) = ${expectedUpdatedAt}::timestamptz`);
+}
+
+export async function updateNeighborhoodPage(userId: string, id: string, content: NeighborhoodContent & { published: boolean }, expectedUpdatedAt?: string) {
+  const [page] = await db.update(pages).set({
+    ...content,
+    slug: neighborhoodSlug(content.name),
+    // Keep versions distinct even if two writes occur within one millisecond.
+    updatedAt: sql`greatest(now(), date_trunc('milliseconds', ${pages.updatedAt}) + interval '1 millisecond')`,
+  }).where(ownedPageVersion(userId, id, expectedUpdatedAt)).returning();
   return page;
 }
 
-export async function deleteNeighborhoodPage(userId: string, id: string) {
-  const [page] = await db.delete(pages).where(ownedPage(userId, id)).returning({ id: pages.id });
+export async function deleteNeighborhoodPage(userId: string, id: string, expectedUpdatedAt?: string) {
+  const [page] = await db.delete(pages).where(ownedPageVersion(userId, id, expectedUpdatedAt)).returning({ id: pages.id });
   return Boolean(page);
 }
 

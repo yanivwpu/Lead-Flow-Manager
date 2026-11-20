@@ -221,7 +221,12 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(another.status, 201);
   const anotherRow = await another.json();
   assert.equal((await savePage("PUT", { ...draft, name: "Las Olas", published: true }, endpoint + "/" + anotherRow.id)).status, 200);
-  assert.equal((await publishNeighborhood(true)).status, 200);
+  const firstPublish = await publishNeighborhood(true, { expectedUpdatedAt: row.updatedAt });
+  assert.equal(firstPublish.status, 200);
+  const publishedRow = await firstPublish.json();
+  assert.notEqual(publishedRow.updatedAt, row.updatedAt);
+  assert.equal((await publishNeighborhood(false, { expectedUpdatedAt: row.updatedAt })).status, 409);
+  assert.equal((await request(editUrl + "?expectedUpdatedAt=" + encodeURIComponent(row.updatedAt), { method: "DELETE" })).status, 409);
   assert.equal((await (await request(endpoint)).json()).pages.length, 2);
   assert.match(await neighborhoodSitemap(), /legacy-agent\/victoria-park/);
   assert.match(await neighborhoodSitemap(), /yaniv-haramatiy\/las-olas/);
