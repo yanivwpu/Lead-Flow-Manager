@@ -1,3 +1,4 @@
+import { agentPageNavigationCss, agentPageNavigationScript } from "./publicAgentPageNavigation";
 import { neighborhoodTitle } from "./neighborhoodPages";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
@@ -165,6 +166,40 @@ export function formatBrowseResultsSummary(loaded: number, total: number): strin
   return `${total} listing${total === 1 ? "" : "s"} found`;
 }
 
+function renderAgentNavigation(data: PublicAgentPageRenderInput): string {
+  if (!data.agentPageUrl || data.embedMode || data.neighborhood?.preview) return "";
+  const home = escapeHtml(data.agentPageUrl);
+  const neighborhoodLinks = data.neighborhoodLinks ?? [];
+  const currentNeighborhood = neighborhoodLinks.some(({ url }) => url === data.canonicalUrl);
+  const items = `<ul class="agent-nav-items">
+    <li><a href="${home}"${data.neighborhood ? "" : ' aria-current="page"'}>Home</a></li>
+    <li><a href="${data.neighborhood ? home : ""}#agent-properties">Properties</a></li>
+    ${neighborhoodLinks.length ? `<li><details class="agent-nav-disclosure"${currentNeighborhood ? " data-current-section" : ""}>
+      <summary>Neighborhoods</summary>
+      <ul class="agent-nav-submenu">${neighborhoodLinks.map(({ url, title }) =>
+        `<li><a href="${escapeHtml(url)}"${url === data.canonicalUrl ? ' aria-current="page"' : ""}>${escapeHtml(title)}</a></li>`
+      ).join("")}</ul>
+    </details></li>` : ""}
+    <li><a href="#agent-contact" data-agent-nav-contact>Contact</a></li>
+  </ul>`;
+
+  return `<div class="agent-site-nav" id="agent-site-nav">
+    <nav class="agent-nav-inline" aria-label="Agent navigation">${items}</nav>
+    <button type="button" class="agent-menu-toggle" id="agent-menu-toggle" aria-controls="agent-menu-drawer" aria-expanded="false">
+      <span class="agent-menu-icon" aria-hidden="true"></span> Menu
+    </button>
+    <dialog class="agent-menu-drawer" id="agent-menu-drawer" aria-labelledby="agent-menu-title">
+      <div class="agent-menu-drawer-body">
+        <div class="agent-drawer-heading">
+          <strong id="agent-menu-title">Navigation</strong>
+          <button type="button" id="agent-menu-close" autofocus>Close menu</button>
+        </div>
+        <nav aria-label="Agent navigation">${items}</nav>
+      </div>
+    </dialog>
+  </div>`;
+}
+
 export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): string {
   const slug = data.agentPageSlug || "";
   const bioHtml = data.bio
@@ -213,6 +248,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .filter(Boolean)
     .join(" ");
 
+  const navigationHtml = renderAgentNavigation(data);
   const agentHeaderHtml = embedMode
     ? ""
     : `<header class="agent-header">
@@ -222,13 +258,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         ${bioHtml}
         ${marketHtml}
         ${neighborhood && (data.publicEmail || data.publicPhone) ? `<p>${[data.publicEmail, data.publicPhone].filter(Boolean).map(escapeHtml).join(" · ")}</p>` : ""}
-        <div class="cta-row"${neighborhood?.preview ? " inert" : ""}>
+        <div class="cta-row"${navigationHtml ? ' id="agent-contact"' : ""}${neighborhood?.preview ? " inert" : ""}>
           <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(neighborhood ? "Contact agent" : primaryContactLabel)}</button>
           ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
           ${neighborhood && !neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
           ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>` : homeWorthBtn}
         </div>
-        ${data.neighborhoodLinks?.length ? `<nav aria-label="Neighborhoods"><ul>${data.neighborhoodLinks.map(({ url, title }) => `<li><a href="${escapeHtml(url)}">${escapeHtml(title)}</a></li>`).join("")}</ul></nav>` : ""}
       </div>
     </header>`;
 
@@ -490,17 +525,19 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     body.embed-mode.hide-chat .chat-widget,
     body.embed-mode.hide-chat .chat-bubble,
     body.embed-mode.hide-chat .chat-panel { display: none !important; visibility: hidden !important; pointer-events: none !important; }
+    ${navigationHtml ? agentPageNavigationCss : ""}
   </style>
 </head>
 <body class="${bodyClass}">
   <div class="wrap">
+    ${navigationHtml}
     ${agentHeaderHtml}
 
     ${neighborhood ? `<section class="agent-header" style="display:block">
       <h2>About ${escapeHtml(neighborhood.name)}</h2>
       ${neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join("")}
       ${neighborhood.parentUrl ? `<p><a href="${escapeHtml(neighborhood.parentUrl)}">Back to the Agent Page</a></p>` : ""}
-    </section>` : `<section class="listings-section">
+    </section>` : `<section class="listings-section"${navigationHtml ? ' id="agent-properties" tabindex="-1"' : ""}>
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
           <div class="listing-type-row">
@@ -891,6 +928,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         }
         openModal("message");
       });
+
+      ${navigationHtml ? agentPageNavigationScript : ""}
 
       var scheduleHeader = document.getElementById("btn-schedule-header");
       if (scheduleHeader && scheduleHeader.tagName === "BUTTON") {

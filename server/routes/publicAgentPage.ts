@@ -46,8 +46,8 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         return;
       }
       const { agent, pageUrl, ...renderInput } = data;
-      const pages = !embedMode ? await publishedNeighborhoods(agent.userId, neighborhoodSlug) : [];
-      const neighborhood = neighborhoodPath ? pages[0] : undefined;
+      const pages = !embedMode ? await publishedNeighborhoods(agent.userId) : [];
+      const neighborhood = neighborhoodPath ? pages.find((page) => page.slug === neighborhoodSlug) : undefined;
       if (neighborhoodPath && !neighborhood) {
         res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
         return;
@@ -58,12 +58,12 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         res.setHeader("Content-Security-Policy", "frame-ancestors *");
       }
       res.type("html").send(buildPublicAgentPageHtml({
-        ...renderInput, canonicalUrl, allowSearchIndexing,
+        ...renderInput, canonicalUrl, allowSearchIndexing, agentPageUrl: pageUrl,
         neighborhood: neighborhood ? { ...neighborhood, parentUrl: pageUrl } : undefined,
-        neighborhoodLinks: !neighborhoodPath ? pages.map((page) => ({
+        neighborhoodLinks: pages.map((page) => ({
           url: buildNeighborhoodUrl(renderInput.agentPageSlug, page.slug, appOrigin),
           title: neighborhoodTitle(page),
-        })) : undefined,
+        })),
       }));
       if (req.method === "GET") {
         void incrementAgentPageAnalytics(agent.userId, "page_view").catch((error) => {
