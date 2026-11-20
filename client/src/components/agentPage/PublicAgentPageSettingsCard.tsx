@@ -43,41 +43,36 @@ function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin:
     title: "Long-Term Rentals",
   });
 
-  const copySnippet = (label: string, code: string) => {
-    navigator.clipboard.writeText(code);
-    toast({ title: `${label} embed code copied` });
+  const copySnippet = async (label: string, code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast({ title: `${label} embed code copied` });
+    } catch {
+      toast({ title: "Could not copy embed code", description: "Check clipboard permissions and try again.", variant: "destructive" });
+    }
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-100" data-testid="agent-page-embed-code">
-      <div>
-        <p className="text-sm font-medium text-gray-800">Embed on your website</p>
-        <p className="text-xs text-muted-foreground leading-snug mt-1">
-          Paste an iframe on an external site (for example, your brokerage homepage) to show live
-          listings from your Agent Page.
+    <details className="rounded-lg border border-gray-200 bg-gray-50/50 p-3" data-testid="agent-page-embed-code">
+      <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">
+        Embed listings on another website
+      </summary>
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-muted-foreground leading-snug">
+          Add your listings to a brokerage or personal website. Click to copy the embed code, then paste it into your website builder.
         </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Homes for sale", saleSnippet)}>
+            <Copy className="h-3.5 w-3.5 mr-1.5" />
+            Copy homes for sale embed
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Rentals", rentSnippet)}>
+            <Copy className="h-3.5 w-3.5 mr-1.5" />
+            Copy rentals embed
+          </Button>
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Homes for sale</Label>
-        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
-          {saleSnippet}
-        </pre>
-        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For sale", saleSnippet)}>
-          <Copy className="h-3.5 w-3.5 mr-1.5" />
-          Copy for sale embed
-        </Button>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Long-term rentals</Label>
-        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
-          {rentSnippet}
-        </pre>
-        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For rent", rentSnippet)}>
-          <Copy className="h-3.5 w-3.5 mr-1.5" />
-          Copy for rent embed
-        </Button>
-      </div>
-    </div>
+    </details>
   );
 }
 
@@ -346,6 +341,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
         </div>
       </div>
 
+      <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
       <div className="px-4 py-4 sm:px-6 sm:py-5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
           <div className="space-y-4 min-w-0" data-testid="agent-page-controls-column">
@@ -660,13 +656,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               />
             </div>
 
-            <div className="space-y-3 pt-1 border-t border-gray-100" data-testid="agent-page-social-links">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-gray-800">Profile links</p>
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Optional. Icons appear on your public page when a link is set.
-                </p>
-              </div>
+            <details className="rounded-lg border border-gray-200 bg-gray-50/50 p-3" data-testid="agent-page-social-links">
+              <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">Website &amp; social links</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground leading-snug">Optional. Icons appear on your public page when a link is set.</p>
               <div className="space-y-2">
                 <Label htmlFor="agent-page-website">Website URL</Label>
                 <Input
@@ -732,11 +725,11 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   onBlur={() => saveProfileLink("youtubeUrl", youtubeUrlDraft)}
                 />
               </div>
-            </div>
+              </div>
+            </details>
           </div>
         </div>
       </div>
-      <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
     </section>
   );
 }
