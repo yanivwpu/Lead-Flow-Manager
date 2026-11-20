@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean, jsonb, numeric, json, index, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, bigint, bigserial, timestamp, boolean, jsonb, numeric, json, index, unique, uniqueIndex, doublePrecision, date, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { uuid } from "drizzle-orm/pg-core";
@@ -1729,11 +1729,21 @@ export type InboxItem = {
 // ==========================================
 
 // AI Business Knowledge - per-account business context for AI
-export const agentNeighborhoodPilot = pgTable("agent_neighborhood_pilot", {
-  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
   content: text("content").notNull(),
   published: boolean("published").notNull().default(false),
-});
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("agent_neighborhood_pages_owner_slug_unique").on(table.userId, table.slug),
+  index("agent_neighborhood_pages_published_idx").on(table.id).where(sql`${table.published}`),
+]);
 
 export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

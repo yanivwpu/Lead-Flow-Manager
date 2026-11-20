@@ -10,9 +10,8 @@ import {
 } from "../inventory/inventoryDb";
 import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
-import { VICTORIA_PARK_AGENT_SLUG, VICTORIA_PARK_SLUG } from "@shared/agent/victoriaPark";
-import { publishedVictoriaPark } from "../agentPage/victoriaParkPilot";
-import { countAgentPageSitemapCandidates, fetchAgentPageSitemapSlugs, resolveAgentPageBySlug } from "../agentPage/agentPageDb";
+import { countNeighborhoodSitemapCandidates, fetchNeighborhoodSitemapPaths } from "../agentPage/neighborhoodPages";
+import { countAgentPageSitemapCandidates, fetchAgentPageSitemapSlugs } from "../agentPage/agentPageDb";
 import { getAppOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
@@ -92,10 +91,11 @@ export function renderAgentPageUrlset(slugs: string[], appOrigin: string): strin
   return renderSitemapUrls(slugs.map((slug) => ({ loc: buildAgentPageUrl(slug, appOrigin) })));
 }
 
-export function renderSitemapIndex(appOrigin: string, pageCount: number, agentPageCount = 0): string {
+export function renderSitemapIndex(appOrigin: string, pageCount: number, agentPageCount = 0, neighborhoodPageCount = 0): string {
   const filenames = [
     ...Array.from({ length: pageCount }, (_, index) => `public-listings-sitemap-${index + 1}.xml`),
     ...Array.from({ length: agentPageCount }, (_, index) => `public-agents-sitemap-${index + 1}.xml`),
+    ...Array.from({ length: neighborhoodPageCount }, (_, index) => `public-neighborhoods-sitemap-${index + 1}.xml`),
   ];
   const entries = filenames.map((filename) =>
     `  <sitemap>\n    <loc>${escapeXml(`${appOrigin}/${filename}`)}</loc>\n  </sitemap>`,
@@ -134,17 +134,21 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
   app.get("/public-listings-sitemap.xml", requirePublicListingSchemaReady, async (_req: Request, res: Response) => {
     try {
       const appOrigin = getAppOrigin();
-      const [total, agentCandidates] = await Promise.all([
+      const [total, agentCandidates, neighborhoods] = await Promise.all([
         countPublicShareableListings(),
         countAgentPageSitemapCandidates(),
+        countNeighborhoodSitemapCandidates().catch((error) => {
+          console.error("[public-neighborhood-sitemap] count failed", error);
+          return 0;
+        }),
       ]);
       const plan = resolveRootSitemapPlan(total);
-      if (agentCandidates > 0) {
+      if (agentCandidates > 0 || neighborhoods > 0) {
         // Keep the existing root URL and give Agent Pages their own uncached shards.
         const listingPages = Math.ceil(total / SITEMAP_URLS_PER_FILE);
         const agentPages = Math.ceil(agentCandidates / AGENT_SITEMAP_CANDIDATES_PER_FILE);
         res.setHeader("Cache-Control", "no-store");
-        res.type("application/xml").send(renderSitemapIndex(appOrigin, listingPages, agentPages));
+        res.type("application/xml").send(renderSitemapIndex(appOrigin, listingPages, agentPages, Math.ceil(neighborhoods / AGENT_SITEMAP_CANDIDATES_PER_FILE)));
         return;
       }
       applyPublicListingSeoCacheHeaders(res);
@@ -169,6 +173,23 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
     }
   });
 
+  app.get("/public-neighborhoods-sitemap-:page.xml", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const total = await countNeighborhoodSitemapCandidates();
+      const shard = resolveSitemapShardPage(total, Number(req.params.page), AGENT_SITEMAP_CANDIDATES_PER_FILE);
+      if (!shard.ok || !total) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const paths = await fetchNeighborhoodSitemapPaths(shard.offset, shard.limit);
+      res.type("application/xml").send(renderAgentPageUrlset(paths, getAppOrigin()));
+    } catch (error) {
+      console.error("[public-neighborhood-sitemap] render failed", error);
+      res.status(500).type("text/plain").send("Sitemap unavailable");
+    }
+  });
+
   app.get("/public-agents-sitemap-:page.xml", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     res.setHeader("Cache-Control", "no-store");
     try {
@@ -180,10 +201,6 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
         return;
       }
       const slugs = await fetchAgentPageSitemapSlugs(shard.offset, shard.limit);
-      if (process.env.RGE_VICTORIA_PARK_PILOT_USER_ID?.trim() && slugs.includes(VICTORIA_PARK_AGENT_SLUG)) {
-        const agent = await resolveAgentPageBySlug(VICTORIA_PARK_AGENT_SLUG);
-        if (agent && await publishedVictoriaPark(agent)) slugs.push(`${VICTORIA_PARK_AGENT_SLUG}/${VICTORIA_PARK_SLUG}`);
-      }
       res.type("application/xml").send(renderAgentPageUrlset(slugs, getAppOrigin()));
     } catch (error) {
       console.error("[public-agent-sitemap] render failed", error);

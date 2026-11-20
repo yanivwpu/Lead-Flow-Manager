@@ -6,8 +6,8 @@ import {
   renderAgentPageListingCards,
 } from "@shared/agent/publicAgentPageHtml";
 import { parseAgentPageEmbedQuery } from "@shared/agent/agentPageEmbed";
-import { VICTORIA_PARK_AGENT_SLUG, VICTORIA_PARK_SLUG } from "@shared/agent/victoriaPark";
-import { publishedVictoriaPark, victoriaParkUrl } from "../agentPage/victoriaParkPilot";
+import { buildNeighborhoodUrl, neighborhoodTitle } from "@shared/agent/neighborhoodPages";
+import { publishedNeighborhoods } from "../agentPage/neighborhoodPages";
 import { getAppOrigin, getRequestOrigin } from "../urlOrigins";
 import { getPublicAgentPageData } from "../agentPage/agentPageService";
 import { browseAgentPageListings, browseQueryToFilters } from "../agentPage/agentPageBrowseService";
@@ -20,8 +20,9 @@ export function registerPublicAgentPageRoutes(app: Express): void {
     // Visibility can change when a slug, subscription or publication setting changes.
     res.setHeader("Cache-Control", "no-store");
     const slug = req.params.slug?.trim() ?? "";
-    const neighborhoodPath = req.params.neighborhood !== undefined;
-    if (!slug || (neighborhoodPath && (slug !== VICTORIA_PARK_AGENT_SLUG || req.params.neighborhood !== VICTORIA_PARK_SLUG))) {
+    const neighborhoodSlug = req.params.neighborhood;
+    const neighborhoodPath = neighborhoodSlug !== undefined;
+    if (!slug || (neighborhoodPath && !/^[a-z0-9-]{1,80}$/.test(neighborhoodSlug))) {
       res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
       return;
     }
@@ -45,21 +46,24 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         return;
       }
       const { agent, pageUrl, ...renderInput } = data;
-      const pilot = !embedMode ? await publishedVictoriaPark(agent) : undefined;
-      if (neighborhoodPath && !pilot) {
+      const pages = !embedMode ? await publishedNeighborhoods(agent.userId, neighborhoodSlug) : [];
+      const neighborhood = neighborhoodPath ? pages[0] : undefined;
+      if (neighborhoodPath && !neighborhood) {
         res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
         return;
       }
-      const pilotUrl = pilot ? victoriaParkUrl(appOrigin) : undefined;
-      const canonicalUrl = neighborhoodPath && pilotUrl ? pilotUrl : pageUrl;
+      const canonicalUrl = neighborhood ? buildNeighborhoodUrl(renderInput.agentPageSlug, neighborhood.slug, appOrigin) : pageUrl;
       const allowSearchIndexing = !embedMode && `${getRequestOrigin(req)}${req.originalUrl}` === canonicalUrl;
       if (embedMode) {
         res.setHeader("Content-Security-Policy", "frame-ancestors *");
       }
       res.type("html").send(buildPublicAgentPageHtml({
         ...renderInput, canonicalUrl, allowSearchIndexing,
-        neighborhood: neighborhoodPath && pilot ? { content: pilot.content, parentUrl: pageUrl } : undefined,
-        neighborhoodLink: !neighborhoodPath ? pilotUrl : undefined,
+        neighborhood: neighborhood ? { ...neighborhood, parentUrl: pageUrl } : undefined,
+        neighborhoodLinks: !neighborhoodPath ? pages.map((page) => ({
+          url: buildNeighborhoodUrl(renderInput.agentPageSlug, page.slug, appOrigin),
+          title: neighborhoodTitle(page),
+        })) : undefined,
       }));
       if (req.method === "GET") {
         void incrementAgentPageAnalytics(agent.userId, "page_view").catch((error) => {

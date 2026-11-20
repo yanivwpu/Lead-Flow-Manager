@@ -2,8 +2,7 @@
  * Public agent page lead intake — creates CRM contacts via channelService.
  */
 import type { PublicAgentLeadBody } from "@shared/agent/agentPageSchema";
-import { VICTORIA_PARK_NAME, VICTORIA_PARK_TITLE } from "@shared/agent/victoriaPark";
-import { publishedVictoriaPark, victoriaParkUrl } from "./victoriaParkPilot";
+import { publishedNeighborhoods, neighborhoodLeadContext } from "./neighborhoodPages";
 import { emptySellerPreferenceProfile } from "@shared/sellerPreferenceSchema";
 import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
 import { storage } from "../storage";
@@ -70,15 +69,14 @@ export async function processPublicAgentPageLead(
   const agent = await resolveAgentPageBySlug(slug);
   if (!agent) return { ok: false, error: "Agent page not found", status: 404 };
 
-  const neighborhood = body.neighborhood;
-  if (neighborhood && (body.embed || body.listingId || !(await publishedVictoriaPark(agent)))) {
-    return { ok: false, error: "Neighborhood page not found", status: 404 };
-  }
-  const neighborhoodUrl = neighborhood ? victoriaParkUrl() : undefined;
+  const page = body.neighborhood && !body.embed && !body.listingId
+    ? (await publishedNeighborhoods(agent.userId, body.neighborhood))[0] : undefined;
+  if (body.neighborhood && !page) return { ok: false, error: "Neighborhood page not found", status: 404 };
+  const pageContext = page && agent.agentPageSlug ? neighborhoodLeadContext(agent.agentPageSlug, page) : undefined;
   const isEmbed = body.embed === true;
   const pageLabel = isEmbed ? "embedded agent page" : "agent page";
   const webchatLeadSource = isEmbed ? ("agent_page_embed" as const) : ("agent_page" as const);
-  const leadSourceLabel = neighborhood ? `Agent Page · ${VICTORIA_PARK_NAME}` : isEmbed ? "Embedded Agent Page" : "Agent Page";
+  const leadSourceLabel = page ? `Agent Page · ${page.name}` : isEmbed ? "Embedded Agent Page" : "Agent Page";
   const userId = agent.userId;
   let listingLabel: string | undefined;
 
@@ -109,9 +107,7 @@ export async function processPublicAgentPageLead(
     contentType: "text",
     externalMessageId,
     webchatLeadSource,
-    webchatPageContext: neighborhoodUrl ? {
-      latestUrl: neighborhoodUrl, pageTitle: VICTORIA_PARK_TITLE, agentNeighborhood: neighborhood,
-    } : undefined,
+    webchatPageContext: pageContext,
   });
 
   if (!result.contact?.id) {
@@ -131,10 +127,11 @@ export async function processPublicAgentPageLead(
   }
   if (body.listingUrl?.trim()) customFields.agentPageListingUrl = body.listingUrl.trim();
   if (body.propertyAddress?.trim()) customFields.propertyAddress = body.propertyAddress.trim();
-  if (neighborhood) {
-    customFields.agentNeighborhood = neighborhood;
-    customFields.leadSourceDetail = VICTORIA_PARK_TITLE;
-    customFields.agentNeighborhoodUrl = neighborhoodUrl;
+  if (pageContext) {
+    customFields.agentNeighborhood = pageContext.agentNeighborhood;
+    customFields.agentNeighborhoodName = pageContext.agentNeighborhoodName;
+    customFields.leadSourceDetail = pageContext.pageTitle;
+    customFields.agentNeighborhoodUrl = pageContext.latestUrl;
   } else if (body.source?.trim()) customFields.leadSourceDetail = body.source.trim();
   if (body.intent === "home_worth") {
     customFields.sellerIntent = "seller_valuation";

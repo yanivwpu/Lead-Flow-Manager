@@ -109,6 +109,7 @@ export type PublicAgentPageLoadOptions = {
   embedMode?: boolean;
   hideChat?: boolean;
   profileOnly?: boolean;
+  preview?: boolean;
   initialListingType?: AgentPageInitialListingChip;
 };
 
@@ -118,14 +119,18 @@ export async function getPublicAgentPageData(
   options: PublicAgentPageLoadOptions = {},
 ): Promise<PublicAgentPageData | undefined> {
   const agent = await resolveAgentPageBySlug(slug);
-  if (!agent) return undefined;
+  return agent ? buildPublicAgentPageData(agent, appOrigin, options) : undefined;
+}
 
-  const scheduling = await resolveRgeCustomerSchedulingUrl(agent.userId);
-  const calendly = await isUserCalendlyBookingConnected(agent.userId)
+export async function buildPublicAgentPageData(
+  agent: AgentPageKnowledgeRow, appOrigin: string, options: PublicAgentPageLoadOptions,
+): Promise<PublicAgentPageData> {
+  const scheduling = options.preview ? undefined : await resolveRgeCustomerSchedulingUrl(agent.userId);
+  const calendly = !options.preview && await isUserCalendlyBookingConnected(agent.userId)
     ? await getCalendlyPublicSchedulingUrl(agent.userId)
     : "";
   const user = await storage.getUser(agent.userId);
-  const widgetEnabled = mergeWidgetEnabled(user?.widgetSettings);
+  const widgetEnabled = !options.preview && mergeWidgetEnabled(user?.widgetSettings);
 
   const initialListingType = options.initialListingType ?? "all";
   const browseFilters =
@@ -148,7 +153,7 @@ export async function getPublicAgentPageData(
 
   return {
     agent,
-    pageUrl: buildAgentPageUrl(agent.agentPageSlug!, appOrigin),
+    pageUrl: buildAgentPageUrl(agent.agentPageSlug || "", appOrigin),
     userId: agent.userId,
     agentPageSlug: agent.agentPageSlug || "",
     displayName,
@@ -160,7 +165,7 @@ export async function getPublicAgentPageData(
     socialLinks,
     publicEmail: str(agent.publicEmail),
     publicPhone: str(agent.publicPhone),
-    schedulingUrl: calendly || scheduling.url || "",
+    schedulingUrl: calendly || scheduling?.url || "",
     widgetEnabled,
     widgetPublicId: widgetEnabled ? await (async () => {
       try {

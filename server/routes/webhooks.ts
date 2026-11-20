@@ -269,8 +269,8 @@ export function registerWebhookRoutes(app: Express): void {
       const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
         "@shared/agent/webchatLeadContext"
       );
-      const { verifiedVictoriaParkChatContext } = await import("../agentPage/victoriaParkPilot");
-      const neighborhood = await verifiedVictoriaParkChatContext(userId, parentUrl);
+      const { verifiedNeighborhoodChatContext } = await import("../agentPage/neighborhoodPages");
+      const neighborhood = await verifiedNeighborhoodChatContext(userId, parentUrl);
       const webchatLeadSource = neighborhood ? "agent_page" : resolveWebchatLeadSource({ source, parentUrl });
       const contactName = resolveWebchatVisitorDisplayName(webchatLeadSource);
 
@@ -640,8 +640,8 @@ export function registerWebhookRoutes(app: Express): void {
         const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
           "@shared/agent/webchatLeadContext"
         );
-        const { verifiedVictoriaParkChatContext } = await import("../agentPage/victoriaParkPilot");
-        const neighborhood = await verifiedVictoriaParkChatContext(access.owner.userId, parentUrl);
+        const { verifiedNeighborhoodChatContext } = await import("../agentPage/neighborhoodPages");
+        const neighborhood = await verifiedNeighborhoodChatContext(access.owner.userId, parentUrl);
         const webchatLeadSource = neighborhood ? "agent_page" : resolveWebchatLeadSource({ source, parentUrl });
         const { channelService } = await import("../channelService");
         const result = await channelService.processIncomingMessage({

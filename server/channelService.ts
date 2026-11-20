@@ -1827,13 +1827,13 @@ class ChannelService {
     }
 
     if (webchatPageContext && Object.keys(webchatPageContext).length > 0) {
-      const { VICTORIA_PARK_NAME, VICTORIA_PARK_TITLE } = await import("@shared/agent/victoriaPark");
-      const neighborhoodFields = webchatPageContext.agentNeighborhood ? {
+      const neighborhoodFields = webchatPageContext.agentNeighborhoodName ? {
         customFields: {
           ...((contact.customFields as Record<string, unknown>) || {}),
-          leadSource: `Agent Page · ${VICTORIA_PARK_NAME}`,
+          leadSource: `Agent Page · ${webchatPageContext.agentNeighborhoodName}`,
+          agentNeighborhoodName: webchatPageContext.agentNeighborhoodName,
           agentNeighborhood: webchatPageContext.agentNeighborhood,
-          leadSourceDetail: VICTORIA_PARK_TITLE,
+          leadSourceDetail: webchatPageContext.pageTitle,
           agentNeighborhoodUrl: webchatPageContext.latestUrl,
         },
       } : {};

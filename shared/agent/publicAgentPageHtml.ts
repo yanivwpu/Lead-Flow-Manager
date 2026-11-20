@@ -1,4 +1,4 @@
-import { VICTORIA_PARK_CITY_GUIDE, VICTORIA_PARK_NAME, VICTORIA_PARK_SLUG, VICTORIA_PARK_TITLE } from "./victoriaPark";
+import { neighborhoodTitle } from "./neighborhoodPages";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
@@ -195,7 +195,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const initialListingType = data.initialListingType ?? "all";
   const primaryMarket = data.marketArea.split(/[;,]/)[0].trim();
   const neighborhood = data.neighborhood;
-  const pageTitle = neighborhood ? `${VICTORIA_PARK_TITLE} | ${data.displayName}` : embedMode
+  const locationTitle = neighborhood ? escapeHtml(neighborhoodTitle(neighborhood)) : "";
+  const pageTitle = neighborhood ? `${neighborhoodTitle(neighborhood)} | ${data.displayName}` : embedMode
     ? "Property Listings"
     : `${data.displayName} | Real Estate Agent${primaryMarket ? ` in ${primaryMarket}` : ""}`;
   const profileSummary = [
@@ -217,16 +218,17 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     : `<header class="agent-header">
       ${renderProfileColumn(data)}
       <div class="agent-info-col">
-        ${neighborhood ? `<h1 class="agent-name">${VICTORIA_PARK_TITLE}</h1><p>${escapeHtml(data.displayName)}${data.brokerageName ? ` · ${escapeHtml(data.brokerageName)}` : ""}</p>` : `<h1 class="agent-name">${escapeHtml(data.displayName)}</h1>`}
+        ${neighborhood ? `<h1 class="agent-name">${locationTitle}</h1><p>${escapeHtml(data.displayName)}${data.brokerageName ? ` · ${escapeHtml(data.brokerageName)}` : ""}</p>` : `<h1 class="agent-name">${escapeHtml(data.displayName)}</h1>`}
         ${bioHtml}
         ${marketHtml}
         ${neighborhood && (data.publicEmail || data.publicPhone) ? `<p>${[data.publicEmail, data.publicPhone].filter(Boolean).map(escapeHtml).join(" · ")}</p>` : ""}
         <div class="cta-row"${neighborhood?.preview ? " inert" : ""}>
           <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(neighborhood ? "Contact agent" : primaryContactLabel)}</button>
           ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
+          ${neighborhood && !neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
           ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>` : homeWorthBtn}
         </div>
-        ${data.neighborhoodLink ? `<p><a href="${escapeHtml(data.neighborhoodLink)}">${VICTORIA_PARK_NAME}, Fort Lauderdale</a></p>` : ""}
+        ${data.neighborhoodLinks?.length ? `<nav aria-label="Neighborhoods"><ul>${data.neighborhoodLinks.map(({ url, title }) => `<li><a href="${escapeHtml(url)}">${escapeHtml(title)}</a></li>`).join("")}</ul></nav>` : ""}
       </div>
     </header>`;
 
@@ -495,10 +497,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ${agentHeaderHtml}
 
     ${neighborhood ? `<section class="agent-header" style="display:block">
-      <h2>About ${VICTORIA_PARK_NAME}</h2>
+      <h2>About ${escapeHtml(neighborhood.name)}</h2>
       ${neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join("")}
-      <p><a href="${VICTORIA_PARK_CITY_GUIDE}">City of Fort Lauderdale neighborhood survey</a></p>
-      <p><a href="${escapeHtml(neighborhood.parentUrl)}">Back to the Agent Page</a></p>
+      ${neighborhood.parentUrl ? `<p><a href="${escapeHtml(neighborhood.parentUrl)}">Back to the Agent Page</a></p>` : ""}
     </section>` : `<section class="listings-section">
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
@@ -657,7 +658,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
   <script type="application/json" id="page-config">${JSON.stringify({
     slug,
-    neighborhood: neighborhood ? VICTORIA_PARK_SLUG : undefined,
+    neighborhood: neighborhood?.slug,
     preview: neighborhood?.preview,
     widgetPublicId: data.widgetPublicId,
     schedulingUrl: data.schedulingUrl,
@@ -1283,6 +1284,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
             if (!res.ok) throw new Error(res.j.error || "Submit failed");
+            var bookingLink = document.getElementById("neighborhood-booking-link");
+            if (body.intent === "schedule_showing" && bookingLink) bookingLink.style.removeProperty("display");
             closeModal();
             showToast("Thanks — we'll be in touch soon.");
           })

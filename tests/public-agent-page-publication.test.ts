@@ -9,9 +9,8 @@ import { chromium } from "playwright";
 import { db } from "../drizzle/db";
 import { channelService } from "../server/channelService";
 import { setPublicListingSchemaReady } from "../server/publicListingSchemaReady";
-import { registerAgentNeighborhoodPilotRoutes } from "../server/routes/agentNeighborhoodPilot";
-import { verifiedVictoriaParkChatContext } from "../server/agentPage/victoriaParkPilot";
-import { VICTORIA_PARK_DRAFT } from "../shared/agent/victoriaPark";
+import { registerAgentNeighborhoodPagesRoutes } from "../server/routes/agentNeighborhoodPages";
+import { verifiedNeighborhoodChatContext } from "../server/agentPage/neighborhoodPages";
 import { registerAgentPageSettingsRoutes } from "../server/routes/agentPageSettings";
 import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage";
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
@@ -43,8 +42,10 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   const migration = await readFile("migrations/20261119_agent_page_profile_publication.sql", "utf8");
   await pg.exec(migration);
 
-  await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pilot.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   const fixture = drizzle(pg);
+  t.mock.method(db, "delete", fixture.delete.bind(fixture) as unknown as typeof db.delete);
   t.mock.method(db, "insert", fixture.insert.bind(fixture) as unknown as typeof db.insert);
   t.mock.method(db, "select", fixture.select.bind(fixture) as unknown as typeof db.select);
   t.mock.method(db, "update", fixture.update.bind(fixture) as unknown as typeof db.update);
@@ -75,7 +76,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     next();
   });
   registerAgentPageSettingsRoutes(app);
-  registerAgentNeighborhoodPilotRoutes(app);
+  registerAgentNeighborhoodPagesRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerPublicListingSitemapRoutes(app);
   setPublicListingSchemaReady(true);
@@ -174,54 +175,71 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(disabled.status, 404);
   assert.match(await disabled.text(), /content="noindex, nofollow"/);
   assert.doesNotMatch(await sitemap(), /\/agents\/jane-new/);
-  const priorPilotOwner = process.env.RGE_VICTORIA_PARK_PILOT_USER_ID;
-  process.env.RGE_VICTORIA_PARK_PILOT_USER_ID = user.id;
-  t.after(() => {
-    if (priorPilotOwner === undefined) delete process.env.RGE_VICTORIA_PARK_PILOT_USER_ID;
-    else process.env.RGE_VICTORIA_PARK_PILOT_USER_ID = priorPilotOwner;
-  });
-  const pilotApi = "/api/agent-page/neighborhood";
+  const endpoint = "/api/agent-page/neighborhoods";
   const parent = "/agents/yaniv-haramatiy";
   const pilot = parent + "/victoria-park";
-  const pilotSave = (published: boolean, content = VICTORIA_PARK_DRAFT) => request(pilotApi, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, published }),
+  const draft = {
+    name: "Victoria Park", city: "Fort Lauderdale", state: "Florida",
+    content: "Victoria Park is in northeast Fort Lauderdale. Before touring a home, write down your parking, outdoor space, and maintenance requirements. Compare those requirements on the visit.\n\nAsk the agent about property-specific documents, disclosures and any planned work. If selling, prepare a list of your recent improvements and when they were done.",
+  };
+  const savePage = (method: "POST" | "PUT", values: object, path = endpoint) => request(path, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(values),
   });
-
-  assert.equal((await pilotSave(true)).status, 403, "only an eligible, live parent may publish");
+  const created = await savePage("POST", { ...draft, published: true });
+  assert.equal(created.status, 201, await created.clone().text());
+  const row = await created.json();
+  assert.equal(row.published, false);
+  const editUrl = endpoint + "/" + row.id;
+  const previewUrl = editUrl + "/preview";
+  const draftPreview = await request(previewUrl);
+  assert.equal(draftPreview.status, 200, "owner can preview before parent is enabled");
+  assert.equal(draftPreview.headers.get("X-Robots-Tag"), "noindex, nofollow");
+  const publishNeighborhood = (published: boolean, updateFields = {}) => savePage("PUT", { ...draft, ...updateFields, published }, editUrl);
+  const neighborhoodSitemap = async () => (await request("/public-neighborhoods-sitemap-1.xml")).text();
+  assert.equal((await publishNeighborhood(true)).status, 403, "a live parent is required to publish");
   assert.equal((await update({ agentPageEnabled: true, agentPageSlug: "yaniv-haramatiy" })).status, 200);
-  assert.equal((await pilotSave(false)).status, 200);
   assert.equal((await request(pilot)).status, 404);
-  assert.doesNotMatch(await sitemap(), /victoria-park/);
+  assert.doesNotMatch(await neighborhoodSitemap(), /victoria-park/);
   assert.doesNotMatch(await (await request(parent)).text(), /victoria-park/);
-  assert.equal((await pilotSave(true, "Coming soon")).status, 400);
-  const preview = await request(pilotApi + "/preview");
-  assert.equal(preview.status, 200);
-  assert.equal(preview.headers.get("X-Robots-Tag"), "noindex, nofollow");
-  assert.match(await preview.text(), /About Victoria Park/);
+  assert.equal((await publishNeighborhood(true, { content: "Coming soon" })).status, 400);
+  assert.equal((await savePage("POST", { ...draft, name: "Victoria-Park" })).status, 409);
   authenticatedUser = "";
-  assert.equal((await request(pilotApi + "/preview")).status, 401);
+  assert.equal((await request(previewUrl)).status, 401);
   authenticatedUser = "legacy-live";
-  assert.equal((await pilotSave(true)).status, 404);
-  assert.equal((await request(pilotApi + "/preview")).status, 404);
+  assert.equal((await request(previewUrl)).status, 404);
+  assert.equal((await publishNeighborhood(true)).status, 404);
+  assert.equal((await request(editUrl, { method: "DELETE" })).status, 404);
+  assert.deepEqual((await (await request(endpoint)).json()).pages, []);
+  const secondAgentDraft = { ...draft, city: "Other City", state: "Georgia" };
+  const secondAgent = await savePage("POST", secondAgentDraft);
+  assert.equal(secondAgent.status, 201);
+  const secondRow = await secondAgent.json();
+  assert.equal((await savePage("PUT", { ...secondAgentDraft, published: true }, endpoint + "/" + secondRow.id)).status, 200);
   authenticatedUser = user.id;
 
-  assert.equal((await pilotSave(true)).status, 200);
+  const another = await savePage("POST", { ...draft, name: "Las Olas", content: draft.content.replace("Victoria Park", "Las Olas") });
+  assert.equal(another.status, 201);
+  const anotherRow = await another.json();
+  assert.equal((await savePage("PUT", { ...draft, name: "Las Olas", published: true }, endpoint + "/" + anotherRow.id)).status, 200);
+  assert.equal((await publishNeighborhood(true)).status, 200);
+  assert.equal((await (await request(endpoint)).json()).pages.length, 2);
+  assert.match(await neighborhoodSitemap(), /legacy-agent\/victoria-park/);
+  assert.match(await neighborhoodSitemap(), /yaniv-haramatiy\/las-olas/);
+  assert.match(await (await request("/agents/legacy-agent/victoria-park")).text(), /Victoria Park, Other City, Georgia/);
+  assert.match(await (await request("/public-listings-sitemap.xml")).text(), /public-neighborhoods-sitemap-1\.xml/);
   const pilotResponse = await request(pilot);
   assert.equal(pilotResponse.status, 200);
   const pilotHtml = await pilotResponse.text();
   assert.ok(pilotHtml.includes(`<link rel="canonical" href="${origin}${pilot}"`));
   assert.match(pilotHtml, /content="index, follow"/);
-  assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale \| Jane Agent<\/title>/);
+  assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale, Florida \| Jane Agent<\/title>/);
   assert.match(pilotHtml, /content="Victoria Park is in northeast Fort Lauderdale/);
   assert.match(pilotHtml, /Back to the Agent Page/);
   assert.doesNotMatch(pilotHtml, /id="listings-grid"/, "no unverified MLS inventory or browse UI");
   assert.match(await (await request(parent)).text(), /href="[^"]+\/agents\/yaniv-haramatiy\/victoria-park"/);
-  assert.match(await sitemap(), /\/agents\/yaniv-haramatiy\/victoria-park<\/loc>/);
+  assert.match(await neighborhoodSitemap(), /\/agents\/yaniv-haramatiy\/victoria-park<\/loc>/);
   assert.match(await (await request(pilot + "?utm_source=test")).text(), /content="noindex, follow"/);
   assert.equal((await request(pilot + "?embed=1")).status, 404);
-  assert.equal((await request("/agents/legacy-agent/victoria-park")).status, 404);
 
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
@@ -229,7 +247,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     for (const width of [320, 390, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       await page.goto(origin + pilot);
-      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale" }).waitFor();
+      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
       for (const label of ["Contact agent", "Schedule Showing", "What's My Home Worth?"]) {
         await page.getByRole("button", { name: label }).click();
@@ -252,20 +270,35 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     assert.equal((updateContact.mock.calls.at(-1)?.arguments[1].customFields as Record<string, unknown>).leadSource, "Agent Page · Victoria Park");
   }
   assert.equal(sellerIntake.mock.calls.length, 1);
-  assert.equal((await verifiedVictoriaParkChatContext(user.id, origin + pilot + "?utm_source=test"))?.agentNeighborhood, "victoria-park");
-  assert.equal(await verifiedVictoriaParkChatContext("legacy-live", origin + pilot), undefined);
-  assert.equal(await verifiedVictoriaParkChatContext(user.id, "https://other.example" + pilot), undefined);
+  assert.equal((await verifiedNeighborhoodChatContext(user.id, origin + pilot + "?utm_source=test"))?.agentNeighborhood, "victoria-park");
+  assert.equal(await verifiedNeighborhoodChatContext("legacy-live", origin + pilot), undefined);
+  assert.equal(await verifiedNeighborhoodChatContext(user.id, "https://other.example" + pilot), undefined);
+
+  assert.equal((await publishNeighborhood(true, { name: "Victoria Park North" })).status, 200);
+  assert.equal((await request(pilot)).status, 404);
+  const renamed = parent + "/victoria-park-north";
+  assert.equal((await request(renamed)).status, 200);
+  assert.doesNotMatch(await neighborhoodSitemap(), /yaniv-haramatiy\/victoria-park<\/loc>/);
+  assert.equal((await publishNeighborhood(true)).status, 200);
+  assert.equal((await update({ agentPageSlug: "jane-realtor" })).status, 200);
+  assert.equal((await request(pilot)).status, 404);
+  const changedParent = "/agents/jane-realtor/victoria-park";
+  assert.equal((await request(changedParent)).status, 200);
+  assert.match(await neighborhoodSitemap(), /jane-realtor\/victoria-park/);
 
   eligible = false;
-  assert.equal((await request(pilot)).status, 404);
-  assert.equal((await inquiry("message")).status, 404);
-  assert.doesNotMatch(await sitemap(), /victoria-park/);
+  assert.equal((await request(changedParent)).status, 404);
+  assert.equal((await request(endpoint)).status, 403);
+  assert.doesNotMatch(await neighborhoodSitemap(), /jane-realtor/);
   eligible = true;
   assert.equal((await update({ agentPageEnabled: false })).status, 200);
-  assert.equal((await request(pilot)).status, 404);
+  assert.equal((await request(changedParent)).status, 404);
   assert.equal((await update({ agentPageEnabled: true })).status, 200);
-  assert.equal((await pilotSave(false)).status, 200);
-  assert.equal((await request(pilot)).status, 404);
-  assert.equal(await verifiedVictoriaParkChatContext(user.id, origin + pilot), undefined);
-  assert.doesNotMatch(await sitemap(), /victoria-park/);
+  assert.equal((await publishNeighborhood(false)).status, 200);
+  assert.equal((await request(changedParent)).status, 404);
+  assert.equal(await verifiedNeighborhoodChatContext(user.id, origin + changedParent), undefined);
+  assert.doesNotMatch(await neighborhoodSitemap(), /jane-realtor\/victoria-park/);
+  assert.equal((await request(editUrl, { method: "DELETE" })).status, 204);
+  assert.equal((await request(previewUrl)).status, 404);
+  assert.equal((await (await request(endpoint)).json()).pages.length, 1);
 });

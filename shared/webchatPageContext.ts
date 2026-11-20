@@ -22,7 +22,8 @@ export type WebchatPageActionContext = {
 
 export type WebchatPageContext = {
   landingUrl?: string;
-  agentNeighborhood?: "victoria-park";
+  agentNeighborhood?: string;
+  agentNeighborhoodName?: string;
   latestUrl?: string;
   pageTitle?: string;
   referrer?: string;
