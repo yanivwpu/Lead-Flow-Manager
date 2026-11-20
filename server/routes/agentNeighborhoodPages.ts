@@ -86,7 +86,8 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   }));
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (isAgentPageSlugConflictError(error) || (error instanceof Error && isAgentPageSlugConflictError(error.cause))) {
+    const cause = error && typeof error === "object" && "cause" in error ? error.cause : undefined;
+    if (isAgentPageSlugConflictError(error) || (cause && isAgentPageSlugConflictError(cause))) {
       res.status(409).json({ error: "You already have a neighborhood page with this URL." });
       return;
     }
