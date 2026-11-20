@@ -2223,7 +2223,7 @@ export function InboxLeadDetailsPanel({
       {/* ══ COPILOT — distinct assistant region ═════════════════════════════════ */}
       <div
         className={cn(
-          "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-emerald-900 bg-[#063d35] text-emerald-50 shadow-sm shadow-emerald-950/15",
+          "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-[#21473f] bg-[#082f2a] text-emerald-50 shadow-sm shadow-emerald-950/15",
           "[&_button:focus-visible]:outline [&_button:focus-visible]:outline-2 [&_button:focus-visible]:-outline-offset-2 [&_button:focus-visible]:outline-emerald-600",
           copilotExpanded && "max-h-[min(72vh,720px)]",
           copilotExpanded && !panelClassName && "h-[min(60%,560px)]",
@@ -2231,12 +2231,12 @@ export function InboxLeadDetailsPanel({
       >
       {/* ══ COPILOT FIXED HEADER ════════════════════════════════════════ */}
       <div
-        className="z-10 shrink-0 rounded-t-xl border-b border-emerald-700/70"
+        className="z-10 shrink-0 rounded-t-xl border-b border-[#31534b]"
       >
         {/* Full-width clickable header row */}
         <div
           onClick={() => onCopilotExpandedChange(!copilotExpanded)}
-          className="px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2 hover:bg-white/10 focus-within:bg-white/10"
+          className="px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2 hover:bg-white/5 focus-within:bg-white/5"
           data-testid="button-copilot-collapse"
         >
           <div className="min-w-0 flex-1">
@@ -2256,7 +2256,7 @@ export function InboxLeadDetailsPanel({
           <div className="flex items-center gap-2 shrink-0 pt-0.5">
             {copilotEntitlementLoading ? (
               <span
-                className="h-4 w-12 rounded-full bg-emerald-700 animate-pulse"
+                className="h-4 w-12 rounded-full bg-[#31534b] animate-pulse"
                 data-testid="copilot-entitlement-loading-pill"
               />
             ) : canSeeCopilot ? (
@@ -2269,7 +2269,7 @@ export function InboxLeadDetailsPanel({
                   "text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-colors leading-none",
                   headerShowsSnoozed
                     ? "bg-amber-100 text-amber-900 border-amber-200 hover:bg-amber-200"
-                    : "bg-emerald-100 text-emerald-900 border-emerald-200 hover:bg-emerald-200",
+                    : "bg-[#243f36] text-emerald-50 border-[#5b7e6e] hover:bg-[#304d42]",
                 )}
                 data-testid="button-ai-toggle"
               >
@@ -2292,7 +2292,7 @@ export function InboxLeadDetailsPanel({
         {!copilotExpanded && canSeeCopilot && (
           <div
             onClick={() => onCopilotExpandedChange(true)}
-            className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-emerald-700/70 hover:bg-white/10"
+            className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-[#31534b] hover:bg-white/5"
           >
             <p className="text-[11px] font-medium text-emerald-50 leading-tight truncate min-w-0">
               {copilotCollapsedSummary}
@@ -2308,17 +2308,17 @@ export function InboxLeadDetailsPanel({
 
       {/* Utilities (operational) — keep near top under header */}
       {copilotExpanded && (
-      <div className="shrink-0 border-b border-emerald-700/70 bg-white/5 px-3 py-2">
+      <div className="shrink-0 border-b border-[#31534b] bg-white/5 px-3 py-2">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
           <Popover open={bookOpen} onOpenChange={(open) => handleCopilotPopoverOpenChange("book", open)}>
             <PopoverTrigger asChild>
               <button
-                className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 transition-colors"
+                className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg border border-[#55756a] bg-[#173b34] text-emerald-50 hover:bg-[#23493f] transition-colors"
                 data-testid="button-ai-book"
               >
-                <CalendarIcon className="w-3 h-3 text-emerald-800" />
+                <CalendarIcon className="w-3 h-3 text-emerald-50" />
                 <span className="text-[10px] font-semibold">Book</span>
               </button>
             </PopoverTrigger>
@@ -2494,13 +2494,13 @@ export function InboxLeadDetailsPanel({
                   "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
                   contact.followUpDate
                     ? "border-amber-200 bg-amber-50 hover:bg-amber-100"
-                    : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                    : "border-[#55756a] bg-[#173b34] hover:bg-[#23493f]"
                 )}
                 data-testid="button-ai-followup"
                 title="Schedule follow-up"
               >
-                <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-emerald-900")} />
-                <span className={cn("text-[10px] font-semibold", contact.followUpDate ? "text-amber-700" : "text-emerald-900")}>
+                <Bell className={cn("w-3 h-3", contact.followUpDate ? "text-amber-600" : "text-emerald-50")} />
+                <span className={cn("text-[10px] font-semibold", contact.followUpDate ? "text-amber-700" : "text-emerald-50")}>
                   {contact.followUpDate ? "Set" : "Follow"}
                 </span>
               </button>
@@ -2639,16 +2639,16 @@ export function InboxLeadDetailsPanel({
                   "flex flex-col items-center gap-0.5 py-1.5 rounded-lg border transition-colors",
                   headerShowsSnoozed
                     ? "border-gray-200 bg-gray-100 hover:bg-gray-200"
-                    : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                    : "border-[#55756a] bg-[#173b34] hover:bg-[#23493f]"
                 )}
                 data-testid="button-ai-pause"
                 title="Temporarily pause AI for this conversation"
               >
                 {headerShowsSnoozed
-                  ? <PlayCircle className="w-3 h-3 text-emerald-900" />
-                  : <PauseCircle className="w-3 h-3 text-emerald-900" />
+                  ? <PlayCircle className="w-3 h-3 text-slate-700" />
+                  : <PauseCircle className="w-3 h-3 text-emerald-50" />
                 }
-                <span className="text-[10px] text-emerald-900 font-semibold">AI</span>
+                <span className={cn("text-[10px] font-semibold", headerShowsSnoozed ? "text-slate-700" : "text-emerald-50")}>AI</span>
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-[220px] p-2.5" align="start" side="bottom" sideOffset={4}>
@@ -2682,9 +2682,9 @@ export function InboxLeadDetailsPanel({
 
               {copilotEntitlementLoading ? (
                 <div className="space-y-2 py-1" data-testid="copilot-entitlement-loading">
-                  <div className="h-3 w-2/5 rounded bg-emerald-600 animate-pulse" />
-                  <div className="h-16 rounded-lg bg-emerald-800 border border-emerald-700 animate-pulse" />
-                  <div className="h-10 rounded-lg bg-emerald-800 border border-emerald-700 animate-pulse" />
+                  <div className="h-3 w-2/5 rounded bg-[#45685d] animate-pulse" />
+                  <div className="h-16 rounded-lg bg-[#173b34] border border-[#31534b] animate-pulse" />
+                  <div className="h-10 rounded-lg bg-[#173b34] border border-[#31534b] animate-pulse" />
                 </div>
               ) : showCopilotUpgrade ? (
                 <AIUpgradePrompt
@@ -2697,7 +2697,7 @@ export function InboxLeadDetailsPanel({
                 <>
                   {!primaryConversation || messages.length === 0 ? (
                     <div
-                      className="mb-3 rounded-lg border border-dashed border-emerald-600 bg-white/5 px-3 py-2.5"
+                      className="mb-3 rounded-lg border border-dashed border-[#55756a] bg-white/5 px-3 py-2.5"
                       data-testid="copilot-no-conversation-context"
                     >
                       <p className="text-[12px] font-medium text-emerald-50">No conversation context yet</p>
@@ -2841,7 +2841,7 @@ export function InboxLeadDetailsPanel({
                               e.stopPropagation();
                               primary.onClick();
                             }}
-                            className="mt-2 w-full text-left rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-colors px-2.5 py-2"
+                            className="mt-2 w-full text-left rounded-lg border border-[#cddad4] bg-[#f2f6f4] hover:bg-[#e6eee9] transition-colors px-2.5 py-2"
                             data-testid={`next-best-action-primary-${primary.id}`}
                             title={primary.title ?? primary.label}
                           >
@@ -2926,7 +2926,7 @@ export function InboxLeadDetailsPanel({
 
                   {/* D. Short narrative summary — action/context only; no duplicate criteria */}
                   {(customerSummaryBullets.length > 0 || aiMemoryLoading) && (
-                    <div className="pt-2 border-t border-emerald-700" data-testid="copilot-summary-section">
+                    <div className="pt-2 border-t border-[#31534b]" data-testid="copilot-summary-section">
                       <p className="text-[9px] uppercase tracking-wide font-medium text-emerald-100 mb-1">
                         Summary
                       </p>
