@@ -145,6 +145,14 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
     ].join(";\n"),
   },
   {
+    tag: "20261120_agent_neighborhood_pilot",
+    sql: `CREATE TABLE IF NOT EXISTS agent_neighborhood_pilot (
+      user_id varchar PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      content text NOT NULL,
+      published boolean NOT NULL DEFAULT false
+    )`,
+  },
+  {
     tag: "20261119_agent_page_profile_publication",
     sql: `-- Preserve old live profiles and leave previously non-public profiles private.
 DO $$

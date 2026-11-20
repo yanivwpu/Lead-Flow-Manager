@@ -210,6 +210,7 @@ function resolveContactSourceLabel(contact: {
   customFields?: Record<string, unknown> | null;
 }): string | null {
   const cf = contact.customFields || {};
+  if (cf.agentNeighborhood === "victoria-park") return "Agent Page · Victoria Park";
   if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
     return cf.leadSource.trim();
   }

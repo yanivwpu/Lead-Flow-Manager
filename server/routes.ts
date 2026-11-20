@@ -58,6 +58,7 @@ import { registerEmailChannelRoutes } from "./routes/emailChannel";
 import { registerGmailPubSubWebhookRoutes } from "./routes/gmailPubSubWebhook";
 import { registerPublicListingRoutes } from "./routes/publicListings";
 import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
+import { registerAgentNeighborhoodPilotRoutes } from "./routes/agentNeighborhoodPilot";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
 import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitemap";
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
@@ -12431,6 +12432,7 @@ export async function registerRoutes(
   registerPublicListingRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerAgentPageSettingsRoutes(app);
+  registerAgentNeighborhoodPilotRoutes(app);
   registerPublicListingSitemapRoutes(app);
   registerBusinessProfileRoutes(app);
   registerBusinessProfileLogoRoutes(app);

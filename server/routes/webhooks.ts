@@ -269,7 +269,9 @@ export function registerWebhookRoutes(app: Express): void {
       const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
         "@shared/agent/webchatLeadContext"
       );
-      const webchatLeadSource = resolveWebchatLeadSource({ source, parentUrl });
+      const { verifiedVictoriaParkChatContext } = await import("../agentPage/victoriaParkPilot");
+      const neighborhood = await verifiedVictoriaParkChatContext(userId, parentUrl);
+      const webchatLeadSource = neighborhood ? "agent_page" : resolveWebchatLeadSource({ source, parentUrl });
       const contactName = resolveWebchatVisitorDisplayName(webchatLeadSource);
 
       const { channelService } = await import("../channelService");
@@ -282,7 +284,7 @@ export function registerWebhookRoutes(app: Express): void {
         contentType: "text",
         externalMessageId: webchatExternalId,
         webchatLeadSource,
-        webchatPageContext,
+        webchatPageContext: { ...webchatPageContext, ...neighborhood },
         preferredChatbotFlowId,
         visitorLocale: locale,
         skipNewChatTrigger: Boolean(validatedAction),
@@ -638,7 +640,9 @@ export function registerWebhookRoutes(app: Express): void {
         const { resolveWebchatLeadSource, resolveWebchatVisitorDisplayName } = await import(
           "@shared/agent/webchatLeadContext"
         );
-        const webchatLeadSource = resolveWebchatLeadSource({ source, parentUrl });
+        const { verifiedVictoriaParkChatContext } = await import("../agentPage/victoriaParkPilot");
+        const neighborhood = await verifiedVictoriaParkChatContext(access.owner.userId, parentUrl);
+        const webchatLeadSource = neighborhood ? "agent_page" : resolveWebchatLeadSource({ source, parentUrl });
         const { channelService } = await import("../channelService");
         const result = await channelService.processIncomingMessage({
           userId: access.owner.userId,
@@ -652,6 +656,7 @@ export function registerWebhookRoutes(app: Express): void {
           mediaFilename: "photo",
           externalMessageId: uploadId ? `webchat_media_${visitorId}_${uploadId}` : undefined,
           webchatLeadSource,
+          webchatPageContext: neighborhood,
         });
       requireInboundPersistence(result);
         if (!result.success) {

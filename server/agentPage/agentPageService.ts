@@ -108,6 +108,7 @@ export type PublicAgentPageData = PublicAgentPageRenderInput & {
 export type PublicAgentPageLoadOptions = {
   embedMode?: boolean;
   hideChat?: boolean;
+  profileOnly?: boolean;
   initialListingType?: AgentPageInitialListingChip;
 };
 
@@ -132,7 +133,7 @@ export async function getPublicAgentPageData(
       ? { ...DEFAULT_AGENT_PAGE_BROWSE_FILTERS, listingType: initialListingType }
       : DEFAULT_AGENT_PAGE_BROWSE_FILTERS;
 
-  const browse = agent.publishListingsPublicly
+  const browse = agent.publishListingsPublicly && !options.profileOnly
     ? await browseAgentPageListings({
         userId: agent.userId,
         appOrigin,

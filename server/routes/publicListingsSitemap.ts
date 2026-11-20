@@ -10,7 +10,9 @@ import {
 } from "../inventory/inventoryDb";
 import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
 import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
-import { countAgentPageSitemapCandidates, fetchAgentPageSitemapSlugs } from "../agentPage/agentPageDb";
+import { VICTORIA_PARK_AGENT_SLUG, VICTORIA_PARK_SLUG } from "@shared/agent/victoriaPark";
+import { publishedVictoriaPark } from "../agentPage/victoriaParkPilot";
+import { countAgentPageSitemapCandidates, fetchAgentPageSitemapSlugs, resolveAgentPageBySlug } from "../agentPage/agentPageDb";
 import { getAppOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
@@ -178,6 +180,10 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
         return;
       }
       const slugs = await fetchAgentPageSitemapSlugs(shard.offset, shard.limit);
+      if (process.env.RGE_VICTORIA_PARK_PILOT_USER_ID?.trim() && slugs.includes(VICTORIA_PARK_AGENT_SLUG)) {
+        const agent = await resolveAgentPageBySlug(VICTORIA_PARK_AGENT_SLUG);
+        if (agent && await publishedVictoriaPark(agent)) slugs.push(`${VICTORIA_PARK_AGENT_SLUG}/${VICTORIA_PARK_SLUG}`);
+      }
       res.type("application/xml").send(renderAgentPageUrlset(slugs, getAppOrigin()));
     } catch (error) {
       console.error("[public-agent-sitemap] render failed", error);

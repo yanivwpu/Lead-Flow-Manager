@@ -1827,13 +1827,23 @@ class ChannelService {
     }
 
     if (webchatPageContext && Object.keys(webchatPageContext).length > 0) {
+      const { VICTORIA_PARK_NAME, VICTORIA_PARK_TITLE } = await import("@shared/agent/victoriaPark");
+      const neighborhoodFields = webchatPageContext.agentNeighborhood ? {
+        customFields: {
+          ...((contact.customFields as Record<string, unknown>) || {}),
+          leadSource: `Agent Page · ${VICTORIA_PARK_NAME}`,
+          agentNeighborhood: webchatPageContext.agentNeighborhood,
+          leadSourceDetail: VICTORIA_PARK_TITLE,
+          agentNeighborhoodUrl: webchatPageContext.latestUrl,
+        },
+      } : {};
       const merged = {
         ...((contact.webchatContext as Record<string, unknown>) || {}),
         ...webchatPageContext,
       };
       const updated = await storage.updateContact(
         contact.id,
-        { webchatContext: merged },
+        { webchatContext: merged, ...neighborhoodFields },
         { expectedWorkspaceUserId: userId, skipAutomationHooks: true },
       );
       if (updated) contact = updated;

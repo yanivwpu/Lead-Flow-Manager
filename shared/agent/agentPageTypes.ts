@@ -48,6 +48,8 @@ export type PublicAgentPageRenderInput = {
   showHomeValueCta: boolean;
   agentPageSlug: string;
   canonicalUrl?: string;
+  neighborhood?: { content: string; parentUrl: string; preview?: boolean };
+  neighborhoodLink?: string;
   /** True only for the clean, canonical public route after checking publication eligibility. */
   allowSearchIndexing?: boolean;
   listings: AgentPageListingCard[];

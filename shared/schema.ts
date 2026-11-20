@@ -1729,6 +1729,12 @@ export type InboxItem = {
 // ==========================================
 
 // AI Business Knowledge - per-account business context for AI
+export const agentNeighborhoodPilot = pgTable("agent_neighborhood_pilot", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  published: boolean("published").notNull().default(false),
+});
+
 export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

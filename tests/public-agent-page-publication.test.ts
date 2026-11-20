@@ -9,6 +9,9 @@ import { chromium } from "playwright";
 import { db } from "../drizzle/db";
 import { channelService } from "../server/channelService";
 import { setPublicListingSchemaReady } from "../server/publicListingSchemaReady";
+import { registerAgentNeighborhoodPilotRoutes } from "../server/routes/agentNeighborhoodPilot";
+import { verifiedVictoriaParkChatContext } from "../server/agentPage/victoriaParkPilot";
+import { VICTORIA_PARK_DRAFT } from "../shared/agent/victoriaPark";
 import { registerAgentPageSettingsRoutes } from "../server/routes/agentPageSettings";
 import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage";
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
@@ -40,7 +43,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   const migration = await readFile("migrations/20261119_agent_page_profile_publication.sql", "utf8");
   await pg.exec(migration);
 
+  await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pilot.sql", "utf8"));
   const fixture = drizzle(pg);
+  t.mock.method(db, "insert", fixture.insert.bind(fixture) as unknown as typeof db.insert);
   t.mock.method(db, "select", fixture.select.bind(fixture) as unknown as typeof db.select);
   t.mock.method(db, "update", fixture.update.bind(fixture) as unknown as typeof db.update);
   const user = { id: "agent-user", name: "Jane Agent", widgetSettings: { enabled: false } };
@@ -49,7 +54,10 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   t.mock.method(storage, "getTemplateInstall", async () => undefined);
   t.mock.method(storage, "getIntegrationByUserAndType", async () => undefined);
   t.mock.method(storage, "getUserTemplateDataByKey", async () => undefined);
-  const updateContact = t.mock.method(storage, "updateContact", async () => undefined);
+  const updateContact = t.mock.method(storage, "updateContact", async (
+    _id: string, _patch: Parameters<typeof storage.updateContact>[1],
+  ) => undefined);
+  const sellerIntake = t.mock.method(storage, "updateContactSellerPreferenceProfile", async () => undefined);
   const incoming = t.mock.method(channelService, "processIncomingMessage", async (_input: Parameters<typeof channelService.processIncomingMessage>[0]) => ({
     contact: { id: "buyer-contact", customFields: {} },
   }));
@@ -61,11 +69,13 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
 
   const app = express();
   app.use(express.json());
+  let authenticatedUser = user.id;
   app.use("/api/agent-page", (req, _res, next) => {
-    req.user = user as Express.User;
+    if (authenticatedUser) req.user = { ...user, id: authenticatedUser } as Express.User;
     next();
   });
   registerAgentPageSettingsRoutes(app);
+  registerAgentNeighborhoodPilotRoutes(app);
   registerPublicAgentPageRoutes(app);
   registerPublicListingSitemapRoutes(app);
   setPublicListingSchemaReady(true);
@@ -125,7 +135,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.match(embed, /content="noindex, nofollow"/);
 
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
     t.after(() => browser.close());
     for (const width of [320, 390, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -164,4 +174,98 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(disabled.status, 404);
   assert.match(await disabled.text(), /content="noindex, nofollow"/);
   assert.doesNotMatch(await sitemap(), /\/agents\/jane-new/);
+  const priorPilotOwner = process.env.RGE_VICTORIA_PARK_PILOT_USER_ID;
+  process.env.RGE_VICTORIA_PARK_PILOT_USER_ID = user.id;
+  t.after(() => {
+    if (priorPilotOwner === undefined) delete process.env.RGE_VICTORIA_PARK_PILOT_USER_ID;
+    else process.env.RGE_VICTORIA_PARK_PILOT_USER_ID = priorPilotOwner;
+  });
+  const pilotApi = "/api/agent-page/neighborhood";
+  const parent = "/agents/yaniv-haramatiy";
+  const pilot = parent + "/victoria-park";
+  const pilotSave = (published: boolean, content = VICTORIA_PARK_DRAFT) => request(pilotApi, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, published }),
+  });
+
+  assert.equal((await pilotSave(true)).status, 403, "only an eligible, live parent may publish");
+  assert.equal((await update({ agentPageEnabled: true, agentPageSlug: "yaniv-haramatiy" })).status, 200);
+  assert.equal((await pilotSave(false)).status, 200);
+  assert.equal((await request(pilot)).status, 404);
+  assert.doesNotMatch(await sitemap(), /victoria-park/);
+  assert.doesNotMatch(await (await request(parent)).text(), /victoria-park/);
+  assert.equal((await pilotSave(true, "Coming soon")).status, 400);
+  const preview = await request(pilotApi + "/preview");
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get("X-Robots-Tag"), "noindex, nofollow");
+  assert.match(await preview.text(), /About Victoria Park/);
+  authenticatedUser = "";
+  assert.equal((await request(pilotApi + "/preview")).status, 401);
+  authenticatedUser = "legacy-live";
+  assert.equal((await pilotSave(true)).status, 404);
+  assert.equal((await request(pilotApi + "/preview")).status, 404);
+  authenticatedUser = user.id;
+
+  assert.equal((await pilotSave(true)).status, 200);
+  const pilotResponse = await request(pilot);
+  assert.equal(pilotResponse.status, 200);
+  const pilotHtml = await pilotResponse.text();
+  assert.ok(pilotHtml.includes(`<link rel="canonical" href="${origin}${pilot}"`));
+  assert.match(pilotHtml, /content="index, follow"/);
+  assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale \| Jane Agent<\/title>/);
+  assert.match(pilotHtml, /content="Victoria Park is in northeast Fort Lauderdale/);
+  assert.match(pilotHtml, /Back to the Agent Page/);
+  assert.doesNotMatch(pilotHtml, /id="listings-grid"/, "no unverified MLS inventory or browse UI");
+  assert.match(await (await request(parent)).text(), /href="[^"]+\/agents\/yaniv-haramatiy\/victoria-park"/);
+  assert.match(await sitemap(), /\/agents\/yaniv-haramatiy\/victoria-park<\/loc>/);
+  assert.match(await (await request(pilot + "?utm_source=test")).text(), /content="noindex, follow"/);
+  assert.equal((await request(pilot + "?embed=1")).status, 404);
+  assert.equal((await request("/agents/legacy-agent/victoria-park")).status, 404);
+
+  if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
+    t.after(() => browser.close());
+    for (const width of [320, 390, 1280]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.goto(origin + pilot);
+      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale" }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      for (const label of ["Contact agent", "Schedule Showing", "What's My Home Worth?"]) {
+        await page.getByRole("button", { name: label }).click();
+        await page.locator("#lead-form").waitFor();
+        await page.getByRole("button", { name: "Cancel" }).click();
+      }
+      await page.close();
+    }
+  }
+
+  const inquiry = (intent: string) => request("/api/public/agents/yaniv-haramatiy/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ intent, name: "Visitor", email: "visitor@example.test", neighborhood: "victoria-park" }),
+  });
+  for (const intent of ["message", "schedule_showing", "home_worth"]) {
+    const result = await inquiry(intent);
+    assert.equal(result.status, 201, await result.clone().text());
+    assert.equal(incoming.mock.calls.at(-1)?.arguments[0].webchatPageContext?.latestUrl, origin + pilot);
+    assert.equal((updateContact.mock.calls.at(-1)?.arguments[1].customFields as Record<string, unknown>).leadSource, "Agent Page · Victoria Park");
+  }
+  assert.equal(sellerIntake.mock.calls.length, 1);
+  assert.equal((await verifiedVictoriaParkChatContext(user.id, origin + pilot + "?utm_source=test"))?.agentNeighborhood, "victoria-park");
+  assert.equal(await verifiedVictoriaParkChatContext("legacy-live", origin + pilot), undefined);
+  assert.equal(await verifiedVictoriaParkChatContext(user.id, "https://other.example" + pilot), undefined);
+
+  eligible = false;
+  assert.equal((await request(pilot)).status, 404);
+  assert.equal((await inquiry("message")).status, 404);
+  assert.doesNotMatch(await sitemap(), /victoria-park/);
+  eligible = true;
+  assert.equal((await update({ agentPageEnabled: false })).status, 200);
+  assert.equal((await request(pilot)).status, 404);
+  assert.equal((await update({ agentPageEnabled: true })).status, 200);
+  assert.equal((await pilotSave(false)).status, 200);
+  assert.equal((await request(pilot)).status, 404);
+  assert.equal(await verifiedVictoriaParkChatContext(user.id, origin + pilot), undefined);
+  assert.doesNotMatch(await sitemap(), /victoria-park/);
 });

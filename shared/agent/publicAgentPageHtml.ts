@@ -1,3 +1,4 @@
+import { VICTORIA_PARK_CITY_GUIDE, VICTORIA_PARK_NAME, VICTORIA_PARK_SLUG, VICTORIA_PARK_TITLE } from "./victoriaPark";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
@@ -193,7 +194,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     !hideChat && data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const initialListingType = data.initialListingType ?? "all";
   const primaryMarket = data.marketArea.split(/[;,]/)[0].trim();
-  const pageTitle = embedMode
+  const neighborhood = data.neighborhood;
+  const pageTitle = neighborhood ? `${VICTORIA_PARK_TITLE} | ${data.displayName}` : embedMode
     ? "Property Listings"
     : `${data.displayName} | Real Estate Agent${primaryMarket ? ` in ${primaryMarket}` : ""}`;
   const profileSummary = [
@@ -201,7 +203,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const description = profileSummary.length > 160 ? `${profileSummary.slice(0, 157).trimEnd()}…` : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/\s+/g, " ") : profileSummary;
+  const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
     : "noindex, follow";
@@ -214,14 +217,16 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     : `<header class="agent-header">
       ${renderProfileColumn(data)}
       <div class="agent-info-col">
-        <h1 class="agent-name">${escapeHtml(data.displayName)}</h1>
+        ${neighborhood ? `<h1 class="agent-name">${VICTORIA_PARK_TITLE}</h1><p>${escapeHtml(data.displayName)}${data.brokerageName ? ` · ${escapeHtml(data.brokerageName)}` : ""}</p>` : `<h1 class="agent-name">${escapeHtml(data.displayName)}</h1>`}
         ${bioHtml}
         ${marketHtml}
-        <div class="cta-row">
-          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(primaryContactLabel)}</button>
-          ${data.schedulingUrl ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
-          ${homeWorthBtn}
+        ${neighborhood && (data.publicEmail || data.publicPhone) ? `<p>${[data.publicEmail, data.publicPhone].filter(Boolean).map(escapeHtml).join(" · ")}</p>` : ""}
+        <div class="cta-row"${neighborhood?.preview ? " inert" : ""}>
+          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(neighborhood ? "Contact agent" : primaryContactLabel)}</button>
+          ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
+          ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>` : homeWorthBtn}
         </div>
+        ${data.neighborhoodLink ? `<p><a href="${escapeHtml(data.neighborhoodLink)}">${VICTORIA_PARK_NAME}, Fort Lauderdale</a></p>` : ""}
       </div>
     </header>`;
 
@@ -489,7 +494,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <div class="wrap">
     ${agentHeaderHtml}
 
-    <section class="listings-section">
+    ${neighborhood ? `<section class="agent-header" style="display:block">
+      <h2>About ${VICTORIA_PARK_NAME}</h2>
+      ${neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join("")}
+      <p><a href="${VICTORIA_PARK_CITY_GUIDE}">City of Fort Lauderdale neighborhood survey</a></p>
+      <p><a href="${escapeHtml(neighborhood.parentUrl)}">Back to the Agent Page</a></p>
+    </section>` : `<section class="listings-section">
       <div class="browse-wrap" id="browse-wrap">
         <div class="browse-head">
           <div class="listing-type-row">
@@ -577,7 +587,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         <p class="browse-remaining-count" id="browse-remaining-count">${browseRemaining > 0 ? `${browseRemaining} remaining` : ""}</p>
         <a href="#" class="browse-back-to-top" id="browse-back-to-top" hidden>Back to top</a>
       </div>
-    </section>
+    </section>`}
     <footer class="site-footer">
       <span class="site-footer-brand"><span>Powered by</span>${renderWhachatLogoMark()}<span>WhachatCRM</span></span>
     </footer>
@@ -647,6 +657,8 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
   <script type="application/json" id="page-config">${JSON.stringify({
     slug,
+    neighborhood: neighborhood ? VICTORIA_PARK_SLUG : undefined,
+    preview: neighborhood?.preview,
     widgetPublicId: data.widgetPublicId,
     schedulingUrl: data.schedulingUrl,
     widgetEnabled: data.widgetEnabled,
@@ -666,6 +678,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <script>
     (function () {
       var config = JSON.parse(document.getElementById("page-config").textContent || "{}");
+      if (config.preview) return;
       var backdrop = document.getElementById("modal-backdrop");
       var form = document.getElementById("lead-form");
       var toast = document.getElementById("toast");
@@ -777,9 +790,11 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         }
 
         backdrop.classList.add("open");
+        backdrop.setAttribute("aria-hidden", "false");
       }
       function closeModal() {
         backdrop.classList.remove("open");
+        backdrop.setAttribute("aria-hidden", "true");
         form.reset();
         if (listingContextEl) listingContextEl.hidden = true;
         var subtitleEl = document.getElementById("modal-subtitle");
@@ -853,6 +868,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 
       var btnMessage = document.getElementById("btn-message");
       if (btnMessage) btnMessage.addEventListener("click", function () {
+        if (config.neighborhood) {
+          openModal("message");
+          return;
+        }
         if (config.preferredLeadCapture === "webchat") {
           if (config.widgetEnabled) {
             openChatWidget();
@@ -876,7 +895,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       if (scheduleHeader && scheduleHeader.tagName === "BUTTON") {
         scheduleHeader.addEventListener("click", function () {
           track("schedule_showing");
-          if (config.schedulingUrl) window.open(config.schedulingUrl, "_blank", "noopener");
+          if (config.schedulingUrl && !config.neighborhood) window.open(config.schedulingUrl, "_blank", "noopener");
           else openModal("schedule_showing");
         });
       } else if (scheduleHeader) {
@@ -1255,6 +1274,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           timeline: fd.get("timeline") || undefined,
           reasonForSelling: fd.get("reasonForSelling") || undefined,
           embed: config.embedMode === true,
+          neighborhood: config.neighborhood,
         };
         fetch("/api/public/agents/" + encodeURIComponent(config.slug) + "/leads", {
           method: "POST",

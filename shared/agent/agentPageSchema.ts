@@ -81,6 +81,7 @@ export type AgentPageSettingsResponse = {
 };
 
 export const publicAgentLeadBodySchema = z.object({
+  neighborhood: z.literal("victoria-park").optional(),
   intent: z.enum(["message", "ask_about", "schedule_showing", "home_worth"]),
   name: z.string().max(120).optional(),
   email: z.string().email().max(200).optional(),
