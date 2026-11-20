@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageSelector } from "./LanguageSelector";
 import { TrialSetupCluster } from "@/components/TrialSetupCluster";
@@ -37,11 +37,29 @@ function writeCollapsed(val: boolean) {
   } catch {}
 }
 
+const sidebarMotion = "duration-[225ms] ease-in-out motion-reduce:transition-none";
+
+// Keep section content mounted while its height changes with the sidebar.
+function SidebarSection({ visible, children }: { visible: boolean; children: ReactNode }) {
+  return (
+    <div
+      inert={!visible}
+      className={cn(
+        "grid transition-[grid-template-rows,opacity]",
+        sidebarMotion,
+        visible ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
 export function Sidebar() {
   const { logout, user } = useAuth();
   const { t } = useTranslation();
   const isRTL = getDirection() === "rtl";
-  const { categories, allItems } = useAppNavCategories();
+  const { categories } = useAppNavCategories();
   const commerceSearch = useSearch();
   const commerceViewParam = new URLSearchParams(commerceSearch).get("view");
   const selectedCommerceView = ["products", "orders", "shopping", "recovery", "post", "settings", "guide"].includes(commerceViewParam || "") ? commerceViewParam : "overview";
@@ -86,46 +104,47 @@ export function Sidebar() {
     <TooltipProvider delayDuration={200}>
       <div
         className={cn(
-          "hidden md:flex h-full flex-col bg-gray-50 z-20 transition-all duration-200 ease-in-out flex-shrink-0 overflow-x-hidden",
+          "hidden md:flex h-full min-w-0 shrink-0 flex-col overflow-hidden bg-gray-50 z-20 transition-[width]",
+          sidebarMotion,
           isRTL ? "border-is" : "border-ie",
-          collapsed ? "w-16 min-w-16 items-center" : "w-[200px] min-w-[200px] items-stretch"
+          collapsed ? "w-16" : "w-[200px]",
         )}
         data-testid="sidebar"
       >
-        {/* ── Logo + Toggle ── */}
         <div
           className={cn(
-            "flex items-center flex-shrink-0",
-            collapsed ? "justify-center px-0 flex-col gap-3 pt-5 pb-4" : "gap-3 px-4 pt-4 pb-3.5"
+            "relative shrink-0 transition-[height]",
+            sidebarMotion,
+            collapsed ? "h-[78px]" : "h-14",
           )}
         >
-          {!collapsed && (
-            <div className="flex min-w-0 flex-1 items-center gap-1.5">
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-green">
-                <span className="text-[11px] font-bold leading-none text-white">W</span>
-              </div>
-              <span className="font-display text-sm font-medium leading-tight tracking-tight text-gray-900 whitespace-normal">
-                WhachatCRM
-              </span>
-            </div>
-          )}
-
-          {collapsed && (
-            <div className="flex h-5 w-5 items-center justify-center rounded-md bg-brand-green">
+          <div className="absolute start-[21px] end-12 top-[18px] flex min-w-0 items-center gap-1.5">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-green">
               <span className="text-[11px] font-bold leading-none text-white">W</span>
             </div>
-          )}
+            <span className={cn(
+              "truncate font-display text-sm font-medium leading-tight tracking-tight text-gray-900 transition-opacity",
+              sidebarMotion,
+              collapsed && "opacity-0",
+            )}>
+              WhachatCRM
+            </span>
+          </div>
 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={toggleSidebar}
                 data-testid="button-toggle-sidebar"
                 className={cn(
-                  "mt-0 shrink-0 flex items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700",
-                  collapsed ? "h-8 w-8" : "h-7 w-7"
+                  "absolute end-[15px] flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition-[top,background-color,color] hover:bg-gray-100 hover:text-gray-700",
+                  sidebarMotion,
+                  collapsed ? "top-10" : "top-3",
                 )}
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-expanded={!collapsed}
+                aria-controls="desktop-sidebar-navigation"
               >
                 {collapsed ? (
                   <PanelLeftOpen className="w-4 h-4" />
@@ -140,228 +159,141 @@ export function Sidebar() {
           </Tooltip>
         </div>
 
-        {/* Trial pill — desktop sidebar only; mobile uses absolute cluster in AppLayout main */}
-        <div
-          className={cn(
-            "hidden md:flex flex-shrink-0 overflow-hidden transition-all duration-200 ease-in-out",
-            collapsed ? "w-full justify-center px-0 pb-2" : "min-w-0 px-2 pb-2",
-          )}
-        >
+        <div className="shrink-0 px-3 pb-2">
           <TrialSetupCluster sidebarCollapsed={collapsed} />
         </div>
 
-        {/* ── Navigation ── */}
-        {collapsed ? (
-          /* COLLAPSED: icon-only list */
-          <nav className="flex-1 flex flex-col items-center gap-1 px-2 overflow-y-auto py-2">
-            {allItems.map((item) => {
-              const isActive = item.active;
-              const iconClasses = cn(
-                "h-5 w-5",
-                isActive ? "text-gray-900" : "text-gray-400"
-              );
-              const btnClasses = cn(
-                "w-10 h-10 flex items-center justify-center rounded-lg transition-colors border-s border-s-transparent",
-                isActive
-                  ? "border-s-gray-300 bg-gray-100 text-gray-900"
-                  : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-              );
-
-              const inner = (
-                <span className="relative inline-flex">
-                  <item.icon className={iconClasses} />
-                  {item.href === "/app/inbox" ? (
-                    <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
-                  ) : null}
-                </span>
-              );
-
-              return (
-                <Tooltip key={item.id}>
-                  <TooltipTrigger asChild>
-                    {item.external ? (
-                      <a
-                        href={item.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid={item.testId}
-                        className={btnClasses}
-                      >
-                        {inner}
-                      </a>
-                    ) : (
-                      <Link href={item.href}>
-                        <a data-testid={item.testId} className={btnClasses}>
-                          {inner}
-                        </a>
-                      </Link>
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent side={tooltipSide} className={sidebarTooltipClass}>
-                    {item.label}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </nav>
-        ) : (
-          /* EXPANDED: categories + labels */
-          <nav className="flex-1 flex flex-col gap-4 px-4 overflow-y-auto">
-            {categories.map((category) => {
-              const isCategoryCollapsed = collapsedCategories.includes(category.id);
-              return (
-                <div key={category.id} className="flex flex-col gap-1">
+        <nav id="desktop-sidebar-navigation" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 overscroll-contain [scrollbar-width:thin] [scrollbar-gutter:stable]">
+          {categories.map((category) => {
+            const isCategoryCollapsed = collapsedCategories.includes(category.id);
+            return (
+              <div key={category.id}>
+                <SidebarSection visible={!collapsed}>
                   <button
+                    type="button"
                     onClick={() => toggleCategory(category.id)}
-                    className="flex items-center justify-between px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider hover:text-gray-600 transition-colors w-full"
+                    aria-expanded={!isCategoryCollapsed}
+                    className="flex w-full items-center justify-between gap-2 px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-gray-400 transition-colors hover:text-gray-600"
                     data-testid={`sidebar-section-${category.id}`}
                   >
-                    {category.label}
-                    {isCategoryCollapsed ? (
-                      <ChevronRight className="w-3 h-3" />
-                    ) : (
-                      <ChevronDown className="w-3 h-3" />
-                    )}
+                    <span className="truncate">{category.label}</span>
+                    {isCategoryCollapsed ? <ChevronRight className="h-3 w-3 shrink-0" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                   </button>
+                </SidebarSection>
 
-                  {!isCategoryCollapsed && (
-                    <div className="flex flex-col gap-1">
-                      {category.items.map((item) => {
-                        const isActive = item.active && item.id !== "ecommerceGrowthEngine";
-                        const linkClasses = cn(
-                          "flex items-center p-2 rounded-lg transition-colors group relative w-full border-s border-s-transparent",
-                          isActive
-                            ? "border-s-gray-300 bg-gray-100 font-medium text-gray-900"
-                            : "text-gray-600 hover:bg-gray-100/90 hover:text-gray-900"
-                        );
-                        const iconClasses = cn(
-                          "h-5 w-5 shrink-0",
-                          isActive
-                            ? "text-gray-900"
-                            : "text-gray-400 group-hover:text-gray-600"
-                        );
+                <SidebarSection visible={collapsed || !isCategoryCollapsed}>
+                  {category.items.map((item) => {
+                    const isCommerce = item.id === "ecommerceGrowthEngine";
+                    const isActive = item.active && (collapsed || !isCommerce);
+                    const linkClasses = cn(
+                      "group my-0.5 flex h-10 w-full min-w-0 items-center overflow-hidden rounded-lg border-s border-s-transparent ps-[9px] pe-1 transition-colors",
+                      isActive
+                        ? "border-s-gray-300 bg-gray-100 font-medium text-gray-900"
+                        : "text-gray-600 hover:bg-gray-100/90 hover:text-gray-900",
+                    );
+                    const inner = (
+                      <>
+                        <span className="relative inline-flex shrink-0">
+                          <item.icon className={cn("h-5 w-5", isActive ? "text-gray-900" : "text-gray-400 group-hover:text-gray-600")} />
+                          {item.href === "/app/inbox" ? (
+                            <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
+                          ) : null}
+                        </span>
+                        <span className={cn("ms-3 min-w-0 truncate text-sm transition-opacity", sidebarMotion, collapsed && "opacity-0")}>
+                          {item.label}
+                        </span>
+                      </>
+                    );
 
-                        if (item.external) {
-                          return (
-                            <a
-                              key={item.id}
-                              href={item.href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              data-testid={item.testId}
-                              className={linkClasses}
-                            >
-                              <item.icon className={iconClasses} />
-                              <span
-                                className={cn(
-                                  "text-sm ms-3",
-                                  isActive ? "font-medium" : "font-normal"
-                                )}
-                              >
-                                {item.label}
-                              </span>
-                            </a>
-                          );
-                        }
+                    return (
+                      <div key={item.id}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            {item.external ? (
+                              <a href={item.href} target="_blank" rel="noopener noreferrer" data-testid={item.testId}
+                                aria-label={item.label} className={linkClasses}>
+                                {inner}
+                              </a>
+                            ) : (
+                              <Link href={item.href}>
+                                <a data-testid={item.testId} aria-label={item.label} className={linkClasses}>{inner}</a>
+                              </Link>
+                            )}
+                          </TooltipTrigger>
+                          <TooltipContent side={tooltipSide} className={sidebarTooltipClass}>
+                            {item.label}
+                          </TooltipContent>
+                        </Tooltip>
 
-                        return (
-                          <div key={item.id}>
-                          <div className="flex flex-col items-stretch">
-                          <Link href={item.href}>
-                            <a data-testid={item.testId} className={cn(linkClasses, item.id === "ecommerceGrowthEngine" && "w-full min-w-0")}>
-                              <span className="relative inline-flex shrink-0">
-                                <item.icon className={iconClasses} />
-                                {item.href === "/app/inbox" ? (
-                                  <InboxActivityNavBadge testId="sidebar-inbox-activity-badge" />
-                                ) : null}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-sm ms-3",
-                                  isActive ? "font-medium" : "font-normal"
-                                )}
-                              >
-                                {item.label}
-                              </span>
-                            </a>
-                          </Link>
-                          {item.id === "ecommerceGrowthEngine" && (
-                            <button type="button"
+                        {isCommerce && (
+                          <SidebarSection visible={!collapsed}>
+                            <button
+                              type="button"
                               data-testid="ecommerce-sidebar-toggle"
                               aria-label={commerceExpanded ? "Collapse E-Commerce modules" : "Expand E-Commerce modules"}
                               aria-expanded={commerceExpanded}
                               onClick={() => setCommerceExpanded(v => !v)}
-                              className="ms-9 mt-0.5 mb-1 inline-flex w-fit items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
-                              {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              className="ms-9 mb-1 mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                            >
+                              {commerceExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                               <span>{commerceExpanded ? (isRTL ? "הסתרה" : commerceLocale === "es" ? "Ocultar" : "Hide") : (isRTL ? "הצגה" : commerceLocale === "es" ? "Mostrar" : "Show")}</span>
                             </button>
-                          )}
-                          </div>
-                          {item.id === "ecommerceGrowthEngine" && commerceExpanded && (
-                            <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
-                              {commerceSubnav.map(module => {
-                                const isSelected = item.active && selectedCommerceView === module.id;
-                                return (
-                                  <Link key={module.id} href={module.href}>
-                                    <a data-testid={`ecommerce-sidebar-${module.id}`}
-                                      aria-current={isSelected ? "page" : undefined}
-                                      className={cn("block rounded-md px-2 py-1.5 text-xs transition-colors",
-                                        isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600 hover:text-blue-700 hover:bg-slate-100")}>
-                                      {isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}
-                                    </a>
-                                  </Link>
-                                );
-                              })}
-                            </div>
-                          )}
-                          </div>
-                        );
-                      })}
+                            {commerceExpanded && (
+                              <div className="ms-4 border-s border-slate-200 ps-3" data-testid="ecommerce-sidebar-modules">
+                                {commerceSubnav.map(module => {
+                                  const isSelected = item.active && selectedCommerceView === module.id;
+                                  return (
+                                    <Link key={module.id} href={module.href}>
+                                      <a data-testid={`ecommerce-sidebar-${module.id}`}
+                                        aria-current={isSelected ? "page" : undefined}
+                                        className={cn("block truncate rounded-md px-2 py-1.5 text-xs transition-colors",
+                                          isSelected ? "bg-blue-50 font-semibold text-blue-800" : "text-slate-600 hover:text-blue-700 hover:bg-slate-100")}>
+                                        {isRTL ? module.he : commerceLocale === "es" ? module.es : module.en}
+                                      </a>
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </SidebarSection>
+                        )}
+                      </div>
+                    );
+                  })}
+                </SidebarSection>
+              </div>
+            );
+          })}
+        </nav>
 
-                    </div>
-                  )}
+        <div className="shrink-0 border-t px-3 pb-3 pt-3">
+          <SidebarSection visible={!collapsed}>
+            <div className="w-[175px]">
+              {user && (
+                <div className="mb-1 px-2">
+                  <div className="text-[10px] font-medium text-gray-400">{t("common.signedInAs", "Signed in as")}</div>
+                  <div className="truncate text-xs font-medium text-gray-700">{user.name}</div>
                 </div>
-              );
-            })}
-          </nav>
-        )}
-
-        {/* ── Bottom: user / logout ── */}
-        <div
-          className={cn(
-            "mt-auto pt-3 border-t flex-shrink-0",
-            collapsed ? "w-full flex flex-col items-center gap-1 px-2 pb-3" : "px-4 pb-3"
-          )}
-        >
-          {!collapsed && user && (
-            <div className="mb-1 px-2">
-              <div className="text-[10px] font-medium text-gray-400">{t("common.signedInAs", "Signed in as")}</div>
-              <div className="text-xs font-medium text-gray-700 truncate">{user.name}</div>
+              )}
+              <div className="mb-2 px-2">
+                <LanguageSelector variant="default" className="w-full justify-start" />
+              </div>
             </div>
-          )}
-
-          {!collapsed && (
-            <div className="mb-2 px-2">
-              <LanguageSelector variant="default" className="w-full justify-start" />
-            </div>
-          )}
+          </SidebarSection>
 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={logout}
                 data-testid="button-logout"
-                className={cn(
-                  "flex items-center rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors",
-                  collapsed
-                    ? "w-10 h-10 justify-center"
-                    : "w-full p-2"
-                )}
+                aria-label={t("common.logout", "Logout")}
+                className="flex h-10 w-full items-center overflow-hidden rounded-lg ps-[10px] text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600"
               >
                 <LogOut className="h-5 w-5 shrink-0" />
-                {!collapsed && (
-                  <span className="font-medium ms-3">{t("common.logout", "Logout")}</span>
-                )}
+                <span className={cn("ms-3 whitespace-nowrap font-medium transition-opacity", sidebarMotion, collapsed && "opacity-0")}>
+                  {t("common.logout", "Logout")}
+                </span>
               </button>
             </TooltipTrigger>
             {collapsed && (
