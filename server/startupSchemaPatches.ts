@@ -145,6 +145,22 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
     ].join(";\n"),
   },
   {
+    tag: "20261119_agent_page_profile_publication",
+    sql: `-- Preserve old live profiles and leave previously non-public profiles private.
+DO $$
+BEGIN
+  ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_profile_enabled boolean;
+  UPDATE ai_business_knowledge
+    SET agent_page_profile_enabled = agent_page_enabled
+      AND publish_listings_publicly
+      AND COALESCE(trim(agent_page_slug), '') <> ''
+    WHERE agent_page_profile_enabled IS NULL;
+  ALTER TABLE ai_business_knowledge
+    ALTER COLUMN agent_page_profile_enabled SET DEFAULT false,
+    ALTER COLUMN agent_page_profile_enabled SET NOT NULL;
+END $$;`,
+  },
+  {
     tag: "0048_agent_page_custom_bio",
     sql: [
       `ALTER TABLE ai_business_knowledge ADD COLUMN IF NOT EXISTS agent_page_use_custom_bio boolean NOT NULL DEFAULT false`,
@@ -1585,7 +1601,7 @@ async function probePublicListingSchemaColumns(): Promise<boolean> {
         l.publish_publicly,
         l.published_at,
         w.publish_listings_publicly,
-        w.agent_page_enabled,
+        w.agent_page_profile_enabled,
         w.agent_page_slug
       FROM inventory_listings l
       INNER JOIN ai_business_knowledge w ON w.user_id = l.user_id
@@ -1650,12 +1666,12 @@ export async function applyStartupSchemaPatches(): Promise<{
     ready = await probePublicListingSchemaColumns();
     if (!ready) {
       console.error(
-        "[StartupSchema] FATAL: public listing routes must not serve until schema 0045–0047 is ready",
+        "[StartupSchema] FATAL: public listing routes must not serve until the required schema is ready",
       );
     }
   } else {
     console.error(
-      "[StartupSchema] FATAL: public listing / agent page routes blocked — required patches 0045, 0046, 0047 failed",
+      "[StartupSchema] FATAL: public listing / agent page routes blocked — required schema patches failed",
     );
   }
 

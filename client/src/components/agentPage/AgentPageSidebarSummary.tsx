@@ -10,9 +10,7 @@ export function AgentPageSidebarSummary() {
     queryFn: fetchAgentPageSettings,
   });
 
-  const pageIsPublic = Boolean(
-    data?.publishListingsPublicly && data?.agentPageEnabled && data?.agentPageSlug,
-  );
+  const pageIsPublic = Boolean(data?.publicPageUrl);
 
   const statusLabel = !data?.agentPageEnabled
     ? "Off"

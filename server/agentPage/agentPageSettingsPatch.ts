@@ -46,11 +46,11 @@ export async function prepareAgentPageSettingsPatch(
     slug = null;
   }
 
-  if (slug === undefined && patch.agentPageEnabled === true) {
+  if (slug == null && patch.agentPageEnabled === true) {
     const current = await loadCurrent();
-    if (current && !current.agentPageSlug) {
-      const auto = buildAgentPageSlug(current.businessProfileDisplayName, userId);
-      if (auto) slug = auto;
+    if (slug === null || !current?.agentPageSlug) {
+      slug = buildAgentPageSlug(current?.businessProfileDisplayName || "Agent", userId)
+        || buildAgentPageSlug("Agent", userId);
     }
   }
 

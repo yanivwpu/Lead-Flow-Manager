@@ -6,7 +6,7 @@ import {
 import { buildListingCanonicalShareUrl, pickPrimaryPhotoUrl } from "@shared/inventory/listingViewUrl";
 import { formatListingPriceForComposer } from "@shared/inventory/inventoryComposerDraft";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
-import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
+import { canShowPublicStreetAddress, getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
 import {
   resolveFlyerListingLabel,
   resolveFlyerSpecFields,
@@ -44,7 +44,7 @@ export function inventoryListingToAgentPageCard(
     listingCompliance: normalizeListingCompliance(listing.listingCompliance),
   };
 
-  const allowStreet = canShowPublicStreetAddress(normalizeListingCompliance(listing.listingCompliance));
+  const allowStreet = canShowPublicStreetAddress(flyerListing.listingCompliance);
   const street = allowStreet
     ? [listing.addressLine1, listing.addressLine2].filter(Boolean).join(", ") || null
     : null;
@@ -73,10 +73,13 @@ export function inventoryListingToAgentPageCard(
   return {
     id: listing.id,
     shareUrl: buildListingCanonicalShareUrl(
-      { listingId: listing.id, publicSlug: listing.publicSlug },
+      {
+        listingId: listing.id,
+        publicSlug: getPublicListingAddressSlug(listing.publicSlug, flyerListing.listingCompliance),
+      },
       appOrigin,
     ),
-    imageUrl: pickPrimaryPhotoUrl(flyerListing.photos),
+    imageUrl: allowStreet ? pickPrimaryPhotoUrl(flyerListing.photos) : null,
     street,
     fullAddress,
     metaSummary,

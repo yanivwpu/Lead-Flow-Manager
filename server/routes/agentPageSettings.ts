@@ -1,20 +1,21 @@
 import type { Express } from "express";
 import { agentPageSettingsPatchSchema } from "@shared/agent/agentPageSchema";
 import { buildAgentPageSlug } from "@shared/agent/agentPageSlug";
-import { getRequestOrigin } from "../urlOrigins";
+import { getAppOrigin } from "../urlOrigins";
 import { buildAgentPageSettingsResponse } from "../agentPage/agentPageService";
 import { patchAgentPageSettings } from "../agentPage/agentPageDb";
 import {
   isAgentPageSlugConflictError,
   prepareAgentPageSettingsPatch,
 } from "../agentPage/agentPageSettingsPatch";
+import { hasAgentPagePublicationAccess } from "../agentPage/agentPagePublication";
 import { isRgeInstalledForUser } from "../buyerPreferenceService";
 
 export function registerAgentPageSettingsRoutes(app: Express): void {
   app.get("/api/agent-page", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const appOrigin = getRequestOrigin(req);
+      const appOrigin = getAppOrigin();
       const settings = await buildAgentPageSettingsResponse(req.user.id, appOrigin);
       if (!settings) return res.status(404).json({ error: "Profile not found" });
       res.json(settings);
@@ -28,7 +29,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
 
-      const appOrigin = getRequestOrigin(req);
+      const appOrigin = getAppOrigin();
       const prepared = await prepareAgentPageSettingsPatch(
         req.user.id,
         req.body,
@@ -41,6 +42,12 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
       }
 
       const patch = prepared.patch;
+      if (patch.agentPageEnabled === true && !(await hasAgentPagePublicationAccess(req.user.id))) {
+        return res.status(403).json({
+          error: "Publishing an Agent Page requires active Realtor Growth Engine access",
+          code: "rge_required",
+        });
+      }
       // Listing publication master switch is RGE-only (UI lives in Realtor Growth Engine).
       if (patch.publishListingsPublicly !== undefined) {
         const rgeInstalled = await isRgeInstalledForUser(req.user.id);
@@ -81,7 +88,7 @@ export function registerAgentPageSettingsRoutes(app: Express): void {
   app.post("/api/agent-page/suggest-slug", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });
-      const settings = await buildAgentPageSettingsResponse(req.user.id, getRequestOrigin(req));
+      const settings = await buildAgentPageSettingsResponse(req.user.id, getAppOrigin());
       const slug = buildAgentPageSlug(
         settings?.businessProfileDisplayName || "agent",
         req.user.id,

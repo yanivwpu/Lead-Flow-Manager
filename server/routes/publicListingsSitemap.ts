@@ -2,17 +2,20 @@ import type { Express, Request, Response } from "express";
 import {
   buildListingSharePath,
   buildListingShareUrl,
-  type ListingShareRef,
 } from "@shared/inventory/listingViewUrl";
 import {
   countPublicShareableListings,
   fetchPublicListingSitemapEntries,
   type PublicListingSitemapEntry,
 } from "../inventory/inventoryDb";
+import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
+import { buildAgentPageUrl } from "@shared/agent/agentPageSlug";
+import { countAgentPageSitemapCandidates, fetchAgentPageSitemapSlugs } from "../agentPage/agentPageDb";
 import { getAppOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 
 export const SITEMAP_URLS_PER_FILE = 45_000;
+const AGENT_SITEMAP_CANDIDATES_PER_FILE = 250;
 export const SITEMAP_CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=300";
 
 export function applyPublicListingSeoCacheHeaders(res: Response): void {
@@ -36,12 +39,16 @@ export type SitemapShardPageResult =
   | { ok: true; offset: number; limit: number; pageCount: number };
 
 /** Validate shard page number and compute DB offset/limit for that page. */
-export function resolveSitemapShardPage(total: number, page: number): SitemapShardPageResult {
-  if (!Number.isFinite(page) || page < 1) return { ok: false };
-  const pageCount = Math.max(1, Math.ceil(total / SITEMAP_URLS_PER_FILE));
+export function resolveSitemapShardPage(
+  total: number,
+  page: number,
+  pageSize = SITEMAP_URLS_PER_FILE,
+): SitemapShardPageResult {
+  if (!Number.isSafeInteger(page) || page < 1) return { ok: false };
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   if (page > pageCount) return { ok: false };
-  const offset = (page - 1) * SITEMAP_URLS_PER_FILE;
-  const limit = Math.min(SITEMAP_URLS_PER_FILE, Math.max(0, total - offset));
+  const offset = (page - 1) * pageSize;
+  const limit = Math.min(pageSize, Math.max(0, total - offset));
   return { ok: true, offset, limit, pageCount };
 }
 
@@ -59,44 +66,53 @@ function formatSitemapLastmod(date: Date): string {
 }
 
 function sitemapLocForEntry(entry: PublicListingSitemapEntry, appOrigin: string): string {
-  const ref: ListingShareRef = { listingId: entry.id, publicSlug: entry.publicSlug };
-  return buildListingShareUrl(ref, appOrigin);
+  return buildListingShareUrl({
+    listingId: entry.id,
+    publicSlug: getPublicListingAddressSlug(entry.publicSlug, entry.listingCompliance),
+  }, appOrigin);
 }
 
-function renderUrlset(entries: PublicListingSitemapEntry[], appOrigin: string): string {
-  const urls = entries
-    .map((entry) => {
-      const loc = escapeXml(sitemapLocForEntry(entry, appOrigin));
-      const lastmod = formatSitemapLastmod(entry.lastmod);
-      return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`;
-    })
-    .join("\n");
-
+function renderSitemapUrls(entries: { loc: string; lastmod?: Date }[]): string {
+  const urls = entries.map(({ loc, lastmod }) =>
+    `  <url>\n    <loc>${escapeXml(loc)}</loc>${lastmod ? `\n    <lastmod>${formatSitemapLastmod(lastmod)}</lastmod>` : ""}\n  </url>`,
+  ).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
-export function renderSitemapIndex(appOrigin: string, pageCount: number): string {
-  const entries = Array.from({ length: pageCount }, (_, index) => {
-    const page = index + 1;
-    const loc = escapeXml(`${appOrigin}/public-listings-sitemap-${page}.xml`);
-    return `  <sitemap>\n    <loc>${loc}</loc>\n  </sitemap>`;
-  }).join("\n");
+function renderUrlset(entries: PublicListingSitemapEntry[], appOrigin: string): string {
+  return renderSitemapUrls(entries.map((entry) => ({
+    loc: sitemapLocForEntry(entry, appOrigin),
+    lastmod: entry.lastmod,
+  })));
+}
+
+export function renderAgentPageUrlset(slugs: string[], appOrigin: string): string {
+  return renderSitemapUrls(slugs.map((slug) => ({ loc: buildAgentPageUrl(slug, appOrigin) })));
+}
+
+export function renderSitemapIndex(appOrigin: string, pageCount: number, agentPageCount = 0): string {
+  const filenames = [
+    ...Array.from({ length: pageCount }, (_, index) => `public-listings-sitemap-${index + 1}.xml`),
+    ...Array.from({ length: agentPageCount }, (_, index) => `public-agents-sitemap-${index + 1}.xml`),
+  ];
+  const entries = filenames.map((filename) =>
+    `  <sitemap>\n    <loc>${escapeXml(`${appOrigin}/${filename}`)}</loc>\n  </sitemap>`,
+  ).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</sitemapindex>\n`;
 }
 
-export function appRobotsTxt(appOrigin: string, includeSitemap: boolean): string {
-  const lines = [
+export function appRobotsTxt(appOrigin: string): string {
+  return [
     "User-agent: *",
     "Allow: /share/",
+    "Allow: /agents/",
     "Disallow: /api/",
     "Disallow: /app/",
     "",
-  ];
-  if (includeSitemap) {
-    lines.push(`Sitemap: ${appOrigin}/public-listings-sitemap.xml`, "");
-  }
-  return lines.join("\n");
+    `Sitemap: ${appOrigin}/public-listings-sitemap.xml`,
+    "",
+  ].join("\n");
 }
 
 function isAppHost(req: Request): boolean {
@@ -109,16 +125,26 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
   app.get("/robots.txt", requirePublicListingSchemaReady, async (req: Request, res: Response, next) => {
     if (!isAppHost(req)) return next();
     const appOrigin = getAppOrigin();
-    const publishedCount = await countPublicShareableListings();
     applyPublicListingSeoCacheHeaders(res);
-    res.type("text/plain").send(appRobotsTxt(appOrigin, publishedCount > 0));
+    res.type("text/plain").send(appRobotsTxt(appOrigin));
   });
 
   app.get("/public-listings-sitemap.xml", requirePublicListingSchemaReady, async (_req: Request, res: Response) => {
     try {
       const appOrigin = getAppOrigin();
-      const total = await countPublicShareableListings();
+      const [total, agentCandidates] = await Promise.all([
+        countPublicShareableListings(),
+        countAgentPageSitemapCandidates(),
+      ]);
       const plan = resolveRootSitemapPlan(total);
+      if (agentCandidates > 0) {
+        // Keep the existing root URL and give Agent Pages their own uncached shards.
+        const listingPages = Math.ceil(total / SITEMAP_URLS_PER_FILE);
+        const agentPages = Math.ceil(agentCandidates / AGENT_SITEMAP_CANDIDATES_PER_FILE);
+        res.setHeader("Cache-Control", "no-store");
+        res.type("application/xml").send(renderSitemapIndex(appOrigin, listingPages, agentPages));
+        return;
+      }
       applyPublicListingSeoCacheHeaders(res);
 
       if (plan.kind === "empty") {
@@ -137,6 +163,24 @@ export function registerPublicListingSitemapRoutes(app: Express): void {
       console.error("[public-listing-sitemap] index failed", {
         error: error instanceof Error ? error.message : String(error),
       });
+      res.status(500).type("text/plain").send("Sitemap unavailable");
+    }
+  });
+
+  app.get("/public-agents-sitemap-:page.xml", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const page = Number(req.params.page);
+      const total = await countAgentPageSitemapCandidates();
+      const shard = resolveSitemapShardPage(total, page, AGENT_SITEMAP_CANDIDATES_PER_FILE);
+      if (!shard.ok || !total) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const slugs = await fetchAgentPageSitemapSlugs(shard.offset, shard.limit);
+      res.type("application/xml").send(renderAgentPageUrlset(slugs, getAppOrigin()));
+    } catch (error) {
+      console.error("[public-agent-sitemap] render failed", error);
       res.status(500).type("text/plain").send("Sitemap unavailable");
     }
   });

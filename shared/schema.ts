@@ -1774,7 +1774,8 @@ export const aiBusinessKnowledge = pgTable("ai_business_knowledge", {
   /** Workspace master switch for public MLS listing share pages. */
   publishListingsPublicly: boolean("publish_listings_publicly").notNull().default(false),
   /** Public agent marketing page enabled. */
-  agentPageEnabled: boolean("agent_page_enabled").notNull().default(false),
+  agentPageEnabled: boolean("agent_page_profile_enabled").notNull().default(false),
+  agentPageLegacyEnabled: boolean("agent_page_enabled").notNull().default(false),
   agentPageSlug: text("agent_page_slug"),
   agentPageDisplayName: text("agent_page_display_name"),
   agentPageBio: text("agent_page_bio"),

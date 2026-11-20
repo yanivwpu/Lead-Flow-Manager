@@ -9,6 +9,7 @@ import {
   SITEMAP_URLS_PER_FILE,
   applyPublicListingSeoCacheHeaders,
   appRobotsTxt,
+  renderAgentPageUrlset,
   renderSitemapIndex,
   renderUrlset,
   resolveRootSitemapPlan,
@@ -53,12 +54,10 @@ function testCacheControlHeader() {
 }
 
 function testRobotsTxtSitemapLine() {
-  const withListings = appRobotsTxt(ORIGIN, true);
-  assert(withListings.includes(`Sitemap: ${ORIGIN}/public-listings-sitemap.xml`), "robots includes sitemap when listings exist");
-  assert(withListings.includes("Allow: /share/"), "robots allows share paths");
-
-  const withoutListings = appRobotsTxt(ORIGIN, false);
-  assert(!withoutListings.includes("Sitemap:"), "robots omits sitemap when no published listings");
+  const robots = appRobotsTxt(ORIGIN);
+  assert(robots.includes(`Sitemap: ${ORIGIN}/public-listings-sitemap.xml`), "robots advertises the shared sitemap");
+  assert(robots.includes("Allow: /share/"), "robots allows share paths");
+  assert(robots.includes("Allow: /agents/"), "robots allows Agent Pages even without listings");
   console.log("  robots.txt sitemap line: OK");
 }
 
@@ -72,7 +71,7 @@ function testRootSitemapPlan() {
 
 function testRootSitemapBodyShape() {
   const urlset = renderUrlset(
-    [{ id: LISTING_ID, publicSlug: PUBLIC_SLUG, lastmod: new Date("2026-06-01") }],
+    [{ id: LISTING_ID, publicSlug: PUBLIC_SLUG, listingCompliance: COMPLIANT, lastmod: new Date("2026-06-01") }],
     ORIGIN,
   );
   assert(urlset.includes("<urlset"), "root urlset document");
@@ -83,6 +82,14 @@ function testRootSitemapBodyShape() {
   assert(index.includes(`${ORIGIN}/public-listings-sitemap-1.xml`), "index references page 1");
   assert(index.includes(`${ORIGIN}/public-listings-sitemap-2.xml`), "index references page 2");
   assert(!index.includes("<urlset"), "index is not a urlset");
+
+  const agentOnlyIndex = renderSitemapIndex(ORIGIN, 0, 1);
+  assert(agentOnlyIndex.includes(`${ORIGIN}/public-agents-sitemap-1.xml`), "index discovers profile-only sitemaps");
+  assert(!agentOnlyIndex.includes("public-listings-sitemap-1.xml"), "no empty property shard");
+  const mixedIndex = renderSitemapIndex(ORIGIN, 1, 1);
+  assert(mixedIndex.includes("public-listings-sitemap-1.xml") && mixedIndex.includes("public-agents-sitemap-1.xml"), "mixed root retains property discovery");
+  const agentUrls = renderAgentPageUrlset(["jane-doe"], ORIGIN);
+  assert(agentUrls.includes(`<loc>${ORIGIN}/agents/jane-doe</loc>`), "agent sitemap has canonical URL");
   console.log("  root sitemap body shape: OK");
 }
 
@@ -102,13 +109,13 @@ function testShardPagination() {
 
 function testSitemapLocSlugPreference() {
   const slugUrl = sitemapLocForEntry(
-    { id: LISTING_ID, publicSlug: PUBLIC_SLUG, lastmod: new Date() },
+    { id: LISTING_ID, publicSlug: PUBLIC_SLUG, listingCompliance: COMPLIANT, lastmod: new Date() },
     ORIGIN,
   );
   assert(slugUrl === `${ORIGIN}/share/listings/${PUBLIC_SLUG}`, "sitemap uses public_slug when present");
 
   const uuidUrl = sitemapLocForEntry(
-    { id: LISTING_ID, publicSlug: null, lastmod: new Date() },
+    { id: LISTING_ID, publicSlug: null, listingCompliance: COMPLIANT, lastmod: new Date() },
     ORIGIN,
   );
   assert(uuidUrl === `${ORIGIN}/share/listings/${LISTING_ID}`, "sitemap uuid fallback when slug missing");

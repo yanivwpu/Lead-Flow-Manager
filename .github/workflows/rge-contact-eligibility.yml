@@ -6,6 +6,15 @@ on:
       - 'shared/buyerPreference*.ts'
       - 'shared/inventoryContactEligibility.ts'
       - 'server/buyerPreferenceService.ts'
+      - 'server/agentPage/**'
+      - 'server/routes/*AgentPage.ts'
+      - 'server/routes/agentPageSettings.ts'
+      - 'server/routes/publicListings*.ts'
+      - 'shared/agent/**'
+      - 'shared/inventory/publicListing*.ts'
+      - 'tests/public-agent-page*.test.ts'
+      - 'tests/public-listing*.test.ts'
+      - 'tests/inventory-public-*.test.ts'
       - 'server/inventory/**'
       - 'server/workflowEngine.ts'
       - 'server/automationTimerHandlers.ts'
@@ -18,7 +27,7 @@ permissions:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 18
     env:
       DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
     steps:
@@ -37,3 +46,30 @@ jobs:
           tests/inventory-contact-server-gate.test.ts
           tests/rge-focused-release-review.test.ts
           tests/ai-domain-eligibility.test.ts
+      - name: Install Chromium for Agent Page viewport checks
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Agent Page publication, property SEO and existing lead workflows
+        env:
+          AGENT_PAGE_BROWSER_TEST: "1"
+        run: >-
+          node --import tsx --test
+          tests/public-agent-page.test.ts
+          tests/public-agent-page-publication.test.ts
+          tests/public-listings-sitemap.test.ts
+          tests/public-listing-publication.test.ts
+          tests/inventory-public-listing-seo.test.ts
+          tests/inventory-listing-public-slug.test.ts
+          tests/inventory-public-flyer.test.ts
+          tests/growth-engine-pro-entitlement.test.ts
+          tests/rge-webchat-readiness.test.ts
+          tests/webchat-lead-flow.test.ts
+          tests/buyer-qualification-scenarios.test.ts
+          tests/pompano-sfh-cash-buyer-matching.test.ts
+          tests/rge-w4-no-reply-enrollment.test.ts
+          tests/calendly-booking-message.test.ts
+          tests/seller-consultation-booking.test.ts
+      - name: Compare TypeScript diagnostics against main
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: git diff --check

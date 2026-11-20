@@ -127,9 +127,12 @@ export function isGrowthEngineWorkflow(
  * This is the single source of truth for server-side Growth Engine gating.
  * Do not infer entitlement from `templateKey` alone (W1–W8 keys are not unique across products).
  */
-export async function evaluateGrowthEngineAccess(userId: string): Promise<GrowthEngineAccessResult> {
-  const user = await storage.getUserForSession(userId);
-  const limits = await subscriptionService.getUserLimits(userId);
+export async function evaluateGrowthEngineAccess(
+  userId: string,
+  options: { readOnly?: boolean } = {},
+): Promise<GrowthEngineAccessResult> {
+  const user = options.readOnly ? undefined : await storage.getUserForSession(userId);
+  const limits = await subscriptionService.getUserLimits(userId, options);
   if (!limits) {
     const result: GrowthEngineAccessResult = {
       ok: false,
@@ -140,7 +143,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon: false,
       workflowsEnabled: false,
     };
-    logGrowthEngineAccessDecision(userId, user, result);
+    if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
     return result;
   }
 
@@ -151,7 +154,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
   if (limits.growthEngineEntitlementOverrideEnabled) {
     if (limits.growthEngineEntitlementOverrideGrant) {
       const result: GrowthEngineAccessResult = { ok: true, limits };
-      logGrowthEngineAccessDecision(userId, user, result);
+      if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
       return result;
     }
     const result: GrowthEngineAccessResult = {
@@ -163,7 +166,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
-    logGrowthEngineAccessDecision(userId, user, result);
+    if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
     return result;
   }
 
@@ -178,7 +181,7 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
-    logGrowthEngineAccessDecision(userId, user, result);
+    if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
     return result;
   }
 
@@ -192,12 +195,12 @@ export async function evaluateGrowthEngineAccess(userId: string): Promise<Growth
       hasAIBrainAddon,
       workflowsEnabled,
     };
-    logGrowthEngineAccessDecision(userId, user, result);
+    if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
     return result;
   }
 
   const result: GrowthEngineAccessResult = { ok: true, limits };
-  logGrowthEngineAccessDecision(userId, user, result);
+  if (!options.readOnly) logGrowthEngineAccessDecision(userId, user, result);
   return result;
 }
 

@@ -5,6 +5,7 @@ import type { PublicAgentLeadBody } from "@shared/agent/agentPageSchema";
 import { emptySellerPreferenceProfile } from "@shared/sellerPreferenceSchema";
 import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
 import { storage } from "../storage";
+import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
 import { incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
 import { fetchPublishedListingsForAgentPage } from "./agentPageDb";
 
@@ -78,7 +79,11 @@ export async function processPublicAgentPageLead(
     const listings = await fetchPublishedListingsForAgentPage(userId);
     const listing = listings.find((l) => l.id === body.listingId);
     if (!listing) return { ok: false, error: "Listing not found", status: 404 };
-    listingLabel = [listing.addressLine1, listing.city, listing.state].filter(Boolean).join(", ");
+    listingLabel = [
+      canShowPublicStreetAddress(listing.listingCompliance) ? listing.addressLine1 : null,
+      listing.city,
+      listing.state,
+    ].filter(Boolean).join(", ");
   }
 
   const { channelService } = await import("../channelService");

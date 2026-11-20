@@ -47,23 +47,10 @@ function assert(cond: boolean, msg: string) {
 }
 
 function testGate() {
-  assert(!canResolvePublicAgentPage({
-    publishListingsPublicly: false,
-    agentPageEnabled: true,
-    agentPageSlug: "jane-doe-abc12345",
-  }), "workspace publish off");
-
-  assert(!canResolvePublicAgentPage({
-    publishListingsPublicly: true,
-    agentPageEnabled: false,
-    agentPageSlug: "jane-doe-abc12345",
-  }), "page disabled");
-
-  assert(canResolvePublicAgentPage({
-    publishListingsPublicly: true,
-    agentPageEnabled: true,
-    agentPageSlug: "jane-doe-abc12345",
-  }), "fully enabled");
+  assert(!canResolvePublicAgentPage({ agentPageEnabled: false, agentPageSlug: "jane-doe" }), "disabled");
+  assert(!canResolvePublicAgentPage({ agentPageEnabled: true, agentPageSlug: null }), "unpublished without slug");
+  assert(!canResolvePublicAgentPage({ agentPageEnabled: true, agentPageSlug: "Jane Doe" }), "noncanonical stored slug");
+  assert(canResolvePublicAgentPage({ agentPageEnabled: true, agentPageSlug: "jane-doe" }), "profile publication ignores MLS switch");
 
   console.log("  gate: OK");
 }
@@ -831,6 +818,7 @@ function testEmbedMode() {
     hideChat: true,
     initialListingType: "rent",
   });
+  assert(embedHideChatHtml.includes('content="noindex, nofollow"'), "embedded pages remain excluded");
   assert(embedHideChatHtml.includes('body class="embed-mode hide-chat"'), "hide-chat body class");
   assert(embedHideChatHtml.includes('"hideChat":true'), "hideChat config flag");
   assert(!embedHideChatHtml.includes('id="chat-widget"'), "chat widget omitted when hideChat");
@@ -893,6 +881,8 @@ function testHtml() {
   const html = buildPublicAgentPageHtml({
     userId: "u1",
     agentPageSlug: "test-agent",
+    canonicalUrl: "https://app.whachatcrm.com/agents/test-agent",
+    allowSearchIndexing: true,
     displayName: "Test Agent",
     bio: "Helping buyers and sellers.",
     marketArea: "Tampa, FL",
@@ -1034,7 +1024,12 @@ function testHtml() {
   assert(html.includes("What's My Home Worth?"), "home worth cta");
   assert(html.includes("Thinking of Selling?"), "home worth modal title");
   assert(html.includes("Get a free home valuation and personalized selling strategy."), "home worth modal subtitle");
-  assert(html.includes('content="noindex, nofollow"'), "noindex");
+  assert(html.includes('content="index, follow"'), "eligible canonical page is indexable");
+  assert(html.includes('<title>Test Agent | Real Estate Agent in Tampa</title>'), "unique agent title");
+  assert(html.includes('<meta name="description" content="Meet Test Agent at Premier Realty.'), "agent description");
+  assert(html.includes('<link rel="canonical" href="https://app.whachatcrm.com/agents/test-agent"'), "agent canonical");
+  assert(emptyLinksHtml.includes('content="noindex, follow"'), "indexing defaults to off");
+  assert(emptyLinksHtml.includes('id="lead-form"'), "inventory-free profile keeps lead form");
   console.log("  html: OK");
 }
 

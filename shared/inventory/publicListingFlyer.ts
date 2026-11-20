@@ -12,7 +12,7 @@ import {
   type InventoryListingCompliance,
 } from "./inventoryListingCompliance";
 import { canShowPublicStreetAddress } from "./publicListingPublication";
-import { pickPrimaryPhotoUrl } from "./listingViewUrl";
+import { buildListingShareUrl, pickPrimaryPhotoUrl } from "./listingViewUrl";
 import { resolveListingStreetForSlug } from "./listingPublicSlug";
 
 export type PublicListingFlyerAgent = {
@@ -966,7 +966,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const {
     listing: rawListing,
     agent,
-    shareUrl,
+    shareUrl: requestedShareUrl,
     qrDataUrl,
     companyLogoUrl = null,
     allowStreetAddress: allowStreetOverride,
@@ -975,14 +975,22 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   const mlsDisplay = applyPublicDisplayPermissions(rawListing);
   const allowStreetAddress = allowStreetOverride ?? mlsDisplay.allowStreetAddress;
   const listing = allowStreetAddress ? rawListing : mlsDisplay.listing;
+  const shareUrl = allowStreetAddress
+    ? requestedShareUrl
+    : buildListingShareUrl(rawListing.id, new URL(requestedShareUrl).origin);
   const allowSearchIndexing = allowIndexOverride === true;
-  const photos = pickFlyerHeroPhotos(parsePhotos(listing.photos));
-  const openGraph = buildListingOpenGraphMeta({ listing, agent, shareUrl });
-  const structuredDataJson = buildListingStructuredDataJson({ listing, agent, shareUrl });
+  // Provider image URLs may themselves contain a street address.
+  const seoListing = allowStreetAddress ? listing : { ...listing, photos: [] };
+  const photos = pickFlyerHeroPhotos(parsePhotos(seoListing.photos));
+  const openGraph = buildListingOpenGraphMeta({ listing: seoListing, agent, shareUrl });
+  const structuredDataJson = buildListingStructuredDataJson({ listing: seoListing, agent, shareUrl });
   const listingLabel = resolveFlyerListingLabel(listing);
   const price = formatListingPriceForComposer(listing.priceCents) || "Price on request";
   const { sqft, hoa, yearBuilt } = resolveFlyerSpecFields(listing);
-  const description = truncateFlyerDescription((listing.description || "").trim());
+  // Free-form remarks may repeat the street address.
+  const description = allowStreetAddress
+    ? truncateFlyerDescription((listing.description || "").trim())
+    : "";
   const robotsMeta = allowSearchIndexing ? "index, follow" : "noindex, nofollow";
 
   const descHtml = description

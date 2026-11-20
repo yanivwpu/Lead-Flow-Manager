@@ -99,13 +99,13 @@ export interface UserLimits {
 }
 
 class SubscriptionService {
-  async getUserLimits(userId: string): Promise<UserLimits | null> {
+  async getUserLimits(userId: string, options: { readOnly?: boolean } = {}): Promise<UserLimits | null> {
     // IMPORTANT: use full user row so trials/entitlements resolve correctly.
     // storage.getUser() is an auth-core minimal projection (no trial fields).
     let user = await storage.getUserForSession(userId);
     if (!user) return null;
 
-    user = await syncTrialExpiryIfNeeded(user);
+    if (!options.readOnly) user = await syncTrialExpiryIfNeeded(user);
 
     const now = new Date();
     const paidSources = await paidSourceOptionsForUser(userId);
@@ -142,7 +142,7 @@ class SubscriptionService {
       conversationsLimit: planLimits.conversationsPerMonth,
     });
     let conversationsUsed = usageDecision.conversationsUsed;
-    if (usageDecision.persistPeriodStart || usageDecision.resetCounter) {
+    if (!options.readOnly && (usageDecision.persistPeriodStart || usageDecision.resetCounter)) {
       await storage.updateUser(userId, {
         conversationUsagePeriodStart: usagePeriod.periodStart,
         ...(usageDecision.resetCounter ? { monthlyConversations: 0 } : {}),

@@ -5,7 +5,8 @@ import { resolveAgentPageBio, resolveAgentPageDisplayName } from "@shared/agent/
 import { resolveAgentPageSocialUrls } from "@shared/agent/agentPageSocialUrls";
 import { AGENT_PAGE_BROWSE_PAGE_SIZE } from "@shared/agent/agentPageBrowseConstants";
 import type { AgentPageInitialListingChip } from "@shared/agent/agentPageEmbed";
-import { renderAgentPageListingCards } from "@shared/agent/publicAgentPageHtml";
+import { canResolvePublicAgentPage } from "@shared/agent/publicAgentPage";
+import { hasAgentPagePublicationAccess } from "./agentPagePublication";
 import {
   browseAgentPageListings,
   DEFAULT_AGENT_PAGE_BROWSE_FILTERS,
@@ -16,7 +17,6 @@ import { storage } from "../storage";
 import { getListingPublicationStats } from "../inventory/inventoryDb";
 import {
   getAgentPageSettingsRow,
-  incrementAgentPageAnalytics,
   resolveAgentPageBySlug,
   type AgentPageKnowledgeRow,
 } from "./agentPageDb";
@@ -71,7 +71,7 @@ export async function buildAgentPageSettingsResponse(
     agentPageShowHomeValueCta: row.agentPageShowHomeValueCta,
     publishListingsPublicly: row.publishListingsPublicly,
     publicPageUrl:
-      row.agentPageSlug && row.publishListingsPublicly && row.agentPageEnabled
+      row.agentPageSlug && canResolvePublicAgentPage(row) && await hasAgentPagePublicationAccess(userId)
         ? buildAgentPageUrl(row.agentPageSlug, appOrigin)
         : null,
     analytics: row.agentPageAnalytics,
@@ -132,21 +132,18 @@ export async function getPublicAgentPageData(
       ? { ...DEFAULT_AGENT_PAGE_BROWSE_FILTERS, listingType: initialListingType }
       : DEFAULT_AGENT_PAGE_BROWSE_FILTERS;
 
-  const browse = await browseAgentPageListings({
-    userId: agent.userId,
-    appOrigin,
-    filters: browseFilters,
-    offset: 0,
-    limit: AGENT_PAGE_BROWSE_PAGE_SIZE,
-    renderHtml: (cards, startIndex) =>
-      renderAgentPageListingCards(cards, startIndex, { embedMode: options.embedMode ?? false }),
-  });
+  const browse = agent.publishListingsPublicly
+    ? await browseAgentPageListings({
+        userId: agent.userId,
+        appOrigin,
+        filters: browseFilters,
+        limit: AGENT_PAGE_BROWSE_PAGE_SIZE,
+      })
+    : { listings: [], total: 0, hasMore: false };
 
   const displayName = resolveAgentPageDisplayName(agent, user?.name);
   const bio = resolveAgentPageBio(agent);
   const socialLinks = resolveAgentPageSocialUrls(agent);
-
-  await incrementAgentPageAnalytics(agent.userId, "page_view");
 
   return {
     agent,
@@ -164,14 +161,14 @@ export async function getPublicAgentPageData(
     publicPhone: str(agent.publicPhone),
     schedulingUrl: calendly || scheduling.url || "",
     widgetEnabled,
-    widgetPublicId: await (async () => {
+    widgetPublicId: widgetEnabled ? await (async () => {
       try {
         const { getWidgetPublicIdForUser } = await import("../widgetIdentity");
         return await getWidgetPublicIdForUser(agent.userId);
       } catch {
         return "";
       }
-    })(),
+    })() : "",
     preferredLeadCapture: (agent.agentPagePreferredLeadCapture as "webchat" | "email" | "phone") || "webchat",
     showHomeValueCta: agent.agentPageShowHomeValueCta,
     listings: browse.listings,

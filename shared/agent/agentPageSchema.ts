@@ -37,7 +37,7 @@ export const agentPageSettingsPatchSchema = z
     agentPageMarketArea: z.string().max(500).optional().nullable(),
     agentPagePreferredLeadCapture: agentPageLeadCaptureSchema.optional(),
     agentPageShowHomeValueCta: z.boolean().optional(),
-    /** Workspace master switch for public listing / Agent Page publication. */
+    /** Workspace master switch for MLS listing publication. */
     publishListingsPublicly: z.boolean().optional(),
   })
   .merge(agentPageSocialUrlsPatchSchema);

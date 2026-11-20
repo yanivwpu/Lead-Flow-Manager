@@ -47,6 +47,9 @@ export type PublicAgentPageRenderInput = {
   preferredLeadCapture: "webchat" | "email" | "phone";
   showHomeValueCta: boolean;
   agentPageSlug: string;
+  canonicalUrl?: string;
+  /** True only for the clean, canonical public route after checking publication eligibility. */
+  allowSearchIndexing?: boolean;
   listings: AgentPageListingCard[];
   /** Total listings matching current browse filters (server-side). */
   browseTotal: number;

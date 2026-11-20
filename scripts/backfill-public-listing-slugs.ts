@@ -13,6 +13,7 @@ import {
   buildListingPublicSlug,
   listingHasPublicSlugAddress,
 } from "../shared/inventory/listingPublicSlug";
+import { canShowPublicStreetAddress } from "../shared/inventory/publicListingPublication";
 import { ensurePublicSlugForListing } from "../server/inventory/inventoryDb";
 import { isProductionDevSeedGuardEnabled, isDevSeedProviderListingId } from "../shared/inventory/inventoryDevSeedGuard";
 
@@ -37,6 +38,7 @@ const batchSize = readNumericArg("--batch-size", 500);
 async function processRow(row: {
   id: string;
   publicSlug: string | null;
+  listingCompliance: unknown;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -47,6 +49,8 @@ async function processRow(row: {
   if (isProductionDevSeedGuardEnabled() && isDevSeedProviderListingId(row.providerListingId)) {
     return "skipped";
   }
+
+  if (!canShowPublicStreetAddress(row.listingCompliance)) return "skipped";
 
   const input = {
     id: row.id,
@@ -105,6 +109,7 @@ async function main() {
       .select({
         id: inventoryListings.id,
         publicSlug: inventoryListings.publicSlug,
+        listingCompliance: inventoryListings.listingCompliance,
         addressLine1: inventoryListings.addressLine1,
         addressLine2: inventoryListings.addressLine2,
         city: inventoryListings.city,

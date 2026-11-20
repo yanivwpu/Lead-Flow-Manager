@@ -26,6 +26,8 @@ export function registerPublicListingRoutes(app: Express): void {
     const identifier = req.params.identifier?.trim() ?? "";
     const appOrigin = getRequestOrigin(req);
     const startedAt = Date.now();
+    // URL and rendered address eligibility can change on the next MLS sync.
+    res.setHeader("Cache-Control", "no-store");
 
     logPublicListingShare("request_start", {
       identifier,
@@ -73,7 +75,7 @@ export function registerPublicListingRoutes(app: Express): void {
             listingId: flyerData.listing.id,
             canonicalSegment,
           });
-          res.redirect(301, flyerData.shareUrl);
+          res.redirect(302, flyerData.shareUrl);
           return;
         }
       }
