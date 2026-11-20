@@ -2741,11 +2741,11 @@ export function RealtorGrowthEngine() {
           (!conditions?.templateId && row.description?.startsWith("Realtor Growth Engine:"));
         return isRge && (conditions?.templateKey === workflow.key || (!conditions?.templateKey && row.name === workflow.name));
       });
-      const status = workflow.key === "W2" ? "Running" :
+      const status = isPaused ? "Warning" : workflow.key === "W2" ? "Running" :
         installed ? (installed.isActive ? "Running" : "Disabled") :
         installedWorkflows || workflowStatusError ? "Warning" : "Checking";
       return { workflow, status, detail: status === "Warning"
-        ? (workflowStatusError ? "Workflow status unavailable" : "Workflow has no installed record")
+        ? (isPaused ? "Growth Engine access is paused" : workflowStatusError ? "Workflow status unavailable" : "Workflow has no installed record")
         : undefined };
     });
     const runningCount = workflowRows.filter((row) => row.status === "Running").length;
@@ -2818,7 +2818,9 @@ export function RealtorGrowthEngine() {
               </CardHeader>
               <CardContent className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm">
                 <span className="text-slate-700">Real estate rules</span>
-                <Badge variant="outline" className="border-emerald-200 text-emerald-800">Active</Badge>
+                <Badge variant="outline" className={isPaused ? "border-amber-200 text-amber-900" : "border-emerald-200 text-emerald-800"}>
+                  {isPaused ? "Paused" : "Active"}
+                </Badge>
               </CardContent>
             </Card>
 
