@@ -1,7 +1,7 @@
 /**
  * Agent page DB — settings, slug lookup, analytics, published listings.
  */
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "../../drizzle/db";
 import {
   aiBusinessKnowledge,
@@ -21,6 +21,7 @@ import {
 } from "@shared/agent/agentPageSchema";
 import { canResolvePublicAgentPage } from "@shared/agent/publicAgentPage";
 import { normalizeAgentPageSlug } from "@shared/agent/agentPageSlug";
+import { hasAgentPagePublicationAccess } from "./agentPagePublication";
 
 function devSeedListingExcludeCondition() {
   if (!isProductionDevSeedGuardEnabled()) return null;
@@ -129,8 +130,41 @@ export async function resolveAgentPageBySlug(slug: string): Promise<AgentPageKno
     ...row,
     agentPageAnalytics: normalizeAgentPageAnalytics(row.agentPageAnalytics),
   };
-  if (!canResolvePublicAgentPage(mapped)) return undefined;
+  if (!canResolvePublicAgentPage(mapped) || !(await hasAgentPagePublicationAccess(mapped.userId))) return undefined;
   return mapped;
+}
+
+const agentSitemapCandidates = and(
+  eq(aiBusinessKnowledge.agentPageEnabled, true),
+  isNotNull(aiBusinessKnowledge.agentPageSlug),
+);
+
+export async function countAgentPageSitemapCandidates(): Promise<number> {
+  const [row] = await db.select({ count: count() }).from(aiBusinessKnowledge).where(agentSitemapCandidates);
+  return row?.count ?? 0;
+}
+
+export async function fetchAgentPageSitemapSlugs(offset: number, limit: number): Promise<string[]> {
+  const rows = await db.select({
+    agentPageSlug: aiBusinessKnowledge.agentPageSlug,
+    agentPageEnabled: aiBusinessKnowledge.agentPageEnabled,
+    userId: aiBusinessKnowledge.userId,
+  })
+    .from(aiBusinessKnowledge)
+    .where(agentSitemapCandidates)
+    .orderBy(asc(aiBusinessKnowledge.userId), asc(aiBusinessKnowledge.agentPageSlug))
+    .offset(offset)
+    .limit(limit);
+
+  const slugs: string[] = [];
+  // Bound concurrent subscription lookups on a sitemap request.
+  for (let i = 0; i < rows.length; i += 8) {
+    const batch = await Promise.all(rows.slice(i, i + 8).map(async (row) =>
+      canResolvePublicAgentPage(row) && await hasAgentPagePublicationAccess(row.userId) ? row.agentPageSlug : null,
+    ));
+    for (const slug of batch) if (slug) slugs.push(slug);
+  }
+  return slugs;
 }
 
 export async function patchAgentPageSettings(
@@ -154,7 +188,10 @@ export async function patchAgentPageSettings(
   const set: Partial<typeof aiBusinessKnowledge.$inferInsert> = {
     updatedAt: new Date(),
   };
-  if (patch.agentPageEnabled !== undefined) set.agentPageEnabled = patch.agentPageEnabled;
+  if (patch.agentPageEnabled !== undefined) {
+    set.agentPageEnabled = patch.agentPageEnabled;
+    set.agentPageLegacyEnabled = patch.agentPageEnabled;
+  }
   if (patch.publishListingsPublicly !== undefined) {
     set.publishListingsPublicly = patch.publishListingsPublicly;
   }

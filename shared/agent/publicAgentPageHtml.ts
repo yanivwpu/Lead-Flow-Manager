@@ -150,7 +150,7 @@ export function renderAgentPageListingCards(
 }
 
 export function buildPublicAgentPageNotFoundHtml(): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex, nofollow" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
 }
 
 /** Matches SiteFooter / Sidebar: green rounded square with white W. */
@@ -192,9 +192,19 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   const chatWidgetClass =
     !hideChat && data.widgetEnabled ? "chat-widget enabled" : "chat-widget";
   const initialListingType = data.initialListingType ?? "all";
+  const primaryMarket = data.marketArea.split(/[;,]/)[0].trim();
   const pageTitle = embedMode
     ? "Property Listings"
-    : `${data.displayName} | Real Estate Agent`;
+    : `${data.displayName} | Real Estate Agent${primaryMarket ? ` in ${primaryMarket}` : ""}`;
+  const profileSummary = [
+    `Meet ${data.displayName}${data.brokerageName ? ` at ${data.brokerageName}` : ""}.`,
+    primaryMarket ? `Serving ${data.marketArea}.` : "",
+    data.bio || "Contact the agent for help buying or selling a home.",
+  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const description = profileSummary.length > 160 ? `${profileSummary.slice(0, 157).trimEnd()}…` : profileSummary;
+  const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
+    ? "index, follow"
+    : "noindex, follow";
   const bodyClass = [embedMode ? "embed-mode" : "", hideChat ? "hide-chat" : ""]
     .filter(Boolean)
     .join(" ");
@@ -220,8 +230,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="robots" content="noindex, nofollow" />
+  <meta name="robots" content="${robots}" />
   <title>${escapeHtml(pageTitle)}</title>
+  ${embedMode ? "" : `<meta name="description" content="${escapeHtml(description)}" />`}
+  ${data.canonicalUrl ? `<link rel="canonical" href="${escapeHtml(data.canonicalUrl)}" />` : ""}
   <style>
     :root { --brand: ${BRAND_GREEN}; --brand-dark: ${BRAND_GREEN_DARK}; --ink: #0f172a; --muted: #64748b; --border: #e2e8f0; --bg: #f8fafc; }
     * { box-sizing: border-box; }

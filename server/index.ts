@@ -40,7 +40,9 @@ function isSaaSPathname(pathname: string): boolean {
     pathname === "/app" ||
     pathname.startsWith("/app/") ||
     pathname === "/api" ||
-    pathname.startsWith("/api/")
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/agents/") ||
+    /^\/public-(?:listings|agents)-sitemap(?:-\d+)?\.xml$/.test(pathname)
   );
 }
 

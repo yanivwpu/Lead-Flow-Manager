@@ -1,17 +1,14 @@
-/**
- * Public agent page publication gate.
- */
+import { validateAgentPageSlugInput } from "./agentPageSlug";
 export type PublicAgentPageGateInput = {
-  publishListingsPublicly: boolean;
   agentPageEnabled: boolean;
   agentPageSlug: string | null | undefined;
 };
 
 /** Whether /agents/:slug may resolve. */
 export function canResolvePublicAgentPage(input: PublicAgentPageGateInput): boolean {
-  if (!input.publishListingsPublicly) return false;
-  if (!input.agentPageEnabled) return false;
-  return Boolean(input.agentPageSlug?.trim());
+  if (!input.agentPageEnabled || !input.agentPageSlug) return false;
+  const slug = validateAgentPageSlugInput(input.agentPageSlug);
+  return slug.ok && slug.slug === input.agentPageSlug;
 }
 
 export type AgentPageListingFilter = "all" | "sale" | "rent" | "coming_soon";

@@ -6,7 +6,7 @@ import {
   renderAgentPageListingCards,
 } from "@shared/agent/publicAgentPageHtml";
 import { parseAgentPageEmbedQuery } from "@shared/agent/agentPageEmbed";
-import { getRequestOrigin } from "../urlOrigins";
+import { getAppOrigin, getRequestOrigin } from "../urlOrigins";
 import { getPublicAgentPageData } from "../agentPage/agentPageService";
 import { browseAgentPageListings, browseQueryToFilters } from "../agentPage/agentPageBrowseService";
 import { processPublicAgentPageLead } from "../agentPage/publicAgentPageLeadService";
@@ -15,13 +15,15 @@ import { requirePublicListingSchemaReady } from "../middleware/requirePublicList
 
 export function registerPublicAgentPageRoutes(app: Express): void {
   app.get("/agents/:slug", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+    // Visibility can change when a slug, subscription or publication setting changes.
+    res.setHeader("Cache-Control", "no-store");
     const slug = req.params.slug?.trim() ?? "";
     if (!slug) {
       res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
       return;
     }
     try {
-      const appOrigin = getRequestOrigin(req);
+      const appOrigin = getAppOrigin();
       const { embedMode, initialListingType, hideChat } = parseAgentPageEmbedQuery(
         (req.query ?? {}) as Record<string, unknown>,
       );
@@ -34,11 +36,17 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
         return;
       }
-      const { agent: _agent, pageUrl: _pageUrl, ...renderInput } = data;
+      const { agent, pageUrl: canonicalUrl, ...renderInput } = data;
+      const allowSearchIndexing = !embedMode && `${getRequestOrigin(req)}${req.originalUrl}` === canonicalUrl;
       if (embedMode) {
         res.setHeader("Content-Security-Policy", "frame-ancestors *");
       }
-      res.type("html").send(buildPublicAgentPageHtml(renderInput));
+      res.type("html").send(buildPublicAgentPageHtml({ ...renderInput, canonicalUrl, allowSearchIndexing }));
+      if (req.method === "GET") {
+        void incrementAgentPageAnalytics(agent.userId, "page_view").catch((error) => {
+          console.warn("[public-agent-page] page view analytics failed", error);
+        });
+      }
     } catch (error) {
       console.error("[public-agent-page] render failed", {
         slug,

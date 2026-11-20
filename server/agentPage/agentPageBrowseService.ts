@@ -30,7 +30,7 @@ export type BrowseAgentPageListingsInput = {
   filters: AgentPageListingBrowseFilters;
   offset?: number;
   limit?: number;
-  renderHtml: (cards: AgentPageListingCard[], startIndex: number) => string;
+  renderHtml?: (cards: AgentPageListingCard[], startIndex: number) => string;
 };
 
 export async function browseAgentPageListings(
@@ -98,7 +98,7 @@ export async function browseAgentPageListings(
 
   return {
     listings: page,
-    html: page.length > 0 ? input.renderHtml(page, offset) : "",
+    html: page.length > 0 ? input.renderHtml?.(page, offset) ?? "" : "",
     total,
     offset,
     limit,

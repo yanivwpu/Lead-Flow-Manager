@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Circle, Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -18,7 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { AgentPageLeadCapture, AgentPageSettingsResponse } from "@shared/agent/agentPageSchema";
 import { agentPageLeadCaptureSchema } from "@shared/agent/agentPageSchema";
-import { buildAgentPageUrl, validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
+import { validateAgentPageSlugInput } from "@shared/agent/agentPageSlug";
 import { buildAgentPageEmbedIframeHtml } from "@shared/agent/agentPageEmbed";
 import { fetchAgentPageSettings, parseAgentPageApiError } from "@/lib/agentPageApi";
 import { bulkPublishEligibleListings } from "@/lib/inventoryApi";
@@ -88,19 +88,6 @@ function normalizeLeadCapture(value: unknown): AgentPageLeadCapture {
 type Props = {
   className?: string;
 };
-
-function resolveDisplayAgentUrl(
-  slug: string | null,
-  publicPageUrl: string | null,
-  enabled: boolean,
-): string | null {
-  if (!enabled || !slug) return null;
-  if (publicPageUrl) return publicPageUrl;
-  if (typeof window !== "undefined") {
-    return buildAgentPageUrl(slug, window.location.origin);
-  }
-  return null;
-}
 
 export function PublicAgentPageSettingsCard({ className }: Props) {
   const queryClient = useQueryClient();
@@ -296,19 +283,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     ],
   );
 
-  const pageIsPublic = Boolean(
-    data?.publishListingsPublicly && data?.agentPageEnabled && data?.agentPageSlug,
-  );
-
-  const agentDisplayUrl = useMemo(
-    () =>
-        resolveDisplayAgentUrl(
-          data?.agentPageSlug ?? (slugDraft || null),
-        data?.publicPageUrl ?? null,
-        Boolean(data?.agentPageEnabled),
-      ),
-    [data?.agentPageSlug, data?.publicPageUrl, data?.agentPageEnabled, slugDraft],
-  );
+  const agentDisplayUrl = data?.publicPageUrl ?? null;
+  const pageIsPublic = Boolean(agentDisplayUrl);
 
   if (isLoading || !data) {
     return (
@@ -326,13 +302,9 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
   const publishStatusLabel = !data.agentPageEnabled
     ? "Page disabled"
-    : !data.publishListingsPublicly
-      ? "Workspace publishing off"
-      : !data.agentPageSlug
-        ? "Slug required"
-        : pageIsPublic
-          ? "Live"
-          : "Not public yet";
+    : !data.agentPageSlug
+      ? "Slug required"
+      : pageIsPublic ? "Live" : "Not public yet";
 
   const publishStatusClass = pageIsPublic
     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -359,16 +331,16 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
           <div
             className={cn(
               "inline-flex items-center gap-2 text-sm font-medium shrink-0",
-              data.agentPageEnabled ? "text-emerald-700" : "text-gray-500",
+              pageIsPublic ? "text-emerald-700" : "text-gray-500",
             )}
             data-testid="agent-page-active-status"
           >
-            {data.agentPageEnabled ? (
+            {pageIsPublic ? (
               <CheckCircle2 className="h-4 w-4" aria-hidden />
             ) : (
               <Circle className="h-4 w-4" aria-hidden />
             )}
-            {data.agentPageEnabled ? "Agent Page Active" : "Agent Page Disabled"}
+            {pageIsPublic ? "Agent Page Active" : publishStatusLabel}
           </div>
         </div>
       </div>
@@ -393,7 +365,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
 
             <div className="space-y-2" data-testid="agent-page-url-block">
               <Label htmlFor="agent-page-slug">Agent URL</Label>
-              {data.agentPageEnabled && (slugDraft || data.agentPageSlug) && agentDisplayUrl ? (
+              {agentDisplayUrl ? (
                 <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2.5 space-y-2">
                   <p className="text-sm text-gray-900 break-all font-mono">{agentDisplayUrl}</p>
                   <div className="flex flex-wrap gap-2">
@@ -419,27 +391,13 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Enable the page and set a slug to get your public URL.
+                  Enabling the page publishes your profile and makes it eligible for search.
                 </p>
               )}
-              {data.agentPageEnabled && (slugDraft || data.agentPageSlug) ? (
+              {data.agentPageSlug && agentDisplayUrl && data.publishListingsPublicly ? (
                 <AgentPageEmbedCodeBlock
-                  slug={(slugDraft || data.agentPageSlug || "").trim()}
-                  appOrigin={
-                    agentDisplayUrl
-                      ? (() => {
-                          try {
-                            return new URL(agentDisplayUrl).origin;
-                          } catch {
-                            return typeof window !== "undefined"
-                              ? window.location.origin
-                              : "https://app.whachatcrm.com";
-                          }
-                        })()
-                      : typeof window !== "undefined"
-                        ? window.location.origin
-                        : "https://app.whachatcrm.com"
-                  }
+                  slug={data.agentPageSlug}
+                  appOrigin={new URL(agentDisplayUrl).origin}
                 />
               ) : null}
               <div className="flex flex-col sm:flex-row gap-2">
@@ -542,8 +500,8 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 <div className="space-y-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">Publish listings publicly</p>
                   <p className="text-xs text-muted-foreground leading-snug">
-                    Master switch for public Agent Page and /share listing pages. Each listing must also be
-                    published individually and pass MLS internet-display rules before a share URL is live.
+                    Show individually published, MLS-eligible listings on your Agent Page and include them
+                    in property search discovery.
                   </p>
                 </div>
                 <Switch
@@ -556,15 +514,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   aria-label="Publish listings publicly"
                 />
               </div>
-              {!data.publishListingsPublicly && (
-                <p className="text-xs text-amber-700 leading-snug">
-                  Turn on &quot;Publish listings publicly&quot; above for a live public page.
-                </p>
-              )}
-              {data.publishListingsPublicly && data.agentPageEnabled && !data.agentPageSlug && (
-                <p className="text-xs text-amber-700 leading-snug">Add a slug to publish your agent page.</p>
-              )}
-              {data.publishListingsPublicly && data.agentPageEnabled && data.agentPageSlug && (
+              {data.publishListingsPublicly && pageIsPublic && (
                 <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
                   <p className="text-xs text-muted-foreground leading-snug">
                     <span className="font-medium text-gray-800 tabular-nums">
