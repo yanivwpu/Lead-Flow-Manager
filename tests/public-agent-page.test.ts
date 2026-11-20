@@ -278,7 +278,11 @@ function testAgentPageDbSavePath() {
   assert(!card.includes("agent-page-future-analytics"), "no future analytics placeholder");
   assert(!card.includes("Lead capture analytics"), "no analytics placeholder cards");
   assert(card.includes("agent-page-url-block"), "agent url block");
-  assert(card.includes("agent-page-embed-code"), "embed code block");
+  assert(card.includes("agent-page-embed-code"), "embed options panel");
+  assert(!card.includes("<pre className"), "raw iframe markup is not displayed in Agent Page settings");
+  assert(card.includes("Copy homes for sale embed"), "for-sale embed has a copy button");
+  assert(card.includes("Copy rentals embed"), "rental embed has a copy button");
+  assert(card.indexOf("<NeighborhoodPageSettings") < card.indexOf('data-testid="agent-page-controls-column"'), "Neighborhood Pages appears before advanced Agent Page controls");
   assert(card.includes("buildAgentPageEmbedIframeHtml"), "embed iframe helper");
   assert(card.includes('listingType: "for_sale"'), "for sale embed param in snippet builder");
   assert(card.includes('listingType: "for_rent"'), "for rent embed param in snippet builder");
