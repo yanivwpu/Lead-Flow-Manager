@@ -30,33 +30,34 @@ export function TrialSetupCluster({ className, sidebarCollapsed }: TrialSetupClu
 
   if (!showTrialPill) return null;
 
-  if (sidebarCollapsed) {
+  if (sidebarCollapsed !== undefined) {
+    const slotClass = "col-start-1 row-start-1 flex items-center transition-opacity duration-[225ms] ease-in-out motion-reduce:transition-none";
     return (
-      <div
-        className={cn(
-          "pointer-events-auto flex w-full justify-center overflow-hidden transition-opacity duration-200 ease-in-out",
-          className,
-        )}
-      >
-        <TrialPillIcon
-          daysRemaining={daysRem}
-          highlight={pillHighlight}
-          onClick={() => openTrial()}
-          tooltipSide={tooltipSide}
-        />
+      <div className={cn("grid h-9 grid-cols-[minmax(0,1fr)] overflow-hidden", className)}>
+        <div inert={!sidebarCollapsed} className={cn(slotClass, !sidebarCollapsed && "opacity-0")}>
+          <TrialPillIcon
+            daysRemaining={daysRem}
+            highlight={pillHighlight}
+            onClick={() => openTrial()}
+            tooltipSide={tooltipSide}
+          />
+        </div>
+        <div inert={sidebarCollapsed} className={cn(slotClass, sidebarCollapsed && "opacity-0")}>
+          <TrialPill
+            daysRemaining={daysRem}
+            highlight={pillHighlight}
+            onClick={() => openTrial()}
+            className="w-[175px] max-w-none shrink-0 whitespace-nowrap"
+          />
+        </div>
       </div>
     );
   }
 
-  const isSidebarSlot = sidebarCollapsed === false;
-
   return (
     <div
       className={cn(
-        "pointer-events-auto min-w-0 transition-all duration-200 ease-in-out",
-        isSidebarSlot
-          ? "w-full max-w-full overflow-hidden"
-          : "pointer-events-none flex max-w-[calc(100%-1rem)] flex-row-reverse flex-wrap items-start justify-end gap-1.5 sm:gap-2",
+        "pointer-events-none flex min-w-0 max-w-[calc(100%-1rem)] flex-row-reverse flex-wrap items-start justify-end gap-1.5 transition-all duration-200 ease-in-out sm:gap-2",
         className,
       )}
     >
