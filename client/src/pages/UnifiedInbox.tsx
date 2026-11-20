@@ -228,6 +228,8 @@ import { isAutomatedInboxSendSource } from "@shared/inboxAutoSendTrigger";
 
 type Channel = 'whatsapp' | 'instagram' | 'facebook' | 'sms' | 'webchat' | 'telegram' | 'tiktok' | 'gohighlevel' | string;
 
+const COPILOT_EXPANDED_PREFERENCE = "inbox-copilot-expanded";
+
 type InboxLeadDetailsPanelContact = ComponentProps<typeof InboxLeadDetailsPanel>["contact"];
 type InboxLeadDetailsPanelConversation = ComponentProps<typeof InboxLeadDetailsPanel>["primaryConversation"];
 
@@ -807,6 +809,21 @@ export function UnifiedInbox() {
   const [showTimeline, setShowTimeline] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDeleteConversationConfirm, setShowDeleteConversationConfirm] = useState(false);
+  const [copilotExpanded, setCopilotExpanded] = useState(() => {
+    try {
+      return window.localStorage.getItem(COPILOT_EXPANDED_PREFERENCE) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const updateCopilotExpanded = (expanded: boolean) => {
+    setCopilotExpanded(expanded);
+    try {
+      window.localStorage.setItem(COPILOT_EXPANDED_PREFERENCE, String(expanded));
+    } catch {
+      // Keep the in-session preference when browser storage is unavailable.
+    }
+  };
   const [showDetailsSheet, setShowDetailsSheet] = useState(false);
   const [editContactForm, setEditContactForm] = useState({ name: "", phone: "", email: "" });
   const [saveToContactsForm, setSaveToContactsForm] = useState({ name: "", email: "" });
@@ -4940,42 +4957,54 @@ export function UnifiedInbox() {
         )}
       </div>
 
-      {/* ── RIGHT COLUMN: CRM Panel (desktop) ── */}
-      {!isMobile && selectedContactId && contact && (
-        <div className="contents" data-testid="inbox-copilot-column" data-copilot-visible="true">
-        <InboxLeadDetailsPanel
-          key={contact.id}
-          contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
-          primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
-          teamMembers={teamMembers}
-          messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '', fromAddress: m.fromAddress })) : []}
-          capabilities={capabilities}
-          currentUserId={user?.id}
-          handoffActive={!!activeHandoff && hasConversation}
-          handoffEventId={hasConversation ? (activeHandoff?.id ?? null) : null}
-          handoffMessage={
-            hasConversation && activeHandoff
-              ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
-              : undefined
-          }
-          composerDraftPreview={
-            hasFullAIBrain && messageInput.trim()
-              ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
-              : undefined
-          }
-          onInsertComposerDraft={insertComposerDraftFromCopilot}
-          connectedChannels={connectedChannelsMap}
-          workspaceIntelligence={workspaceIntelligence}
-          onUpdateContact={updateContact}
-          onUpdateConversationStatus={status => {
-            if (primaryConversation && hasConversation) {
-              updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
-            }
-          }}
-          onEditContact={handleEditContact}
-          onDeleteContact={() => setShowDeleteConfirm(true)}
-        />
-        </div>
+      {/* Keep column geometry independent of contact loading. The contact key resets CRM drafts and dialogs. */}
+      {!isMobile && (
+        <aside
+          className={cn(
+            "hidden h-full min-h-0 w-[272px] shrink-0 flex-col border-l border-gray-100 bg-white min-[1200px]:w-[400px]",
+            selectedContactId && "lg:flex",
+          )}
+          data-testid="inbox-copilot-column"
+          data-copilot-visible={Boolean(selectedContactId)}
+          aria-label="Contact details and Copilot"
+        >
+          {selectedContactId && contact?.id === selectedContactId && (
+            <InboxLeadDetailsPanel
+              key={contact.id}
+              copilotExpanded={copilotExpanded}
+              onCopilotExpandedChange={updateCopilotExpanded}
+              contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
+              primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
+              teamMembers={teamMembers}
+              messages={hasConversation ? messages.map(m => ({ direction: m.direction, content: m.content || '', fromAddress: m.fromAddress })) : []}
+              capabilities={capabilities}
+              currentUserId={user?.id}
+              handoffActive={!!activeHandoff && hasConversation}
+              handoffEventId={hasConversation ? (activeHandoff?.id ?? null) : null}
+              handoffMessage={
+                hasConversation && activeHandoff
+                  ? String((activeHandoff.eventData as any)?.reason || "Customer requested human assistance")
+                  : undefined
+              }
+              composerDraftPreview={
+                hasFullAIBrain && messageInput.trim()
+                  ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
+                  : undefined
+              }
+              onInsertComposerDraft={insertComposerDraftFromCopilot}
+              connectedChannels={connectedChannelsMap}
+              workspaceIntelligence={workspaceIntelligence}
+              onUpdateContact={updateContact}
+              onUpdateConversationStatus={status => {
+                if (primaryConversation && hasConversation) {
+                  updateConversationMutation.mutate({ conversationId: primaryConversation.id, status });
+                }
+              }}
+              onEditContact={handleEditContact}
+              onDeleteContact={() => setShowDeleteConfirm(true)}
+            />
+          )}
+        </aside>
       )}
 
       {/* ── MOBILE CRM Sheet ── */}
@@ -4990,9 +5019,11 @@ export function UnifiedInbox() {
               </SheetTitle>
             </SheetHeader>
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {showDetailsSheet && selectedContactId && contact ? (
+              {showDetailsSheet && selectedContactId && contact?.id === selectedContactId ? (
                 <InboxLeadDetailsPanel
                   key={contact.id}
+                  copilotExpanded={copilotExpanded}
+                  onCopilotExpandedChange={updateCopilotExpanded}
                   contact={(formDisplayContact || contact) as InboxLeadDetailsPanelContact}
                   primaryConversation={hasConversation ? (primaryConversation as InboxLeadDetailsPanelConversation) : undefined}
                   teamMembers={teamMembers}

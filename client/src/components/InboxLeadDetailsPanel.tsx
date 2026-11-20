@@ -302,6 +302,8 @@ interface InboxLeadDetailsPanelProps {
   connectedChannels?: Record<string, boolean>;
   /** Override the root container class — use when embedding in a mobile sheet */
   panelClassName?: string;
+  copilotExpanded: boolean;
+  onCopilotExpandedChange: (expanded: boolean) => void;
   /**
    * Workspace Intelligence Snapshot from parent (preferred).
    * When omitted, panel loads GET /api/ai/workspace-intelligence via React Query (shared cache).
@@ -872,6 +874,8 @@ export function InboxLeadDetailsPanel({
   onInsertComposerDraft,
   connectedChannels,
   panelClassName,
+  copilotExpanded,
+  onCopilotExpandedChange,
   workspaceIntelligence: workspaceIntelligenceProp,
 }: InboxLeadDetailsPanelProps) {
   const { toast } = useToast();
@@ -1361,10 +1365,12 @@ export function InboxLeadDetailsPanel({
   }, [businessKnowledge]);
 
   // AI Memory — AI-generated natural-language summary
-  const [aiMemory, setAiMemory] = useState<string>('');
-  const [aiMemoryLoading, setAiMemoryLoading] = useState(false);
-  // Track which contact+message fingerprint the memory was generated for (avoid redundant calls)
-  const aiMemoryKeyRef = useRef<string>('');
+  const aiMemoryKey = messages.length > 0
+    ? JSON.stringify([contact.id, primaryConversation?.id, messages.length])
+    : null;
+  const [aiMemoryResult, setAiMemoryResult] = useState<{ key: string; text: string } | null>(null);
+  const aiMemory = aiMemoryKey && aiMemoryResult?.key === aiMemoryKey ? aiMemoryResult.text : "";
+  const aiMemoryLoading = Boolean(aiMemoryKey && aiMemoryResult?.key !== aiMemoryKey);
 
   // Follow popover: 'quick' shows the quick options; 'custom' shows date+time picker
   const [customFollowDate, setCustomFollowDate] = useState<Date | undefined>(undefined);
@@ -1375,7 +1381,6 @@ export function InboxLeadDetailsPanel({
   const [bookingTime,      setBookingTime]      = useState("10:00");
   const [bookingType,      setBookingType]      = useState("Viewing");
   const [bookingConfirmed, setBookingConfirmed] = useState(false);
-  const [copilotExpanded, setCopilotExpanded]   = useState(true);
 
   useEffect(() => {
     setCompletedActions(new Set()); // Reset completed actions when contact changes
@@ -1483,25 +1488,13 @@ export function InboxLeadDetailsPanel({
 
   // ── AI Memory: fetch AI-generated summary whenever messages change meaningfully ──
   useEffect(() => {
-    // Hard-reset when switching contacts so prior contact memory cannot linger.
-    aiMemoryKeyRef.current = "";
-    setAiMemory("");
-    setAiMemoryLoading(false);
-  }, [contact.id]);
-
-  useEffect(() => {
-    if (messages.length === 0) {
-      setAiMemory('');
-      aiMemoryKeyRef.current = '';
+    if (!aiMemoryKey) {
+      setAiMemoryResult(null);
       return;
     }
-    // Build a key from contact id + message count to avoid duplicate fetches
-    const key = `${contact.id}:${messages.length}`;
-    if (aiMemoryKeyRef.current === key) return;
-    aiMemoryKeyRef.current = key;
 
+    const key = aiMemoryKey;
     let cancelled = false;
-    setAiMemoryLoading(true);
 
     fetch('/api/ai/memory', {
       method: 'POST',
@@ -1520,24 +1513,25 @@ export function InboxLeadDetailsPanel({
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => {
         if (!cancelled) {
-          setAiMemory(
-            data.memory || buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry })
-          );
+          setAiMemoryResult({
+            key,
+            text: data.memory || buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry }),
+          });
         }
       })
       .catch(() => {
         if (!cancelled) {
           // Fallback to rule-based summary
-          setAiMemory(buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry }));
+          setAiMemoryResult({
+            key,
+            text: buildAIMemorySummary(intel, messages, { industry: businessKnowledge?.industry }),
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setAiMemoryLoading(false);
       });
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, contact.id]);
+  }, [aiMemoryKey]);
 
   // ── Auto-tag: apply tag automatically when signal is strong + current tag is neutral ──
   const autoTagAppliedRef = useRef<string | null>(null);
@@ -2221,7 +2215,7 @@ export function InboxLeadDetailsPanel({
     <div
       className={
         panelClassName ??
-        "hidden lg:flex lg:h-full lg:min-h-0 lg:w-[272px] lg:min-w-[272px] min-[1200px]:w-[400px] min-[1200px]:min-w-[400px] flex-col border-l border-gray-100 bg-white overflow-hidden flex-shrink-0"
+        "flex min-h-0 flex-1 flex-col overflow-hidden"
       }
       data-testid="inbox-lead-details-panel"
     >
@@ -2231,7 +2225,7 @@ export function InboxLeadDetailsPanel({
         className={cn(
           "mx-2 mt-2 mb-2 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm shadow-gray-900/[0.06]",
           copilotExpanded && "max-h-[min(72vh,720px)]",
-          !copilotExpanded && "mb-2",
+          copilotExpanded && !panelClassName && "h-[min(60%,560px)]",
         )}
       >
       {/* ══ COPILOT FIXED HEADER ════════════════════════════════════════ */}
@@ -2245,7 +2239,7 @@ export function InboxLeadDetailsPanel({
       >
         {/* Full-width clickable header row */}
         <div
-          onClick={() => setCopilotExpanded(p => !p)}
+          onClick={() => onCopilotExpandedChange(!copilotExpanded)}
           className={cn(
             "px-3 pt-2.5 pb-1.5 flex items-start justify-between cursor-pointer transition-colors select-none gap-2",
             copilotExpanded ? "hover:bg-gray-100/70" : "hover:bg-gray-100/60",
@@ -2307,7 +2301,7 @@ export function InboxLeadDetailsPanel({
         {/* Collapsed — one-line summary, compact height */}
         {!copilotExpanded && canSeeCopilot && (
           <div
-            onClick={() => setCopilotExpanded(true)}
+            onClick={() => onCopilotExpandedChange(true)}
             className="px-3 py-1.5 flex items-center justify-between gap-2 cursor-pointer border-t border-gray-200"
           >
             <p className="text-[11px] font-medium text-gray-800 leading-tight truncate min-w-0">
@@ -2324,7 +2318,7 @@ export function InboxLeadDetailsPanel({
 
       {/* Utilities (operational) — keep near top under header */}
       {copilotExpanded && (
-      <div className="shrink-0 border-b border-gray-200 bg-gray-50/60 px-3 py-2 animate-in fade-in duration-150">
+      <div className="shrink-0 border-b border-gray-200 bg-gray-50/60 px-3 py-2">
         <div className="grid grid-cols-4 gap-1">
 
           {/* ── BOOK ── */}
@@ -2693,7 +2687,7 @@ export function InboxLeadDetailsPanel({
       {/* ══ Copilot scrollable body (header + utilities stay fixed above) ═ */}
       {copilotExpanded && (
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-        <div className="px-3 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="px-3 py-3">
           <div className="min-w-0 pt-1 pb-2">
 
               {copilotEntitlementLoading ? (
@@ -3017,7 +3011,7 @@ export function InboxLeadDetailsPanel({
       </div>
 
       {/* ══ Body ════════════════════════════════════════════════════════════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-gutter:stable]">
         <div className="px-3 py-3 space-y-3">
 
           {/* ── CONTACT INFO ─────────────────────────────────────────── */}
