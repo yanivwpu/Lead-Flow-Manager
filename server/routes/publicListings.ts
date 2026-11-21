@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import QRCode from "qrcode";
-import { getPublicListingFlyerData, resolvePublicShareListing } from "../inventory/inventoryDb";
+import { getPublicListingFlyerData, getPublicShareListing } from "../inventory/inventoryDb";
 import {
   backfillFlyerColumnsForListingId,
   listingNeedsFlyerColumnBackfill,
@@ -28,7 +29,11 @@ function logPublicListingShare(event: string, payload: Record<string, unknown>):
 
 // Direct-share URLs resolve when MLS compliance passes; indexing requires explicit publish.
 export function registerPublicListingRoutes(app: Express): void {
-  app.get("/share/listings/:identifier", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+  const viewLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-8", legacyHeaders: false });
+  const inquiryLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false,
+    message: { error: "Too many inquiries. Please try again shortly." } });
+
+  app.get("/share/listings/:identifier", viewLimiter, requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     const identifier = req.params.identifier?.trim() ?? "";
     const appOrigin = getRequestOrigin(req);
     const startedAt = Date.now();
@@ -125,12 +130,14 @@ export function registerPublicListingRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/public/listings/:identifier/leads", requirePublicListingSchemaReady, async (req, res) => {
+  app.post("/api/public/listings/:listingId/leads", inquiryLimiter, requirePublicListingSchemaReady, async (req, res) => {
+    const { listingId } = req.params;
+    if (!isListingShareUuid(listingId)) return res.status(404).json({ error: "This listing inquiry form is unavailable." });
     const parsed = listingInquirySchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: "Enter valid contact details." });
 
     try {
-      const listing = await resolvePublicShareListing(req.params.identifier);
+      const listing = await getPublicShareListing(listingId);
       if (!listing || !(await hasAgentPagePublicationAccess(listing.userId))) {
         return res.status(404).json({ error: "This listing inquiry form is unavailable." });
       }

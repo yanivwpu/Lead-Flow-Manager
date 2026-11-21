@@ -284,6 +284,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.match(await fallback.text(), /href="tel:\+19545550100">Contact Agent<\/a>/);
   assert.equal((await postFlyer({ email: "flyer@example.test" })).status, 404);
   eligible = true;
+  const limited = await Promise.all(Array.from({ length: 11 }, () => postFlyer({ email: "invalid" })));
+  assert.ok(limited.some((response) => response.status === 429));
 
   assert.equal((await update({ agentPageSlug: "jane-new" })).status, 200);
   assert.equal((await request("/agents/jane-agent")).status, 404);
