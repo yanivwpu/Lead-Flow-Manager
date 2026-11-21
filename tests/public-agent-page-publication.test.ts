@@ -194,7 +194,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   const draftPreview = await request(previewUrl);
   assert.equal(draftPreview.status, 200, "owner can preview before parent is enabled");
   assert.equal(draftPreview.headers.get("X-Robots-Tag"), "noindex, nofollow");
-  assert.doesNotMatch(await draftPreview.text(), /id="agent-site-nav"/);
+  const draftPreviewHtml = await draftPreview.text();
+  assert.doesNotMatch(draftPreviewHtml, /id="agent-site-nav"/);
+  assert.match(draftPreviewHtml, /Private preview — not published/, "draft preview clearly labeled private");
   const publishNeighborhood = (published: boolean, updateFields = {}) => savePage("PUT", { ...draft, ...updateFields, published }, editUrl);
   const neighborhoodSitemap = async () => (await request("/public-neighborhoods-sitemap-1.xml")).text();
   assert.equal((await publishNeighborhood(true)).status, 403, "a live parent is required to publish");
