@@ -29,11 +29,10 @@ function logPublicListingShare(event: string, payload: Record<string, unknown>):
 
 // Direct-share URLs resolve when MLS compliance passes; indexing requires explicit publish.
 export function registerPublicListingRoutes(app: Express): void {
-  const viewLimiter = rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: "draft-8", legacyHeaders: false });
   const inquiryLimiter = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false,
     message: { error: "Too many inquiries. Please try again shortly." } });
 
-  app.get("/share/listings/:identifier", viewLimiter, requirePublicListingSchemaReady, async (req: Request, res: Response) => {
+  app.get("/share/listings/:identifier", requirePublicListingSchemaReady, async (req: Request, res: Response) => {
     const identifier = req.params.identifier?.trim() ?? "";
     const appOrigin = getRequestOrigin(req);
     const startedAt = Date.now();

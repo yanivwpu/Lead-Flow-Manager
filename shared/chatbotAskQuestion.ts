@@ -22,7 +22,6 @@ export type ChatbotAskChannel = (typeof CHATBOT_ASK_CHANNELS)[number];
 
 export const CHATBOT_ASK_TTL_MS = 24 * 60 * 60 * 1000;
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+?[0-9][0-9\s().-]{6,22}$/;
 const VAR_NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -122,10 +121,15 @@ export function classifyChatbotAskVariable(variableName: unknown): ChatbotAskVar
   return "custom";
 }
 
+function matchesChatbotEmail(value: string): boolean {
+  const at = value.indexOf("@");
+  if (at <= 0 || at !== value.lastIndexOf("@")) return false;
+  const domainDot = value.indexOf(".", at + 2);
+  return domainDot !== -1 && domainDot < value.length - 1 && !/\s/.test(value);
+}
+
 export function isVerifiedContactEmail(email: unknown): boolean {
-  if (typeof email !== "string") return false;
-  const trimmed = email.trim();
-  return EMAIL_RE.test(trimmed);
+  return typeof email === "string" && matchesChatbotEmail(email.trim());
 }
 
 export function isVerifiedContactPhone(phone: unknown): boolean {
@@ -135,7 +139,7 @@ export function isVerifiedContactPhone(phone: unknown): boolean {
 
 export function normalizeChatbotEmail(raw: string): string | null {
   const v = raw.trim().toLowerCase();
-  if (!EMAIL_RE.test(v)) return null;
+  if (!matchesChatbotEmail(v)) return null;
   return v;
 }
 
@@ -176,7 +180,7 @@ export function validateChatbotAskAnswer(
   if (!text) return { ok: false, reason: "empty", retryPrompt: retryFor(kind).retryPrompt };
 
   if (kind === "name") {
-    if (text.length < 2 || EMAIL_RE.test(text) || PHONE_RE.test(text)) return retryFor("name");
+    if (text.length < 2 || matchesChatbotEmail(text) || PHONE_RE.test(text)) return retryFor("name");
     const blockedName =
       /^(hi|hello|hey|hola|shalom|thanks|thank you|ok|okay|yes|no|please|help|got it|sure|yo|sup)$/i.test(text) ||
       /^(features?\s*(&|and)?\s*pricing|find my solution|book a demo)$/i.test(text);

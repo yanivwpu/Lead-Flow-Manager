@@ -14,8 +14,10 @@ import {
   clearChatbotPendingAsk,
   createChatbotPendingAsk,
   isConsentYesNoButtons,
+  isVerifiedContactEmail,
   markChatbotPendingConsumed,
   mergeChatbotPendingIntoAiControl,
+  normalizeChatbotEmail,
   pendingAskFromAiControl,
   rememberChatbotPendingAsk,
   resetChatbotAskQuestionMemoryForTests,
@@ -44,6 +46,14 @@ resetChatbotAskQuestionMemoryForTests();
   assert.equal(validateChatbotAskAnswer("email", "not-an-email").ok, false);
   const email = validateChatbotAskAnswer("email", "jane@acme.com");
   assert.equal(email.ok, true);
+  assert.equal(normalizeChatbotEmail(" Jane+Sales@Acme.COM "), "jane+sales@acme.com");
+  assert.equal(isVerifiedContactEmail("jane@acme.com."), true, "an earlier interior dot still satisfies the existing validator");
+  for (const invalidEmail of ["jane@.com", "jane@acme.", "jane@acme@company.com", "jane@acme .com"]) {
+    assert.equal(normalizeChatbotEmail(invalidEmail), null);
+  }
+  assert.equal(isVerifiedContactEmail(`jane@${"a".repeat(100_000)}.example`), true);
+  assert.equal(isVerifiedContactEmail(`jane@${"a".repeat(100_000)}`), false);
+  assert.equal(validateChatbotAskAnswer("name", "jane@acme.com").ok, false);
   const phone = validateChatbotAskAnswer("email_or_phone", "+1 (954) 555-0100");
   assert.equal(phone.ok, true);
   if (phone.ok) assert.equal(phone.kind, "phone");
