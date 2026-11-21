@@ -419,7 +419,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     { id: "widget-thread", userId: user.id, contactId: "saved-lead", channel: "webchat" },
   ]);
   await fixture.insert(messages).values({ userId: user.id, conversationId: "old-inquiry", contactId: "prior-lead",
-    direction: "inbound", content: "Checking lead capture" });
+    direction: "inbound", content: "Checking lead capture", externalMessageId: "agent_page_legacy_inquiry" });
   const inquiry = (intent: string) => submit("yaniv-haramatiy", { ...neighborhoodIdentity, intent, neighborhood: "victoria-park" });
   for (const intent of ["message", "schedule_showing", "home_worth"]) {
     const result = await inquiry(intent);
