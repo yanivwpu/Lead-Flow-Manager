@@ -1,6 +1,7 @@
 import { coordinatedSend, humanSendInput, InboxCoordinationError } from "../inboxSendCoordination";
 import { notifyUser } from "../presence";
 import { contactPatchSchema } from "../contactPatchSecurity";
+import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getInboxWorkspaceAccess, requireInboxWorkspace, inboxWorkspaceId, isInboxAdmin } from "../inboxWorkspaceAccess";
 import { shopifyContactContext } from "@shared/contactDetails";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
@@ -1132,6 +1133,9 @@ export function registerContactRoutes(app: Express): void {
       const requestedConversation=typeof req.body.conversationId==="string"?await storage.getConversation(req.body.conversationId):null;
       if(req.body.conversationId&&(!requestedConversation||requestedConversation.userId!==inboxWorkspaceId(req)||requestedConversation.contactId!==contact.id||requestedConversation.channel!==coordinatedChannel))return res.status(404).json({error:"Not found"});
       const conversation=requestedConversation || (coordinatedChannel!=="email"?await storage.getConversationByContactAndChannel(contact.id,coordinatedChannel as any):null);
+      if (conversation?.channelAccountId === AGENT_PAGE_FORM_ACCOUNT) {
+        return res.status(400).json({ success: false, code: "webchat_session_inactive", error: "This inquiry was submitted through a form and has no live chat session." });
+      }
       if(coordinatedChannel==="email"&&conversation){
         if(resolvedEmailRich?.providerThreadId&&resolvedEmailRich.providerThreadId!==conversation.externalThreadId)return res.status(404).json({error:"Not found"});
         if(resolvedEmailRich?.mailboxId&&resolvedEmailRich.mailboxId!==conversation.channelAccountId)return res.status(404).json({error:"Not found"});

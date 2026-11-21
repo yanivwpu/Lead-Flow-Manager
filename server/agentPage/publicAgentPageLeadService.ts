@@ -1,22 +1,15 @@
 /**
  * Public agent page lead intake — creates CRM contacts via channelService.
  */
-import type { PublicAgentLeadBody } from "@shared/agent/agentPageSchema";
+import { AGENT_PAGE_FORM_ACCOUNT, type PublicAgentLeadBody } from "@shared/agent/agentPageSchema";
+import { randomUUID } from "node:crypto";
+import { collectValidatedIdentity } from "@shared/webchatIdentityPromotion";
 import { publishedNeighborhoods, neighborhoodLeadContext } from "./neighborhoodPages";
 import { emptySellerPreferenceProfile } from "@shared/sellerPreferenceSchema";
 import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
-import { storage } from "../storage";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
-import { incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
-import { fetchPublishedListingsForAgentPage } from "./agentPageDb";
-
-function channelContactId(body: PublicAgentLeadBody): string {
-  const email = body.email?.trim().toLowerCase();
-  if (email) return email;
-  const phone = body.phone?.replace(/\D/g, "");
-  if (phone) return phone;
-  return `agent_page_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
+import { fetchPublishedListingsForAgentPage, incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
+import { resolveAgentPageFormContact } from "./agentPageFormContact";
 
 function buildLeadMessage(
   intent: PublicAgentLeadBody["intent"],
@@ -66,6 +59,15 @@ export async function processPublicAgentPageLead(
   slug: string,
   body: PublicAgentLeadBody,
 ): Promise<{ ok: true; contactId: string } | { ok: false; error: string; status: number }> {
+  const identity = collectValidatedIdentity(body);
+  // The general chat validator also accepts formatted strings; require enough actual digits here.
+  if (identity.phone) {
+    const digits = identity.phone.replace(/\D/g, "");
+    identity.phone = digits.length >= 7 && digits.length <= 15 ? digits : undefined;
+  }
+  if (!identity.email && !identity.phone) {
+    return { ok: false, error: "Enter a valid email address or phone number.", status: 400 };
+  }
   const agent = await resolveAgentPageBySlug(slug);
   if (!agent) return { ok: false, error: "Agent page not found", status: 404 };
 
@@ -91,35 +93,8 @@ export async function processPublicAgentPageLead(
     ].filter(Boolean).join(", ");
   }
 
-  const { channelService } = await import("../channelService");
-  const contactIdKey = channelContactId(body);
-  const message = buildLeadMessage(body.intent, body, listingLabel, pageLabel);
-  const externalMessageId = `agent_page_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
-
-  const result = await channelService.processIncomingMessage({
-    userId,
-    channel: "webchat",
-    channelContactId: contactIdKey,
-    contactName:
-      body.name?.trim() ||
-      (isEmbed ? "Embedded Agent Page Visitor" : "Agent Page Visitor"),
-    content: message,
-    contentType: "text",
-    externalMessageId,
-    webchatLeadSource,
-    webchatPageContext: pageContext,
-  });
-
-  if (!result.contact?.id) {
-    return { ok: false, error: "Failed to create lead", status: 500 };
-  }
-
-  const contactId = result.contact.id;
   const customFields: Record<string, unknown> = {
-    ...(result.contact.customFields as Record<string, unknown> | undefined),
-    sourcePage: isEmbed ? "agent_page_embed" : "agent_page",
     leadSource: leadSourceLabel,
-    leadType: body.intent === "home_worth" ? "Seller" : "Buyer",
   };
   if (body.listingId) {
     customFields.agentPageListingId = body.listingId;
@@ -135,11 +110,27 @@ export async function processPublicAgentPageLead(
   } else if (body.source?.trim()) customFields.leadSourceDetail = body.source.trim();
   if (body.intent === "home_worth") {
     customFields.sellerIntent = "seller_valuation";
+    customFields.leadType = "Seller";
   }
-  if (body.email) customFields.email = body.email.trim();
-  if (body.phone) customFields.phone = body.phone.trim();
 
-  await storage.updateContact(contactId, { customFields });
+  const form = await resolveAgentPageFormContact({
+    userId, identity, sourcePage: webchatLeadSource, attribution: customFields, pageContext,
+  });
+  if (!form) return { ok: false, error: "Please use one contact method or contact the agent directly.", status: 409 };
+
+  const { channelService } = await import("../channelService");
+  const result = await channelService.processIncomingMessage({
+    userId,
+    channel: "webchat",
+    channelContactId: AGENT_PAGE_FORM_ACCOUNT,
+    content: buildLeadMessage(body.intent, { ...body, name: identity.name }, listingLabel, pageLabel),
+    externalMessageId: `agent_page_${randomUUID()}`,
+    agentPageForm: form,
+  });
+  if (!result.success || !result.message) return { ok: false, error: "Failed to save inquiry", status: 500 };
+  const contactId = form.contact.id;
+  const { runAgentPageLeadReview } = await import("../workflowEngine");
+  await runAgentPageLeadReview(form.contact, form.conversation.id);
 
   if (body.intent === "home_worth") {
     const profile = {

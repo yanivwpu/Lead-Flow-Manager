@@ -87,6 +87,7 @@ import { db } from "../drizzle/db";
 import { users, chats, registeredPhones, messageUsage, conversationWindows, teamMembers, workflows, workflowExecutions, recurringReminders, webhooks, webhookDeliveries, integrations, messageTemplates, templateCarouselMediaDefaults, templateSends, dripCampaigns, dripSteps, dripEnrollments, dripSends, chatbotFlows, chatbotSessions, salespeople, demoBookings, salesConversions, adminSettings, contacts, conversations, messages, activityEvents, channelSettings, supportTickets, partners, commissions, agreementAcceptances, contactNotes, appointments, flowJobs, noReplyJobs, automationTimerJobs, automationSendDedup, prospectIntelligence, prospectOutreachQueueItems, type InsertConversationWindow, type ConversationWindow, growthEngineSetupTasks } from "@shared/schema";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { eq, and, lte, sql, isNotNull, isNull, asc, desc, gte, sum, gt, or, like, ilike, ne, inArray, notInArray, lt, count } from "drizzle-orm";
+import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { getEffectiveTaskPayoutDollars, type TaskPayoutFields } from "./salespersonTaskPayout";
 import {
   generateTelegramWebhookPublicId,
@@ -267,10 +268,10 @@ export interface IStorage {
   createWorkflow(workflow: InsertWorkflow): Promise<Workflow>;
   updateWorkflow(id: string, updates: Partial<Workflow>): Promise<Workflow | undefined>;
   deleteWorkflow(id: string): Promise<void>;
-  incrementWorkflowExecution(id: string): Promise<void>;
+  incrementWorkflowExecution(id: string, connection?: Pick<typeof db, "update">): Promise<void>;
   
   // Workflow execution log methods
-  logWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution>;
+  logWorkflowExecution(execution: InsertWorkflowExecution, connection?: Pick<typeof db, "insert">): Promise<WorkflowExecution>;
   getWorkflowExecutions(workflowId: string, limit?: number): Promise<WorkflowExecution[]>;
   
   // Recurring reminder methods
@@ -1331,16 +1332,16 @@ export class DbStorage implements IStorage {
     await db.delete(workflows).where(eq(workflows.id, id));
   }
 
-  async incrementWorkflowExecution(id: string): Promise<void> {
-    await db.update(workflows).set({
+  async incrementWorkflowExecution(id: string, connection: Pick<typeof db, "update"> = db): Promise<void> {
+    await connection.update(workflows).set({
       executionCount: sql`coalesce(${workflows.executionCount}, 0) + 1`,
       lastExecutedAt: new Date()
     }).where(eq(workflows.id, id));
   }
 
   // Workflow execution log methods
-  async logWorkflowExecution(execution: InsertWorkflowExecution): Promise<WorkflowExecution> {
-    const result = await db.insert(workflowExecutions).values(execution).returning();
+  async logWorkflowExecution(execution: InsertWorkflowExecution, connection: Pick<typeof db, "insert"> = db): Promise<WorkflowExecution> {
+    const result = await connection.insert(workflowExecutions).values(execution).returning();
     return result[0];
   }
 
@@ -2898,7 +2899,8 @@ export class DbStorage implements IStorage {
         .where(and(
           eq(conversations.contactId, contactId),
           sql`${conversations.userId} = (SELECT ${contacts.userId} FROM ${contacts} WHERE ${contacts.id}=${contactId})`,
-          eq(conversations.channel, channel)
+          eq(conversations.channel, channel),
+          channel === "webchat" ? sql`${conversations.channelAccountId} is distinct from ${AGENT_PAGE_FORM_ACCOUNT}` : undefined,
         ))
         .orderBy(desc(conversations.lastMessageAt), desc(conversations.createdAt))
         .limit(1);

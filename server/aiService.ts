@@ -130,6 +130,9 @@ export class AIService {
       aiConversationDomain?: string;
       websiteFormInquiry?: string;
       leadSource?: string;
+      email?: string;
+      phone?: string;
+      referralNeighborhood?: string;
       visitorIntent?: string;
       chatbotVariables?: string;
       conversationLanguage?: string;
@@ -1344,6 +1347,9 @@ Return JSON only: { "summary": "..." }`;
       aiConversationDomain?: string;
       websiteFormInquiry?: string;
       leadSource?: string;
+      email?: string;
+      phone?: string;
+      referralNeighborhood?: string;
       visitorIntent?: string;
       chatbotVariables?: string;
       conversationLanguage?: string;
@@ -1453,6 +1459,9 @@ ${cap}`;
 ${contactContext ? `LEAD CRM CONTEXT (use this to personalize your reply):
 ${usableVisitorPersonalizationName({ name: contactContext.name }) ? `- Lead name: ${usableVisitorPersonalizationName({ name: contactContext.name })}` : ''}
 ${contactContext.leadSource ? `- Lead source: ${contactContext.leadSource}` : ''}
+${contactContext.email ? `- Email already supplied: ${contactContext.email}` : ''}
+${contactContext.phone ? `- Phone already supplied: ${contactContext.phone}` : ''}
+${contactContext.referralNeighborhood ? `- Referral neighborhood: ${contactContext.referralNeighborhood}. Confirm the visitor's desired area before matching.` : ''}
 ${contactContext.pipelineStage ? `- Pipeline stage: ${contactContext.pipelineStage}` : ''}
 ${contactContext.leadScore ? `- Lead score: ${contactContext.leadScore}` : ''}
 ${contactContext.intent ? `- Detected intent: ${contactContext.intent}` : ''}
