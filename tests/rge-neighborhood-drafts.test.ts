@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   EMPTY_NEIGHBORHOOD, neighborhoodDraftKey, readNeighborhoodDrafts,
   sameNeighborhoodContent, writeNeighborhoodDrafts,
@@ -43,4 +45,11 @@ test("malformed or oversized drafts are ignored and unavailable storage is repor
     setItem() { throw new Error("Blocked"); },
     removeItem() { throw new Error("Blocked"); },
   }, key, { active: null, entries: {} }), false);
+});
+
+test("saved neighborhood rows provide preview or live view without opening editor", () => {
+  const ui = readFileSync(join(process.cwd(), "client/src/components/agentPage/NeighborhoodPageSettings.tsx"), "utf8");
+  assert(ui.includes(">Preview</a>"), "draft rows expose a direct Preview link");
+  assert(ui.includes(">View live</a>"), "published rows expose a direct live-page link");
+  assert(ui.includes("encodeURIComponent(item.id)}/preview"), "draft preview reuses authenticated endpoint");
 });
