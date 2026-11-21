@@ -59,6 +59,7 @@ import { registerGmailPubSubWebhookRoutes } from "./routes/gmailPubSubWebhook";
 import { registerPublicListingRoutes } from "./routes/publicListings";
 import { registerPublicAgentPageRoutes } from "./routes/publicAgentPage";
 import { registerAgentNeighborhoodPagesRoutes } from "./routes/agentNeighborhoodPages";
+import { AGENT_PAGE_FORM_ACCOUNT, agentPageLeadCopilotContext } from "@shared/agent/agentPageSchema";
 import { registerAgentPageSettingsRoutes } from "./routes/agentPageSettings";
 import { registerPublicListingSitemapRoutes } from "./routes/publicListingsSitemap";
 import { registerBusinessProfileRoutes } from "./routes/businessProfile";
@@ -11410,6 +11411,9 @@ export async function registerRoutes(
         }
         resolvedContactId = convOwned.contactId;
         conversationAiControlForGate = convOwned.aiControl;
+        if (convOwned.channelAccountId === AGENT_PAGE_FORM_ACCOUNT && requestedMode === "auto" && autoDispatch === true) {
+          return res.json({ suggestion: "", confidence: 0, status: "no_live_session" });
+        }
         if(requestedMode==="auto"&&autoDispatch===true){
           const state=await replyState({workspaceId:userId,contactId:convOwned.contactId,channel:convOwned.channel,conversationId:convOwned.id});
           autoSendContext={sendAttemptId:crypto.randomUUID(),replyRevision:state.revision,aiEpoch:Number((convOwned.aiControl as any)?.generationEpoch||0)};
@@ -11680,9 +11684,9 @@ export async function registerRoutes(
       if (chatId) {
         try {
           const convForPrefs = await storage.getConversation(chatId);
-          if (convForPrefs?.contactId) {
+          if (convForPrefs?.contactId && convForPrefs.userId === userId) {
             const contactForPrefs = await storage.getContact(convForPrefs.contactId);
-            if (contactForPrefs) {
+            if (contactForPrefs?.userId === userId) {
               const { resolveBuyerMatchingTraceId } = await import("./buyerMatchingTraceRegistry");
               let lastInboundMessageId: string | null = null;
               if (convForPrefs.id) {
@@ -11760,6 +11764,9 @@ export async function registerRoutes(
               });
 
               let contextPatch: Record<string, unknown> = { ...(contactContext || {}) };
+              if (convForPrefs.channelAccountId === AGENT_PAGE_FORM_ACCOUNT) {
+                contextPatch = { ...contextPatch, ...agentPageLeadCopilotContext(contactForPrefs) };
+              }
 
               if (
                 sellerGate.ok &&

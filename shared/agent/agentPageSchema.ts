@@ -80,11 +80,29 @@ export type AgentPageSettingsResponse = {
   workspacePublishEnabled: boolean;
 };
 
+export const AGENT_PAGE_FORM_ACCOUNT = "agent_page_form";
+
+export function agentPageLeadCopilotContext(contact: {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  customFields?: unknown;
+}) {
+  const fields = contact.customFields as { leadSource?: unknown; agentNeighborhoodName?: unknown } | null;
+  return {
+    name: contact.name,
+    email: contact.email ?? undefined,
+    phone: contact.phone ?? undefined,
+    leadSource: typeof fields?.leadSource === "string" ? fields.leadSource : undefined,
+    referralNeighborhood: typeof fields?.agentNeighborhoodName === "string" ? fields.agentNeighborhoodName : undefined,
+  };
+}
+
 export const publicAgentLeadBodySchema = z.object({
   neighborhood: z.string().max(80).regex(/^[a-z0-9-]+$/).optional(),
   intent: z.enum(["message", "ask_about", "schedule_showing", "home_worth"]),
   name: z.string().max(120).optional(),
-  email: z.string().email().max(200).optional(),
+  email: z.string().trim().email().max(200).optional(),
   phone: z.string().max(40).optional(),
   message: z.string().max(4000).optional(),
   listingId: z.string().uuid().optional(),

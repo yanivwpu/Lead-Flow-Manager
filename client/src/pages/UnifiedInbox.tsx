@@ -1,4 +1,5 @@
 import { InboxReplyConflict } from "@/components/InboxReplyConflict";
+import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { useInboxDraftClaim, useInboxReplySnapshot, replySnapshotKey } from "@/lib/useInboxCollaboration";
 import { AssigneeAvatar } from "@/components/InboxAssignmentControl";
 import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
@@ -3971,7 +3972,8 @@ export function UnifiedInbox() {
                   </p>
                 ) : null}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {isEmailChannel && (emailComposeTo || formDisplayContact?.email || contact.email) ? (
+                  {(isEmailChannel || primaryConversation?.channelAccountId === AGENT_PAGE_FORM_ACCOUNT) &&
+                    (emailComposeTo || formDisplayContact?.email || contact.email) ? (
                     <span className="flex items-center gap-1 truncate">
                       <Mail className="w-3 h-3" />
                       {emailComposeTo || formDisplayContact?.email || contact.email}

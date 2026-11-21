@@ -1,6 +1,9 @@
 import { isInventoryContactEligible, isRgeContactEligible, requiresRgeContactIntent, requiresBuyerPropertyIntent } from "./inventory/inventoryContactEligibility";
 import { storage } from "./storage";
-import { type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
+import { contacts, type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
+import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "../drizzle/db";
 import { subscriptionService } from "./subscriptionService";
 import {
   evaluateGrowthEngineAccess,
@@ -70,6 +73,75 @@ export interface WorkflowCondition {
   durationHours?: number;
   durationMinutes?: number;
   conditions?: { type: string; value: string }[];
+}
+
+function isRgeNewLeadWorkflow(workflow: Workflow): boolean {
+  const conditions = workflow.triggerConditions as { templateId?: string; templateKey?: string } | null;
+  return conditions?.templateId === RGE_TEMPLATE_ID && conditions.templateKey === "W1";
+}
+
+/** Follow-Ups reads the contact's single task slot. The W1 marker survives task completion. */
+async function persistWorkflowTask(
+  workflow: Workflow,
+  contact: Contact,
+  action: { title: string; dueDays?: unknown },
+  connection: Pick<typeof db, "update"> = db,
+) {
+  const title = action.title.trim();
+  const dueDays = action.dueDays ?? 1;
+  if (!title || typeof dueDays !== "number" || !Number.isFinite(dueDays) || dueDays < 0) {
+    throw new Error("Invalid workflow task configuration");
+  }
+  const now = new Date();
+  const followUpDate = new Date(now.getTime() + dueDays * 86_400_000);
+  if (!Number.isFinite(followUpDate.getTime())) throw new Error("Invalid workflow task due date");
+  const newLeadReview = isRgeNewLeadWorkflow(workflow);
+  const [saved] = await connection.update(contacts).set({
+    followUp: title,
+    followUpDate,
+    updatedAt: now,
+    ...(newLeadReview ? {
+      sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || '{"rgeNewLeadReviewCreated":true}'::jsonb`,
+    } : {}),
+  }).where(and(
+    eq(contacts.userId, workflow.userId),
+    eq(contacts.id, contact.id),
+    sql`nullif(trim(${contacts.followUp}), '') IS NULL`,
+    newLeadReview ? sql`${contacts.sourceDetails}->>'rgeNewLeadReviewCreated' IS DISTINCT FROM 'true'` : undefined,
+  )).returning({ id: contacts.id });
+  return saved ? { type: "task_created", value: title } satisfies WorkflowAction : null;
+}
+
+/** The validated form warrants human review. Full W1 still requires verified property intent. */
+export async function runAgentPageLeadReview(contact: Contact, conversationId: string): Promise<void> {
+  const { userId } = contact;
+  if ((contact.sourceDetails as { agentPageForm?: boolean } | null)?.agentPageForm !== true) return;
+  const access = await evaluateGrowthEngineAccess(userId, { readOnly: true });
+  if (!access.ok || !access.limits.workflowsEnabled) return;
+  const workflows = await storage.getActiveWorkflowsByTrigger(userId, "new_chat");
+  const workflow = workflows.find(isRgeNewLeadWorkflow);
+  const task = (workflow?.actions as Array<{ type?: string; title?: string; dueDays?: unknown }> | undefined)
+    ?.find((action) => action.type === "create_task" && typeof action.title === "string" && action.title.trim());
+  const title = task?.title;
+  if (!workflow || !title || workflow.userId !== userId) return;
+
+  const triggerData = { trigger: "agent_page_form", contactId: contact.id };
+  try {
+    await db.transaction(async (tx) => {
+      const created = await persistWorkflowTask(workflow, contact, { title, dueDays: task?.dueDays }, tx);
+      if (!created) return;
+      await storage.logWorkflowExecution({
+        workflowId: workflow.id, conversationId, triggerData, actionsExecuted: [created], status: "success",
+      }, tx);
+      await storage.incrementWorkflowExecution(workflow.id, tx);
+    });
+  } catch (error) {
+    await storage.logWorkflowExecution({
+      workflowId: workflow.id, conversationId, triggerData, actionsExecuted: [], status: "failed",
+      errorMessage: error instanceof Error ? error.message : "Could not persist the follow-up task",
+    });
+    throw error;
+  }
 }
 
 /**
@@ -820,8 +892,12 @@ export async function executeWorkflowActions(
         }
         continue;
       }
-      if (action.type === "create_task" && typeof action.title === "string" && action.title.trim() && contact?.id) {
-        executedActions.push({ type: "task_created", value: action.title.trim() });
+      if (action.type === "create_task") {
+        if (!contact || contact.userId !== workflow.userId || typeof action.title !== "string") {
+          throw new Error("Workflow task requires a workspace contact and title");
+        }
+        const created = await persistWorkflowTask(workflow, contact, action);
+        if (created) executedActions.push(created);
         continue;
       }
       switch (action.type) {

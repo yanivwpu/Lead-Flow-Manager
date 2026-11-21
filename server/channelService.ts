@@ -8,7 +8,7 @@ import { notifyUser } from "./presence";
 import crypto from "crypto";
 import {
   type Contact, type Conversation, type Message, type Channel,
-  CHANNEL_INFO, CHANNELS,
+  CHANNEL_INFO, CHANNELS, conversations,
 } from "@shared/schema";
 import {
   AI_HANDOFF_RESOLVED_EVENT,
@@ -19,7 +19,8 @@ import { detectHighConfidenceBookingIntent } from "@shared/bookingIntent";
 import { detectSellerConsultationBookingIntent, classifySellerIntent, isPureSellerIntent } from "@shared/sellerIntent";
 import { db } from "../drizzle/db";
 import { messages as messagesTbl } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
+import { and, eq, sql } from "drizzle-orm";
 import { scheduleHubSpotAutoSync } from "./hubspotAutoSync";
 import {
   EMAIL_INBOX_IDENTITY_SOURCE,
@@ -1181,6 +1182,8 @@ class ChannelService {
     /** Public webchat attribution — e.g. agent page embed sets `agent_page`. */
     webchatLeadSource?: "agent_page" | "agent_page_embed" | "website";
     webchatPageContext?: import("@shared/webchatPageContext").WebchatPageContext;
+    /** Server-resolved private Agent Page intake. Public Web Chat never supplies this. */
+    agentPageForm?: { contact: Contact; conversation: Conversation; contactCreated: boolean; conversationCreated: boolean };
     preferredChatbotFlowId?: string;
     visitorLocale?: string;
     skipNewChatTrigger?: boolean;
@@ -1211,6 +1214,7 @@ class ChannelService {
       inboundMode,
       webchatLeadSource,
       webchatPageContext,
+      agentPageForm,
       preferredChatbotFlowId,
       visitorLocale,
       skipNewChatTrigger,
@@ -1257,8 +1261,13 @@ class ChannelService {
 
     console.log(`[Inbound] Channel identified: ${channel} — starting processIncomingMessage`);
 
-    let contact: Contact | undefined;
-    let contactCreated = false;
+    if (agentPageForm && (channel !== "webchat" || agentPageForm.contact.userId !== userId ||
+      agentPageForm.conversation.userId !== userId || agentPageForm.conversation.contactId !== agentPageForm.contact.id ||
+      agentPageForm.conversation.channel !== channel || agentPageForm.conversation.channelAccountId !== AGENT_PAGE_FORM_ACCOUNT)) {
+      throw new Error("Invalid Agent Page form conversation");
+    }
+    let contact: Contact | undefined = agentPageForm?.contact;
+    let contactCreated = agentPageForm?.contactCreated ?? false;
 
     if (channel === "calendly" && preferredContactId) {
       const pc = await storage.getContact(preferredContactId);
@@ -1353,7 +1362,7 @@ class ChannelService {
           channelContactId,
         });
       }
-    } else {
+    } else if (!agentPageForm) {
       console.log(`[Inbox Worker] Contact matched — contactId: ${contact.id}, name: "${contact.name}"`);
       const { shouldPromoteProspectOnlyIdentity } = await import("@shared/contactCrmVisibility");
       if (shouldPromoteProspectOnlyIdentity({ contact, direction: "inbound" })) {
@@ -1407,7 +1416,7 @@ class ChannelService {
       await storage.updateContact(contact.id, contactUpdates);
     }
 
-    if (channel === "webchat" && contact && !validatedPageRuleAction) {
+    if (channel === "webchat" && contact && !validatedPageRuleAction && !agentPageForm) {
       try {
         const { extractIdentityHints } = await import("@shared/agent/webchatLeadContext");
         const { acceptExtractedIdentity, collectValidatedIdentity } = await import(
@@ -1436,6 +1445,9 @@ class ChannelService {
         /* extraction is best-effort and must not block inbound */
       }
     }
+    if (agentPageForm?.contactCreated) {
+      await this.logActivity(userId, contact.id, undefined, "lead_created", { source: AGENT_PAGE_FORM_ACCOUNT });
+    }
 
     if (!contact) {
       return buildInboundResult({
@@ -1459,8 +1471,8 @@ class ChannelService {
 
     // For WhatsApp/SMS with a channelAccountId (multi-number), isolate by destination number
     const acctId = (channel === 'whatsapp' || channel === 'sms') ? channelAccountId : undefined;
-    let conversation = await storage.getConversationByContactAndChannel(contact.id, channel, acctId);
-    let isNewConversation = false;
+    let conversation = agentPageForm?.conversation ?? await storage.getConversationByContactAndChannel(contact.id, channel, acctId);
+    let isNewConversation = agentPageForm?.conversationCreated ?? false;
     /** True when an awaited WhatsApp template re-engagement just reopened via inbound (clears awaiting state + optional toast). */
     let shouldNotifyReplyWindowReopened = false;
     if (!conversation) {
@@ -1476,8 +1488,7 @@ class ChannelService {
       });
       isNewConversation = true;
       console.log(`[Inbox Worker] Conversation created — conversationId: ${conversation.id}`);
-      await subscriptionService.incrementConversationUsage(userId);
-    } else {
+    } else if (!agentPageForm) {
       console.log(`[Inbox Worker] Existing conversation found — conversationId: ${conversation.id}`);
       const priorRe = parseConversationReEngagement(conversation.reEngagement);
       shouldNotifyReplyWindowReopened = priorRe?.state === "template_sent_awaiting_reply";
@@ -1487,6 +1498,7 @@ class ChannelService {
         ...(shouldNotifyReplyWindowReopened ? { reEngagement: {} } : {}),
       });
     }
+    if (isNewConversation) await subscriptionService.incrementConversationUsage(userId);
 
     let persisted: {
       mediaUrl?: string;
@@ -1584,7 +1596,7 @@ class ChannelService {
       );
     }
 
-    if (channel === "webchat" && contentType !== "form_result") {
+    if (channel === "webchat" && contentType !== "form_result" && !agentPageForm) {
       const { syncWebchatContactIdentity } = await import("./webchatLeadService");
       contact = await syncWebchatContactIdentity({
         userId,
@@ -1597,12 +1609,20 @@ class ChannelService {
       await touchWebchatVisitorSession(contact.id);
     }
 
-    await storage.updateConversation(conversation.id, {
+    const latestInbound = {
       lastMessageAt: new Date(),
       lastMessagePreview: (content || (finalMediaUrl ? mediaPreviewLabel(contentType) : "")).substring(0, 100),
-      lastMessageDirection: 'inbound',
-      unreadCount: (conversation.unreadCount || 0) + 1,
-    });
+      lastMessageDirection: "inbound",
+    };
+    if (agentPageForm) {
+      await db.update(conversations).set({
+        ...latestInbound,
+        unreadCount: sql`coalesce(${conversations.unreadCount}, 0) + 1`,
+        updatedAt: new Date(),
+      }).where(and(eq(conversations.id, conversation.id), eq(conversations.userId, userId)));
+    } else {
+      await storage.updateConversation(conversation.id, { ...latestInbound, unreadCount: (conversation.unreadCount || 0) + 1 });
+    }
     if (channel === "email") {
       console.log(
         `[Inbound] Conversation/thread updated — conversationId: ${conversation.id}, unreadCount: ${(conversation.unreadCount || 0) + 1}, channel=email, textLen=${(content || "").length}, textRedacted=true`,
@@ -1708,15 +1728,16 @@ class ChannelService {
       }
     }
 
-    if (isCommerceInbound) {
+    if (isCommerceInbound || agentPageForm) {
+      const reason = agentPageForm ? "agent_page_form_no_outbound" : "commerce_inbound";
       return buildInboundResult({
         success: true,
         contact,
         conversation,
         message,
-        workflowState: { status: "skipped", reason: "commerce_inbound" },
-        chatbotState: { status: "skipped", reason: "commerce_inbound", willFire: false },
-        automationState: { status: "skipped", reason: "commerce_inbound" },
+        workflowState: { status: "skipped", reason },
+        chatbotState: { status: "skipped", reason, willFire: false },
+        automationState: { status: "skipped", reason },
         created: { contact: contactCreated, conversation: isNewConversation, message: true },
         updated: { contact: true, conversation: true, message: false },
         channel,

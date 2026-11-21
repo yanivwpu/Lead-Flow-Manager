@@ -143,7 +143,7 @@ export function registerPublicAgentPageRoutes(app: Express): void {
       if (!outcome.ok) {
         return res.status(outcome.status).json({ error: outcome.error });
       }
-      res.status(201).json({ ok: true, contactId: outcome.contactId });
+      res.status(201).json({ ok: true });
     } catch (error) {
       console.error("[public-agent-page] lead failed", error);
       res.status(500).json({ error: "Lead submit failed" });
