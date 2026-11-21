@@ -526,16 +526,22 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     body.embed-mode.hide-chat .chat-bubble,
     body.embed-mode.hide-chat .chat-panel { display: none !important; visibility: hidden !important; pointer-events: none !important; }
     ${navigationHtml ? agentPageNavigationCss : ""}
+    .agent-preview-banner { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff; color: #1e3a8a; font-size: .875rem; overflow-wrap: anywhere; }
+    .agent-preview-banner strong { display: block; margin-bottom: 3px; }
   </style>
 </head>
 <body class="${bodyClass}">
   <div class="wrap">
+    ${neighborhood?.preview ? `<aside class="agent-preview-banner" role="status">
+      <strong>Private preview — not published</strong>
+      This page is visible only to its owner while previewing. ${neighborhood.parentUrl ? `Public URL after publication: ${escapeHtml(`${neighborhood.parentUrl}/${neighborhood.slug}`)}` : "A public link will be available when your Agent Page is enabled and this neighborhood is published."}
+    </aside>` : ""}
     ${navigationHtml}
     ${agentHeaderHtml}
 
     ${neighborhood ? `<section class="agent-header" style="display:block">
       <h2>About ${escapeHtml(neighborhood.name)}</h2>
-      ${neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join("")}
+      ${neighborhood.content.trim() ? neighborhood.content.trim().split(/\n\s*\n/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join("") : neighborhood.preview ? `<p class="text-muted">Add local information in the editor to see your neighborhood guide here.</p>` : ""}
       ${neighborhood.parentUrl ? `<p><a href="${escapeHtml(neighborhood.parentUrl)}">Back to the Agent Page</a></p>` : ""}
     </section>` : `<section class="listings-section"${navigationHtml ? ' id="agent-properties" tabindex="-1"' : ""}>
       <div class="browse-wrap" id="browse-wrap">
