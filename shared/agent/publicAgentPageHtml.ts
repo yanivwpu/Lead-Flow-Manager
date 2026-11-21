@@ -1307,6 +1307,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       form.addEventListener("submit", function (e) {
         e.preventDefault();
         var fd = new FormData(form);
+        if (!String(fd.get("email") || "").trim() && !String(fd.get("phone") || "").trim()) {
+          showToast("Enter an email address or phone number.");
+          return;
+        }
         var body = {
           intent: fd.get("intent"),
           name: fd.get("name"),

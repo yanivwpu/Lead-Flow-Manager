@@ -4,8 +4,9 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { SQL, eq } from "drizzle-orm";
+import { getTableConfig, PgDialect } from "drizzle-orm/pg-core";
 import express from "express";
-import { chromium } from "playwright";
 import { db } from "../drizzle/db";
 import { channelService } from "../server/channelService";
 import { setPublicListingSchemaReady } from "../server/publicListingSchemaReady";
@@ -16,13 +17,21 @@ import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage"
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
 import { storage } from "../server/storage";
 import { subscriptionService, type UserLimits } from "../server/subscriptionService";
+import { AGENT_PAGE_FORM_ACCOUNT, agentPageLeadCopilotContext } from "../shared/agent/agentPageSchema";
+import { contacts, conversations, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions } from "../shared/schema";
+import { buildFollowUpItems, hasScheduledFollowUp } from "../shared/followUpTasks";
+import { INBOUND_DEDUP_SCHEMA_SQL } from "../server/inboundDedupSchema";
+import { isInventoryContactEligible } from "../server/inventory/inventoryContactEligibility";
+import { inboxOnlyWebchatSourceDetails } from "../shared/webchatIdentityPromotion";
+import { filterCrmListedContacts } from "../shared/contactCrmVisibility";
+import { executeWorkflowActions } from "../server/workflowEngine";
 
 test("profile-only publication, indexing and withdrawal use the same entitlement", async (t) => {
   const pg = new PGlite();
   t.after(() => pg.close());
   await pg.exec(`
-    CREATE TABLE users (id text PRIMARY KEY, avatar_url text);
-    INSERT INTO users VALUES ('agent-user', NULL), ('legacy-live', NULL);
+    CREATE TABLE users (id varchar PRIMARY KEY, avatar_url text, inbox_new_activity_count integer DEFAULT 0);
+    INSERT INTO users (id) VALUES ('agent-user'), ('legacy-live');
     CREATE TABLE ai_business_knowledge (
       user_id text PRIMARY KEY, publish_listings_publicly boolean DEFAULT false,
       agent_page_enabled boolean DEFAULT false, agent_page_slug text, agent_page_use_custom_bio boolean DEFAULT false,
@@ -44,27 +53,47 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
 
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
+  const dialect = new PgDialect();
+  for (const table of [contacts, conversations, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions]) {
+    const { name, columns } = getTableConfig(table);
+    const definitions = columns.map((column) => {
+      const value = column.default;
+      const defaultSql = value instanceof SQL ? dialect.sqlToQuery(value).sql
+        : typeof value === "string" ? `'${value.replaceAll("'", "''")}'` : value;
+      return `"${column.name}" ${column.getSQLType()}${column.primary ? " PRIMARY KEY" : ""}${column.notNull ? " NOT NULL" : ""}${defaultSql === undefined ? "" : ` DEFAULT ${defaultSql}`}`;
+    });
+    await pg.exec(`CREATE TABLE "${name}" (${definitions.join(", ")})`);
+  }
+  await pg.exec(INBOUND_DEDUP_SCHEMA_SQL);
   const fixture = drizzle(pg);
   t.mock.method(db, "delete", fixture.delete.bind(fixture) as unknown as typeof db.delete);
   t.mock.method(db, "insert", fixture.insert.bind(fixture) as unknown as typeof db.insert);
   t.mock.method(db, "select", fixture.select.bind(fixture) as unknown as typeof db.select);
   t.mock.method(db, "update", fixture.update.bind(fixture) as unknown as typeof db.update);
+  t.mock.method(db, "execute", fixture.execute.bind(fixture) as unknown as typeof db.execute);
+  t.mock.method(db, "transaction", fixture.transaction.bind(fixture) as unknown as typeof db.transaction);
   const user = { id: "agent-user", name: "Jane Agent", widgetSettings: { enabled: false } };
   t.mock.method(storage, "getUser", async () => user);
   t.mock.method(storage, "getTemplateEntitlement", async () => ({ status: "purchased" }));
   t.mock.method(storage, "getTemplateInstall", async () => undefined);
+  t.mock.method(storage, "getAiBusinessKnowledge", async () => undefined);
   t.mock.method(storage, "getIntegrationByUserAndType", async () => undefined);
   t.mock.method(storage, "getUserTemplateDataByKey", async () => undefined);
-  const updateContact = t.mock.method(storage, "updateContact", async (
-    _id: string, _patch: Parameters<typeof storage.updateContact>[1],
+  const sellerIntake = t.mock.method(storage, "updateContactSellerPreferenceProfile", async (
+    ..._args: Parameters<typeof storage.updateContactSellerPreferenceProfile>
   ) => undefined);
-  const sellerIntake = t.mock.method(storage, "updateContactSellerPreferenceProfile", async () => undefined);
-  const incoming = t.mock.method(channelService, "processIncomingMessage", async (_input: Parameters<typeof channelService.processIncomingMessage>[0]) => ({
-    contact: { id: "buyer-contact", customFields: {} },
-  }));
+  t.mock.method(channelService, "logActivity", async () => undefined);
+  const outbound = t.mock.method(channelService, "sendMessage", async () => { throw new Error("Unexpected outbound send"); });
+  t.mock.method(subscriptionService, "incrementConversationUsage", async () => undefined);
+  await fixture.insert(workflows).values({
+    id: "w1", userId: user.id, name: "New Lead Auto-Reply + Create Lead", triggerType: "new_chat",
+    triggerConditions: { templateId: "realtor-growth-engine", templateKey: "W1" },
+    actions: [{ type: "send_message_template", templateKey: "intro_fast_reply" }, { type: "create_task", title: "Review new lead", dueDays: 1 }],
+  });
   let eligible = true;
+  let expectReadOnly = true;
   t.mock.method(subscriptionService, "getUserLimits", async (userId: string, options?: { readOnly?: boolean }) => {
-    assert.equal(options?.readOnly, true);
+    if (expectReadOnly) assert.equal(options?.readOnly, true);
     return { plan: eligible || userId === "legacy-live" ? "pro" : "free", workflowsEnabled: true } as UserLimits;
   });
 
@@ -136,6 +165,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.match(embed, /content="noindex, nofollow"/);
 
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
+    const { chromium } = await import("playwright");
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
     t.after(() => browser.close());
     for (const width of [320, 390, 1280]) {
@@ -149,14 +179,28 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     }
   }
 
-  const lead = await request("/api/public/agents/jane-agent/leads", {
+  const submit = (slug: string, body: Record<string, unknown>) => request(`/api/public/agents/${slug}/leads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ intent: "message", name: "Buyer", email: "buyer@example.test" }),
+    body: JSON.stringify({ intent: "message", name: "Jane Buyer", ...body }),
   });
+  const lead = await submit("jane-agent", { email: "Buyer@Example.test", message: "Checking lead capture" });
   assert.equal(lead.status, 201, await lead.clone().text());
-  assert.equal(incoming.mock.calls[0].arguments[0].webchatLeadSource, "agent_page");
-  assert.equal(updateContact.mock.calls.length, 1);
+  assert.deepEqual(await lead.json(), { ok: true }, "no CRM identity ID is returned publicly");
+  const [emailLead] = await storage.getContacts(user.id);
+  assert.equal(emailLead.name, "Jane Buyer");
+  assert.equal(emailLead.email, "buyer@example.test");
+  assert.equal(emailLead.pipelineStage, "New Lead");
+  assert.equal(emailLead.followUp, "Review new lead");
+  assert.ok(Math.abs(emailLead.followUpDate!.getTime() - Date.now() - 86_400_000) < 15_000);
+  assert.equal(await isInventoryContactEligible(emailLead), false, "a form does not qualify a buyer");
+  assert.equal((await submit("jane-agent", { name: "Phone Lead", phone: "+1 (954) 555-0158" })).status, 201);
+  const [phoneLead] = (await storage.getContacts(user.id)).filter((contact) => contact.phone === "9545550158");
+  assert.equal(phoneLead.name, "Phone Lead");
+  for (const invalid of [{}, { phone: "12-3" }, { phone: "1......." }, { email: "bad address" }]) {
+    assert.equal((await submit("jane-agent", invalid)).status, 400);
+  }
+  assert.equal((await storage.getContacts(user.id)).length, 2);
 
   assert.equal((await update({ agentPageSlug: "jane-new" })).status, 200);
   assert.equal((await request("/agents/jane-agent")).status, 404);
@@ -255,6 +299,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal((await request(pilot + "?embed=1")).status, 404);
 
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
+    const { chromium } = await import("playwright");
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
     t.after(() => browser.close());
     for (const width of [320, 390, 1280, 1440]) {
@@ -358,18 +403,81 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     }
   }
 
-  const inquiry = (intent: string) => request("/api/public/agents/yaniv-haramatiy/leads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ intent, name: "Visitor", email: "visitor@example.test", neighborhood: "victoria-park" }),
-  });
+  const neighborhoodIdentity = { name: "Victoria Visitor", email: "visitor@example.test", phone: "+1 (954) 555-0164" };
+  await fixture.insert(contacts).values([
+    { id: "prior-lead", userId: user.id, name: "Agent Page Visitor", source: "webchat", primaryChannel: "webchat",
+      webchatId: neighborhoodIdentity.email, sourceDetails: inboxOnlyWebchatSourceDetails(),
+      customFields: { email: neighborhoodIdentity.email, phone: neighborhoodIdentity.phone, sourcePage: "agent_page" } },
+    { id: "other-tenant", userId: "legacy-live", name: "Other Tenant", email: neighborhoodIdentity.email },
+    { id: "anonymous", userId: user.id, name: "Website Visitor", source: "webchat", sourceDetails: inboxOnlyWebchatSourceDetails() },
+    { id: "saved-lead", userId: user.id, name: "Saved Lead", phone: "+1 (954) 555-0165", pipelineStage: "Qualified",
+      webchatId: "5451e8ea-00dc-4f66-a9fe-789abdef0123" },
+  ]);
+  await fixture.insert(conversations).values([
+    { id: "old-inquiry", userId: user.id, contactId: "prior-lead", channel: "webchat" },
+    { id: "widget-thread", userId: user.id, contactId: "saved-lead", channel: "webchat" },
+  ]);
+  const inquiry = (intent: string) => submit("yaniv-haramatiy", { ...neighborhoodIdentity, intent, neighborhood: "victoria-park" });
   for (const intent of ["message", "schedule_showing", "home_worth"]) {
     const result = await inquiry(intent);
     assert.equal(result.status, 201, await result.clone().text());
-    assert.equal(incoming.mock.calls.at(-1)?.arguments[0].webchatPageContext?.latestUrl, origin + pilot);
-    assert.equal((updateContact.mock.calls.at(-1)?.arguments[1].customFields as Record<string, unknown>).leadSource, "Agent Page · Victoria Park");
   }
-  assert.equal(sellerIntake.mock.calls.length, 1);
+  const converted = (await storage.getContacts(user.id)).find((contact) => contact.email === neighborhoodIdentity.email)!;
+  assert.equal(converted.id, "prior-lead");
+  assert.equal(converted.name, neighborhoodIdentity.name);
+  assert.equal(converted.phone, "9545550164");
+  assert.deepEqual(agentPageLeadCopilotContext(converted), {
+    name: neighborhoodIdentity.name, email: neighborhoodIdentity.email, phone: "9545550164",
+    leadSource: "Agent Page · Victoria Park", referralNeighborhood: "Victoria Park",
+  });
+  assert.equal((converted.webchatContext as { latestUrl: string }).latestUrl, origin + pilot);
+  assert.equal(((await storage.getConversation("old-inquiry"))?.channelAccountId), AGENT_PAGE_FORM_ACCOUNT);
+  assert.equal((await storage.getMessages("old-inquiry")).length, 3);
+  const inbox = await storage.getUnifiedInbox(user.id);
+  assert.equal(inbox.find((row) => row.conversation?.id === "old-inquiry")?.contact.name, neighborhoodIdentity.name);
+  assert.ok(buildFollowUpItems(inbox).find((item) => item.id === converted.id && hasScheduledFollowUp(item)));
+  assert.equal(inbox.find((row) => row.contact.id === "anonymous")?.contact.name, "Website Visitor");
+  assert.ok(!filterCrmListedContacts(await storage.getContacts(user.id)).some((contact) => contact.id === "anonymous"));
+  assert.equal((await storage.getContact("other-tenant"))?.name, "Other Tenant");
+  assert.equal((await storage.getWorkflowExecutions("w1")).filter((row) => row.conversationId === "old-inquiry").length, 1);
+  await fixture.update(contacts).set({ followUp: null, followUpDate: null }).where(eq(contacts.id, converted.id));
+  assert.equal((await inquiry("message")).status, 201);
+  assert.equal((await storage.getContact(converted.id))?.followUp, null, "completed review cannot be recreated by retries");
+
+  const existing = await submit("yaniv-haramatiy", { phone: "9545550165", name: "Submitted Name", email: "saved@example.test" });
+  assert.equal(existing.status, 201, await existing.clone().text());
+  assert.equal((await storage.getContact("saved-lead"))?.email, "saved@example.test");
+  assert.equal((await storage.getContact("saved-lead"))?.pipelineStage, "Qualified");
+  assert.equal((await storage.getConversationByContactAndChannel("saved-lead", "webchat"))?.id, "widget-thread");
+  assert.equal((await storage.getMessages("widget-thread")).length, 0, "private inquiry is not exposed to public widget polling");
+  assert.equal((await submit("yaniv-haramatiy", { email: "saved@example.test", phone: "9545550164" })).status, 409);
+  assert.equal(outbound.mock.calls.length, 0);
+
+  const repeated = await Promise.all([1, 2].map(() => submit("yaniv-haramatiy", {
+    name: "Concurrent Lead", email: "concurrent@example.test", neighborhood: "victoria-park",
+  })));
+  for (const response of repeated) assert.equal(response.status, 201, await response.clone().text());
+  const matching = (await storage.getContacts(user.id)).filter((contact) => contact.email === "concurrent@example.test");
+  assert.equal(matching.length, 1);
+  const concurrent = await storage.getContactWithConversations(matching[0].id);
+  assert.equal(concurrent?.conversations.length, 1);
+  assert.equal(concurrent?.conversations[0].unreadCount, 2);
+  assert.equal((await storage.getWorkflowExecutions("w1")).filter((row) => row.conversationId === concurrent?.conversations[0].id).length, 1);
+
+  const [manualWorkflow] = await fixture.insert(workflows).values({
+    id: "manual-task-workflow", userId: user.id, name: "Internal task", triggerType: "keyword",
+    actions: [{ type: "create_task", title: "Call tomorrow", dueDays: 1 }],
+  }).returning();
+  expectReadOnly = false;
+  const occupied = await executeWorkflowActions(manualWorkflow, null, {}, emailLead);
+  assert.deepEqual(occupied.actionsExecuted, [], "an existing task is preserved without a false task_created entry");
+  assert.equal((await storage.getContact(emailLead.id))?.followUp, "Review new lead");
+  const taskExecution = await executeWorkflowActions(manualWorkflow, null, {}, converted);
+  assert.deepEqual(taskExecution.actionsExecuted, [{ type: "task_created", value: "Call tomorrow" }]);
+  assert.equal((await storage.getContact(converted.id))?.followUp, "Call tomorrow");
+  expectReadOnly = true;
+  assert.ok(sellerIntake.mock.calls.some(({ arguments: [id, profile] }) =>
+    id === converted.id && profile.lastSellerIntent === "seller_valuation"));
   assert.equal((await verifiedNeighborhoodChatContext(user.id, origin + pilot + "?utm_source=test"))?.agentNeighborhood, "victoria-park");
   assert.equal(await verifiedNeighborhoodChatContext("legacy-live", origin + pilot), undefined);
   assert.equal(await verifiedNeighborhoodChatContext(user.id, "https://other.example" + pilot), undefined);
