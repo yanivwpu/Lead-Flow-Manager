@@ -22,7 +22,7 @@ import { contacts, conversations, messages, prospectIntelligence, prospectOutrea
 import { buildFollowUpItems, hasScheduledFollowUp } from "../shared/followUpTasks";
 import { INBOUND_DEDUP_SCHEMA_SQL } from "../server/inboundDedupSchema";
 import { isInventoryContactEligible } from "../server/inventory/inventoryContactEligibility";
-import { inboxOnlyWebchatSourceDetails } from "../shared/webchatIdentityPromotion";
+import { inboxOnlyWebchatSourceDetails, promotedWebchatSourceDetails } from "../shared/webchatIdentityPromotion";
 import { filterCrmListedContacts } from "../shared/contactCrmVisibility";
 import { executeWorkflowActions } from "../server/workflowEngine";
 
@@ -403,10 +403,11 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     }
   }
 
-  const neighborhoodIdentity = { name: "Victoria Visitor", email: "visitor@example.test", phone: "+1 (954) 555-0164" };
+  const neighborhoodIdentity = { name: "Test 2", email: "visitor@example.test", phone: "+1 (954) 555-0164" };
   await fixture.insert(contacts).values([
-    { id: "prior-lead", userId: user.id, name: "Agent Page Visitor", source: "webchat", primaryChannel: "webchat",
-      webchatId: neighborhoodIdentity.email, sourceDetails: inboxOnlyWebchatSourceDetails(),
+    { id: "prior-lead", userId: user.id, name: "Checking lead capture", source: "webchat", primaryChannel: "webchat",
+      pipelineStage: "New Lead", email: neighborhoodIdentity.email,
+      webchatId: neighborhoodIdentity.email, sourceDetails: promotedWebchatSourceDetails({}, { agentPageForm: true, identifiedFrom: "agent_page_form" }),
       customFields: { email: neighborhoodIdentity.email, phone: neighborhoodIdentity.phone, sourcePage: "agent_page" } },
     { id: "other-tenant", userId: "legacy-live", name: "Other Tenant", email: neighborhoodIdentity.email },
     { id: "anonymous", userId: user.id, name: "Website Visitor", source: "webchat", sourceDetails: inboxOnlyWebchatSourceDetails() },
@@ -417,6 +418,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     { id: "old-inquiry", userId: user.id, contactId: "prior-lead", channel: "webchat" },
     { id: "widget-thread", userId: user.id, contactId: "saved-lead", channel: "webchat" },
   ]);
+  await fixture.insert(messages).values({ userId: user.id, conversationId: "old-inquiry", contactId: "prior-lead",
+    direction: "inbound", content: "Checking lead capture" });
   const inquiry = (intent: string) => submit("yaniv-haramatiy", { ...neighborhoodIdentity, intent, neighborhood: "victoria-park" });
   for (const intent of ["message", "schedule_showing", "home_worth"]) {
     const result = await inquiry(intent);
@@ -432,7 +435,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   });
   assert.equal((converted.webchatContext as { latestUrl: string }).latestUrl, origin + pilot);
   assert.equal(((await storage.getConversation("old-inquiry"))?.channelAccountId), AGENT_PAGE_FORM_ACCOUNT);
-  assert.equal((await storage.getMessages("old-inquiry")).length, 3);
+  const inquiryMessages = await storage.getMessages("old-inquiry");
+  assert.equal(inquiryMessages.length, 4);
+  assert.equal(inquiryMessages[0].content, "Checking lead capture", "the original message stays in the thread");
   const inbox = await storage.getUnifiedInbox(user.id);
   assert.equal(inbox.find((row) => row.conversation?.id === "old-inquiry")?.contact.name, neighborhoodIdentity.name);
   assert.ok(buildFollowUpItems(inbox).find((item) => item.id === converted.id && hasScheduledFollowUp(item)));
@@ -441,12 +446,14 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal((await storage.getContact("other-tenant"))?.name, "Other Tenant");
   assert.equal((await storage.getWorkflowExecutions("w1")).filter((row) => row.conversationId === "old-inquiry").length, 1);
   await fixture.update(contacts).set({ followUp: null, followUpDate: null }).where(eq(contacts.id, converted.id));
-  assert.equal((await inquiry("message")).status, 201);
+  assert.equal((await submit("yaniv-haramatiy", { ...neighborhoodIdentity, name: "Another Name", neighborhood: "victoria-park" })).status, 201);
   assert.equal((await storage.getContact(converted.id))?.followUp, null, "completed review cannot be recreated by retries");
+  assert.equal((await storage.getContact(converted.id))?.name, "Test 2", "repeat submissions preserve the captured name");
 
   const existing = await submit("yaniv-haramatiy", { phone: "9545550165", name: "Submitted Name", email: "saved@example.test" });
   assert.equal(existing.status, 201, await existing.clone().text());
   assert.equal((await storage.getContact("saved-lead"))?.email, "saved@example.test");
+  assert.equal((await storage.getContact("saved-lead"))?.name, "Saved Lead", "an established CRM name is preserved");
   assert.equal((await storage.getContact("saved-lead"))?.pipelineStage, "Qualified");
   assert.equal((await storage.getConversationByContactAndChannel("saved-lead", "webchat"))?.id, "widget-thread");
   assert.equal((await storage.getMessages("widget-thread")).length, 0, "private inquiry is not exposed to public widget polling");

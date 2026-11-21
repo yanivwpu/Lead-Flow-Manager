@@ -53,13 +53,16 @@ export async function resolveAgentPageFormContact(input: {
       !!existing.webchatId && (existing.webchatId === String(fields.email ?? "").trim().toLowerCase() ||
         existing.webchatId === String(fields.phone ?? "").replace(/\D/g, ""));
     const isNewLead = !existing || !isCrmListedContact(existing);
+    // The original form used chat extraction, so even a plausible legacy name may be a message.
+    const captureFormName = !!name && (!current.name || (wasLegacyForm && details.agentPageFormNameCaptured !== true));
     const patch = {
-      name: current.name || name || existing?.name || "Agent Page Visitor",
+      name: (captureFormName ? name : current.name) || existing?.name || "Agent Page Visitor",
       email: current.email ? existing!.email : email,
       phone: current.phone ? existing!.phone : phone,
       source: !existing?.source || existing.source === EMAIL_INBOX_IDENTITY_SOURCE ? "webchat" : existing.source,
       sourceDetails: promotedWebchatSourceDetails(details, {
         agentPageForm: true,
+        ...(captureFormName ? { agentPageFormNameCaptured: true } : {}),
         identifiedFrom: "agent_page_form",
         leadSource: attribution.leadSource,
       }),

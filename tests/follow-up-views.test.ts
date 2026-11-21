@@ -79,6 +79,10 @@ test('List renders genuine work with accurate counts and rule-based copy, withou
   for (const id of ['manual', 'realtor', 'inquiry', 'undated']) assert.ok(document.querySelector(`[data-testid="task-item-${id}"]`), id);
   for (const id of ['ordinary', 'railway', 'promo', 'deal']) assert.equal(document.querySelector(`[data-testid="task-item-${id}"]`), null, id);
   assert.equal(document.querySelectorAll('[data-testid="task-item-manual"]').length, 1);
+  const columns = document.querySelector('[data-testid="follow-up-list-columns"]')!;
+  assert.ok(columns.classList.contains('lg:grid-cols-2'));
+  assert.ok(columns.children[0].querySelector('[data-testid="task-item-realtor"]'), 'upcoming follow-ups appear first, including on mobile');
+  assert.ok(columns.children[1].querySelector('[data-testid="task-item-inquiry"]'), 'reply recommendations appear in the second section');
   assert.equal(document.querySelector('[data-testid="button-mark-done-inquiry"]'), null, 'reply work cannot clear contact reminders');
   assert.equal(document.querySelector('[data-testid="kpi-active-deals"] p')?.textContent, '2');
   assert.equal(document.querySelector('[data-testid="kpi-needs-reply"] p')?.textContent, '1');
