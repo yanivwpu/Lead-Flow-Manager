@@ -15,7 +15,7 @@ import { db } from "../../drizzle/db";
 export async function resolveAgentPageFormContact(input: {
   userId: string;
   identity: ValidatedWebchatIdentity;
-  sourcePage: "agent_page" | "agent_page_embed";
+  sourcePage: "agent_page" | "agent_page_embed" | "listing_flyer";
   attribution: Record<string, unknown>;
   pageContext?: WebchatPageContext;
 }) {

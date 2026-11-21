@@ -79,7 +79,6 @@ export async function resolvePublicListingAgent(userId: string): Promise<
   const profile = await getBusinessProfileForUser(userId);
   return {
     name: profile.displayName || null,
-    email: profile.publicEmail || null,
     phone: profile.publicPhone || null,
     avatarUrl: profile.avatarUrl,
     brokerageName: profile.businessName || null,

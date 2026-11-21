@@ -14,10 +14,10 @@ import {
 import { canShowPublicStreetAddress } from "./publicListingPublication";
 import { buildListingShareUrl, pickPrimaryPhotoUrl } from "./listingViewUrl";
 import { resolveListingStreetForSlug } from "./listingPublicSlug";
+import { publicAgentContactFieldsHtml, publicAgentPhoneHref } from "../agent/publicAgentContact";
 
 export type PublicListingFlyerAgent = {
   name: string | null;
-  email: string | null;
   phone: string | null;
   avatarUrl: string | null;
   brokerageName: string | null;
@@ -58,6 +58,8 @@ export type PublicListingFlyerInput = {
   qrDataUrl: string;
   /** Company/agency logo from Business Profile; W logo fallback when absent. */
   companyLogoUrl?: string | null;
+  /** Same-origin public inquiry endpoint, supplied for eligible shares only. */
+  inquiryPath?: string;
   /** When false, street address and map are withheld per MLS display rules. */
   allowStreetAddress?: boolean;
   /** When false, page should not be indexed (address display restricted). */
@@ -427,12 +429,11 @@ export function buildListingStructuredDataJson(input: ListingOpenGraphInput): st
     payload.yearBuilt = listing.yearBuilt;
   }
 
-  if (agent.name || agent.brokerageName || agent.phone || agent.email) {
+  if (agent.name || agent.brokerageName || agent.phone) {
     const seller: Record<string, unknown> = { "@type": "RealEstateAgent" };
     if (agent.name) seller.name = agent.name;
     if (agent.brokerageName) seller.parentOrganization = { "@type": "Organization", name: agent.brokerageName };
     if (agent.phone) seller.telephone = agent.phone;
-    if (agent.email) seller.email = agent.email;
     payload.seller = seller;
   }
 
@@ -496,24 +497,6 @@ export function renderListingErrorOpenGraphTags(): string {
 
 function isValidBookingLink(link: string | null | undefined): link is string {
   return typeof link === "string" && /^https?:\/\//i.test(link.trim());
-}
-
-function buildAgentContactHref(
-  agent: PublicListingFlyerAgent,
-  listing: PublicListingFlyerListing,
-): string | null {
-  const address = buildFullAddress(listing);
-  const subject = encodeURIComponent(
-    address ? `Inquiry about ${address}` : "Property inquiry",
-  );
-  if (agent.email) {
-    return `mailto:${encodeURIComponent(agent.email)}?subject=${subject}`;
-  }
-  if (agent.phone) {
-    const digits = agent.phone.replace(/\D/g, "");
-    return digits ? `tel:${digits}` : null;
-  }
-  return null;
 }
 
 function buildGoogleMapsUrl(listing: PublicListingFlyerListing): string | null {
@@ -652,10 +635,11 @@ function buildFlyerBottomRow(
   agent: PublicListingFlyerAgent,
   companyLogoUrl: string | null,
   allowStreetAddress: boolean,
+  inquiryPath?: string,
 ): string {
   const mapCol = allowStreetAddress ? renderMapColumn(listing) : `<div class="bottom-col bottom-col-map bottom-col-empty" aria-hidden="true"></div>`;
   const qrCol = renderQrColumn(qrDataUrl);
-  const agentCard = renderAgentCard(agent, listing, companyLogoUrl);
+  const agentCard = renderAgentCard(agent, companyLogoUrl, inquiryPath);
   const agentCol = agentCard
     ? `<div class="bottom-col bottom-col-agent">${agentCard}</div>`
     : `<div class="bottom-col bottom-col-agent bottom-col-empty" aria-hidden="true"></div>`;
@@ -764,25 +748,19 @@ function renderGallery(
   </section>`;
 }
 
-function renderAgentActions(agent: PublicListingFlyerAgent, listing: PublicListingFlyerListing): string {
+function renderAgentActions(agent: PublicListingFlyerAgent, inquiryPath?: string): string {
   const bookingHref = isValidBookingLink(agent.bookingLink) ? agent.bookingLink.trim() : null;
-  const contactHref = buildAgentContactHref(agent, listing);
+  const phoneHref = publicAgentPhoneHref(agent.phone);
+  const contactClass = bookingHref ? "btn agent-cta-secondary" : "btn btn-primary agent-cta";
   const buttons: string[] = [];
 
   if (bookingHref) {
     buttons.push(
       `<a class="btn btn-primary agent-cta" href="${escapeHtml(bookingHref)}" target="_blank" rel="noopener noreferrer">Schedule Showing</a>`,
     );
-    if (contactHref) {
-      buttons.push(
-        `<a class="btn agent-cta-secondary" href="${escapeHtml(contactHref)}">Contact Agent</a>`,
-      );
-    }
-  } else if (contactHref) {
-    buttons.push(
-      `<a class="btn btn-primary agent-cta" href="${escapeHtml(contactHref)}">Contact Agent</a>`,
-    );
   }
+  if (inquiryPath) buttons.push(`<button type="button" class="${contactClass}" id="open-listing-inquiry">Contact Agent</button>`);
+  else if (phoneHref) buttons.push(`<a class="${contactClass}" href="${escapeHtml(phoneHref)}">Contact Agent</a>`);
 
   if (buttons.length === 0) return "";
   return `<div class="agent-actions">${buttons.join("")}</div>`;
@@ -795,22 +773,72 @@ function agentInitials(agent: PublicListingFlyerAgent): string {
   return source.charAt(0).toUpperCase();
 }
 
+function renderListingInquiry(inquiryPath: string): string {
+  return `<dialog id="listing-inquiry" class="listing-inquiry no-print" aria-labelledby="listing-inquiry-title">
+    <h2 id="listing-inquiry-title">Contact Agent</h2>
+    <form action="${escapeHtml(inquiryPath)}" method="post">
+      ${publicAgentContactFieldsHtml}
+      <label>Message<textarea name="message" maxlength="4000"></textarea></label>
+      <p id="listing-inquiry-status" role="status"></p>
+      <div class="agent-actions">
+        <button type="submit" class="btn btn-primary agent-cta">Send inquiry</button>
+        <button type="button" class="btn agent-cta-secondary" id="close-listing-inquiry">Close</button>
+      </div>
+    </form>
+  </dialog>
+  <script>
+    (function () {
+      var dialog = document.getElementById("listing-inquiry");
+      var form = dialog.querySelector("form");
+      var status = document.getElementById("listing-inquiry-status");
+      var submit = form.querySelector('button[type="submit"]');
+      document.getElementById("open-listing-inquiry").addEventListener("click", function () { dialog.showModal(); });
+      document.getElementById("close-listing-inquiry").addEventListener("click", function () { dialog.close(); });
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var fields = Object.fromEntries(new FormData(form));
+        fields.email = fields.email.trim() || undefined;
+        fields.phone = fields.phone.trim() || undefined;
+        if (!fields.email && !fields.phone) {
+          status.textContent = "Enter an email address or phone number.";
+          form.elements.email.focus();
+          return;
+        }
+        submit.disabled = true;
+        status.textContent = "Sending inquiry…";
+        try {
+          var response = await fetch(form.action, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields),
+          });
+          var result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Unable to send inquiry.");
+          form.reset();
+          status.textContent = "Thanks. Your inquiry was sent.";
+        } catch (error) {
+          status.textContent = error.message || "Unable to send inquiry.";
+        } finally {
+          submit.disabled = false;
+        }
+      });
+    })();
+  </script>`;
+}
+
 function renderAgentCard(
   agent: PublicListingFlyerAgent,
-  listing: PublicListingFlyerListing,
   companyLogoUrl: string | null,
+  inquiryPath?: string,
 ): string {
-  const contactHref = buildAgentContactHref(agent, listing);
+  const phoneHref = publicAgentPhoneHref(agent.phone);
   const bookingHref = isValidBookingLink(agent.bookingLink) ? agent.bookingLink.trim() : null;
   const companyLogo = renderCompanyLogo(companyLogoUrl);
   const hasAgent =
     agent.name ||
     agent.brokerageName ||
     agent.phone ||
-    agent.email ||
     agent.avatarUrl ||
     companyLogo ||
-    contactHref ||
+    inquiryPath ||
     bookingHref;
   if (!hasAgent) return "";
 
@@ -824,16 +852,10 @@ function renderAgentCard(
     lines.push(`<p class="agent-brokerage">${escapeHtml(agent.brokerageName)}</p>`);
   }
   if (agent.phone) {
-    const tel = agent.phone.replace(/\D/g, "");
     lines.push(
-      tel
-        ? `<p class="agent-contact"><a href="tel:${escapeHtml(tel)}">${escapeHtml(agent.phone)}</a></p>`
+      phoneHref
+        ? `<p class="agent-contact"><a href="${escapeHtml(phoneHref)}">${escapeHtml(agent.phone)}</a></p>`
         : `<p class="agent-contact">${escapeHtml(agent.phone)}</p>`,
-    );
-  }
-  if (agent.email) {
-    lines.push(
-      `<p class="agent-contact"><a href="mailto:${escapeHtml(agent.email)}">${escapeHtml(agent.email)}</a></p>`,
     );
   }
 
@@ -841,7 +863,7 @@ function renderAgentCard(
     ${avatar}
     <div class="agent-body">
       ${lines.join("")}
-      ${renderAgentActions(agent, listing)}
+      ${renderAgentActions(agent, inquiryPath)}
     </div>
     ${companyLogo ? `<div class="agent-logo-footer">${companyLogo}</div>` : ""}
   </div>`;
@@ -969,6 +991,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     shareUrl: requestedShareUrl,
     qrDataUrl,
     companyLogoUrl = null,
+    inquiryPath,
     allowStreetAddress: allowStreetOverride,
     allowSearchIndexing: allowIndexOverride,
   } = input;
@@ -1001,7 +1024,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     : "";
 
   const propertyHeaderHtml = renderPropertyHeader(listing, price, sqft, hoa, yearBuilt);
-  const bottomRowHtml = buildFlyerBottomRow(listing, qrDataUrl, agent, companyLogoUrl, allowStreetAddress);
+  const bottomRowHtml = buildFlyerBottomRow(listing, qrDataUrl, agent, companyLogoUrl, allowStreetAddress, inquiryPath);
   const complianceAttributionHtml = renderListingComplianceAttribution(
     listing.listingCompliance,
     agent.brokerageName,
@@ -1364,6 +1387,13 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     .agent-contact { margin: 0 0 3px; font-size: 0.8125rem; }
     .agent-contact a { color: var(--ink); text-decoration: none; }
     .agent-contact a:hover { text-decoration: underline; }
+    .listing-inquiry { width: min(28rem, calc(100% - 2rem)); border: 1px solid var(--border); border-radius: 12px; padding: 20px; color: var(--ink); }
+    .listing-inquiry::backdrop { background: rgb(15 23 42 / 55%); }
+    .listing-inquiry h2 { margin: 0 0 12px; }
+    .listing-inquiry label { display: grid; gap: 4px; margin-bottom: 10px; font-weight: 600; }
+    .listing-inquiry input, .listing-inquiry textarea { width: 100%; padding: 8px; border: 1px solid #94a3b8; border-radius: 6px; font: inherit; font-weight: 400; }
+    .listing-inquiry textarea { min-height: 72px; resize: vertical; }
+    .listing-inquiry [role="status"]:empty { display: none; }
     .agent-body { width: 100%; }
     .agent-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; width: 100%; }
     .agent-cta, .agent-cta-secondary { width: 100%; text-align: center; font-size: 0.8125rem; padding: 8px 12px; }
@@ -1569,6 +1599,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
     </div>
   </div>
   ${renderFlyerFloatingActions()}
+  ${inquiryPath ? renderListingInquiry(inquiryPath) : ""}
   <div id="toast" class="toast no-print" role="status" aria-live="polite">Listing link copied.</div>
   <script>
     (function () {

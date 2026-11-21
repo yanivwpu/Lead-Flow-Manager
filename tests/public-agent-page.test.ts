@@ -287,7 +287,7 @@ function testAgentPageDbSavePath() {
   assert(card.includes('listingType: "for_rent"'), "for rent embed param in snippet builder");
   assert(card.includes("Primary contact button"), "primary contact button label");
   assert(card.includes("agent-page-primary-contact-button"), "primary contact button test id");
-  assert(card.includes("Email link"), "email link option label");
+  assert(card.includes("Contact form"), "legacy email preference now labels the contact form");
   assert(card.includes("Phone call"), "phone call option label");
   assert(
     card.includes("Web chat and forms create CRM leads in your Inbox"),
@@ -710,7 +710,6 @@ function testEmbedMode() {
       linkedinUrl: "",
       youtubeUrl: "",
     },
-    publicEmail: "",
     publicPhone: "",
     schedulingUrl: "",
     widgetEnabled: true,
@@ -803,7 +802,6 @@ function testEmbedMode() {
       linkedinUrl: "",
       youtubeUrl: "",
     },
-    publicEmail: "",
     publicPhone: "",
     schedulingUrl: "",
     widgetEnabled: true,
@@ -846,7 +844,6 @@ function testEmbedMode() {
       linkedinUrl: "",
       youtubeUrl: "",
     },
-    publicEmail: "",
     publicPhone: "",
     schedulingUrl: "",
     widgetEnabled: true,
@@ -895,7 +892,6 @@ function testHtml() {
       linkedinUrl: "https://linkedin.com/in/testagent",
       youtubeUrl: "",
     },
-    publicEmail: "agent@example.com",
     publicPhone: "+15550100",
     schedulingUrl: "https://calendly.com/test",
     widgetEnabled: true,
@@ -974,7 +970,6 @@ function testHtml() {
       linkedinUrl: "",
       youtubeUrl: "",
     },
-    publicEmail: "",
     publicPhone: "",
     schedulingUrl: "",
     widgetEnabled: false,

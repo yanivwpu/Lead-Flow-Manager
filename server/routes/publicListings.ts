@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import QRCode from "qrcode";
-import { getPublicListingFlyerData } from "../inventory/inventoryDb";
+import { getPublicListingFlyerData, resolvePublicShareListing } from "../inventory/inventoryDb";
 import {
   backfillFlyerColumnsForListingId,
   listingNeedsFlyerColumnBackfill,
@@ -12,9 +12,15 @@ import {
   inventoryRowToFlyerListing,
 } from "@shared/inventory/publicListingFlyer";
 import { isListingShareUuid } from "@shared/inventory/listingPublicSlug";
-import { extractListingShareSegmentFromUrl } from "@shared/inventory/listingViewUrl";
+import { buildListingCanonicalShareUrl, extractListingShareSegmentFromUrl } from "@shared/inventory/listingViewUrl";
+import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
+import { publicAgentLeadBodySchema } from "@shared/agent/agentPageSchema";
 import { getRequestOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
+import { hasAgentPagePublicationAccess } from "../agentPage/agentPagePublication";
+import { processPublicListingLead } from "../agentPage/publicAgentPageLeadService";
+
+const listingInquirySchema = publicAgentLeadBodySchema.pick({ name: true, email: true, phone: true, message: true });
 
 function logPublicListingShare(event: string, payload: Record<string, unknown>): void {
   console.info(JSON.stringify({ tag: "[public-listing:share]", event, ...payload }));
@@ -85,6 +91,7 @@ export function registerPublicListingRoutes(app: Express): void {
         width: 320,
         errorCorrectionLevel: "M",
       });
+      const inquiryEnabled = await hasAgentPagePublicationAccess(flyerData.listing.userId).catch(() => false);
 
       const html = buildPublicListingFlyerHtml({
         listing: inventoryRowToFlyerListing(flyerData.listing),
@@ -93,6 +100,7 @@ export function registerPublicListingRoutes(app: Express): void {
         qrDataUrl,
         companyLogoUrl: flyerData.companyLogoUrl,
         allowSearchIndexing: flyerData.indexedPublicListing,
+        inquiryPath: inquiryEnabled ? `/api/public/listings/${encodeURIComponent(flyerData.listing.id)}/leads` : undefined,
       });
 
       logPublicListingShare("render_ok", {
@@ -114,6 +122,26 @@ export function registerPublicListingRoutes(app: Express): void {
         }),
       );
       res.status(500).type("html").send(buildPublicListingLoadErrorHtml());
+    }
+  });
+
+  app.post("/api/public/listings/:identifier/leads", requirePublicListingSchemaReady, async (req, res) => {
+    const parsed = listingInquirySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ error: "Enter valid contact details." });
+
+    try {
+      const listing = await resolvePublicShareListing(req.params.identifier);
+      if (!listing || !(await hasAgentPagePublicationAccess(listing.userId))) {
+        return res.status(404).json({ error: "This listing inquiry form is unavailable." });
+      }
+      const publicSlug = getPublicListingAddressSlug(listing.publicSlug, listing.listingCompliance);
+      const listingUrl = buildListingCanonicalShareUrl({ listingId: listing.id, publicSlug }, getRequestOrigin(req));
+      const outcome = await processPublicListingLead(listing, listingUrl, parsed.data);
+      if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error });
+      return res.status(201).json({ ok: true });
+    } catch (error) {
+      console.error("[public-listing] inquiry failed", error);
+      return res.status(500).json({ error: "Unable to send inquiry." });
     }
   });
 }

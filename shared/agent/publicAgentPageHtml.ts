@@ -3,6 +3,7 @@ import { neighborhoodTitle } from "./neighborhoodPages";
 import type { PublicAgentPageRenderInput, AgentPageListingCard } from "./agentPageTypes";
 import { listingTypeChipClass } from "./agentPageEmbed";
 import { normalizePropertyTypeForFilter } from "./publicAgentPageBrowse";
+import { publicAgentContactFieldsHtml, publicAgentPhoneHref } from "./publicAgentContact";
 
 const BRAND_GREEN = "#059669";
 const BRAND_GREEN_DARK = "#047857";
@@ -210,14 +211,15 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ? `<button type="button" class="btn btn-outline" id="btn-home-worth">What's My Home Worth?</button>`
     : "";
 
-  const primaryContactLabel =
-    data.preferredLeadCapture === "email"
-      ? "Email agent"
-      : data.preferredLeadCapture === "phone"
-        ? "Call agent"
-        : data.widgetEnabled
-          ? "Let's Chat"
-          : "Send a message";
+  const phoneHref = publicAgentPhoneHref(data.publicPhone);
+  const contactMode = data.neighborhood ? "form"
+    : data.preferredLeadCapture === "phone" && phoneHref ? "phone"
+    : data.preferredLeadCapture === "webchat" && data.widgetEnabled ? "chat" : "form";
+  const primaryContactLabel = contactMode === "phone" ? "Call agent"
+    : contactMode === "chat" ? "Let's Chat"
+    : data.neighborhood || data.preferredLeadCapture === "email" ? "Contact Agent" : "Send a message";
+  const phoneLink = phoneHref
+    ? `<a class="agent-heading-phone" href="${escapeHtml(phoneHref)}">${escapeHtml(data.publicPhone)}</a>` : "";
 
   const embedMode = data.embedMode === true;
   const hideChat = embedMode && data.hideChat === true;
@@ -254,12 +256,16 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     : `<header class="agent-header">
       ${renderProfileColumn(data)}
       <div class="agent-info-col">
-        ${neighborhood ? `<h1 class="agent-name">${locationTitle}</h1><p>${escapeHtml(data.displayName)}${data.brokerageName ? ` · ${escapeHtml(data.brokerageName)}` : ""}</p>` : `<h1 class="agent-name">${escapeHtml(data.displayName)}</h1>`}
+        <div class="agent-heading">
+          ${neighborhood ? `<h1 class="agent-name">${locationTitle}</h1>
+            <div class="agent-byline"><span>${escapeHtml(data.displayName)}</span>${phoneLink}</div>
+            ${data.brokerageName ? `<p class="agent-heading-brokerage">${escapeHtml(data.brokerageName)}</p>` : ""}`
+            : `<h1 class="agent-name">${escapeHtml(data.displayName)}</h1>${phoneLink}`}
+        </div>
         ${bioHtml}
         ${marketHtml}
-        ${neighborhood && (data.publicEmail || data.publicPhone) ? `<p>${[data.publicEmail, data.publicPhone].filter(Boolean).map(escapeHtml).join(" · ")}</p>` : ""}
         <div class="cta-row"${navigationHtml ? ' id="agent-contact"' : ""}${neighborhood?.preview ? " inert" : ""}>
-          <button type="button" class="btn btn-primary" id="btn-message">${escapeHtml(neighborhood ? "Contact agent" : primaryContactLabel)}</button>
+          ${contactMode === "phone" ? `<a class="btn btn-primary" id="btn-message" href="${escapeHtml(phoneHref!)}">${primaryContactLabel}</a>` : `<button type="button" class="btn btn-primary" id="btn-message">${primaryContactLabel}</button>`}
           ${data.schedulingUrl && !neighborhood ? `<a class="btn btn-outline" id="btn-schedule-header" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Schedule Showing</a>` : `<button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>`}
           ${neighborhood && !neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
           ${neighborhood && !homeWorthBtn ? `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>` : homeWorthBtn}
@@ -294,6 +300,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     @media (min-width: 640px) { .agent-brokerage-block { align-items: flex-start; } }
     .agent-logo { max-height: 36px; max-width: 120px; object-fit: contain; }
     .agent-name { margin: 0 0 4px; font-size: 1.75rem; font-weight: 800; }
+    .agent-heading { margin-bottom: 10px; overflow-wrap: anywhere; }
+    .agent-byline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-weight: 600; }
+    .agent-heading-phone { color: var(--brand-dark); font-size: 0.9375rem; font-weight: 600; text-underline-offset: 3px; }
+    .agent-heading-brokerage { color: var(--muted); margin: 2px 0 0; }
     .agent-bio { margin: 0 0 10px; color: #334155; font-size: 0.9375rem; }
     .agent-market { margin: 4px 0 12px; display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
     .agent-market-label { font-size: 0.8125rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -652,9 +662,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         <input type="hidden" name="listingUrl" id="form-listing-url" value="" disabled />
         <input type="hidden" name="source" id="form-source" value="" disabled />
         <input type="hidden" name="propertyAddress" id="form-listing-property-address" value="" disabled />
-        <label>Name<input name="name" required /></label>
-        <label>Email<input name="email" type="email" /></label>
-        <label>Phone<input name="phone" type="tel" /></label>
+        ${publicAgentContactFieldsHtml}
         <div id="message-field"><label>Message<textarea name="message"></textarea></label></div>
         <div id="home-worth-fields" hidden>
           <label>Property address<input name="propertyAddress" id="home-worth-property-address" disabled /></label>
@@ -706,9 +714,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     widgetPublicId: data.widgetPublicId,
     schedulingUrl: data.schedulingUrl,
     widgetEnabled: data.widgetEnabled,
-    preferredLeadCapture: data.preferredLeadCapture,
-    publicEmail: data.publicEmail,
-    publicPhone: data.publicPhone,
+    contactMode,
     chatPrefill: "Hi, I'd like to connect with you about real estate.",
     browseFilterDebug: process.env.NODE_ENV === "development",
     browsePageSize: data.browsePageSize,
@@ -911,28 +917,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       }
 
       var btnMessage = document.getElementById("btn-message");
-      if (btnMessage) btnMessage.addEventListener("click", function () {
-        if (config.neighborhood) {
-          openModal("message");
-          return;
-        }
-        if (config.preferredLeadCapture === "webchat") {
-          if (config.widgetEnabled) {
-            openChatWidget();
-            return;
-          }
-          openModal("message");
-          return;
-        }
-        if (config.preferredLeadCapture === "email" && config.publicEmail) {
-          window.location.href = "mailto:" + config.publicEmail;
-          return;
-        }
-        if (config.preferredLeadCapture === "phone" && config.publicPhone) {
-          window.location.href = "tel:" + config.publicPhone.replace(/\\D/g, "");
-          return;
-        }
-        openModal("message");
+      if (btnMessage && config.contactMode !== "phone") btnMessage.addEventListener("click", function () {
+        if (config.contactMode === "chat") openChatWidget();
+        else openModal("message");
       });
 
       ${navigationHtml ? agentPageNavigationScript : ""}

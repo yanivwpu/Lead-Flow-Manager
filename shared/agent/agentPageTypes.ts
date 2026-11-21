@@ -39,7 +39,6 @@ export type PublicAgentPageRenderInput = {
   avatarUrl: string | null;
   companyLogo: string | null;
   socialLinks: PublicAgentPageSocialLinks;
-  publicEmail: string;
   publicPhone: string;
   schedulingUrl: string;
   widgetEnabled: boolean;

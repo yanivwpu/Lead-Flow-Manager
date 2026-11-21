@@ -163,7 +163,6 @@ export async function buildPublicAgentPageData(
     avatarUrl: str(agent.avatarUrl) || null,
     companyLogo: str(agent.companyLogo) || null,
     socialLinks,
-    publicEmail: str(agent.publicEmail),
     publicPhone: str(agent.publicPhone),
     schedulingUrl: calendly || scheduling?.url || "",
     widgetEnabled,
