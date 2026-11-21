@@ -56,7 +56,7 @@ export function resolveListingStreetForSlug(input: ListingPublicSlugInput): stri
 }
 
 export function slugifyListingText(value: string): string {
-  return value
+  const slug = value
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -64,8 +64,12 @@ export function slugifyListingText(value: string): string {
     .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/-+/g, "-");
+
+  // Collapsing hyphen runs leaves at most one hyphen at each end.
+  const start = slug.startsWith("-") ? 1 : 0;
+  const end = slug.endsWith("-") ? -1 : undefined;
+  return slug.slice(start, end);
 }
 
 export type ListingPublicSlugInput = {
