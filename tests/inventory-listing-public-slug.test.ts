@@ -28,6 +28,9 @@ assert(isListingShareUuid(listingId), "uuid detected");
 assert(!isListingShareUuid("3503-oaks-way-308-pompano-beach-fl-33069-2e059e00"), "slug not uuid");
 
 assert(slugifyListingText("3503 Oaks Way #308") === "3503-oaks-way-308", "unit slugify");
+assert(slugifyListingText("  42 Côte-d’Or Ave. #5  ") === "42-cote-d-or-ave-5", "accented address slugify");
+assert(slugifyListingText("---3503---Oaks--Way---") === "3503-oaks-way", "collapse and trim hyphens");
+assert(slugifyListingText("---") === "", "hyphen-only input is empty");
 assert(listingPublicSlugSuffix(listingId) === "2e059e00", "stable suffix");
 
 const slug = buildListingPublicSlug({
@@ -42,6 +45,16 @@ assert(
   slug === "3503-oaks-way-308-pompano-beach-fl-33069-2e059e00",
   `expected full slug, got ${slug}`,
 );
+
+const longStreetPrefix = "a".repeat(89);
+const longSlug = buildListingPublicSlug({
+  id: listingId,
+  addressLine1: `${"-".repeat(100_000)}${longStreetPrefix}-${"b".repeat(100_000)}`,
+  city: "Pompano Beach",
+  state: "FL",
+  zip: "33069",
+});
+assert(longSlug === `${longStreetPrefix}-2e059e00`, "long address keeps the same truncation and suffix");
 
 const slugFromUnparsed = buildListingPublicSlug({
   id: listingId,

@@ -1,3 +1,4 @@
+import { RGE_INVENTORY_SETTINGS_HASH } from "@shared/rgePaths";
 import { useQuery } from "@tanstack/react-query";
 import { Home, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,13 +10,13 @@ import { isWorkspaceInventoryConnected } from "@shared/inventory/inventoryWorksp
 
 export function InventorySidebarSummary() {
   const { user } = useAuth();
-  const { data: status, isLoading: statusLoading } = useQuery({
+  const { data: status, isLoading: statusLoading, isError: statusError } = useQuery({
     queryKey: ["/api/inventory/status"],
     queryFn: fetchInventoryStatus,
     staleTime: 30_000,
   });
 
-  const { data: sources = [], isLoading: sourcesLoading } = useQuery({
+  const { data: sources = [], isLoading: sourcesLoading, isError: sourcesError } = useQuery({
     queryKey: inventorySourcesQueryKey(user?.id),
     queryFn: fetchInventorySourcesBundle,
     select: (bundle) => normalizeInventorySourcesQueryData(bundle).sources,
@@ -40,41 +41,27 @@ export function InventorySidebarSummary() {
       ? "bg-amber-50 text-amber-800 border-amber-200"
       : "bg-slate-50 text-slate-600 border-slate-200";
 
-  const summaryLine = !status?.canUse
-    ? "Inventory unavailable"
-    : connected
-      ? `${sources.filter((s) => s.connectionStatus === "connected").length || sources.length} source${sources.length === 1 ? "" : "s"} connected`
-      : "No source connected";
-
   return (
     <Card data-testid="inventory-sidebar-summary">
-      <CardHeader className="pb-2">
+      <CardHeader className="p-4 pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Home className="w-4 h-4 text-brand-green" />
           Inventory Sources
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        {isLoading ? (
+      <CardContent className="px-4 pb-4 text-sm">
+        {statusError || sourcesError ? <p role="alert" className="text-slate-700">Status unavailable</p> : isLoading ? (
           <div className="flex items-center text-muted-foreground text-xs">
             <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
             Loading…
           </div>
         ) : (
-          <>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground text-xs">Status</span>
-              <span
-                className={cn(
-                  "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
-                  statusClass,
-                )}
-              >
-                {statusLabel}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">{summaryLine}</p>
-          </>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {status?.featureEnabled ? (
+              <a href={`#${RGE_INVENTORY_SETTINGS_HASH}`} className="font-medium text-slate-700 underline-offset-4 hover:underline">Manage sources</a>
+            ) : <span className="text-slate-700">Listing feeds</span>}
+            <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", statusClass)}>{statusLabel}</span>
+          </div>
         )}
       </CardContent>
     </Card>

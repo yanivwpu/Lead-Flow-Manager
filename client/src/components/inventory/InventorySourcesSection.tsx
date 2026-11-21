@@ -625,10 +625,9 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
 
       {status.canUse && (
         <>
-          <p className={cn("text-sm text-muted-foreground leading-relaxed", isCompact && "text-xs")}>
-            Your inventory provider supplies the listing feed used by RGE to power buyer matching, new
-            opportunities, price reduction alerts, and AI listing drafts.
-          </p>
+          {!isCompact && <p className="text-sm text-muted-foreground">
+            Connected listing feeds support buyer matching, opportunities, price reduction alerts, and listing drafts.
+          </p>}
 
           {sourcesError ? (
             <Alert className="border-red-200 bg-red-50/80">
@@ -656,7 +655,7 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
             <>
               {hasConnectedSource && (
                 <div className="space-y-2" data-testid="inventory-connected-sources">
-                  <h3 className="text-sm font-semibold text-gray-900">Connected source</h3>
+                  <h3 className="sr-only">Connected sources</h3>
                   {connectedSummaries.map((card) => {
                     const source = sources.find((s) => s.id === card.sourceId);
                     const cardSyncing = source?.lastSyncStatus === "running";
@@ -718,29 +717,19 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                             </DropdownMenu>
                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground tabular-nums" data-testid="inventory-total-synced">
-                            {card.listingCountLabel}
-                          </span>
-                          {card.listingsScanned > 0 ? (
-                            <>
-                              {" · "}
-                              <span data-testid="inventory-listings-scanned">
-                                Scanned {card.listingsScanned.toLocaleString()}
-                              </span>
-                            </>
-                          ) : null}
-                          {card.totalStoredRows > card.listingCount ? (
-                            <>
-                              {" · "}
-                              <span data-testid="inventory-stored-rows">
-                                {card.totalStoredRows.toLocaleString()} stored rows
-                              </span>
-                            </>
-                          ) : null}
-                          {" · "}
-                          Last successful sync {card.lastSuccessfulSyncLabel}
+                        <p className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-700">
+                          <span className="font-semibold tabular-nums" data-testid="inventory-total-synced">{card.listingCountLabel}</span>
+                          <span>{cardSyncing ? "Syncing" : card.syncPaused ? "Sync paused" : `Last successful sync ${card.lastSuccessfulSyncLabel}`}</span>
                         </p>
+                        {(card.listingsScanned > 0 || card.totalStoredRows > card.listingCount) && (
+                          <details className="text-sm text-slate-700">
+                            <summary className="cursor-pointer">Sync details</summary>
+                            <div className="mt-1 flex flex-wrap gap-3">
+                              <span data-testid="inventory-listings-scanned">Scanned {card.listingsScanned.toLocaleString()}</span>
+                              <span data-testid="inventory-stored-rows">{card.totalStoredRows.toLocaleString()} stored rows</span>
+                            </div>
+                          </details>
+                        )}
                         {card.lastError ? (
                           <p className="text-xs text-red-700 leading-snug" data-testid="inventory-sync-error">
                             {card.lastError}
@@ -824,13 +813,23 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                 data-testid="inventory-agent-page-publication"
               >
                 <p className="text-sm font-semibold text-gray-900">Agent Page listings</p>
-                <dl className="grid gap-2 sm:grid-cols-2 text-xs">
+                <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
                       <div>
                         <dt className="text-muted-foreground">Active synced listings</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-total-synced">
                           {(publicationStats.activeStored ?? publicationStats.totalSynced).toLocaleString()}
                         </dd>
                       </div>
+                      <div>
+                        <dt className="text-muted-foreground">Published to Agent Page</dt>
+                        <dd className="font-medium tabular-nums" data-testid="publication-published">
+                          {publicationStats.publishedOnAgentPage.toLocaleString()}
+                        </dd>
+                      </div>
+                </dl>
+                <details className="text-sm text-slate-700">
+                  <summary className="cursor-pointer">Publication details</summary>
+                  <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div>
                         <dt className="text-muted-foreground">Scanned this sync</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-listings-scanned">
@@ -850,18 +849,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-muted-foreground">Published to Agent Page</dt>
-                        <dd className="font-medium tabular-nums" data-testid="publication-published">
-                          {publicationStats.publishedOnAgentPage.toLocaleString()}
-                        </dd>
-                      </div>
-                      <div>
                         <dt className="text-muted-foreground">Hidden / unpublished</dt>
                         <dd className="font-medium tabular-nums" data-testid="publication-hidden">
                           {publicationStats.hiddenUnpublished.toLocaleString()}
                         </dd>
                       </div>
-                    </dl>
+                  </dl>
+                </details>
 
                     {!publicationStats.workspacePublishEnabled && (
                       <p className="text-xs text-amber-700 leading-snug">
@@ -1519,14 +1513,13 @@ export function InventorySourcesSection({ variant = "section", className }: Prop
           className={cn("border-gray-200 scroll-mt-24", className)}
           data-testid="card-inventory-sources-compact"
         >
-          <CardHeader className="pb-3">
+          <CardHeader className="p-4 pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Home className="h-4 w-4 text-brand-green" />
               Inventory sources
             </CardTitle>
-            <CardDescription>Manage connected feeds or add another listing provider.</CardDescription>
           </CardHeader>
-          <CardContent>{inner}</CardContent>
+          <CardContent className="px-4 pb-4">{inner}</CardContent>
         </Card>
         {removeSourceDialog}
         {bulkPublishDialog}

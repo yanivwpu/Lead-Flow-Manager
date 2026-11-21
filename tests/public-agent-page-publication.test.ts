@@ -194,13 +194,18 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   const draftPreview = await request(previewUrl);
   assert.equal(draftPreview.status, 200, "owner can preview before parent is enabled");
   assert.equal(draftPreview.headers.get("X-Robots-Tag"), "noindex, nofollow");
+  const draftPreviewHtml = await draftPreview.text();
+  assert.doesNotMatch(draftPreviewHtml, /id="agent-site-nav"/);
+  assert.match(draftPreviewHtml, /Private preview — not published/, "draft preview clearly labeled private");
   const publishNeighborhood = (published: boolean, updateFields = {}) => savePage("PUT", { ...draft, ...updateFields, published }, editUrl);
   const neighborhoodSitemap = async () => (await request("/public-neighborhoods-sitemap-1.xml")).text();
   assert.equal((await publishNeighborhood(true)).status, 403, "a live parent is required to publish");
   assert.equal((await update({ agentPageEnabled: true, agentPageSlug: "yaniv-haramatiy" })).status, 200);
   assert.equal((await request(pilot)).status, 404);
   assert.doesNotMatch(await neighborhoodSitemap(), /victoria-park/);
-  assert.doesNotMatch(await (await request(parent)).text(), /victoria-park/);
+  const parentWithDraft = await (await request(parent)).text();
+  assert.doesNotMatch(parentWithDraft, /victoria-park|<summary>Neighborhoods<\/summary>/);
+  assert.match(parentWithDraft, /aria-current="page">Home/);
   assert.equal((await publishNeighborhood(true, { content: "Coming soon" })).status, 400);
   assert.equal((await savePage("POST", { ...draft, name: "Victoria-Park" })).status, 409);
   authenticatedUser = "";
@@ -221,7 +226,12 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(another.status, 201);
   const anotherRow = await another.json();
   assert.equal((await savePage("PUT", { ...draft, name: "Las Olas", published: true }, endpoint + "/" + anotherRow.id)).status, 200);
-  assert.equal((await publishNeighborhood(true)).status, 200);
+  const firstPublish = await publishNeighborhood(true, { expectedUpdatedAt: row.updatedAt });
+  assert.equal(firstPublish.status, 200);
+  const publishedRow = await firstPublish.json();
+  assert.notEqual(publishedRow.updatedAt, row.updatedAt);
+  assert.equal((await publishNeighborhood(false, { expectedUpdatedAt: row.updatedAt })).status, 409);
+  assert.equal((await request(editUrl + "?expectedUpdatedAt=" + encodeURIComponent(row.updatedAt), { method: "DELETE" })).status, 409);
   assert.equal((await (await request(endpoint)).json()).pages.length, 2);
   assert.match(await neighborhoodSitemap(), /legacy-agent\/victoria-park/);
   assert.match(await neighborhoodSitemap(), /yaniv-haramatiy\/las-olas/);
@@ -235,6 +245,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale, Florida \| Jane Agent<\/title>/);
   assert.match(pilotHtml, /content="Victoria Park is in northeast Fort Lauderdale/);
   assert.match(pilotHtml, /Back to the Agent Page/);
+  assert.match(pilotHtml, /href="[^"]+\/agents\/yaniv-haramatiy\/las-olas"/);
+  assert.doesNotMatch(pilotHtml, /legacy-agent|Other City/);
+  assert.doesNotMatch(await (await request(parent + "?embed=1")).text(), /id="agent-site-nav"|<summary>Neighborhoods<\/summary>/);
   assert.doesNotMatch(pilotHtml, /id="listings-grid"/, "no unverified MLS inventory or browse UI");
   assert.match(await (await request(parent)).text(), /href="[^"]+\/agents\/yaniv-haramatiy\/victoria-park"/);
   assert.match(await neighborhoodSitemap(), /\/agents\/yaniv-haramatiy\/victoria-park<\/loc>/);
@@ -244,6 +257,93 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
     t.after(() => browser.close());
+    for (const width of [320, 390, 1280, 1440]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.goto(origin + parent);
+      const menu = page.getByRole("button", { name: "Menu", exact: true });
+      const drawer = page.getByRole("dialog", { name: "Navigation" });
+      const nav = page.getByRole("navigation", { name: "Agent navigation" });
+      const disclosure = nav.getByText("Neighborhoods", { exact: true });
+      const mobile = width < 640;
+
+      if (mobile) {
+        await menu.focus();
+        await page.keyboard.press("Enter");
+        await drawer.waitFor();
+        assert.equal(await menu.getAttribute("aria-expanded"), "true");
+        assert.equal(await page.locator(":focus").innerText(), "Close menu");
+        await page.keyboard.press("Tab");
+        assert.equal(await page.locator(":focus").innerText(), "Home");
+        await page.keyboard.press("Escape");
+        await drawer.waitFor({ state: "hidden" });
+        await page.waitForFunction(() => document.activeElement?.id === "agent-menu-toggle");
+        assert.equal(await menu.getAttribute("aria-expanded"), "false");
+
+        await menu.click();
+        await drawer.waitFor();
+        await page.mouse.click(width - 4, 24);
+        await drawer.waitFor({ state: "hidden" });
+
+        await menu.click();
+        await drawer.waitFor();
+      } else {
+        assert.equal(await menu.isVisible(), false);
+        assert.equal(await nav.isVisible(), true);
+      }
+
+      assert.equal(await nav.getByRole("link", { name: "Home" }).getAttribute("aria-current"), "page");
+      await disclosure.focus();
+      await page.keyboard.press("Enter");
+      await nav.getByRole("link", { name: /Las Olas/ }).waitFor();
+      if (!mobile) {
+        await page.keyboard.press("Tab");
+        assert.match(await page.locator(":focus").innerText(), /Las Olas/);
+        await page.keyboard.press("Escape");
+        assert.equal(await disclosure.locator("..").getAttribute("open"), null);
+        assert.equal(await page.locator(":focus").innerText(), "Neighborhoods");
+        await page.keyboard.press("Enter");
+      }
+
+      await nav.getByRole("link", { name: /Victoria Park/ }).click();
+      await page.waitForURL(origin + pilot);
+      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      if (mobile) {
+        assert.equal(await drawer.isVisible(), false);
+        await menu.click();
+        await drawer.waitFor();
+      } else {
+        await disclosure.click();
+      }
+
+      assert.equal(await nav.getByRole("link", { name: /Victoria Park/ }).getAttribute("aria-current"), "page");
+      assert.equal(await nav.getByRole("link", { name: "Home" }).getAttribute("aria-current"), null);
+      await nav.getByRole("link", { name: /Las Olas/ }).click();
+      await page.waitForURL(origin + parent + "/las-olas");
+      if (mobile) {
+        await menu.click();
+        await drawer.waitFor();
+      }
+      await nav.getByRole("link", { name: "Properties" }).click();
+      await page.waitForURL(origin + parent + "#agent-properties");
+      await page.locator("#agent-properties").waitFor();
+      if (mobile) {
+        await menu.click();
+        await drawer.waitFor();
+      }
+      await nav.getByRole("link", { name: "Contact", exact: true }).click();
+      await page.getByRole("dialog").getByRole("textbox", { name: "Name", exact: true }).waitFor();
+      assert.equal(await page.locator(":focus").getAttribute("name"), "name");
+      await page.getByRole("button", { name: "Cancel" }).click();
+
+      if (mobile) {
+        await menu.click();
+        await drawer.waitFor();
+        await nav.getByRole("link", { name: "Properties" }).click();
+        await drawer.waitFor({ state: "hidden" });
+      }
+      await page.close();
+    }
     for (const width of [320, 390, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       await page.goto(origin + pilot);

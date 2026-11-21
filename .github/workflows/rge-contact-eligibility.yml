@@ -54,6 +54,7 @@ jobs:
         run: >-
           node --import tsx --test
           tests/public-agent-page.test.ts
+          tests/rge-neighborhood-drafts.test.ts
           tests/public-agent-page-publication.test.ts
           tests/public-listings-sitemap.test.ts
           tests/public-listing-publication.test.ts

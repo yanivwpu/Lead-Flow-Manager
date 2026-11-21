@@ -1,7 +1,7 @@
 import { NeighborhoodPageSettings } from "./NeighborhoodPageSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Circle, Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,41 +43,36 @@ function AgentPageEmbedCodeBlock({ slug, appOrigin }: { slug: string; appOrigin:
     title: "Long-Term Rentals",
   });
 
-  const copySnippet = (label: string, code: string) => {
-    navigator.clipboard.writeText(code);
-    toast({ title: `${label} embed code copied` });
+  const copySnippet = async (label: string, code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast({ title: `${label} embed code copied` });
+    } catch {
+      toast({ title: "Could not copy embed code", description: "Check clipboard permissions and try again.", variant: "destructive" });
+    }
   };
 
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-100" data-testid="agent-page-embed-code">
-      <div>
-        <p className="text-sm font-medium text-gray-800">Embed on your website</p>
-        <p className="text-xs text-muted-foreground leading-snug mt-1">
-          Paste an iframe on an external site (for example, your brokerage homepage) to show live
-          listings from your Agent Page.
+    <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-embed-code">
+      <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">
+        Embed listings on another website
+      </summary>
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-muted-foreground leading-snug">
+          Add your listings to a brokerage or personal website. Click to copy the embed code, then paste it into your website builder.
         </p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Homes for sale", saleSnippet)}>
+            <Copy className="h-3.5 w-3.5 mr-1.5" />
+            Copy homes for sale embed
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => void copySnippet("Rentals", rentSnippet)}>
+            <Copy className="h-3.5 w-3.5 mr-1.5" />
+            Copy rentals embed
+          </Button>
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Homes for sale</Label>
-        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
-          {saleSnippet}
-        </pre>
-        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For sale", saleSnippet)}>
-          <Copy className="h-3.5 w-3.5 mr-1.5" />
-          Copy for sale embed
-        </Button>
-      </div>
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Long-term rentals</Label>
-        <pre className="text-[11px] leading-relaxed font-mono whitespace-pre-wrap break-all rounded-md border border-gray-200 bg-gray-50/80 p-3 max-h-40 overflow-y-auto">
-          {rentSnippet}
-        </pre>
-        <Button type="button" variant="outline" size="sm" onClick={() => copySnippet("For rent", rentSnippet)}>
-          <Copy className="h-3.5 w-3.5 mr-1.5" />
-          Copy for rent embed
-        </Button>
-      </div>
-    </div>
+    </details>
   );
 }
 
@@ -92,7 +87,7 @@ type Props = {
 
 export function PublicAgentPageSettingsCard({ className }: Props) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["/api/agent-page"],
     queryFn: fetchAgentPageSettings,
   });
@@ -287,6 +282,10 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
   const agentDisplayUrl = data?.publicPageUrl ?? null;
   const pageIsPublic = Boolean(agentDisplayUrl);
 
+  if (isError && !data) {
+    return <p role="alert" className="rounded-xl border bg-white p-4 text-sm text-slate-700">Unable to load Agent Page settings.</p>;
+  }
+
   if (isLoading || !data) {
     return (
       <div
@@ -301,11 +300,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
     );
   }
 
-  const publishStatusLabel = !data.agentPageEnabled
-    ? "Page disabled"
-    : !data.agentPageSlug
-      ? "Slug required"
-      : pageIsPublic ? "Live" : "Not public yet";
+  const publishStatusLabel = pageIsPublic ? "Live" : "Offline";
 
   const publishStatusClass = pageIsPublic
     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -318,38 +313,17 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
       className={cn("rounded-xl border border-gray-200 bg-white", className)}
       data-testid="public-agent-page-settings"
     >
-      <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-gray-100 space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1 min-w-0">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Globe className="w-4 h-4 text-brand-green shrink-0" />
+      <header className="space-y-3 px-4 py-4 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <Globe className="h-4 w-4 shrink-0 text-brand-green" />
               Public Agent Page
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Create a public profile page to capture seller and buyer leads.
-            </p>
+            <span className={cn("rounded-full border px-2.5 py-0.5 text-xs font-semibold", publishStatusClass)}
+              data-testid="agent-page-active-status">{publishStatusLabel}</span>
           </div>
-          <div
-            className={cn(
-              "inline-flex items-center gap-2 text-sm font-medium shrink-0",
-              pageIsPublic ? "text-emerald-700" : "text-gray-500",
-            )}
-            data-testid="agent-page-active-status"
-          >
-            {pageIsPublic ? (
-              <CheckCircle2 className="h-4 w-4" aria-hidden />
-            ) : (
-              <Circle className="h-4 w-4" aria-hidden />
-            )}
-            {pageIsPublic ? "Agent Page Active" : publishStatusLabel}
-          </div>
-        </div>
-      </div>
-
-      <div className="px-4 py-4 sm:px-6 sm:py-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-          <div className="space-y-4 min-w-0" data-testid="agent-page-controls-column">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Label htmlFor="agent-page-enabled" className="text-sm font-medium">
                 Enable page
               </Label>
@@ -364,28 +338,32 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               />
             </div>
 
-            <div className="space-y-2" data-testid="agent-page-url-block">
-              <Label htmlFor="agent-page-slug">Agent URL</Label>
+        </div>
+        <div data-testid="agent-page-url-block">
               {agentDisplayUrl ? (
-                <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2.5 space-y-2">
-                  <p className="text-sm text-gray-900 break-all font-mono">{agentDisplayUrl}</p>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
+                  <p className="min-w-0 break-all text-sm text-slate-800">{agentDisplayUrl}</p>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(agentDisplayUrl);
-                        toast({ title: "Link copied" });
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(agentDisplayUrl);
+                          toast({ title: "Link copied" });
+                        } catch {
+                          toast({ title: "Could not copy the link", variant: "destructive" });
+                        }
                       }}
                     >
                       <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      Copy
+                      Copy Link
                     </Button>
                     <Button asChild variant="outline" size="sm">
                       <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                        Open
+                        Open Page
                       </a>
                     </Button>
                   </div>
@@ -395,173 +373,14 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   Enabling the page publishes your profile and makes it eligible for search.
                 </p>
               )}
-              {data.agentPageSlug && agentDisplayUrl && data.publishListingsPublicly ? (
-                <AgentPageEmbedCodeBlock
-                  slug={data.agentPageSlug}
-                  appOrigin={new URL(agentDisplayUrl).origin}
-                />
-              ) : null}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input
-                  id="agent-page-slug"
-                  value={slugDraft}
-                  placeholder="jane-smith-a1b2c3d4"
-                  aria-invalid={slugError ? true : undefined}
-                  className={cn(slugError && "border-destructive focus-visible:ring-destructive")}
-                  onChange={(e) => {
-                    setSlugDraft(e.target.value);
-                    if (slugError) setSlugError(null);
-                  }}
-                  onBlur={() => saveSlug(slugDraft)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={suggestSlugMutation.isPending || saveMutation.isPending}
-                  onClick={async () => {
-                    try {
-                      const result = await suggestSlugMutation.mutateAsync();
-                      if (result.slug) {
-                        setSlugDraft(result.slug);
-                        setSlugError(null);
-                        saveMutation.mutate({ agentPageSlug: result.slug });
-                      }
-                    } catch (e) {
-                      toast({
-                        title: "Could not generate slug",
-                        description: e instanceof Error ? e.message : undefined,
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  Suggest slug
-                </Button>
-              </div>
-              {slugError ? (
-                <p className="text-xs text-destructive" role="alert">
-                  {slugError}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">URL path: /agents/your-slug</p>
-              )}
-            </div>
+        </div>
+      </header>
 
-            <div className="space-y-2" data-testid="agent-page-primary-contact-button">
-              <Label>Primary contact button</Label>
-              <Select value={leadCaptureValue} onValueChange={handleLeadCaptureChange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="webchat">Web chat</SelectItem>
-                  <SelectItem value="email">Email link</SelectItem>
-                  <SelectItem value="phone">Phone call</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground leading-snug">
-                Web chat and forms create CRM leads in your Inbox. Email and phone open the visitor&apos;s email
-                app or dialer and may not be tracked.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="agent-page-home-worth" className="text-sm font-medium">
-                Show Home Value CTA
-              </Label>
-              <Switch
-                id="agent-page-home-worth"
-                checked={data.agentPageShowHomeValueCta}
-                disabled={saveMutation.isPending}
-                onCheckedChange={(checked) => {
-                  if (checked === data.agentPageShowHomeValueCta) return;
-                  saveMutation.mutate({ agentPageShowHomeValueCta: checked });
-                }}
-              />
-            </div>
-
-            <div className="space-y-2 pt-1" data-testid="agent-page-publish-status">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-medium text-gray-800">Page visibility</p>
-                <span
-                  className={cn(
-                    "text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border",
-                    publishStatusClass,
-                  )}
-                >
-                  {publishStatusLabel}
-                </span>
-              </div>
-              <div
-                className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3"
-                data-testid="publish-listings-publicly-toggle"
-              >
-                <div className="space-y-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">Publish listings publicly</p>
-                  <p className="text-xs text-muted-foreground leading-snug">
-                    Show individually published, MLS-eligible listings on your Agent Page and include them
-                    in property search discovery.
-                  </p>
-                </div>
-                <Switch
-                  checked={data.publishListingsPublicly}
-                  disabled={saveMutation.isPending}
-                  onCheckedChange={(checked) => {
-                    if (checked === data.publishListingsPublicly) return;
-                    saveMutation.mutate({ publishListingsPublicly: checked });
-                  }}
-                  aria-label="Publish listings publicly"
-                />
-              </div>
-              {data.publishListingsPublicly && pageIsPublic && (
-                <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
-                  <p className="text-xs text-muted-foreground leading-snug">
-                    <span className="font-medium text-gray-800 tabular-nums">
-                      {data.publishedOnAgentPage.toLocaleString()}
-                    </span>{" "}
-                    listings on your Agent Page
-                    {data.eligibleToPublish > 0 ? (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <span className="tabular-nums">{data.eligibleToPublish.toLocaleString()}</span> eligible
-                        to publish
-                      </>
-                    ) : null}
-                  </p>
-                  {data.publishedOnAgentPage === 0 && data.eligibleToPublish > 0 && (
-                    <p className="text-xs text-amber-700 leading-snug">
-                      Synced listings are not shown on your Agent Page until they are published.
-                    </p>
-                  )}
-                  {data.eligibleToPublish > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                      disabled={bulkPublishMutation.isPending}
-                      onClick={() => bulkPublishMutation.mutate()}
-                      data-testid="button-bulk-publish-listings"
-                    >
-                      {bulkPublishMutation.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Publishing…
-                        </>
-                      ) : (
-                        `Publish ${data.eligibleToPublish.toLocaleString()} eligible listings`
-                      )}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-4 min-w-0" data-testid="agent-page-profile-column">
+      <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
+      <div data-testid="agent-page-controls-column">
+        <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-profile-column">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Profile and branding</summary>
+          <div className="mt-4 space-y-4">
             <div className="space-y-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -659,14 +478,118 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 }}
               />
             </div>
+          </div>
+        </details>
+        <details className="border-t border-slate-200 px-4 py-3 sm:px-6">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Contact and lead capture</summary>
+          <div className="mt-4 space-y-4">
+            <div className="space-y-2" data-testid="agent-page-primary-contact-button">
+              <Label>Primary contact button</Label>
+              <Select value={leadCaptureValue} onValueChange={handleLeadCaptureChange}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="webchat">Web chat</SelectItem>
+                  <SelectItem value="email">Email link</SelectItem>
+                  <SelectItem value="phone">Phone call</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground leading-snug">
+                Web chat and forms create CRM leads in your Inbox. Email and phone open the visitor&apos;s email
+                app or dialer and may not be tracked.
+              </p>
+            </div>
 
-            <div className="space-y-3 pt-1 border-t border-gray-100" data-testid="agent-page-social-links">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-gray-800">Profile links</p>
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Optional. Icons appear on your public page when a link is set.
-                </p>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="agent-page-home-worth" className="text-sm font-medium">
+                Show Home Value CTA
+              </Label>
+              <Switch
+                id="agent-page-home-worth"
+                checked={data.agentPageShowHomeValueCta}
+                disabled={saveMutation.isPending}
+                onCheckedChange={(checked) => {
+                  if (checked === data.agentPageShowHomeValueCta) return;
+                  saveMutation.mutate({ agentPageShowHomeValueCta: checked });
+                }}
+              />
+            </div>
+          </div>
+        </details>
+        <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-publish-status">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Listing visibility</summary>
+          <div className="mt-4 space-y-4">
+              <div
+                className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50/80 p-3"
+                data-testid="publish-listings-publicly-toggle"
+              >
+                <div className="space-y-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Publish listings publicly</p>
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    Show individually published, MLS-eligible listings on your Agent Page and include them
+                    in property search discovery.
+                  </p>
+                </div>
+                <Switch
+                  checked={data.publishListingsPublicly}
+                  disabled={saveMutation.isPending}
+                  onCheckedChange={(checked) => {
+                    if (checked === data.publishListingsPublicly) return;
+                    saveMutation.mutate({ publishListingsPublicly: checked });
+                  }}
+                  aria-label="Publish listings publicly"
+                />
               </div>
+              {data.publishListingsPublicly && pageIsPublic && (
+                <div className="space-y-2 pt-1" data-testid="agent-page-listing-publish">
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    <span className="font-medium text-gray-800 tabular-nums">
+                      {data.publishedOnAgentPage.toLocaleString()}
+                    </span>{" "}
+                    listings on your Agent Page
+                    {data.eligibleToPublish > 0 ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="tabular-nums">{data.eligibleToPublish.toLocaleString()}</span> eligible
+                        to publish
+                      </>
+                    ) : null}
+                  </p>
+                  {data.publishedOnAgentPage === 0 && data.eligibleToPublish > 0 && (
+                    <p className="text-xs text-amber-700 leading-snug">
+                      Synced listings are not shown on your Agent Page until they are published.
+                    </p>
+                  )}
+                  {data.eligibleToPublish > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={bulkPublishMutation.isPending}
+                      onClick={() => bulkPublishMutation.mutate()}
+                      data-testid="button-bulk-publish-listings"
+                    >
+                      {bulkPublishMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Publishing…
+                        </>
+                      ) : (
+                        `Publish ${data.eligibleToPublish.toLocaleString()} eligible listings`
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+          </div>
+        </details>
+            <details className="border-t border-slate-200 px-4 py-3 sm:px-6" data-testid="agent-page-social-links">
+              <summary className="cursor-pointer select-none text-sm font-medium text-gray-800">Website &amp; social links</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground leading-snug">Optional. Icons appear on your public page when a link is set.</p>
               <div className="space-y-2">
                 <Label htmlFor="agent-page-website">Website URL</Label>
                 <Input
@@ -732,11 +655,67 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                   onBlur={() => saveProfileLink("youtubeUrl", youtubeUrlDraft)}
                 />
               </div>
-            </div>
+              </div>
+            </details>
+              {data.agentPageSlug && agentDisplayUrl && data.publishListingsPublicly ? (
+                <AgentPageEmbedCodeBlock
+                  slug={data.agentPageSlug}
+                  appOrigin={new URL(agentDisplayUrl).origin}
+                />
+              ) : null}
+        <details className="border-t border-slate-200 px-4 py-3 sm:px-6">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Advanced settings</summary>
+          <div className="mt-4 space-y-4">
+            <Label htmlFor="agent-page-slug">Agent URL path</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  id="agent-page-slug"
+                  value={slugDraft}
+                  placeholder="jane-smith-a1b2c3d4"
+                  aria-invalid={slugError ? true : undefined}
+                  className={cn(slugError && "border-destructive focus-visible:ring-destructive")}
+                  onChange={(e) => {
+                    setSlugDraft(e.target.value);
+                    if (slugError) setSlugError(null);
+                  }}
+                  onBlur={() => saveSlug(slugDraft)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={suggestSlugMutation.isPending || saveMutation.isPending}
+                  onClick={async () => {
+                    try {
+                      const result = await suggestSlugMutation.mutateAsync();
+                      if (result.slug) {
+                        setSlugDraft(result.slug);
+                        setSlugError(null);
+                        saveMutation.mutate({ agentPageSlug: result.slug });
+                      }
+                    } catch (e) {
+                      toast({
+                        title: "Could not generate slug",
+                        description: e instanceof Error ? e.message : undefined,
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  Suggest slug
+                </Button>
+              </div>
+              {slugError ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {slugError}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">URL path: /agents/your-slug</p>
+              )}
           </div>
-        </div>
+        </details>
       </div>
-      <NeighborhoodPageSettings publicPageUrl={agentDisplayUrl} />
     </section>
   );
 }

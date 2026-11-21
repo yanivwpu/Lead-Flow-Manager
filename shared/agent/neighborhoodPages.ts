@@ -11,6 +11,7 @@ export type NeighborhoodPageSettings = NeighborhoodContent & {
   id: string;
   slug: string;
   published: boolean;
+  updatedAt: string;
   publicUrl: string | null;
 };
 

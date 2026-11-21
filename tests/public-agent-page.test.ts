@@ -270,15 +270,18 @@ function testAgentPageDbSavePath() {
     card.includes("Add an about blurb in Business Profile"),
     "inline validation when custom bio cannot be seeded",
   );
-  assert(card.includes("Create a public profile page to capture seller and buyer leads"), "header description");
-  assert(card.includes("Agent Page Active"), "active status label");
+  assert(card.includes('pageIsPublic ? "Live" : "Offline"'), "public status label");
   assert(card.includes("Edit Business Profile"), "business profile link");
   assert(card.includes("Managed in Business Profile"), "business profile managed label");
   assert(card.includes("AgentPageMarketAreaChips"), "market area chips component");
   assert(!card.includes("agent-page-future-analytics"), "no future analytics placeholder");
   assert(!card.includes("Lead capture analytics"), "no analytics placeholder cards");
   assert(card.includes("agent-page-url-block"), "agent url block");
-  assert(card.includes("agent-page-embed-code"), "embed code block");
+  assert(card.includes("agent-page-embed-code"), "embed options panel");
+  assert(!card.includes("<pre className"), "raw iframe markup is not displayed in Agent Page settings");
+  assert(card.includes("Copy homes for sale embed"), "for-sale embed has a copy button");
+  assert(card.includes("Copy rentals embed"), "rental embed has a copy button");
+  assert(card.indexOf("<NeighborhoodPageSettings") < card.indexOf('data-testid="agent-page-controls-column"'), "Neighborhood Pages appears before advanced Agent Page controls");
   assert(card.includes("buildAgentPageEmbedIframeHtml"), "embed iframe helper");
   assert(card.includes('listingType: "for_sale"'), "for sale embed param in snippet builder");
   assert(card.includes('listingType: "for_rent"'), "for rent embed param in snippet builder");
@@ -307,10 +310,6 @@ function testAgentPageDbSavePath() {
   );
   assert(agentRoute.includes('from "../urlOrigins"'), "agent page route imports urlOrigins");
   assert(agentRoute.includes("getRequestOrigin"), "agent page route uses getRequestOrigin");
-  assert(
-    rge.includes("Listings available on your public Agent Page come from connected inventory sources"),
-    "inventory helper text below agent page",
-  );
   assert(rge.includes("AgentPageSidebarSummary"), "sidebar shows compact agent page summary only");
   assert(rge.includes("InventorySidebarSummary"), "sidebar shows compact inventory summary only");
   assert(rge.includes('data-testid="rge-dashboard-top-grid"'), "top grid wrapper");

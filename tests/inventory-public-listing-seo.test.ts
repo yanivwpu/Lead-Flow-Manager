@@ -16,6 +16,7 @@ import {
 } from "../shared/inventory/publicListingFlyer";
 import { mock } from "node:test";
 import { db } from "../drizzle/db";
+import { buildListingPublicSlug } from "../shared/inventory/listingPublicSlug";
 import { ensurePublicSlugForListing, resolvePublicShareListing } from "../server/inventory/inventoryDb";
 import { renderUrlset, sitemapLocForEntry } from "../server/routes/publicListingsSitemap";
 
@@ -24,7 +25,17 @@ function assert(cond: boolean, msg: string) {
 }
 
 const listingId = "2e059e00-0846-4f23-a606-cf0812b57bff";
-const publicSlug = "3503-oaks-way-308-pompano-beach-fl-33069-2e059e00";
+const address = {
+  addressLine1: "3503 Oaks Way",
+  addressLine2: "#308",
+  city: "Pompano Beach",
+  state: "FL",
+  zip: "33069",
+};
+const publicSlug = buildListingPublicSlug({ id: listingId, ...address });
+if (publicSlug !== "3503-oaks-way-308-pompano-beach-fl-33069-2e059e00") {
+  throw new Error(`Expected the existing address slug, got ${publicSlug}`);
+}
 const origin = "https://app.whachatcrm.com";
 const canonicalUrl = `${origin}/share/listings/${publicSlug}`;
 
@@ -42,11 +53,7 @@ const listing = inventoryRowToFlyerListing({
   description: "Bright corner unit.",
   features: ["Pool"],
   photos: [{ url: "https://cdn.example.com/a.jpg", order: 0 }],
-  addressLine1: "3503 Oaks Way",
-  addressLine2: "#308",
-  city: "Pompano Beach",
-  state: "FL",
-  zip: "33069",
+  ...address,
   latitude: 26.2,
   longitude: -80.1,
   status: "active",

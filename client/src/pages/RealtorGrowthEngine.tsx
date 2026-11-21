@@ -80,6 +80,7 @@ import {
   RGE_INVENTORY_SETTINGS_PATH,
   RGE_TEMPLATE_DETAIL_PATH,
   RGE_TEMPLATE_ONBOARDING_PATH,
+  RGE_TEMPLATE_ID,
 } from "@shared/rgePaths";
 import {
   getSubscriptionApiUrl,
@@ -87,7 +88,7 @@ import {
 } from "@/lib/shopifyBillingHint";
 import { mustUseShopifyBilling } from "@/lib/shopifyBillingContext";
 import { InAppProUpgradeButton } from "@/components/InAppProUpgradeButton";
-import { useToast } from "@/hooks/use-toast";
+import { toast, useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { logRgeSelect } from "@/lib/rgeSelectDebug";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,7 +104,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Workflow } from "@shared/schema";
 import { 
   CheckCircle2, 
   ChevronRight,
@@ -962,7 +963,6 @@ function RGEOnboardingWizard({
 export function RealtorGrowthEngine() {
   const { i18n } = useTranslation();
   const [location, setLocation] = useLocation();
-  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const totalSteps = 5;
   const [checkingSubscription, setCheckingSubscription] = useState(false);
@@ -1091,9 +1091,14 @@ export function RealtorGrowthEngine() {
     setLocation,
   ]);
 
-  const { data: assetsData } = useQuery<{ assets?: Array<{ assetType?: string; definition?: Record<string, unknown> }> }>({
+  const { data: assetsData, isLoading: assetsLoading, isError: assetsError } = useQuery<{ assets?: Array<{ assetType?: string; definition?: Record<string, unknown> }> }>({
     queryKey: ["/api/templates/realtor-growth-engine/assets"],
     enabled: !!templateData && status === 'installed'
+  });
+
+  const { data: installedWorkflows, isError: workflowStatusError } = useQuery<Workflow[]>({
+    queryKey: ["/api/workflows"],
+    enabled: status === "installed",
   });
 
   const rawWorkflows =
@@ -2729,62 +2734,69 @@ export function RealtorGrowthEngine() {
       );
     };
 
+    const workflowRows = workflows.map((workflow) => {
+      const installed = installedWorkflows?.find((row) => {
+        const conditions = row.triggerConditions as { templateId?: string; templateKey?: string } | null;
+        const isRge = conditions?.templateId === RGE_TEMPLATE_ID ||
+          (!conditions?.templateId && row.description?.startsWith("Realtor Growth Engine:"));
+        return isRge && (conditions?.templateKey === workflow.key || (!conditions?.templateKey && row.name === workflow.name));
+      });
+      const status = isPaused ? "Warning" : workflow.key === "W2" ? "Running" :
+        installed ? (installed.isActive ? "Running" : "Disabled") :
+        installedWorkflows || workflowStatusError ? "Warning" : "Checking";
+      return { workflow, status, detail: status === "Warning"
+        ? (isPaused ? "Growth Engine access is paused" : workflowStatusError ? "Workflow status unavailable" : "Workflow has no installed record")
+        : undefined };
+    });
+    const runningCount = workflowRows.filter((row) => row.status === "Running").length;
+    const pipelineStages = (pipeline as { stages?: Array<string | { name?: string; displayName?: string }> }).stages
+      ?.map((stage) => typeof stage === "string" ? stage : stage.name || stage.displayName || "").filter(Boolean) ?? [];
+
     return (
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <Badge className="mb-2 bg-brand-green/10 text-brand-green border-brand-green/20">Active Engine</Badge>
-            <h1 className="text-3xl font-bold text-gray-900"><RealtorMark /> Growth Engine</h1>
-            <p className="text-muted-foreground">Your real estate automation system is active and running.</p>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6">
+        <header className="mb-5">
+          <h1 className="text-2xl font-semibold text-slate-950 sm:text-3xl"><RealtorMark /> Growth Engine</h1>
+        </header>
 
         <div
-          className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-6 items-start"
+          className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(230px,275px)]"
           data-testid="rge-dashboard-top-grid"
         >
-          <div className="space-y-6 min-w-0" data-testid="rge-dashboard-main">
+          <div className="min-w-0 space-y-4" data-testid="rge-dashboard-main">
             <Card className="min-w-0">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-brand-green" />
+              <CardHeader className="p-4 pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Zap className="h-4 w-4 text-brand-green" />
                   Active Automations
                 </CardTitle>
-                <CardDescription>Click any workflow to preview or customize its settings.</CardDescription>
+                <CardDescription>{assetsLoading ? "Loading workflows…" : assetsError
+                  ? "Workflow details unavailable" : `${runningCount} of ${workflowRows.length} running`}</CardDescription>
               </CardHeader>
-              <CardContent>
-                <ScrollArea className="max-h-[520px]">
-                  <div className="space-y-2 pr-2">
-                    {workflows.length > 0 ? workflows.map((wf: any, i: number) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between p-3 border rounded-lg bg-gray-50/50 cursor-pointer hover:bg-gray-100/80 hover:border-brand-green/30 transition-colors group"
-                        onClick={() => openModal(wf)}
-                        data-testid={`workflow-row-${wf.key}`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-muted-foreground bg-gray-200 px-1.5 py-0.5 rounded">{wf.key}</span>
-                            <p className="font-medium text-sm text-gray-900 truncate">{wf.name}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 ml-3 shrink-0">
-                          <Badge variant="outline" className={cn("text-[10px]", wf.enabledByDefault !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500 border-gray-200")}>
-                            {wf.enabledByDefault !== false ? "Running" : "Disabled"}
+              <CardContent className="px-4 pb-3">
+                <ul className="divide-y divide-slate-200">
+                  {workflowRows.map(({ workflow, status, detail }) => (
+                    <li key={workflow.key}>
+                      <button type="button"
+                        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-1 py-2 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
+                        onClick={() => openModal(workflow)}
+                        data-testid={`workflow-row-${workflow.key}`}
+                        aria-label={`Customize ${workflow.name}`}>
+                        <span className="min-w-0 text-sm font-medium text-slate-900">
+                          {workflow.name}
+                          {detail && <span className="block text-xs font-normal text-slate-600">{detail}</span>}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <Badge variant="outline" className={cn("text-xs",
+                            status === "Running" ? "border-emerald-200 text-emerald-800" :
+                              status === "Warning" ? "border-amber-200 text-amber-900" : "border-slate-200 text-slate-600")}>
+                            {status}
                           </Badge>
-                          <Settings className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </div>
-                    )) : (
-                      <div className="text-center py-6 text-muted-foreground text-sm">
-                        Loading automation details...
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-                <p className="text-[11px] text-center text-muted-foreground mt-3">
-                  {workflows.length} workflows active — click to customize
-                </p>
+                          <Settings className="h-4 w-4 text-slate-600" aria-hidden="true" />
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
 
@@ -2797,56 +2809,36 @@ export function RealtorGrowthEngine() {
             </section>
           </div>
 
-          <aside className="space-y-6 min-w-0 lg:sticky lg:top-6 lg:self-start" data-testid="rge-dashboard-sidebar">
+          <aside className="grid min-w-0 gap-3 sm:grid-cols-2 xl:sticky xl:top-6 xl:grid-cols-1" data-testid="rge-dashboard-sidebar">
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="w-4 h-4 text-brand-green" />
-                  AI Qualification
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Target className="h-4 w-4 text-brand-green" /> AI Qualification
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Status</span>
-                    <span className="font-medium text-green-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Active
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Rules</span>
-                    <span className="font-medium">Real Estate Pro</span>
-                  </div>
-                  <Separator />
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    AI is currently scoring leads based on property interest, budget, and purchasing timeline.
-                  </p>
-                </div>
+              <CardContent className="flex flex-wrap items-center justify-between gap-2 px-4 pb-4 text-sm">
+                <span className="text-slate-700">Real estate rules</span>
+                <Badge variant="outline" className={isPaused ? "border-amber-200 text-amber-900" : "border-emerald-200 text-emerald-800"}>
+                  {isPaused ? "Paused" : "Active"}
+                </Badge>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <LayoutGrid className="w-4 h-4 text-brand-green" />
-                  CRM Pipeline
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <LayoutGrid className="h-4 w-4 text-brand-green" /> CRM Pipeline
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {(((pipeline as { stages?: unknown[] }).stages?.length ?? 0) > 0 ? (pipeline as { stages: unknown[] }).stages : ['New Lead', 'Discovery', 'Tour Scheduled', 'Offer', 'Closed']).map((stage: unknown, i: number) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-green" />
-                      <span className="text-gray-700">
-                        {typeof stage === "string"
-                          ? stage
-                          : (stage as { name?: string; displayName?: string }).name ||
-                            (stage as { displayName?: string }).displayName ||
-                            ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+              <CardContent className="px-4 pb-4 text-sm text-slate-700">
+                {pipelineStages.length ? (
+                  <details>
+                    <summary className="cursor-pointer">{pipelineStages.length} stages</summary>
+                    <ol className="mt-2 list-decimal space-y-1 pl-5">
+                      {pipelineStages.map((stage, index) => <li key={index}>{stage}</li>)}
+                    </ol>
+                  </details>
+                ) : "Pipeline stages unavailable"}
               </CardContent>
             </Card>
 
@@ -2855,10 +2847,7 @@ export function RealtorGrowthEngine() {
           </aside>
         </div>
 
-        <section className="mt-6 w-full scroll-mt-24 space-y-3" data-testid="rge-inventory-section">
-          <p className="text-sm text-muted-foreground">
-            Listings available on your public Agent Page come from connected inventory sources.
-          </p>
+        <section className="mt-4 w-full scroll-mt-24" data-testid="rge-inventory-section">
           <InventorySourcesSection variant="compact" className="w-full" />
         </section>
 
