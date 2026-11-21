@@ -146,6 +146,15 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             <p className="text-xs text-muted-foreground">{item.publicUrl ? "Published" : item.published ? "Published · Agent Page offline" : "Draft"}{drafts.entries[item.id] ? " · Unsaved edits" : ""}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {item.publicUrl ? (
+              <Button asChild type="button" size="sm" variant="outline">
+                <a href={item.publicUrl} target="_blank" rel="noopener noreferrer">View live</a>
+              </Button>
+            ) : (
+              <Button asChild type="button" size="sm" variant="outline">
+                <a href={`${endpoint}/${encodeURIComponent(item.id)}/preview`} target="_blank" rel="noopener noreferrer">Preview</a>
+              </Button>
+            )}
             <Button type="button" size="sm" variant="outline" disabled={save.isPending}
               onClick={() => updateDrafts((current) => ({ ...current, active: item.id }))}>Edit</Button>
             {item.publicUrl && <Button type="button" size="sm" variant="outline" onClick={async () => {
