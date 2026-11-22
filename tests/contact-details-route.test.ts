@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createContactDetailsHandler } from "../server/contactDetailsRoute";
 
-async function invoke({ owner = "owner", authenticated = true, locked = false, suppressed = false, failure = false } = {}) {
+async function invoke({ owner = "owner", authenticated = true, locked = false, suppressed = false, failure = false, record = {} } = {}) {
   const calls: string[] = [];
   let code = 200; let body: any;
-  const contact: any = { id: "contact", userId: owner, name: "Customer", customFields: suppressed ? { shopifyRedacted: true } : {}, source: "whatsapp" };
+  const contact: any = { id: "contact", userId: owner, name: "Customer", customFields: suppressed ? { shopifyRedacted: true } : {}, source: "whatsapp", ...record };
   const handler = createContactDetailsHandler({
     getContact: async (id, userId) => { assert.equal(id, "contact"); assert.equal(userId, "owner"); calls.push("contact"); return contact; },
     getConversations: async () => { calls.push("conversations"); return [{ id: "thread", userId: "owner", channel: "email" }, { id: "foreign", userId: "other", channel: "whatsapp" }] as any; },
@@ -33,4 +33,13 @@ test("authorized response filters related tenant rows and allowlists commerce fi
   assert.deepEqual(result.body.conversations, [{ id: "thread", channel: "email" }]);
   assert.equal(result.body.orders[0].number, "#1"); assert.equal(result.body.orders.length, 1);
   assert.ok(!JSON.stringify(result.body).includes("PRIVATE")); assert.ok(!JSON.stringify(result.body).includes("secret"));
+});
+
+test("identified webchat contacts are projected with the same name as the CRM list", async () => {
+  const result = await invoke({ record: {
+    name: "Jane Doe", email: "jane@example.com", source: "webchat", primaryChannel: "webchat",
+    customFields: { webchatIdentity: { status: "identified" } },
+  } });
+  assert.equal(result.body.contact.name, "Jane Doe");
+  assert.equal(result.body.contact.customFields, undefined);
 });

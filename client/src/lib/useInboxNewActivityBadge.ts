@@ -80,6 +80,7 @@ export function useInboxNewActivityRealtime() {
     let ws: WebSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let contactsRefreshTimer: ReturnType<typeof setTimeout> | undefined;
     let destroyed = false;
 
     const connect = () => {
@@ -106,6 +107,12 @@ export function useInboxNewActivityRealtime() {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type !== "new_message") return;
+          if (typeof msg.inboxNewActivityCount === "number") {
+            if (contactsRefreshTimer) clearTimeout(contactsRefreshTimer);
+            contactsRefreshTimer = setTimeout(() => {
+              void queryClient.invalidateQueries({ queryKey: ["/api/contacts", "activity"] });
+            }, 350);
+          }
           // Visible Inbox will ack; applying the incremented count here races and can stick the badge.
           if (
             typeof document !== "undefined" &&
@@ -140,6 +147,7 @@ export function useInboxNewActivityRealtime() {
       destroyed = true;
       if (heartbeat) clearInterval(heartbeat);
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (contactsRefreshTimer) clearTimeout(contactsRefreshTimer);
       try {
         ws?.close();
       } catch {

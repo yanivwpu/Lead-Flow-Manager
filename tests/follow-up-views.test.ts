@@ -118,19 +118,37 @@ test('Calendar contains only valid dated tasks and appointments and respects fil
   assert.equal(state.writes, 0);
 });
 
-test('an inquiry recommendation has a reminder action and is absent from the calendar until scheduled', () => {
+test('fresh form reviews surface with a reminder action after urgent work, with a count for overflow', () => {
   reset();
-  const inquiry = fixture('mls-review', 'Could you send a quote?', {
-    source: 'webchat', sourceDetails: { agentPageForm: true, rgeNewLeadReviewRecommended: 'Review new lead' },
-  });
-  state.rows.push({ ...inquiry, channel: 'webchat', conversation: {
-    ...inquiry.conversation, channel: 'webchat', channelAccountId: 'agent_page_form',
-  } });
+  state.rows.unshift(fixture('urgent', 'Can you send a quote today?'));
+  const form = (id: string, source: string, ageMinutes: number) => {
+    const row = fixture(id, 'Could you send a quote?', {
+      source: 'webchat', sourceDetails: { agentPageForm: true, leadSource: source, rgeNewLeadReviewRecommended: 'Review new lead' },
+    });
+    return { ...row, lastMessageAt: new Date(date.getTime() - ageMinutes * 60_000).toISOString(),
+      channel: 'webchat', conversation: { ...row.conversation, channel: 'webchat', channelAccountId: 'agent_page_form' } };
+  };
+  for (let i = 0; i < 7; i++) state.rows.push(form(`old-review-${i}`, 'Agent Page', 100 + i));
+  state.rows.push(form('z-mls-review', 'MLS Property Listing', 0), form('a-agent-review', 'Agent Page', 2),
+    form('b-neighborhood-review', 'Agent Page · Victoria Park', 3));
+
   const page = render('list');
-  const task = page.querySelector('[data-testid="task-item-mls-review"]');
-  assert.match(task?.textContent ?? '', /Review new lead.*Set Reminder/);
-  assert.doesNotMatch(task?.textContent ?? '', /Needs Reply/);
-  assert.equal(render('calendar').querySelector('[data-testid="calendar-task-mls-review"]'), null);
+  const recommended = page.querySelector('[aria-labelledby="recommended-tasks-heading"]')!;
+  const visible = [...recommended.querySelectorAll('[data-testid^="task-item-"]')].filter(row => !row.closest('details'));
+  assert.deepEqual(visible.slice(0, 4).map(row => row.getAttribute('data-testid')),
+    ['task-item-urgent', 'task-item-z-mls-review', 'task-item-a-agent-review', 'task-item-b-neighborhood-review']);
+  for (const row of visible.slice(1, 4)) {
+    assert.match(row.textContent ?? '', /Review new lead.*Set Reminder/);
+    assert.doesNotMatch(row.textContent ?? '', /Needs Reply/);
+  }
+  assert.match(page.querySelector('a[href="#recommended-tasks-heading"]')?.textContent ?? '', /Lead reviews \(10\)/);
+  assert.match(recommended.querySelector('summary')?.textContent ?? '', /More recommendations \(7\)/);
+  assert.ok(page.querySelector('[data-testid="task-item-manual"]'), 'existing overdue work stays visible');
+  const calendar = render('calendar');
+  for (const id of ['z-mls-review', 'a-agent-review', 'b-neighborhood-review']) {
+    assert.equal(calendar.querySelector(`[data-testid="calendar-task-${id}"]`), null);
+  }
+  assert.equal(state.writes, 0);
 });
 
 test('Pipeline uses the same deal definition as KPI/List and preserves Realtor qualification stages', () => {
