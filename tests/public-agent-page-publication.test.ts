@@ -74,6 +74,8 @@ test("profile publication, privacy, and inquiry identity retain their existing b
 
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261122_neighborhood_guide_photos.sql", "utf8"));
+  await pg.exec(await readFile("migrations/20261122_neighborhood_guide_photos.sql", "utf8"));
   const dialect = new PgDialect();
   for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions]) {
     const { name, columns } = getTableConfig(table);
@@ -419,6 +421,8 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   const draftPreviewHtml = await draftPreview.text();
   assert.doesNotMatch(draftPreviewHtml, /id="agent-site-nav"/);
   assert.match(draftPreviewHtml, /Private preview — not published/, "draft preview clearly labeled private");
+  assert.match(draftPreviewHtml, /NEIGHBORHOOD LOCAL GUIDE/);
+  assert.match(draftPreviewHtml, /id="local-guide-title">Discover Victoria Park/);
   const publishNeighborhood = (published: boolean, updateFields = {}) => savePage("PUT", { ...draft, ...updateFields, published }, editUrl);
   const neighborhoodSitemap = async () => (await request("/public-neighborhoods-sitemap-1.xml")).text();
   assert.equal((await publishNeighborhood(true)).status, 403, "a live parent is required to publish");
@@ -464,6 +468,10 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   const pilotHtml = await pilotResponse.text();
   assert.ok(pilotHtml.includes(`<link rel="canonical" href="${origin}${pilot}"`));
   assert.match(pilotHtml, /content="index, follow"/);
+  assert.match(pilotHtml, /NEIGHBORHOOD LOCAL GUIDE/);
+  assert.match(pilotHtml, /Living in Victoria Park/);
+  assert.match(pilotHtml, /href="#agent-contact">Contact the agent/);
+  assert.match(pilotHtml, /class="neighborhood-guide"/);
   assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale, Florida \| Jane Agent<\/title>/);
   assert.match(pilotHtml, /class="agent-heading"[^>]*>[\s\S]*?<h1[^>]*>Victoria Park, Fort Lauderdale, Florida<\/h1>\s*<div class="agent-byline"><span>Jane Agent<\/span><a[^>]*href="tel:\+19545550100"/);
   assert.doesNotMatch(pilotHtml, /jane-public|mailto:|publicEmail/);
@@ -541,6 +549,10 @@ test("profile publication, privacy, and inquiry identity retain their existing b
       assert.equal(await page.locator(".wrap").evaluate((node) => node.getBoundingClientRect().x), stablePosition);
       if (!mobile) {
         const withoutStableGutter = await page.evaluate(() => {
+          // The new guide itself scrolls; hide it temporarily to reproduce the old short-page case.
+          const guide = document.querySelector<HTMLElement>(".neighborhood-guide");
+          const originalGuideDisplay = guide?.style.display ?? "";
+          if (guide) guide.style.display = "none";
           document.documentElement.style.scrollbarGutter = "auto";
           const wrap = document.querySelector(".wrap")!;
           const shortPosition = wrap.getBoundingClientRect().x;
@@ -548,6 +560,7 @@ test("profile publication, privacy, and inquiry identity retain their existing b
           const tallPosition = wrap.getBoundingClientRect().x;
           document.body.style.minHeight = "";
           document.documentElement.style.scrollbarGutter = "";
+          if (guide) guide.style.display = originalGuideDisplay;
           return { shortPosition, tallPosition };
         });
         assert.notEqual(withoutStableGutter.shortPosition, withoutStableGutter.tallPosition, "classic scrollbar reproduces the old layout shift");

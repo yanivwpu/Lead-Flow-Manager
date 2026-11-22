@@ -162,6 +162,10 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
 CREATE INDEX IF NOT EXISTS agent_neighborhood_pages_published_idx ON agent_neighborhood_pages (id) WHERE published;`,
   },
   {
+    tag: "20261122_neighborhood_guide_photos",
+    sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS photos jsonb NOT NULL DEFAULT '[]'::jsonb",
+  },
+  {
     tag: "20261119_agent_page_profile_publication",
     sql: `-- Preserve old live profiles and leave previously non-public profiles private.
 DO $$

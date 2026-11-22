@@ -1737,6 +1737,7 @@ export const agentNeighborhoodPages = pgTable("agent_neighborhood_pages", {
   city: text("city").notNull(),
   state: text("state").notNull(),
   content: text("content").notNull(),
+  photos: jsonb("photos").$type<Array<{ url: string; alt: string }>>().notNull().default(sql`'[]'::jsonb`),
   published: boolean("published").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

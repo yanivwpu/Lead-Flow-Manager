@@ -1,7 +1,15 @@
 import { Router, type Express, type NextFunction, type Request, type RequestHandler, type Response } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { buildPublicAgentPageHtml } from "@shared/agent/publicAgentPageHtml";
-import { buildNeighborhoodUrl, neighborhoodContentComplete } from "@shared/agent/neighborhoodPages";
+import {
+  buildNeighborhoodUrl, neighborhoodContentComplete,
+  isOwnedNeighborhoodGuidePhotoUrl, NEIGHBORHOOD_GUIDE_MAX_PHOTOS,
+  NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
+} from "@shared/agent/neighborhoodPages";
+import { inspectBusinessProfileLogoUpload } from "../businessProfileLogoUpload";
+import { uploadOutboundUserMedia } from "../mediaStorageService";
+import { prepareWebchatVisitorImage } from "../webchatVisitorMedia";
 import { canResolvePublicAgentPage } from "@shared/agent/publicAgentPage";
 import { buildPublicAgentPageData } from "../agentPage/agentPageService";
 import { getAgentPageSettingsRow } from "../agentPage/agentPageDb";
@@ -18,11 +26,15 @@ const fields = z.object({
   city: z.string().trim().min(1).max(80).regex(/[\p{L}\p{N}]/u),
   state: z.string().trim().min(1).max(60).regex(/[\p{L}\p{N}]/u),
   content: z.string().trim().max(5000),
+  photos: z.array(z.object({
+    url: z.string().url().max(600),
+    alt: z.string().trim().min(3).max(140),
+  }).strict()).max(NEIGHBORHOOD_GUIDE_MAX_PHOTOS).optional(),
 });
 
 function settings(page: NeighborhoodPage, agentSlug: string | null) {
-  const { id, name, city, state, content, slug, published, updatedAt } = page;
-  return { id, name, city, state, content, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
+  const { id, name, city, state, content, photos, slug, published, updatedAt } = page;
+  return { id, name, city, state, content, photos, slug, published, updatedAt: updatedAt.toISOString(), publicUrl: agentSlug && isPublishedNeighborhood(page)
     ? buildNeighborhoodUrl(agentSlug, slug, getAppOrigin()) : null };
 }
 
@@ -35,6 +47,26 @@ function run(handler: (req: Request, res: Response, userId: string) => Promise<u
 
 export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   const router = Router();
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES, files: 1 },
+  });
+  function ownedPhotos(userId: string, photos: Array<{ url: string; alt: string }> | undefined): boolean {
+    return !photos || photos.every((photo) =>
+      isOwnedNeighborhoodGuidePhotoUrl(photo.url, userId, process.env.CLOUDFLARE_R2_PUBLIC_URL));
+  }
+  function uploadOne(req: Request, res: Response, next: NextFunction): void {
+    upload.single("file")(req, res, (error: unknown) => {
+      if (error) {
+        const e = error as { code?: string };
+        res.status(e.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+          error: e.code === "LIMIT_FILE_SIZE" ? "Images must be 5 MB or smaller." : "Choose a JPG, PNG, or WebP image.",
+        });
+        return;
+      }
+      next();
+    });
+  }
   router.use((req, res, next) => {
     res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
     if (!req.user) { res.sendStatus(401); return; }
@@ -53,6 +85,10 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   router.post("/", run(async (req, res, userId) => {
     const parsed = fields.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
+    if (!ownedPhotos(userId, parsed.data.photos)) {
+      return res.status(400).json({ error: "Choose photos uploaded to your own Neighborhood Page." });
+    }
+    if (parsed.data.photos?.length) return res.status(400).json({ error: "Save the new neighborhood before uploading photos." });
     const page = await createNeighborhoodPage(userId, parsed.data);
     res.status(201).json(settings(page, null));
   }));
@@ -60,6 +96,9 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
   router.put("/:id", run(async (req, res, userId) => {
     const parsed = fields.extend({ published: z.boolean(), expectedUpdatedAt: z.string().datetime().optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: "Enter a neighborhood, city, state, and up to 5,000 characters of local content." });
+    if (!ownedPhotos(userId, parsed.data.photos)) {
+      return res.status(400).json({ error: "Choose photos uploaded to your own Neighborhood Page." });
+    }
     let liveSlug: string | null = null;
     if (parsed.data.published) {
       const agent = await getAgentPageSettingsRow(userId);
@@ -88,6 +127,38 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       return res.status(409).json({ error: "This page changed since you opened it. Review the saved version before deleting." });
     }
     res.sendStatus(404);
+  }));
+
+  // Owner-only, never indexable. Uploads are attached when the owner saves the page.
+  router.post("/:id/photos", uploadOne, run(async (req, res, userId) => {
+    const page = await getNeighborhoodPage(userId, String(req.params.id));
+    if (!page) return res.sendStatus(404);
+    if ((page.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) {
+      return res.status(400).json({ error: "Remove an existing photo before adding another." });
+    }
+    const file = (req as Request & { file?: {
+      buffer: Buffer; originalname: string; mimetype: string; size: number;
+    } }).file;
+    if (!file?.buffer) return res.status(400).json({ error: "Choose a JPG, PNG, or WebP image." });
+    const checked = inspectBusinessProfileLogoUpload(file);
+    if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
+    // Decode, constrain pixel dimensions, and strip metadata before placing photos on public pages.
+    const prepared = await prepareWebchatVisitorImage({ buffer: file.buffer, declaredMime: checked.mime });
+    if (!prepared.ok) return res.status(400).json({ error: "Could not process this image. Try a smaller JPG, PNG, or WebP." });
+    // R2 is required: never put SEO photographs on Railway's ephemeral local disk.
+    if (!process.env.CLOUDFLARE_R2_ACCOUNT_ID || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
+        !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET ||
+        !process.env.CLOUDFLARE_R2_PUBLIC_URL) {
+      return res.status(503).json({ error: "Photo storage is unavailable. Try again later." });
+    }
+    const stored = await uploadOutboundUserMedia({
+      userId, buffer: prepared.buffer, contentType: prepared.mime,
+      originChannel: "neighborhood-guide",
+    });
+    if (!isOwnedNeighborhoodGuidePhotoUrl(stored.mediaUrl, userId, process.env.CLOUDFLARE_R2_PUBLIC_URL)) {
+      return res.status(503).json({ error: "Could not verify the uploaded image. Try again." });
+    }
+    return res.status(201).json({ url: stored.mediaUrl });
   }));
 
   router.get("/:id/preview", run(async (req, res, userId) => {
