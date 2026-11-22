@@ -145,6 +145,10 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
     ].join(";\n"),
   },
   {
+    tag: "20261122_neighborhood_guide_photos",
+    sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS photos jsonb NOT NULL DEFAULT '[]'::jsonb",
+  },
+  {
     tag: "20261120_agent_neighborhood_pages",
     sql: `CREATE TABLE IF NOT EXISTS agent_neighborhood_pages (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
