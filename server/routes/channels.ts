@@ -463,7 +463,7 @@ export function registerChannelRoutes(app: Express): void {
       // A generic channel PATCH cannot bypass verified Meta OAuth ownership.
       // Existing notification preferences may still be changed normally.
       if (channel === "instagram" && (
-        req.body?.isConnected === true ||
+        Object.prototype.hasOwnProperty.call(req.body ?? {}, "isConnected") ||
         Object.prototype.hasOwnProperty.call(req.body ?? {}, "config")
       )) {
         return res.status(403).json({
