@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy, Eye, Pencil } from "lucide-react";
 import { neighborhoodTitle, neighborhoodContentComplete, type NeighborhoodContent, type NeighborhoodPageSettings } from "@shared/agent/neighborhoodPages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,26 +146,33 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             <p className="break-words text-sm font-medium">{neighborhoodTitle(item)}</p>
             <p className="text-xs text-muted-foreground">{item.publicUrl ? "Published" : item.published ? "Published · Agent Page offline" : "Draft"}{drafts.entries[item.id] ? " · Unsaved edits" : ""}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {item.publicUrl ? (
-              <Button asChild type="button" size="sm" variant="outline">
-                <a href={item.publicUrl} target="_blank" rel="noopener noreferrer">View live</a>
-              </Button>
-            ) : (
-              <Button asChild type="button" size="sm" variant="outline">
-                <a href={`${endpoint}/${encodeURIComponent(item.id)}/preview`} target="_blank" rel="noopener noreferrer">Preview</a>
-              </Button>
-            )}
-            <Button type="button" size="sm" variant="outline" disabled={save.isPending}
-              onClick={() => updateDrafts((current) => ({ ...current, active: item.id }))}>Edit</Button>
-            {item.publicUrl && <Button type="button" size="sm" variant="outline" onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(item.publicUrl!);
-                toast({ title: "Link copied" });
-              } catch {
-                toast({ title: "Could not copy the URL", description: item.publicUrl ?? undefined });
-              }
-            }}>Copy URL</Button>}
+          <div className="flex items-center gap-1" role="group" aria-label={`${neighborhoodTitle(item)} actions`}>
+            <Button asChild type="button" size="icon" variant="ghost" className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+              <a href={item.publicUrl ?? `${endpoint}/${encodeURIComponent(item.id)}/preview`}
+                 target="_blank" rel="noopener noreferrer"
+                 aria-label={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}
+                 title={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}>
+                <Eye className="h-4 w-4" aria-hidden="true" />
+              </a>
+            </Button>
+            {item.publicUrl && <Button type="button" size="icon" variant="ghost"
+              className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Copy neighborhood page URL" title="Copy neighborhood page URL"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(item.publicUrl!);
+                  toast({ title: "Link copied" });
+                } catch {
+                  toast({ title: "Could not copy the URL", description: item.publicUrl ?? undefined });
+                }
+              }}><Copy className="h-4 w-4" aria-hidden="true" /></Button>}
+            <Button type="button" size="icon" variant="ghost"
+              className="h-9 w-9 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              aria-label={`Edit ${neighborhoodTitle(item)}`} title="Edit neighborhood"
+              disabled={save.isPending}
+              onClick={() => updateDrafts((current) => ({ ...current, active: item.id }))}>
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+            </Button>
           </div>
         </div>
       ))}
