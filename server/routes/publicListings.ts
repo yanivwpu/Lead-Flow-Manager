@@ -16,6 +16,7 @@ import { isListingShareUuid } from "@shared/inventory/listingPublicSlug";
 import { buildListingCanonicalShareUrl, extractListingShareSegmentFromUrl } from "@shared/inventory/listingViewUrl";
 import { getPublicListingAddressSlug } from "@shared/inventory/publicListingPublication";
 import { publicAgentLeadBodySchema } from "@shared/agent/agentPageSchema";
+import { AGENT_INQUIRY_PHONE_ERROR } from "@shared/agent/agentPageInquiry";
 import { getRequestOrigin } from "../urlOrigins";
 import { requirePublicListingSchemaReady } from "../middleware/requirePublicListingSchemaReady";
 import { hasAgentPagePublicationAccess } from "../agentPage/agentPagePublication";
@@ -133,7 +134,10 @@ export function registerPublicListingRoutes(app: Express): void {
     const { listingId } = req.params;
     if (!isListingShareUuid(listingId)) return res.status(404).json({ error: "This listing inquiry form is unavailable." });
     const parsed = listingInquirySchema.safeParse(req.body ?? {});
-    if (!parsed.success) return res.status(400).json({ error: "Enter valid contact details." });
+    if (!parsed.success) {
+      if (parsed.error.flatten().fieldErrors.phone) return res.status(400).json({ error: AGENT_INQUIRY_PHONE_ERROR, field: "phone" });
+      return res.status(400).json({ error: "Enter valid contact details." });
+    }
 
     try {
       const listing = await getPublicShareListing(listingId);
@@ -143,7 +147,7 @@ export function registerPublicListingRoutes(app: Express): void {
       const publicSlug = getPublicListingAddressSlug(listing.publicSlug, listing.listingCompliance);
       const listingUrl = buildListingCanonicalShareUrl({ listingId: listing.id, publicSlug }, getRequestOrigin(req));
       const outcome = await processPublicListingLead(listing, listingUrl, parsed.data);
-      if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error });
+      if (!outcome.ok) return res.status(outcome.status).json({ error: outcome.error, field: outcome.field });
       return res.status(201).json({ ok: true });
     } catch (error) {
       console.error("[public-listing] inquiry failed", error);

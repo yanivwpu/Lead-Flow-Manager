@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { publicAgentAnalyticsBodySchema, publicAgentBrowseQuerySchema, publicAgentLeadBodySchema } from "@shared/agent/agentPageSchema";
+import { AGENT_INQUIRY_PHONE_ERROR } from "@shared/agent/agentPageInquiry";
 import {
   buildPublicAgentPageHtml,
   buildPublicAgentPageNotFoundHtml,
@@ -137,11 +138,12 @@ export function registerPublicAgentPageRoutes(app: Express): void {
       const slug = req.params.slug?.trim() ?? "";
       const parsed = publicAgentLeadBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
+        if (parsed.error.flatten().fieldErrors.phone) return res.status(400).json({ error: AGENT_INQUIRY_PHONE_ERROR, field: "phone" });
         return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
       }
       const outcome = await processPublicAgentPageLead(slug, parsed.data);
       if (!outcome.ok) {
-        return res.status(outcome.status).json({ error: outcome.error });
+        return res.status(outcome.status).json({ error: outcome.error, field: outcome.field });
       }
       res.status(201).json({ ok: true });
     } catch (error) {

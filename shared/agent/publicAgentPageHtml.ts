@@ -1319,7 +1319,10 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           body: JSON.stringify(body),
         }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
-            if (!res.ok) throw new Error(res.j.error || "Submit failed");
+            if (!res.ok) {
+              if (res.j.field === "phone") form.elements.phone.focus();
+              throw new Error(res.j.error || "Submit failed");
+            }
             var bookingLink = document.getElementById("neighborhood-booking-link");
             if (body.intent === "schedule_showing" && bookingLink) bookingLink.style.removeProperty("display");
             closeModal();

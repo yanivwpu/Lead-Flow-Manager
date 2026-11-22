@@ -22,14 +22,27 @@ import { subscriptionService, type UserLimits } from "../server/subscriptionServ
 import { AGENT_PAGE_FORM_ACCOUNT, agentPageLeadCopilotContext } from "../shared/agent/agentPageSchema";
 import { contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions } from "../shared/schema";
 import { buildFollowUpItems, hasScheduledFollowUp } from "../shared/followUpTasks";
-import { agentInquiryLabel, agentInquiryRecommendation, isAgentInquiryThread } from "../shared/agent/agentPageInquiry";
+import { agentInquiryLabel, agentInquiryRecommendation, isAgentInquiryThread, validatedAgentInquiryPhone } from "../shared/agent/agentPageInquiry";
 import { INBOUND_DEDUP_SCHEMA_SQL } from "../server/inboundDedupSchema";
 import { isInventoryContactEligible } from "../server/inventory/inventoryContactEligibility";
 import { inboxOnlyWebchatSourceDetails, promotedWebchatSourceDetails } from "../shared/webchatIdentityPromotion";
 import { filterCrmListedContacts } from "../shared/contactCrmVisibility";
 import { executeWorkflowActions } from "../server/workflowEngine";
 
-test("profile-only publication, indexing and withdrawal use the same entitlement", async (t) => {
+test("inquiry phone formats normalize without dropping invalid input", () => {
+  for (const form of ["(555) 123-4567", "555-123-4567", "+1 555 123 4567", "+1 (555) 123-4567"]) {
+    assert.equal(validatedAgentInquiryPhone(form), "5551234567");
+  }
+  for (const form of ["+44 (20) 7946 0958", "0044 20 7946 0958"]) {
+    assert.equal(validatedAgentInquiryPhone(form), "442079460958");
+  }
+  assert.equal(validatedAgentInquiryPhone("+972 54 123 4567"), "972541234567");
+  for (const form of ["(555 123-4567", "555) 123-4567", "555-123-4567 ext 4", "1.......", "+0 555 1234567", "1".repeat(16)]) {
+    assert.equal(validatedAgentInquiryPhone(form), undefined, form);
+  }
+});
+
+test("profile publication, privacy, and inquiry identity retain their existing boundaries", async (t) => {
   const publicEmail = "jane-public@example.test";
   const publicPhone = "+1 (954) 555-0100";
   const listingId = "49431be3-1bb2-4758-89fd-22afccacd531";
@@ -228,10 +241,19 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       await card.getByRole("button", { name: "Contact Agent" }).click();
       const dialog = page.getByRole("dialog", { name: "Contact Agent" });
       await dialog.waitFor();
-      if (width === 390) {
-        await dialog.getByLabel("Name").fill("Listing Visitor");
-        await dialog.getByLabel("Email").fill("flyer@example.test");
+      if (width === 390 || width === 1280) {
+        const first = width === 390;
+        // browser.newPage creates an independent browser context for each viewport.
+        await dialog.getByLabel("Name").fill(first ? "Listing Visitor" : "Independent Visitor");
+        await dialog.getByLabel("Email").fill(first ? "flyer@example.test" : "independent-flyer@example.test");
         await dialog.getByLabel("Message").fill("Could you tell me more?");
+        if (first) {
+          await dialog.getByLabel("Phone").fill("555-12");
+          await dialog.getByRole("button", { name: "Send inquiry" }).click();
+          await dialog.getByRole("status").filter({ hasText: "Enter a valid phone number" }).waitFor();
+          assert.equal(await dialog.getByLabel("Phone").evaluate((input) => input === document.activeElement), true);
+        }
+        await dialog.getByLabel("Phone").fill(first ? "(555) 123-4567" : "+44 (20) 7946 0958");
         await dialog.getByRole("button", { name: "Send inquiry" }).click();
         await dialog.getByRole("status").filter({ hasText: "Your inquiry was sent" }).waitFor();
       }
@@ -275,7 +297,13 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   for (const invalid of [{}, { phone: "12-3" }, { phone: "1......." }, { email: "bad address" }]) {
     assert.equal((await submit("jane-agent", invalid)).status, 400);
   }
-  assert.equal((await storage.getContacts(user.id)).filter((contact) => contact.email !== "flyer@example.test").length, 2);
+  const invalidPhone = await submit("jane-agent", { name: "Invalid Visitor", email: "invalid-phone@example.test", phone: "(555) wrong" });
+  assert.equal(invalidPhone.status, 400);
+  assert.equal((await invalidPhone.json()).field, "phone");
+  assert.equal((await storage.getContacts(user.id)).filter((contact) => !contact.email?.endsWith("flyer@example.test")).length, 2);
+  assert.equal((await submit("jane-agent", { name: "Returning Buyer", email: "buyer@example.test", phone: "(954) 555-0159" })).status, 201);
+  assert.equal((await storage.getContact(emailLead.id))?.phone, "9545550159", "an unassigned phone can be added to the matched contact");
+  assert.equal((await storage.getContact(emailLead.id))?.name, "Jane Buyer");
 
   const flyer = await request(flyerPath);
   assert.equal(flyer.status, 200, await flyer.clone().text());
@@ -289,10 +317,22 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   });
   assert.equal((await postFlyer({ name: "Listing Visitor" })).status, 400);
   assert.equal((await postFlyer({ email: "flyer@example.test" }, "/api/public/listings/42-private-street-49431be3/leads")).status, 404);
-  const flyerLead = await postFlyer({ name: "Listing Visitor", email: "flyer@example.test", message: "Could you tell me more?",
+  const flyerLead = await postFlyer({ name: "Listing Visitor", email: "flyer@example.test", phone: "(555) 123-4567", message: "Could you tell me more?",
     listingUrl: "https://untrusted.example/42-private-street", propertyAddress: "42 Private Street" });
   assert.equal(flyerLead.status, 201, await flyerLead.clone().text());
   const listingLead = (await storage.getContacts(user.id)).find((contact) => contact.email === "flyer@example.test")!;
+  assert.equal(listingLead.phone, "5551234567");
+  const returning = await postFlyer({ name: "Newly Submitted Name", email: "FLYER@example.test", phone: "+1 555-123-4567" });
+  assert.equal(returning.status, 201, await returning.clone().text());
+  assert.equal((await storage.getContact(listingLead.id))?.name, "Listing Visitor");
+  assert.equal((await storage.getContacts(user.id)).filter((contact) => contact.email === "flyer@example.test").length, 1);
+
+  if (process.env.AGENT_PAGE_BROWSER_TEST !== "1") {
+    assert.equal((await postFlyer({ name: "Independent Visitor", email: "independent-flyer@example.test", phone: "+44 (20) 7946 0958" })).status, 201);
+  }
+  const independent = (await storage.getContacts(user.id)).find((contact) => contact.email === "independent-flyer@example.test")!;
+  assert.notEqual(independent.id, listingLead.id);
+  assert.equal(independent.phone, "442079460958");
   const fields = listingLead.customFields as Record<string, unknown>;
   assert.equal(fields.agentPageListingId, listingId);
   assert.equal(fields.agentPageListingUrl, origin + flyerPath);
@@ -303,6 +343,20 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(agentInquiryRecommendation(listingLead), "Review new lead");
   assert.equal(agentInquiryLabel(listingLead), "MLS Property Inquiry");
   const [listingThread] = (await storage.getContactWithConversations(listingLead.id))!.conversations;
+  const [independentThread] = (await storage.getContactWithConversations(independent.id))!.conversations;
+  assert.notEqual(independentThread.id, listingThread.id);
+  const messageCount = (await storage.getMessages(listingThread.id)).length;
+  for (const conflict of [
+    { email: "different@example.test", phone: "555-123-4567" },
+    { email: "flyer@example.test", phone: "555-555-0127" },
+    { email: "flyer@example.test", phone: independent.phone },
+  ]) {
+    const rejected = await submit("jane-agent", { ...conflict, name: "Conflicting Visitor" });
+    assert.equal(rejected.status, 409, await rejected.clone().text());
+  }
+  assert.equal((await storage.getMessages(listingThread.id)).length, messageCount);
+  assert.equal((await storage.getContact(listingLead.id))?.phone, "5551234567");
+  assert.ok(!(await storage.getContacts(user.id)).some((contact) => contact.email === "different@example.test" || contact.phone === "5555550127"));
   assert.ok(isAgentInquiryThread(listingThread));
   const sendAttempt = await request(`/api/contacts/${listingLead.id}/send`, {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -315,6 +369,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     assert.match(msg.content, /Fort Lauderdale, FL/);
     assert.doesNotMatch(msg.content, /42 Private Street|42-private-street|untrusted\.example/);
   }
+  assert.ok((await storage.getMessages(listingThread.id)).some((msg) =>
+    (msg.templateVariables as { agentInquirySubmittedName?: string }).agentInquirySubmittedName === "Newly Submitted Name"));
   eligible = false;
   const fallback = await request(flyerPath);
   assert.equal(fallback.status, 200);
@@ -548,7 +604,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     }
   }
 
-  const neighborhoodIdentity = { name: "Test 2", email: "visitor@example.test", phone: "+1 (954) 555-0164" };
+  const neighborhoodIdentity = { name: "Test 2", email: "visitor@example.test", phone: "(954) 555-0164" };
   await fixture.insert(contacts).values([
     { id: "prior-lead", userId: user.id, name: "Checking lead capture", source: "webchat", primaryChannel: "webchat",
       pipelineStage: "New Lead", email: neighborhoodIdentity.email,
@@ -565,6 +621,11 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   ]);
   await fixture.insert(messages).values({ userId: user.id, conversationId: "old-inquiry", contactId: "prior-lead",
     direction: "inbound", content: "Checking lead capture", externalMessageId: "agent_page_1763679600000_legacy001" });
+  const legacyConflict = await submit("yaniv-haramatiy", { name: "Another Visitor", email: "new-email@example.test",
+    phone: neighborhoodIdentity.phone, neighborhood: "victoria-park" });
+  assert.equal(legacyConflict.status, 409, await legacyConflict.clone().text());
+  assert.equal((await storage.getContact("prior-lead"))?.phone, null);
+  assert.equal((await storage.getMessages("old-inquiry")).length, 1);
   const inquiry = (intent: string) => submit("yaniv-haramatiy", { name: neighborhoodIdentity.name, email: neighborhoodIdentity.email, intent, neighborhood: "victoria-park" });
   for (const intent of ["message", "schedule_showing", "home_worth"]) {
     const result = await inquiry(intent);
@@ -600,10 +661,15 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal((await storage.getContact(converted.id))?.followUpDate?.toISOString(), reminderDate);
   assert.equal(agentInquiryRecommendation((await storage.getContact(converted.id))!), undefined);
   assert.equal((await patchContact(converted.id, { followUp: null, followUpDate: null, phone: null })).status, 200);
-  assert.equal((await submit("yaniv-haramatiy", { ...neighborhoodIdentity, name: "Another Name", neighborhood: "victoria-park" })).status, 201);
+  assert.equal((await submit("yaniv-haramatiy", { ...neighborhoodIdentity, name: "Another Name", neighborhood: "victoria-park" })).status, 409,
+    "a new submission cannot silently override a staff-cleared phone");
+  assert.equal((await submit("yaniv-haramatiy", { name: "Another Name", email: neighborhoodIdentity.email, neighborhood: "victoria-park" })).status, 201);
   assert.equal((await storage.getContact(converted.id))?.followUp, null, "completed review cannot be recreated by retries");
   assert.equal((await storage.getContact(converted.id))?.name, "Test 2", "repeat submissions preserve the captured name");
   assert.equal((await storage.getContact(converted.id))?.phone, null, "an agent's explicit phone removal stays cleared");
+  assert.equal((await patchContact(converted.id, { name: "Staff Edited Name" })).status, 200);
+  assert.equal((await inquiry("message")).status, 201);
+  assert.equal((await storage.getContact(converted.id))?.name, "Staff Edited Name");
 
   const existing = await submit("yaniv-haramatiy", { phone: "9545550165", name: "Submitted Name", email: "saved@example.test" });
   assert.equal(existing.status, 201, await existing.clone().text());

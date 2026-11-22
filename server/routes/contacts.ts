@@ -636,9 +636,13 @@ export function registerContactRoutes(app: Express): void {
       }
       const sourceDetails = contact.sourceDetails as Record<string, unknown> | null;
       const storedCustomPhone = (contact.customFields as { phone?: unknown } | null)?.phone;
-      if ((contact.source === "webchat" || sourceDetails?.agentPageForm === true) &&
-          (("phone" in body && body.phone !== contact.phone) || ("customFields" in body && body.customFields?.phone !== storedCustomPhone))) {
-        body.sourceDetails = { ...sourceDetails, agentPagePhoneManuallyEdited: true };
+      if (contact.source === "webchat" || sourceDetails?.agentPageForm === true) {
+        if (("phone" in body && body.phone !== contact.phone) || ("customFields" in body && body.customFields?.phone !== storedCustomPhone)) {
+          body.sourceDetails = { ...sourceDetails, agentPagePhoneManuallyEdited: true };
+        }
+        if ("name" in body && body.name !== contact.name) {
+          body.sourceDetails = { ...(body.sourceDetails ?? sourceDetails), agentPageNameManuallyEdited: true };
+        }
       }
       if (sourceDetails?.rgeNewLeadReviewRecommended && ("followUp" in body || "followUpDate" in body)) {
         body.sourceDetails = { ...(body.sourceDetails ?? sourceDetails), rgeNewLeadReviewRecommended: null };

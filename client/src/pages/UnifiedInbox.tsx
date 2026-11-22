@@ -4699,7 +4699,7 @@ export function UnifiedInbox() {
                             if (
                               ct === "email" ||
                               ct === "email_html" ||
-                              (activeChannel === "email" && !hasMedia && !msg.mediaUrl)
+                              (!inquiryThread && activeChannel === "email" && !hasMedia && !msg.mediaUrl)
                             ) {
                               return (
                                 <EmailMessageBody
@@ -4708,7 +4708,13 @@ export function UnifiedInbox() {
                                 />
                               );
                             }
-                            return <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words">{<SafeMessageText text={msg.content || (ct === 'sticker' ? 'Sticker received' : '')} />}</p>;
+                            const submittedName = msg.templateVariables?.agentInquirySubmittedName;
+                            return <>
+                              {inquiryThread && !isOut && typeof submittedName === "string" && <p className="mb-1 break-words text-xs font-medium text-gray-600">
+                                Submitted name: {submittedName}
+                              </p>}
+                              <p className="whitespace-pre-wrap leading-snug [overflow-wrap:anywhere] break-words"><SafeMessageText text={msg.content || (ct === 'sticker' ? 'Sticker received' : '')} /></p>
+                            </>;
                             })()}
                           </div>
                           <div className="mt-1 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-0.5 self-end">
