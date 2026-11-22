@@ -328,7 +328,7 @@ run("3. Contact export excludes inbox identities", () => {
   );
   const exportFn = contactsPage.slice(contactsPage.indexOf("function handleExport"));
   assert.ok(exportFn.includes("filtered.map"));
-  assert.ok(contactsPage.includes("/api/contacts?limit=5000"));
+  assert.ok(contactsPage.includes("/api/contacts/activity"));
   const routes = readFileSync(
     join(import.meta.dirname, "..", "server/routes/contacts.ts"),
     "utf8",

@@ -169,8 +169,9 @@ export function prioritizeTasks(items: readonly FollowUpItem[], now = new Date()
       (item.urgent ? 35 : 0) + (item.needsReply ? 30 : 0) +
       (recentEngagement ? 10 : 0) + (isActiveDeal(item) ? 10 : 0);
   };
+  const timestamp = (item: FollowUpItem) => item.time ? Date.parse(item.time) : -Infinity;
   return items.filter(item => item.reviewRecommended || hasTask(item) || hasNeedsReply(item)).sort((a, b) =>
     score(b) - score(a) ||
     (a.followUpDate ? Date.parse(a.followUpDate) : Infinity) - (b.followUpDate ? Date.parse(b.followUpDate) : Infinity) ||
-    a.id.localeCompare(b.id));
+    timestamp(b) - timestamp(a) || a.id.localeCompare(b.id));
 }

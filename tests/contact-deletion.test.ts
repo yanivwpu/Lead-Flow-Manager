@@ -128,7 +128,7 @@ run("Contacts filters/search/export still present; email_inbox stays excluded", 
   const page = readFileSync(join(ROOT, "client/src/pages/Contacts.tsx"), "utf8");
   assert.ok(page.includes("input-contacts-search"));
   assert.ok(page.includes("function handleExport"));
-  assert.ok(page.includes("/api/contacts?limit=5000"));
+  assert.ok(page.includes("/api/contacts/activity"));
   const routes = readFileSync(join(ROOT, "server/routes/contacts.ts"), "utf8");
   assert.ok(routes.includes("filterCrmListedContacts"));
   const visibility = readFileSync(join(ROOT, "shared/contactCrmVisibility.ts"), "utf8");

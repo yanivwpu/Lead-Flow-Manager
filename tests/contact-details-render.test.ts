@@ -1,18 +1,23 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "esbuild";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const globals = globalThis as typeof globalThis & { contactDetailsFixture: any };
 mkdirSync("work", { recursive: true });
-await build({ entryPoints: ["client/src/pages/ContactDetails.tsx"], bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", outfile: "work/contact-details-render.mjs", plugins: [{ name: "crm-fixture", setup(build) {
+const scratch = mkdtempSync(resolve("work/contact-details-render-"));
+const bundle = join(scratch, "page.mjs");
+after(() => rmSync(scratch, { recursive: true, force: true }));
+await build({ entryPoints: ["client/src/pages/ContactDetails.tsx"], bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", outfile: bundle, plugins: [{ name: "crm-fixture", setup(build) {
   build.onResolve({ filter: /^react$/ }, () => ({ path: "react", external: true }));
   build.onResolve({ filter: /^(wouter|@tanstack\/react-query|@\/lib\/auth-context)$/ }, args => ({ path: args.path, namespace: "fixture" }));
   build.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ loader: "js", contents: args.path === "wouter" ? `import React from 'react'; export const useRoute=()=>[true,{id:'contact'}]; export const useSearch=()=> 'returnTo=%2Fapp%2Fcontacts%3Fsearch%3DJane'; export const Link=({href,children,...props})=>React.createElement('a',{href,...props},children);` : args.path.includes("auth-context") ? `export const useAuth=()=>({user:{id:'owner'}});` : `export const useQuery=({queryKey})=>{const f=globalThis.contactDetailsFixture; const p=queryKey[0];return {data:p.endsWith('/details')?f.details:p.endsWith('/notes')?f.notes:p.endsWith('/appointments')?[]:[],isPending:false,isError:false};};export const useQueryClient=()=>({invalidateQueries(){}}); export const useMutation=()=>({isPending:false,isError:false,mutate(){},reset(){}});` }));
 } }] });
-const { ContactDetails } = await import("../work/contact-details-render.mjs");
+const { ContactDetails } = await import(pathToFileURL(bundle).href);
 const contact = { id: "contact", name: "Jane Doe", email: "jane@example.com", phone: "15551234567", source: "whatsapp", primaryChannel: "whatsapp", tag: "Hot", pipelineStage: "Lead", createdAt: "2026-10-01", updatedAt: "2026-10-02" };
 const render = (details: any) => { globals.contactDetailsFixture = { details, notes: [{ id: "n", content: "Review purchase", createdByName: "Team", createdAt: "2026-10-03" }] }; return renderToStaticMarkup(React.createElement(ContactDetails)); };
 
@@ -34,5 +39,13 @@ test("Shopify customer renders persisted order information and handles absent me
 test("a private inquiry has a contact form channel and its verified source label", () => {
   const html = render({ contact: { ...contact, source: "webchat", primaryChannel: "webchat" },
     displayChannel: "webchat", inquirySource: "MLS Property Inquiry", conversations: [], shopify: false, orders: [], activity: [] });
+  assert.match(html, /<h1[^>]*>Jane Doe<\/h1>/);
+  assert.doesNotMatch(html, /Website Visitor/);
   assert.match(html, /<dt>Channel<\/dt><dd>Contact form<\/dd><dt>Source<\/dt><dd>MLS Property Inquiry<\/dd>/);
+});
+
+test("the API-resolved anonymous visitor label is preserved", () => {
+  const html = render({ contact: { ...contact, name: "Agent Page Visitor", email: null, phone: null,
+    source: "webchat", primaryChannel: "webchat" }, conversations: [], shopify: false, orders: [], activity: [] });
+  assert.match(html, /<h1[^>]*>Agent Page Visitor<\/h1>/);
 });

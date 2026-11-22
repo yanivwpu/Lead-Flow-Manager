@@ -109,6 +109,11 @@ jobs:
           tests/inbox-channel-health-bar.test.ts tests/inbox-list-loading.test.ts tests/inbox-list-merge.test.ts
           tests/automation-send-guard.test.ts tests/booking-fast-path.test.ts tests/chatbot-ai-completion-context.test.ts
           tests/webchat-ai-generation-guard.test.ts tests/webchat-generation-recovery.test.ts tests/marketing-compliance.test.ts
+      - name: CRM activity, contact display and reminder recommendations
+        run: >-
+          node --import tsx --test
+          tests/crm-contacts-activity.test.ts tests/contact-details-route.test.ts
+          tests/contact-details-render.test.ts tests/follow-up-tasks.test.ts tests/follow-up-views.test.ts
       - name: Reject new TypeScript diagnostics
         env:
           TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}

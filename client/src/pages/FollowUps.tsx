@@ -533,10 +533,14 @@ export function FollowUps() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [kpiFilter, setKpiFilter] = useState<KPIFilter>(null);
   const isMobile = useIsMobile();
+  const [leadReviewsOnly, setLeadReviewsOnly] = useState(false);
 
   const { data: inboxData = [], isLoading } = useQuery<InboxItem[]>({
     queryKey: ['/api/inbox'],
     enabled: !!user,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 30_000,
   });
 
   const { data: appointmentsData = [] } = useQuery<AppointmentRecord[]>({
@@ -637,8 +641,11 @@ export function FollowUps() {
 
   const savedTasks = followUps.filter(task => !task.reviewRecommended && (hasTask(task) || !hasNeedsReply(task)));
   const replyTasks = useMemo(() => prioritizeTasks(followUps.filter(task => task.reviewRecommended || !hasTask(task))), [followUps]);
-  const recommendedTasks = replyTasks.slice(0, 5);
-  const remainingReplies = replyTasks.slice(5);
+  const leadReviews = replyTasks.filter(task => task.reviewRecommended);
+  const showOnlyLeadReviews = !kpiFilter && leadReviewsOnly && leadReviews.length > 0;
+  const visibleRecommendations = showOnlyLeadReviews ? leadReviews : replyTasks;
+  const recommendedTasks = visibleRecommendations.slice(0, 5);
+  const remainingReplies = visibleRecommendations.slice(5);
 
   const appointmentTasks = useMemo<Chat[]>(() => {
     return appointmentsData.filter(appt => validTaskDate(appt.appointmentDate)).map(appt => ({
@@ -799,6 +806,14 @@ export function FollowUps() {
           </div>
         )}
         
+        {viewMode === 'list' && leadReviews.length > 0 && !kpiFilter && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <a href="#recommended-tasks-heading" onClick={() => setLeadReviewsOnly(true)} className="text-sm font-medium text-purple-700 underline underline-offset-2">
+              Lead reviews ({leadReviews.length})
+            </a>
+          </div>
+        )}
+
         {viewMode === 'list' ? (
           <div className={cn("grid items-start gap-6", savedTasks.length > 0 && recommendedTasks.length > 0
             ? "lg:grid-cols-2" : "max-w-3xl")} data-testid="follow-up-list-columns">
@@ -819,13 +834,19 @@ export function FollowUps() {
               <section className="min-w-0" aria-labelledby="recommended-tasks-heading">
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles className="h-4 w-4 text-purple-500" />
-                  <h2 id="recommended-tasks-heading" className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
+                  <h2 id="recommended-tasks-heading" tabIndex={-1} className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
                     Recommended Tasks
                   </h2>
                 </div>
                 <p className="text-xs text-gray-500 mb-3" title="Rule-based priority using due dates, urgency, customer inquiries, and sales qualification.">
                   Prioritized by due date, urgency, and customer intent
                 </p>
+                {!kpiFilter && leadReviews.length > 0 && leadReviews.length < replyTasks.length && (
+                  <Button type="button" size="sm" variant="outline" className="mb-3"
+                    aria-pressed={showOnlyLeadReviews} onClick={() => setLeadReviewsOnly(!showOnlyLeadReviews)}>
+                    Lead reviews only ({leadReviews.length})
+                  </Button>
+                )}
                 <div className="space-y-3">
                   {recommendedTasks.map(chat => (
                     <div key={chat.id} className="relative">
@@ -842,14 +863,16 @@ export function FollowUps() {
                   ))}
                 </div>
                 {remainingReplies.length > 0 && (
-                  <div className="mt-6 space-y-3">
-                    <h3 className="text-sm font-semibold text-gray-700">More inquiries</h3>
+                  <details className="mt-4 space-y-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-gray-700">
+                      More recommendations ({remainingReplies.length})
+                    </summary>
                     {remainingReplies.map(chat => (
                       <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
                         isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
                         onClick={handleRowClick} onSetReminder={setReminder} />
                     ))}
-                  </div>
+                  </details>
                 )}
               </section>
             )}

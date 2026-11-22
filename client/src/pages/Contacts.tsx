@@ -150,7 +150,7 @@ function Avatar({ contact, displayName }: { contact: Contact; displayName: strin
   );
 }
 
-type SortField = "name" | "createdAt" | "pipelineStage" | "tag";
+type SortField = "activity" | "name" | "createdAt" | "pipelineStage" | "tag";
 type SortDir = "asc" | "desc";
 
 function SortHeader({
@@ -162,6 +162,8 @@ function SortHeader({
   const active = sortField === field;
   return (
     <button
+      type="button"
+      aria-label={active ? `${label} (${sortDir === "asc" ? "ascending" : "descending"})` : label}
       onClick={() => onSort(field)}
       className={cn(
         "flex items-center gap-1 text-xs font-medium uppercase tracking-wide transition-colors",
@@ -239,6 +241,21 @@ function WebchatIdentityBadge({ contact }: { contact: Contact }) {
   return null;
 }
 
+function LastIncomingActivity({ at }: { at?: string | null }) {
+  const { t } = useTranslation();
+  if (!at) return null;
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return null;
+  return (
+    <p className="mt-0.5 truncate text-xs text-gray-500">
+      {t("contacts.lastActivity", "Last activity")}{" "}
+      <time dateTime={at} title={date.toLocaleString(undefined, { timeZoneName: "short" })}>
+        {formatDistanceToNow(date, { addSuffix: true })}
+      </time>
+    </p>
+  );
+}
+
 function contactRowPhone(contact: Contact): string | null {
   return webchatPublicPhone(contact);
 }
@@ -249,7 +266,7 @@ export function Contacts() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const contactsQueryKey = withUserQueryScope(["/api/contacts"], user?.id);
+  const contactsQueryKey = withUserQueryScope(["/api/contacts", "activity"], user?.id);
   const notesSummaryQueryKey = withUserQueryScope(["/api/contacts/notes-summary"], user?.id);
   const appointmentsQueryKey = withUserQueryScope(["/api/appointments"], user?.id);
 
@@ -271,7 +288,7 @@ export function Contacts() {
   const setFilterStage = (value: string) => updateListParam("stage", value);
   const listTab = ([CRM_LIST_ALL, CRM_LIST_IDENTIFIED, CRM_LIST_WEBSITE_VISITORS].includes(listParams.get("tab") as CrmContactListTab) ? listParams.get("tab") : CRM_LIST_IDENTIFIED) as CrmContactListTab;
   const setListTab = (value: CrmContactListTab) => updateListParam("tab", value);
-  const sortField = (["name", "tag", "pipelineStage", "createdAt"].includes(listParams.get("sort") || "") ? listParams.get("sort") : "createdAt") as SortField;
+  const sortField = (["name", "tag", "pipelineStage", "createdAt"].includes(listParams.get("sort") || "") ? listParams.get("sort") : "activity") as SortField;
   const sortDir: SortDir = listParams.get("direction") === "asc" ? "asc" : "desc";
   const setSortDir = (value: SortDir | ((previous: SortDir) => SortDir)) => updateListParam("direction", typeof value === "function" ? value(sortDir) : value);
   const openContact = (id: string) => navigate(`/app/contacts/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(`/app/contacts${listSearch ? `?${listSearch}` : ""}`)}`);
@@ -317,12 +334,26 @@ export function Contacts() {
     }
   }
 
-  const { data: contacts = [], isLoading } = useQuery<Contact[]>({
+  const { data: contacts = [], isLoading, isError, refetch } = useQuery<Contact[]>({
     queryKey: contactsQueryKey,
-    queryFn: async () => {
-      const res = await fetch("/api/contacts?limit=5000", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch");
-      return res.json();
+    enabled: Boolean(user?.id),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    queryFn: async ({ signal }) => {
+      type Page = { contacts: Contact[]; nextCursor: { at: string; id: string } | null };
+      const contactsById = new Map<string, Contact>();
+      let cursor: Page["nextCursor"] = null;
+      do {
+        const params = cursor ? `?${new URLSearchParams({ afterAt: cursor.at, afterId: cursor.id })}` : "";
+        const res = await fetch(`/api/contacts/activity${params}`, { credentials: "include", signal });
+        if (!res.ok) throw new Error("Failed to fetch contacts");
+        const page: Page = await res.json();
+        for (const contact of page.contacts) {
+          if (!contactsById.has(contact.id)) contactsById.set(contact.id, contact);
+        }
+        cursor = page.nextCursor;
+      } while (cursor);
+      return [...contactsById.values()];
     },
   });
 
@@ -461,6 +492,9 @@ export function Contacts() {
       list = list.filter((c) => contactDisplayChannelKey(c) === filterChannel);
     }
 
+    // The complete feed arrives in database activity order.
+    if (sortField === "activity") return sortDir === "desc" ? list : list.reverse();
+
     list.sort((a, b) => {
       let av: string, bv: string;
       if (sortField === "name") {
@@ -573,7 +607,7 @@ export function Contacts() {
 
   function handleSort(field: SortField) {
     if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else updateListParams({ sort: field, direction: "asc" });
+    else updateListParams({ sort: field, direction: field === "activity" ? "desc" : "asc" });
   }
 
   function clearFilters() {
@@ -713,6 +747,9 @@ export function Contacts() {
               ))}
             </select>
 
+            <SortHeader label={t("contacts.recentActivity", "Recent Activity")} field="activity"
+              sortField={sortField} sortDir={sortDir} onSort={handleSort} />
+
             {activeFiltersCount > 0 && (
               <Button
                 variant="ghost"
@@ -777,6 +814,15 @@ export function Contacts() {
             </div>
           )}
 
+          {isError && (
+            <div role="alert" className="flex items-center gap-2 text-sm text-red-700">
+              {t("contacts.loadError", "Could not load contacts.")}
+              <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                {t("contacts.retry", "Retry")}
+              </Button>
+            </div>
+          )}
+
           {/* ── MOBILE card list (< md) ── */}
           <div className="md:hidden bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             {isLoading ? (
@@ -784,7 +830,7 @@ export function Contacts() {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
                 <p className="text-sm">{t("contacts.loading", "Loading contacts…")}</p>
               </div>
-            ) : filtered.length === 0 ? (
+            ) : isError && contacts.length === 0 ? null : filtered.length === 0 ? (
               <div className="py-16 text-center">
                 <Users className="w-10 h-10 text-gray-200 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">
@@ -914,11 +960,9 @@ export function Contacts() {
                         ) : classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS ? (
                           <p className="text-xs text-gray-400 mt-0.5">
                             {webchatLeadSourceLabel(contact)}
-                            {contact.lastIncomingAt
-                              ? ` · ${formatDistanceToNow(new Date(contact.lastIncomingAt), { addSuffix: true })}`
-                              : ""}
                           </p>
                         ) : null}
+                        <LastIncomingActivity at={contact.lastIncomingAt} />
                       </div>
 
                       {/* Right: appointment + timestamp + menu */}
@@ -981,7 +1025,7 @@ export function Contacts() {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
                 <p className="text-sm">{t("contacts.loading", "Loading contacts…")}</p>
               </div>
-            ) : filtered.length === 0 ? (
+            ) : isError && contacts.length === 0 ? null : filtered.length === 0 ? (
               <div className="py-16 text-center">
                 <Users className="w-10 h-10 text-gray-200 mx-auto mb-3" />
                 <p className="text-gray-500 font-medium">
@@ -1078,11 +1122,9 @@ export function Contacts() {
                           {!publicPhone && !contact.email && classifyCrmContactListTab(contact) === CRM_LIST_WEBSITE_VISITORS && (
                             <p className="text-xs text-gray-400 truncate mt-0.5">
                               {webchatLeadSourceLabel(contact)}
-                              {contact.lastIncomingAt
-                                ? ` · last ${formatDistanceToNow(new Date(contact.lastIncomingAt), { addSuffix: true })}`
-                                : ""}
                             </p>
                           )}
+                          <LastIncomingActivity at={contact.lastIncomingAt} />
                         </div>
                         <ArrowUpRight className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </div>

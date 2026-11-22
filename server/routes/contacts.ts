@@ -7,6 +7,7 @@ import { shopifyContactContext } from "@shared/contactDetails";
 import { normalizeShopifyShopDomain } from "@shared/shopifyBilling";
 import { customerPrivacyLocked } from "../shopifyPrivacyRequests";
 import { createContactDetailsHandler } from "../contactDetailsRoute";
+import { getCrmContactsActivityPage, parseCrmActivityCursor } from "../crmContactsActivity";
 import type { Express } from "express";
 import {
   filterCrmListedContacts,
@@ -22,7 +23,7 @@ import {
   promoteInboxIdentityToCrm,
 } from "../emailChannel/contactMatch";
 import { sql, eq, and, inArray, desc } from "drizzle-orm";
-import { CHANNELS, contactNotes, campaignEnrollments, contacts, conversations, activityEvents } from "@shared/schema";
+import { CHANNELS, contactNotes, campaignEnrollments, contacts, conversations, activityEvents, type Contact } from "@shared/schema";
 import {
   CONTACTS_BULK_DELETE_MAX,
   deleteContactSafely,
@@ -61,6 +62,30 @@ async function resolveEntityForNotes(id: string): Promise<{ userId: string } | n
   return null;
 }
 
+async function withActiveCampaignEnrollments(workspaceId: string, listed: Contact[]) {
+  const listedIds = listed.map((contact) => contact.id);
+  let activeEnrollmentIds = new Set<string>();
+  if (listedIds.length > 0) {
+    try {
+      const enrollmentRows = await db
+        .selectDistinct({ contactId: campaignEnrollments.contactId })
+        .from(campaignEnrollments)
+        .where(and(
+          eq(campaignEnrollments.userId, workspaceId),
+          eq(campaignEnrollments.status, "active"),
+          inArray(campaignEnrollments.contactId, listedIds),
+        ));
+      activeEnrollmentIds = new Set(enrollmentRows.map((row) => row.contactId).filter(Boolean));
+    } catch (error) {
+      console.warn("[contacts] active enrollment lookup failed:", error);
+    }
+  }
+  return listed.map((contact) => ({
+    ...contact,
+    hasActiveCampaignEnrollment: activeEnrollmentIds.has(contact.id),
+  }));
+}
+
 export function registerContactRoutes(app: Express): void {
   // Get all contacts
   app.get("/api/contacts", requireInboxWorkspace, async (req, res) => {
@@ -71,33 +96,30 @@ export function registerContactRoutes(app: Express): void {
       const limit = parseInt(req.query.limit as string) || 1000;
       const contacts = await storage.getContacts(inboxWorkspaceId(req), limit);
       const listed = filterCrmListedContacts(contacts);
-      const listedIds = listed.map((c) => c.id);
-      let activeEnrollmentIds = new Set<string>();
-      if (listedIds.length > 0) {
-        try {
-          const enrollmentRows = await db
-            .selectDistinct({ contactId: campaignEnrollments.contactId })
-            .from(campaignEnrollments)
-            .where(
-              and(
-                eq(campaignEnrollments.userId, inboxWorkspaceId(req)),
-                eq(campaignEnrollments.status, "active"),
-                inArray(campaignEnrollments.contactId, listedIds),
-              ),
-            );
-          activeEnrollmentIds = new Set(enrollmentRows.map((r) => r.contactId).filter(Boolean));
-        } catch (enrollErr) {
-          console.warn("[contacts] active enrollment lookup failed:", enrollErr);
-        }
-      }
-      res.json(
-        listed.map((c) => ({
-          ...c,
-          hasActiveCampaignEnrollment: activeEnrollmentIds.has(c.id),
-        })),
-      );
+      res.json(await withActiveCampaignEnrollments(inboxWorkspaceId(req), listed));
     } catch (error) {
       console.error("Error fetching contacts:", error);
+      res.status(500).json({ error: "Failed to fetch contacts" });
+    }
+  });
+
+  // Contacts list paging, using the workspace's inbound activity order.
+  app.get("/api/contacts/activity", requireInboxWorkspace, async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    const { afterAt, afterId } = req.query;
+    const cursor = parseCrmActivityCursor(afterAt, afterId);
+    if ((afterAt !== undefined || afterId !== undefined) && !cursor) {
+      return res.status(400).json({ error: "Invalid Contacts page cursor" });
+    }
+    try {
+      const workspaceId = inboxWorkspaceId(req);
+      const page = await getCrmContactsActivityPage(db, workspaceId, cursor ?? undefined);
+      res.json({
+        contacts: await withActiveCampaignEnrollments(workspaceId, page.contacts),
+        nextCursor: page.nextCursor,
+      });
+    } catch (error) {
+      console.error("Error fetching Contacts activity:", error);
       res.status(500).json({ error: "Failed to fetch contacts" });
     }
   });

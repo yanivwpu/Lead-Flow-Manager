@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Contact, ContactNote } from "@shared/schema";
 import { contactConversationHref, contactsReturnHref } from "@shared/contactDetails";
 import { getContactDisplayChannelLabel } from "@shared/contactChannelDisplay";
-import { webchatPublicPhone, webchatSafeDisplayName } from "@shared/webchatContactIdentity";
+import { webchatPublicPhone } from "@shared/webchatContactIdentity";
 import { useAuth } from "@/lib/auth-context";
 import { withUserQueryScope } from "@/lib/accountQueryScope";
 import { pipelineStageOptions } from "@/lib/data";
@@ -93,7 +93,7 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
   return <main className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6 text-gray-900" data-testid="contact-details">
     {back}
     <header className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0"><h1 className="break-words text-xl font-semibold">{webchatSafeDisplayName(contact)}</h1><p className="text-sm text-gray-500">{contact.pipelineStage || "No stage"} · {contact.tag || "No tag"}</p></div>
+      <div className="min-w-0"><h1 className="break-words text-xl font-semibold">{contact.name}</h1><p className="text-sm text-gray-500">{contact.pipelineStage || "No stage"} · {contact.tag || "No tag"}</p></div>
       {conversationHref ? <Link href={conversationHref}><Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Open Conversation</Button></Link> : <p className="text-sm text-gray-500">No messaging conversation yet</p>}
     </header>
     <ContactSuppressionStatus contactId={contact.id} identityRevision={JSON.stringify([contact.email, contact.phone])} />
