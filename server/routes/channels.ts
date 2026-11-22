@@ -460,6 +460,16 @@ export function registerChannelRoutes(app: Express): void {
       if (!CHANNELS.includes(channel as any)) {
         return res.status(400).json({ error: "Invalid channel" });
       }
+      // A generic channel PATCH cannot bypass verified Meta OAuth ownership.
+      // Existing notification preferences may still be changed normally.
+      if (channel === "instagram" && (
+        Object.prototype.hasOwnProperty.call(req.body ?? {}, "isConnected") ||
+        Object.prototype.hasOwnProperty.call(req.body ?? {}, "config")
+      )) {
+        return res.status(403).json({
+          error: "Connect Instagram through Meta authorization in Channel Settings.",
+        });
+      }
       const setting = await storage.upsertChannelSetting(
         req.user.id,
         channel as any,

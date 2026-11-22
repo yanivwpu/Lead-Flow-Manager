@@ -5307,6 +5307,23 @@ export async function registerRoutes(
         page.instagramAccountId = manualInstagramAccountId.trim();
       }
 
+      // Reject a known cross-workspace Instagram collision before calling Meta.
+      // This leaves the other workspace and existing conversations untouched.
+      if (channel === "instagram") {
+        const { instagramHasWorkspaceConflict, InstagramWorkspaceConflictError } =
+          await import("./instagramWorkspaceOwnership");
+        if (await instagramHasWorkspaceConflict(req.user.id, {
+          instagramAccountId: page.instagramAccountId,
+          pageId: page.id,
+        })) {
+          return res.status(409).json({
+            success: false,
+            code: "INSTAGRAM_WORKSPACE_CONFLICT",
+            error: new InstagramWorkspaceConflictError().message,
+          });
+        }
+      }
+
       // #region agent log
       {
         const priorFb = await storage.getChannelSetting(req.user.id, channel);
@@ -5344,6 +5361,12 @@ export async function registerRoutes(
         const { subscriptionDiag: _failSubDiag, ...failPublic } = result;
         return res.status(422).json(failPublic);
       }
+      if (channel === "instagram" && !result.instagramAccountId) {
+        return res.status(422).json({
+          success: false,
+          error: "Instagram account could not be identified. Confirm the linked Professional account and try again.",
+        });
+      }
 
       // Persist: generate stable webhook verify token
       const cryptoMod = await import("crypto");
@@ -5376,11 +5399,32 @@ export async function registerRoutes(
         config: { ...channelConfig, accessToken: "[REDACTED]" },
       };
       console.log(`[MetaOAuth] Step 5a: DB upsertChannelSetting userId=${req.user.id} channel=${channel}`, JSON.stringify(channelSavePayload));
-      await storage.upsertChannelSetting(req.user.id, channel, {
-        isConnected: true,
-        isEnabled: true,
-        config: channelConfig,
-      });
+      if (channel === "instagram") {
+        const { saveExclusiveInstagramConnection, InstagramWorkspaceConflictError } =
+          await import("./instagramWorkspaceOwnership");
+        try {
+          await saveExclusiveInstagramConnection(req.user.id, {
+            instagramAccountId: result.instagramAccountId!,
+            pageId: page.id,
+            config: channelConfig,
+          });
+        } catch (error) {
+          if (error instanceof InstagramWorkspaceConflictError) {
+            return res.status(409).json({
+              success: false,
+              code: "INSTAGRAM_WORKSPACE_CONFLICT",
+              error: error.message,
+            });
+          }
+          throw error;
+        }
+      } else {
+        await storage.upsertChannelSetting(req.user.id, channel, {
+          isConnected: true,
+          isEnabled: true,
+          config: channelConfig,
+        });
+      }
       console.log(`[MetaOAuth] Step 5a: upsertChannelSetting OK`);
 
       // #region agent log
@@ -5513,6 +5557,15 @@ export async function registerRoutes(
 
       const fbConfig = fbSetting?.config as any;
       const igConfig = igSetting?.config as any;
+      const instagramIdentityConflict = igSetting?.isConnected
+        ? await (await import("./instagramWorkspaceOwnership")).instagramHasWorkspaceConflict(
+            req.user.id,
+            {
+              instagramAccountId: igConfig?.instagramAccountId ?? igConfig?.instagramId,
+              pageId: igConfig?.pageId,
+            },
+          )
+        : false;
 
       // If no stored token yet, derive it the same way POST does
       const cryptoMod = await import('crypto');
@@ -5535,6 +5588,7 @@ export async function registerRoutes(
           verifyTokenConfigured: !!(igConfig?.webhookVerifyToken || deriveIgToken()),
           pageName: igConfig?.pageName ?? null,
           pageId: igConfig?.instagramAccountId ?? igConfig?.pageId ?? null,
+          duplicateWorkspaceConnection: instagramIdentityConflict,
         },
       });
     } catch (error) {
@@ -7071,6 +7125,9 @@ export async function registerRoutes(
       if (channel !== 'facebook' && channel !== 'instagram') {
         return res.status(400).json({ error: "channel must be 'facebook' or 'instagram'" });
       }
+      if (channel === 'instagram') {
+        return res.status(403).json({ error: "Complete Instagram connection through Meta authorization." });
+      }
       await storage.upsertChannelSetting(req.user.id, channel as any, {
         isConnected: true,
         isEnabled: true,
@@ -7098,6 +7155,9 @@ export async function registerRoutes(
       const { type, name, config } = req.body;
       if (!type || !name || !config) {
         return res.status(400).json({ error: "Type, name, and config are required" });
+      }
+      if (type === "meta_instagram") {
+        return res.status(403).json({ error: "Connect Instagram using the verified Meta connection wizard." });
       }
       
       // Check if integration of this type already exists
@@ -7441,6 +7501,10 @@ export async function registerRoutes(
       }
       
       const { name, config, isActive } = req.body;
+      // Legacy integration edits must not bypass Instagram cross-workspace ownership.
+      if (integration.type === "meta_instagram" && config !== undefined) {
+        return res.status(403).json({ error: "Reconnect Instagram using the verified Meta connection wizard." });
+      }
       const updates: any = {};
       if (name !== undefined) updates.name = name;
       if (config !== undefined) updates.config = encryptIntegrationConfig(config);
