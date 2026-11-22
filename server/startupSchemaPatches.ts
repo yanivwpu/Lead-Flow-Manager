@@ -145,10 +145,6 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
     ].join(";\n"),
   },
   {
-    tag: "20261122_neighborhood_guide_photos",
-    sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS photos jsonb NOT NULL DEFAULT '[]'::jsonb",
-  },
-  {
     tag: "20261120_agent_neighborhood_pages",
     sql: `CREATE TABLE IF NOT EXISTS agent_neighborhood_pages (
   id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -164,6 +160,10 @@ const STARTUP_COLUMN_PATCHES: StartupPatch[] = [
   CONSTRAINT agent_neighborhood_pages_owner_slug_unique UNIQUE (user_id, slug)
 );
 CREATE INDEX IF NOT EXISTS agent_neighborhood_pages_published_idx ON agent_neighborhood_pages (id) WHERE published;`,
+  },
+  {
+    tag: "20261122_neighborhood_guide_photos",
+    sql: "ALTER TABLE agent_neighborhood_pages ADD COLUMN IF NOT EXISTS photos jsonb NOT NULL DEFAULT '[]'::jsonb",
   },
   {
     tag: "20261119_agent_page_profile_publication",
