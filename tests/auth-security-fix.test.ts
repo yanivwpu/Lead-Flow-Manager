@@ -121,11 +121,13 @@ account.password = legacyPassword;
 assert.ok(await login(legacyPassword));
 assert.ok(await bcrypt.compare(legacyPassword,account.password));
 // Signup and reset malformed/weak passwords reject before account writes or token claims.
-for (const value of [legacyPassword,{},[],42,'a'.repeat(73),'😀'.repeat(19)]) {
+for (const value of [legacyPassword,'a'.repeat(6),{},[],42,'a'.repeat(73),'😀'.repeat(19)]) {
  assert.ok(validateNewPassword(value));
  assert.equal((await call('/api/auth/signup',{name:'Fixture',email:account.email,password:value})).status,400);
  assert.equal((await call('/api/auth/reset-password',{token:'malformed',password:value})).status,400);
 }
+assert.equal(validateNewPassword('seven77'),null);
+assert.equal(validateNewPassword('a'.repeat(6)), 'Password must be at least 7 characters');
 assert.equal(validateNewPassword(password),null);
 assert.equal(validateNewPassword('😀'.repeat(15)),null);
 assert.equal(validateNewPassword('a'.repeat(72)),null);
