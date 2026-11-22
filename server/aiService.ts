@@ -1,4 +1,5 @@
 import { validateCommerceDraft } from "@shared/commerceGrounding";
+import { isExplicitRealEstateShoppingOverride } from "@shared/aiDomainEligibility";
 import { aiProvider } from "./aiProvider";
 import {
   extractWebsiteKnowledgeSummaryText,
@@ -213,7 +214,10 @@ export class AIService {
     // Deterministic commerce actions return facts from the shared live catalog.
     // Sending still belongs to the existing AI Brain/channel authorization gates.
     const { shoppingSuggestion, unverifiedLiveShoppingProductReply } = await import("./shopping/runtime");
-    const shopping = await (execution?.shoppingSuggestion ?? shoppingSuggestion)({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
+    // Commerce and RGE may share a contact/thread. Strong property intent on the
+    // current inbound takes priority over older Shopify session state.
+    const explicitRealEstateTurn = isExplicitRealEstateShoppingOverride(lastUserMessage);
+    const shopping = explicitRealEstateTurn ? null : await (execution?.shoppingSuggestion ?? shoppingSuggestion)({userId, conversationId: chatId, text: lastUserMessage, channel, locale: detectedLanguage});
     if (shopping) return {
       suggestion: shopping.reply,
       confidence: shopping.handoff || shopping.intelligenceReview ? 0 : 1,
@@ -225,7 +229,7 @@ export class AIService {
     };
     // This safeguard runs only on the real customer-facing suggestion path.
     // Private Test Chat supplies its own fully isolated Shopping suggestion.
-    if (!execution?.shoppingSuggestion) {
+    if (!explicitRealEstateTurn && !execution?.shoppingSuggestion) {
       const unavailable = await unverifiedLiveShoppingProductReply(userId,lastUserMessage,detectedLanguage);
       if (unavailable) return {
         suggestion: unavailable, confidence: 0, confidenceProvided: true,

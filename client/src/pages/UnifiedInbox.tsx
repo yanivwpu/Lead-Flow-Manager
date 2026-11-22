@@ -4132,7 +4132,10 @@ export function UnifiedInbox() {
               </div>
             </div>
 
-            <ShoppingActivity conversationId={selectedConversationId || activeConversationId} />
+            <ShoppingActivity
+              conversationId={selectedConversationId || activeConversationId}
+              latestInboundText={messages.slice().reverse().find(m => m.direction === "inbound")?.content}
+            />
             {/* Messages area — channel-adaptive chrome (email document vs chat bubbles) */}
             <UnifiedConversationMessagesPane
               channel={activeChannel}

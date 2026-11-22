@@ -12,6 +12,7 @@ import {
   shouldShowRealEstateCopilotRecommendations,
   shouldUseRealEstateAiPersona,
   stripIneligibleRealEstateContactContext,
+  isExplicitRealEstateShoppingOverride,
   looksLikeSystemOrNotificationEmail,
 } from "../shared/aiDomainEligibility";
 import { resolveCopilotDominantIntent } from "../shared/copilotIntent";
@@ -299,6 +300,20 @@ run("stripIneligibleRealEstateContactContext removes buyer/inventory fields", ()
   assert.equal(stripped.useRealEstatePromptPersona, false);
   assert.equal(stripped.aiConversationDomain, "generic");
   assert.equal(stripped.name, "Agency Lead");
+});
+
+run("Commerce shopping yields to explicit property intent on the latest inbound only", () => {
+  const property = "Hi, I'm looking for two bedroom condo in Fort Lauderdale under $400,000 can you show me some properties?";
+  assert.equal(isExplicitRealEstateShoppingOverride(property), true);
+  assert.equal(isExplicitRealEstateShoppingOverride("I'm looking for a 2 bed condo to rent in Fort Lauderdale"), true);
+  assert.equal(isExplicitRealEstateShoppingOverride("I'm looking for a snowboard under $400"), false);
+  assert.equal(isExplicitRealEstateShoppingOverride("Which size of jacket do you have in stock?"), false);
+  assert.equal(isExplicitRealEstateShoppingOverride("My Shopify order #1001 has shipped?"), false);
+  assert.equal(isExplicitRealEstateShoppingOverride("Hello"), false);
+  assert.equal(isExplicitRealEstateShoppingOverride(""), false);
+  assert.equal(isExplicitRealEstateShoppingOverride(null), false);
+  // An old property inquiry must not permanently block a new shopping conversation:
+  // the caller evaluates only the latest inbound, not historic CRM criteria.
 });
 
 console.log("\nAll AI domain eligibility tests passed.");

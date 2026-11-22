@@ -294,6 +294,15 @@ export function hasStrongRealEstateLeadEvidence(text: string | null | undefined)
   return hasCriteria;
 }
 
+/**
+ * A current, explicit property request wins over a previously active Shopping
+ * session on the same contact/conversation. Never infer this from the workspace
+ * industry, old CRM tags, or a property mention in historic messages alone.
+ */
+export function isExplicitRealEstateShoppingOverride(text: string | null | undefined): boolean {
+  return hasStrongRealEstateLeadEvidence(text);
+}
+
 export function detectRentalLeadEvidence(text: string | null | undefined): boolean {
   const t = String(text || "").trim();
   if (!hasStrongRealEstateLeadEvidence(t)) return false;
