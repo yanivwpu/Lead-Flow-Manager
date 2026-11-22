@@ -8,6 +8,8 @@ export type RecommendationCardLayout = "sidebar" | "modal";
 
 export interface RecommendationCardImage {
   src?: string | null;
+  /** Only first visible cards should load eagerly. */
+  priority?: boolean;
   alt?: string;
   fallback?: ReactNode;
   onClick?: () => void;
@@ -130,7 +132,9 @@ export function RecommendationCard({
           src={image.src}
           alt={image.alt ?? ""}
           className="h-full w-full flex-shrink-0 object-cover object-center"
-          loading="lazy"
+          loading={image.priority ? "eager" : "lazy"}
+          fetchPriority={image.priority ? "high" : "auto"}
+          decoding="async"
         />
       ) : (
         <span className="flex h-full w-full items-center justify-center">
@@ -163,7 +167,9 @@ export function RecommendationCard({
                 src={image.src}
                 alt={image.alt ?? ""}
                 className="h-full w-full object-cover object-center"
-                loading="lazy"
+                loading={image.priority ? "eager" : "lazy"}
+          fetchPriority={image.priority ? "high" : "auto"}
+          decoding="async"
               />
             ) : (
               <span className="flex h-full w-full items-center justify-center">
