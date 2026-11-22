@@ -326,6 +326,11 @@ export function AuthPage() {
                   )}
                 </button>
               </div>
+              {!isLogin && (
+                <p className="text-xs text-gray-500" data-testid="signup-password-requirement">
+                  {t("errors.passwordTooShort")}
+                </p>
+              )}
             </div>
 
             {isLogin && (
