@@ -76,7 +76,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   const stale = Boolean(active && active !== NEW_NEIGHBORHOOD && (!page || (draft && draft.baseVersion !== page.updatedAt)));
   const values = draft?.values ?? page ?? EMPTY_NEIGHBORHOOD;
   const dirty = Boolean(draft);
-  function editField(field: keyof NeighborhoodContent, value: string) {
+  function editField(field: "name" | "city" | "state" | "content", value: string) {
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
