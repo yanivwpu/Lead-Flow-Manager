@@ -1,8 +1,13 @@
 import type { NeighborhoodContent } from "@shared/agent/neighborhoodPages";
 
 export const NEW_NEIGHBORHOOD = "new";
-export const EMPTY_NEIGHBORHOOD: NeighborhoodContent = { name: "", city: "", state: "", content: "" };
+export const EMPTY_NEIGHBORHOOD: NeighborhoodContent = { name: "", city: "", state: "", content: "", photos: [] };
 const limits = { name: 80, city: 80, state: 60, content: 5000 };
+function validPhotos(photos: unknown): boolean {
+  return photos === undefined || (Array.isArray(photos) && photos.length <= 6 &&
+    photos.every((photo) => photo && typeof photo.url === "string" && photo.url.length <= 600 &&
+      typeof photo.alt === "string" && photo.alt.length <= 140));
+}
 
 export type NeighborhoodDraft = { values: NeighborhoodContent; baseVersion: string | null };
 export type NeighborhoodDrafts = { active: string | null; entries: Record<string, NeighborhoodDraft> };
@@ -12,7 +17,8 @@ export function neighborhoodDraftKey(userId: string): string {
 }
 
 export function sameNeighborhoodContent(a: NeighborhoodContent, b: NeighborhoodContent): boolean {
-  return a.name === b.name && a.city === b.city && a.state === b.state && a.content === b.content;
+  return a.name === b.name && a.city === b.city && a.state === b.state && a.content === b.content &&
+    JSON.stringify(a.photos ?? []) === JSON.stringify(b.photos ?? []);
 }
 
 function validIdentity(id: unknown): id is string {
@@ -28,11 +34,11 @@ export function readNeighborhoodDrafts(storage: Pick<Storage, "getItem">, key: s
       const draft = raw as NeighborhoodDraft | undefined;
       if (!validIdentity(id) || !draft?.values ||
         (id === NEW_NEIGHBORHOOD ? draft.baseVersion !== null : typeof draft.baseVersion !== "string")) continue;
-      const { name, city, state, content } = draft.values;
-      const values = { name, city, state, content };
+      const { name, city, state, content, photos } = draft.values;
+      const values = { name, city, state, content, ...(photos === undefined ? {} : { photos }) };
       if ((Object.keys(limits) as Array<keyof NeighborhoodContent>).every(
         (field) => typeof values[field] === "string" && values[field].length <= limits[field],
-      )) entries[id] = { values, baseVersion: draft.baseVersion };
+      ) && validPhotos(photos)) entries[id] = { values, baseVersion: draft.baseVersion };
     }
     return { active: validIdentity(parsed.active) ? parsed.active : null, entries };
   } catch {
