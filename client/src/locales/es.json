@@ -503,7 +503,7 @@
     "validationError": "Error de validación",
     "requiredField": "Este campo es requerido",
     "invalidEmail": "Dirección de correo inválida",
-    "passwordTooShort": "La contraseña debe tener al menos 8 caracteres"
+    "passwordTooShort": "La contraseña debe tener al menos 7 caracteres"
   },
   "language": {
     "select": "Seleccionar Idioma",
