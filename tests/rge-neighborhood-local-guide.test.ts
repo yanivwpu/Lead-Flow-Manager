@@ -65,6 +65,6 @@ test("neighborhood guide renders responsive photo hero/gallery with accessible a
   assert.match(html, /content="index, follow"/);
   assert.match(html, /id="btn-message"/);
   assert.match(html, /href="#agent-contact">Contact the agent/);
-  assert.doesNotMatch(html, /class="listing-card"/);
+  assert.match(html, /class="neighborhood-guide-editorial"/);
   assert.doesNotMatch(html, /mailto:/);
 });
