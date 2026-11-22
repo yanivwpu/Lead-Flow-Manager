@@ -39,7 +39,7 @@ test("polygon coordinates exclude outside homes, missing coordinates, and polygo
   });
   const withHole: NeighborhoodBoundary = { type: "Polygon", coordinates: [ring,
     [[-80.138,26.12],[-80.13,26.12],[-80.13,26.13],[-80.138,26.13],[-80.138,26.12]],
-  };
+  ] };
   assert.equal(coordinateWithinNeighborhood(26.125, -80.135, withHole), false);
   assert.equal(coordinateWithinNeighborhood(26.135, -80.135, withHole), true);
   const multi: NeighborhoodBoundary = { type: "MultiPolygon", coordinates: [
