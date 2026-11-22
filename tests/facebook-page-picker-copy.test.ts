@@ -39,6 +39,23 @@ run("explains authorized-only Page list and missing-Page recovery", () => {
   assert.ok(wizard.includes("Showing {pages.length} authorized Page"));
 });
 
+run("explains personal Facebook login versus Page Messenger before authorization", () => {
+  assert.ok(wizard.includes("A Facebook Page is required for Messenger"));
+  assert.ok(wizard.includes("messages sent to your selected Facebook Page"));
+  assert.ok(wizard.includes("not messages sent to your personal profile"));
+  assert.ok(wizard.includes("Personal Messenger conversations cannot be connected."));
+  assert.ok(wizard.includes("After creating your Page, return here"));
+  assert.ok(wizard.includes("https://www.facebook.com/pages/create"));
+  assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-idle\""));
+  assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-empty\""));
+  assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-missing\""));
+  assert.ok(wizard.includes('target="_blank"'));
+  assert.ok(wizard.includes('rel="noopener noreferrer"'));
+  assert.ok(wizard.includes("{isFacebook && ("));
+  assert.ok(wizard.includes('onClick={() => setStage("idle")}'));
+  assert.ok(wizard.includes("data-testid=\"button-connect-meta-oauth\""));
+});
+
 run("does not claim WhachatCRM detects all managed Pages", () => {
   assert.equal(wizard.toLowerCase().includes("all pages you manage"), false);
   assert.equal(wizard.toLowerCase().includes("every page you manage"), false);
