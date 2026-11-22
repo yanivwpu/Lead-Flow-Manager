@@ -7125,6 +7125,9 @@ export async function registerRoutes(
       if (channel !== 'facebook' && channel !== 'instagram') {
         return res.status(400).json({ error: "channel must be 'facebook' or 'instagram'" });
       }
+      if (channel === 'instagram') {
+        return res.status(403).json({ error: "Complete Instagram connection through Meta authorization." });
+      }
       await storage.upsertChannelSetting(req.user.id, channel as any, {
         isConnected: true,
         isEnabled: true,
@@ -7152,6 +7155,9 @@ export async function registerRoutes(
       const { type, name, config } = req.body;
       if (!type || !name || !config) {
         return res.status(400).json({ error: "Type, name, and config are required" });
+      }
+      if (type === "meta_instagram") {
+        return res.status(403).json({ error: "Connect Instagram using the verified Meta connection wizard." });
       }
       
       // Check if integration of this type already exists
@@ -7495,6 +7501,10 @@ export async function registerRoutes(
       }
       
       const { name, config, isActive } = req.body;
+      // Legacy integration edits must not bypass Instagram cross-workspace ownership.
+      if (integration.type === "meta_instagram" && config !== undefined) {
+        return res.status(403).json({ error: "Reconnect Instagram using the verified Meta connection wizard." });
+      }
       const updates: any = {};
       if (name !== undefined) updates.name = name;
       if (config !== undefined) updates.config = encryptIntegrationConfig(config);
