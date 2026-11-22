@@ -628,11 +628,10 @@ export function FollowUps() {
       (b.followUpDate ? Date.parse(b.followUpDate) : Infinity));
   }, [filteredChats, kpiFilter]);
 
-  const recommendedTasks = useMemo(() => prioritizeTasks(followUps).slice(0, 5), [followUps]);
-  const regularTasks = useMemo(() => {
-    const recommendedIds = new Set(recommendedTasks.map(t => t.id));
-    return followUps.filter(t => !recommendedIds.has(t.id));
-  }, [followUps, recommendedTasks]);
+  const savedTasks = followUps.filter(task => hasTask(task) || !hasNeedsReply(task));
+  const replyTasks = useMemo(() => prioritizeTasks(followUps.filter(task => !hasTask(task))), [followUps]);
+  const recommendedTasks = replyTasks.slice(0, 5);
+  const remainingReplies = replyTasks.slice(5);
 
   const appointmentTasks = useMemo<Chat[]>(() => {
     return appointmentsData.filter(appt => validTaskDate(appt.appointmentDate)).map(appt => ({
@@ -779,12 +778,26 @@ export function FollowUps() {
         )}
         
         {viewMode === 'list' ? (
-          <div className="max-w-3xl">
+          <div className={cn("grid items-start gap-6", savedTasks.length > 0 && recommendedTasks.length > 0
+            ? "lg:grid-cols-2" : "max-w-3xl")} data-testid="follow-up-list-columns">
+            {savedTasks.length > 0 && (
+              <section className="min-w-0 space-y-3" aria-labelledby="follow-up-tasks-heading">
+                <h2 id="follow-up-tasks-heading" className="text-sm font-semibold text-gray-700 uppercase tracking-wider" data-testid="section-all-tasks">
+                  {kpiFilter ? 'Matching Tasks' : 'Follow-up Tasks'}
+                </h2>
+                {savedTasks.map(chat => (
+                  <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
+                    isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
+                    onClick={handleRowClick} />
+                ))}
+              </section>
+            )}
+
             {recommendedTasks.length > 0 && (
-              <div className="mb-8">
+              <section className="min-w-0" aria-labelledby="recommended-tasks-heading">
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles className="h-4 w-4 text-purple-500" />
-                  <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
+                  <h2 id="recommended-tasks-heading" className="text-sm font-semibold text-purple-600 uppercase tracking-wider" data-testid="section-recommended">
                     Recommended Tasks
                   </h2>
                 </div>
@@ -805,41 +818,30 @@ export function FollowUps() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            <div className="mb-8">
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4" data-testid="section-all-tasks">
-                {recommendedTasks.length > 0 ? 'Other Tasks' : 'All Tasks'}
-              </h2>
-              <div className="space-y-3">
-                {regularTasks.map(chat => (
-                  <TaskListItem
-                    key={chat.id}
-                    chat={chat}
-                    onMarkDone={handleMarkDone}
-                    isPending={clearFollowUpMutation.isPending}
-                    pendingId={clearFollowUpMutation.variables}
-                    onClick={handleRowClick}
-                  />
-                ))}
-                
-                {followUps.length === 0 && (
-                  <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                    <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500 font-medium">No matching tasks</p>
-                    <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
-                    <Button 
-                      className="mt-4 bg-brand-green hover:bg-emerald-700" 
-                      data-testid="button-view-chats"
-                      onClick={() => setLocation('/app/inbox')}
-                    >
-                      Go to Inbox
-                    </Button>
+                {remainingReplies.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <h3 className="text-sm font-semibold text-gray-700">More inquiries</h3>
+                    {remainingReplies.map(chat => (
+                      <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
+                        isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
+                        onClick={handleRowClick} />
+                    ))}
                   </div>
                 )}
+              </section>
+            )}
+
+            {followUps.length === 0 && (
+              <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <CheckCircle2 className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No matching tasks</p>
+                <p className="text-sm text-gray-400 mt-1">No actionable contact tasks in the recent inbox for this view.</p>
+                <Button className="mt-4 bg-brand-green hover:bg-emerald-700" data-testid="button-view-chats"
+                  onClick={() => setLocation('/app/inbox')}>
+                  Go to Inbox
+                </Button>
               </div>
-            </div>
+            )}
           </div>
         ) : viewMode === 'calendar' ? (
           <TaskCalendarView
