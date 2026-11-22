@@ -9,6 +9,7 @@ import {
 } from "@shared/agent/neighborhoodPages";
 import { inspectBusinessProfileLogoUpload } from "../businessProfileLogoUpload";
 import { uploadOutboundUserMedia } from "../mediaStorageService";
+import { findNeighborhoodListings } from "../agentPage/neighborhoodListings";
 import { prepareWebchatVisitorImage } from "../webchatVisitorMedia";
 import { canResolvePublicAgentPage } from "@shared/agent/publicAgentPage";
 import { buildPublicAgentPageData } from "../agentPage/agentPageService";
@@ -165,8 +166,12 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     const [page, agent] = await Promise.all([getNeighborhoodPage(userId, String(req.params.id)), getAgentPageSettingsRow(userId)]);
     if (!page || !agent) return res.sendStatus(404);
     const data = await buildPublicAgentPageData(agent, getAppOrigin(), { profileOnly: true, preview: true });
+    const neighborhoodListings = await findNeighborhoodListings({
+      userId, neighborhood: page, appOrigin: getAppOrigin(), ownerPreview: true,
+    });
     res.type("html").send(buildPublicAgentPageHtml({
       ...data, neighborhood: { ...page, parentUrl: canResolvePublicAgentPage(agent) ? data.pageUrl : "", preview: true },
+      neighborhoodListings,
     }));
   }));
 

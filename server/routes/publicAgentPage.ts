@@ -9,6 +9,7 @@ import {
 import { parseAgentPageEmbedQuery } from "@shared/agent/agentPageEmbed";
 import { buildNeighborhoodUrl, neighborhoodTitle } from "@shared/agent/neighborhoodPages";
 import { publishedNeighborhoods } from "../agentPage/neighborhoodPages";
+import { findNeighborhoodListings } from "../agentPage/neighborhoodListings";
 import { getAppOrigin, getRequestOrigin } from "../urlOrigins";
 import { getPublicAgentPageData } from "../agentPage/agentPageService";
 import { browseAgentPageListings, browseQueryToFilters } from "../agentPage/agentPageBrowseService";
@@ -53,6 +54,9 @@ export function registerPublicAgentPageRoutes(app: Express): void {
         res.status(404).type("html").send(buildPublicAgentPageNotFoundHtml());
         return;
       }
+      const neighborhoodListings = neighborhood
+        ? await findNeighborhoodListings({ userId: agent.userId, neighborhood, appOrigin })
+        : undefined;
       const canonicalUrl = neighborhood ? buildNeighborhoodUrl(renderInput.agentPageSlug, neighborhood.slug, appOrigin) : pageUrl;
       const allowSearchIndexing = !embedMode && `${getRequestOrigin(req)}${req.originalUrl}` === canonicalUrl;
       if (embedMode) {
@@ -61,6 +65,7 @@ export function registerPublicAgentPageRoutes(app: Express): void {
       res.type("html").send(buildPublicAgentPageHtml({
         ...renderInput, canonicalUrl, allowSearchIndexing, agentPageUrl: pageUrl,
         neighborhood: neighborhood ? { ...neighborhood, parentUrl: pageUrl } : undefined,
+        neighborhoodListings,
         neighborhoodLinks: pages.map((page) => ({
           url: buildNeighborhoodUrl(renderInput.agentPageSlug, page.slug, appOrigin),
           title: neighborhoodTitle(page),

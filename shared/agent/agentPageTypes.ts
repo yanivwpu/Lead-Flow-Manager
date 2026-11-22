@@ -22,6 +22,16 @@ export type AgentPageListingCard = {
   listingLabel: "FOR SALE" | "FOR RENT";
 };
 
+/** Public guide cards are server-selected; never trust a neighborhood name alone. */
+export type NeighborhoodListingRenderData = {
+  boundaryStatus: "verified" | "unsupported" | "unmatched" | "unavailable";
+  boundarySource: string | null;
+  mode: "public" | "owner_preview";
+  sale: AgentPageListingCard[];
+  rent: AgentPageListingCard[];
+  hasOlderMatchingInventory: boolean;
+};
+
 export type PublicAgentPageSocialLinks = {
   websiteUrl: string;
   facebookUrl: string;
@@ -50,6 +60,7 @@ export type PublicAgentPageRenderInput = {
   agentPageUrl?: string;
   neighborhood?: import("./neighborhoodPages").NeighborhoodContent & { slug: string; parentUrl: string; preview?: boolean };
   neighborhoodLinks?: Array<{ url: string; title: string }>;
+  neighborhoodListings?: NeighborhoodListingRenderData;
   /** True only for the clean, canonical public route after checking publication eligibility. */
   allowSearchIndexing?: boolean;
   listings: AgentPageListingCard[];
