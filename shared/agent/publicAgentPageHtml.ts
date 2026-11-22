@@ -314,7 +314,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .join(" ");
 
   const navigationHtml = renderAgentNavigation(data);
-  const agentHeaderHtml = embedMode || neighborhood
+  const agentHeaderHtml = embedMode
     ? ""
     : `<header class="agent-header">
       ${renderProfileColumn(data)}
@@ -676,7 +676,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       This page is visible only to its owner while previewing. ${neighborhood.parentUrl ? `Public URL after publication: ${escapeHtml(`${neighborhood.parentUrl}/${neighborhood.slug}`)}` : "A public link will be available when your Agent Page is enabled and this neighborhood is published."}
     </aside>` : ""}
     ${navigationHtml}
-    ${agentHeaderHtml}
+    ${neighborhood ? "" : agentHeaderHtml}
 
     ${neighborhood ? guideHtml : `<section class="listings-section"${navigationHtml ? ' id="agent-properties" tabindex="-1"' : ""}>
       <div class="browse-wrap" id="browse-wrap">
