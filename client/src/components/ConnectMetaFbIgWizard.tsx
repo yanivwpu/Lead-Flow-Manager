@@ -329,7 +329,7 @@ export function ConnectMetaFbIgWizard({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-md" data-testid="dialog-meta-connect">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="dialog-meta-connect">
         <DialogHeader>
           <div className="flex items-center gap-2.5 mb-1">
             <div
@@ -456,7 +456,7 @@ export function ConnectMetaFbIgWizard({
                   <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div className="text-xs text-amber-800 space-y-2">
                     <p className="font-medium">
-                      {isFacebook ? "No authorized Facebook Pages were returned." : "No authorized Instagram Pages were returned."}
+                      No authorized Facebook Pages were returned.
                     </p>
                     {isFacebook && (
                       <p>
