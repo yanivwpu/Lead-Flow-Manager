@@ -152,6 +152,57 @@ export function renderAgentPageListingCards(
   return cards.map((card, index) => listingCardHtml(card, startIndex + index, embedMode)).join("");
 }
 
+/**
+ * Public neighborhood inventory uses the same compliance-safe Agent Page cards,
+ * but only after an exact official polygon match. Historical samples are owner-
+ * preview only, never silently represented as current MLS availability.
+ */
+function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string {
+  const neighborhood = data.neighborhood;
+  if (!neighborhood) return "";
+  const listings = data.neighborhoodListings;
+  const publicMode = !neighborhood.preview;
+  const authorizedMode = publicMode ? listings?.mode === "public"
+    : listings?.mode === "owner_preview";
+  const matched = listings?.boundaryStatus === "verified" && authorizedMode;
+  const sales = matched ? listings.sale : [];
+  const rentals = matched ? listings.rent : [];
+  const title = escapeHtml(neighborhood.name);
+  const statusText = !listings || !matched
+    ? listings?.boundaryStatus === "unavailable"
+      ? "The verified neighborhood map is temporarily unavailable. Local properties cannot be shown right now."
+      : "Neighborhood property matching requires a verified local boundary. Contact the agent for available properties."
+    : listings.hasOlderMatchingInventory && publicMode
+      ? "Some previously synced properties are not shown because their current MLS availability cannot be verified."
+      : !publicMode && listings.hasOlderMatchingInventory
+        ? "Private test: these are previously synced listings, not verified current availability. Do not share as active properties."
+        : "Properties are matched by verified neighborhood boundaries and MLS display permissions.";
+  const group = (groupTitle: string, category: string, cards: AgentPageListingCard[]) =>
+    `<section class="neighborhood-property-group" id="homes-${category}" aria-labelledby="neighborhood-${category}-heading">
+      <div class="neighborhood-property-group-header">
+        <h3 id="neighborhood-${category}-heading">${groupTitle}</h3>
+        <span class="neighborhood-property-number">${cards.length} shown</span>
+      </div>
+      <div class="listings-grid neighborhood-property-grid">
+        ${cards.length ? renderAgentPageListingCards(cards) :
+          `<div class="neighborhood-property-empty">No verified ${category === "sale" ? "for-sale" : "rental"} listings are available to show. Ask the agent about the latest options.</div>`}
+      </div>
+    </section>`;
+  return `<section id="neighborhood-properties" class="neighborhood-properties" aria-labelledby="neighborhood-property-title">
+    <div class="neighborhood-guide-section-label">EXPLORE THE NEIGHBORHOOD</div>
+    <h2 id="neighborhood-property-title">Homes in ${title}</h2>
+    <div class="neighborhood-property-jump">
+      <a href="#homes-sale">Homes for Sale</a>
+      <a href="#homes-rent">Homes for Rent</a>
+    </div>
+    <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
+    <div id="listings-grid" class="neighborhood-property-sections">
+      ${group("Homes for Sale", "sale", sales)}
+      ${group("Homes for Rent", "rent", rentals)}
+    </div>
+  </section>`;
+}
+
 export function buildPublicAgentPageNotFoundHtml(): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="robots" content="noindex, nofollow" /><title>Agent not found</title></head><body style="font-family:system-ui,sans-serif;text-align:center;padding:4rem"><h1>Page not found</h1><p>This agent page is not available.</p></body></html>`;
 }
@@ -174,7 +225,7 @@ function renderAgentNavigation(data: PublicAgentPageRenderInput): string {
   const currentNeighborhood = neighborhoodLinks.some(({ url }) => url === data.canonicalUrl);
   const items = `<ul class="agent-nav-items">
     <li><a href="${home}"${data.neighborhood ? "" : ' aria-current="page"'}>Home</a></li>
-    <li><a href="${data.neighborhood ? home : ""}#agent-properties">Properties</a></li>
+    <li><a href="${data.neighborhood ? "#neighborhood-properties" : "#agent-properties"}">Properties</a></li>
     ${neighborhoodLinks.length ? `<li><details class="agent-nav-disclosure"${currentNeighborhood ? " data-current-section" : ""}>
       <summary>Neighborhoods</summary>
       <ul class="agent-nav-submenu">${neighborhoodLinks.map(({ url, title }) =>
@@ -270,6 +321,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`).join("")}</div>
       </section>` : ""}
 
+      ${renderNeighborhoodProperties(data)}
       ${neighborhood.parentUrl ? `<p class="neighborhood-guide-back"><a href="${escapeHtml(neighborhood.parentUrl)}">← Back to the Agent Page</a></p>` : ""}
       </div>
       <aside class="neighborhood-agent-sidebar" id="agent-contact" aria-label="Contact the local real estate agent">
@@ -647,6 +699,25 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-agent-actions { display: flex; flex-direction: column; align-items: stretch; gap: 9px; }
     .neighborhood-agent-actions .btn { width: 100%; min-height: 43px; justify-content: center; text-align: center; }
     .neighborhood-agent-card .agent-social { justify-content: center; margin-top: 14px; }
+    .neighborhood-properties { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--border); scroll-margin-top: 24px; }
+    .neighborhood-properties h2 { margin-bottom: 12px; }
+    .neighborhood-property-jump { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0 14px; }
+    .neighborhood-property-jump a { border: 1px solid #d6e8e1; background: #effaf5; color: #06664f;
+      border-radius: 999px; padding: 8px 15px; font-weight: 700; text-decoration: none; font-size: .9rem; }
+    .neighborhood-property-jump a:hover,.neighborhood-property-jump a:focus-visible { background: #d8f4e6; }
+    .neighborhood-property-status { font-size: .88rem; line-height: 1.5; color: #64748b; margin-bottom: 20px; }
+    .neighborhood-property-sections { display: flex; flex-direction: column; gap: 28px; }
+    .neighborhood-property-group { min-width: 0; scroll-margin-top: 18px; }
+    .neighborhood-property-group-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .neighborhood-property-group h3 { font-size: 1.25rem; margin: 0; color: #0f172a; }
+    .neighborhood-property-number { color: #64748b; font-size: .83rem; }
+    .neighborhood-property-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+    .neighborhood-property-grid .listing-card { min-width: 0; }
+    .neighborhood-property-empty { grid-column: 1/-1; border: 1px dashed #dbe5e7;
+      background: #f8fafc; border-radius: 12px; padding: 20px; color: #64748b; font-size: .9rem; }
+    @media (max-width: 560px) {
+      .neighborhood-property-grid { grid-template-columns: 1fr; }
+    }
     .neighborhood-guide-back { margin: 22px 0 0; font-size: .9rem; }
     .neighborhood-guide-back a { color: #047857; text-underline-offset: 3px; }
     @media (max-width: 860px) {
