@@ -146,7 +146,7 @@ function testDisplayPermissions() {
       listingDetails: {},
       listingCompliance: NO_ADDRESS_DISPLAY,
     }),
-    agent: { name: "Agent", email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
+    agent: { name: "Agent", phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
     shareUrl: "https://example.com/share/listings/l1",
     qrDataUrl: "",
   });

@@ -23,6 +23,7 @@ import {
   normalizeListingSlugAddressInput,
 } from "@shared/inventory/listingPublicSlug";
 import { buildListingCanonicalShareUrl } from "@shared/inventory/listingViewUrl";
+import type { PublicListingFlyerAgent } from "@shared/inventory/publicListingFlyer";
 import { normalizeListingCompliance } from "@shared/inventory/inventoryListingCompliance";
 import {
   canDirectShareListing,
@@ -1398,15 +1399,6 @@ export async function fetchPublicListingSitemapEntries(
   }));
 }
 
-export type PublicListingAgentProfile = {
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  avatarUrl: string | null;
-  brokerageName: string | null;
-  bookingLink: string | null;
-};
-
 export type ListingDirectShareMeta = {
   allowed: boolean;
   blockedReason: string | null;
@@ -1467,7 +1459,7 @@ export async function createDirectShareLinkForUserListing(
 
 export type PublicListingFlyerData = {
   listing: InventoryListing;
-  agent: PublicListingAgentProfile;
+  agent: PublicListingFlyerAgent;
   companyLogoUrl: string | null;
   shareUrl: string;
   indexedPublicListing: boolean;

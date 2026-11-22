@@ -491,13 +491,12 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="webchat">Web chat</SelectItem>
-                  <SelectItem value="email">Email link</SelectItem>
+                  <SelectItem value="email">Contact form</SelectItem>
                   <SelectItem value="phone">Phone call</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground leading-snug">
-                Web chat and forms create CRM leads in your Inbox. Email and phone open the visitor&apos;s email
-                app or dialer and may not be tracked.
+                Web chat and forms create CRM leads in your Inbox. Phone opens the visitor&apos;s dialer and may not be tracked.
               </p>
             </div>
 

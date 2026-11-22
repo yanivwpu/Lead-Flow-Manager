@@ -171,7 +171,7 @@ function testFlyerGating() {
 
   const without = buildPublicListingFlyerHtml({
     listing: inventoryRowToFlyerListing({ ...baseRow, listingCompliance: {} }),
-    agent: { name: "Jane", email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
+    agent: { name: "Jane", phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
     shareUrl: "https://app.example.com/share/listings/x",
     qrDataUrl: "data:image/png;base64,TEST",
   });
@@ -187,7 +187,6 @@ function testFlyerGating() {
     }),
     agent: {
       name: "Jane",
-      email: null,
       phone: null,
       avatarUrl: null,
       brokerageName: "Summit Realty",

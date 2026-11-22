@@ -43,7 +43,6 @@ export type AgentPageKnowledgeRow = {
   businessName: string | null;
   companyLogo: string | null;
   publicPhone: string | null;
-  publicEmail: string | null;
   publicWebsite: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;
@@ -70,7 +69,6 @@ export async function getAgentPageSettingsRow(userId: string): Promise<AgentPage
       businessName: aiBusinessKnowledge.businessName,
       companyLogo: aiBusinessKnowledge.companyLogo,
       publicPhone: aiBusinessKnowledge.publicPhone,
-      publicEmail: aiBusinessKnowledge.publicEmail,
       publicWebsite: aiBusinessKnowledge.publicWebsite,
       facebookUrl: aiBusinessKnowledge.facebookUrl,
       instagramUrl: aiBusinessKnowledge.instagramUrl,
@@ -111,7 +109,6 @@ export async function resolveAgentPageBySlug(slug: string): Promise<AgentPageKno
       businessName: aiBusinessKnowledge.businessName,
       companyLogo: aiBusinessKnowledge.companyLogo,
       publicPhone: aiBusinessKnowledge.publicPhone,
-      publicEmail: aiBusinessKnowledge.publicEmail,
       publicWebsite: aiBusinessKnowledge.publicWebsite,
       facebookUrl: aiBusinessKnowledge.facebookUrl,
       instagramUrl: aiBusinessKnowledge.instagramUrl,

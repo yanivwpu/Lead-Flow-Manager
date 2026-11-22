@@ -10,6 +10,18 @@ import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
 import { fetchPublishedListingsForAgentPage, incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
 import { resolveAgentPageFormContact } from "./agentPageFormContact";
+import type { InventoryListing } from "@shared/schema";
+
+type PublicLeadResult = { ok: true; contactId: string } | { ok: false; error: string; status: number };
+type ListingInquiry = Pick<PublicAgentLeadBody, "name" | "email" | "phone" | "message">;
+
+function publicListingLabel(listing: InventoryListing): string {
+  return [
+    canShowPublicStreetAddress(listing.listingCompliance) ? listing.addressLine1 : null,
+    listing.city,
+    listing.state,
+  ].filter(Boolean).join(", ");
+}
 
 function buildLeadMessage(
   intent: PublicAgentLeadBody["intent"],
@@ -58,16 +70,7 @@ function buildLeadMessage(
 export async function processPublicAgentPageLead(
   slug: string,
   body: PublicAgentLeadBody,
-): Promise<{ ok: true; contactId: string } | { ok: false; error: string; status: number }> {
-  const identity = collectValidatedIdentity(body);
-  // The general chat validator also accepts formatted strings; require enough actual digits here.
-  if (identity.phone) {
-    const digits = identity.phone.replace(/\D/g, "");
-    identity.phone = digits.length >= 7 && digits.length <= 15 ? digits : undefined;
-  }
-  if (!identity.email && !identity.phone) {
-    return { ok: false, error: "Enter a valid email address or phone number.", status: 400 };
-  }
+): Promise<PublicLeadResult> {
   const agent = await resolveAgentPageBySlug(slug);
   if (!agent) return { ok: false, error: "Agent page not found", status: 404 };
 
@@ -77,7 +80,7 @@ export async function processPublicAgentPageLead(
   const pageContext = page && agent.agentPageSlug ? neighborhoodLeadContext(agent.agentPageSlug, page) : undefined;
   const isEmbed = body.embed === true;
   const pageLabel = isEmbed ? "embedded agent page" : "agent page";
-  const webchatLeadSource = isEmbed ? ("agent_page_embed" as const) : ("agent_page" as const);
+  const sourcePage = isEmbed ? "agent_page_embed" : "agent_page";
   const leadSourceLabel = page ? `Agent Page · ${page.name}` : isEmbed ? "Embedded Agent Page" : "Agent Page";
   const userId = agent.userId;
   let listingLabel: string | undefined;
@@ -86,11 +89,42 @@ export async function processPublicAgentPageLead(
     const listings = await fetchPublishedListingsForAgentPage(userId);
     const listing = listings.find((l) => l.id === body.listingId);
     if (!listing) return { ok: false, error: "Listing not found", status: 404 };
-    listingLabel = [
-      canShowPublicStreetAddress(listing.listingCompliance) ? listing.addressLine1 : null,
-      listing.city,
-      listing.state,
-    ].filter(Boolean).join(", ");
+    listingLabel = publicListingLabel(listing);
+  }
+
+  return savePublicAgentInquiry({ userId, body, sourcePage, pageContext, pageLabel, leadSourceLabel, listingLabel });
+}
+
+/** The public share route verifies MLS eligibility and supplies listing context from the server. */
+export function processPublicListingLead(listing: InventoryListing, listingUrl: string, inquiry: ListingInquiry): Promise<PublicLeadResult> {
+  return savePublicAgentInquiry({
+    userId: listing.userId,
+    body: { ...inquiry, intent: "ask_about", listingId: listing.id, listingUrl, source: "MLS Property Listing" },
+    sourcePage: "listing_flyer",
+    pageLabel: "property listing",
+    leadSourceLabel: "MLS Property Listing",
+    listingLabel: publicListingLabel(listing),
+  });
+}
+
+async function savePublicAgentInquiry(input: {
+  userId: string;
+  body: PublicAgentLeadBody;
+  sourcePage: Parameters<typeof resolveAgentPageFormContact>[0]["sourcePage"];
+  pageContext?: ReturnType<typeof neighborhoodLeadContext>;
+  pageLabel: string;
+  leadSourceLabel: string;
+  listingLabel?: string;
+}): Promise<PublicLeadResult> {
+  const { userId, body, sourcePage, pageContext, pageLabel, leadSourceLabel, listingLabel } = input;
+  const identity = collectValidatedIdentity(body);
+  // The general chat validator also accepts formatted strings; require enough actual digits here.
+  if (identity.phone) {
+    const digits = identity.phone.replace(/\D/g, "");
+    identity.phone = digits.length >= 7 && digits.length <= 15 ? digits : undefined;
+  }
+  if (!identity.email && !identity.phone) {
+    return { ok: false, error: "Enter a valid email address or phone number.", status: 400 };
   }
 
   const customFields: Record<string, unknown> = {
@@ -114,7 +148,7 @@ export async function processPublicAgentPageLead(
   }
 
   const form = await resolveAgentPageFormContact({
-    userId, identity, sourcePage: webchatLeadSource, attribution: customFields, pageContext,
+    userId, identity, sourcePage, attribution: customFields, pageContext,
   });
   if (!form) return { ok: false, error: "Please use one contact method or contact the agent directly.", status: 409 };
 

@@ -70,7 +70,6 @@ function buildFlyerHtml(indexed: boolean): string {
     listing: inventoryRowToFlyerListing(FLYER_ROW),
     agent: {
       name: "Agent",
-      email: null,
       phone: null,
       avatarUrl: null,
       brokerageName: null,
@@ -225,7 +224,6 @@ function testDirectShareSlugUrlResolves() {
     }),
     agent: {
       name: "Agent",
-      email: null,
       phone: null,
       avatarUrl: null,
       brokerageName: null,

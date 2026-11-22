@@ -15,10 +15,12 @@ import { verifiedNeighborhoodChatContext } from "../server/agentPage/neighborhoo
 import { registerAgentPageSettingsRoutes } from "../server/routes/agentPageSettings";
 import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage";
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
+import { registerPublicListingRoutes } from "../server/routes/publicListings";
+import { getBusinessProfileForUser } from "../server/businessProfileService";
 import { storage } from "../server/storage";
 import { subscriptionService, type UserLimits } from "../server/subscriptionService";
 import { AGENT_PAGE_FORM_ACCOUNT, agentPageLeadCopilotContext } from "../shared/agent/agentPageSchema";
-import { contacts, conversations, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions } from "../shared/schema";
+import { contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions } from "../shared/schema";
 import { buildFollowUpItems, hasScheduledFollowUp } from "../shared/followUpTasks";
 import { INBOUND_DEDUP_SCHEMA_SQL } from "../server/inboundDedupSchema";
 import { isInventoryContactEligible } from "../server/inventory/inventoryContactEligibility";
@@ -27,10 +29,16 @@ import { filterCrmListedContacts } from "../shared/contactCrmVisibility";
 import { executeWorkflowActions } from "../server/workflowEngine";
 
 test("profile-only publication, indexing and withdrawal use the same entitlement", async (t) => {
+  const publicEmail = "jane-public@example.test";
+  const publicPhone = "+1 (954) 555-0100";
+  const listingId = "49431be3-1bb2-4758-89fd-22afccacd531";
+  const flyerPath = `/share/listings/${listingId}`;
+  const inquiryPath = `/api/public/listings/${listingId}/leads`;
   const pg = new PGlite();
   t.after(() => pg.close());
   await pg.exec(`
-    CREATE TABLE users (id varchar PRIMARY KEY, avatar_url text, inbox_new_activity_count integer DEFAULT 0);
+    CREATE TABLE users (id varchar PRIMARY KEY, avatar_url text, email text, twilio_whatsapp_number text,
+      meta_display_phone_number text, inbox_new_activity_count integer DEFAULT 0);
     INSERT INTO users (id) VALUES ('agent-user'), ('legacy-live');
     CREATE TABLE ai_business_knowledge (
       user_id text PRIMARY KEY, publish_listings_publicly boolean DEFAULT false,
@@ -41,20 +49,19 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       public_website text, facebook_url text, instagram_url text, linkedin_url text, youtube_url text,
       about_text text, updated_at timestamp DEFAULT now()
     );
-    CREATE TABLE inventory_listings (
-      user_id text, provider_listing_id text, status text, publish_publicly boolean, listing_compliance jsonb
-    );
     INSERT INTO ai_business_knowledge (user_id, agent_page_enabled, publish_listings_publicly, agent_page_slug, display_name, business_name, about_text)
       VALUES ('agent-user', true, false, 'jane-agent', 'Jane Agent', 'Summit Realty', 'Helping buyers and sellers.'),
              ('legacy-live', true, true, 'legacy-agent', 'Legacy Agent', NULL, NULL);
   `);
+  await pg.query(`UPDATE ai_business_knowledge SET public_email = $1, public_phone = $2,
+    agent_page_preferred_lead_capture = 'email' WHERE user_id = 'agent-user'`, [publicEmail, publicPhone]);
   const migration = await readFile("migrations/20261119_agent_page_profile_publication.sql", "utf8");
   await pg.exec(migration);
 
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   const dialect = new PgDialect();
-  for (const table of [contacts, conversations, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions]) {
+  for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions]) {
     const { name, columns } = getTableConfig(table);
     const definitions = columns.map((column) => {
       const value = column.default;
@@ -76,7 +83,10 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   t.mock.method(storage, "getUser", async () => user);
   t.mock.method(storage, "getTemplateEntitlement", async () => ({ status: "purchased" }));
   t.mock.method(storage, "getTemplateInstall", async () => undefined);
-  t.mock.method(storage, "getAiBusinessKnowledge", async () => undefined);
+  t.mock.method(storage, "getAiBusinessKnowledge", async (userId: string) => userId === user.id ? {
+    displayName: "Jane Agent", businessName: "Summit Realty", publicEmail, publicPhone,
+    companyLogo: "https://cdn.example.test/brokerage.png",
+  } : undefined);
   t.mock.method(storage, "getIntegrationByUserAndType", async () => undefined);
   t.mock.method(storage, "getUserTemplateDataByKey", async () => undefined);
   const sellerIntake = t.mock.method(storage, "updateContactSellerPreferenceProfile", async (
@@ -89,6 +99,13 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     id: "w1", userId: user.id, name: "New Lead Auto-Reply + Create Lead", triggerType: "new_chat",
     triggerConditions: { templateId: "realtor-growth-engine", templateKey: "W1" },
     actions: [{ type: "send_message_template", templateKey: "intro_fast_reply" }, { type: "create_task", title: "Review new lead", dueDays: 1 }],
+  });
+  await fixture.insert(inventoryListings).values({
+    id: listingId, userId: user.id, sourceId: "source", provider: "bridge_interactive", providerListingId: "RGE001",
+    status: "active", addressLine1: "42 Private Street", city: "Fort Lauderdale", state: "FL", zip: "33301",
+    publicSlug: "42-private-street-49431be3", squareFeet: 1000, yearBuilt: 1990,
+    listingCompliance: { internetEntireListingDisplay: true, internetAddressDisplay: false,
+      listOfficeName: "Summit Realty", mlsSourceName: "Example MLS", mlsListingId: "RGE001" },
   });
   let eligible = true;
   let expectReadOnly = true;
@@ -107,6 +124,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   registerAgentPageSettingsRoutes(app);
   registerAgentNeighborhoodPagesRoutes(app);
   registerPublicAgentPageRoutes(app);
+  registerPublicListingRoutes(app);
   registerPublicListingSitemapRoutes(app);
   setPublicListingSchemaReady(true);
   t.after(() => setPublicListingSchemaReady(false));
@@ -150,6 +168,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   const html = await canonical.text();
   assert.match(html, /content="index, follow"/);
   assert.match(html, /<h1[^>]*>Jane Agent<\/h1>/);
+  assert.match(html, /class="agent-heading"[^>]*>\s*<h1[^>]*>Jane Agent<\/h1><a[^>]*href="tel:\+19545550100"/);
+  assert.doesNotMatch(html, /jane-public|mailto:|publicEmail/);
+  assert.equal((await getBusinessProfileForUser(user.id)).publicEmail, publicEmail);
   assert.match(html, /id="lead-form"/);
   assert.ok(html.includes(`<link rel="canonical" href="${origin}/agents/jane-agent"`));
   assert.match(await (await request("/robots.txt")).text(), /Allow: \/agents\//);
@@ -168,13 +189,40 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     const { chromium } = await import("playwright");
     const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
     t.after(() => browser.close());
-    for (const width of [320, 390, 1280]) {
+    for (const width of [390, 1280, 1440]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.route("https://cdn.example.test/**", (route) => route.abort());
       await page.goto(origin + "/agents/jane-agent");
       await page.getByRole("heading", { name: "Jane Agent" }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
-      await page.getByRole("button", { name: "Send a message" }).click();
+      assert.equal(await page.locator(".agent-heading").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
+      await page.getByRole("button", { name: "Contact Agent" }).click();
       await page.locator("#lead-form").waitFor();
+      if (width === 390) {
+        await page.locator("#lead-form").getByLabel("Name").fill("Jane Buyer");
+        await page.locator("#lead-form").getByLabel("Email").fill("buyer@example.test");
+        await page.getByRole("button", { name: "Submit" }).click();
+        await page.getByRole("status").filter({ hasText: "Thanks" }).waitFor();
+      }
+      await page.goto(origin + flyerPath);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      const card = page.locator(".agent-card");
+      assert.equal(await card.getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
+      await card.getByRole("button", { name: "Contact Agent" }).click();
+      const dialog = page.getByRole("dialog", { name: "Contact Agent" });
+      await dialog.waitFor();
+      if (width === 390) {
+        await dialog.getByLabel("Name").fill("Listing Visitor");
+        await dialog.getByLabel("Email").fill("flyer@example.test");
+        await dialog.getByLabel("Message").fill("Could you tell me more?");
+        await dialog.getByRole("button", { name: "Send inquiry" }).click();
+        await dialog.getByRole("status").filter({ hasText: "Your inquiry was sent" }).waitFor();
+      }
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "hidden" });
+      await page.goto(origin + "/agents/legacy-agent");
+      assert.equal(await page.locator(".agent-heading a[href^='tel:']").count(), 0);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
       await page.close();
     }
   }
@@ -200,7 +248,44 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   for (const invalid of [{}, { phone: "12-3" }, { phone: "1......." }, { email: "bad address" }]) {
     assert.equal((await submit("jane-agent", invalid)).status, 400);
   }
-  assert.equal((await storage.getContacts(user.id)).length, 2);
+  assert.equal((await storage.getContacts(user.id)).filter((contact) => contact.email !== "flyer@example.test").length, 2);
+
+  const flyer = await request(flyerPath);
+  assert.equal(flyer.status, 200, await flyer.clone().text());
+  const flyerHtml = await flyer.text();
+  assert.doesNotMatch(flyerHtml, /jane-public|mailto:|"email"\s*:|42 Private Street|42-private-street/);
+  assert.match(flyerHtml, /"telephone":"\+1 \(954\) 555-0100"/);
+  assert.ok(flyerHtml.includes(`action="${inquiryPath}"`));
+  assert.match(flyerHtml, /brokerage\.png|Summit Realty/);
+  const postFlyer = (body: Record<string, unknown>, path = inquiryPath) => request(path, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.equal((await postFlyer({ name: "Listing Visitor" })).status, 400);
+  assert.equal((await postFlyer({ email: "flyer@example.test" }, "/api/public/listings/42-private-street-49431be3/leads")).status, 404);
+  const flyerLead = await postFlyer({ name: "Listing Visitor", email: "flyer@example.test", message: "Could you tell me more?",
+    listingUrl: "https://untrusted.example/42-private-street", propertyAddress: "42 Private Street" });
+  assert.equal(flyerLead.status, 201, await flyerLead.clone().text());
+  const listingLead = (await storage.getContacts(user.id)).find((contact) => contact.email === "flyer@example.test")!;
+  const fields = listingLead.customFields as Record<string, unknown>;
+  assert.equal(fields.agentPageListingId, listingId);
+  assert.equal(fields.agentPageListingUrl, origin + flyerPath);
+  assert.equal(fields.listingReference, "Fort Lauderdale, FL");
+  assert.equal(fields.sourcePage, "listing_flyer");
+  assert.equal(fields.leadSource, "MLS Property Listing");
+  assert.equal(listingLead.followUp, "Review new lead");
+  const [listingThread] = (await storage.getContactWithConversations(listingLead.id))!.conversations;
+  for (const msg of await storage.getMessages(listingThread.id)) {
+    assert.match(msg.content, /Fort Lauderdale, FL/);
+    assert.doesNotMatch(msg.content, /42 Private Street|42-private-street|untrusted\.example/);
+  }
+  eligible = false;
+  const fallback = await request(flyerPath);
+  assert.equal(fallback.status, 200);
+  assert.match(await fallback.text(), /href="tel:\+19545550100">Contact Agent<\/a>/);
+  assert.equal((await postFlyer({ email: "flyer@example.test" })).status, 404);
+  eligible = true;
+  const limited = await Promise.all(Array.from({ length: 11 }, () => postFlyer({ email: "invalid" })));
+  assert.ok(limited.some((response) => response.status === 429));
 
   assert.equal((await update({ agentPageSlug: "jane-new" })).status, 200);
   assert.equal((await request("/agents/jane-agent")).status, 404);
@@ -287,6 +372,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.ok(pilotHtml.includes(`<link rel="canonical" href="${origin}${pilot}"`));
   assert.match(pilotHtml, /content="index, follow"/);
   assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale, Florida \| Jane Agent<\/title>/);
+  assert.match(pilotHtml, /class="agent-heading"[^>]*>[\s\S]*?<h1[^>]*>Victoria Park, Fort Lauderdale, Florida<\/h1>\s*<div class="agent-byline"><span>Jane Agent<\/span><a[^>]*href="tel:\+19545550100"/);
+  assert.doesNotMatch(pilotHtml, /jane-public|mailto:|publicEmail/);
   assert.match(pilotHtml, /content="Victoria Park is in northeast Fort Lauderdale/);
   assert.match(pilotHtml, /Back to the Agent Page/);
   assert.match(pilotHtml, /href="[^"]+\/agents\/yaniv-haramatiy\/las-olas"/);
@@ -394,7 +481,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       await page.goto(origin + pilot);
       await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
-      for (const label of ["Contact agent", "Schedule Showing", "What's My Home Worth?"]) {
+      assert.equal(await page.locator(".agent-byline").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
+      assert.equal(await page.locator(".agent-header a[href^='tel:']").count(), 1);
+      for (const label of ["Contact Agent", "Schedule Showing", "What's My Home Worth?"]) {
         await page.getByRole("button", { name: label }).click();
         await page.locator("#lead-form").waitFor();
         await page.getByRole("button", { name: "Cancel" }).click();

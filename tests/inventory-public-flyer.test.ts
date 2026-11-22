@@ -69,7 +69,6 @@ const html = buildPublicListingFlyerHtml({
   listing,
   agent: {
     name: "Jane Agent",
-    email: "jane@broker.com",
     phone: "+1 512-555-0100",
     avatarUrl: "https://cdn.example.com/jane.jpg",
     brokerageName: "Summit Realty",
@@ -154,7 +153,6 @@ const bookingHtml = buildPublicListingFlyerHtml({
   listing,
   agent: {
     name: "Jane Agent",
-    email: "jane@broker.com",
     phone: "+1 512-555-0100",
     avatarUrl: null,
     brokerageName: "Summit Realty",
@@ -169,7 +167,6 @@ const ogMeta = buildListingOpenGraphMeta({
   listing,
   agent: {
     name: "Jane Agent",
-    email: "jane@broker.com",
     phone: null,
     avatarUrl: null,
     brokerageName: null,
@@ -205,7 +202,7 @@ assert(resolveDisplayHoaFee(parsedHoa) === "HOA $325/mo", "hoa parsed from featu
 
 const noPhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [], latitude: null, longitude: null },
-  agent: { name: null, email: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
+  agent: { name: null, phone: null, avatarUrl: null, brokerageName: null, bookingLink: null },
   shareUrl: "https://app.example.com/share/listings/x",
   qrDataUrl: "data:image/png;base64,TEST",
 });
@@ -221,7 +218,6 @@ const addressOnlyHtml = buildPublicListingFlyerHtml({
   listing: addressOnlyListing,
   agent: {
     name: "Jane Agent",
-    email: "jane@broker.com",
     phone: "+1 512-555-0100",
     avatarUrl: null,
     brokerageName: "Summit Realty",
@@ -259,7 +255,6 @@ const previewOverrideHtml = buildPublicListingFlyerHtml({
   },
   agent: {
     name: "Jane Agent",
-    email: null,
     phone: null,
     avatarUrl: null,
     brokerageName: null,
@@ -276,7 +271,6 @@ const onePhotoHtml = buildPublicListingFlyerHtml({
   listing: { ...listing, photos: [{ url: "https://cdn.example.com/only.jpg", order: 0 }] },
   agent: {
     name: "Jane Agent",
-    email: "jane@broker.com",
     phone: "+1 512-555-0100",
     avatarUrl: null,
     brokerageName: "Summit Realty",
