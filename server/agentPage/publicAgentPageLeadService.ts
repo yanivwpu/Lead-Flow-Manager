@@ -10,6 +10,7 @@ import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
 import { fetchPublishedListingsForAgentPage, incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
 import { resolveAgentPageFormContact } from "./agentPageFormContact";
+import { validatedAgentInquiryPhone } from "@shared/agent/agentPageInquiry";
 import type { InventoryListing } from "@shared/schema";
 
 type PublicLeadResult = { ok: true; contactId: string } | { ok: false; error: string; status: number };
@@ -119,10 +120,7 @@ async function savePublicAgentInquiry(input: {
   const { userId, body, sourcePage, pageContext, pageLabel, leadSourceLabel, listingLabel } = input;
   const identity = collectValidatedIdentity(body);
   // The general chat validator also accepts formatted strings; require enough actual digits here.
-  if (identity.phone) {
-    const digits = identity.phone.replace(/\D/g, "");
-    identity.phone = digits.length >= 7 && digits.length <= 15 ? digits : undefined;
-  }
+  identity.phone = validatedAgentInquiryPhone(body.phone);
   if (!identity.email && !identity.phone) {
     return { ok: false, error: "Enter a valid email address or phone number.", status: 400 };
   }

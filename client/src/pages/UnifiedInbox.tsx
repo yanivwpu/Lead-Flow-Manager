@@ -1,5 +1,5 @@
 import { InboxReplyConflict } from "@/components/InboxReplyConflict";
-import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
+import { agentInquiryLabel, isAgentInquiryThread } from "@shared/agent/agentPageInquiry";
 import { useInboxDraftClaim, useInboxReplySnapshot, replySnapshotKey } from "@/lib/useInboxCollaboration";
 import { AssigneeAvatar } from "@/components/InboxAssignmentControl";
 import { InboxReplyAttribution, InboxReplyAvatar } from "@/components/InboxReplyAttribution";
@@ -444,7 +444,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   instagram: { icon: Instagram, color: '#E4405F', label: 'Instagram' },
   facebook: { icon: Facebook, color: '#1877F2', label: 'Messenger' },
   sms: { icon: Smartphone, color: '#6B7280', label: 'SMS' },
-  webchat: { icon: Globe, color: '#3B82F6', label: 'Web Chat' },
+  webchat: { icon: Globe, color: '#3B82F6', label: 'Website Chat' },
   telegram: { icon: Send, color: '#0088CC', label: 'Telegram' },
   tiktok: { icon: Video, color: '#000000', label: 'TikTok' },
   email: { icon: Mail, color: '#EA4335', label: 'Email' },
@@ -498,7 +498,7 @@ const SOURCE_LABELS: Record<string, string> = {
   whatsapp: 'WhatsApp',
   instagram: 'Instagram DM',
   facebook: 'Facebook',
-  webchat: 'Web Chat',
+  webchat: 'Website Chat',
   import: 'CSV Import',
   api: 'API',
   tiktok: 'TikTok',
@@ -514,7 +514,7 @@ const SOURCE_OPTIONS = [
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'instagram', label: 'Instagram DM' },
   { value: 'facebook', label: 'Facebook' },
-  { value: 'webchat', label: 'Web Chat' },
+  { value: 'webchat', label: 'Website Chat' },
   { value: 'import', label: 'CSV Import' },
   { value: 'api', label: 'API' },
 ];
@@ -1378,6 +1378,7 @@ export function UnifiedInbox() {
   );
 
   const primaryConversation = (selectionBase.primaryConversation as Conversation | null) ?? undefined;
+  const inquiryThread = isAgentInquiryThread(primaryConversation);
   const activeConversationId = selectionBase.activeConversationId;
 
   // Lock sticky to the conversation currently being viewed (once resolved).
@@ -3710,7 +3711,7 @@ export function UnifiedInbox() {
                   ? item.conversation.unreadCount
                   : item.unreadCount;
               const needsReply =
-                item.conversation?.lastMessageDirection === "inbound" && rowUnread > 0;
+                !isAgentInquiryThread(item.conversation) && item.conversation?.lastMessageDirection === "inbound" && rowUnread > 0;
               const isOverdue = fuStatus === 'overdue';
               const bookedAppt = nextAppointmentByContact.get(item.contact.id);
               const crmTag = isCrmDisplayTag(item.contact.tag) ? item.contact.tag : null;
@@ -3798,6 +3799,9 @@ export function UnifiedInbox() {
                       <span className={INBOX_ROW_CHANNEL_ICON_WRAP} aria-hidden>
                         {getChannelIcon(item.channel, "w-3 h-3")}
                       </span>
+                      {isAgentInquiryThread(item.conversation) && <span className="max-w-[60%] truncate text-xs text-sky-700">
+                        {agentInquiryLabel(item.contact) ?? "Agent Page Inquiry"}
+                      </span>}
                       {rowIsForm ? (
                         <span
                           className="mr-1 shrink-0 rounded bg-sky-100 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-900"
@@ -3929,7 +3933,10 @@ export function UnifiedInbox() {
                   <h3 className="font-semibold text-sm truncate" data-testid="inbox-selected-contact-name">
                     {formDisplayContact?.name || contact.name}
                   </h3>
-                  {getChannelIcon(activeChannel)}
+                  {getChannelIcon(inquiryThread ? "webchat" : activeChannel)}
+                  {inquiryThread && <Badge variant="secondary" data-testid="badge-rge-inquiry-source">
+                    {agentInquiryLabel(contact) ?? "Agent Page Inquiry"}
+                  </Badge>}
                   {isWebsiteFormThread ? (
                     <Badge
                       variant="secondary"
@@ -3972,7 +3979,7 @@ export function UnifiedInbox() {
                   </p>
                 ) : null}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {(isEmailChannel || primaryConversation?.channelAccountId === AGENT_PAGE_FORM_ACCOUNT) &&
+                  {(isEmailChannel || inquiryThread) &&
                     (emailComposeTo || formDisplayContact?.email || contact.email) ? (
                     <span className="flex items-center gap-1 truncate">
                       <Mail className="w-3 h-3" />
@@ -4015,7 +4022,7 @@ export function UnifiedInbox() {
                 ) : null}
 
                 {/* Channel switcher (neutral control) */}
-                <DropdownMenu>
+                {!inquiryThread && <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
@@ -4061,7 +4068,7 @@ export function UnifiedInbox() {
                       );
                     })}
                   </DropdownMenuContent>
-                </DropdownMenu>
+                </DropdownMenu>}
 
                 {/* Actions menu */}
                 <DropdownMenu>
@@ -4820,7 +4827,7 @@ export function UnifiedInbox() {
               </div>
             )}
 
-            {isEmailChannel && forceNewEmailCompose ? (
+            {!inquiryThread && isEmailChannel && forceNewEmailCompose ? (
               <div
                 className="border-t border-emerald-100 bg-emerald-50/70 px-4 py-2 text-xs text-emerald-900 shrink-0"
                 data-testid="inbox-new-outreach-compose-banner"
@@ -4829,7 +4836,7 @@ export function UnifiedInbox() {
               </div>
             ) : null}
 
-            {isEmailChannel && (
+            {!inquiryThread && isEmailChannel && (
               <div
                 className="border-t border-gray-200 bg-white px-4 sm:px-5 pt-3 pb-2 space-y-2 shrink-0 w-full max-w-full"
                 data-testid="inbox-email-compose-headers"
@@ -4884,7 +4891,9 @@ export function UnifiedInbox() {
               {teammateActivity.length>0&&<div className="flex flex-wrap items-center gap-2 py-1 text-xs text-slate-500" data-testid="inbox-teammate-activity">{teammateActivity.map(v=><span key={v.userId} className="inline-flex items-center gap-1"><ChatAvatar src={v.avatarUrl} name={v.userName} size="sm" className="h-5 w-5 text-[9px]" />{t(v.isTyping?"inboxCollaboration.replying":"inboxCollaboration.viewing",{name:v.userName})}</span>)}</div>}
               <InboxReplyConflict code={collaboration.conflict} latestReply={collaboration.latestReply} onReview={()=>void reviewLatestReply()} />
             </div>
-            <AIComposer
+            {inquiryThread ? <p className="border-t bg-white px-4 py-3 text-sm text-muted-foreground" data-testid="rge-inquiry-reply-notice">
+              This inquiry came through a contact form. Follow up using the contact’s email or phone.
+            </p> : <AIComposer
               key={
                 hasConversation && primaryConversation?.id
                   ? `conv-${primaryConversation.id}`
@@ -4926,7 +4935,7 @@ export function UnifiedInbox() {
               onAttachPendingMedia={isEmailChannel ? undefined : attachComposerPendingMedia}
               forceManualMode={forceNewEmailCompose}
               serverHeldDraft={serverHeldDraft}
-            />
+            />}
           </>
         ) : selectedContactId ? (
           /* Contact selected but detail still loading (and not yet in inbox list cache) */
@@ -4989,11 +4998,11 @@ export function UnifiedInbox() {
                   : undefined
               }
               composerDraftPreview={
-                hasFullAIBrain && messageInput.trim()
+                !inquiryThread && hasFullAIBrain && messageInput.trim()
                   ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
                   : undefined
               }
-              onInsertComposerDraft={insertComposerDraftFromCopilot}
+              onInsertComposerDraft={inquiryThread ? undefined : insertComposerDraftFromCopilot}
               connectedChannels={connectedChannelsMap}
               workspaceIntelligence={workspaceIntelligence}
               onUpdateContact={updateContact}
@@ -5041,11 +5050,11 @@ export function UnifiedInbox() {
                       : undefined
                   }
                   composerDraftPreview={
-                    hasFullAIBrain && messageInput.trim()
+                    !inquiryThread && hasFullAIBrain && messageInput.trim()
                       ? `${messageInput.slice(0, 100)}${messageInput.length > 100 ? "…" : ""}`
                       : undefined
                   }
-                  onInsertComposerDraft={insertComposerDraftFromCopilot}
+                  onInsertComposerDraft={inquiryThread ? undefined : insertComposerDraftFromCopilot}
                   connectedChannels={connectedChannelsMap}
                   workspaceIntelligence={workspaceIntelligence}
                   onUpdateContact={updateContact}

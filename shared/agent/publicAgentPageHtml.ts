@@ -285,7 +285,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
   <style>
     :root { --brand: ${BRAND_GREEN}; --brand-dark: ${BRAND_GREEN_DARK}; --ink: #0f172a; --muted: #64748b; --border: #e2e8f0; --bg: #f8fafc; }
     * { box-sizing: border-box; }
-    html { overflow-x: hidden; }
+    html { overflow-x: hidden; ${embedMode ? "" : "scrollbar-gutter: stable;"} }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; overflow-x: hidden; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
     .agent-header { display: grid; gap: 20px; background: #fff; border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 10px; }

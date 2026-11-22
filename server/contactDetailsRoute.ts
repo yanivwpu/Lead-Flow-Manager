@@ -4,6 +4,7 @@ import type { Contact, Conversation, ActivityEvent } from "@shared/schema";
 import { contactDetailsSuppressed, projectShopifyOrder, shopifyContactContext } from "@shared/contactDetails";
 import { getContactDisplayChannel } from "@shared/contactChannelDisplay";
 import { webchatSafeDisplayName, webchatPublicPhone } from "@shared/webchatContactIdentity";
+import { agentInquiryLabel } from "@shared/agent/agentPageInquiry";
 
 /** Dependencies are explicit so ownership/privacy ordering can be tested without a database. */
 export function createContactDetailsHandler(deps: {
@@ -38,6 +39,7 @@ export function createContactDetailsHandler(deps: {
         conversations: conversations.filter(item => item.userId === inboxWorkspaceId(req))
           .map(item => ({ id: item.id, channel: item.channel })),
         displayChannel: getContactDisplayChannel(contact, conversations),
+        inquirySource: agentInquiryLabel(contact),
         orders, shopify: context.linked || orders.length > 0,
         commerceCustomer: { store: context.store || orders[0]?.store || null, ordersCount: context.ordersCount, totalSpent: context.totalSpent },
         // Webhook payloads and automation internals are never returned to the browser.

@@ -30,3 +30,9 @@ test("Shopify customer renders persisted order information and handles absent me
   for (const text of ["Shopify purchases", "#1001", "Shirt", "42.00 USD", "paid", "No messaging conversation yet", "read-only"]) assert.ok(html.includes(text), text);
   assert.ok(!html.includes("/app/inbox/"));
 });
+
+test("a private inquiry has a contact form channel and its verified source label", () => {
+  const html = render({ contact: { ...contact, source: "webchat", primaryChannel: "webchat" },
+    displayChannel: "webchat", inquirySource: "MLS Property Inquiry", conversations: [], shopify: false, orders: [], activity: [] });
+  assert.match(html, /<dt>Channel<\/dt><dd>Contact form<\/dd><dt>Source<\/dt><dd>MLS Property Inquiry<\/dd>/);
+});

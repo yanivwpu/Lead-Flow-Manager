@@ -291,11 +291,12 @@ test("Contacts UI defaults to identified contacts and exposes Website Visitors",
   assert.doesNotMatch(page, /function StatCard/);
   assert.match(page, /CRM_LIST_WEBSITE_VISITORS/);
   assert.match(page, /CRM_LIST_ALL/);
-  assert.match(page, /Identified from Website Chat/);
+  assert.match(page, /badge-identified-webchat-[\s\S]*?Website Chat/);
+  assert.match(page, /agentInquiryLabel\(contact\)/);
   assert.match(page, /webchatSafeDisplayName/);
   assert.match(page, /webchatPublicPhone/);
   assert.match(page, /select-filter-channel/);
-  assert.match(page, /Web Chat/);
+  assert.match(page, /Website Chat/);
   const script = read("scripts/preflight-webchat-contact-identity.ts");
   assert.match(script, /readOnly: true/);
   assert.match(script, /aggregateWebchatContactPreflight/);

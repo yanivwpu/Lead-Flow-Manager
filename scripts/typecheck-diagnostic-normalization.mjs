@@ -1,7 +1,9 @@
 /** Property/union-member display order is not a TypeScript regression; types and members remain significant. */
 export function normalizeDiagnosticTypeProperties(message) {
   const unions = message.replace(/"(?:[^"\\]|\\.)*"(?:\s*\|\s*"(?:[^"\\]|\\.)*")+/g,
-    value => value.match(/"(?:[^"\\]|\\.)*"/g).sort().join(" | "));
+    value => value.match(/"(?:[^"\\]|\\.)*"/g).sort().join(" | "))
+    .replace(/Type '([A-Za-z_$][\w$]*(?: \| [A-Za-z_$][\w$]*)+)'/g,
+      (_, members) => `Type '${members.split(" | ").sort().join(" | ")}'`);
   return unions.replace(/\{([^{}]*)\}/g, (whole, body) => {
     const properties = body.split(";").map(value => value.trim()).filter(Boolean);
     if (!properties.length || !properties.every(value => /^(?:readonly\s+)?[A-Za-z_$][\w$]*\??\s*:/.test(value))) return whole;

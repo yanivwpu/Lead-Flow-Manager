@@ -10,5 +10,8 @@ test("diagnostic comparison ignores property order but preserves type/property/c
   assert.notEqual(normalize(one), normalize(one.replace("2345", "9999")));
   assert.equal(normalize('Type "week" | "month"'), normalize('Type "month" | "week"'));
   assert.notEqual(normalize('Type "week" | "month"'), normalize('Type "year" | "month"'));
+  const fileUnion = "Type 'File | BusinessProfileLogoFileLike' is not assignable to type 'Blob'.";
+  assert.equal(normalize(fileUnion), normalize(fileUnion.replace("File | BusinessProfileLogoFileLike", "BusinessProfileLogoFileLike | File")));
+  assert.notEqual(normalize(fileUnion), normalize(fileUnion.replace("File |", "Image |")));
   assert.equal(normalize("unexpected { non-type }"), "unexpected { non-type }");
 });

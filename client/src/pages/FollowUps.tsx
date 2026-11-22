@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, isToday, isBefore, startOfWeek, endOfWeek } from "date-fns";
 import { ShopifyOrderSupportTasks } from "@/components/followups/ShopifyOrderSupportTasks";
@@ -106,13 +107,15 @@ function TaskListItem({
   onMarkDone, 
   isPending, 
   pendingId,
-  onClick 
+  onClick,
+  onSetReminder,
 }: { 
   chat: Chat; 
   onMarkDone: (e: React.MouseEvent, chatId: string) => void;
   isPending: boolean;
   pendingId: string | undefined;
   onClick: (chatId: string) => void;
+  onSetReminder?: (chat: Chat) => void;
 }) {
   const status = chat.followUpDate ? getTaskStatus(chat.followUpDate) : null;
   const needsReply = hasNeedsReply(chat);
@@ -123,7 +126,7 @@ function TaskListItem({
       onClick={() => onClick(chat.id)}
       data-testid={`task-item-${chat.id}`}
     >
-      {hasTask(chat) && !chat.isAppointment && <button
+      {hasTask(chat) && !chat.isAppointment && !chat.reviewRecommended && <button
         className="h-6 w-6 rounded-full border-2 border-gray-300 hover:border-brand-green hover:bg-brand-green hover:text-white mr-4 shrink-0 transition-colors flex items-center justify-center"
         onClick={(e) => onMarkDone(e, chat.id)}
         disabled={isPending}
@@ -150,7 +153,7 @@ function TaskListItem({
           )}
         </div>
         <p className="text-sm text-gray-600 mb-1">
-          {hasTask(chat) ? `Follow up: ${chat.followUp}` : needsReply ? 'Reply to customer inquiry' : `Sales opportunity · ${chat.pipelineStage}`}
+          {chat.reviewRecommended || (hasTask(chat) ? `Follow up: ${chat.followUp}` : needsReply ? 'Reply to customer inquiry' : `Sales opportunity · ${chat.pipelineStage}`)}
           {chat.followUpDate && (
             <span className="text-gray-400 ml-2">
               ({format(new Date(chat.followUpDate), 'MMM d, yyyy')})
@@ -167,7 +170,9 @@ function TaskListItem({
         )}
       </div>
 
-      <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />
+      {chat.reviewRecommended && onSetReminder ? <Button size="sm" variant="outline" className="ml-3 shrink-0"
+        onClick={(event) => { event.stopPropagation(); onSetReminder(chat); }}>Set Reminder</Button>
+        : <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-brand-green transition-colors ml-4" data-testid={`icon-arrow-${chat.id}`} />}
     </div>
   );
 }
@@ -577,6 +582,7 @@ export function FollowUps() {
 
   const chats = useMemo(() => buildFollowUpItems(inboxData), [inboxData]);
   const scheduledFollowUps = useMemo(() => chats.filter(hasScheduledFollowUp), [chats]);
+  const [reminder, setReminder] = useState<Chat | undefined>(undefined);
 
   const patchContact = async (contactId: string, fields: Record<string, unknown>) => {
     const res = await fetch(`/api/contacts/${contactId}`, {
@@ -604,10 +610,11 @@ export function FollowUps() {
   });
 
   const updateFollowUpDateMutation = useMutation({
-    mutationFn: async ({ chatId, newDate }: { chatId: string; newDate: Date }) => {
-      return patchContact(chatId, { followUpDate: newDate.toISOString() });
+    mutationFn: async ({ chatId, newDate, title }: { chatId: string; newDate: Date; title?: string }) => {
+      return patchContact(chatId, { followUpDate: newDate.toISOString(), ...(title ? { followUp: title } : {}) });
     },
-    onSuccess: invalidateAll,
+    onSuccess: () => { invalidateAll(); setReminder(undefined); },
+    onError: () => toast({ title: 'Could not save reminder', variant: 'destructive' }),
   });
 
   const updatePipelineStageMutation = useMutation({
@@ -622,14 +629,14 @@ export function FollowUps() {
   }, [chats, kpiFilter]);
 
   const followUps = useMemo(() => {
-    const items = kpiFilter ? filteredChats : filteredChats.filter(c => hasTask(c) || hasNeedsReply(c));
+    const items = kpiFilter ? filteredChats : filteredChats.filter(c => c.reviewRecommended || hasTask(c) || hasNeedsReply(c));
     return [...items].sort((a, b) =>
       (a.followUpDate ? Date.parse(a.followUpDate) : Infinity) -
       (b.followUpDate ? Date.parse(b.followUpDate) : Infinity));
   }, [filteredChats, kpiFilter]);
 
-  const savedTasks = followUps.filter(task => hasTask(task) || !hasNeedsReply(task));
-  const replyTasks = useMemo(() => prioritizeTasks(followUps.filter(task => !hasTask(task))), [followUps]);
+  const savedTasks = followUps.filter(task => !task.reviewRecommended && (hasTask(task) || !hasNeedsReply(task)));
+  const replyTasks = useMemo(() => prioritizeTasks(followUps.filter(task => task.reviewRecommended || !hasTask(task))), [followUps]);
   const recommendedTasks = replyTasks.slice(0, 5);
   const remainingReplies = replyTasks.slice(5);
 
@@ -751,6 +758,21 @@ export function FollowUps() {
 
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <KPIHeader chats={chats} activeFilter={kpiFilter} onFilterChange={setKpiFilter} />
+        <Dialog open={!!reminder} onOpenChange={(open) => { if (!open) setReminder(undefined); }}>
+          <DialogContent aria-describedby={undefined}>
+            <DialogTitle>Set Reminder</DialogTitle>
+            <form className="space-y-4" onSubmit={(event) => {
+              event.preventDefault();
+              const date = new Date(String(new FormData(event.currentTarget).get('reminderAt')));
+              if (reminder && Number.isFinite(date.getTime())) updateFollowUpDateMutation.mutate({ chatId: reminder.id, newDate: date, title: reminder.reviewRecommended });
+            }}>
+              <label className="grid gap-1 text-sm">Date and time
+                <input name="reminderAt" type="datetime-local" required className="rounded-md border border-gray-300 p-2" />
+              </label>
+              <Button type="submit" disabled={updateFollowUpDateMutation.isPending}>Save Reminder</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
         {viewMode === "list" && !kpiFilter && <ShopifyOrderSupportTasks />}
         
         {kpiFilter && (
@@ -814,6 +836,7 @@ export function FollowUps() {
                         isPending={clearFollowUpMutation.isPending}
                         pendingId={clearFollowUpMutation.variables}
                         onClick={handleRowClick}
+                        onSetReminder={setReminder}
                       />
                     </div>
                   ))}
@@ -824,7 +847,7 @@ export function FollowUps() {
                     {remainingReplies.map(chat => (
                       <TaskListItem key={chat.id} chat={chat} onMarkDone={handleMarkDone}
                         isPending={clearFollowUpMutation.isPending} pendingId={clearFollowUpMutation.variables}
-                        onClick={handleRowClick} />
+                        onClick={handleRowClick} onSetReminder={setReminder} />
                     ))}
                   </div>
                 )}
