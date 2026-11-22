@@ -54,5 +54,5 @@ test("visible MLS image prioritized without removing lazy loading or flyer permi
   assert.match(flyer, /renderFlyerHeroResourceHints\(photos\[0\]\?\.url\)/);
   assert.match(flyer, /fetchpriority="high"/);
   assert.match(flyer, /loading="lazy" decoding="async"/);
-  assert.match(flyer, /allowStreetAddress \? listing : mlsDisplay\.listing/);
+  assert.match(flyer, /allowStreetAddress \? rawListing : mlsDisplay\.listing/);
 });
