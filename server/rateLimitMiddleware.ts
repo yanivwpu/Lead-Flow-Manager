@@ -133,6 +133,13 @@ export const RATE_LIMIT_RULES: RateLimitRule[] = [
     windowMs: 60 * 60 * 1000,
   },
   {
+    id: "neighborhood-guide-photo-upload",
+    match: (path, method) =>
+      method.toUpperCase() === "POST" && /^\/api\/agent-page\/neighborhoods\/[^/]+\/photos$/.test(path),
+    limit: 24,
+    windowMs: 15 * 60 * 1000,
+  },
+  {
     id: "marketing-assets-write",
     match: (path, method) =>
       WRITE_METHODS.has(method.toUpperCase()) && path.startsWith("/api/marketing-assets"),
