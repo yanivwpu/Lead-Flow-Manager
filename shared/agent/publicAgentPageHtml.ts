@@ -196,7 +196,7 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
       <a href="#homes-rent">Homes for Rent</a>
     </div>
     <p class="neighborhood-property-status"${!matched || listings?.hasOlderMatchingInventory ? ' role="status"' : ""}>${escapeHtml(statusText)}</p>
-    <div id="listings-grid" class="neighborhood-property-sections">
+    <div id="listings-grid" class="neighborhood-property-sections"${neighborhood.preview ? " inert" : ""}>
       ${group("Homes for Sale", "sale", sales)}
       ${group("Homes for Rent", "rent", rentals)}
     </div>
