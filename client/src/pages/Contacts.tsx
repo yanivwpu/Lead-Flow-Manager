@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { agentInquiryLabel } from "@shared/agent/agentPageInquiry";
 import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -87,7 +88,7 @@ const CHANNEL_CONFIG: Record<string, { icon: any; color: string; label: string }
   instagram: { icon: Instagram, color: "#E4405F", label: "Instagram" },
   facebook: { icon: Facebook, color: "#1877F2", label: "Messenger" },
   sms: { icon: Smartphone, color: "#6B7280", label: "SMS" },
-  webchat: { icon: Globe, color: "#3B82F6", label: "Web Chat" },
+  webchat: { icon: Globe, color: "#3B82F6", label: "Website Chat" },
   telegram: { icon: Send, color: "#0088CC", label: "Telegram" },
   shopify: { icon: ShoppingCart, color: "#96BF48", label: "Shopify" },
   woocommerce: { icon: ShoppingCart, color: "#96588A", label: "WooCommerce" },
@@ -214,13 +215,14 @@ function ContactRowMenu({
 }
 
 function WebchatIdentityBadge({ contact }: { contact: Contact }) {
+  if (agentInquiryLabel(contact)) return null;
   if (isIdentifiedFromWebsiteChat(contact)) {
     return (
       <span
         className="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0 text-[10px] font-medium whitespace-nowrap"
         data-testid={`badge-identified-webchat-${contact.id}`}
       >
-        Identified from Website Chat
+        Website Chat
       </span>
     );
   }
@@ -880,7 +882,7 @@ export function Contacts() {
                           {/* Channel icon + label */}
                           <span className="flex items-center gap-1 text-xs text-gray-400">
                             <ChannelIcon channel={ch} size="w-3.5 h-3.5" />
-                            {cfg.label}
+                            {agentInquiryLabel(contact) ?? cfg.label}
                           </span>
                           {/* Tag badge */}
                           {crmTag && (
@@ -1124,7 +1126,7 @@ export function Contacts() {
                       {/* Channel */}
                       <div className="flex items-center gap-1.5">
                         <ChannelIcon channel={ch} size="w-4 h-4" />
-                        <span className="text-sm text-gray-500 hidden sm:block">{cfg.label}</span>
+                        <span className="text-sm text-gray-500 hidden sm:block">{agentInquiryLabel(contact) ?? cfg.label}</span>
                       </div>
 
                       {/* Created */}

@@ -118,6 +118,21 @@ test('Calendar contains only valid dated tasks and appointments and respects fil
   assert.equal(state.writes, 0);
 });
 
+test('an inquiry recommendation has a reminder action and is absent from the calendar until scheduled', () => {
+  reset();
+  const inquiry = fixture('mls-review', 'Could you send a quote?', {
+    source: 'webchat', sourceDetails: { agentPageForm: true, rgeNewLeadReviewRecommended: 'Review new lead' },
+  });
+  state.rows.push({ ...inquiry, channel: 'webchat', conversation: {
+    ...inquiry.conversation, channel: 'webchat', channelAccountId: 'agent_page_form',
+  } });
+  const page = render('list');
+  const task = page.querySelector('[data-testid="task-item-mls-review"]');
+  assert.match(task?.textContent ?? '', /Review new lead.*Set Reminder/);
+  assert.doesNotMatch(task?.textContent ?? '', /Needs Reply/);
+  assert.equal(render('calendar').querySelector('[data-testid="calendar-task-mls-review"]'), null);
+});
+
 test('Pipeline uses the same deal definition as KPI/List and preserves Realtor qualification stages', () => {
   reset();
   const document = render('pipeline');

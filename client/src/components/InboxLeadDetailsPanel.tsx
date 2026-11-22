@@ -1,4 +1,5 @@
 import { InboxAssignmentControl } from "@/components/InboxAssignmentControl";
+import { agentInquiryLabel, agentInquiryRecommendation } from "@shared/agent/agentPageInquiry";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -207,8 +208,12 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function resolveContactSourceLabel(contact: {
   source?: string | null;
+  sourceDetails?: unknown;
   customFields?: Record<string, unknown> | null;
 }): string | null {
+  const inquiryLabel = agentInquiryLabel(contact);
+  if (inquiryLabel) return inquiryLabel;
+  if (contact.source === "webchat") return "Website Chat";
   const cf = contact.customFields || {};
   if (typeof cf.agentNeighborhoodName === "string" && cf.agentNeighborhoodName.trim()) return `Agent Page · ${cf.agentNeighborhoodName}`;
   if (typeof cf.leadSource === 'string' && cf.leadSource.trim()) {
@@ -1432,14 +1437,14 @@ export function InboxLeadDetailsPanel({
     else if (label === '3 days') d.setDate(d.getDate() + 3);
     else if (label === '1 week') d.setDate(d.getDate() + 7);
     d.setHours(9, 0, 0, 0);
-    onUpdateContact({ followUp: label, followUpDate: d.toISOString() });
+    onUpdateContact({ followUp: agentInquiryRecommendation(contact) || label, followUpDate: d.toISOString() });
   };
 
   const confirmCustomFollowUp = () => {
     if (!customFollowDate) return;
     const iso = buildDateTimeISO(customFollowDate, customFollowTime);
     const label = format(customFollowDate, 'MMM d') + ' at ' + formatTime24to12(customFollowTime);
-    onUpdateContact({ followUp: label, followUpDate: iso });
+    onUpdateContact({ followUp: agentInquiryRecommendation(contact) || label, followUpDate: iso });
     setFollowOpen(false);
   };
 
@@ -3387,6 +3392,11 @@ export function InboxLeadDetailsPanel({
                   {formatFollowUpDisplay(contact.followUpDate)}
                 </span>
               </button>
+            ) : agentInquiryRecommendation(contact) ? (
+              <button type="button" className="mt-1 text-xs font-medium text-brand-green hover:underline" onClick={() => {
+                setFollowView('custom');
+                setFollowOpen(true);
+              }}>Set Reminder</button>
             ) : (
               <p className="mt-1 text-[11px] text-gray-400 italic">Not set</p>
             )}

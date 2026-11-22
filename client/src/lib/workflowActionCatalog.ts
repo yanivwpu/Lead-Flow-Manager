@@ -22,6 +22,7 @@ export type WorkflowActionRecord = {
   templateKey?: string;
   title?: string;
   dueDays?: number;
+  autoScheduleAgentPageInquiries?: boolean;
   fields?: string[];
   [key: string]: unknown;
 };

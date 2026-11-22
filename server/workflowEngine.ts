@@ -2,7 +2,7 @@ import { isInventoryContactEligible, isRgeContactEligible, requiresRgeContactInt
 import { storage } from "./storage";
 import { contacts, type Chat, type Workflow, type Contact, type Channel } from "@shared/schema";
 import { RGE_TEMPLATE_ID } from "@shared/rgePaths";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../drizzle/db";
 import { subscriptionService } from "./subscriptionService";
 import {
@@ -58,6 +58,7 @@ export interface WorkflowAction {
     | "set_followup"
     | "message_template"
     | "task_created"
+    | "task_recommended"
     | "language_detected"
     | "lead_fields_updated";
   value: string;
@@ -86,6 +87,7 @@ async function persistWorkflowTask(
   contact: Contact,
   action: { title: string; dueDays?: unknown },
   connection: Pick<typeof db, "update"> = db,
+  recommendOnly = false,
 ) {
   const title = action.title.trim();
   const dueDays = action.dueDays ?? 1;
@@ -97,19 +99,22 @@ async function persistWorkflowTask(
   if (!Number.isFinite(followUpDate.getTime())) throw new Error("Invalid workflow task due date");
   const newLeadReview = isRgeNewLeadWorkflow(workflow);
   const [saved] = await connection.update(contacts).set({
-    followUp: title,
-    followUpDate,
+    ...(recommendOnly ? {} : { followUp: title, followUpDate }),
     updatedAt: now,
     ...(newLeadReview ? {
-      sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || '{"rgeNewLeadReviewCreated":true}'::jsonb`,
+      sourceDetails: sql`coalesce(${contacts.sourceDetails}, '{}'::jsonb) || ${JSON.stringify({
+        rgeNewLeadReviewCreated: true,
+        ...(recommendOnly ? { rgeNewLeadReviewRecommended: title } : {}),
+      })}::jsonb`,
     } : {}),
   }).where(and(
     eq(contacts.userId, workflow.userId),
     eq(contacts.id, contact.id),
     sql`nullif(trim(${contacts.followUp}), '') IS NULL`,
+    recommendOnly ? isNull(contacts.followUpDate) : undefined,
     newLeadReview ? sql`${contacts.sourceDetails}->>'rgeNewLeadReviewCreated' IS DISTINCT FROM 'true'` : undefined,
   )).returning({ id: contacts.id });
-  return saved ? { type: "task_created", value: title } satisfies WorkflowAction : null;
+  return saved ? { type: recommendOnly ? "task_recommended" : "task_created", value: title } satisfies WorkflowAction : null;
 }
 
 /** The validated form warrants human review. Full W1 still requires verified property intent. */
@@ -120,7 +125,7 @@ export async function runAgentPageLeadReview(contact: Contact, conversationId: s
   if (!access.ok || !access.limits.workflowsEnabled) return;
   const workflows = await storage.getActiveWorkflowsByTrigger(userId, "new_chat");
   const workflow = workflows.find(isRgeNewLeadWorkflow);
-  const task = (workflow?.actions as Array<{ type?: string; title?: string; dueDays?: unknown }> | undefined)
+  const task = (workflow?.actions as Array<{ type?: string; title?: string; dueDays?: unknown; autoScheduleAgentPageInquiries?: boolean }> | undefined)
     ?.find((action) => action.type === "create_task" && typeof action.title === "string" && action.title.trim());
   const title = task?.title;
   if (!workflow || !title || workflow.userId !== userId) return;
@@ -128,7 +133,8 @@ export async function runAgentPageLeadReview(contact: Contact, conversationId: s
   const triggerData = { trigger: "agent_page_form", contactId: contact.id };
   try {
     await db.transaction(async (tx) => {
-      const created = await persistWorkflowTask(workflow, contact, { title, dueDays: task?.dueDays }, tx);
+      const created = await persistWorkflowTask(workflow, contact, { title, dueDays: task?.dueDays }, tx,
+        task?.autoScheduleAgentPageInquiries !== true);
       if (!created) return;
       await storage.logWorkflowExecution({
         workflowId: workflow.id, conversationId, triggerData, actionsExecuted: [created], status: "success",

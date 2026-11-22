@@ -16,12 +16,14 @@ import { registerAgentPageSettingsRoutes } from "../server/routes/agentPageSetti
 import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage";
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
 import { registerPublicListingRoutes } from "../server/routes/publicListings";
+import { registerContactRoutes } from "../server/routes/contacts";
 import { getBusinessProfileForUser } from "../server/businessProfileService";
 import { storage } from "../server/storage";
 import { subscriptionService, type UserLimits } from "../server/subscriptionService";
 import { AGENT_PAGE_FORM_ACCOUNT, agentPageLeadCopilotContext } from "../shared/agent/agentPageSchema";
-import { contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions } from "../shared/schema";
+import { contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions } from "../shared/schema";
 import { buildFollowUpItems, hasScheduledFollowUp } from "../shared/followUpTasks";
+import { agentInquiryLabel, agentInquiryRecommendation, isAgentInquiryThread } from "../shared/agent/agentPageInquiry";
 import { INBOUND_DEDUP_SCHEMA_SQL } from "../server/inboundDedupSchema";
 import { isInventoryContactEligible } from "../server/inventory/inventoryContactEligibility";
 import { inboxOnlyWebchatSourceDetails, promotedWebchatSourceDetails } from "../shared/webchatIdentityPromotion";
@@ -38,7 +40,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   t.after(() => pg.close());
   await pg.exec(`
     CREATE TABLE users (id varchar PRIMARY KEY, avatar_url text, email text, twilio_whatsapp_number text,
-      meta_display_phone_number text, inbox_new_activity_count integer DEFAULT 0);
+      meta_display_phone_number text, deletion_requested_at timestamp, inbox_new_activity_count integer DEFAULT 0);
     INSERT INTO users (id) VALUES ('agent-user'), ('legacy-live');
     CREATE TABLE ai_business_knowledge (
       user_id text PRIMARY KEY, publish_listings_publicly boolean DEFAULT false,
@@ -61,7 +63,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   await pg.exec(await readFile("migrations/20261120_agent_neighborhood_pages.sql", "utf8"));
   const dialect = new PgDialect();
-  for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, workflows, workflowExecutions]) {
+  for (const table of [contacts, conversations, inventoryListings, messages, prospectIntelligence, prospectOutreachQueueItems, teamMembers, workflows, workflowExecutions]) {
     const { name, columns } = getTableConfig(table);
     const definitions = columns.map((column) => {
       const value = column.default;
@@ -89,6 +91,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   } : undefined);
   t.mock.method(storage, "getIntegrationByUserAndType", async () => undefined);
   t.mock.method(storage, "getUserTemplateDataByKey", async () => undefined);
+  t.mock.method(storage, "getChannelSettings", async () => []);
+  t.mock.method(storage, "getAppointmentsByContact", async () => []);
   const sellerIntake = t.mock.method(storage, "updateContactSellerPreferenceProfile", async (
     ..._args: Parameters<typeof storage.updateContactSellerPreferenceProfile>
   ) => undefined);
@@ -121,6 +125,11 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     if (authenticatedUser) req.user = { ...user, id: authenticatedUser } as Express.User;
     next();
   });
+  app.use("/api/contacts", (req, _res, next) => {
+    req.user = { ...user, emailVerifiedAt: new Date() } as Express.User;
+    next();
+  });
+  registerContactRoutes(app);
   registerAgentPageSettingsRoutes(app);
   registerAgentNeighborhoodPagesRoutes(app);
   registerPublicAgentPageRoutes(app);
@@ -194,7 +203,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       await page.route("https://cdn.example.test/**", (route) => route.abort());
       await page.goto(origin + "/agents/jane-agent");
       await page.getByRole("heading", { name: "Jane Agent" }).waitFor();
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       assert.equal(await page.locator(".agent-heading").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
       await page.getByRole("button", { name: "Contact Agent" }).click();
       await page.locator("#lead-form").waitFor();
@@ -205,7 +214,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
         await page.getByRole("status").filter({ hasText: "Thanks" }).waitFor();
       }
       await page.goto(origin + flyerPath);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       const card = page.locator(".agent-card");
       assert.equal(await card.getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
       await card.getByRole("button", { name: "Contact Agent" }).click();
@@ -222,7 +231,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       await dialog.waitFor({ state: "hidden" });
       await page.goto(origin + "/agents/legacy-agent");
       assert.equal(await page.locator(".agent-heading a[href^='tel:']").count(), 0);
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await page.close();
     }
   }
@@ -239,12 +248,22 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(emailLead.name, "Jane Buyer");
   assert.equal(emailLead.email, "buyer@example.test");
   assert.equal(emailLead.pipelineStage, "New Lead");
-  assert.equal(emailLead.followUp, "Review new lead");
-  assert.ok(Math.abs(emailLead.followUpDate!.getTime() - Date.now() - 86_400_000) < 15_000);
+  assert.equal(emailLead.followUp, null);
+  assert.equal(emailLead.phone, null);
+  assert.equal(emailLead.followUpDate, null);
+  assert.equal(agentInquiryRecommendation(emailLead), "Review new lead");
+  assert.equal(agentInquiryLabel(emailLead), "Agent Page Inquiry");
   assert.equal(await isInventoryContactEligible(emailLead), false, "a form does not qualify a buyer");
+  const [defaultW1] = await fixture.select().from(workflows).where(eq(workflows.id, "w1"));
+  await fixture.update(workflows).set({ actions: [{ type: "create_task", title: "Review new lead", dueDays: 1,
+    autoScheduleAgentPageInquiries: true }] }).where(eq(workflows.id, "w1"));
   assert.equal((await submit("jane-agent", { name: "Phone Lead", phone: "+1 (954) 555-0158" })).status, 201);
   const [phoneLead] = (await storage.getContacts(user.id)).filter((contact) => contact.phone === "9545550158");
   assert.equal(phoneLead.name, "Phone Lead");
+  assert.ok(Math.abs(phoneLead.followUpDate!.getTime() - Date.now() - 86_400_000) < 15_000);
+  assert.equal((await submit("jane-agent", { phone: "+1 (954) 555-0158" })).status, 201);
+  assert.deepEqual((await storage.getContact(phoneLead.id))?.followUpDate, phoneLead.followUpDate);
+  await fixture.update(workflows).set({ actions: defaultW1.actions }).where(eq(workflows.id, "w1"));
   for (const invalid of [{}, { phone: "12-3" }, { phone: "1......." }, { email: "bad address" }]) {
     assert.equal((await submit("jane-agent", invalid)).status, 400);
   }
@@ -272,8 +291,18 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(fields.listingReference, "Fort Lauderdale, FL");
   assert.equal(fields.sourcePage, "listing_flyer");
   assert.equal(fields.leadSource, "MLS Property Listing");
-  assert.equal(listingLead.followUp, "Review new lead");
+  assert.equal(listingLead.followUp, null);
+  assert.equal(agentInquiryRecommendation(listingLead), "Review new lead");
+  assert.equal(agentInquiryLabel(listingLead), "MLS Property Inquiry");
   const [listingThread] = (await storage.getContactWithConversations(listingLead.id))!.conversations;
+  assert.ok(isAgentInquiryThread(listingThread));
+  const sendAttempt = await request(`/api/contacts/${listingLead.id}/send`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel: "webchat", conversationId: listingThread.id, content: "A drafted reply",
+      sendAttemptId: listingId, replyRevision: "fixture" }),
+  });
+  assert.equal(sendAttempt.status, 400, await sendAttempt.clone().text());
+  assert.equal((await sendAttempt.json()).code, "webchat_session_inactive");
   for (const msg of await storage.getMessages(listingThread.id)) {
     assert.match(msg.content, /Fort Lauderdale, FL/);
     assert.doesNotMatch(msg.content, /42 Private Street|42-private-street|untrusted\.example/);
@@ -387,16 +416,21 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
 
   if (process.env.AGENT_PAGE_BROWSER_TEST === "1") {
     const { chromium } = await import("playwright");
-    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE });
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_EXECUTABLE,
+      ignoreDefaultArgs: ["--hide-scrollbars"], args: ["--disable-features=OverlayScrollbar"] });
     t.after(() => browser.close());
     for (const width of [320, 390, 1280, 1440]) {
-      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      const page = await browser.newPage({ viewport: { width, height: 1050 } });
       await page.goto(origin + parent);
       const menu = page.getByRole("button", { name: "Menu", exact: true });
       const drawer = page.getByRole("dialog", { name: "Navigation" });
       const nav = page.getByRole("navigation", { name: "Agent navigation" });
       const disclosure = nav.getByText("Neighborhoods", { exact: true });
       const mobile = width < 640;
+      const stablePosition = await page.evaluate(() => {
+        document.body.style.minHeight = "200vh";
+        return document.querySelector(".wrap")!.getBoundingClientRect().x;
+      });
 
       if (mobile) {
         await menu.focus();
@@ -413,7 +447,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
 
         await menu.click();
         await drawer.waitFor();
-        await page.mouse.click(width - 4, 24);
+        await page.mouse.click(width - 24, 24);
         await drawer.waitFor({ state: "hidden" });
 
         await menu.click();
@@ -439,7 +473,21 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       await nav.getByRole("link", { name: /Victoria Park/ }).click();
       await page.waitForURL(origin + pilot);
       await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      assert.equal(await page.locator(".wrap").evaluate((node) => node.getBoundingClientRect().x), stablePosition);
+      if (!mobile) {
+        const withoutStableGutter = await page.evaluate(() => {
+          document.documentElement.style.scrollbarGutter = "auto";
+          const wrap = document.querySelector(".wrap")!;
+          const shortPosition = wrap.getBoundingClientRect().x;
+          document.body.style.minHeight = "200vh";
+          const tallPosition = wrap.getBoundingClientRect().x;
+          document.body.style.minHeight = "";
+          document.documentElement.style.scrollbarGutter = "";
+          return { shortPosition, tallPosition };
+        });
+        assert.notEqual(withoutStableGutter.shortPosition, withoutStableGutter.tallPosition, "classic scrollbar reproduces the old layout shift");
+      }
       if (mobile) {
         assert.equal(await drawer.isVisible(), false);
         await menu.click();
@@ -480,7 +528,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       await page.goto(origin + pilot);
       await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
-      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       assert.equal(await page.locator(".agent-byline").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
       assert.equal(await page.locator(".agent-header a[href^='tel:']").count(), 1);
       for (const label of ["Contact Agent", "Schedule Showing", "What's My Home Worth?"]) {
@@ -497,7 +545,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     { id: "prior-lead", userId: user.id, name: "Checking lead capture", source: "webchat", primaryChannel: "webchat",
       pipelineStage: "New Lead", email: neighborhoodIdentity.email,
       webchatId: neighborhoodIdentity.email, sourceDetails: promotedWebchatSourceDetails({}, { agentPageForm: true, identifiedFrom: "agent_page_form" }),
-      customFields: { email: neighborhoodIdentity.email, phone: neighborhoodIdentity.phone, sourcePage: "agent_page" } },
+      customFields: { email: neighborhoodIdentity.email, phone: neighborhoodIdentity.phone, sourcePage: "listing_flyer" } },
     { id: "other-tenant", userId: "legacy-live", name: "Other Tenant", email: neighborhoodIdentity.email },
     { id: "anonymous", userId: user.id, name: "Website Visitor", source: "webchat", sourceDetails: inboxOnlyWebchatSourceDetails() },
     { id: "saved-lead", userId: user.id, name: "Saved Lead", phone: "+1 (954) 555-0165", pipelineStage: "Qualified",
@@ -508,8 +556,8 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     { id: "widget-thread", userId: user.id, contactId: "saved-lead", channel: "webchat" },
   ]);
   await fixture.insert(messages).values({ userId: user.id, conversationId: "old-inquiry", contactId: "prior-lead",
-    direction: "inbound", content: "Checking lead capture", externalMessageId: "agent_page_legacy_inquiry" });
-  const inquiry = (intent: string) => submit("yaniv-haramatiy", { ...neighborhoodIdentity, intent, neighborhood: "victoria-park" });
+    direction: "inbound", content: "Checking lead capture", externalMessageId: "agent_page_1763679600000_legacy001" });
+  const inquiry = (intent: string) => submit("yaniv-haramatiy", { name: neighborhoodIdentity.name, email: neighborhoodIdentity.email, intent, neighborhood: "victoria-park" });
   for (const intent of ["message", "schedule_showing", "home_worth"]) {
     const result = await inquiry(intent);
     assert.equal(result.status, 201, await result.clone().text());
@@ -518,6 +566,7 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(converted.id, "prior-lead");
   assert.equal(converted.name, neighborhoodIdentity.name);
   assert.equal(converted.phone, "9545550164");
+  assert.equal(agentInquiryLabel(converted), "Neighborhood Inquiry · Victoria Park");
   assert.deepEqual(agentPageLeadCopilotContext(converted), {
     name: neighborhoodIdentity.name, email: neighborhoodIdentity.email, phone: "9545550164",
     leadSource: "Agent Page · Victoria Park", referralNeighborhood: "Victoria Park",
@@ -529,25 +578,54 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
   assert.equal(inquiryMessages[0].content, "Checking lead capture", "the original message stays in the thread");
   const inbox = await storage.getUnifiedInbox(user.id);
   assert.equal(inbox.find((row) => row.conversation?.id === "old-inquiry")?.contact.name, neighborhoodIdentity.name);
-  assert.ok(buildFollowUpItems(inbox).find((item) => item.id === converted.id && hasScheduledFollowUp(item)));
+  assert.ok(buildFollowUpItems(inbox).find((item) => item.id === converted.id && item.reviewRecommended && !hasScheduledFollowUp(item)));
   assert.equal(inbox.find((row) => row.contact.id === "anonymous")?.contact.name, "Website Visitor");
   assert.ok(!filterCrmListedContacts(await storage.getContacts(user.id)).some((contact) => contact.id === "anonymous"));
   assert.equal((await storage.getContact("other-tenant"))?.name, "Other Tenant");
   assert.equal((await storage.getWorkflowExecutions("w1")).filter((row) => row.conversationId === "old-inquiry").length, 1);
-  await fixture.update(contacts).set({ followUp: null, followUpDate: null }).where(eq(contacts.id, converted.id));
+  const patchContact = (id: string, body: object) => request(`/api/contacts/${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const reminderDate = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const scheduled = await patchContact(converted.id, { followUp: "Review new lead", followUpDate: reminderDate });
+  assert.equal(scheduled.status, 200, await scheduled.clone().text());
+  assert.equal((await storage.getContact(converted.id))?.followUpDate?.toISOString(), reminderDate);
+  assert.equal(agentInquiryRecommendation((await storage.getContact(converted.id))!), undefined);
+  assert.equal((await patchContact(converted.id, { followUp: null, followUpDate: null, phone: null })).status, 200);
   assert.equal((await submit("yaniv-haramatiy", { ...neighborhoodIdentity, name: "Another Name", neighborhood: "victoria-park" })).status, 201);
   assert.equal((await storage.getContact(converted.id))?.followUp, null, "completed review cannot be recreated by retries");
   assert.equal((await storage.getContact(converted.id))?.name, "Test 2", "repeat submissions preserve the captured name");
+  assert.equal((await storage.getContact(converted.id))?.phone, null, "an agent's explicit phone removal stays cleared");
 
   const existing = await submit("yaniv-haramatiy", { phone: "9545550165", name: "Submitted Name", email: "saved@example.test" });
   assert.equal(existing.status, 201, await existing.clone().text());
   assert.equal((await storage.getContact("saved-lead"))?.email, "saved@example.test");
   assert.equal((await storage.getContact("saved-lead"))?.name, "Saved Lead", "an established CRM name is preserved");
+  assert.equal((await storage.getContact("saved-lead"))?.phone, "+1 (954) 555-0165");
   assert.equal((await storage.getContact("saved-lead"))?.pipelineStage, "Qualified");
   assert.equal((await storage.getConversationByContactAndChannel("saved-lead", "webchat"))?.id, "widget-thread");
   assert.equal((await storage.getMessages("widget-thread")).length, 0, "private inquiry is not exposed to public widget polling");
+  assert.equal(isAgentInquiryThread(await storage.getConversation("widget-thread")), false);
   assert.equal((await submit("yaniv-haramatiy", { email: "saved@example.test", phone: "9545550164" })).status, 409);
   assert.equal(outbound.mock.calls.length, 0);
+
+  for (const [id, phone, proven] of [
+    ["no-legacy-message", "9545550167", false],
+    ["invalid-legacy-phone", "1.......", true],
+    ["duplicate-legacy-phone", "9545550165", true],
+  ] as const) {
+    const email = `${id}@example.test`;
+    await fixture.insert(contacts).values({ id, userId: user.id, name: "Legacy Lead", source: "webchat",
+      webchatId: email, customFields: { email, phone, sourcePage: "agent_page" } });
+    if (proven) {
+      const [thread] = await fixture.insert(conversations).values({ userId: user.id, contactId: id, channel: "webchat" }).returning();
+      await fixture.insert(messages).values({ userId: user.id, contactId: id, conversationId: thread.id,
+        direction: "inbound", content: "Legacy inquiry", externalMessageId: `agent_page_1763679600000_${id === 'invalid-legacy-phone' ? 'invalid' : 'duplicate'}` });
+    }
+    assert.equal((await submit("yaniv-haramatiy", { name: "Legacy Lead", email })).status, 201);
+    assert.equal((await storage.getContact(id))?.phone, null, id);
+    assert.equal((await storage.getContacts(user.id)).filter((contact) => contact.email === email).length, 1);
+  }
 
   const repeated = await Promise.all([1, 2].map(() => submit("yaniv-haramatiy", {
     name: "Concurrent Lead", email: "concurrent@example.test", neighborhood: "victoria-park",
@@ -565,9 +643,9 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     actions: [{ type: "create_task", title: "Call tomorrow", dueDays: 1 }],
   }).returning();
   expectReadOnly = false;
-  const occupied = await executeWorkflowActions(manualWorkflow, null, {}, emailLead);
+  const occupied = await executeWorkflowActions(manualWorkflow, null, {}, phoneLead);
   assert.deepEqual(occupied.actionsExecuted, [], "an existing task is preserved without a false task_created entry");
-  assert.equal((await storage.getContact(emailLead.id))?.followUp, "Review new lead");
+  assert.equal((await storage.getContact(phoneLead.id))?.followUp, "Review new lead");
   const taskExecution = await executeWorkflowActions(manualWorkflow, null, {}, converted);
   assert.deepEqual(taskExecution.actionsExecuted, [{ type: "task_created", value: "Call tomorrow" }]);
   assert.equal((await storage.getContact(converted.id))?.followUp, "Call tomorrow");

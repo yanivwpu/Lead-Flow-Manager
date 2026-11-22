@@ -3,16 +3,17 @@ import {
   looksLikeHumanAsk, looksLikeProductOrSaasInquiry,
   looksLikeSystemNotificationContent, looksLikeSystemOrNotificationEmail,
 } from './aiDomainEligibility';
+import { agentInquiryRecommendation, isAgentInquiryThread } from './agent/agentPageInquiry';
 
 export type FollowUpInboxItem = {
   contact: {
     id: string; name: string; avatar?: string | null; email?: string | null;
     tag: string; pipelineStage: string; notes?: string | null;
     followUp?: string | null; followUpDate?: string | Date | null;
-    source?: string | null;
+    source?: string | null; sourceDetails?: unknown;
   };
   conversation?: {
-    id?: string; channel?: string; status?: string | null;
+    id?: string; channel?: string; status?: string | null; channelAccountId?: string | null;
     subject?: string | null; lastMessagePreview?: string | null;
     lastMessageDirection?: string | null;
   } | null;
@@ -28,6 +29,7 @@ export type FollowUpItem = {
   unread: number; tag: string; followUp: string | null; followUpDate: string | null;
   notes: string; pipelineStage: string; needsReply: boolean; isOpportunity: boolean;
   urgent: boolean; engaged: boolean;
+  reviewRecommended?: string;
   conversationId?: string;
   appointmentId?: string; contactId?: string; appointmentType?: string; isAppointment?: boolean;
 };
@@ -72,6 +74,7 @@ const CUSTOMER_TOPIC = /\b(?:pric(?:e|es|ing)|cost|quot(?:e|es|ation)|proposal|d
 
 export function hasActionableInquiry(row: FollowUpInboxItem): boolean {
   const conversation = row.conversation;
+  if (isAgentInquiryThread(conversation)) return false;
   if (conversation?.lastMessageDirection !== 'inbound' ||
       ['resolved', 'closed'].includes(normalized(conversation.status || ''))) return false;
   const text = [conversation.subject, conversation.lastMessagePreview, row.lastMessage]
@@ -103,6 +106,7 @@ export function buildFollowUpItems(rows: readonly FollowUpInboxItem[]): FollowUp
       id: contact.id, name: contact.name, avatar: contact.avatar || '',
       lastMessage: row.conversation?.lastMessagePreview || row.lastMessage, time,
       unread: row.unreadCount, tag: contact.tag, followUp,
+      reviewRecommended: agentInquiryRecommendation(contact),
       followUpDate: followUp ? validTaskDate(contact.followUpDate) : null,
       notes: contact.notes || '', pipelineStage: contact.pipelineStage,
       needsReply, isOpportunity: isSalesOpportunity(contact),
@@ -161,10 +165,11 @@ export function prioritizeTasks(items: readonly FollowUpItem[], now = new Date()
     const age = now.getTime() - Date.parse(item.time);
     const recentEngagement = item.engaged && age >= 0 && age <= 72 * 60 * 60 * 1000;
     return (status === 'overdue' ? 100 : status === 'today' ? 70 : 0) +
+      (item.reviewRecommended ? 45 : 0) +
       (item.urgent ? 35 : 0) + (item.needsReply ? 30 : 0) +
       (recentEngagement ? 10 : 0) + (isActiveDeal(item) ? 10 : 0);
   };
-  return items.filter(item => hasTask(item) || hasNeedsReply(item)).sort((a, b) =>
+  return items.filter(item => item.reviewRecommended || hasTask(item) || hasNeedsReply(item)).sort((a, b) =>
     score(b) - score(a) ||
     (a.followUpDate ? Date.parse(a.followUpDate) : Infinity) - (b.followUpDate ? Date.parse(b.followUpDate) : Infinity) ||
     a.id.localeCompare(b.id));

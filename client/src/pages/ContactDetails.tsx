@@ -19,6 +19,7 @@ type Details = {
   conversations: Array<{ id: string; channel: string }>;
   shopify: boolean;
   displayChannel?: string | null;
+  inquirySource?: string;
   commerceCustomer?: { store: string | null; ordersCount: number | null; totalSpent: string | null };
   orders: Array<{ id: string; store: string | null; number: string | null; total: string | null; currency: string | null; paymentStatus: string | null; fulfillmentStatus: string | null; createdAt: string | null; products: Array<{ name: string | null; quantity: number | null }> }>;
   activity: Array<{ id: string; eventType: string; createdAt: string | null }>;
@@ -115,7 +116,9 @@ function ContactDetailsContent({ id }: { id: string | undefined }) {
           <Button disabled={save.isPending} type="submit">{save.isPending ? "Saving…" : "Save changes"}</Button>
         </form> : <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm [&>dd]:break-words [&>dt]:text-gray-500">
           <dt>Email</dt><dd>{contact.email || "—"}</dd><dt>Phone</dt><dd>{webchatPublicPhone(contact) || "—"}</dd>
-          <dt>Channel</dt><dd>{getContactDisplayChannelLabel(details.data.displayChannel ?? contact.primaryChannel) || "No channel"}</dd><dt>Source</dt><dd>{contact.source || "Unavailable"}</dd>
+          <dt>Channel</dt><dd>{details.data.inquirySource ? "Contact form" : ((details.data.displayChannel ?? contact.primaryChannel) === "webchat"
+            ? "Website Chat" : getContactDisplayChannelLabel(details.data.displayChannel ?? contact.primaryChannel) || "No channel")}</dd>
+          <dt>Source</dt><dd>{details.data.inquirySource || (contact.source === "webchat" ? "Website Chat" : contact.source || "Unavailable")}</dd>
           <dt>Assigned</dt><dd>{assigned || (contact.assignedTo ? "Assigned team member" : "Unassigned")}</dd>
           <dt>Lead score</dt><dd>{contact.leadScore ?? "—"}</dd><dt>Created</dt><dd>{date(contact.createdAt)}</dd><dt>Updated</dt><dd>{date(contact.updatedAt)}</dd>
           <dt>Follow-up</dt><dd>{contact.followUp || "None"}{contact.followUpDate && <div>{date(contact.followUpDate)}</div>}</dd>

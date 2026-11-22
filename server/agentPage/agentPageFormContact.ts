@@ -1,4 +1,4 @@
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { EMAIL_INBOX_IDENTITY_SOURCE, isCrmListedContact } from "@shared/contactCrmVisibility";
 import { contacts, conversations, messages } from "@shared/schema";
 import {
@@ -9,6 +9,7 @@ import {
 } from "@shared/webchatIdentityPromotion";
 import type { WebchatPageContext } from "@shared/webchatPageContext";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
+import { validatedAgentInquiryPhone } from "@shared/agent/agentPageInquiry";
 import { db } from "../../drizzle/db";
 
 /** Resolve identity and reserve the private Inbox thread together, before processing the message. */
@@ -30,7 +31,8 @@ export async function resolveAgentPageFormContact(input: {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`agent-page:${userId}:${key}`}, 0))`);
     }
     const legacy = sql`${contacts.source} = 'webchat'
-      and ${contacts.customFields}->>'sourcePage' in ('agent_page', 'agent_page_embed')
+      and (${contacts.customFields}->>'sourcePage' in ('agent_page', 'agent_page_embed')
+        or ${contacts.sourceDetails}->>'agentPageForm' = 'true')
       and (${contacts.webchatId} = lower(trim(${contacts.customFields}->>'email'))
         or ${contacts.webchatId} = regexp_replace(${contacts.customFields}->>'phone', '[^0-9]', '', 'g'))`;
     const matches = await tx.select().from(contacts).where(and(eq(contacts.userId, userId), or(
@@ -49,7 +51,7 @@ export async function resolveAgentPageFormContact(input: {
     const fields = (existing?.customFields ?? {}) as Record<string, unknown>;
     const details = (existing?.sourceDetails ?? {}) as Record<string, unknown>;
     const wasLegacyForm = existing?.source === "webchat" &&
-      (fields.sourcePage === "agent_page" || fields.sourcePage === "agent_page_embed") &&
+      (fields.sourcePage === "agent_page" || fields.sourcePage === "agent_page_embed" || details.agentPageForm === true) &&
       !!existing.webchatId && (existing.webchatId === String(fields.email ?? "").trim().toLowerCase() ||
         existing.webchatId === String(fields.phone ?? "").replace(/\D/g, ""));
     const isNewLead = !existing || !isCrmListedContact(existing);
@@ -62,10 +64,35 @@ export async function resolveAgentPageFormContact(input: {
         )).limit(1)
       : [];
     const captureFormName = !!name && (!current.name || !!legacyNameMessage);
+    let recoveredPhone: string | undefined;
+    const legacyPhone = wasLegacyForm && !phone && !existing.phone?.trim() && details.agentPagePhoneManuallyEdited !== true
+      ? validatedAgentInquiryPhone(fields.phone) : undefined;
+    if (legacyPhone) {
+      // Only the old form stored a phone in custom fields with this delivery ID format.
+      const [legacyMessage] = await tx.select({ id: messages.id }).from(messages).where(and(
+        eq(messages.userId, userId), eq(messages.contactId, existing.id), eq(messages.direction, "inbound"),
+        sql`${messages.externalMessageId} ~ '^agent_page_[0-9]{13}_[a-z0-9]{1,12}$'`,
+      )).limit(1);
+      if (legacyMessage) {
+        const lockKey = `agent-page:${userId}:phone:${legacyPhone}`;
+        // The contact row is already locked. Skip this fallback if a phone submission holds the identity lock.
+        const lock = await tx.execute<{ acquired: boolean }>(sql`select pg_try_advisory_xact_lock(hashtextextended(${lockKey}, 0)) as acquired`);
+        if (lock.rows[0]?.acquired) {
+          const [other] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+            eq(contacts.userId, userId), ne(contacts.id, existing.id), or(
+              sql`${storedPhone(sql`${contacts.phone}`)} = ${legacyPhone}`,
+              sql`${storedPhone(sql`${contacts.whatsappId}`)} = ${legacyPhone}`,
+              and(legacy, sql`${storedPhone(sql`${contacts.customFields}->>'phone'`)} = ${legacyPhone}`),
+            ),
+          )).limit(1);
+          if (!other) recoveredPhone = legacyPhone;
+        }
+      }
+    }
     const patch = {
       name: (captureFormName ? name : current.name) || existing?.name || "Agent Page Visitor",
       email: current.email ? existing!.email : email,
-      phone: current.phone ? existing!.phone : phone,
+      ...(existing?.phone?.trim() || details.agentPagePhoneManuallyEdited === true ? {} : { phone: phone ?? recoveredPhone }),
       source: !existing?.source || existing.source === EMAIL_INBOX_IDENTITY_SOURCE ? "webchat" : existing.source,
       sourceDetails: promotedWebchatSourceDetails(details, {
         agentPageForm: true,

@@ -458,6 +458,7 @@ function ActionBlock({
   total,
   teamMembers,
   messageTemplateKeys,
+  isRealtorNewLeadReview,
   onUpdate,
   onPatch,
   onRemove,
@@ -469,6 +470,7 @@ function ActionBlock({
   total: number;
   teamMembers: any[];
   messageTemplateKeys?: string[];
+  isRealtorNewLeadReview?: boolean;
   onUpdate: (field: "type" | "value", value: string) => void;
   onPatch: (patch: Partial<WorkflowAction>) => void;
   onRemove: () => void;
@@ -549,6 +551,11 @@ function ActionBlock({
               className="h-8 text-sm bg-gray-50 border-gray-200"
               data-testid={`input-action-task-due-${index}`}
             />
+            {isRealtorNewLeadReview && <label className="flex items-start gap-2 text-xs text-gray-700">
+              <input type="checkbox" checked={action.autoScheduleAgentPageInquiries === true}
+                onChange={(event) => onPatch({ autoScheduleAgentPageInquiries: event.target.checked })} />
+              Automatically schedule reminders for Agent Page, Neighborhood, and MLS inquiries
+            </label>}
           </div>
         );
       case "detect_language":
@@ -1660,6 +1667,8 @@ export function Workflows() {
                     total={actions.length}
                     teamMembers={teamMembers}
                     messageTemplateKeys={showGrowthEngineWorkflowUi ? rgeMessageTemplateKeys : undefined}
+                    isRealtorNewLeadReview={editingWorkflow?.triggerConditions?.templateId === "realtor-growth-engine" &&
+                      editingWorkflow.triggerConditions.templateKey === "W1"}
                     onUpdate={(field, value) => updateAction(i, field, value)}
                     onPatch={(patch) => patchAction(i, patch)}
                     onRemove={() => removeAction(i)}
