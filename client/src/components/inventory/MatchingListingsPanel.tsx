@@ -80,7 +80,7 @@ export function MatchingListingsPanel({
 
   const {
     data, isLoading, isFetched, isError, error, isFetching, isPlaceholderData,
-    fetchNextPage, hasNextPage, isFetchingNextPage, refetch,
+    fetchNextPage, hasNextPage, isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey: inventoryMatchesQueryKey(contactId, fetchOptions),
     queryFn: ({ pageParam, signal }) =>
@@ -139,7 +139,7 @@ export function MatchingListingsPanel({
   const savedSet = new Set(savedListingIds);
   const hasCachedMatches = matches.length > 0;
   const refreshSavedState = () => {
-    void refetch();
+    // The card already schedules the match refetch; avoid a duplicate burst.
     void queryClient.invalidateQueries({
       queryKey: ["/api/contacts", contactId, "inventory-matches/saved"],
     });
