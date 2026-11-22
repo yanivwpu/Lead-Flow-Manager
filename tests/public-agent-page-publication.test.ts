@@ -586,8 +586,8 @@ test("profile publication, privacy, and inquiry identity retain their existing b
         await drawer.waitFor();
       }
       await nav.getByRole("link", { name: "Properties" }).click();
-      await page.waitForURL(origin + parent + "#agent-properties");
-      await page.locator("#agent-properties").waitFor();
+      await page.waitForURL(origin + parent + "/las-olas#neighborhood-properties");
+      await page.locator("#neighborhood-properties").waitFor();
       if (mobile) {
         await menu.click();
         await drawer.waitFor();
