@@ -47,9 +47,16 @@ test("malformed or oversized drafts are ignored and unavailable storage is repor
   }, key, { active: null, entries: {} }), false);
 });
 
-test("saved neighborhood rows provide preview or live view without opening editor", () => {
+test("RGE Agent Page controls use labeled compact icons without changing destinations", () => {
   const ui = readFileSync(join(process.cwd(), "client/src/components/agentPage/NeighborhoodPageSettings.tsx"), "utf8");
-  assert(ui.includes(">Preview</a>"), "draft rows expose a direct Preview link");
-  assert(ui.includes(">View live</a>"), "published rows expose a direct live-page link");
+  const main = readFileSync(join(process.cwd(), "client/src/components/agentPage/PublicAgentPageSettingsCard.tsx"), "utf8");
+
+  assert(ui.includes('aria-label={item.publicUrl ? "View live neighborhood page" : "Preview neighborhood draft"}'));
   assert(ui.includes("encodeURIComponent(item.id)}/preview"), "draft preview reuses authenticated endpoint");
+  assert(ui.includes('aria-label="Copy neighborhood page URL"'), "published rows retain a Copy action");
+  assert(ui.includes('aria-label={`Edit ${neighborhoodTitle(item)}`}'), "Edit remains independently accessible");
+  assert(ui.includes('<Pencil className="h-4 w-4"'), "neighborhood Edit uses a compact pencil icon");
+  assert(main.includes('aria-label="View Agent Page"'), "Agent Page has a direct accessible View action");
+  assert(main.includes('aria-label="Copy Agent Page link"'), "Agent Page retains link copying");
+  assert(main.includes('href={agentDisplayUrl}'), "Agent Page View opens the existing public URL");
 });
