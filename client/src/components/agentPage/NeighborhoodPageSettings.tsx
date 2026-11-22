@@ -251,12 +251,18 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
               </div>
             ))}
           </div>
-          <Label htmlFor="neighborhood-content">Local information</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor="neighborhood-content">Your local guide</Label>
+            <Button type="button" size="sm" variant="ghost" disabled={stale || save.isPending}
+              onClick={() => editField("content", `${values.content.trimEnd()}\n\n## New section\n\n`)}>
+              + Section heading
+            </Button>
+          </div>
           <Textarea id="neighborhood-content" rows={10} maxLength={5000} disabled={save.isPending} readOnly={stale}
             value={values.content} onChange={(event) => editField("content", event.target.value)} />
           <p className="text-xs text-muted-foreground">
             Write at least two distinct paragraphs with useful local information, totaling 240 characters or more.
-            Changing the neighborhood name can change its URL.
+            Add optional headings on their own lines, such as ## Parks &amp; Recreation, to organize your guide.\n            Changing the neighborhood name can change its URL.
           </p>
 
           <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
