@@ -546,7 +546,7 @@ export function ChannelSettings() {
   const { data: metaWebhookConfig } = useQuery<{
     webhookUrl: string;
     facebook: { isConnected: boolean; verifyTokenConfigured?: boolean; pageName?: string | null; pageId?: string | null };
-    instagram: { isConnected: boolean; verifyTokenConfigured?: boolean; pageName?: string | null; pageId?: string | null };
+    instagram: { isConnected: boolean; verifyTokenConfigured?: boolean; pageName?: string | null; pageId?: string | null; duplicateWorkspaceConnection?: boolean };
   }>({
     queryKey: withUserQueryScope(["/api/integrations/meta-webhook-config"], user?.id),
     enabled: !!user?.id && sessionAligned,
@@ -1004,6 +1004,19 @@ export function ChannelSettings() {
       const st = getChannelStatus(channel);
       const savedPage = setting?.config?.pageName as string | undefined;
       if (st === "connected") {
+        if (channel === "instagram" && metaWebhookConfig?.instagram?.duplicateWorkspaceConnection) {
+          return {
+            pill: "needs_attention",
+            pillLabel: "Account conflict",
+            subline: savedPage ? `Account: ${savedPage}` : config.description,
+            warning: "This Instagram account is also connected to another workspace. Messages may appear in the wrong Inbox. Disconnect the duplicate connection in the workspace you no longer want to use; existing conversations will not be moved.",
+            action: "manage",
+            actionLabel: "Manage",
+            onAction: () => handleFbIgSettingsClick(channel),
+            cardClass: baseAmber,
+            showReceiveToggle: false,
+          };
+        }
         return {
           pill: "connected",
           subline: savedPage
