@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Eye, Pencil } from "lucide-react";
-import { neighborhoodTitle, neighborhoodContentComplete, type NeighborhoodContent, type NeighborhoodPageSettings } from "@shared/agent/neighborhoodPages";
+import { ArrowLeft, ArrowRight, Copy, Eye, ImagePlus, Pencil, Trash2 } from "lucide-react";
+import {
+  neighborhoodTitle, neighborhoodContentComplete, NEIGHBORHOOD_GUIDE_MAX_PHOTOS, NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES,
+  type NeighborhoodContent, type NeighborhoodPhoto, type NeighborhoodPageSettings,
+} from "@shared/agent/neighborhoodPages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +31,8 @@ export function NeighborhoodPageSettings({ publicPageUrl }: { publicPageUrl: str
 function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; publicPageUrl: string | null }) {
   const client = useQueryClient();
   const storageKey = neighborhoodDraftKey(userId);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [drafts, setDrafts] = useState<NeighborhoodDrafts>(() => {
     const storage = browserDraftStorage();
     return storage ? readNeighborhoodDrafts(storage, storageKey) : { active: null, entries: {} };
@@ -75,13 +80,60 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
     if (!active) return;
     updateDrafts((current) => {
       const prior = current.entries[active];
-      const { name, city, state, content } = prior?.values ?? values;
-      const next = { name, city, state, content, [field]: value };
+      const { name, city, state, content, photos } = prior?.values ?? values;
+      const next = { name, city, state, content, photos: photos ?? [], [field]: value };
       const entries = { ...current.entries };
       if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
       else entries[active] = { values: next, baseVersion: prior?.baseVersion ?? page?.updatedAt ?? null };
       return { active, entries };
     });
+  }
+
+  function editPhotos(photos: NeighborhoodPhoto[]) {
+    if (!active) return;
+    updateDrafts((current) => {
+      const previous = current.entries[active];
+      const next = { ...(previous?.values ?? values), photos };
+      const entries = { ...current.entries };
+      if (sameNeighborhoodContent(next, page ?? EMPTY_NEIGHBORHOOD)) delete entries[active];
+      else entries[active] = { values: next, baseVersion: previous?.baseVersion ?? page?.updatedAt ?? null };
+      return { active, entries };
+    });
+  }
+
+  async function uploadPhoto(file: File | undefined) {
+    if (!file || !page || !active) return;
+    if (file.size > NEIGHBORHOOD_GUIDE_MAX_PHOTO_BYTES) {
+      toast({ title: "Photo must be under 5 MB", variant: "destructive" }); return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast({ title: "Choose a JPG, PNG, or WebP photo", variant: "destructive" }); return;
+    }
+    if ((values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS) return;
+    const editingId = active;
+    setPhotoUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(`${endpoint}/${encodeURIComponent(page.id)}/photos`, {
+        method: "POST", body: form, credentials: "include",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || typeof result.url !== "string") {
+        throw new Error(result.error || "Photo upload failed.");
+      }
+      if (draftRef.current.active !== editingId) return;
+      const current = draftRef.current.entries[editingId]?.values ?? values;
+      editPhotos([...(current.photos ?? []), {
+        url: result.url, alt: `Photo of ${current.name || "the neighborhood"} in ${current.city || "the local area"}`,
+      }]);
+      toast({ title: "Photo uploaded", description: "Save or update the page to publish this change." });
+    } catch (error) {
+      toast({ title: "Photo upload failed", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setPhotoUploading(false);
+      if (photoInput.current) photoInput.current.value = "";
+    }
   }
 
   const save = useMutation({
@@ -128,7 +180,9 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
   });
 
   if (data === null) return null;
-  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim());
+  const photosValid = (values.photos ?? []).length <= NEIGHBORHOOD_GUIDE_MAX_PHOTOS &&
+    (values.photos ?? []).every((photo) => photo.alt.trim().length >= 3);
+  const canSave = Boolean(active && !stale && data && values.name.trim() && values.city.trim() && values.state.trim() && photosValid);
   const canPublish = Boolean(data?.canPublish && canSave && neighborhoodContentComplete(values.content));
 
   return (
@@ -136,7 +190,7 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id="neighborhood-pages-heading" className="text-sm font-semibold">Neighborhood Pages</h3>
         <Button type="button" size="sm" variant="outline" disabled={!data || save.isPending}
-          onClick={() => updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }))}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume new neighborhood" : "Add Neighborhood"}</Button>
+          onClick={() => updateDrafts((current) => ({ ...current, active: NEW_NEIGHBORHOOD }))}>{drafts.entries[NEW_NEIGHBORHOOD] ? "Resume draft" : "+ Add"}</Button>
       </div>
       {isPending && <p className="text-sm text-muted-foreground">Loading neighborhood pages…</p>}
       {isError && <p role="alert" className="text-sm text-destructive">Unable to load neighborhood pages.</p>}
@@ -204,14 +258,78 @@ function NeighborhoodManager({ userId, publicPageUrl }: { userId: string; public
             Write at least two distinct paragraphs with useful local information, totaling 240 characters or more.
             Changing the neighborhood name can change its URL.
           </p>
+
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h5 className="text-sm font-semibold text-slate-900">Local guide photos</h5>
+                <p className="text-xs text-muted-foreground">The first photo becomes your cover. Add up to six images with useful descriptions.</p>
+              </div>
+              <Button type="button" size="sm" variant="outline" disabled={!page || stale || photoUploading || save.isPending ||
+                (values.photos?.length ?? 0) >= NEIGHBORHOOD_GUIDE_MAX_PHOTOS}
+                onClick={() => photoInput.current?.click()}>
+                <ImagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {photoUploading ? "Uploading…" : "Add photos"}
+              </Button>
+              <input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only"
+                aria-label="Upload neighborhood photo" disabled={photoUploading}
+                onChange={(event) => void uploadPhoto(event.target.files?.[0])} />
+            </div>
+            {!page && <p className="text-xs text-slate-600">Save your neighborhood draft first to enable photo uploads.</p>}
+            <p className="text-xs text-slate-600">JPG, PNG, or WebP · max 5 MB each. Only upload photos you own or have permission to use.
+              Photos are publicly visible only after you save or update a published page.</p>
+            {Boolean(values.photos?.length) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(values.photos ?? []).map((photo, index) => (
+                  <div key={photo.url} className="min-w-0 overflow-hidden rounded-lg border border-slate-200">
+                    <img src={photo.url} alt={photo.alt} loading="lazy" className="h-36 w-full bg-slate-100 object-cover" />
+                    <div className="space-y-2 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-slate-700">{index === 0 ? "Cover image" : `Gallery photo ${index + 1}`}</span>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
+                            aria-label={`Move photo ${index + 1} left`} title="Move earlier"
+                            disabled={index === 0 || save.isPending || stale}
+                            onClick={() => {
+                              const photos = [...(values.photos ?? [])];
+                              [photos[index - 1], photos[index]] = [photos[index], photos[index - 1]];
+                              editPhotos(photos);
+                            }}><ArrowLeft className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8"
+                            aria-label={`Move photo ${index + 1} right`} title="Move later"
+                            disabled={index === (values.photos?.length ?? 0) - 1 || save.isPending || stale}
+                            onClick={() => {
+                              const photos = [...(values.photos ?? [])];
+                              [photos[index + 1], photos[index]] = [photos[index], photos[index + 1]];
+                              editPhotos(photos);
+                            }}><ArrowRight className="h-4 w-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-red-600"
+                            aria-label={`Remove photo ${index + 1}`} title="Remove photo"
+                            disabled={save.isPending || stale}
+                            onClick={() => editPhotos((values.photos ?? []).filter((_, i) => i !== index))}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <Label htmlFor={`guide-photo-alt-${index}`}>Image description</Label>
+                      <Input id={`guide-photo-alt-${index}`} value={photo.alt} maxLength={140}
+                        disabled={save.isPending || stale}
+                        onChange={(event) => editPhotos((values.photos ?? []).map((current, i) =>
+                          i === index ? { ...current, alt: event.target.value } : current))} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           {data && !data.canPublish && <p className="text-xs text-muted-foreground">Enable your public Agent Page before publishing.</p>}
           <div className="flex flex-wrap gap-2">
-            {!page?.published && <Button type="button" size="sm" variant="outline" disabled={!dirty || !canSave || save.isPending}
+            {!page?.published && <Button type="button" size="sm" variant="outline" disabled={!dirty || !canSave || save.isPending || photoUploading}
               onClick={() => save.mutate({ page, values, published: false })}>Save draft</Button>}
             {page && !dirty && <Button asChild size="sm" variant="outline">
               <a href={`${endpoint}/${encodeURIComponent(page.id)}/preview`} target="_blank" rel="noopener noreferrer">Preview saved page</a>
             </Button>}
-            {page && <Button type="button" size="sm" disabled={!canPublish || (page.published && !dirty) || save.isPending}
+            {page && <Button type="button" size="sm" disabled={!canPublish || (page.published && !dirty) || save.isPending || photoUploading}
               onClick={() => save.mutate({ page, values, published: true })}>{page.published ? "Update published page" : "Publish"}</Button>}
             {page?.published && <Button type="button" size="sm" variant="outline" disabled={save.isPending || stale}
               onClick={() => save.mutate({ page, values: page, published: false, preserveDraft: true })}>Unpublish</Button>}
