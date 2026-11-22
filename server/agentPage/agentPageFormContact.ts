@@ -1,6 +1,6 @@
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { EMAIL_INBOX_IDENTITY_SOURCE, isCrmListedContact } from "@shared/contactCrmVisibility";
-import { contacts, conversations } from "@shared/schema";
+import { contacts, conversations, messages } from "@shared/schema";
 import {
   collectValidatedIdentity,
   promotedWebchatSourceDetails,
@@ -53,13 +53,23 @@ export async function resolveAgentPageFormContact(input: {
       !!existing.webchatId && (existing.webchatId === String(fields.email ?? "").trim().toLowerCase() ||
         existing.webchatId === String(fields.phone ?? "").replace(/\D/g, ""));
     const isNewLead = !existing || !isCrmListedContact(existing);
+    // Correct an old inferred name when it matches a previous inquiry from the legacy form.
+    const [legacyNameMessage] = name && current.name && wasLegacyForm && details.agentPageFormNameCaptured !== true
+      ? await tx.select({ id: messages.id }).from(messages).where(and(
+          eq(messages.userId, userId), eq(messages.contactId, existing.id), eq(messages.direction, "inbound"),
+          sql`starts_with(${messages.externalMessageId}, 'agent_page_')`,
+          sql`trim(${messages.content}) = ${current.name}`,
+        )).limit(1)
+      : [];
+    const captureFormName = !!name && (!current.name || !!legacyNameMessage);
     const patch = {
-      name: current.name || name || existing?.name || "Agent Page Visitor",
+      name: (captureFormName ? name : current.name) || existing?.name || "Agent Page Visitor",
       email: current.email ? existing!.email : email,
       phone: current.phone ? existing!.phone : phone,
       source: !existing?.source || existing.source === EMAIL_INBOX_IDENTITY_SOURCE ? "webchat" : existing.source,
       sourceDetails: promotedWebchatSourceDetails(details, {
         agentPageForm: true,
+        ...(captureFormName ? { agentPageFormNameCaptured: true } : {}),
         identifiedFrom: "agent_page_form",
         leadSource: attribution.leadSource,
       }),
