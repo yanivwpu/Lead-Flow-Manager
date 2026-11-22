@@ -429,7 +429,7 @@ export const USER_GUIDE_FAQS: SeoFaqItem[] = [
   { question: "Do I need a developer for WhatsApp setup?", answer: "No for standard embedded signup. Developers can extend via webhooks where offered." },
   { question: "Can I migrate my existing WhatsApp Business number?", answer: "Often yes — Meta guides migration or coexistence during embedded signup depending on eligibility." },
   { question: "What is the 24-hour WhatsApp session window?", answer: "After a customer messages you, free-form replies are allowed for 24 hours. After that, use Meta-approved templates." },
-  { question: "How do I connect Facebook Messenger?", answer: "Link your Facebook Page in Channel Settings and approve Meta messaging permissions." },
+  { question: "How do I connect Facebook Messenger?", answer: "Facebook Messenger requires a Facebook Page; personal Facebook Messenger inboxes cannot connect. Sign in with your personal Facebook account to authorize a Page you manage in Settings → Channels. If you only have a personal profile, create a free Page at https://www.facebook.com/pages/create, return to WhachatCRM, and authorize the new Page. Other channels and Realtor Growth Engine property matching do not require a Facebook Page." },
   { question: "Why won't Instagram connect?", answer: "Ensure Instagram Professional is linked to the same Facebook Page and Business Manager ownership matches." },
   { question: "What channels appear in the unified inbox?", answer: "WhatsApp, Messenger, Instagram, and others you connect such as SMS or web chat on eligible plans." },
   { question: "How do I assign conversations to teammates?", answer: "On Pro, use Assign in the inbox sidebar to set conversation ownership." },
