@@ -1,7 +1,7 @@
 import { NeighborhoodPageSettings } from "./NeighborhoodPageSettings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Globe, Loader2 } from "lucide-react";
+import { Copy, Eye, Globe, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -343,11 +343,19 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
               {agentDisplayUrl ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
                   <p className="min-w-0 break-all text-sm text-slate-800">{agentDisplayUrl}</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center gap-1" role="group" aria-label="Agent Page actions">
+                    <Button asChild variant="ghost" size="icon" className="h-9 w-9 text-slate-600 hover:bg-slate-200 hover:text-slate-900">
+                      <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer" aria-label="View Agent Page" title="View Agent Page">
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                      </a>
+                    </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                      aria-label="Copy Agent Page link"
+                      title="Copy Agent Page link"
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(agentDisplayUrl);
@@ -357,14 +365,7 @@ export function PublicAgentPageSettingsCard({ className }: Props) {
                         }
                       }}
                     >
-                      <Copy className="h-3.5 w-3.5 mr-1.5" />
-                      Copy Link
-                    </Button>
-                    <Button asChild variant="outline" size="sm">
-                      <a href={agentDisplayUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                        Open Page
-                      </a>
+                      <Copy className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
