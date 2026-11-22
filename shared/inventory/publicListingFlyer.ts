@@ -716,6 +716,19 @@ function renderCompanyLogo(companyLogoUrl: string | null): string {
   return `<img class="agent-company-logo" src="${escapeHtml(companyLogoUrl)}" alt="" />`;
 }
 
+/** Start the hero photo fetch during HTML parsing; never rewrite provider photo URLs. */
+function renderFlyerHeroResourceHints(photoUrl: string | undefined): string {
+  if (!photoUrl) return "";
+  try {
+    const parsed = new URL(photoUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+    return `<link rel="preconnect" href="${escapeHtml(parsed.origin)}" />
+  <link rel="preload" as="image" href="${escapeHtml(parsed.href)}" fetchpriority="high" />`;
+  } catch {
+    return "";
+  }
+}
+
 function renderGallery(
   photos: { url: string; order: number }[],
   listingLabel: "FOR SALE" | "FOR RENT",
@@ -727,7 +740,7 @@ function renderGallery(
     .map(
       (p, idx) =>
         `<button type="button" class="thumb${idx === 0 ? " active" : ""}" data-index="${idx}" data-url="${escapeHtml(p.url)}" aria-label="Photo ${idx + 1}">
-          <img src="${escapeHtml(p.url)}" alt="" loading="lazy" />
+          <img src="${escapeHtml(p.url)}" alt="" loading="lazy" decoding="async" fetchpriority="low" />
         </button>`,
     )
     .join("");
@@ -739,7 +752,7 @@ function renderGallery(
   return `<section class="gallery">
     ${renderListingBannerHeroOverlap(listingLabel)}
     <div class="hero-wrap">
-      <img id="hero-img" class="hero-img" src="${escapeHtml(hero)}" alt="Property photo" />
+      <img id="hero-img" class="hero-img" src="${escapeHtml(hero)}" alt="Property photo" fetchpriority="high" loading="eager" decoding="async" />
       ${nav}
     </div>
     ${renderPrintPhotoStrip(photos)}
@@ -1044,6 +1057,7 @@ export function buildPublicListingFlyerHtml(input: PublicListingFlyerInput): str
   <link rel="canonical" href="${escapeHtml(shareUrl)}" />
   <title>${escapeHtml(openGraph.title)}</title>
   ${renderListingOpenGraphTags(openGraph)}
+  ${renderFlyerHeroResourceHints(photos[0]?.url)}
   ${structuredDataJson ? `<script type="application/ld+json">${structuredDataJson.replace(/<\//g, "<\\/")}</script>` : ""}
   <style>
     :root {
