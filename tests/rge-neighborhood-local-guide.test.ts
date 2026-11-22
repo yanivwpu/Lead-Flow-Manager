@@ -64,7 +64,7 @@ test("neighborhood guide renders responsive photo hero/gallery with accessible a
   assert.match(html, /Local park &amp; cafés/);
   assert.match(html, /content="index, follow"/);
   assert.match(html, /id="btn-message"/);
-  assert.match(html, /id="agent-contact" class="neighborhood-agent-sidebar"/);
+  assert.match(html, /class="neighborhood-agent-sidebar" id="agent-contact"/);
   assert.match(html, /<h1 id="local-guide-title">Discover Victoria Park<\/h1>/);
   assert.match(html, /id="btn-message">Contact Agent/);
   assert.match(html, /id="btn-schedule-header">Schedule Showing/);
