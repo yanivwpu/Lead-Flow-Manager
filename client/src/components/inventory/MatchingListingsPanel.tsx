@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Heart, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,8 @@ export function MatchingListingsPanel({
 }: MatchingListingsPanelProps) {
   const [showSaved, setShowSaved] = useState(false);
   const queryClient = useQueryClient();
+  const cardsContainerRef = useRef<HTMLDivElement | null>(null);
+  const firstNewCardIndexRef = useRef<number | null>(null);
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
 
   const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
@@ -98,10 +100,23 @@ export function MatchingListingsPanel({
   });
   const firstPage = data?.pages[0];
   const matches = useMemo(() => uniqueInventoryMatchPages(data?.pages ?? []), [data?.pages]);
+  useEffect(() => {
+    const index = firstNewCardIndexRef.current;
+    if (index == null || isFetchingNextPage) return;
+    const nextCard = cardsContainerRef.current?.children.item(index);
+    if (nextCard instanceof HTMLElement) {
+      // Reveal the first appended listing, rather than leaving the user at the
+      // bottom button or jumping back up to the first ten matches.
+      nextCard.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+    }
+    firstNewCardIndexRef.current = null;
+  }, [matches.length, isFetchingNextPage]);
+
 
   useEffect(() => {
     setShowSaved(false);
     setLastClientFetchAt(null);
+    firstNewCardIndexRef.current = null;
   }, [contactId]);
 
   useEffect(() => {
@@ -174,7 +189,10 @@ export function MatchingListingsPanel({
   }
 
   const handleViewMore = () => {
-    if (!isFetchingNextPage && canViewMore) void fetchNextPage();
+    if (!isFetchingNextPage && canViewMore) {
+      firstNewCardIndexRef.current = matches.length;
+      void fetchNextPage();
+    }
   };
 
   return (
@@ -279,7 +297,7 @@ export function MatchingListingsPanel({
           data-match-count={totalFound}
           data-rendered-count={showingCount}
         >
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" ref={cardsContainerRef}>
             {matches.map((match: InventoryMatchResult, index) => (
               <InventoryMatchRecommendationCard
                 key={match.listingId}
