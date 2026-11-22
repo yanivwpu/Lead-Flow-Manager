@@ -64,7 +64,13 @@ test("neighborhood guide renders responsive photo hero/gallery with accessible a
   assert.match(html, /Local park &amp; cafés/);
   assert.match(html, /content="index, follow"/);
   assert.match(html, /id="btn-message"/);
-  assert.match(html, /href="#agent-contact">Contact the agent/);
+  assert.match(html, /class="neighborhood-agent-sidebar" id="agent-contact"/);
+  assert.match(html, /<h1 id="local-guide-title">Discover Victoria Park<\/h1>/);
+  assert.match(html, /id="btn-message">Contact Agent/);
+  assert.match(html, /id="btn-schedule-header">Schedule Showing/);
+  assert.match(html, /id="btn-home-worth">What's My Home Worth/);
+  assert.doesNotMatch(html, /<header class="agent-header">/);
+  assert.doesNotMatch(html, /class="neighborhood-guide-contact"/);
   assert.match(html, /class="neighborhood-guide-editorial"/);
   assert.doesNotMatch(html, /mailto:/);
 });
