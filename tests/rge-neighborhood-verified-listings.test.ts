@@ -114,6 +114,7 @@ test("missing boundary or stale owner sample cannot leak MLS cards onto public p
   const ownerRendered = html(previewListings, true);
   assert.match(ownerRendered, /data-id="historical-1"/);
   assert.match(ownerRendered, /Private test: these are previously synced listings/);
+  assert.match(ownerRendered, /id="listings-grid" class="neighborhood-property-sections" inert/, "private MLS samples cannot submit public leads");
   assert.match(ownerRendered, /content="noindex, follow"/);
   const unmatched: NeighborhoodListingRenderData = {
     ...previewListings, boundaryStatus: "unmatched", mode: "public",
