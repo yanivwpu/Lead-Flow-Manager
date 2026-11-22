@@ -5,10 +5,12 @@ export function nextMatchPageOffset(
   pages: ReadonlyArray<Pick<InventoryMatchesResponse, "matches" | "matchCount">>,
 ): number | undefined {
   if (!pages.length) return undefined;
-  const totalLoaded = pages.reduce((sum, p) => sum + p.matches.length, 0);
+  const nextOffset = pages.length * 10;
   const latest = pages[pages.length - 1];
-  if (!latest.matches.length || totalLoaded >= pages[0].matchCount) return undefined;
-  return totalLoaded;
+  // Backend page offsets must advance by the requested size even if an MLS
+  // permission gate removed one of the candidate cards after ranking.
+  if (!latest.matches.length || nextOffset >= pages[0].matchCount) return undefined;
+  return nextOffset;
 }
 
 /** Keep stable cards when a listing appears in adjacent pages after a re-rank. */
