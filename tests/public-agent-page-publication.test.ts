@@ -16,7 +16,6 @@ import { registerAgentPageSettingsRoutes } from "../server/routes/agentPageSetti
 import { registerPublicAgentPageRoutes } from "../server/routes/publicAgentPage";
 import { registerPublicListingSitemapRoutes } from "../server/routes/publicListingsSitemap";
 import { registerPublicListingRoutes } from "../server/routes/publicListings";
-import { registerContactRoutes } from "../server/routes/contacts";
 import { getBusinessProfileForUser } from "../server/businessProfileService";
 import { storage } from "../server/storage";
 import { subscriptionService, type UserLimits } from "../server/subscriptionService";
@@ -129,7 +128,16 @@ test("profile-only publication, indexing and withdrawal use the same entitlement
     req.user = { ...user, emailVerifiedAt: new Date() } as Express.User;
     next();
   });
-  registerContactRoutes(app);
+  // The contacts module initializes an AI client for unrelated routes. This fixture never calls it.
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "fixture-unused";
+  try {
+    const { registerContactRoutes } = await import("../server/routes/contacts");
+    registerContactRoutes(app);
+  } finally {
+    if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalApiKey;
+  }
   registerAgentPageSettingsRoutes(app);
   registerAgentNeighborhoodPagesRoutes(app);
   registerPublicAgentPageRoutes(app);
