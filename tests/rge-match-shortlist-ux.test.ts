@@ -31,6 +31,8 @@ test("Copilot exposes contact-scoped saved shortlist and does not overwrite earl
   const routes = readFileSync(join(process.cwd(), "server/routes/contacts.ts"), "utf8");
   assert.match(panel, /useInfiniteQuery/);
   assert.match(panel, /fetchNextPage/);
+  assert.match(panel, /nextCard\.scrollIntoView/);
+  assert.match(panel, /firstNewCardIndexRef/);
   assert.match(panel, /nextMatchPageOffset/);
   assert.match(panel, /button-view-more-matches/);
   assert.match(panel, /button-saved-property-shortlist/);
