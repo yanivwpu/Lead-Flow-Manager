@@ -256,7 +256,9 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         <div class="neighborhood-guide-section-label">GET TO KNOW THE AREA</div>
         <h3>Living in ${guideTitle}</h3>
         ${guideParagraphs.length ? guideParagraphs.map((text) =>
-          `<p>${escapeHtml(text)}</p>`).join("") :
+          text.startsWith("## ") && text.length <= 84
+            ? `<h3 class="neighborhood-guide-subheading">${escapeHtml(text.slice(3).trim())}</h3>`
+            : `<p>${escapeHtml(text)}</p>`).join("") :
           neighborhood.preview ? '<p>Add your own neighborhood insights to see how the guide will appear.</p>' : ""}
       </div>
       ${guidePhotos.length > 1 ? `<section class="neighborhood-guide-gallery" aria-labelledby="guide-gallery-title">
@@ -283,7 +285,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     primaryMarket ? `Serving ${data.marketArea}.` : "",
     data.bio || "Contact the agent for help buying or selling a home.",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-  const summary = neighborhood ? neighborhood.content.trim().replace(/\s+/g, " ") : profileSummary;
+  const summary = neighborhood ? neighborhood.content.trim().replace(/(^|\n)##\s+/g, "$1").replace(/\s+/g, " ") : profileSummary;
   const description = summary.length > 160 ? `${summary.slice(0, 157).trimEnd()}…` : summary;
   const robots = embedMode ? "noindex, nofollow" : data.allowSearchIndexing && data.canonicalUrl
     ? "index, follow"
@@ -602,6 +604,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .neighborhood-guide h3 { color: #0f172a; font-size: clamp(1.3rem, 2vw, 1.7rem); margin: 0 0 18px; }
     .neighborhood-guide-editorial { max-width: 830px; padding: 4px 0 18px; }
     .neighborhood-guide-editorial p { font-size: 1rem; line-height: 1.85; color: #334155; margin: 0 0 20px; }
+    .neighborhood-guide-editorial .neighborhood-guide-subheading { font-size: 1.2rem; margin: 28px 0 10px; }
     .neighborhood-guide-gallery { margin-top: 10px; padding-top: 26px; border-top: 1px solid var(--border); }
     .neighborhood-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
     .neighborhood-gallery-grid figure { overflow: hidden; margin: 0; border: 1px solid var(--border);
