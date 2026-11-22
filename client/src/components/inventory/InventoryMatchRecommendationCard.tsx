@@ -21,6 +21,7 @@ interface InventoryMatchRecommendationCardProps {
   contactFirstName?: string;
   match: InventoryMatchResult;
   saved: boolean;
+  imagePriority?: boolean;
   onSavedChange: () => void;
   onInsertComposerDraft?: (draft: CopilotComposerInsert) => boolean;
   layout?: RecommendationCardLayout;
@@ -31,6 +32,7 @@ export function InventoryMatchRecommendationCard({
   contactFirstName,
   match,
   saved,
+  imagePriority = false,
   onSavedChange,
   onInsertComposerDraft,
   layout = "modal",
@@ -73,6 +75,7 @@ export function InventoryMatchRecommendationCard({
         testId={`inventory-match-${match.listingId}`}
         image={{
           src: recommendation.imageSrc,
+          priority: imagePriority,
           onClick: viewListing,
           ariaLabel: "View listing",
           fallback: (
