@@ -357,6 +357,19 @@ export function registerContactRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/contacts/:id/inventory-matches/saved", async (req, res) => {
+    try {
+      if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+      const { getSavedListingMatchesForContact } = await import("../inventory/inventorySavedMatchService");
+      const result = await getSavedListingMatchesForContact(req.params.id, req.user.id);
+      if (!result.ok) return res.status(result.status).json({ error: result.error });
+      res.json({ matches: result.matches, totalSaved: result.totalSaved, unavailable: result.unavailable });
+    } catch (error) {
+      console.error("Error fetching saved inventory matches:", error);
+      res.status(500).json({ error: "Failed to load saved properties" });
+    }
+  });
+
   app.post("/api/contacts/:id/inventory-matches/saved", async (req, res) => {
     try {
       if (!req.user) return res.status(401).json({ error: "Unauthorized" });

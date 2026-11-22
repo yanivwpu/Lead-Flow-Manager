@@ -67,3 +67,21 @@ export async function unsaveContactInventoryMatch(
     .returning({ id: contactInventorySavedMatches.id });
   return deleted.length > 0;
 }
+
+/** Saved shortlist belongs to one contact and workspace. The list is bounded. */
+export async function listSavedMatchRecordsForContact(
+  userId: string,
+  contactId: string,
+): Promise<Array<{ listingId: string; matchScore: number | null; matchReasons: unknown }>> {
+  return db.select({
+    listingId: contactInventorySavedMatches.listingId,
+    matchScore: contactInventorySavedMatches.matchScore,
+    matchReasons: contactInventorySavedMatches.matchReasons,
+  }).from(contactInventorySavedMatches)
+    .where(and(
+      eq(contactInventorySavedMatches.userId, userId),
+      eq(contactInventorySavedMatches.contactId, contactId),
+    ))
+    .orderBy(desc(contactInventorySavedMatches.updatedAt))
+    .limit(100);
+}

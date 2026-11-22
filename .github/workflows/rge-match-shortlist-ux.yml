@@ -1,0 +1,41 @@
+name: RGE match shortlist UX
+on:
+  pull_request:
+    paths:
+      - 'client/src/components/inventory/MatchingListingsPanel.tsx'
+      - 'client/src/components/inventory/SavedInventoryMatches.tsx'
+      - 'client/src/components/inventory/InventoryMatchRecommendationCard.tsx'
+      - 'client/src/components/recommendations/RecommendationCard.tsx'
+      - 'client/src/lib/inventoryMatchPagination.ts'
+      - 'server/inventory/inventorySavedMatchDb.ts'
+      - 'server/inventory/inventorySavedMatchService.ts'
+      - 'server/routes/contacts.ts'
+      - 'shared/inventory/publicListingFlyer.ts'
+      - 'tests/rge-match-shortlist-ux.test.ts'
+      - '.github/workflows/rge-match-shortlist-ux.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Match paging and saved shortlist UX
+        run: >-
+          node --import tsx --test
+          tests/rge-match-shortlist-ux.test.ts
+          tests/inventory-matches-refetch.test.ts
+          tests/verify-inventory-copilot-ui.test.ts
+      - name: Compare TypeScript diagnostics with main
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: git diff --check
