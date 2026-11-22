@@ -1,5 +1,5 @@
 /** Applies to newly chosen passwords only; existing login credentials remain valid. */
-export const PASSWORD_MIN_LENGTH = 15;
+export const PASSWORD_MIN_LENGTH = 7;
 
 export function validateNewPassword(password: unknown): string | null {
   if (typeof password !== "string") return "Password must be a string";

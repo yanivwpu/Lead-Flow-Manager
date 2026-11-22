@@ -578,7 +578,7 @@
     "validationError": "Validation error",
     "requiredField": "This field is required",
     "invalidEmail": "Invalid email address",
-    "passwordTooShort": "Password must be at least 8 characters"
+    "passwordTooShort": "Password must be at least 7 characters"
   },
   "language": {
     "select": "Select Language",

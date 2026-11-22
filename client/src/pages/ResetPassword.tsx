@@ -39,10 +39,10 @@ export function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
+    if (Array.from(password).length < 7) {
       toast({
         title: "Password too short",
-        description: "Password must be at least 6 characters",
+        description: "Password must be at least 7 characters",
         variant: "destructive"
       });
       return;
@@ -145,7 +145,7 @@ export function ResetPassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter new password"
                 required
-                minLength={6}
+                minLength={7}
                 data-testid="input-new-password"
               />
               <button

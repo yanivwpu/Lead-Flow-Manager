@@ -75,8 +75,8 @@ function PortalResetPassword({ portal }: { portal: PortalKind }) {
       setError("Passwords do not match");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (Array.from(password).length < 7) {
+      setError("Password must be at least 7 characters");
       return;
     }
     setIsLoading(true);

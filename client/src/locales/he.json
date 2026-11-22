@@ -580,7 +580,7 @@
     "validationError": "שגיאת אימות",
     "requiredField": "שדה זה נדרש",
     "invalidEmail": "כתובת אימייל לא תקינה",
-    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 8 תווים"
+    "passwordTooShort": "הסיסמה חייבת להכיל לפחות 7 תווים"
   },
   "language": {
     "select": "בחר שפה",
