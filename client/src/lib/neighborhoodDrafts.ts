@@ -36,7 +36,7 @@ export function readNeighborhoodDrafts(storage: Pick<Storage, "getItem">, key: s
         (id === NEW_NEIGHBORHOOD ? draft.baseVersion !== null : typeof draft.baseVersion !== "string")) continue;
       const { name, city, state, content, photos } = draft.values;
       const values = { name, city, state, content, ...(photos === undefined ? {} : { photos }) };
-      if ((Object.keys(limits) as Array<keyof NeighborhoodContent>).every(
+      if ((Object.keys(limits) as Array<keyof typeof limits>).every(
         (field) => typeof values[field] === "string" && values[field].length <= limits[field],
       ) && validPhotos(photos)) entries[id] = { values, baseVersion: draft.baseVersion };
     }
