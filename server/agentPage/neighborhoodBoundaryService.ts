@@ -1,5 +1,5 @@
 import {
-  boundaryBounds, readBoundaryGeometry, selectExactOfficialNeighborhood,
+  boundaryBounds, selectExactOfficialNeighborhood,
   supportsFortLauderdaleBoundary, type NeighborhoodBoundary, type BoundaryBounds,
 } from "@shared/agent/neighborhoodListingGeo";
 
