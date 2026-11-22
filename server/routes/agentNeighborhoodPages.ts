@@ -9,6 +9,7 @@ import {
 } from "@shared/agent/neighborhoodPages";
 import { inspectBusinessProfileLogoUpload } from "../businessProfileLogoUpload";
 import { uploadOutboundUserMedia } from "../mediaStorageService";
+import { prepareWebchatVisitorImage } from "../webchatVisitorMedia";
 import { canResolvePublicAgentPage } from "@shared/agent/publicAgentPage";
 import { buildPublicAgentPageData } from "../agentPage/agentPageService";
 import { getAgentPageSettingsRow } from "../agentPage/agentPageDb";
@@ -141,6 +142,9 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
     if (!file?.buffer) return res.status(400).json({ error: "Choose a JPG, PNG, or WebP image." });
     const checked = inspectBusinessProfileLogoUpload(file);
     if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
+    // Decode, constrain pixel dimensions, and strip metadata before placing photos on public pages.
+    const prepared = await prepareWebchatVisitorImage({ buffer: file.buffer, declaredMime: checked.mime });
+    if (!prepared.ok) return res.status(400).json({ error: "Could not process this image. Try a smaller JPG, PNG, or WebP." });
     // R2 is required: never put SEO photographs on Railway's ephemeral local disk.
     if (!process.env.CLOUDFLARE_R2_ACCOUNT_ID || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID ||
         !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET ||
@@ -148,7 +152,7 @@ export function registerAgentNeighborhoodPagesRoutes(app: Express): void {
       return res.status(503).json({ error: "Photo storage is unavailable. Try again later." });
     }
     const stored = await uploadOutboundUserMedia({
-      userId, buffer: file.buffer, contentType: checked.mime,
+      userId, buffer: prepared.buffer, contentType: prepared.mime,
       originChannel: "neighborhood-guide",
     });
     if (!isOwnedNeighborhoodGuidePhotoUrl(stored.mediaUrl, userId, process.env.CLOUDFLARE_R2_PUBLIC_URL)) {
