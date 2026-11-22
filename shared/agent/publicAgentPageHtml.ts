@@ -165,8 +165,8 @@ function renderNeighborhoodProperties(data: PublicAgentPageRenderInput): string 
   const authorizedMode = publicMode ? listings?.mode === "public"
     : listings?.mode === "owner_preview";
   const matched = listings?.boundaryStatus === "verified" && authorizedMode;
-  const sales = matched ? listings.sale : [];
-  const rentals = matched ? listings.rent : [];
+  const sales = matched && listings ? listings.sale : [];
+  const rentals = matched && listings ? listings.rent : [];
   const title = escapeHtml(neighborhood.name);
   const statusText = !listings || !matched
     ? listings?.boundaryStatus === "unavailable"
