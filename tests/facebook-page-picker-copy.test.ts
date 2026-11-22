@@ -45,7 +45,11 @@ run("explains personal Facebook login versus Page Messenger before authorization
   assert.ok(wizard.includes("not messages sent to your personal profile"));
   assert.ok(wizard.includes("Personal Messenger conversations cannot be connected."));
   assert.ok(wizard.includes("After creating your Page, return here"));
-  assert.ok(wizard.includes("https://www.facebook.com/pages/create"));
+  // Verify the complete trusted destination, not a URL substring.
+  assert.match(
+    wizard,
+    /^const FACEBOOK_PAGE_CREATE_URL = "https:\/\/www\.facebook\.com\/pages\/create";$/m,
+  );
   assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-idle\""));
   assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-empty\""));
   assert.ok(wizard.includes("data-testid=\"link-create-facebook-page-missing\""));
