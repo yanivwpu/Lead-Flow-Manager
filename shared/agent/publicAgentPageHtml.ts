@@ -255,7 +255,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
       <div class="neighborhood-guide-main">
       <div class="neighborhood-guide-editorial">
         <div class="neighborhood-guide-section-label">GET TO KNOW THE AREA</div>
-        <h3>Living in ${guideTitle}</h3>
+        <h2>Living in ${guideTitle}</h2>
         ${guideParagraphs.length ? guideParagraphs.map((text) =>
           text.startsWith("## ") && text.length <= 84
             ? `<h3 class="neighborhood-guide-subheading">${escapeHtml(text.slice(3).trim())}</h3>`
