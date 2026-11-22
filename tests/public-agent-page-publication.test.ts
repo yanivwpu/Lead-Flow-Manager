@@ -470,7 +470,7 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(pilotHtml, /content="index, follow"/);
   assert.match(pilotHtml, /NEIGHBORHOOD LOCAL GUIDE/);
   assert.match(pilotHtml, /Living in Victoria Park/);
-  assert.match(pilotHtml, /id="agent-contact" class="neighborhood-agent-sidebar"/);
+  assert.match(pilotHtml, /class="neighborhood-agent-sidebar" id="agent-contact"/);
   assert.match(pilotHtml, /id="btn-message">Contact Agent/);
   assert.doesNotMatch(pilotHtml, /<header class="agent-header">/);
   assert.match(pilotHtml, /<h1 id="local-guide-title">Discover Victoria Park<\/h1>/);
