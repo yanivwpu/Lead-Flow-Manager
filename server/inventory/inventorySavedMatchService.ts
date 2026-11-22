@@ -120,7 +120,7 @@ export async function getSavedListingMatchesForContact(
           baths: l.baths,
           propertyType: listing.propertyType,
           listingUrl: listing.listingUrl,
-          thumbnailUrl: pickPrimaryPhotoUrl(l.photos),
+          thumbnailUrl: canShowPublicStreetAddress(compliance) ? pickPrimaryPhotoUrl(l.photos) : null,
         },
       } satisfies InventoryMatchResult;
     }));
