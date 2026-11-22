@@ -247,11 +247,12 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
         alt="${escapeHtml(guideHero.alt)}" loading="eager" fetchpriority="high" decoding="async" />` : ""}
       <div class="neighborhood-guide-hero-inner">
         <span class="neighborhood-guide-eyebrow">NEIGHBORHOOD LOCAL GUIDE</span>
-        <h2 id="local-guide-title">Discover ${guideTitle}</h2>
+        <h1 id="local-guide-title">Discover ${guideTitle}</h1>
         <p>${guideSubtitle}</p>
       </div>
     </div>
     <div class="neighborhood-guide-content">
+      <div class="neighborhood-guide-main">
       <div class="neighborhood-guide-editorial">
         <div class="neighborhood-guide-section-label">GET TO KNOW THE AREA</div>
         <h3>Living in ${guideTitle}</h3>
@@ -268,13 +269,31 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
           `<figure><img src="${escapeHtml(photo.url)}" alt="${escapeHtml(photo.alt)}" loading="lazy" decoding="async" />
           <figcaption>${escapeHtml(photo.alt)}</figcaption></figure>`).join("")}</div>
       </section>` : ""}
-      <aside class="neighborhood-guide-contact">
-        <div><div class="neighborhood-guide-section-label">YOUR LOCAL REAL ESTATE RESOURCE</div>
-        <h3>Considering a move to ${guideTitle}?</h3>
-        <p>Connect with ${escapeHtml(data.displayName)} for questions about buying, selling, or exploring the area.</p></div>
-        <a class="btn btn-primary" href="#agent-contact">Contact the agent</a>
-      </aside>
+
       ${neighborhood.parentUrl ? `<p class="neighborhood-guide-back"><a href="${escapeHtml(neighborhood.parentUrl)}">← Back to the Agent Page</a></p>` : ""}
+      </div>
+      <aside class="neighborhood-agent-sidebar" id="agent-contact" aria-label="Contact the local real estate agent">
+        <div class="neighborhood-agent-card">
+          <div class="neighborhood-guide-section-label">YOUR LOCAL REAL ESTATE AGENT</div>
+          <div class="neighborhood-agent-person">
+            ${renderAvatar(data)}
+            <div class="neighborhood-agent-person-info">
+              <h2>${escapeHtml(data.displayName)}</h2>
+              ${phoneLink}
+              ${data.brokerageName ? `<p>${escapeHtml(data.brokerageName)}</p>` : ""}
+            </div>
+          </div>
+          ${data.companyLogo ? `<div class="neighborhood-agent-logo">${renderLogo(data)}</div>` : ""}
+          <p class="neighborhood-agent-intro">Questions about buying, selling, or exploring ${guideTitle}?</p>
+          <div class="cta-row neighborhood-agent-actions"${neighborhood.preview ? " inert" : ""}>
+            <button type="button" class="btn btn-primary" id="btn-message">Contact Agent</button>
+            <button type="button" class="btn btn-outline" id="btn-schedule-header">Schedule Showing</button>
+            ${!neighborhood.preview && data.schedulingUrl ? `<a id="neighborhood-booking-link" class="btn btn-outline" style="display:none" href="${escapeHtml(data.schedulingUrl)}" target="_blank" rel="noopener">Choose a time</a>` : ""}
+            ${homeWorthBtn || `<button type="button" class="btn btn-outline" id="btn-home-worth">Request a home valuation</button>`}
+          </div>
+          ${renderSocialLinks(data)}
+        </div>
+      </aside>
     </div>
   </article>` : "";
   const pageTitle = neighborhood ? `${neighborhoodTitle(neighborhood)} | ${data.displayName}` : embedMode
@@ -295,7 +314,7 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     .join(" ");
 
   const navigationHtml = renderAgentNavigation(data);
-  const agentHeaderHtml = embedMode
+  const agentHeaderHtml = embedMode || neighborhood
     ? ""
     : `<header class="agent-header">
       ${renderProfileColumn(data)}
@@ -582,50 +601,71 @@ export function buildPublicAgentPageHtml(data: PublicAgentPageRenderInput): stri
     ${navigationHtml ? agentPageNavigationCss : ""}
     .agent-preview-banner { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff; color: #1e3a8a; font-size: .875rem; overflow-wrap: anywhere; }
     .agent-preview-banner strong { display: block; margin-bottom: 3px; }
-    /* Visual local guide: same SEO/canonical and lead flow as the existing neighborhood page. */
-    .neighborhood-guide { overflow: hidden; background: #fff; border: 1px solid var(--border);
+    /* Photo-first neighborhood guide; primary Agent Page remains unchanged. */
+    .neighborhood-guide { overflow: clip; background: #fff; border: 1px solid var(--border);
       border-radius: 18px; margin-top: 14px; box-shadow: 0 5px 30px rgba(15,23,42,.035); }
-    .neighborhood-guide-hero { position: relative; display: flex; align-items: end; min-height: 280px;
+    .neighborhood-guide-hero { position: relative; display: flex; align-items: end; min-height: 290px;
       overflow: hidden; background: linear-gradient(135deg, #0b5e4b, #02816b 55%, #0f766e); color: #fff; }
-    .neighborhood-guide-hero.has-photo { min-height: 365px; }
+    .neighborhood-guide-hero.has-photo { min-height: 400px; }
     .neighborhood-guide-cover { position: absolute; inset: 0; width: 100%; height: 100%;
       object-fit: cover; object-position: center; }
     .neighborhood-guide-hero.has-photo:after { content: ""; position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(5,24,24,.82), rgba(5,24,24,.18) 88%); }
-    .neighborhood-guide-hero-inner { position: relative; z-index: 1; padding: 36px; max-width: 850px; }
+      background: linear-gradient(to top, rgba(5,24,24,.82), rgba(5,24,24,.12) 88%); }
+    .neighborhood-guide-hero-inner { position: relative; z-index: 1; padding: 40px; max-width: 880px; }
     .neighborhood-guide-eyebrow { display: inline-flex; border: 1px solid rgba(255,255,255,.5);
       border-radius: 999px; padding: 5px 11px; letter-spacing: .12em; font-size: .72rem; font-weight: 800; }
-    .neighborhood-guide-hero h2 { font-size: clamp(1.75rem, 4vw, 2.9rem);
-      line-height: 1.16; margin: 14px 0 6px; letter-spacing: -.035em; }
-    .neighborhood-guide-hero p { font-size: 1.05rem; opacity: .92; margin: 0; }
-    .neighborhood-guide-content { padding: 30px 36px 28px; }
+    .neighborhood-guide-hero h1 { color: #fff; font-size: clamp(2rem, 4.5vw, 3.35rem);
+      line-height: 1.12; margin: 14px 0 6px; letter-spacing: -.035em; }
+    .neighborhood-guide-hero p { font-size: 1.05rem; opacity: .94; margin: 0; }
+    .neighborhood-guide-content { display: grid; grid-template-columns: minmax(0, 1fr) 292px;
+      gap: 30px; padding: 32px 34px 34px; align-items: start; }
+    .neighborhood-guide-main { min-width: 0; }
     .neighborhood-guide-section-label { font-size: .73rem; letter-spacing: .105em;
       font-weight: 800; color: #08735c; margin: 0 0 10px; }
-    .neighborhood-guide h3 { color: #0f172a; font-size: clamp(1.3rem, 2vw, 1.7rem); margin: 0 0 18px; }
-    .neighborhood-guide-editorial { max-width: 830px; padding: 4px 0 18px; }
+    .neighborhood-guide h2 { color: #0f172a; font-size: clamp(1.3rem, 2vw, 1.7rem); margin: 0 0 18px; }
+    .neighborhood-guide-editorial { padding: 4px 0 14px; }
     .neighborhood-guide-editorial p { font-size: 1rem; line-height: 1.85; color: #334155; margin: 0 0 20px; }
-    .neighborhood-guide-editorial .neighborhood-guide-subheading { font-size: 1.2rem; margin: 28px 0 10px; }
+    .neighborhood-guide-editorial .neighborhood-guide-subheading { font-size: 1.15rem; margin: 28px 0 10px; }
     .neighborhood-guide-gallery { margin-top: 10px; padding-top: 26px; border-top: 1px solid var(--border); }
-    .neighborhood-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+    .neighborhood-gallery-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
     .neighborhood-gallery-grid figure { overflow: hidden; margin: 0; border: 1px solid var(--border);
       border-radius: 12px; background: #f8fafc; }
-    .neighborhood-gallery-grid img { display: block; width: 100%; height: 220px; object-fit: cover; }
+    .neighborhood-gallery-grid img { display: block; width: 100%; height: 180px; object-fit: cover; }
     .neighborhood-gallery-grid figcaption { padding: 10px 13px; color: #475569; font-size: .8rem; }
-    .neighborhood-guide-contact { display: flex; align-items: center; justify-content: space-between;
-      gap: 24px; padding: 26px; margin-top: 32px; border-radius: 14px;
-      background: #effaf5; border: 1px solid #cce9dc; }
-    .neighborhood-guide-contact h3 { margin-bottom: 7px; }
-    .neighborhood-guide-contact p { color: #475569; margin: 0; }
-    .neighborhood-guide-contact .btn { flex-shrink: 0; }
+    .neighborhood-agent-sidebar { min-width: 0; position: sticky; top: 20px; scroll-margin-top: 16px; }
+    .neighborhood-agent-card { background: #fff; border: 1px solid #dbe5e7; border-radius: 16px;
+      padding: 22px 18px; box-shadow: 0 8px 28px rgba(15,23,42,.08); }
+    .neighborhood-agent-person { display: flex; align-items: center; gap: 12px; margin: 14px 0 12px; }
+    .neighborhood-agent-person .agent-avatar { width: 66px; height: 66px; border-width: 2px; }
+    .neighborhood-agent-person-info { min-width: 0; }
+    .neighborhood-agent-person-info h2 { margin: 0 0 4px; font-size: 1.12rem; line-height: 1.25; }
+    .neighborhood-agent-person-info p { font-size: .8rem; color: #64748b; margin: 4px 0 0; }
+    .neighborhood-agent-person-info .agent-heading-phone { display: inline-block; font-size: .88rem; font-weight: 600; }
+    .neighborhood-agent-logo { padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .neighborhood-agent-logo .agent-logo { max-height: 28px; width: auto; max-width: 100%; }
+    .neighborhood-agent-intro { font-size: .91rem; line-height: 1.55; color: #475569; margin: 14px 0; }
+    .neighborhood-agent-actions { display: flex; flex-direction: column; align-items: stretch; gap: 9px; }
+    .neighborhood-agent-actions .btn { width: 100%; min-height: 43px; justify-content: center; text-align: center; }
+    .neighborhood-agent-card .agent-social { justify-content: center; margin-top: 14px; }
     .neighborhood-guide-back { margin: 22px 0 0; font-size: .9rem; }
     .neighborhood-guide-back a { color: #047857; text-underline-offset: 3px; }
+    @media (max-width: 860px) {
+      .neighborhood-guide-content { grid-template-columns: minmax(0,1fr); gap: 24px; padding: 26px 22px; }
+      .neighborhood-agent-sidebar { position: static; order: -1; }
+      .neighborhood-agent-card { max-width: none; }
+      .neighborhood-agent-actions { flex-direction: row; flex-wrap: wrap; }
+      .neighborhood-agent-actions .btn { width: auto; flex: 1 1 180px; }
+      .neighborhood-guide-main { order: 1; }
+    }
     @media (max-width: 639px) {
-      .neighborhood-guide-hero,.neighborhood-guide-hero.has-photo { min-height: 255px; }
-      .neighborhood-guide-hero-inner { padding: 26px 20px; }
-      .neighborhood-guide-content { padding: 24px 18px; }
+      .neighborhood-guide-hero,.neighborhood-guide-hero.has-photo { min-height: 290px; }
+      .neighborhood-guide-hero-inner { padding: 28px 20px; }
+      .neighborhood-guide-content { padding: 20px 16px 28px; }
       .neighborhood-gallery-grid { grid-template-columns: 1fr; }
       .neighborhood-gallery-grid img { height: 230px; }
-      .neighborhood-guide-contact { flex-direction: column; align-items: flex-start; padding: 20px; }
+      .neighborhood-agent-card { padding: 20px 16px; }
+      .neighborhood-agent-actions { flex-direction: column; }
+      .neighborhood-agent-actions .btn { flex: initial; width: 100%; }
     }
   </style>
 </head>
