@@ -1,0 +1,36 @@
+name: Instagram workspace ownership
+on:
+  pull_request:
+    paths:
+      - 'shared/instagramWorkspaceOwnership.ts'
+      - 'server/instagramWorkspaceOwnership.ts'
+      - 'server/routes.ts'
+      - 'server/routes/channels.ts'
+      - 'client/src/components/ChannelSettings.tsx'
+      - 'tests/instagram-workspace-ownership.test.ts'
+      - '.github/workflows/instagram-workspace-ownership.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Instagram ownership and existing Inbox boundaries
+        run: >-
+          node --import tsx --test
+          tests/instagram-workspace-ownership.test.ts
+          tests/account-switch-auth-isolation.test.ts
+      - name: Compare TypeScript diagnostics with main
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: git diff --check
