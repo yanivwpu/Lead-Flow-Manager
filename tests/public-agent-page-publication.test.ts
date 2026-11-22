@@ -483,7 +483,8 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(pilotHtml, /href="[^"]+\/agents\/yaniv-haramatiy\/las-olas"/);
   assert.doesNotMatch(pilotHtml, /legacy-agent|Other City/);
   assert.doesNotMatch(await (await request(parent + "?embed=1")).text(), /id="agent-site-nav"|<summary>Neighborhoods<\/summary>/);
-  assert.doesNotMatch(pilotHtml, /id="listings-grid"/, "no unverified MLS inventory or browse UI");
+  assert.match(pilotHtml, /id="neighborhood-properties"/, "local sale/rent sections are available");
+  assert.doesNotMatch(pilotHtml, /<article class="listing-card/, "no property cards without verified neighborhood matching");
   assert.match(await (await request(parent)).text(), /href="[^"]+\/agents\/yaniv-haramatiy\/victoria-park"/);
   assert.match(await neighborhoodSitemap(), /\/agents\/yaniv-haramatiy\/victoria-park<\/loc>/);
   assert.match(await (await request(pilot + "?utm_source=test")).text(), /content="noindex, follow"/);
