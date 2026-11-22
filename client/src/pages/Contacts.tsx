@@ -288,9 +288,13 @@ export function Contacts() {
   const setFilterStage = (value: string) => updateListParam("stage", value);
   const listTab = ([CRM_LIST_ALL, CRM_LIST_IDENTIFIED, CRM_LIST_WEBSITE_VISITORS].includes(listParams.get("tab") as CrmContactListTab) ? listParams.get("tab") : CRM_LIST_IDENTIFIED) as CrmContactListTab;
   const setListTab = (value: CrmContactListTab) => updateListParam("tab", value);
-  const sortField = (["name", "tag", "pipelineStage", "createdAt"].includes(listParams.get("sort") || "") ? listParams.get("sort") : "activity") as SortField;
-  const sortDir: SortDir = listParams.get("direction") === "asc" ? "asc" : "desc";
-  const setSortDir = (value: SortDir | ((previous: SortDir) => SortDir)) => updateListParam("direction", typeof value === "function" ? value(sortDir) : value);
+  const requestedSort = listParams.get("sort");
+  const requestedDirection = listParams.get("direction");
+  // Older links could toggle the former default Added sort using direction alone.
+  const legacyAddedSort = !requestedSort && (requestedDirection === "asc" || requestedDirection === "desc");
+  const sortField = (["activity", "name", "tag", "pipelineStage", "createdAt"].includes(requestedSort || "")
+    ? requestedSort : legacyAddedSort ? "createdAt" : "activity") as SortField;
+  const sortDir: SortDir = requestedDirection === "asc" ? "asc" : "desc";
   const openContact = (id: string) => navigate(`/app/contacts/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(`/app/contacts${listSearch ? `?${listSearch}` : ""}`)}`);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
@@ -606,8 +610,10 @@ export function Contacts() {
   }
 
   function handleSort(field: SortField) {
-    if (field === sortField) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else updateListParams({ sort: field, direction: field === "activity" ? "desc" : "asc" });
+    const direction = field === sortField
+      ? (sortDir === "asc" ? "desc" : "asc")
+      : (field === "activity" ? "desc" : "asc");
+    updateListParams({ sort: field, direction });
   }
 
   function clearFilters() {

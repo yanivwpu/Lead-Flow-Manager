@@ -124,7 +124,8 @@ test("Contacts keeps URL-selected filters and alternate sorting while defaulting
   assert.equal(activity.getAttribute("datetime") ?? activity.getAttribute("dateTime"), "2026-11-22T11:00:00Z");
   assert.deepEqual(order(render("sort=name&direction=asc")), ["new", "dormant", "returning"]);
   assert.deepEqual(order(render("sort=createdAt&direction=desc")), ["new", "dormant", "returning"]);
-  assert.deepEqual(order(render("direction=asc")), ["dormant", "new", "returning"]);
+  assert.deepEqual(order(render("sort=activity&direction=asc")), ["dormant", "new", "returning"]);
+  assert.deepEqual(order(render("direction=asc")), ["returning", "dormant", "new"]);
   assert.deepEqual(order(render("tag=Warm&channel=webchat&stage=Lead&search=amy%40example.com")), ["new"]);
   assert.deepEqual(order(render("search=stale%20search")), []);
 });
