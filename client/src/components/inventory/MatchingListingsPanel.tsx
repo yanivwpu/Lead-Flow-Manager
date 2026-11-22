@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Heart, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { InventoryMatchResult } from "@shared/inventory/inventoryMatchTypes";
@@ -11,11 +11,11 @@ import { InventoryMatchRecommendationCard } from "@/components/inventory/Invento
 import type { CopilotComposerInsert } from "@/lib/copilotComposerInsert";
 import { shouldShowInventoryHealthDiagnostics } from "@/lib/copilotRgeVisibility";
 import { INVENTORY_MATCH_PAGE_SIZE } from "@/lib/inventoryMatchUi";
+import { nextMatchPageOffset, uniqueInventoryMatchPages } from "@/lib/inventoryMatchPagination";
+import { SavedInventoryMatches } from "@/components/inventory/SavedInventoryMatches";
 import {
   fetchInventoryMatches,
   INVENTORY_MATCHES_STALE_MS,
-  inventoryMatchesHasDisplayableResults,
-  inventoryMatchesPlaceholderData,
   inventoryMatchesQueryKey,
   inventoryMatchesRetryDelay,
   isRateLimitedInventoryMatchesError,
@@ -51,7 +51,8 @@ export function MatchingListingsPanel({
   inventoryRelevant = true,
   onInsertComposerDraft,
 }: MatchingListingsPanelProps) {
-  const [matchOffset, setMatchOffset] = useState(0);
+  const [showSaved, setShowSaved] = useState(false);
+  const queryClient = useQueryClient();
   const [lastClientFetchAt, setLastClientFetchAt] = useState<string | null>(null);
 
   const showHealthDiagnostics = shouldShowInventoryHealthDiagnostics({
@@ -63,11 +64,10 @@ export function MatchingListingsPanel({
 
   const fetchOptions = useMemo(
     () => ({
-      offset: matchOffset,
       limit: INVENTORY_MATCH_PAGE_SIZE,
       includeDiagnostics: showHealthDiagnostics,
     }),
-    [matchOffset, showHealthDiagnostics],
+    [showHealthDiagnostics],
   );
 
   const { data: inventoryStatus } = useQuery({
@@ -78,20 +78,29 @@ export function MatchingListingsPanel({
 
   const enabled = inventoryRelevant && !!contactId && !!inventoryStatus?.canUse;
 
-  const { data, isLoading, isFetched, isError, error, isFetching, refetch, isPlaceholderData } =
-    useQuery({
-      queryKey: inventoryMatchesQueryKey(contactId, fetchOptions),
-      queryFn: ({ signal }) => fetchInventoryMatches(contactId, fetchOptions, signal),
-      enabled,
-      staleTime: INVENTORY_MATCHES_STALE_MS,
-      placeholderData: (previousData, previousQuery) =>
-        inventoryMatchesPlaceholderData(contactId, previousData, previousQuery),
-      retry: shouldRetryInventoryMatches,
-      retryDelay: inventoryMatchesRetryDelay,
-    });
+  const {
+    data, isLoading, isFetched, isError, error, isFetching, isPlaceholderData,
+    fetchNextPage, hasNextPage, isFetchingNextPage, refetch,
+  } = useInfiniteQuery({
+    queryKey: inventoryMatchesQueryKey(contactId, fetchOptions),
+    queryFn: ({ pageParam, signal }) =>
+      fetchInventoryMatches(contactId, { ...fetchOptions, offset: pageParam }, signal),
+    initialPageParam: 0,
+    getNextPageParam: (_latest, pages) => nextMatchPageOffset(pages),
+    enabled,
+    staleTime: INVENTORY_MATCHES_STALE_MS,
+    // Do not reuse results from a different contact while switching Inbox threads.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey?.[0] === inventoryMatchesQueryKey(contactId, fetchOptions)[0]
+        ? previousData : undefined,
+    retry: shouldRetryInventoryMatches,
+    retryDelay: inventoryMatchesRetryDelay,
+  });
+  const firstPage = data?.pages[0];
+  const matches = useMemo(() => uniqueInventoryMatchPages(data?.pages ?? []), [data?.pages]);
 
   useEffect(() => {
-    setMatchOffset(0);
+    setShowSaved(false);
     setLastClientFetchAt(null);
   }, [contactId]);
 
@@ -100,7 +109,7 @@ export function MatchingListingsPanel({
     if (!isError && !isPlaceholderData) {
       setLastClientFetchAt(new Date().toISOString());
     }
-  }, [isFetched, isError, isPlaceholderData, contactId, data?.matchCount]);
+  }, [isFetched, isError, isPlaceholderData, contactId, firstPage?.matchCount]);
 
   useEffect(() => {
     if (!contactId || !data || isPlaceholderData) return;
@@ -108,42 +117,47 @@ export function MatchingListingsPanel({
     logBuyerMatchingTraceClient({
       step: "displayed_cards",
       traceId:
-        data.buyerMatchingTraceId ?? resolveClientBuyerMatchingTraceId(contactId),
+        firstPage?.buyerMatchingTraceId ?? resolveClientBuyerMatchingTraceId(contactId),
       contactId,
       source: "MatchingListingsPanel",
       layer: "ui",
-      inventoryFilters: showHealthDiagnostics ? data.diagnostics?.activeFilterSummary ?? null : null,
-      matchCount: data.matchCount ?? data.matches?.length ?? 0,
-      returnedListings: summarizeListingsForTrace(data.matches ?? []),
-      displayedCardCount: (data.matches ?? []).length,
+      inventoryFilters: showHealthDiagnostics ? firstPage?.diagnostics?.activeFilterSummary ?? null : null,
+      matchCount: firstPage?.matchCount ?? matches.length,
+      returnedListings: summarizeListingsForTrace(matches),
+      displayedCardCount: matches.length,
     });
-  }, [contactId, data, isFetched, isError, isPlaceholderData, showHealthDiagnostics]);
+  }, [contactId, data, firstPage, matches, isFetched, isError, isPlaceholderData, showHealthDiagnostics]);
 
   if (!inventoryRelevant) return null;
   if (!inventoryStatus) return null;
   if (!inventoryStatus.canUse) return null;
   if (!contactId) return null;
 
-  const matches = data?.matches ?? [];
-  const totalFound = data?.matchCount ?? matches.length;
+  const totalFound = firstPage?.matchCount ?? matches.length;
   const showingCount = matches.length;
-  const savedListingIds = data?.savedListingIds ?? [];
+  const savedListingIds = firstPage?.savedListingIds ?? [];
   const savedSet = new Set(savedListingIds);
-  const hasCachedMatches = inventoryMatchesHasDisplayableResults(data);
+  const hasCachedMatches = matches.length > 0;
+  const refreshSavedState = () => {
+    void refetch();
+    void queryClient.invalidateQueries({
+      queryKey: ["/api/contacts", contactId, "inventory-matches/saved"],
+    });
+  };
   const isRateLimited = isError && isRateLimitedInventoryMatchesError(error);
   const clientErrorMessage =
     isError && error instanceof Error ? error.message : null;
 
-  const canViewMore = totalFound > matchOffset + showingCount;
+  const canViewMore = Boolean(hasNextPage);
 
   const showEmpty =
     isFetched &&
     !isError &&
-    data?.eligible &&
+    firstPage?.eligible &&
     matches.length === 0 &&
-    (data.reason === "no_matches" ||
-      data.reason === "no_buyer_preferences" ||
-      data.reason === "no_active_inventory");
+    (firstPage.reason === "no_matches" ||
+      firstPage.reason === "no_buyer_preferences" ||
+      firstPage.reason === "no_active_inventory");
 
   const showBlockingFetchError =
     isError && !hasCachedMatches && !isLoading;
@@ -151,16 +165,16 @@ export function MatchingListingsPanel({
   const showListingFetchFailed =
     !isError &&
     isFetched &&
-    data?.reason === "listing_fetch_failed" &&
+    firstPage?.reason === "listing_fetch_failed" &&
     !hasCachedMatches;
 
   if (!enabled && !isLoading) return null;
-  if (isFetched && !isError && data && !data.eligible && data.reason === "feature_disabled") {
+  if (isFetched && !isError && firstPage && !firstPage.eligible && firstPage.reason === "feature_disabled") {
     return null;
   }
 
   const handleViewMore = () => {
-    setMatchOffset((prev) => prev + INVENTORY_MATCH_PAGE_SIZE);
+    if (!isFetchingNextPage && canViewMore) void fetchNextPage();
   };
 
   return (
@@ -195,9 +209,31 @@ export function MatchingListingsPanel({
               </p>
             )}
           </div>
+          <button
+            type="button"
+            className={cn(
+              "shrink-0 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold",
+              showSaved ? "bg-rose-50 border-rose-200 text-rose-700" : "border-gray-200 text-gray-600 hover:bg-gray-50",
+            )}
+            onClick={() => setShowSaved((v) => !v)}
+            aria-pressed={showSaved}
+            data-testid="button-saved-property-shortlist"
+          >
+            <Heart className="h-3 w-3" aria-hidden="true" />
+            {showSaved ? "Back to matches" : `Saved (${savedListingIds.length})`}
+          </button>
         </div>
       </div>
 
+      {showSaved ? (
+        <SavedInventoryMatches
+          contactId={contactId}
+          contactFirstName={contactFirstName}
+          onInsertComposerDraft={onInsertComposerDraft}
+          onSavedChange={refreshSavedState}
+        />
+      ) : (
+      <>
       {isLoading && !hasCachedMatches && (
         <div className="flex items-center gap-1.5 py-2 text-[11px] text-gray-400">
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -217,10 +253,10 @@ export function MatchingListingsPanel({
 
       {showHealthDiagnostics && (isFetched || isError) && (
         <InventoryHealthDiagnosticsPanel
-          diagnostics={data?.diagnostics}
-          clientError={clientErrorMessage ?? data?.error ?? null}
+          diagnostics={firstPage?.diagnostics}
+          clientError={clientErrorMessage ?? firstPage?.error ?? null}
           lastClientFetchAt={lastClientFetchAt}
-          reason={data?.reason}
+          reason={firstPage?.reason}
           compact={compact}
           rateLimitWarning={isRateLimited}
         />
@@ -228,10 +264,10 @@ export function MatchingListingsPanel({
 
       {showEmpty && (
         <p className="text-[11px] text-gray-500 leading-snug py-1">
-          {data?.reason === "no_buyer_preferences" || data?.reason === "no_active_inventory"
+          {firstPage?.reason === "no_buyer_preferences" || firstPage?.reason === "no_active_inventory"
             ? "Matches will appear once buyer preferences and inventory are available."
-            : showHealthDiagnostics && data?.diagnostics?.noMatchSummary?.trim()
-              ? data.diagnostics.noMatchSummary.trim()
+            : showHealthDiagnostics && firstPage?.diagnostics?.noMatchSummary?.trim()
+              ? firstPage.diagnostics.noMatchSummary.trim()
               : "No strong matches in active inventory yet."}
         </p>
       )}
@@ -244,14 +280,15 @@ export function MatchingListingsPanel({
           data-rendered-count={showingCount}
         >
           <div className="space-y-1.5">
-            {matches.map((match: InventoryMatchResult) => (
+            {matches.map((match: InventoryMatchResult, index) => (
               <InventoryMatchRecommendationCard
                 key={match.listingId}
                 contactId={contactId}
                 contactFirstName={contactFirstName}
                 match={match}
+                imagePriority={index < 2}
                 saved={savedSet.has(match.listingId)}
-                onSavedChange={() => void refetch()}
+                onSavedChange={refreshSavedState}
                 onInsertComposerDraft={onInsertComposerDraft}
                 layout="sidebar"
               />
@@ -269,14 +306,16 @@ export function MatchingListingsPanel({
                 size="sm"
                 className="h-7 text-[10px] px-2.5"
                 onClick={handleViewMore}
-                disabled={isFetching}
+                disabled={isFetchingNextPage}
                 data-testid="button-view-more-matches"
               >
-                View more
+                {isFetchingNextPage ? "Loading more…" : "View more"}
               </Button>
             )}
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
