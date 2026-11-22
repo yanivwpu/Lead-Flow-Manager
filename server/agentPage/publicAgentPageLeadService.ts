@@ -10,10 +10,10 @@ import { persistSellerPreferenceProfile } from "../sellerPreferenceService";
 import { canShowPublicStreetAddress } from "@shared/inventory/publicListingPublication";
 import { fetchPublishedListingsForAgentPage, incrementAgentPageAnalytics, resolveAgentPageBySlug } from "./agentPageDb";
 import { resolveAgentPageFormContact } from "./agentPageFormContact";
-import { validatedAgentInquiryPhone } from "@shared/agent/agentPageInquiry";
+import { AGENT_INQUIRY_PHONE_ERROR, validatedAgentInquiryPhone } from "@shared/agent/agentPageInquiry";
 import type { InventoryListing } from "@shared/schema";
 
-type PublicLeadResult = { ok: true; contactId: string } | { ok: false; error: string; status: number };
+type PublicLeadResult = { ok: true; contactId: string } | { ok: false; error: string; status: number; field?: "phone" };
 type ListingInquiry = Pick<PublicAgentLeadBody, "name" | "email" | "phone" | "message">;
 
 function publicListingLabel(listing: InventoryListing): string {
@@ -118,9 +118,11 @@ async function savePublicAgentInquiry(input: {
   listingLabel?: string;
 }): Promise<PublicLeadResult> {
   const { userId, body, sourcePage, pageContext, pageLabel, leadSourceLabel, listingLabel } = input;
-  const identity = collectValidatedIdentity(body);
-  // The general chat validator also accepts formatted strings; require enough actual digits here.
-  identity.phone = validatedAgentInquiryPhone(body.phone);
+  const phone = validatedAgentInquiryPhone(body.phone);
+  if (body.phone?.trim() && !phone) {
+    return { ok: false, error: AGENT_INQUIRY_PHONE_ERROR, status: 400, field: "phone" };
+  }
+  const identity = { ...collectValidatedIdentity({ name: body.name, email: body.email }), phone };
   if (!identity.email && !identity.phone) {
     return { ok: false, error: "Enter a valid email address or phone number.", status: 400 };
   }
@@ -148,7 +150,10 @@ async function savePublicAgentInquiry(input: {
   const form = await resolveAgentPageFormContact({
     userId, identity, sourcePage, attribution: customFields, pageContext,
   });
-  if (!form) return { ok: false, error: "Please use one contact method or contact the agent directly.", status: 409 };
+  if (!form) {
+    console.info("[public-agent-inquiry]", { source: sourcePage, identityOutcome: "conflict" });
+    return { ok: false, error: "We couldn't save this inquiry with those contact details. Check the email and phone, or contact the agent directly.", status: 409 };
+  }
 
   const { channelService } = await import("../channelService");
   const result = await channelService.processIncomingMessage({
@@ -158,8 +163,10 @@ async function savePublicAgentInquiry(input: {
     content: buildLeadMessage(body.intent, { ...body, name: identity.name }, listingLabel, pageLabel),
     externalMessageId: `agent_page_${randomUUID()}`,
     agentPageForm: form,
+    templateVariables: body.name?.trim() ? { agentInquirySubmittedName: body.name.trim() } : undefined,
   });
   if (!result.success || !result.message) return { ok: false, error: "Failed to save inquiry", status: 500 };
+  console.info("[public-agent-inquiry]", { source: sourcePage, identityOutcome: form.contactCreated ? "created" : "reused" });
   const contactId = form.contact.id;
   const { runAgentPageLeadReview } = await import("../workflowEngine");
   await runAgentPageLeadReview(form.contact, form.conversation.id);

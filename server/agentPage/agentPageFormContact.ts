@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 import { EMAIL_INBOX_IDENTITY_SOURCE, isCrmListedContact } from "@shared/contactCrmVisibility";
 import { contacts, conversations, messages } from "@shared/schema";
 import {
@@ -10,6 +10,7 @@ import {
 import type { WebchatPageContext } from "@shared/webchatPageContext";
 import { AGENT_PAGE_FORM_ACCOUNT } from "@shared/agent/agentPageSchema";
 import { validatedAgentInquiryPhone } from "@shared/agent/agentPageInquiry";
+import { isAnonymousWebchatVisitorName } from "@shared/agent/webchatLeadContext";
 import { db } from "../../drizzle/db";
 
 /** Resolve identity and reserve the private Inbox thread together, before processing the message. */
@@ -22,9 +23,10 @@ export async function resolveAgentPageFormContact(input: {
 }) {
   const { userId, identity, sourcePage, attribution, pageContext } = input;
   const { name, email, phone } = identity;
-  // Mirror the existing webchat normalization for stored formatted/US +1 numbers.
+  // Compare stored formats with the inquiry form's canonical digits.
   const storedPhone = (field: ReturnType<typeof sql>) =>
-    sql`regexp_replace(regexp_replace(${field}, '[^0-9]', '', 'g'), '^1([0-9]{10})$', '\\1')`;
+    sql`regexp_replace(regexp_replace(regexp_replace(${field}, '[^0-9]', '', 'g'), '^00([1-9])', '\\1'), '^1([0-9]{10})$', '\\1')`;
+  const legacyMessage = sql`${messages.externalMessageId} ~ '^agent_page_[0-9]{13}_[a-z0-9]{1,12}$'`;
   return db.transaction(async (tx) => {
     // A submission with both fields must serialize with submissions using either field alone.
     for (const key of [email && `email:${email}`, phone && `phone:${phone}`].filter(Boolean).sort()) {
@@ -35,64 +37,81 @@ export async function resolveAgentPageFormContact(input: {
         or ${contacts.sourceDetails}->>'agentPageForm' = 'true')
       and (${contacts.webchatId} = lower(trim(${contacts.customFields}->>'email'))
         or ${contacts.webchatId} = regexp_replace(${contacts.customFields}->>'phone', '[^0-9]', '', 'g'))`;
+    const legacyEvidence = sql`exists (select 1 from ${messages} where ${messages.userId} = ${contacts.userId}
+      and ${messages.contactId} = ${contacts.id} and ${messages.direction} = 'inbound' and ${legacyMessage})`;
+    const legacyEmail = and(legacy, sql`nullif(trim(${contacts.email}), '') is null`,
+      or(sql`${contacts.webchatId} = lower(trim(${contacts.customFields}->>'email'))`, legacyEvidence));
+    const legacyPhoneMatch = and(legacy, sql`nullif(trim(${contacts.phone}), '') is null`,
+      sql`${contacts.sourceDetails}->>'agentPagePhoneManuallyEdited' is distinct from 'true'`,
+      or(sql`${contacts.webchatId} = regexp_replace(${contacts.customFields}->>'phone', '[^0-9]', '', 'g')`, legacyEvidence));
+    const phoneMatches = (value: string) => or(
+      sql`${storedPhone(sql`${contacts.phone}`)} = ${value}`,
+      sql`${storedPhone(sql`${contacts.whatsappId}`)} = ${value}`,
+      and(legacyPhoneMatch, sql`${storedPhone(sql`${contacts.customFields}->>'phone'`)} = ${value}`),
+    );
     const matches = await tx.select().from(contacts).where(and(eq(contacts.userId, userId), or(
       email ? sql`lower(trim(${contacts.email})) = ${email}` : undefined,
-      phone ? sql`${storedPhone(sql`${contacts.phone}`)} = ${phone}` : undefined,
-      phone ? sql`${storedPhone(sql`${contacts.whatsappId}`)} = ${phone}` : undefined,
-      and(legacy, or(
-        email ? sql`lower(trim(${contacts.customFields}->>'email')) = ${email}` : undefined,
-        phone ? sql`${storedPhone(sql`${contacts.customFields}->>'phone'`)} = ${phone}` : undefined,
-      )),
-    ))).limit(2).for("update");
+      email ? and(legacyEmail, sql`lower(trim(${contacts.customFields}->>'email')) = ${email}`) : undefined,
+      phone ? phoneMatches(phone) : undefined,
+    ))).orderBy(asc(contacts.id)).limit(2).for("update");
     // Never attach an inquiry or a new identity field when the matches disagree.
     if (matches.length > 1) return null;
     const [existing] = matches;
-    const current = existing ? collectValidatedIdentity(existing) : {};
     const fields = (existing?.customFields ?? {}) as Record<string, unknown>;
     const details = (existing?.sourceDetails ?? {}) as Record<string, unknown>;
     const wasLegacyForm = existing?.source === "webchat" &&
       (fields.sourcePage === "agent_page" || fields.sourcePage === "agent_page_embed" || details.agentPageForm === true) &&
       !!existing.webchatId && (existing.webchatId === String(fields.email ?? "").trim().toLowerCase() ||
         existing.webchatId === String(fields.phone ?? "").replace(/\D/g, ""));
+    const [originalFormMessage] = wasLegacyForm ? await tx.select({ id: messages.id }).from(messages).where(and(
+      eq(messages.userId, userId), eq(messages.contactId, existing.id), eq(messages.direction, "inbound"), legacyMessage,
+    )).limit(1) : [];
+    const oldEmail = typeof fields.email === "string" ? collectValidatedIdentity({ email: fields.email }).email : undefined;
+    const oldPhone = validatedAgentInquiryPhone(fields.phone);
+    const knownLegacyEmail = wasLegacyForm && (originalFormMessage || existing.webchatId === oldEmail) ? oldEmail : undefined;
+    const knownLegacyPhone = wasLegacyForm && details.agentPagePhoneManuallyEdited !== true &&
+      (originalFormMessage || existing.webchatId === String(fields.phone ?? "").replace(/\D/g, "")) ? oldPhone : undefined;
+    const storedEmail = existing?.email?.trim().toLowerCase();
+    const canonicalPhone = existing?.phone?.trim();
+    const providerPhone = validatedAgentInquiryPhone(existing?.whatsappId);
+    const knownEmail = storedEmail || knownLegacyEmail;
+    const knownPhone = canonicalPhone ? validatedAgentInquiryPhone(canonicalPhone) : providerPhone ?? knownLegacyPhone;
+    const matchesKnownIdentity = (email && email === knownEmail) || (phone && phone === knownPhone);
+    const conflictingEmail = email && knownEmail && email !== knownEmail;
+    const conflictingPhone = phone && (canonicalPhone || knownPhone) && phone !== knownPhone;
+    const manuallyClearedPhone = phone && !canonicalPhone && details.agentPagePhoneManuallyEdited === true;
+    if (existing && (!matchesKnownIdentity || conflictingEmail || conflictingPhone || manuallyClearedPhone)) return null;
+
     const isNewLead = !existing || !isCrmListedContact(existing);
+    const currentName = existing?.name?.trim();
     // Correct an old inferred name when it matches a previous inquiry from the legacy form.
-    const [legacyNameMessage] = name && current.name && wasLegacyForm && details.agentPageFormNameCaptured !== true
+    const [legacyNameMessage] = name && currentName && originalFormMessage && details.agentPageFormNameCaptured !== true &&
+      details.agentPageNameManuallyEdited !== true
       ? await tx.select({ id: messages.id }).from(messages).where(and(
           eq(messages.userId, userId), eq(messages.contactId, existing.id), eq(messages.direction, "inbound"),
-          sql`starts_with(${messages.externalMessageId}, 'agent_page_')`,
-          sql`trim(${messages.content}) = ${current.name}`,
+          legacyMessage, sql`trim(${messages.content}) = ${currentName}`,
         )).limit(1)
       : [];
-    const captureFormName = !!name && (!current.name || !!legacyNameMessage);
+    const captureFormName = !!name && details.agentPageNameManuallyEdited !== true &&
+      (!currentName || isAnonymousWebchatVisitorName(currentName) || !!legacyNameMessage);
     let recoveredPhone: string | undefined;
-    const legacyPhone = wasLegacyForm && !phone && !existing.phone?.trim() && details.agentPagePhoneManuallyEdited !== true
-      ? validatedAgentInquiryPhone(fields.phone) : undefined;
+    const legacyPhone = originalFormMessage && !phone && !canonicalPhone && (!providerPhone || providerPhone === knownLegacyPhone)
+      ? knownLegacyPhone : undefined;
     if (legacyPhone) {
-      // Only the old form stored a phone in custom fields with this delivery ID format.
-      const [legacyMessage] = await tx.select({ id: messages.id }).from(messages).where(and(
-        eq(messages.userId, userId), eq(messages.contactId, existing.id), eq(messages.direction, "inbound"),
-        sql`${messages.externalMessageId} ~ '^agent_page_[0-9]{13}_[a-z0-9]{1,12}$'`,
-      )).limit(1);
-      if (legacyMessage) {
-        const lockKey = `agent-page:${userId}:phone:${legacyPhone}`;
-        // The contact row is already locked. Skip this fallback if a phone submission holds the identity lock.
-        const lock = await tx.execute<{ acquired: boolean }>(sql`select pg_try_advisory_xact_lock(hashtextextended(${lockKey}, 0)) as acquired`);
-        if (lock.rows[0]?.acquired) {
-          const [other] = await tx.select({ id: contacts.id }).from(contacts).where(and(
-            eq(contacts.userId, userId), ne(contacts.id, existing.id), or(
-              sql`${storedPhone(sql`${contacts.phone}`)} = ${legacyPhone}`,
-              sql`${storedPhone(sql`${contacts.whatsappId}`)} = ${legacyPhone}`,
-              and(legacy, sql`${storedPhone(sql`${contacts.customFields}->>'phone'`)} = ${legacyPhone}`),
-            ),
-          )).limit(1);
-          if (!other) recoveredPhone = legacyPhone;
-        }
+      const lockKey = `agent-page:${userId}:phone:${legacyPhone}`;
+      // The contact row is already locked. Skip this fallback if a phone submission holds the identity lock.
+      const lock = await tx.execute<{ acquired: boolean }>(sql`select pg_try_advisory_xact_lock(hashtextextended(${lockKey}, 0)) as acquired`);
+      if (lock.rows[0]?.acquired) {
+        const [other] = await tx.select({ id: contacts.id }).from(contacts).where(and(
+          eq(contacts.userId, userId), ne(contacts.id, existing.id), phoneMatches(legacyPhone),
+        )).limit(1);
+        if (!other) recoveredPhone = legacyPhone;
       }
     }
     const patch = {
-      name: (captureFormName ? name : current.name) || existing?.name || "Agent Page Visitor",
-      email: current.email ? existing!.email : email,
-      ...(existing?.phone?.trim() || details.agentPagePhoneManuallyEdited === true ? {} : { phone: phone ?? recoveredPhone }),
+      name: (captureFormName ? name : existing?.name) || "Agent Page Visitor",
+      email: storedEmail ? existing?.email : email,
+      ...(canonicalPhone || details.agentPagePhoneManuallyEdited === true ? {} : { phone: phone ?? recoveredPhone }),
       source: !existing?.source || existing.source === EMAIL_INBOX_IDENTITY_SOURCE ? "webchat" : existing.source,
       sourceDetails: promotedWebchatSourceDetails(details, {
         agentPageForm: true,

@@ -811,7 +811,10 @@ function renderListingInquiry(inquiryPath: string): string {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(fields),
           });
           var result = await response.json();
-          if (!response.ok) throw new Error(result.error || "Unable to send inquiry.");
+          if (!response.ok) {
+            if (result.field === "phone") form.elements.phone.focus();
+            throw new Error(result.error || "Unable to send inquiry.");
+          }
           form.reset();
           status.textContent = "Thanks. Your inquiry was sent.";
         } catch (error) {
