@@ -549,6 +549,10 @@ test("profile publication, privacy, and inquiry identity retain their existing b
       assert.equal(await page.locator(".wrap").evaluate((node) => node.getBoundingClientRect().x), stablePosition);
       if (!mobile) {
         const withoutStableGutter = await page.evaluate(() => {
+          // The new guide itself scrolls; hide it temporarily to reproduce the old short-page case.
+          const guide = document.querySelector<HTMLElement>(".neighborhood-guide");
+          const originalGuideDisplay = guide?.style.display ?? "";
+          if (guide) guide.style.display = "none";
           document.documentElement.style.scrollbarGutter = "auto";
           const wrap = document.querySelector(".wrap")!;
           const shortPosition = wrap.getBoundingClientRect().x;
@@ -556,6 +560,7 @@ test("profile publication, privacy, and inquiry identity retain their existing b
           const tallPosition = wrap.getBoundingClientRect().x;
           document.body.style.minHeight = "";
           document.documentElement.style.scrollbarGutter = "";
+          if (guide) guide.style.display = originalGuideDisplay;
           return { shortPosition, tallPosition };
         });
         assert.notEqual(withoutStableGutter.shortPosition, withoutStableGutter.tallPosition, "classic scrollbar reproduces the old layout shift");
