@@ -18,6 +18,7 @@ import {
   RefreshCcw,
   ChevronRight,
   MessageSquare,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -61,6 +62,9 @@ interface ProgressState {
   instagram: ProgressStatus;
   saving: ProgressStatus;
 }
+
+// Official Page creation link. Creation happens on Facebook, never inside our OAuth flow.
+const FACEBOOK_PAGE_CREATE_URL = "https://www.facebook.com/pages/create";
 
 const BLANK_PROGRESS: ProgressState = {
   token: "pending",
@@ -320,12 +324,12 @@ export function ConnectMetaFbIgWizard({
   const channelNoun = isFacebook ? "Facebook Page" : "Instagram account";
   const channelTitle = isFacebook ? "Facebook Messenger" : "Instagram DMs";
   const idleDescription = isFacebook
-    ? `Sign in with Facebook to grant access to your ${channelNoun}.`
+    ? "Sign in with your personal Facebook account to authorize a Facebook Page. Personal Messenger inboxes cannot connect."
     : "Instagram business messaging is managed through Meta Business and connected Facebook Pages. Continue with Facebook to securely connect your Instagram DMs.";
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="sm:max-w-md" data-testid="dialog-meta-connect">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto" data-testid="dialog-meta-connect">
         <DialogHeader>
           <div className="flex items-center gap-2.5 mb-1">
             <div
@@ -359,6 +363,32 @@ export function ConnectMetaFbIgWizard({
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-red-700">{pagesError}</p>
+              </div>
+            )}
+
+            {isFacebook && (
+              <div
+                className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 space-y-2"
+                data-testid="facebook-page-requirement"
+              >
+                <p className="text-sm font-semibold text-slate-900">A Facebook Page is required for Messenger</p>
+                <p className="text-xs leading-relaxed text-slate-700">
+                  Use your existing personal Facebook login to approve access. WhachatCRM receives
+                  messages sent to your selected Facebook Page, not messages sent to your personal profile.
+                </p>
+                <a
+                  href={FACEBOOK_PAGE_CREATE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+                  data-testid="link-create-facebook-page-idle"
+                >
+                  Don't have a Page? Create one for free
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+                <p className="text-xs text-slate-600">
+                  After creating your Page, return here and continue with Facebook to authorize it.
+                </p>
               </div>
             )}
 
@@ -425,7 +455,15 @@ export function ConnectMetaFbIgWizard({
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg">
                   <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div className="text-xs text-amber-800 space-y-2">
-                    <p className="font-medium">No authorized Facebook Pages were returned.</p>
+                    <p className="font-medium">
+                      No authorized Facebook Pages were returned.
+                    </p>
+                    {isFacebook && (
+                      <p>
+                        If you only have a personal Facebook profile, you need to create a Facebook
+                        Page first. Personal Messenger conversations cannot be connected.
+                      </p>
+                    )}
                     <p>
                       Meta only shows Pages that were shared with WhachatCRM during Facebook
                       authorization. Managing a Page in Facebook does not automatically make it
@@ -439,6 +477,25 @@ export function ConnectMetaFbIgWizard({
                     </p>
                   </div>
                 </div>
+                {isFacebook && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">Don't have a Facebook Page?</p>
+                    <p className="text-xs leading-relaxed text-slate-700">
+                      Create a free Page using your current Facebook login. Then come back and
+                      authorize that Page to connect its Messenger inbox.
+                    </p>
+                    <a
+                      href={FACEBOOK_PAGE_CREATE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
+                      data-testid="link-create-facebook-page-empty"
+                    >
+                      Create Facebook Page
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    </a>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   className="w-full"
@@ -518,6 +575,24 @@ export function ConnectMetaFbIgWizard({
                         Granting access to multiple Pages does not connect all of them to this
                         workspace. Only the Page you select here will be connected.
                       </p>
+                      {isFacebook && (
+                        <>
+                          <p>
+                            Only have a personal Facebook account? You must create a Page to
+                            receive Messenger messages in WhachatCRM.
+                          </p>
+                          <a
+                            href={FACEBOOK_PAGE_CREATE_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-semibold text-blue-700 hover:underline"
+                            data-testid="link-create-facebook-page-missing"
+                          >
+                            Create a Facebook Page
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          </a>
+                        </>
+                      )}
                     </div>
                   )}
                   <Button

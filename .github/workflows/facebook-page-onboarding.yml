@@ -1,0 +1,28 @@
+name: Facebook Page onboarding UI
+on:
+  pull_request:
+    paths:
+      - 'client/src/components/ConnectMetaFbIgWizard.tsx'
+      - 'client/src/content/help/userGuideContent.ts'
+      - 'tests/facebook-page-picker-copy.test.ts'
+      - '.github/workflows/facebook-page-onboarding.yml'
+permissions:
+  contents: read
+jobs:
+  copy-and-connection-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --include=dev --ignore-scripts
+      - name: Facebook Page requirement and existing authorization flow
+        run: node --import tsx tests/facebook-page-picker-copy.test.ts
+      - name: Reject new TypeScript diagnostics
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: git diff --check
