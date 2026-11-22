@@ -470,10 +470,13 @@ test("profile publication, privacy, and inquiry identity retain their existing b
   assert.match(pilotHtml, /content="index, follow"/);
   assert.match(pilotHtml, /NEIGHBORHOOD LOCAL GUIDE/);
   assert.match(pilotHtml, /Living in Victoria Park/);
-  assert.match(pilotHtml, /href="#agent-contact">Contact the agent/);
+  assert.match(pilotHtml, /id="agent-contact" class="neighborhood-agent-sidebar"/);
+  assert.match(pilotHtml, /id="btn-message">Contact Agent/);
+  assert.doesNotMatch(pilotHtml, /<header class="agent-header">/);
+  assert.match(pilotHtml, /<h1 id="local-guide-title">Discover Victoria Park<\/h1>/);
   assert.match(pilotHtml, /class="neighborhood-guide"/);
   assert.match(pilotHtml, /<title>Victoria Park, Fort Lauderdale, Florida \| Jane Agent<\/title>/);
-  assert.match(pilotHtml, /class="agent-heading"[^>]*>[\s\S]*?<h1[^>]*>Victoria Park, Fort Lauderdale, Florida<\/h1>\s*<div class="agent-byline"><span>Jane Agent<\/span><a[^>]*href="tel:\+19545550100"/);
+  assert.match(pilotHtml, /class="neighborhood-agent-person"[\s\S]*?<h2>Jane Agent<\/h2>\s*<a[^>]*href="tel:\+19545550100"/);
   assert.doesNotMatch(pilotHtml, /jane-public|mailto:|publicEmail/);
   assert.match(pilotHtml, /content="Victoria Park is in northeast Fort Lauderdale/);
   assert.match(pilotHtml, /Back to the Agent Page/);
@@ -544,7 +547,7 @@ test("profile publication, privacy, and inquiry identity retain their existing b
 
       await nav.getByRole("link", { name: /Victoria Park/ }).click();
       await page.waitForURL(origin + pilot);
-      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
+      await page.getByRole("heading", { name: "Discover Victoria Park" }).waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       assert.equal(await page.locator(".wrap").evaluate((node) => node.getBoundingClientRect().x), stablePosition);
       if (!mobile) {
@@ -604,10 +607,15 @@ test("profile publication, privacy, and inquiry identity retain their existing b
     for (const width of [320, 390, 1280]) {
       const page = await browser.newPage({ viewport: { width, height: 900 } });
       await page.goto(origin + pilot);
-      await page.getByRole("heading", { name: "Victoria Park, Fort Lauderdale, Florida" }).waitFor();
+      await page.getByRole("heading", { name: "Discover Victoria Park" }).waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-      assert.equal(await page.locator(".agent-byline").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
-      assert.equal(await page.locator(".agent-header a[href^='tel:']").count(), 1);
+      assert.equal(await page.locator(".neighborhood-agent-card").getByRole("link", { name: publicPhone }).getAttribute("href"), "tel:+19545550100");
+      assert.equal(await page.locator(".agent-header").count(), 0);
+      assert.equal(await page.locator("#local-guide-title").count(), 1);
+      const guideFollowsNavigation = await page.evaluate(() =>
+        document.querySelector(".neighborhood-guide-hero")!.getBoundingClientRect().top >=
+        document.querySelector(".agent-site-nav")!.getBoundingClientRect().bottom);
+      assert(guideFollowsNavigation, "hero follows navigation without a repeated agent header");
       for (const label of ["Contact Agent", "Schedule Showing", "What's My Home Worth?"]) {
         await page.getByRole("button", { name: label }).click();
         await page.locator("#lead-form").waitFor();
