@@ -91,8 +91,7 @@ export function isOptionalFacebookPageMetadataProbeError(
   return (
     err?.httpStatus === 400 &&
     asCode(err?.code) === 100 &&
-    message.includes("pages_read_engagement") &&
-    (message.includes("page public content access") || message.includes("page public metadata access")) &&
+    message.includes("this endpoint requires the 'pages_read_engagement' permission") &&
     !message.includes("pages_messaging")
   );
 }
