@@ -6266,6 +6266,8 @@ export async function registerRoutes(
             const {
               classifyFacebookPageGraphError,
               facebookPageHealthUserMessage,
+              isOptionalFacebookPageMetadataProbeError,
+              messengerPageVerifiedWithoutMetadataRead,
             } = await import("@shared/facebookPageHealthMessage");
             const { graphErrorForDiag, logFacebookReconnectDiag, facebookTokenFingerprint } =
               await import("./metaFacebookReconnectDiag");
@@ -6350,12 +6352,19 @@ export async function registerRoutes(
 
             const pageJson = pageRes.ok && pageRes.json && typeof pageRes.json === "object" ? (pageRes.json as any) : null;
             const pageTransient = !pageRes.ok && (pageRes.outcome === "timeout" || pageRes.outcome === "network");
+            const optionalMetadataReadDenied =
+              s.channel === "facebook" && isOptionalFacebookPageMetadataProbeError(pageGraphError);
             if (pageJson && (pageJson.id || pageJson.name)) {
               entry.checks.pageAccessible = true;
             } else if (pageTransient) {
               entry.checks.pageAccessible = null;
               const tmp = facebookPageHealthUserMessage("temporary_failure");
               entry.warnings.push(`${tmp.issue} ${tmp.recovery}`);
+            } else if (optionalMetadataReadDenied) {
+              // A Facebook Page profile read needs pages_read_engagement but Messenger
+              // does not require this optional metadata read to receive webhooks.
+              // Decide Page messaging reachability using verified token + subscription below.
+              entry.checks.pageAccessible = null;
             } else {
               entry.checks.pageAccessible = false;
               const kind = classifyFacebookPageGraphError(
@@ -6398,8 +6407,27 @@ export async function registerRoutes(
               }
             }
 
+            // A Page-profile permission restriction is nonblocking only when
+            // Messenger's token, required scopes and messages webhook all verify.
+            const messengerVerifiedViaSubscription =
+              s.channel === "facebook" &&
+              messengerPageVerifiedWithoutMetadataRead({
+                metadataProbeError: pageGraphError,
+                tokenValid: entry.checks.tokenValid,
+                missingScopes: entry.checks.missingScopes,
+                subscriptionOk: entry.checks.subscriptionOk,
+              });
+            if (messengerVerifiedViaSubscription) {
+              entry.checks.pageAccessible = true;
+            } else if (optionalMetadataReadDenied && entry.checks.subscriptionOk !== false) {
+              entry.warnings.push(
+                "Page profile metadata isn't available. Messenger access is not yet fully verified."
+              );
+            }
+
             // Operational failure log only — avoid noisy success spam on every Inbox poll.
-            if (!pageRes.ok || entry.checks.pageAccessible === false || entry.checks.subscriptionOk === false) {
+            if ((!pageRes.ok && !messengerVerifiedViaSubscription && !optionalMetadataReadDenied) ||
+                entry.checks.pageAccessible === false || entry.checks.subscriptionOk === false) {
               logFacebookReconnectDiag("channel_health_failure", {
                 userId: inboxWorkspaceId(req),
                 channel: s.channel,
