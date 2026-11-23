@@ -1,0 +1,32 @@
+name: Facebook Page health metadata scope regression
+on:
+  pull_request:
+    paths:
+      - 'shared/facebookPageHealthMessage.ts'
+      - 'server/routes.ts'
+      - 'tests/facebook-sender-profile-naming.test.ts'
+      - '.github/workflows/facebook-page-health-metadata.yml'
+permissions:
+  contents: read
+jobs:
+  facebook-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Messenger metadata-only permission and real failure regressions
+        run: node --import tsx tests/facebook-sender-profile-naming.test.ts
+      - name: TypeScript regression gate
+        env:
+          TYPECHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-types-against-base.mjs
+      - run: git diff --check

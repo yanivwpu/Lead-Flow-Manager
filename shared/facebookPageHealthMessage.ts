@@ -78,6 +78,37 @@ export function classifyFacebookPageGraphError(
   return "unknown";
 }
 
+/**
+ * Meta can deny /{pageId}?fields=id,name when pages_read_engagement has not
+ * been granted, even when pages_messaging and pages_manage_metadata are valid.
+ * This is a Page-metadata read restriction, NOT proof Messenger is broken.
+ * Only the exact Graph (#100) metadata-permission signature is downgraded.
+ */
+export function isOptionalFacebookPageMetadataProbeError(
+  err: SanitizedGraphErrorLike | null | undefined,
+): boolean {
+  const message = (err?.message || "").toLowerCase();
+  return (
+    err?.httpStatus === 400 &&
+    asCode(err?.code) === 100 &&
+    message.includes("this endpoint requires the 'pages_read_engagement' permission") &&
+    !message.includes("pages_messaging")
+  );
+}
+
+/** Infer Messenger Page access only when both the token and messages subscription verify. */
+export function messengerPageVerifiedWithoutMetadataRead(input: {
+  metadataProbeError: SanitizedGraphErrorLike | null | undefined;
+  tokenValid: boolean | null;
+  missingScopes: readonly string[] | null;
+  subscriptionOk: boolean | null;
+}): boolean {
+  return isOptionalFacebookPageMetadataProbeError(input.metadataProbeError) &&
+    input.tokenValid === true &&
+    input.missingScopes?.length === 0 &&
+    input.subscriptionOk === true;
+}
+
 export function facebookPageHealthUserMessage(
   kind: FacebookPageHealthIssueKind,
 ): { issue: string; recovery: string } {
